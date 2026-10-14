@@ -13,7 +13,7 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -40,9 +40,13 @@ namespace Tests.Scenarios
         public Func<ScenarioContext, bool> Check { get; private set; }
         public int Frames { get; private set; }
         public string NaturalAttackName { get; private set; }
+        /// <summary>The square a grapple Move or Escape step clicks after the button (<see cref="GrappleMove"/>, <see cref="GrappleEscape"/>).</summary>
+        public bool HasCell { get; private set; }
+        /// <summary>The option label prefix an <see cref="AnswerImprovedGrab"/> or <see cref="GrappleDamage"/> step clicks.</summary>
+        public string MenuChoice { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
-        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin", "Attack" };
+        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin", "Attack", "Move" };
 
         private Step(StepKind kind) { Kind = kind; }
 
@@ -94,6 +98,41 @@ namespace Tests.Scenarios
         public static Step GrappleAttack(string naturalAttackName = null)
             => new Step(StepKind.GrappleAction) { GrappleKind = "Attack", NaturalAttackName = naturalAttackName };
         /// <summary>
+        /// Ui only: the Grapple: Damage button (also a holder's Damage check, CMB-163), then the damage-mode menu option
+        /// whose label starts with <paramref name="optionPrefix"/> ("Lethal damage" or "Nonlethal damage").
+        /// </summary>
+        public static Step GrappleDamage(string optionPrefix = "Lethal damage")
+            => new Step(StepKind.GrappleAction) { GrappleKind = "Damage", MenuChoice = optionPrefix };
+        /// <summary>
+        /// Ui only: the Grapple: Move button (an opposed check, PHB p.156), then, when the check is won, the destination
+        /// square (x, y) of the drag (GrappleSystem.ExecuteGrappleMovement; CMB-152).
+        /// </summary>
+        public static Step GrappleMove(int x, int y)
+            => new Step(StepKind.GrappleAction) { GrappleKind = "Move", Cell = new Vector2Int(x, y), HasCell = true };
+        /// <summary>
+        /// Ui only: the Grapple: Escape Check button, then, when the escape succeeds, the adjacent square (x, y) of the
+        /// free escape move (PHB p.157; GrappleSystem.ExecuteFreeAdjacentGrappleMovement, CMB-152).
+        /// </summary>
+        public static Step GrappleEscape(int x, int y)
+            => new Step(StepKind.GrappleAction) { GrappleKind = "Escape", Cell = new Vector2Int(x, y), HasCell = true };
+        /// <summary>
+        /// Ui: answers the PC's Improved Grab menu (MM p.310; CMB-148) that the step before it opens: "grapple" (conduct
+        /// the grapple normally), "hold" (hold with the body part that hit, -20) or "skip". With no such step the menu
+        /// is answered "skip". Skipped on the AI path (the AI chooses with AIProfile.ShouldHoldWithImprovedGrab).
+        /// </summary>
+        public static Step AnswerImprovedGrab(string choice) => new Step(StepKind.AnswerImprovedGrab) { MenuChoice = choice };
+
+        /// <summary>The ImprovedGrabMenu label prefix for an <see cref="AnswerImprovedGrab"/> choice.</summary>
+        internal static string ImprovedGrabOptionPrefix(string choice)
+        {
+            switch ((choice ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "grapple": return "Improved Grab: grapple";
+                case "hold": return "Improved Grab: hold";
+                default: return "Skip the grapple";
+            }
+        }
+        /// <summary>
         /// Casts a prepared spell at <paramref name="target"/>. Scripted: TryNPCPerformSpellCastForAI with a clone of the
         /// database spell (never the template); no metamagic on that path. Ui: the cast menu with the first unused
         /// prepared slot holding that spell, then the target square (or, for a self-centered burst such as Prayer, the
@@ -138,7 +177,10 @@ namespace Tests.Scenarios
                 case StepKind.Maneuver:
                     return "Maneuver(" + ManeuverType + "," + Target + (OffHand ? ",offhand" : "") + ")";
                 case StepKind.GrappleAction:
-                    return "GrappleAction(" + GrappleKind + (string.IsNullOrEmpty(NaturalAttackName) ? "" : "," + NaturalAttackName) + ")";
+                    return "GrappleAction(" + GrappleKind + (string.IsNullOrEmpty(NaturalAttackName) ? "" : "," + NaturalAttackName)
+                        + (HasCell ? "," + Cell.x + "," + Cell.y : "") + ")";
+                case StepKind.AnswerImprovedGrab:
+                    return "AnswerImprovedGrab(" + MenuChoice + ")";
                 case StepKind.Cast:
                     return "Cast(" + SpellId + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "") + ")";
                 case StepKind.Charge:
@@ -163,7 +205,7 @@ namespace Tests.Scenarios
                 || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
-            bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl;
+            bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
             if (hasCell && (Cell.x < 0 || Cell.y < 0 || Cell.x >= ScenarioLimits.GridWidth || Cell.y >= ScenarioLimits.GridHeight))
                 return Describe() + ": square off the grid";
             if (Kind == StepKind.GrappleAction && Array.IndexOf(GrappleKinds, GrappleKind) < 0)
@@ -328,7 +370,7 @@ namespace Tests.Scenarios
                     RunAssert(job, a, s, path, i);
                     continue;
                 }
-                if (s.Kind == StepKind.AnswerAoO)
+                if (s.Kind == StepKind.AnswerAoO || s.Kind == StepKind.AnswerImprovedGrab)
                 {
                     EmitStep(job, a, path, i, s, "skipped", "no prompts on the AI path");
                     continue;
@@ -599,6 +641,14 @@ namespace Tests.Scenarios
                 _actionTime = Time.time;
                 return;
             }
+            // The Improved Grab menu a hit opens (MM p.310; CMB-148): answered from the next AnswerImprovedGrab step, else Skip.
+            if (prompt == "submenu" && gm.CombatUI != null && gm.CombatUI.Harness_OpenSpecialStyleMenuName() == "ImprovedGrabMenu")
+            {
+                AnswerImprovedGrabMenu(gm);
+                _actionFrame = frame;
+                _actionTime = Time.time;
+                return;
+            }
 
             bool ready = gm.IsPlayerTurn && gm.ActivePC == _actor && gm.CurrentSubPhase == GameManager.PlayerSubPhase.ChoosingAction && prompt == null;
             if (_awaiting)
@@ -624,9 +674,10 @@ namespace Tests.Scenarios
                 return;
             }
 
-            while (_index < _steps.Count && _steps[_index].Kind == StepKind.AnswerAoO)
+            while (_index < _steps.Count && (_steps[_index].Kind == StepKind.AnswerAoO || _steps[_index].Kind == StepKind.AnswerImprovedGrab))
             {
-                ScriptedSteps.EmitStep(_job, _actor, PathName, _index, _steps[_index], "skipped", "no AoO confirmation open");
+                ScriptedSteps.EmitStep(_job, _actor, PathName, _index, _steps[_index], "skipped",
+                    _steps[_index].Kind == StepKind.AnswerAoO ? "no AoO confirmation open" : "no Improved Grab menu open");
                 _index++;
             }
 
@@ -761,6 +812,13 @@ namespace Tests.Scenarios
                     PressGrapple(gm, s.GrappleKind);
                     if (s.GrappleKind == "Attack")
                         PickGrappleNaturalAttack(gm, s.NaturalAttackName);
+                    else if (s.GrappleKind == "Damage")
+                        PickGrappleDamageMode(gm, s.MenuChoice);
+                    // A won grapple move check, or a successful escape, opens the destination selection (CMB-152).
+                    if (s.HasCell && gm.CurrentSubPhase == GameManager.PlayerSubPhase.Moving)
+                        ClickIf(gm, GameManager.PlayerSubPhase.Moving, s.Cell);
+                    else if (s.HasCell)
+                        _awaitNote = "no destination selection opened (the check failed or the move is not offered)";
                     break;
                 case StepKind.Cast:
                 {
@@ -893,6 +951,66 @@ namespace Tests.Scenarios
                 case "Escape": gm.OnGrappleEscapeCheckButtonPressed(); break;
                 case "BreakPin": gm.OnGrappleBreakPinButtonPressed(); break;
                 case "Attack": gm.OnGrappleUnarmedAttackButtonPressed(); break;
+                case "Move": gm.OnGrappleMoveButtonPressed(); break;
+            }
+        }
+
+        /// <summary>
+        /// After the Grapple: Damage button: clicks the damage-mode option whose label starts with
+        /// <paramref name="optionPrefix"/> (default "Lethal damage"); no menu (the action was refused): noted.
+        /// </summary>
+        private void PickGrappleDamageMode(GameManager gm, string optionPrefix)
+        {
+            string menu = gm.CombatUI != null ? gm.CombatUI.Harness_OpenSpecialStyleMenuName() : null;
+            if (menu != "GrappleDamageModeMenu")
+            {
+                _awaitNote = "no damage-mode menu opened";
+                return;
+            }
+            string prefix = string.IsNullOrEmpty(optionPrefix) ? "Lethal damage" : optionPrefix;
+            UnityEngine.UI.Button option = gm.CombatUI.Harness_FindSpecialStyleOption(prefix);
+            if (option == null || !option.interactable)
+            {
+                _awaitNote = "no damage-mode option starting with " + prefix + "; cancelled";
+                gm.CombatUI.HideSpecialStyleSelectionMenu();
+                gm.Harness_CancelToActionChoices();
+                return;
+            }
+            option.onClick.Invoke();
+            _awaitNote = "damage mode: " + prefix;
+        }
+
+        /// <summary>
+        /// Answers the PC's Improved Grab menu (MM p.310; CMB-148): with the next step an AnswerImprovedGrab, clicks its
+        /// option ("grapple", "hold" or "skip") and records that step; otherwise clicks Skip and notes it on the step in flight.
+        /// </summary>
+        private void AnswerImprovedGrabMenu(GameManager gm)
+        {
+            Step answer = _index < _steps.Count && _steps[_index].Kind == StepKind.AnswerImprovedGrab ? _steps[_index] : null;
+            string prefix = Step.ImprovedGrabOptionPrefix(answer != null ? answer.MenuChoice : "skip");
+            UnityEngine.UI.Button option = gm.CombatUI.Harness_FindSpecialStyleOption(prefix);
+            bool clicked = option != null && option.interactable;
+            if (clicked)
+                option.onClick.Invoke();
+            else
+            {
+                UnityEngine.UI.Button cancel = gm.CombatUI.Harness_FindSpecialStyleCancel();
+                if (cancel != null)
+                    cancel.onClick.Invoke();
+                else
+                    gm.CombatUI.HideSpecialStyleSelectionMenu();
+            }
+
+            if (answer != null)
+            {
+                ScriptedSteps.EmitStep(_job, _actor, PathName, _index, answer, clicked ? "done" : "refused",
+                    clicked ? null : "no option starting with " + prefix + "; answered Skip");
+                _index++;
+            }
+            else
+            {
+                string note = "Improved Grab menu answered Skip (no AnswerImprovedGrab step)";
+                _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
             }
         }
 

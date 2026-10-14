@@ -628,7 +628,8 @@ public partial class GameManager
 
     /// <summary>
     /// Whether a hit lets <paramref name="attacker"/> try Improved Grab on <paramref name="target"/>: the attacker has
-    /// it, the attack hit with its trigger attack, the target is alive, and the target is small enough
+    /// it, the attack hit with its trigger attack, the target is alive, neither is already in a grapple link (a holder
+    /// with one body part included, CMB-163), and the target is small enough
     /// (CharacterController.CanImprovedGrabTargetBySize, MM p.310). Every Improved Grab path checks this before it
     /// prompts a controllable attacker or rolls, PC and NPC alike (CMB-126). A trigger hit refused only for size logs
     /// one combat log line, so the rule is visible in play; each caller asks once per attack.
@@ -644,6 +645,19 @@ public partial class GameManager
         if (!IsImprovedGrabTriggerAttack(attacker, attackResult))
             return false;
 
+        // One grapple link per creature: a creature that holds another with one body part (not grappling, MM p.310)
+        // starts no second grapple with its remaining attacks, and a creature already in a grapple is not grabbed again
+        // (provisional, owner question CMB-163). Checked before the PC prompt and the AI choice.
+        if (attacker.IsInAnyGrappleLink(out CharacterController attackerLinked) || target.IsInAnyGrappleLink(out _))
+        {
+            string attackName = !string.IsNullOrWhiteSpace(attackResult.WeaponName) ? attackResult.WeaponName : "trigger attack";
+            string why = attackerLinked != null
+                ? $"{attacker.Stats.CharacterName} is already in a grapple with {attackerLinked.Stats.CharacterName}"
+                : $"{target.Stats.CharacterName} is already in a grapple";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"No Improved Grab after the {attackName} hit: {why}."));
+            return false;
+        }
+
         if (!attacker.CanImprovedGrabTargetBySize(target, out string sizeReason))
         {
             string attackName = !string.IsNullOrWhiteSpace(attackResult.WeaponName) ? attackResult.WeaponName : "trigger attack";
@@ -656,25 +670,57 @@ public partial class GameManager
 
     private IEnumerator ResolveImprovedGrabWithPromptCoroutine(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
     {
-        bool shouldAttemptGrab = true;
+        ImprovedGrabChoice choice = ImprovedGrabChoice.GrappleNormally;
         if (attacker != null && attacker.IsControllable)
         {
-            bool playerDecision = false;
-            yield return StartCoroutine(PromptImprovedGrabChoice(attacker, target, attackResult != null ? attackResult.WeaponName : null, decision => playerDecision = decision));
-            shouldAttemptGrab = playerDecision;
+            ImprovedGrabChoice playerChoice = ImprovedGrabChoice.Skip;
+            yield return StartCoroutine(PromptImprovedGrabChoice(attacker, target, attackResult != null ? attackResult.WeaponName : null, decision => playerChoice = decision));
+            choice = playerChoice;
         }
 
-        if (!shouldAttemptGrab)
+        if (choice == ImprovedGrabChoice.Skip)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{attacker?.Stats?.CharacterName ?? "Attacker"} declines to start a grapple."));
             onResolved?.Invoke();
             yield break;
         }
 
-        SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, choice);
         string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
         onResolved?.Invoke();
+    }
+
+    /// <summary>The controller's choice after an Improved Grab trigger hit (MM p.310; CMB-148).</summary>
+    private enum ImprovedGrabChoice
+    {
+        Skip,
+        GrappleNormally,
+        HoldWithBodyPart
+    }
+
+    /// <summary>
+    /// The AI's Improved Grab choice (MM p.310; owner ruling 2026-10-11, CMB-148): its profile's
+    /// (AIProfile.ShouldHoldWithImprovedGrab), else the default, between grappling normally and the -20 hold.
+    /// </summary>
+    private ImprovedGrabChoice ChooseImprovedGrabForAI(CharacterController attacker, CharacterController target)
+    {
+        List<CharacterController> all = GetAllCharacters();
+        bool hold = attacker != null && attacker.aiProfile != null
+            ? attacker.aiProfile.ShouldHoldWithImprovedGrab(attacker, target, all)
+            : DND35.AI.AIProfile.DefaultShouldHoldWithImprovedGrab(attacker, target, all);
+        return hold ? ImprovedGrabChoice.HoldWithBodyPart : ImprovedGrabChoice.GrappleNormally;
+    }
+
+    /// <summary>
+    /// Resolves the controller's Improved Grab choice through the one resolver, PC and NPC alike
+    /// (CharacterController.ResolveImprovedGrabFreeAttempt): the natural attack that hit establishes the hold (its damage in
+    /// later rounds, CMB-148), and the hold choice decides whether the attacker is grappled (MM p.310, CMB-149).
+    /// </summary>
+    private SpecialAttackResult ResolveImprovedGrabChoice(CharacterController attacker, CharacterController target, CombatResult attackResult, ImprovedGrabChoice choice)
+    {
+        NaturalAttackDefinition establishingAttack = attacker != null ? attacker.GetNaturalAttackForAttackResult(attackResult) : null;
+        return attacker.ResolveImprovedGrabFreeAttempt(target, establishingAttack, choice == ImprovedGrabChoice.HoldWithBodyPart);
     }
 
     private bool TryResolveImprovedGrabAfterSingleAttack(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
@@ -688,7 +734,7 @@ public partial class GameManager
             return true;
         }
 
-        SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, ChooseImprovedGrabForAI(attacker, target));
         string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
         return false;
@@ -708,7 +754,7 @@ public partial class GameManager
             if (!CanAttemptImprovedGrabFromAttack(attacker, target, attackResult))
                 continue;
 
-            SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+            SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, ChooseImprovedGrabForAI(attacker, target));
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackResult.WeaponName} hit): {grabResult.Log}"));
 
             if (grabResult.Success || target.Stats.IsDead)
@@ -778,13 +824,13 @@ public partial class GameManager
         CharacterController initialTarget,
         DND35.AI.AIProfile profile,
         Func<CharacterController, CharacterController, bool> tryStepManeuver,
-        out bool startedGrappleBySubstitute,
+        out bool startedGrappleInSequence,
         out int maneuversUsed,
         out int targetSwitchCount,
         out string stopReason,
         NpcMeleeSequenceResume resume)
     {
-        startedGrappleBySubstitute = false;
+        startedGrappleInSequence = false;
         maneuversUsed = 0;
         targetSwitchCount = 0;
         stopReason = null;
@@ -837,7 +883,9 @@ public partial class GameManager
                 || currentTarget.Stats == null
                 || currentTarget.Stats.IsDead
                 || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
-                || !npc.IsTargetInCurrentWeaponRange(currentTarget); // melee reach; never the PC thrown mode (CMB-096)
+                || !npc.IsTargetInCurrentWeaponRange(currentTarget) // melee reach; never the PC thrown mode (CMB-096)
+                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149).
+                || npc.IsBarredFromOrdinaryAttackOn(currentTarget, out _);
 
             if (needsNewTarget)
             {
@@ -846,7 +894,7 @@ public partial class GameManager
                 {
                     stopReason = currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead
                         ? "target is down"
-                        : "target is out of reach";
+                        : (npc.IsBarredFromOrdinaryAttackOn(currentTarget, out _) ? "it holds the target with one body part" : "target is out of reach");
                     break;
                 }
 
@@ -897,7 +945,7 @@ public partial class GameManager
                     // handed to AI_GrappleRestrictedTurn by the caller.
                     if (npc.IsGrappling())
                     {
-                        startedGrappleBySubstitute = true;
+                        startedGrappleInSequence = true;
                         break;
                     }
 
@@ -983,7 +1031,6 @@ public partial class GameManager
 
             var stepAttacks = new List<CombatResult> { attack };
             TryResolveFreeTripFromAttackResults(npc, currentTarget, stepAttacks, rangeInfo);
-            // Today both NPC paths keep attacking after Improved Grab takes hold.
             TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepAttacks);
 
             if (currentTarget.Stats.IsDead)
@@ -992,6 +1039,17 @@ public partial class GameManager
             // A target dead, dying or unconscious may be the last of its side: victory or defeat at once (CORE-011).
             if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("NPCPerformAttack.Sequence"))
                 break;
+
+            // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): once its Improved Grab takes
+            // hold, the remaining steps become grapple actions against the grappled creature, through the same step
+            // counter (the caller hands them to AI_GrappleRestrictedTurn). A hold with one body part (MM p.310) leaves
+            // it ungrappled: its remaining attacks go on against other opponents (the retarget above).
+            if (npc.IsGrappling())
+            {
+                startedGrappleInSequence = true;
+                stopReason = "grappling: the remaining attacks become grapple actions (PHB p.156)";
+                break;
+            }
 
             if (currentTarget.Stats.IsDead)
             {
@@ -1053,7 +1111,7 @@ public partial class GameManager
             target,
             npc.aiProfile,
             tryStepManeuver,
-            out bool startedGrappleBySubstitute,
+            out bool startedGrappleInSequence,
             out int maneuversUsed,
             out int targetSwitchCount,
             out string stopReason,
@@ -1079,7 +1137,7 @@ public partial class GameManager
                 resume);
             aggregate.Attacks.AddRange(rest.Attacks);
             aggregate.AttackLabels.AddRange(rest.AttackLabels);
-            startedGrappleBySubstitute |= restStartedGrapple;
+            startedGrappleInSequence |= restStartedGrapple;
             maneuversUsed += restManeuvers;
             targetSwitchCount += restSwitches;
         }
@@ -1118,11 +1176,11 @@ public partial class GameManager
         if (FullAttackHadLastKnownPositionMiss(aggregate) && HandleConsecutiveLastKnownAutoMiss(npc, target))
             yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
 
-        // The remaining steps of a turn whose grapple was started by a substitute become grapple
-        // actions (PHB p.156); AI_GrappleRestrictedTurn draws them through the same attack sequence:
-        // grapple checks on iterative steps, and for a creature fighting with its natural attacks
-        // grapple natural attacks on its remaining natural steps (CMB-127).
-        if (startedGrappleBySubstitute && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
+        // The remaining steps of a turn whose grapple was started in the sequence (a substitute grapple, or an
+        // Improved Grab that took hold, CMB-149) become grapple actions (PHB p.156); AI_GrappleRestrictedTurn draws them
+        // through the same attack sequence: grapple checks and grapple natural attacks, each on a step of the BAB
+        // ladder (CMB-127, CMB-146).
+        if (startedGrappleInSequence && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
             yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
 
         yield return new WaitForSeconds(1.0f);
@@ -1555,6 +1613,17 @@ public partial class GameManager
         if (target == null || target.Stats == null || target.Stats.IsDead)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no valid target and stops attacking."));
+            yield break;
+        }
+
+        // A grappling creature attacks only through grapple actions against the creature it grapples (PHB p.156; CMB-149).
+        // The normal AI turn runs its grapple turn before it gets here; this gate covers the callers that attack directly
+        // (a confused creature attacking the nearest creature, a charmed one attacking its charmer's foe).
+        if (npc.IsGrappling())
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{npc.Stats.CharacterName} is grappling, so its attack is a grapple action (PHB p.156)."));
+            if (CanUseGrappleAttackOption(npc) || (npc.Actions != null && npc.Actions.HasStandardAction))
+                yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
             yield break;
         }
 

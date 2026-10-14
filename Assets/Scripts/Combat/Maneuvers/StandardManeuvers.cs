@@ -536,11 +536,10 @@ public partial class GameManager
     // Once grappling, each attack can be a grapple action (PHB p.156: one in place of each of your attacks, at
     // successively lower BAB). Every grapple action that takes an attack (damage, pin, escape check, light weapon,
     // unarmed strike, opponent's weapon) is an iterative step at its iterative BAB, for every creature, so its grapple
-    // check rolls at that BAB. The one exception is the grapple attack of a creature fighting with its natural attacks:
-    // it is ONE natural attack (MM p.314) and takes the place of that natural attack in the natural sequence, at that
-    // attack's bonus (CMB-127). Both kinds share the step counter, so a natural-weapon creature gets a grapple check
-    // only while its step count is still inside its iterative ladder. How many grapple natural attacks it gets (one
-    // per natural attack, as coded, or the iterative ladder) is open with the owner (CMB-146).
+    // check rolls at that BAB. The grapple attack of a creature fighting with its natural attacks is ONE natural attack
+    // (MM p.314), made at that attack's own bonus and giving up that natural attack (CMB-127); it too takes one step of
+    // the BAB ladder (owner interpretation 2026-10-11, CMB-146), so a lion (BAB +3) makes one grapple action a turn. Both kinds
+    // share the step counter. The rake is its own grapple action (GrappleActionType.Rake, CMB-144).
 
     /// <summary>
     /// True when <paramref name="actionType"/>, made by a grappling <paramref name="attacker"/>, is a grapple natural
@@ -553,14 +552,17 @@ public partial class GameManager
             && attacker.IsGrappling()
             && attacker.UsesNaturalAttacksForGrappleAttack();
 
-    /// <summary>Grapple natural attacks still available this turn: natural steps left, capped by the natural attacks left to choose from.</summary>
+    /// <summary>
+    /// Grapple natural attacks still available this turn: steps left on the BAB ladder (PHB p.156, CMB-146), capped by
+    /// the natural steps and the natural attacks left to choose from (the active PC's buttons' record included).
+    /// </summary>
     private int GetRemainingGrappleNaturalAttackSteps(CharacterController attacker)
     {
         if (attacker == null || !attacker.IsGrappling() || !attacker.UsesNaturalAttacksForGrappleAttack())
             return 0;
 
         int steps = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: false);
-        return Mathf.Min(steps, GetGrappleNaturalAttackOptionsFor(attacker).Count);
+        return Mathf.Min(steps, attacker.GetRemainingGrappleNaturalAttackCount(index => IsNaturalAttackSequenceIndexUsed(attacker, index)));
     }
 
     /// <summary>
@@ -580,8 +582,22 @@ public partial class GameManager
         if (attacker == null || attacker.Actions == null)
             return 0;
 
+        // A holder with one body part after Improved Grab (MM p.310) is not grappling: its one grapple action is the
+        // Damage check against the creature it holds, an iterative step (CMB-163). It starts no other grapple.
+        if (attacker.IsHoldingWithImprovedGrab())
+        {
+            return actionType == GrappleActionType.DamageOpponent && attacker.IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType.DamageOpponent, out _)
+                ? GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: true)
+                : 0;
+        }
+
         if (!attacker.IsGrappling())
-            return attacker.CanUseStandardGrapple() ? GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: false) : 0;
+        {
+            // One grapple link per creature: a creature held with one body part is grappled, so it is IsGrappling (CMB-163).
+            return attacker.CanUseStandardGrapple() && !attacker.IsInAnyGrappleLink(out _)
+                ? GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: false)
+                : 0;
+        }
 
         if (IsGrappleNaturalAttackStep(attacker, actionType))
             return GetRemainingGrappleNaturalAttackSteps(attacker);
@@ -602,6 +618,9 @@ public partial class GameManager
     {
         if (!CanUseGrappleAttackOption(attacker, actionType))
             return 0;
+
+        if (attacker.IsHoldingWithImprovedGrab())
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true);
 
         if (!attacker.IsGrappling())
             return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: false);
@@ -636,10 +655,36 @@ public partial class GameManager
             return false;
         }
 
+        // A holder with one body part (MM p.310): its Damage check against the held creature takes an iterative step
+        // (CMB-163); nothing else.
+        if (attacker.IsHoldingWithImprovedGrab())
+        {
+            if (actionType != GrappleActionType.DamageOpponent
+                || !attacker.IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType.DamageOpponent, out reason))
+            {
+                if (string.IsNullOrEmpty(reason))
+                    attacker.IsGrappleActionAvailableToImprovedGrabHolder(actionType ?? GrappleActionType.PinOpponent, out reason);
+                return false;
+            }
+
+            if (!TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out _, out reason, iterativeOnly: true))
+                return false;
+
+            attacksRemaining = GetRemainingGrappleAttackActions(attacker, GrappleActionType.DamageOpponent);
+            return true;
+        }
+
         bool isAlreadyGrappling = attacker.IsGrappling();
         if (!isAlreadyGrappling && !attacker.CanUseStandardGrapple())
         {
             reason = "Standard grapple is not available";
+            return false;
+        }
+
+        // One grapple link per creature (CMB-163).
+        if (!isAlreadyGrappling && attacker.IsInAnyGrappleLink(out CharacterController linked))
+        {
+            reason = $"already in a grapple with {(linked != null && linked.Stats != null ? linked.Stats.CharacterName : "another creature")}";
             return false;
         }
 
@@ -661,6 +706,11 @@ public partial class GameManager
                 reason = "no natural attack is left this turn";
                 return false;
             }
+
+            // A grapple natural attack takes the place of one of the creature's iterative attacks (PHB p.156; owner
+            // interpretation 2026-10-11, CMB-146): refused, with nothing spent, when the BAB ladder is used up.
+            if (!attacker.HasGrappleNaturalAttackLadderStep(out reason))
+                return false;
         }
         else
         {

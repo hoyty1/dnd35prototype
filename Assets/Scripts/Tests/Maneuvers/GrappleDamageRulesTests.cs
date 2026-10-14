@@ -111,10 +111,18 @@ public static class GrappleDamageRulesTests
         TestHasteNaturalFullAttackAddsOneAttack();
         TestGrappleNaturalAttackIsOneAttack();
         TestGrappleNaturalAttackHasteAndOutOfOrderSteps();
-        TestGrappleNaturalAttackRakeOncePerTurn();
+        TestGrappleRakeRules();
         TestGrappleNaturalAttackStepsAndAiChoice();
         TestGrappleChecksStayIterativeForNaturalAttackers();
         TestGrappleNaturalAttackRefusesUsedOrMissingAttack();
+        TestGrappleCheckIgnoresConditionAttackModifiers();
+        TestImprovedGrabHoldAndEstablishingDamage();
+        TestImprovedGrabHoldAiChoice();
+        TestGrappleMovesProvokeOnlyThirdParties();
+        TestImprovedGrabOneGrappleLinkPerCreature();
+        TestImprovedGrabHoldDamageCheck();
+        TestImprovedGrabDamageOnEveryWonGrappleCheck();
+        TestRakeRefusedAgainstImprovedGrabHolder();
         TestHasteWeaponAndMixedAttackersGetOneHasteAttack();
         TestHasteNaturalManeuverReplacesHasteStep();
         TestAiHasteNaturalAttackChoice();
@@ -3283,7 +3291,7 @@ public static class GrappleDamageRulesTests
     /// <summary>Commits the grapple step that gives up natural attack <paramref name="index"/>, then makes that attack (the PC and AI order).</summary>
     private static SpecialAttackResult GrappleNaturalAttack(CharacterController attacker, int index, bool haste, out bool committed)
     {
-        committed = attacker.TryCommitManeuverSubstituteStep(index, out int bab, out _, out _, haste);
+        committed = attacker.TryCommitGrappleNaturalAttackStep(index, haste, out int bab, out _, out _);
         return committed
             ? attacker.ResolveGrappleAction(GrappleActionType.AttackUnarmed, null, null, bab, index, haste)
             : null;
@@ -3293,9 +3301,12 @@ public static class GrappleDamageRulesTests
 
     private static void TestGrappleNaturalAttackIsOneAttack()
     {
-        var bear = CreateBiteClawsCreature("GrappleNaturalOne", 4, false);
-        var control = CreateBiteClawsCreature("GrappleNaturalOneControl", 4, false);
+        // BAB +11 (+11/+6/+1): three iterative steps, so three grapple natural attacks (PHB p.156; CMB-146).
+        var bear = CreateBiteClawsCreature("GrappleNaturalOne", 11, false);
+        var control = CreateBiteClawsCreature("GrappleNaturalOneControl", 11, false);
+        var lion = CreateBiteClawsCreature("GrappleNaturalOneLadder", 4, false);
         var target = CreateHasteTarget("GrappleNaturalOneTarget");
+        var target2 = CreateHasteTarget("GrappleNaturalOneTarget2");
         try
         {
             bear.StartNewTurn();
@@ -3305,7 +3316,6 @@ public static class GrappleDamageRulesTests
                 && options[0].NaturalAttackIndex == 0 && options[2].NaturalAttackIndex == 2 && !options.Exists(o => o.IsHasteExtraAttack),
                 "CMB-127: a grappling bite/claw/claw creature may make any of its 3 natural attacks with a grapple attack");
 
-            int hpBefore = target.Stats.CurrentHP;
             SpecialAttackResult claw = GrappleNaturalAttack(bear, 1, false, out bool clawCommitted);
             FullAttackResult controlClaw = control.FullAttack(target, false, 0, null, null, startAttackIndex: 1, maxAttacks: 1);
             FullAttackResult controlBite = control.FullAttack(target, false, 0, null, null, startAttackIndex: 0, maxAttacks: 1);
@@ -3326,7 +3336,20 @@ public static class GrappleDamageRulesTests
             bool fourth = bear.TryCommitManeuverSubstituteStep(-1, out _, out _, out string fourthReason);
             Assert(left.Count == 1 && left[0].NaturalAttackIndex == 2 && claw2Committed && claw2 != null
                 && !fourth && !string.IsNullOrEmpty(fourthReason) && bear.GetGrappleNaturalAttackOptions().Count == 0,
-                "CMB-127: a full attack of grapple attacks makes each natural attack once (3 with BAB +4), then nothing is left");
+                "CMB-146: with BAB +11 (three iterative attacks) a full attack of grapple attacks makes each of the 3 natural attacks once, then nothing is left");
+
+            // The lion case (BAB +3 or +4: one iterative attack): one grapple natural attack a turn, though two natural
+            // attacks are left to choose from (PHB p.156; owner interpretation 2026-10-11, CMB-146).
+            lion.StartNewTurn();
+            ForceGrappleState(lion, target2);
+            int countBefore = lion.GetRemainingGrappleNaturalAttackCount();
+            SpecialAttackResult first = GrappleNaturalAttack(lion, 0, false, out bool firstOk);
+            SpecialAttackResult second = GrappleNaturalAttack(lion, 1, false, out bool secondOk);
+            bool secondRefusedReasonOk = !lion.TryCommitGrappleNaturalAttackStep(1, false, out _, out _, out string ladderReason) && ladderReason.Contains("BAB ladder");
+            Assert(countBefore == 1 && firstOk && first != null && !secondOk && second == null && secondRefusedReasonOk
+                && lion.ProgressiveAttackPool.MainHandStepsUsed == 1 && lion.GetGrappleNaturalAttackOptions().Count == 2
+                && lion.GetRemainingGrappleNaturalAttackCount() == 0,
+                $"CMB-146: a BAB +4 natural attacker makes one grapple natural attack a turn (its one iterative step); the second is refused before any step is spent (count before {countBefore})");
         }
         catch (System.Exception ex)
         {
@@ -3334,14 +3357,17 @@ public static class GrappleDamageRulesTests
         }
         finally
         {
-            Cleanup(bear, control, target);
+            Cleanup(bear, control, lion, target, target2);
         }
     }
 
     private static void TestGrappleNaturalAttackHasteAndOutOfOrderSteps()
     {
-        var bear = CreateHastedBiteClaws("GrappleNaturalHaste", 4);
+        // BAB +11 hasted: +11/+6/+1 plus Haste's extra attack, four steps on the ladder (PHB p.239; CMB-146).
+        var bear = CreateHastedBiteClaws("GrappleNaturalHaste", 11);
+        var hastedLion = CreateHastedBiteClaws("GrappleNaturalHasteLadder", 4);
         var target = CreateHasteTarget("GrappleNaturalHasteTarget");
+        var target2 = CreateHasteTarget("GrappleNaturalHasteTarget2");
         try
         {
             bear.StartNewTurn();
@@ -3361,7 +3387,16 @@ public static class GrappleDamageRulesTests
             SpecialAttackResult c2 = GrappleNaturalAttack(bear, 2, false, out bool c2Ok);
             bool fifth = bear.TryCommitManeuverSubstituteStep(-1, out _, out _, out _);
             Assert(c1Ok && c2Ok && c1 != null && c2 != null && !fifth,
-                "CMB-127: a hasted bite/claw/claw grappler makes 4 grapple attacks (bite, Haste bite, claw, claw), and no fifth");
+                "CMB-146: a hasted BAB +11 bite/claw/claw grappler makes 4 grapple attacks (bite, Haste bite, claw, claw), and no fifth");
+
+            // A hasted BAB +4 creature: one iterative step plus Haste's, so two grapple natural attacks.
+            hastedLion.StartNewTurn();
+            ForceGrappleState(hastedLion, target2);
+            GrappleNaturalAttack(hastedLion, 0, false, out bool lionBiteOk);
+            GrappleNaturalAttack(hastedLion, 1, false, out bool lionClawOk);
+            GrappleNaturalAttack(hastedLion, 2, false, out bool lionThirdOk);
+            Assert(lionBiteOk && lionClawOk && !lionThirdOk,
+                "CMB-146: a hasted BAB +4 grappler makes two grapple natural attacks (its iterative step and Haste's), not three");
 
             // Out of sequence order: a grapple claw at step 0, then a maneuver substitute with no natural attack named
             // (the NPC executor's call) gives up the bite, the first natural attack not used, at the bite's BAB
@@ -3370,9 +3405,9 @@ public static class GrappleDamageRulesTests
             GrappleNaturalAttack(bear, 1, false, out bool firstClawOk);
             bool pinStep = bear.TryCommitManeuverSubstituteStep(-1, out int pinBab, out int pinStepIndex, out _);
             int resolvedThird = bear.ResolveSubstituteNaturalAttackIndex(2, out bool thirdIsHaste);
-            Assert(firstClawOk && pinStep && pinStepIndex == 1 && pinBab == 4 && bear.ProgressiveAttackPool.IsNaturalAttackUsed(0)
+            Assert(firstClawOk && pinStep && pinStepIndex == 1 && pinBab == 11 && bear.ProgressiveAttackPool.IsNaturalAttackUsed(0)
                 && resolvedThird == 2 && !thirdIsHaste,
-                "CMB-127: after a grapple claw at step 0, a maneuver at step 1 gives up the unused bite (BAB +4), and step 2 the other claw");
+                "CMB-127: after a grapple claw at step 0, a maneuver at step 1 gives up the unused bite (BAB +11), and step 2 the other claw");
         }
         catch (System.Exception ex)
         {
@@ -3380,38 +3415,80 @@ public static class GrappleDamageRulesTests
         }
         finally
         {
-            Cleanup(bear, target);
+            Cleanup(bear, hastedLion, target, target2);
         }
     }
 
-    private static void TestGrappleNaturalAttackRakeOncePerTurn()
+    private static void TestGrappleRakeRules()
     {
-        var cat = CreateBiteClawsCreature("GrappleNaturalRake", 4, false);
-        var target = CreateHasteTarget("GrappleNaturalRakeTarget");
+        // MM p.314 (owner interpretation 2026-10-11, CMB-144): rake claws only against a grappled foe, not subject to
+        // the -4 for grappling; the creature must begin its turn grappling; the rake comes with a full attack; once a turn.
+        var cat = CreateBiteClawsCreature("GrappleRake", 4, false);
+        var control = CreateBiteClawsCreature("GrappleRakeControl", 4, false);
+        var target = CreateHasteTarget("GrappleRakeTarget");
+        var target2 = CreateHasteTarget("GrappleRakeTarget2");
         try
         {
-            cat.Stats.HasRake = true;
-            cat.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            foreach (CharacterController c in new[] { cat, control })
+            {
+                c.Stats.HasRake = true;
+                c.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            }
+
+            // The turn the grapple starts: no rake.
             cat.StartNewTurn();
             ForceGrappleState(cat, target);
-            SpecialAttackResult first = GrappleNaturalAttack(cat, 0, false, out _);
-            SpecialAttackResult second = GrappleNaturalAttack(cat, 1, false, out _);
-            Assert(first != null && first.Log.Contains("Rake: 2 extra claw attack(s)") && second != null && !second.Log.Contains("Rake:")
-                && cat.ProgressiveAttackPool.RakeUsedThisTurn,
-                "CMB-127: the rake's 2 claws come with the first grapple natural attack of the turn, not with every one (MM p.314)");
+            bool startTurn = cat.CanRakeInGrapple(out string startReason);
+            SpecialAttackResult refused = cat.ResolveGrappleAction(GrappleActionType.Rake);
+            Assert(!startTurn && startReason.Contains("begin its turn grappling") && refused != null && !refused.Success
+                && cat.Actions.HasStandardAction && cat.Actions.HasMoveAction && !cat.ProgressiveAttackPool.RakeUsedThisTurn,
+                "CMB-144: a creature cannot begin a grapple and rake in the same turn (MM p.314); nothing is spent");
 
+            // Next turn, begun grappling: the rake makes the turn a full attack, once.
             cat.StartNewTurn();
-            SpecialAttackResult nextTurn = GrappleNaturalAttack(cat, 2, false, out _);
-            Assert(nextTurn != null && nextTurn.Log.Contains("Rake: 2 extra claw attack(s)"),
-                "CMB-127: the next turn's first grapple natural attack rakes again");
+            Assert(cat.ProgressiveAttackPool.BeganTurnGrappling && cat.CanRakeInGrapple(out _),
+                "CMB-144: a creature that begins its turn grappling may rake");
+            SpecialAttackResult rake = cat.ResolveGrappleAction(GrappleActionType.Rake);
+            Assert(rake != null && rake.Log.Contains("2 extra claw attack(s)") && cat.ProgressiveAttackPool.IsFullAttack
+                && !cat.Actions.HasStandardAction && !cat.Actions.HasMoveAction && cat.ProgressiveAttackPool.RakeUsedThisTurn
+                && cat.ProgressiveAttackPool.MainHandStepsUsed == 0,
+                "CMB-144: the rake's 2 claws make the turn a full attack (standard and move actions spent) and take no attack step");
+            Assert(!cat.CanRakeInGrapple(out string againReason) && againReason.Contains("already raked"),
+                "CMB-144: the rake comes once a turn");
+            SpecialAttackResult afterRake = GrappleNaturalAttack(cat, 0, false, out bool afterRakeOk);
+            Assert(afterRakeOk && afterRake != null,
+                "CMB-144/CMB-146: after the rake the full attack's one grapple action (BAB +4) still follows");
+
+            // A grapple attack first (a standard action), then the rake turns the turn into a full attack.
+            cat.StartNewTurn();
+            GrappleNaturalAttack(cat, 1, false, out bool clawFirst);
+            bool rakeAfterAttack = cat.CanRakeInGrapple(out _);
+            SpecialAttackResult lateRake = cat.ResolveGrappleAction(GrappleActionType.Rake);
+            Assert(clawFirst && rakeAfterAttack && lateRake != null && cat.ProgressiveAttackPool.IsFullAttack && !cat.Actions.HasMoveAction,
+                "CMB-144: a rake after the turn's first grapple attack spends the move action and makes it a full attack");
+
+            // No full attack possible (move action used): no rake.
+            cat.StartNewTurn();
+            cat.Actions.UseMoveAction();
+            Assert(!cat.CanRakeInGrapple(out string noFullReason) && noFullReason.Contains("full attack"),
+                "CMB-144: a creature that cannot make a full attack this turn cannot rake");
+
+            // No -4 for grappling on the rake: the grappling cat's rake claws roll at the ungrappled control's rake bonus.
+            cat.StartNewTurn();
+            control.StartNewTurn();
+            FullAttackResult grappledRake = cat.PerformRakeAttacks(target, false, 0, null);
+            FullAttackResult freeRake = control.PerformRakeAttacks(target2, false, 0, null);
+            Assert(cat.HasCondition(CombatConditionType.Grappled) && grappledRake.Attacks.Count == 2 && freeRake.Attacks.Count == 2
+                && AttackModifier(grappledRake.Attacks[0]) == AttackModifier(freeRake.Attacks[0]),
+                $"CMB-144: rake attacks are not subject to the -4 for attacking in a grapple (MM p.314; grappling {AttackModifier(grappledRake.Attacks[0])}, free {AttackModifier(freeRake.Attacks[0])})");
         }
         catch (System.Exception ex)
         {
-            Assert(false, $"Grapple natural rake check threw {ex.GetType().Name}: {ex.Message}");
+            Assert(false, $"Grapple rake check threw {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
-            Cleanup(cat, target);
+            Cleanup(cat, control, target, target2);
         }
     }
 
@@ -3436,19 +3513,19 @@ public static class GrappleDamageRulesTests
             fighter.StartNewTurn();
             ForceGrappleState(bear, target);
             ForceGrappleState(fighter, target2);
-            Assert(gm.GetRemainingGrappleAttackActions(bear) == 3 && gm.GetCurrentGrappleAttackBonus(bear) == 4
-                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 3
+            Assert(gm.GetRemainingGrappleAttackActions(bear) == 1 && gm.GetCurrentGrappleAttackBonus(bear) == 4
+                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 1
                 && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.PinOpponent) == 1
                 && gm.GetRemainingGrappleAttackActions(fighter) == 3 && gm.GetRemainingGrappleAttackActions(fighter, GrappleActionType.AttackUnarmed) == 3,
-                $"CMB-127/CMB-146: a grappling BAB +4 bite/claw/claw creature has 3 grapple natural attacks (one per natural attack) but 1 grapple check (its iterative ladder, PHB p.156); a BAB +12 fighter keeps its 3 iteratives for both (got {gm.GetRemainingGrappleAttackActions(bear)}, {gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.PinOpponent)}, {gm.GetRemainingGrappleAttackActions(fighter)})");
+                $"CMB-146: a grappling BAB +4 bite/claw/claw creature has 1 grapple natural attack and 1 grapple check (its iterative ladder, PHB p.156); a BAB +12 fighter keeps its 3 iteratives for both (got {gm.GetRemainingGrappleAttackActions(bear)}, {gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.PinOpponent)}, {gm.GetRemainingGrappleAttackActions(fighter)})");
 
             CharacterController.GrappleNaturalAttackOption pick = gm.ChooseGrappleNaturalAttackForAI(bear, target);
             Assert(pick.NaturalAttackIndex == 0 && !pick.IsHasteExtraAttack,
                 "CMB-127: with no riders the AI's grapple attack is the highest-bonus natural attack (the bite)");
             GrappleNaturalAttack(bear, 0, false, out _);
             CharacterController.GrappleNaturalAttackOption next = gm.ChooseGrappleNaturalAttackForAI(bear, target);
-            Assert(next.NaturalAttackIndex == 1 && gm.GetRemainingGrappleAttackActions(bear) == 2,
-                "CMB-127: once the bite is used the AI attacks with a claw, and 2 grapple actions are left");
+            Assert(next.NaturalAttackIndex == 1 && gm.GetRemainingGrappleAttackActions(bear) == 0,
+                "CMB-146: once the bite is used the claws are still options, but no grapple action is left on the BAB +4 ladder");
 
             stinger.Stats.NaturalAttacks.Clear();
             stinger.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
@@ -3504,20 +3581,23 @@ public static class GrappleDamageRulesTests
                 && bear.GetGrappleNaturalAttackOptions().Count == 3
                 && !gm.CanUseGrappleAttackOption(bear, GrappleActionType.PinOpponent)
                 && !gm.CanUseGrappleAttackOption(bear, GrappleActionType.OpposedGrappleEscape)
-                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 2,
-                $"CMB-127: a BAB +4 bite/claw/claw grappler's pin is an iterative step at its full BAB +4 that gives up no natural attack; no second grapple check follows, 2 grapple natural attacks do (got ok={pinOk} bab={pinBab} reason={pinReason})");
+                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 0,
+                $"CMB-146: a BAB +4 bite/claw/claw grappler's pin is an iterative step at its full BAB +4 that gives up no natural attack; no second grapple check and no grapple natural attack follow (got ok={pinOk} bab={pinBab} reason={pinReason})");
 
-            // The lion case: after one grapple claw attack the one iterative step is used, so a pin or escape check is refused.
+            // The lion case: after one grapple claw attack the one iterative step is used, so a pin, an escape check or
+            // another grapple natural attack is refused.
             bear2.StartNewTurn();
             ForceGrappleState(bear2, target2);
             bool clawOk = ConsumeGrappleStep(gm, bear2, GrappleActionType.AttackUnarmed, 1, out int clawBab, out _);
             bool pinAfter = ConsumeGrappleStep(gm, bear2, GrappleActionType.PinOpponent, -1, out _, out string refusal);
+            bool biteAfter = ConsumeGrappleStep(gm, bear2, GrappleActionType.AttackUnarmed, 0, out _, out string biteRefusal);
             Assert(clawOk && clawBab == -1 && bear2.ProgressiveAttackPool.IsNaturalAttackUsed(1)
-                && !pinAfter && !string.IsNullOrEmpty(refusal) && bear2.ProgressiveAttackPool.MainHandStepsUsed == 1
+                && !pinAfter && !string.IsNullOrEmpty(refusal) && !biteAfter && biteRefusal != null && biteRefusal.Contains("BAB ladder")
+                && bear2.ProgressiveAttackPool.MainHandStepsUsed == 1
                 && !gm.CanUseGrappleAttackOption(bear2, GrappleActionType.PinOpponent)
                 && !gm.CanUseGrappleAttackOption(bear2, GrappleActionType.OpposedGrappleEscape)
-                && gm.CanUseGrappleAttackOption(bear2, GrappleActionType.AttackUnarmed),
-                $"CMB-127: after one grapple claw attack (at the claw's -1) a BAB +4 natural attacker is refused a pin or escape check and keeps its other natural attacks (got claw={clawOk}/{clawBab}, pin={pinAfter})");
+                && !gm.CanUseGrappleAttackOption(bear2, GrappleActionType.AttackUnarmed),
+                $"CMB-146: after one grapple claw attack (at the claw's -1) a BAB +4 natural attacker is refused a pin, an escape check and a second grapple natural attack (got claw={clawOk}/{clawBab}, pin={pinAfter}, bite={biteAfter} {biteRefusal})");
         }
         catch (System.Exception ex)
         {
@@ -3532,7 +3612,7 @@ public static class GrappleDamageRulesTests
     private static void TestGrappleNaturalAttackRefusesUsedOrMissingAttack()
     {
         var beast = CreateBiteClawsCreature("GrappleNaturalRefuse", 4, false);
-        var clawBite = CreateBiteClawsCreature("GrappleNaturalFallback", 4, false);
+        var clawBite = CreateBiteClawsCreature("GrappleNaturalFallback", 11, false);
         var target = CreateHasteTarget("GrappleNaturalRefuseTarget");
         var target2 = CreateHasteTarget("GrappleNaturalFallbackTarget");
         try
@@ -3571,6 +3651,433 @@ public static class GrappleDamageRulesTests
         finally
         {
             Cleanup(beast, clawBite, target, target2);
+        }
+    }
+
+    private static void TestGrappleCheckIgnoresConditionAttackModifiers()
+    {
+        // PHB p.155-156 (owner interpretation 2026-10-11, CMB-130): a grapple check is BAB + Str + the special size
+        // modifier + effects that name grapple checks; condition attack modifiers (Grappled, Pinned, Shaken) do not apply.
+        var attacker = CreateTestCharacter("GrappleCheckConditions", "Fighter");
+        var defender = CreateWeakDefender("GrappleCheckConditionsTarget");
+        int n = 0;
+        try
+        {
+            int expected = attacker.Stats.BaseAttackBonus + attacker.Stats.STRMod + attacker.GetGrappleSizeModifier()
+                + (attacker.Stats.HasFeat("Improved Grapple") ? 4 : 0);
+            int defenderExpected = defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.GetGrappleSizeModifier()
+                + (defender.Stats.HasFeat("Improved Grapple") ? 4 : 0);
+            ForceGrappleState(attacker, defender);
+            attacker.ApplyCondition(CombatConditionType.Shaken, 5, "CMB-130 test");
+            Assert(attacker.HasCondition(CombatConditionType.Grappled) && attacker.Stats.ConditionAttackPenalty <= -6
+                && attacker.GetGrappleModifier() == expected,
+                $"CMB-130: the grapple modifier leaves out the Grappled -4 and Shaken -2 attack modifiers (got {attacker.GetGrappleModifier()}, expected {expected}, attack conditions {attacker.Stats.ConditionAttackPenalty})");
+
+            // Attacker wins the pin check (forced 20 vs 1); its check total carries no condition term.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            SpecialAttackResult pin = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pin != null && pin.Success && CheckMod(pin) == expected && pin.OpposedTotal - pin.OpposedRoll == defenderExpected
+                && defender.HasCondition(CombatConditionType.Pinned) && !pin.Log.Contains("Condition modifiers"),
+                $"CMB-130: the pin check is BAB + Str + size on both sides, no condition modifiers (got {CheckMod(pin)} vs {pin?.OpposedTotal - pin?.OpposedRoll})");
+
+            // The pinned defender's escape check: no -4 Grappled, no -4 Pinned (it was -8 before).
+            SpecialAttackResult escape = defender.ResolveGrappleAction(GrappleActionType.OpposedGrappleEscape);
+            Assert(escape != null && CheckMod(escape) == defenderExpected,
+                $"CMB-130: a pinned creature's escape check takes no Grappled or Pinned penalty (got {CheckMod(escape)}, expected {defenderExpected})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple check condition test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(attacker, defender);
+        }
+    }
+
+    private static void TestImprovedGrabHoldAndEstablishingDamage()
+    {
+        // MM p.310 (owner ruling 2026-10-11, CMB-148, CMB-149): the controller may grapple normally or hold with the body
+        // part that hit (-20 on grapple checks, not grappled); in later rounds a successful Damage check deals the
+        // establishing attack's damage.
+        var holder = CreateBiteClawsCreature("ImprovedGrabHolder", 11, false);
+        var grappler = CreateBiteClawsCreature("ImprovedGrabNormal", 11, false);
+        var held = CreateHasteTarget("ImprovedGrabHeld");
+        var grabbed = CreateHasteTarget("ImprovedGrabGrabbed");
+        var other = CreateHasteTarget("ImprovedGrabOther");
+        int n = 0;
+        try
+        {
+            foreach (CharacterController c in new[] { holder, grappler })
+            {
+                c.Stats.HasImprovedGrab = true;
+                c.Stats.ImprovedGrabTriggerAttackName = "Bite";
+                c.Stats.CurrentSizeCategory = SizeCategory.Large;
+            }
+            held.SetTeam(CharacterTeam.Enemy);
+            grabbed.SetTeam(CharacterTeam.Enemy);
+            other.SetTeam(CharacterTeam.Enemy);
+            other.GridPosition = new Vector2Int(0, 1);
+
+            // The hold: -20 on the free check, the holder not grappled.
+            int baseMod = holder.GetGrappleModifier();
+            NaturalAttackDefinition bite = holder.GetNaturalAttackByWeaponName("Bite");
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            holder.StartNewTurn();
+            SpecialAttackResult hold = holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+            Assert(bite != null && hold != null && hold.Success && CheckMod(hold) == baseMod - 20
+                && holder.IsHoldingWithImprovedGrab() && !holder.IsGrappling() && !holder.HasCondition(CombatConditionType.Grappled)
+                && held.IsGrappling() && held.HasCondition(CombatConditionType.Grappled)
+                && holder.GetGrappleModifier() == baseMod - 20,
+                $"CMB-148: the Improved Grab hold with the bite takes -20 on the free check ({CheckMod(hold)} vs {baseMod}) and leaves the holder ungrappled; the held creature is grappled");
+            Assert(holder.IsBarredFromOrdinaryAttackOn(held, out _) && !holder.IsBarredFromOrdinaryAttackOn(other, out _),
+                "CMB-149: the holder's ordinary attacks go only against other opponents (MM p.310)");
+            SpecialAttackResult heldPin = held.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(heldPin != null && !heldPin.Success && heldPin.Log.Contains("not grappled"),
+                "CMB-163: a creature held with one body part cannot pin its holder, which is not grappled");
+
+            // The held creature escapes against the holder's -20 check.
+            n = 0;
+            SpecialAttackResult escape = held.ResolveGrappleAction(GrappleActionType.OpposedGrappleEscape);
+            Assert(escape != null && escape.Success && escape.OpposedTotal - escape.OpposedRoll == baseMod - 20
+                && !held.IsGrappling() && !holder.IsHoldingWithImprovedGrab(),
+                $"CMB-148: the holder opposes the escape at -20 ({escape?.OpposedTotal - escape?.OpposedRoll}); the escape ends the hold");
+
+            // Hold again; letting go ends it.
+            n = 0;
+            holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+            string letGo = holder.ReleaseImprovedGrabHold();
+            Assert(!string.IsNullOrEmpty(letGo) && !held.IsGrappling() && !held.HasCondition(CombatConditionType.Grappled),
+                "CMB-163: the holder may let go, and the held creature is free");
+
+            // MM p.310: a holder that moves carries the held creature along when it can drag its weight (PHB p.162:
+            // 5 x its heavy load; STR 26 Large: 5 x 800 x 2 = 8,000 lb. against a Medium creature's 500 lb. and its gear).
+            n = 0;
+            holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+            Vector2Int holderFrom = holder.GridPosition;
+            Vector2Int heldFrom = held.GridPosition;
+            holder.GridPosition = holderFrom + new Vector2Int(3, 0);
+            string carried = CharacterController.CheckImprovedGrabHoldReach(holder, holderFrom, holder.GridPosition);
+            Assert(string.IsNullOrEmpty(carried) && holder.IsHoldingWithImprovedGrab() && held.IsGrappling()
+                && held.GridPosition != heldFrom && holder.GetMinimumDistanceToTarget(held, chebyshev: true) <= Mathf.Max(1, holder.Stats.NaturalReachSquares),
+                $"CMB-163: a holder that moves carries the held creature along within its reach (MM p.310; held {heldFrom} -> {held.GridPosition}, holder {holder.GridPosition})");
+
+            // Too heavy to drag: the hold ends instead (STR 1: 5 x 10 x 2 = 100 lb. < 500 lb.).
+            int strBefore = holder.Stats.STR;
+            holder.Stats.STR = 1;
+            holderFrom = holder.GridPosition;
+            holder.GridPosition = holderFrom + new Vector2Int(3, 0);
+            string tooHeavy = CharacterController.CheckImprovedGrabHoldReach(holder, holderFrom, holder.GridPosition);
+            holder.Stats.STR = strBefore;
+            Assert(!string.IsNullOrEmpty(tooHeavy) && tooHeavy.Contains("drag") && !holder.IsHoldingWithImprovedGrab() && !held.IsGrappling(),
+                $"CMB-163: a holder that cannot drag the held creature's weight drops it when it moves away (PHB p.162; got '{tooHeavy}')");
+
+            // The held creature moved out of reach by something else: the hold ends.
+            n = 0;
+            holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+            Vector2Int pushedFrom = held.GridPosition;
+            held.GridPosition = pushedFrom + new Vector2Int(6, 6);
+            string pushed = CharacterController.CheckImprovedGrabHoldReach(held, pushedFrom, held.GridPosition);
+            Assert(!string.IsNullOrEmpty(pushed) && !holder.IsHoldingWithImprovedGrab() && !held.IsGrappling(),
+                "CMB-163: the hold ends when the held creature is moved out of the holder's reach");
+
+            // Normal grapple: same turn unarmed damage, later rounds the bite's damage, lethal by default.
+            n = 0;
+            grappler.StartNewTurn();
+            SpecialAttackResult grab = grappler.ResolveImprovedGrabFreeAttempt(grabbed, grappler.GetNaturalAttackByWeaponName("Bite"));
+            int grabMod = grappler.GetGrappleModifier();
+            Assert(grab != null && grab.Success && grappler.IsGrappling() && grappler.HasCondition(CombatConditionType.Grappled)
+                && grappler.GetImprovedGrabDamageAttackForGrappleCheck() == null,
+                "CMB-148: a normal Improved Grab grapple grapples both; in the round it is established no bite damage yet");
+            grappler.StartNewTurn();
+            n = 0;
+            NaturalAttackDefinition damageAttack = grappler.GetImprovedGrabDamageAttackForGrappleCheck();
+            SpecialAttackResult damage = grappler.ResolveGrappleAction(GrappleActionType.DamageOpponent);
+            Assert(damageAttack != null && damageAttack.Name == "Bite" && damage != null && damage.Success && damage.DamageDealt > 0
+                && damage.Log.Contains("Bite's damage") && damage.Log.Contains("lethal") && CheckMod(damage) == grabMod,
+                $"CMB-148: in a later round a successful Damage check deals the bite's damage, lethal, with no grapple check penalty (MM p.310; check {CheckMod(damage)} vs {grabMod})");
+            n = 0;
+            SpecialAttackResult nonlethal = grappler.ResolveGrappleAction(GrappleActionType.DamageOpponent, AttackDamageMode.Nonlethal);
+            Assert(nonlethal != null && CheckMod(nonlethal) == grabMod - 4,
+                "CMB-148: nonlethal damage with the bite costs -4 on the grapple check (PHB p.146)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab hold test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(holder, grappler, held, grabbed, other);
+        }
+    }
+
+    private static void TestImprovedGrabHoldAiChoice()
+    {
+        // The AI holds only while another enemy is in reach and the -20 check keeps even odds (CMB-148).
+        var grabber = CreateBiteClawsCreature("ImprovedGrabAiChoice", 11, false);
+        var target = CreateWeakDefender("ImprovedGrabAiChoiceTarget");
+        var other = CreateWeakDefender("ImprovedGrabAiChoiceOther");
+        try
+        {
+            grabber.SetTeam(CharacterTeam.Player); // test actors default to the Enemy team
+            target.SetTeam(CharacterTeam.Enemy);
+            other.SetTeam(CharacterTeam.Enemy);
+            target.GridPosition = new Vector2Int(1, 0);
+            other.GridPosition = new Vector2Int(9, 9);
+            var all = new System.Collections.Generic.List<CharacterController> { grabber, target, other };
+            bool aloneHold = DND35.AI.AIProfile.DefaultShouldHoldWithImprovedGrab(grabber, target, all);
+            other.GridPosition = new Vector2Int(0, 1);
+            bool withOtherHold = DND35.AI.AIProfile.DefaultShouldHoldWithImprovedGrab(grabber, target, all);
+            grabber.Stats.BaseAttackBonusOverride = 1;
+            bool weakHold = DND35.AI.AIProfile.DefaultShouldHoldWithImprovedGrab(grabber, target, all);
+            Assert(!aloneHold && withOtherHold && !weakHold,
+                $"CMB-148: the AI holds with one body part only when another foe is in reach and the -20 check keeps even odds (alone {aloneHold}, other in reach {withOtherHold}, weak {weakHold})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab AI choice test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(grabber, target, other);
+        }
+    }
+
+    private static void TestImprovedGrabOneGrappleLinkPerCreature()
+    {
+        // A creature has one grapple link at a time (CMB-163): a holder with one body part (not IsGrappling, MM p.310)
+        // starts no second Improved Grab or grapple, and a third party cannot grab the holder; the first hold is unchanged.
+        var holder = CreateBiteClawsCreature("OneLinkHolder", 11, false);
+        var held = CreateHasteTarget("OneLinkHeld");
+        var second = CreateHasteTarget("OneLinkSecond");
+        var third = CreateBiteClawsCreature("OneLinkThird", 11, false);
+        int n = 0;
+        try
+        {
+            holder.Stats.HasImprovedGrab = true;
+            holder.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            holder.Stats.CurrentSizeCategory = SizeCategory.Large;
+            third.Stats.HasImprovedGrab = true;
+            third.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            third.Stats.CurrentSizeCategory = SizeCategory.Huge;
+            NaturalAttackDefinition bite = holder.GetNaturalAttackByWeaponName("Bite");
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            holder.StartNewTurn();
+            SpecialAttackResult hold = holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+
+            n = 0;
+            SpecialAttackResult secondGrab = holder.ResolveImprovedGrabFreeAttempt(second, bite, holdWithBodyPart: false);
+            SpecialAttackResult secondHold = holder.ResolveImprovedGrabFreeAttempt(second, bite, holdWithBodyPart: true);
+            MethodInfo resolveGrapple = typeof(CharacterController).GetMethod("ResolveGrapple", BindingFlags.Instance | BindingFlags.NonPublic);
+            var plainGrapple = resolveGrapple != null ? resolveGrapple.Invoke(holder, new object[] { second, null }) as SpecialAttackResult : null;
+            Assert(hold != null && hold.Success && secondGrab != null && !secondGrab.Success && secondHold != null && !secondHold.Success
+                && plainGrapple != null && !plainGrapple.Success && secondGrab.Log.Contains("already in a grapple")
+                && !second.IsGrappling() && holder.TryGetImprovedGrabHold(out CharacterController stillHeld, out _) && stillHeld == held
+                && held.IsGrappling(),
+                "CMB-163: a holder starts no second Improved Grab (hold or normal) and no grapple; its first hold is unchanged");
+
+            n = 0;
+            SpecialAttackResult grabHolder = third.ResolveImprovedGrabFreeAttempt(holder, third.GetNaturalAttackByWeaponName("Bite"));
+            Assert(grabHolder != null && !grabHolder.Success && grabHolder.Log.Contains("already in a grapple")
+                && !third.IsGrappling() && holder.IsHoldingWithImprovedGrab() && held.IsGrappling(),
+                "CMB-163: a third party cannot grab a creature that holds another with one body part; the hold is unchanged");
+
+            GameManager gm = GameManager.Instance;
+            if (gm != null)
+            {
+                Assert(!gm.CanUseGrappleAttackOption(holder) && !gm.CanUseGrappleAttackOption(holder, GrappleActionType.PinOpponent),
+                    "CMB-163: the action panel and the AI see no grapple start and no pin for a holder");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"One grapple link test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(holder, held, second, third);
+        }
+    }
+
+    private static void TestImprovedGrabHoldDamageCheck()
+    {
+        // MM p.310 (CMB-148, CMB-163): a holder with one body part makes grapple checks at -20; from the round after the
+        // grab its Damage check against the held creature deals the establishing attack's damage. Its other grapple
+        // actions are not offered.
+        var holder = CreateBiteClawsCreature("HoldDamageHolder", 11, false);
+        var held = CreateHasteTarget("HoldDamageHeld");
+        int n = 0;
+        try
+        {
+            holder.Stats.HasImprovedGrab = true;
+            holder.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            holder.Stats.CurrentSizeCategory = SizeCategory.Large;
+            NaturalAttackDefinition bite = holder.GetNaturalAttackByWeaponName("Bite");
+            int baseMod = holder.GetGrappleModifier();
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            holder.StartNewTurn();
+            holder.ResolveImprovedGrabFreeAttempt(held, bite, holdWithBodyPart: true);
+
+            n = 0;
+            int hpAtGrab = held.Stats.CurrentHP;
+            SpecialAttackResult sameRound = holder.ResolveGrappleAction(GrappleActionType.DamageOpponent);
+            Assert(sameRound != null && !sameRound.Success && sameRound.Log.Contains("rounds after the grab") && held.Stats.CurrentHP == hpAtGrab,
+                "CMB-163: in the round of the grab the hold deals no damage (MM p.310: successive rounds)");
+
+            holder.StartNewTurn();
+            int hpBefore = held.Stats.CurrentHP;
+            n = 0;
+            SpecialAttackResult damage = holder.ResolveGrappleAction(GrappleActionType.DamageOpponent);
+            Assert(damage != null && damage.Success && damage.DamageDealt > 0 && held.Stats.CurrentHP < hpBefore
+                && damage.Log.Contains("Bite's damage") && CheckMod(damage) == baseMod - 20,
+                $"CMB-148/CMB-163: the holder's Damage check in a later round is rolled at -20 and deals the bite's damage (check {CheckMod(damage)}, expected {baseMod - 20})");
+
+            n = 0;
+            SpecialAttackResult pin = holder.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pin != null && !pin.Success && pin.Log.Contains("only grapple action is the Damage check") && !held.HasCondition(CombatConditionType.Pinned),
+                "CMB-163: a holder's only grapple action is the Damage check");
+
+            GameManager gm = GameManager.Instance;
+            if (gm != null)
+            {
+                holder.StartNewTurn();
+                bool stepOk = ConsumeGrappleStep(gm, holder, GrappleActionType.DamageOpponent, -1, out int bab, out string reason);
+                Assert(stepOk && bab == 11 && holder.ProgressiveAttackPool.MainHandStepsUsed == 1 && holder.IsHoldingWithImprovedGrab(),
+                    $"CMB-163: the holder's Damage check takes an iterative step of its BAB ladder, through the PC and AI path (got ok={stepOk} bab={bab} {reason})");
+                bool pinStep = ConsumeGrappleStep(gm, holder, GrappleActionType.PinOpponent, -1, out _, out string pinReason);
+                Assert(!pinStep && !string.IsNullOrEmpty(pinReason) && holder.ProgressiveAttackPool.MainHandStepsUsed == 1,
+                    "CMB-163: a holder's pin is refused before any step is spent");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab hold damage test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(holder, held);
+        }
+    }
+
+    private static void TestImprovedGrabDamageOnEveryWonGrappleCheck()
+    {
+        // MM p.310 (CMB-148): each successful grapple check the grabber makes in successive rounds deals the establishing
+        // attack's damage: a won pin in a later round deals the bite's damage; in the round of the grab it does not.
+        var grappler = CreateBiteClawsCreature("EveryCheckGrappler", 11, false);
+        var grabbed = CreateHasteTarget("EveryCheckGrabbed");
+        var plain = CreateTestCharacter("EveryCheckPlain", "Fighter");
+        var plainTarget = CreateHasteTarget("EveryCheckPlainTarget");
+        int n = 0;
+        try
+        {
+            grappler.Stats.HasImprovedGrab = true;
+            grappler.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            grappler.Stats.CurrentSizeCategory = SizeCategory.Large;
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            grappler.StartNewTurn();
+            grappler.ResolveImprovedGrabFreeAttempt(grabbed, grappler.GetNaturalAttackByWeaponName("Bite"));
+
+            n = 0;
+            SpecialAttackResult sameRoundPin = grappler.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(sameRoundPin != null && sameRoundPin.Success && sameRoundPin.DamageDealt == 0 && !sameRoundPin.Log.Contains("Bite's damage"),
+                "CMB-148: a won pin in the round of the grab deals no hold damage");
+
+            // The next round: the pin's round is up, so a new pin is a renewal (CMB-120), a won grapple check like any other.
+            grappler.StartNewTurn();
+            int hpBefore = grabbed.Stats.CurrentHP;
+            n = 0;
+            SpecialAttackResult pin = grappler.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pin != null && pin.Success && pin.DamageDealt > 0 && grabbed.Stats.CurrentHP < hpBefore
+                && pin.Log.Contains("also deals the Bite's damage") && grabbed.HasCondition(CombatConditionType.Pinned),
+                $"CMB-148: a won pin check in a later round also deals the bite's damage (MM p.310; dealt {pin?.DamageDealt})");
+
+            // Control: a grapple not started by Improved Grab deals no damage with a pin.
+            ForceGrappleState(plain, plainTarget);
+            plain.StartNewTurn();
+            n = 0;
+            SpecialAttackResult plainPin = plain.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(plainPin != null && plainPin.Success && plainPin.DamageDealt == 0,
+                "CMB-148: a pin in a grapple not started by Improved Grab deals no damage");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab every-check damage test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(grappler, grabbed, plain, plainTarget);
+        }
+    }
+
+    private static void TestRakeRefusedAgainstImprovedGrabHolder()
+    {
+        // MM p.314: rake claws only against a grappled foe; a holder with one body part is not grappled (MM p.310).
+        var holder = CreateBiteClawsCreature("RakeHolder", 11, false);
+        var cat = CreateBiteClawsCreature("RakeHeldCat", 4, false);
+        int n = 0;
+        try
+        {
+            holder.Stats.HasImprovedGrab = true;
+            holder.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            holder.Stats.CurrentSizeCategory = SizeCategory.Large;
+            cat.Stats.HasRake = true;
+            cat.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            cat.Stats.BaseAttackBonusOverride = 0;
+            cat.Stats.STR = 6;
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            holder.StartNewTurn();
+            holder.ResolveImprovedGrabFreeAttempt(cat, holder.GetNaturalAttackByWeaponName("Bite"), holdWithBodyPart: true);
+            cat.StartNewTurn();
+            bool canRake = cat.CanRakeInGrapple(out string reason);
+            Assert(cat.IsGrappling() && cat.ProgressiveAttackPool.BeganTurnGrappling && !canRake && reason.Contains("not grappled"),
+                $"CMB-144/CMB-163: a creature held with one body part cannot rake its holder, which is not grappled (got {canRake}: {reason})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Rake against holder test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(holder, cat);
+        }
+    }
+
+    private static void TestGrappleMovesProvokeOnlyThirdParties()
+    {
+        // Owner interpretation 2026-10-11 (CMB-152): the grapple moves provoke from third parties, never from the
+        // creatures in the same grapple; AnalyzePathForAoOs takes those as excluded threateners.
+        var mover = CreateTestCharacter("GrappleMoveAoOMover", "Fighter");
+        var partner = CreateTestCharacter("GrappleMoveAoOPartner", "Fighter");
+        var third = CreateTestCharacter("GrappleMoveAoOThird", "Fighter");
+        try
+        {
+            mover.SetTeam(CharacterTeam.Player); // test actors default to the Enemy team
+            partner.SetTeam(CharacterTeam.Enemy);
+            third.SetTeam(CharacterTeam.Enemy);
+            mover.GridPosition = new Vector2Int(3, 3);
+            partner.GridPosition = new Vector2Int(3, 3);
+            third.GridPosition = new Vector2Int(4, 3);
+            var all = new System.Collections.Generic.List<CharacterController> { mover, partner, third };
+            var path = new System.Collections.Generic.List<Vector2Int> { new Vector2Int(2, 3) };
+            System.Collections.Generic.List<AoOThreatInfo> plain = ThreatSystem.AnalyzePathForAoOs(mover, path, all);
+            System.Collections.Generic.List<AoOThreatInfo> excluded = ThreatSystem.AnalyzePathForAoOs(mover, path, all, excludedThreateners: new System.Collections.Generic.List<CharacterController> { partner });
+            Assert(plain.Exists(a => a.Threatener == partner) && plain.Exists(a => a.Threatener == third)
+                && !excluded.Exists(a => a.Threatener == partner) && excluded.Exists(a => a.Threatener == third),
+                $"CMB-152: leaving the shared square provokes from the third party only when the former grapple partner is excluded (plain {plain.Count}, excluded {excluded.Count})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple move AoO test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(mover, partner, third);
         }
     }
 

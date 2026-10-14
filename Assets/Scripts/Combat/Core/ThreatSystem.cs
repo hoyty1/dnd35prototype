@@ -397,12 +397,16 @@ public static class ThreatSystem
     /// use raw threatened squares and do not (GRID-020).
     /// With <paramref name="forcedMovement"/> (a bull rush push) the round record is not read:
     /// whether a pushed defender shares it, and over which round, is an open owner question (CMB-150).
+    /// <paramref name="excludedThreateners"/> get no AoO from this movement: the creatures in the same grapple as a
+    /// grappler that moves with the grapple, or the former grapple opponent of an escaper moving away (owner
+    /// interpretation 2026-10-11, CMB-152).
     /// </summary>
     /// <param name="mover">The character moving.</param>
     /// <param name="path">The movement path (list of squares, NOT including the starting square).</param>
     /// <param name="allCharacters">All characters in combat.</param>
     /// <returns>List of AoOs that would be provoked.</returns>
-    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false, bool forcedMovement = false)
+    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false, bool forcedMovement = false,
+        ICollection<CharacterController> excludedThreateners = null)
     {
         var provokedAoOs = new List<AoOThreatInfo>();
         if (mover == null || mover.Stats == null) return provokedAoOs;
@@ -419,6 +423,8 @@ public static class ThreatSystem
             if (character == mover) continue;
             if (character.Stats.IsDead) continue;
             if (character.Team == mover.Team) continue;
+            // In the same grapple as the mover (CMB-152).
+            if (excludedThreateners != null && excludedThreateners.Contains(character)) continue;
             // Its one movement opportunity against this mover this round already came (CMB-128).
             if (!forcedMovement && HasHadMovementOpportunity(character, mover)) continue;
 
@@ -521,11 +527,11 @@ public static class ThreatSystem
     /// movement executors call it for each opponent listed at the step they resolve, whether or not
     /// the AoO is then made (the opportunity came either way): GameManager.ResolveMovementAoOsBeforeStep
     /// (PC moves and withdraw, NPC, summon and compulsion moves, both charge paths, crawl, the overrun
-    /// continuation) and the bull rush follow (GameManager.ResolveBullRushStepAoOs). Movement executors
+    /// continuation, the grapple moves: GrappleSystem.ExecuteGrappleMovement and ExecuteFreeAdjacentGrappleMovement,
+    /// CMB-152) and the bull rush follow (GameManager.ResolveBullRushStepAoOs). Movement executors
     /// that resolve no movement AoOs at all also record nothing: the PC move-through overrun and its
-    /// Normal Move branch (CMB-151), the attacker's follow after a targeted overrun push
-    /// (TryPushTargetAway, CMB-116, CMB-151) and the grapple moves (GrappleSystem.ExecuteGrappleMovement,
-    /// ExecuteFreeAdjacentGrappleMovement, CMB-152). Not called for provocations that are not movement
+    /// Normal Move branch (CMB-151) and the attacker's follow after a targeted overrun push
+    /// (TryPushTargetAway, CMB-116, CMB-151). Not called for provocations that are not movement
     /// (casting, ranged attacks, standing up, maneuver starts, the bull rush entry into the defender's
     /// space, CMB-113) nor for a bull rush push (CMB-150).
     /// </summary>

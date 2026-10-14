@@ -278,13 +278,51 @@ namespace Tests.Scenarios
             _pinsEnded.Clear();
         }
 
-        /// <summary>True when <paramref name="a"/> and <paramref name="b"/> share the square a pin release left them in.</summary>
+        /// <summary>
+        /// An Improved Grab hold with one body part (MM p.310: the holder pulls the held creature into its space) that has
+        /// ended with both creatures free and still in one square was let go (CMB-163): as after a pin release, they may
+        /// share that square until one moves out. Holds are sampled at every check.
+        /// </summary>
+        private void ResolveEndedHolds()
+        {
+            var current = new Dictionary<CharacterController, CharacterController>();
+            foreach (CharacterController c in _job.Trace.KnownActors)
+            {
+                if (c == null || c.Stats == null)
+                    continue;
+                try
+                {
+                    if (c.TryGetImprovedGrabHold(out CharacterController held, out _) && held != null)
+                        current[c] = held;
+                }
+                catch (Exception) { }
+            }
+
+            foreach (KeyValuePair<CharacterController, CharacterController> hold in _holds)
+            {
+                CharacterController a = hold.Key, b = hold.Value;
+                if (current.TryGetValue(a, out CharacterController still) && still == b)
+                    continue;
+                if (a == null || b == null || a.Stats == null || b.Stats == null)
+                    continue;
+                if (SafeGrappling(a) || SafeGrappling(b) || a.GridPosition != b.GridPosition)
+                    continue;
+                _grappleSharedSquares[(a, b)] = a.GridPosition;
+                _grappleSharedSquares[(b, a)] = a.GridPosition;
+            }
+            _holds = current;
+        }
+
+        private Dictionary<CharacterController, CharacterController> _holds = new Dictionary<CharacterController, CharacterController>();
+
+        /// <summary>True when <paramref name="a"/> and <paramref name="b"/> share the square a pin release or an ended hold left them in.</summary>
         private bool InSquareLeftByGrapple(CharacterController a, CharacterController b)
             => _grappleSharedSquares.TryGetValue((a, b), out Vector2Int sq) && sq == a.GridPosition && sq == b.GridPosition;
 
         private void CheckState(string when)
         {
             ResolveEndedPins();
+            ResolveEndedHolds();
             SquareGrid grid = _gm.Grid;
             var byPos = new Dictionary<Vector2Int, CharacterController>();
             foreach (CharacterController c in _job.Trace.KnownActors)

@@ -587,6 +587,12 @@ public partial class GameManager
         // Inert test hook: every MoveToCell, MoveAlongPath (segment) and grapple reposition lands here.
         ScenarioHooks.Moved?.Invoke(mover, previousPosition, currentPosition, movementType);
 
+        // An Improved Grab hold with one body part: a moving holder carries the held creature along while it can drag its
+        // weight, else the hold ends (MM p.310, PHB p.162; CMB-163).
+        string holdEnded = CharacterController.CheckImprovedGrabHoldReach(mover, previousPosition, currentPosition);
+        if (!string.IsNullOrEmpty(holdEnded))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", holdEnded));
+
         if (_mirrorImageFollowSuppression.Contains(mover))
         {
             _mirrorImageFollowSuppression.Remove(mover);

@@ -340,7 +340,6 @@ PC usability before correction is 129 yes, 94 partial and 186 no. 29 Cleric- or 
 **Still open:**
 
 - **Grapple:**
-  - how many grapple natural attacks a natural-weapon creature gets: one per natural attack (as coded) or its BAB ladder (PHB p.156); owner question CMB-146 (one natural weapon per grapple attack is settled, MM p.314, CMB-127)
   - whether drawing a light weapon is an opposed check
   - escaping must beat every grappler (PHB p.156)
   - per-creature improved grab and constrict values

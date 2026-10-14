@@ -212,6 +212,50 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// AI choice after an Improved Grab trigger hit (MM p.310; owner ruling 2026-10-11, CMB-148): grapple normally
+        /// (false) or hold with the body part that hit (true: -20 on grapple checks, the free one included, but not
+        /// grappled, so it keeps threatening and attacking others). <see cref="DefaultShouldHoldWithImprovedGrab"/>.
+        /// </summary>
+        public virtual bool ShouldHoldWithImprovedGrab(CharacterController self, CharacterController target, IList<CharacterController> allCharacters)
+            => DefaultShouldHoldWithImprovedGrab(self, target, allCharacters);
+
+        /// <summary>
+        /// The default hold choice, also used for creatures without a profile: hold only while another able enemy is
+        /// within the creature's reach (the hold's point is to keep fighting it) and the -20 still leaves the free grapple
+        /// check at least even odds (its modifier -20 at least the target's).
+        /// </summary>
+        public static bool DefaultShouldHoldWithImprovedGrab(CharacterController self, CharacterController target, IList<CharacterController> allCharacters)
+        {
+            if (self == null || target == null || self.Stats == null || target.Stats == null || allCharacters == null)
+                return false;
+
+            if (self.GetGrappleModifier() + CharacterController.ImprovedGrabHoldGrappleCheckPenalty < target.GetGrappleModifier())
+                return false;
+
+            return HasOtherEnemyInReach(self, target, allCharacters);
+        }
+
+        /// <summary>True when an able enemy of <paramref name="self"/> other than <paramref name="excluded"/> is within its reach.</summary>
+        public static bool HasOtherEnemyInReach(CharacterController self, CharacterController excluded, IList<CharacterController> allCharacters)
+        {
+            if (self == null || allCharacters == null)
+                return false;
+
+            for (int i = 0; i < allCharacters.Count; i++)
+            {
+                CharacterController other = allCharacters[i];
+                if (other == null || other == self || other == excluded || other.Stats == null || other.Stats.IsDead || other.IsUnconscious)
+                    continue;
+                if (!TeamUtility.IsEnemy(self, other))
+                    continue;
+                if (self.IsTargetInCurrentWeaponRange(other))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Validates whether trip is meaningful against the current target: it is standing, and, when
         /// <paramref name="self"/> is given, the shared trip legality allows it (size, swarm, incorporeal;
         /// CharacterController.CanTrip, PHB p.158, CMB-079).

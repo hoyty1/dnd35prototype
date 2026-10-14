@@ -39,7 +39,9 @@ public enum GrappleActionType
     DisarmSmallObject,
     DrawLightWeapon,
     RetrieveSpellComponent,
-    ReleasePinnedOpponent
+    ReleasePinnedOpponent,
+    /// <summary>The rake's extra claw attacks against the grappled foe (MM p.314): needs a full attack and a turn begun grappling (CMB-144).</summary>
+    Rake
 }
 
 public enum AttackDamageMode
@@ -585,6 +587,16 @@ public class CharacterController : MonoBehaviour
         // count reaches this value (its next turn); 0 = no maintainer. See IsPinRenewalDue (CMB-120).
         public int PinRoundEndsAtMaintainerTurnStart;
 
+        // Improved Grab (MM p.310). The natural attack that established the hold, when Improved Grab started this
+        // grapple (null otherwise), and the controller's turn-start count at that moment: in later rounds ("successive
+        // rounds") each successful Damage grapple check of the controller deals that attack's damage (CMB-148).
+        public NaturalAttackDefinition EstablishingAttack;
+        public int EstablishedAtControllerTurnStart;
+        // The controller chose to hold with the body part that made the attack: -20 on its grapple checks, and it is
+        // not considered grappled (no Grappled condition, keeps its Dex bonus, threatens, may attack others; MM p.310,
+        // owner ruling 2026-10-11, CMB-148, CMB-149). The defender is grappled as usual.
+        public bool ControllerHoldsWithBodyPart;
+
         public CharacterController GetOpponent(CharacterController actor)
         {
             if (actor == Controller) return Defender;
@@ -828,7 +840,8 @@ public class CharacterController : MonoBehaviour
     /// weapon user's maneuver, or any creature's grapple action once grappling other than a natural-weapon
     /// creature's grapple natural attack) uses an iterative BAB, so it can never go past the iterative ladder.
     /// A natural-attack creature's maneuver or grapple natural attack is a NaturalSequence step (CMB-102,
-    /// CMB-127) and is capped by the natural-attack count instead (that count for grapple attacks is CMB-146).
+    /// CMB-127) and is capped by the natural-attack count instead; a grapple natural attack is also capped by the
+    /// iterative ladder (TryCommitGrappleNaturalAttackStep; PHB p.156, owner interpretation 2026-10-11, CMB-146).
     /// </summary>
     private int GetAttackStepLimit(AttackStepKind kind)
     {
@@ -6301,6 +6314,28 @@ public class CharacterController : MonoBehaviour
         return EnsureInventory().GetConsumableCount();
     }
 
+    /// <summary>The attack modifier this creature's Grappled (or Grappling) condition rows add to ConditionAttackPenalty (-4 each).</summary>
+    private int GetGrappledConditionAttackModifier()
+    {
+        if (Stats == null || Stats.ActiveConditions == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < Stats.ActiveConditions.Count; i++)
+        {
+            StatusEffect condition = Stats.ActiveConditions[i];
+            if (condition != null && ConditionRules.Normalize(condition.Type) == CombatConditionType.Grappled)
+                total += ConditionRules.GetDefinition(condition.Type).AttackModifier;
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// The rake's extra claw attacks (MM p.314) against <paramref name="target"/>, at the full BAB with no -4 for
+    /// grappling. Callers: the pounce (a charge's full attack) and the grapple rake (<see cref="ResolveGrappleRake"/>,
+    /// which checks the turn-start and full-attack rules, CMB-144).
+    /// </summary>
     public FullAttackResult PerformRakeAttacks(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
         var result = new FullAttackResult
@@ -6328,7 +6363,9 @@ public class CharacterController : MonoBehaviour
         int critMult = 2;
         int attackCount = Mathf.Max(1, rakeAttack.Count);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+        // Rake attacks are not subject to the usual -4 for attacking with a natural weapon in a grapple (MM p.314,
+        // CMB-144): leave the Grappled row's attack modifier out; every other condition still applies.
+        int conditionAttackPenalty = Stats.ConditionAttackPenalty - GetGrappledConditionAttackModifier();
         int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // rake is always melee
 
         for (int i = 0; i < attackCount; i++)
@@ -9183,7 +9220,16 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Grapple] Link ended ({reason}).");
     }
 
-    private string EstablishGrappleWith(CharacterController target)
+    /// <summary>Starts a grapple link with <paramref name="target"/> (a grapple, not an Improved Grab).</summary>
+    private string EstablishGrappleWith(CharacterController target) => EstablishGrappleLink(target, null, false);
+
+    /// <summary>
+    /// Starts the grapple link with <paramref name="target"/>. <paramref name="establishingAttack"/> is the natural attack
+    /// whose Improved Grab started it (MM p.310: its damage on later successful Damage checks, CMB-148);
+    /// <paramref name="holdWithBodyPart"/> is the Improved Grab hold with that body part, in which this creature is not
+    /// grappled (MM p.310; CMB-148, CMB-149).
+    /// </summary>
+    private string EstablishGrappleLink(CharacterController target, NaturalAttackDefinition establishingAttack, bool holdWithBodyPart)
     {
         if (target == null || target == this)
             return string.Empty;
@@ -9197,11 +9243,15 @@ public class CharacterController : MonoBehaviour
             Defender = target,
             PinnedCharacter = null,
             PinMaintainer = null,
-            PinRoundEndsAtMaintainerTurnStart = 0
+            PinRoundEndsAtMaintainerTurnStart = 0,
+            EstablishingAttack = establishingAttack,
+            EstablishedAtControllerTurnStart = _turnsStartedCount,
+            ControllerHoldsWithBodyPart = holdWithBodyPart && establishingAttack != null
         };
 
         RegisterGrappleLink(link);
-        ApplyConditionIfMissing(this, CombatConditionType.Grappled, target.Stats != null ? target.Stats.CharacterName : "Grapple");
+        if (!link.ControllerHoldsWithBodyPart)
+            ApplyConditionIfMissing(this, CombatConditionType.Grappled, target.Stats != null ? target.Stats.CharacterName : "Grapple");
         ApplyConditionIfMissing(target, CombatConditionType.Grappled, Stats != null ? Stats.CharacterName : "Grapple");
 
         RemoveConditionIfPresent(this, CombatConditionType.Pinned);
@@ -9238,6 +9288,15 @@ public class CharacterController : MonoBehaviour
         if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
         {
             EndGrappleLink(link, "opponent unavailable");
+            opponent = null;
+            return false;
+        }
+
+        // MM p.310: a creature that holds with one body part after Improved Grab is not considered grappled; it acts
+        // normally (TryGetImprovedGrabHold describes its hold). The held creature is grappled by it as usual.
+        if (link.ControllerHoldsWithBodyPart && link.Controller == this)
+        {
+            opponent = null;
             return false;
         }
 
@@ -9253,12 +9312,265 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// True when this creature is part of any grapple link: grappling, grappled, or in an Improved Grab hold with one
+    /// body part on either side (the holder is not <see cref="IsGrappling"/>, MM p.310). <paramref name="other"/> is the
+    /// other creature of the link. Every "already in a grapple" gate that starts a grapple reads this, because a
+    /// creature has one grapple link at a time (a second one would break the first; CMB-163).
+    /// </summary>
+    public bool IsInAnyGrappleLink(out CharacterController other)
+    {
+        other = null;
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null)
+            return false;
+
+        other = link.GetOpponent(this);
+        return true;
+    }
+
+    /// <summary>
     /// Convenience alias for UI/gameplay checks that need to know whether this character
     /// is currently in an active grapple.
     /// </summary>
     public bool IsGrappling()
     {
         return IsInActiveGrapple();
+    }
+
+    // ----- Improved Grab hold with one body part (MM p.310; owner ruling 2026-10-11, CMB-148, CMB-149) -----
+    // A creature with Improved Grab may conduct the grapple normally or simply hold the opponent with the body part
+    // that made the attack. Holding: -20 on its grapple checks, and it is not considered grappled: no Grappled
+    // condition, so it keeps its Dex bonus to AC, threatens, makes attacks of opportunity and takes no -4 on attacks,
+    // and its remaining attacks go on against other opponents. The held creature is grappled by it. The controller
+    // chooses (PC prompt, AI AIProfile.ShouldHoldWithImprovedGrab) and both reach ResolveImprovedGrabFreeAttempt.
+    // In later rounds the holder may make the Damage grapple check against the held creature in place of an attack
+    // (at -20; a success deals the establishing attack's damage, MM p.310; IsGrappleActionAvailableToImprovedGrabHolder),
+    // and when it moves it carries the held creature along while it can drag its weight (MM p.310, PHB p.162;
+    // CheckImprovedGrabHoldReach). A creature has one grapple link at a time, so a holder starts no second grapple and
+    // cannot be grabbed (IsInAnyGrappleLink). Still open with the owner (CMB-163), with the provisional behaviour in
+    // the code: the -20 on the free check that starts the hold, letting go as a free action (ReleaseImprovedGrabHold),
+    // the bar on ordinary attacks against the held creature, the held creature's pin and move actions, the holder's
+    // other grapple actions, a second Improved Grab while holding, and the weights used for the drag limit.
+
+    /// <summary>The grapple check penalty of an Improved Grab hold with one body part (MM p.310).</summary>
+    public const int ImprovedGrabHoldGrappleCheckPenalty = -20;
+
+    /// <summary>True when this creature holds another with one body part after Improved Grab (MM p.310; see above).</summary>
+    public bool IsHoldingWithImprovedGrab() => TryGetImprovedGrabHold(out _, out _);
+
+    /// <summary>
+    /// The creature this one holds with one body part after Improved Grab, and the natural attack (body part) that holds it.
+    /// False when it holds none; a hold whose held creature is gone ends here.
+    /// </summary>
+    public bool TryGetImprovedGrabHold(out CharacterController held, out NaturalAttackDefinition bodyPart)
+    {
+        held = null;
+        bodyPart = null;
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null || !link.ControllerHoldsWithBodyPart || link.Controller != this)
+            return false;
+
+        if (link.Defender == null || link.Defender.Stats == null || link.Defender.Stats.IsDead)
+        {
+            EndGrappleLink(link, "held creature unavailable");
+            return false;
+        }
+
+        held = link.Defender;
+        bodyPart = link.EstablishingAttack;
+        return true;
+    }
+
+    /// <summary>True when this creature is held by <paramref name="holder"/>'s Improved Grab hold with one body part (MM p.310).</summary>
+    public bool IsHeldByImprovedGrabHold(out CharacterController holder)
+    {
+        holder = null;
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null || !link.ControllerHoldsWithBodyPart || link.Defender != this)
+            return false;
+
+        holder = link.Controller;
+        return holder != null;
+    }
+
+    /// <summary>
+    /// MM p.310: a creature holding with one body part "can use its remaining attacks against other opponents", so its
+    /// ordinary attacks do not target the creature it holds (provisional, owner question CMB-163). Read by the PC attack
+    /// target click and the NPC attack sequence (its target and retarget choices); the other attack paths that skip it
+    /// are listed in CMB-163.
+    /// </summary>
+    public bool IsBarredFromOrdinaryAttackOn(CharacterController target, out string reason)
+    {
+        reason = string.Empty;
+        if (target == null || !TryGetImprovedGrabHold(out CharacterController held, out NaturalAttackDefinition bodyPart) || held != target)
+            return false;
+
+        string partName = bodyPart != null && !string.IsNullOrWhiteSpace(bodyPart.Name) ? bodyPart.Name.Trim().ToLowerInvariant() : "body part";
+        reason = $"{Stats.CharacterName} holds {target.Stats.CharacterName} with its {partName} and can use its other attacks only against other opponents (MM p.310).";
+        return true;
+    }
+
+    /// <summary>
+    /// The natural attack whose damage this creature's successful grapple checks deal (MM p.310, CMB-148): the attack that
+    /// established the grapple through its Improved Grab, from the round after it was established ("successive rounds");
+    /// null otherwise (the Damage action then deals unarmed strike damage). The Damage action deals it in place of the
+    /// unarmed strike; a won pin, move, use-opponent's-weapon or break-pin check adds it (AppendImprovedGrabCheckDamage).
+    /// Shared by the resolver, the PC damage menu and the AI.
+    /// </summary>
+    public NaturalAttackDefinition GetImprovedGrabDamageAttackForGrappleCheck()
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null || link.Controller != this || link.EstablishingAttack == null)
+            return null;
+
+        return _turnsStartedCount > link.EstablishedAtControllerTurnStart ? link.EstablishingAttack : null;
+    }
+
+    /// <summary>
+    /// A creature held by an Improved Grab hold with one body part cannot pin or drag its holder, which is not grappled
+    /// (MM p.310); pending the owner's ruling on the hold's details (CMB-163). Shared by the resolver, the PC menu and the AI.
+    /// </summary>
+    public bool IsGrappleActionBlockedByImprovedGrabHold(GrappleActionType actionType, out string reason)
+    {
+        reason = string.Empty;
+        if (actionType != GrappleActionType.PinOpponent && actionType != GrappleActionType.MoveHalfSpeed)
+            return false;
+
+        if (!IsHeldByImprovedGrabHold(out CharacterController holder))
+            return false;
+
+        string holderName = holder.Stats != null ? holder.Stats.CharacterName : holder.name;
+        reason = $"{holderName} holds {Stats.CharacterName} with one body part and is not grappled itself (MM p.310), so it cannot be pinned or moved by the grapple.";
+        return true;
+    }
+
+    /// <summary>-20 while this creature holds with one body part (MM p.310), else 0. Read by every grapple check formula.</summary>
+    public int GetImprovedGrabHoldGrappleCheckPenalty()
+        => IsHoldingWithImprovedGrab() ? ImprovedGrabHoldGrappleCheckPenalty : 0;
+
+    /// <summary>
+    /// Lets go of an Improved Grab hold with one body part, which ends the grapple for the held creature too. A free
+    /// action on the holder's turn until the owner rules otherwise (CMB-163). Returns the log line, or empty when
+    /// this creature holds nobody.
+    /// </summary>
+    public string ReleaseImprovedGrabHold(string reason = null)
+    {
+        if (!TryGetImprovedGrabHold(out CharacterController held, out NaturalAttackDefinition bodyPart))
+            return string.Empty;
+
+        string heldName = held.Stats != null ? held.Stats.CharacterName : held.name;
+        string partName = bodyPart != null && !string.IsNullOrWhiteSpace(bodyPart.Name) ? bodyPart.Name.Trim().ToLowerInvariant() : "body part";
+        ReleaseGrappleState(string.IsNullOrEmpty(reason) ? "Improved Grab hold released" : reason);
+        return $"{Stats.CharacterName} lets go of {heldName} ({partName} hold){(string.IsNullOrEmpty(reason) ? string.Empty : ": " + reason)}. {heldName} is no longer grappled.";
+    }
+
+    /// <summary>
+    /// The upper end of the typical weight of a creature of <paramref name="size"/>, in pounds (MM p.314 size table; a
+    /// Colossal creature's open range uses its lower end). The game stores no creature weights, so the Improved Grab
+    /// carry test reads this, plus the creature's carried gear (owner question CMB-163, provisional).
+    /// </summary>
+    public static float GetTypicalCreatureWeightUpperBoundLbs(SizeCategory size)
+    {
+        switch (size)
+        {
+            case SizeCategory.Fine: return 0.125f;
+            case SizeCategory.Diminutive: return 1f;
+            case SizeCategory.Tiny: return 8f;
+            case SizeCategory.Small: return 60f;
+            case SizeCategory.Medium: return 500f;
+            case SizeCategory.Large: return 4000f;
+            case SizeCategory.Huge: return 32000f;
+            case SizeCategory.Gargantuan: return 250000f;
+            default: return 250000f;
+        }
+    }
+
+    /// <summary>
+    /// The carrying capacity multiplier of a bipedal creature of <paramref name="size"/> (PHB p.162). The game does not
+    /// tell bipeds from quadrupeds, so the drag test uses the lower, biped multipliers (owner question CMB-163).
+    /// </summary>
+    public static float GetBipedCarryingCapacityMultiplier(SizeCategory size)
+    {
+        switch (size)
+        {
+            case SizeCategory.Fine: return 0.125f;
+            case SizeCategory.Diminutive: return 0.25f;
+            case SizeCategory.Tiny: return 0.5f;
+            case SizeCategory.Small: return 0.75f;
+            case SizeCategory.Large: return 2f;
+            case SizeCategory.Huge: return 4f;
+            case SizeCategory.Gargantuan: return 8f;
+            case SizeCategory.Colossal: return 16f;
+            default: return 1f;
+        }
+    }
+
+    /// <summary>
+    /// MM p.310: a creature holding with one body part "can even move (possibly carrying away the opponent), provided it
+    /// can drag the opponent's weight". PHB p.162: a creature can drag five times its maximum load. True when this
+    /// creature can drag <paramref name="held"/>: 5 x its heavy load (Strength, biped size multiplier) against the held
+    /// creature's typical weight (upper end for its size) plus its carried gear. Provisional figures, owner question CMB-163.
+    /// </summary>
+    public bool CanDragImprovedGrabHeldCreature(CharacterController held, out string reason)
+    {
+        reason = string.Empty;
+        if (held == null || held.Stats == null || Stats == null)
+            return false;
+
+        float dragLimit = 5f * CharacterStats.GetHeavyLoadForStrength(Stats.EffectiveStrengthScore)
+            * GetBipedCarryingCapacityMultiplier(Stats.CurrentSizeCategory);
+        float weight = GetTypicalCreatureWeightUpperBoundLbs(held.Stats.CurrentSizeCategory) + Mathf.Max(0f, held.Stats.TotalCarriedWeightLbs);
+        if (weight <= dragLimit)
+            return true;
+
+        reason = $"{Stats.CharacterName} cannot drag {held.Stats.CharacterName}'s weight ({weight:0} lb. against a drag limit of {dragLimit:0} lb.; MM p.310, PHB p.162)";
+        return false;
+    }
+
+    /// <summary>
+    /// Keeps an Improved Grab hold with one body part together when one of the two moves, called for every movement
+    /// (GameManager.NotifyCharacterMovement) with the mover's step. When the holder moves out of its natural reach of
+    /// the held creature, it carries the creature along (MM p.310: it can move carrying the opponent if it can drag the
+    /// opponent's weight, <see cref="CanDragImprovedGrabHeldCreature"/>): the held creature moves by the same step, or
+    /// into the holder's space, without provoking (CMB-152). The hold ends when the holder cannot drag the weight, when
+    /// there is no room, or when the held creature is moved out of reach by something else. Returns the log line of an
+    /// ended hold, or empty.
+    /// </summary>
+    public static string CheckImprovedGrabHoldReach(CharacterController mover, Vector2Int previousPosition, Vector2Int currentPosition)
+    {
+        if (mover == null)
+            return string.Empty;
+
+        CharacterController holder = null;
+        if (mover.IsHoldingWithImprovedGrab())
+            holder = mover;
+        else if (mover.IsHeldByImprovedGrabHold(out CharacterController h))
+            holder = h;
+
+        if (holder == null || !holder.TryGetImprovedGrabHold(out CharacterController held, out _))
+            return string.Empty;
+
+        if (IsWithinImprovedGrabHoldReach(holder, held))
+            return string.Empty;
+
+        if (mover != holder)
+            return holder.ReleaseImprovedGrabHold("the held creature was moved out of reach");
+
+        if (!holder.CanDragImprovedGrabHeldCreature(held, out string dragReason))
+            return holder.ReleaseImprovedGrabHold(dragReason);
+
+        Vector2Int heldFrom = held.GridPosition;
+        Vector2Int step = currentPosition - previousPosition;
+        if ((held.TrySetGrapplePosition(heldFrom + step, holder) && IsWithinImprovedGrabHoldReach(holder, held))
+            || (held.TrySetGrapplePosition(holder.FindBestGrapplePosition(held, holder), holder) && IsWithinImprovedGrabHoldReach(holder, held)))
+        {
+            Debug.Log($"[Grapple] {holder.Stats.CharacterName} carries {held.Stats.CharacterName} from ({heldFrom.x},{heldFrom.y}) to ({held.GridPosition.x},{held.GridPosition.y}) (Improved Grab hold, MM p.310).");
+            return string.Empty;
+        }
+
+        return holder.ReleaseImprovedGrabHold("no room to carry the held creature along");
+    }
+
+    private static bool IsWithinImprovedGrabHoldReach(CharacterController holder, CharacterController held)
+    {
+        int reach = holder.Stats != null ? Mathf.Max(1, holder.Stats.NaturalReachSquares) : 1;
+        return holder.GetMinimumDistanceToTarget(held, chebyshev: true) <= reach;
     }
 
     public bool IsPinned()
@@ -9771,14 +10083,15 @@ public class CharacterController : MonoBehaviour
             SizeModifier = GetGrappleSizeModifier()
         };
 
-        if (Stats != null)
-        {
-            if (Stats.ConditionAttackPenalty != 0)
-                result.AddMiscModifier(Stats.ConditionAttackPenalty, "Condition modifiers");
+        // A grapple check is BAB + Str + the special size modifier + effects that name grapple checks (PHB p.155-156;
+        // owner interpretation 2026-10-11, CMB-130). It is not an attack roll, so condition attack modifiers (Grappled, Pinned,
+        // Shaken, Prone...) and Haste's attack bonus do not apply.
+        if (Stats != null && Stats.HasFeat("Improved Grapple"))
+            result.AddMiscModifier(4, "Improved Grapple feat");
 
-            if (Stats.HasFeat("Improved Grapple"))
-                result.AddMiscModifier(4, "Improved Grapple feat");
-        }
+        int holdPenalty = GetImprovedGrabHoldGrappleCheckPenalty();
+        if (holdPenalty != 0)
+            result.AddMiscModifier(holdPenalty, "Improved Grab hold with one body part (MM p.310)");
 
         int greasedArmorBonus = GetGreasedArmorGrappleBonus(context);
         if (greasedArmorBonus > 0)
@@ -9951,8 +10264,17 @@ public class CharacterController : MonoBehaviour
             lapseLog = LetDuePinLapse();
         }
 
+        // MM p.310 (CMB-148): in the rounds after an Improved Grab, the grabber's won pin, move, use-opponent's-weapon and
+        // break-pin checks also deal the establishing attack's damage (the Damage action deals it itself).
+        NaturalAttackDefinition grabDamageAttack = IsImprovedGrabDamagingGrappleCheck(actionType) ? GetImprovedGrabDamageAttackForGrappleCheck() : null;
+        CharacterController grabDamageTarget = null;
+        if (grabDamageAttack != null)
+            IsInAnyGrappleLink(out grabDamageTarget);
+
         SpecialAttackResult result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride,
             naturalAttackIndex, naturalAttackIsHasteExtra);
+        if (grabDamageAttack != null)
+            AppendImprovedGrabCheckDamage(result, grabDamageTarget, grabDamageAttack);
         if (result != null && !string.IsNullOrEmpty(lapseLog))
             result.Log = string.IsNullOrEmpty(result.Log) ? lapseLog : lapseLog + "\n\n" + result.Log;
         return result;
@@ -9977,6 +10299,8 @@ public class CharacterController : MonoBehaviour
                 return !CanAttackWithLightWeaponWhileGrappling(out _, out _);
             case GrappleActionType.AttackUnarmed:
                 return !CanAttackUnarmedWhileGrappling(out _);
+            case GrappleActionType.Rake:
+                return !CanRakeInGrapple(out _);
             case GrappleActionType.UseOpponentWeapon:
             {
                 CharacterController opponent = GetPinnedOpponent();
@@ -10011,6 +10335,160 @@ public class CharacterController : MonoBehaviour
         return $"{Stats.CharacterName} does not pin {pinnedName} again: the pin ends after its 1 round (PHB p.156). The grapple continues.";
     }
 
+    /// <summary>The damage a successful grapple check dealt (<see cref="RollAndApplyGrappleCheckDamage"/>).</summary>
+    private struct GrappleCheckDamageRoll
+    {
+        public int DiceCount;
+        public int DiceSides;
+        public int Raw;
+        public int Final;
+        public List<int> Rolls;
+        public WeaponDamageBreakdown Bonus;
+    }
+
+    /// <summary>
+    /// Rolls and applies the damage of a won grapple check to <paramref name="opponent"/>: the natural attack
+    /// <paramref name="naturalAttack"/> (an Improved Grab's establishing attack, MM p.310, CMB-148: its scaled dice and
+    /// its own Strength share) or, when null, an unarmed strike (PHB p.156), with the shared weapon damage terms
+    /// (CMB-003; no attack roll, so no Power Attack), through the damage pipeline (mitigation, death). The one damage
+    /// roll of the Damage grapple action and of the Improved Grab damage on the grabber's other won checks.
+    /// </summary>
+    private GrappleCheckDamageRoll RollAndApplyGrappleCheckDamage(CharacterController opponent, NaturalAttackDefinition naturalAttack, bool nonlethal)
+    {
+        var roll = new GrappleCheckDamageRoll { Rolls = new List<int>() };
+        if (opponent == null || opponent.Stats == null || Stats == null)
+            return roll;
+
+        DamageBypassTag damageTags;
+        string damageSourceName;
+        if (naturalAttack != null)
+        {
+            Stats.GetScaledNaturalAttackDamage(naturalAttack, out roll.DiceCount, out roll.DiceSides);
+            roll.DiceCount = Mathf.Max(1, roll.DiceCount);
+            roll.DiceSides = Mathf.Max(1, roll.DiceSides);
+            roll.Bonus = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
+                default(AttackCalculator.FeatModifiers), naturalAttack: naturalAttack);
+            damageTags = naturalAttack.GetPhysicalDamageTypes();
+            if (damageTags == DamageBypassTag.None)
+                damageTags = DamageBypassTag.Bludgeoning;
+            damageSourceName = $"Grapple damage ({naturalAttack.Name}, Improved Grab)";
+        }
+        else
+        {
+            var unarmed = GetUnarmedDamage();
+            roll.DiceCount = Mathf.Max(1, unarmed.damageCount);
+            roll.DiceSides = Mathf.Max(2, unarmed.damageDice);
+            // Unarmed strike damage counts as weapon damage for bonuses on weapon damage rolls (PHB p.121), so morale,
+            // Sickened and Weapon Specialization in unarmed strike (PHB p.102) apply.
+            roll.Bonus = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
+                DamageOnlyFeatModifiers(null), unarmed.bonusDamage);
+            damageTags = DamageBypassTag.Bludgeoning;
+            damageSourceName = "Grapple damage (unarmed strike)";
+        }
+
+        for (int i = 0; i < roll.DiceCount; i++)
+        {
+            int die = DiceService.RollDie(roll.DiceSides, "Grapple damage");
+            roll.Rolls.Add(die);
+            roll.Raw += die;
+        }
+
+        roll.Raw = Mathf.Max(1, roll.Raw + roll.Bonus.Total);
+
+        var damageTypes = new HashSet<DamageType>();
+        if ((damageTags & DamageBypassTag.Bludgeoning) != 0) damageTypes.Add(DamageType.Bludgeoning);
+        if ((damageTags & DamageBypassTag.Piercing) != 0) damageTypes.Add(DamageType.Piercing);
+        if ((damageTags & DamageBypassTag.Slashing) != 0) damageTypes.Add(DamageType.Slashing);
+        if (damageTypes.Count == 0) damageTypes.Add(DamageType.Bludgeoning);
+
+        var packet = new DamagePacket
+        {
+            RawDamage = roll.Raw,
+            Types = damageTypes,
+            AttackTags = damageTags,
+            IsRanged = false,
+            IsNonlethal = nonlethal,
+            Source = AttackSource.Weapon,
+            SourceName = damageSourceName
+        };
+
+        DamageResolutionResult mitigation = opponent.Stats.ApplyIncomingDamage(roll.Raw, packet);
+        roll.Final = mitigation.FinalDamage;
+
+        if (opponent.Stats.IsDead)
+        {
+            opponent.OnDeath();
+            ReleaseGrappleState("opponent killed in grapple");
+        }
+
+        return roll;
+    }
+
+    /// <summary>
+    /// The grapple actions whose won check is "a successful grapple check" of the grabber other than the Damage action,
+    /// which deals the establishing attack's damage itself: pin, move, use opponent's weapon and break pin (MM p.310,
+    /// CMB-148). Escaping is left out: it ends the hold. Owner interpretation 2026-10-11: only the checks the creature
+    /// makes on its own turn count, not the opposed checks it rolls against the held creature's actions.
+    /// </summary>
+    private static bool IsImprovedGrabDamagingGrappleCheck(GrappleActionType actionType)
+        => actionType == GrappleActionType.PinOpponent
+            || actionType == GrappleActionType.MoveHalfSpeed
+            || actionType == GrappleActionType.UseOpponentWeapon
+            || actionType == GrappleActionType.BreakPin;
+
+    /// <summary>
+    /// MM p.310 (CMB-148): each successful grapple check the grabber makes in the rounds after its Improved Grab
+    /// automatically deals the damage of the attack that established the hold, lethal. Appends that damage to the result
+    /// of a won pin, move, use-opponent's-weapon or break-pin check (the Damage action deals it itself).
+    /// </summary>
+    private void AppendImprovedGrabCheckDamage(SpecialAttackResult result, CharacterController opponent, NaturalAttackDefinition establishingAttack)
+    {
+        if (result == null || !result.Success || establishingAttack == null || opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+            return;
+
+        int hpBefore = opponent.Stats.CurrentHP;
+        GrappleCheckDamageRoll roll = RollAndApplyGrappleCheckDamage(opponent, establishingAttack, nonlethal: false);
+        result.DamageDealt += roll.Final;
+        result.TargetKilled = opponent.Stats.IsDead;
+        string line = $"Improved Grab: the successful grapple check also deals the {establishingAttack.Name}'s damage (MM p.310): "
+            + $"{roll.DiceCount}d{roll.DiceSides} + [{roll.Bonus.Describe()}] = {roll.Raw} lethal ({opponent.Stats.CharacterName} takes {roll.Final}) [Rolls: {string.Join(", ", roll.Rolls)}]. "
+            + $"HP: {hpBefore} -> {opponent.Stats.CurrentHP}";
+        result.Log = string.IsNullOrEmpty(result.Log) ? line : result.Log + "\n\n" + line;
+    }
+
+    /// <summary>
+    /// The grapple actions a creature holding with one body part after Improved Grab may take against the creature it
+    /// holds: the Damage grapple check, from the round after the grab (MM p.310: each successful grapple check in
+    /// successive rounds deals the establishing attack's damage; at -20, GetImprovedGrabHoldGrappleCheckPenalty), in
+    /// place of an attack. Its other grapple actions are not offered (owner question CMB-163). Shared by the resolver,
+    /// the PC buttons and the AI.
+    /// </summary>
+    public bool IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType actionType, out string reason)
+    {
+        reason = string.Empty;
+        if (!TryGetImprovedGrabHold(out CharacterController held, out NaturalAttackDefinition bodyPart))
+        {
+            reason = $"{(Stats != null ? Stats.CharacterName : name)} holds nobody with Improved Grab.";
+            return false;
+        }
+
+        string heldName = held.Stats != null ? held.Stats.CharacterName : held.name;
+        if (actionType != GrappleActionType.DamageOpponent)
+        {
+            reason = $"{Stats.CharacterName} holds {heldName} with one body part and is not grappling: its only grapple action is the Damage check (MM p.310; CMB-163).";
+            return false;
+        }
+
+        if (GetImprovedGrabDamageAttackForGrappleCheck() == null)
+        {
+            string partName = bodyPart != null && !string.IsNullOrWhiteSpace(bodyPart.Name) ? bodyPart.Name.Trim().ToLowerInvariant() : "body part";
+            reason = $"{Stats.CharacterName}'s {partName} hold deals its damage with grapple checks in the rounds after the grab (MM p.310).";
+            return false;
+        }
+
+        return true;
+    }
+
     private SpecialAttackResult ResolveGrappleActionCore(
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride,
@@ -10021,16 +10499,36 @@ public class CharacterController : MonoBehaviour
     {
         if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out bool opponentPinned))
         {
-            return new SpecialAttackResult
+            // A holder with one body part (MM p.310) is not grappling, but its Damage check against the creature it holds
+            // goes through here, at its -20 (CMB-163).
+            if (!TryGetImprovedGrabHold(out CharacterController held, out _))
             {
-                ManeuverName = "Grapple Action",
-                Success = false,
-                Log = $"{Stats.CharacterName} is not currently in a grapple."
-            };
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Action",
+                    Success = false,
+                    Log = $"{Stats.CharacterName} is not currently in a grapple."
+                };
+            }
+
+            if (!IsGrappleActionAvailableToImprovedGrabHolder(actionType, out string holderReason))
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Action",
+                    Success = false,
+                    Log = holderReason
+                };
+            }
+
+            opponent = held;
+            isPinned = false;
+            opponentPinned = false;
         }
 
         bool isPinning = IsPinningOpponent();
-        if (IsGrappleActionBlockedWhilePinning(actionType, out string blockedReason))
+        if (IsGrappleActionBlockedWhilePinning(actionType, out string blockedReason)
+            || IsGrappleActionBlockedByImprovedGrabHold(actionType, out blockedReason))
         {
             return new SpecialAttackResult
             {
@@ -10161,18 +10659,6 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                bool isMonk = Stats != null && Stats.IsMonk;
-                bool hasImprovedUnarmedStrike = FeatManager.HasImprovedUnarmedStrike(Stats);
-                bool usesMonkOrIusException = isMonk || hasImprovedUnarmedStrike;
-                string grappleDamageRuleReason = isMonk
-                    ? "Monk exception"
-                    : (hasImprovedUnarmedStrike ? "Improved Unarmed Strike feat" : null);
-
-                AttackDamageMode selectedMode = grappleDamageModeOverride
-                    ?? (usesMonkOrIusException ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
-                bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
-                int grappleCheckPenalty = (!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0;
-
                 if (opponent == null || opponent.Stats == null || Stats == null)
                 {
                     return new SpecialAttackResult
@@ -10183,62 +10669,55 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, grappleCheckPenalty, grappleCheckPenalty != 0 ? "Lethal damage without Monk/Improved Unarmed Strike" : null);
+                // MM p.310 (CMB-148): a creature whose Improved Grab established this grapple deals the damage of the attack
+                // that established it with each successful grapple check in later rounds (no constrict here). That is a
+                // natural weapon, lethal by default; nonlethal costs -4 (PHB p.146). Otherwise unarmed strike damage, and
+                // lethal unarmed damage costs -4 unless monk or Improved Unarmed Strike (PHB p.156).
+                NaturalAttackDefinition holdAttack = GetImprovedGrabDamageAttackForGrappleCheck();
+
+                bool isMonk = Stats != null && Stats.IsMonk;
+                bool hasImprovedUnarmedStrike = FeatManager.HasImprovedUnarmedStrike(Stats);
+                bool usesMonkOrIusException = holdAttack == null && (isMonk || hasImprovedUnarmedStrike);
+                string grappleDamageRuleReason = holdAttack != null
+                    ? $"Improved Grab: the {holdAttack.Name} that established the hold, MM p.310"
+                    : (isMonk
+                        ? "Monk exception"
+                        : (hasImprovedUnarmedStrike ? "Improved Unarmed Strike feat" : null));
+
+                AttackDamageMode selectedMode = grappleDamageModeOverride
+                    ?? ((holdAttack != null || usesMonkOrIusException) ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
+                bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
+                int grappleCheckPenalty = holdAttack != null
+                    ? (dealNonlethalDamage ? -4 : 0)
+                    : ((!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0);
+                string grappleCheckPenaltyLabel = grappleCheckPenalty == 0
+                    ? null
+                    : (holdAttack != null ? $"Nonlethal damage with the {holdAttack.Name}" : "Lethal damage without Monk/Improved Unarmed Strike");
+
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, grappleCheckPenalty, grappleCheckPenaltyLabel);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
 
                 bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
-                int finalDamageDealt = 0;
-                int rawDamage = 0;
-                var unarmed = GetUnarmedDamage();
-                int damageDiceCount = Mathf.Max(1, unarmed.damageCount);
-                int damageDiceSides = Mathf.Max(2, unarmed.damageDice);
-                // Unarmed strike damage (PHB p.156) with the shared damage modifier (CMB-003): unarmed strike damage
-                // counts as weapon damage for bonuses on weapon damage rolls (PHB p.121), so morale, Sickened and Weapon
-                // Specialization in unarmed strike (PHB p.102) apply. No attack roll is made, so no Power Attack.
-                WeaponDamageBreakdown grappleDamageBonus = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
-                    DamageOnlyFeatModifiers(null), unarmed.bonusDamage);
-                int bonusDamage = grappleDamageBonus.Total;
-                var damageRolls = new List<int>();
-
-                if (success)
-                {
-                    for (int i = 0; i < damageDiceCount; i++)
-                    {
-                        int die = DiceService.RollDie(damageDiceSides, "Grapple damage");
-                        damageRolls.Add(die);
-                        rawDamage += die;
-                    }
-
-                    rawDamage += bonusDamage;
-                    rawDamage = Mathf.Max(1, rawDamage);
-
-                    var packet = new DamagePacket
-                    {
-                        RawDamage = rawDamage,
-                        Types = new HashSet<DamageType> { DamageType.Bludgeoning },
-                        AttackTags = DamageBypassTag.Bludgeoning,
-                        IsRanged = false,
-                        IsNonlethal = dealNonlethalDamage,
-                        Source = AttackSource.Weapon,
-                        SourceName = "Grapple damage (unarmed strike)"
-                    };
-
-                    DamageResolutionResult mitigation = opponent.Stats.ApplyIncomingDamage(rawDamage, packet);
-                    finalDamageDealt = mitigation.FinalDamage;
-
-                    if (opponent.Stats.IsDead)
-                    {
-                        opponent.OnDeath();
-                        ReleaseGrappleState("opponent killed in grapple");
-                    }
-                }
+                GrappleCheckDamageRoll damageRoll = success
+                    ? RollAndApplyGrappleCheckDamage(opponent, holdAttack, dealNonlethalDamage)
+                    : default(GrappleCheckDamageRoll);
+                int finalDamageDealt = damageRoll.Final;
+                int rawDamage = damageRoll.Raw;
+                int damageDiceCount = damageRoll.DiceCount;
+                int damageDiceSides = damageRoll.DiceSides;
+                WeaponDamageBreakdown grappleDamageBonus = damageRoll.Bonus;
+                List<int> damageRolls = damageRoll.Rolls ?? new List<int>();
 
                 string damageTypeLabel = dealNonlethalDamage ? "nonlethal" : "lethal";
-                string defaultDamageRuleSummary = grappleDamageRuleReason != null
-                    ? $"Deals lethal damage by default ({grappleDamageRuleReason})."
-                    : "Deals nonlethal damage by default (no Monk/Improved Unarmed Strike exception).";
+                string defaultDamageRuleSummary = holdAttack != null
+                    ? $"Deals the {holdAttack.Name}'s damage, lethal by default ({grappleDamageRuleReason})."
+                    : (grappleDamageRuleReason != null
+                        ? $"Deals lethal damage by default ({grappleDamageRuleReason})."
+                        : "Deals nonlethal damage by default (no Monk/Improved Unarmed Strike exception).");
                 string penaltyRuleSummary = grappleCheckPenalty != 0
-                    ? "Applies -4 penalty for choosing lethal damage without Monk/Improved Unarmed Strike exception."
+                    ? (holdAttack != null
+                        ? $"Applies -4 penalty for choosing nonlethal damage with the {holdAttack.Name} (PHB p.146)."
+                        : "Applies -4 penalty for choosing lethal damage without Monk/Improved Unarmed Strike exception.")
                     : (grappleDamageRuleReason != null
                         ? $"No penalty ({grappleDamageRuleReason})."
                         : "No penalty (nonlethal default).");
@@ -10518,6 +10997,9 @@ public class CharacterController : MonoBehaviour
             case GrappleActionType.RetrieveSpellComponent:
                 return ResolveRetrieveSpellComponentDuringGrappleStub();
 
+            case GrappleActionType.Rake:
+                return ResolveGrappleRake();
+
             case GrappleActionType.ReleasePinnedOpponent:
             {
                 if (!isPinning || !opponentPinned)
@@ -10554,12 +11036,12 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// The grapple check modifier of the Use Opponent's Weapon check: the one grapple check formula (BAB, Str, special
+    /// size modifier and effects that name grapple checks such as Improved Grapple; PHB p.155-156, CMB-130).
+    /// </summary>
     private int GetStrictOpposedGrappleModifierForUseOpponentWeapon(int? baseAttackBonusOverride = null)
-    {
-        int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
-        int bab = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0);
-        return bab + (Stats != null ? Stats.STRMod : 0) + sizeMod;
-    }
+        => GetGrappleModifier(baseAttackBonusOverride);
 
     private bool TryResolveStrictOpposedGrappleCheckForUseOpponentWeapon(
         CharacterController opponent,
@@ -11041,22 +11523,68 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    // ----- Grapple attack with a natural weapon (PHB p.156; MM p.314; CMB-127) -----
+    // ----- Grapple attack with a natural weapon (PHB p.156; MM p.314; CMB-127, CMB-146) -----
     // PHB p.156 (Attack Your Opponent): while grappling, an attack with an unarmed strike, a natural weapon or a light
     // weapon takes the place of one of your attacks. MM p.314 (Rake): normally a monster attacks with only one of its
     // natural weapons while grappling. So each grapple attack action of a creature fighting with its natural attacks
     // is ONE natural attack of its choice, at that attack's normal bonus (primary full BAB, secondary -5 or -2 with
     // Multiattack, MM p.312, p.304), with the -4 for attacking in a grapple: the attacker's Grappled condition row
-    // (AttackModifier -4, read by BuildAttackBonus), so it is not added a second time here. The action is one step of
-    // the creature's natural sequence (a NaturalSequence step, like a maneuver that replaces a natural attack,
-    // CMB-102), so a full attack of grapple attacks makes each natural attack once, and Haste adds one more with a
-    // natural weapon already used (CMB-106). That count (one grapple attack per natural attack) is an unconfirmed
-    // reading: PHB p.156 ties grapple actions to the BAB ladder, and the owner has not ruled (CMB-146). Every other
-    // grapple action (damage, pin, escape, light weapon, opponent's weapon) stays an iterative step at its iterative
-    // BAB for every creature (GameManager.IsGrappleNaturalAttackStep). The step is committed by the caller with the chosen natural attack
-    // (GameManager.TryConsumeIterativeGrappleAttack -> TryCommitManeuverSubstituteStep), PC and AI alike; the PC picks
-    // in the grapple natural-attack menu, the AI with DND35.AI.NaturalAttackChoice. Rake keeps its own rule: its two
-    // extra claw attacks come once a turn, with the first grapple natural attack (PerformRakeAttacks marks the turn).
+    // (AttackModifier -4, read by BuildAttackBonus), so it is not added a second time here. How many: one per step of
+    // the BAB ladder (PHB p.156: one grapple action in place of each of your attacks; owner interpretation 2026-10-11,
+    // CMB-146), Haste's extra attack included, so a lion (BAB +3) makes one a turn. The step is a NaturalSequence step
+    // (it gives up the natural attack it makes, like a maneuver that replaces a natural attack, CMB-102), capped by the
+    // iterative ladder (HasGrappleNaturalAttackLadderStep); every other grapple action (damage, pin, escape, light
+    // weapon, opponent's weapon) is an iterative step, and all share the step counter. The step is committed by the
+    // caller with the chosen natural attack (GameManager.TryConsumeIterativeGrappleAttack), PC and AI alike; the PC
+    // picks in the grapple natural-attack menu, the AI with DND35.AI.NaturalAttackChoice. Rake is its own grapple
+    // action (GrappleActionType.Rake, ResolveGrappleRake; CMB-144).
+
+    /// <summary>
+    /// Grapple natural attacks this creature can still make this turn: the natural attacks left to choose from
+    /// (<paramref name="alsoUsed"/> as in <see cref="GetGrappleNaturalAttackOptions"/>), capped by the steps left on its
+    /// BAB ladder (PHB p.156; owner interpretation 2026-10-11, CMB-146) and in its natural sequence.
+    /// </summary>
+    public int GetRemainingGrappleNaturalAttackCount(Func<int, bool> alsoUsed = null)
+    {
+        if (!IsGrappling() || !UsesNaturalAttacksForGrappleAttack())
+            return 0;
+
+        int ladder = GetRemainingMainHandAttackSteps(AttackStepKind.MainHand);
+        int natural = GetRemainingMainHandAttackSteps(AttackStepKind.NaturalSequence);
+        return Mathf.Min(Mathf.Min(ladder, natural), GetGrappleNaturalAttackOptions(alsoUsed).Count);
+    }
+
+    /// <summary>
+    /// Check, pay for and record the step of one grapple natural attack (PHB p.156; MM p.314): refused when no step
+    /// is left on the BAB ladder (owner interpretation 2026-10-11, CMB-146), else <see cref="TryCommitManeuverSubstituteStep"/>
+    /// with the natural attack it makes (<paramref name="naturalAttackIndex"/>, -1 for the step's default).
+    /// </summary>
+    public bool TryCommitGrappleNaturalAttackStep(int naturalAttackIndex, bool isHasteExtraAttack, out int attackBab, out int stepIndex, out string reason)
+    {
+        attackBab = 0;
+        stepIndex = -1;
+        if (!HasGrappleNaturalAttackLadderStep(out reason))
+            return false;
+
+        return TryCommitManeuverSubstituteStep(naturalAttackIndex, out attackBab, out stepIndex, out reason, isHasteExtraAttack);
+    }
+
+    /// <summary>
+    /// The one ladder rule of a grapple natural attack (PHB p.156; owner interpretation 2026-10-11, CMB-146): it takes
+    /// the place of one of the creature's iterative attacks, so it needs a step left on the BAB ladder. Read before any
+    /// step is spent by GameManager.TryConsumeGrappleAttackAction (the PC and AI path) and <see cref="TryCommitGrappleNaturalAttackStep"/>.
+    /// </summary>
+    public bool HasGrappleNaturalAttackLadderStep(out string reason)
+    {
+        if (GetRemainingMainHandAttackSteps(AttackStepKind.MainHand) > 0)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        reason = "no attack is left on the BAB ladder this turn (a grapple attack takes the place of one of the creature's iterative attacks, PHB p.156)";
+        return false;
+    }
 
     /// <summary>One natural attack a grapple attack action can make: a natural-sequence index, and whether it is Haste's extra attack with that weapon.</summary>
     public struct GrappleNaturalAttackOption
@@ -11141,8 +11669,7 @@ public class CharacterController : MonoBehaviour
     /// natural attack at <paramref name="naturalAttackIndex"/>, rolled through <see cref="FullAttack"/> at its normal
     /// bonus, so every BuildAttackBonus term and its on-hit riders apply. <paramref name="isHasteExtraAttack"/> marks it
     /// as Haste's extra attack in the log; the step commit has already marked the Haste attack (or this natural
-    /// attack) used. With the rake ability (MM p.314) the first grapple natural attack of the turn adds the rake's
-    /// extra claw attacks against the grappled foe (<see cref="PerformRakeAttacks"/>; their timing is CMB-144).
+    /// attack) used. The rake is a separate grapple action (<see cref="ResolveGrappleRake"/>, CMB-144).
     /// </summary>
     public SpecialAttackResult ResolveGrappleNaturalAttack(CharacterController opponent, int naturalAttackIndex, bool isHasteExtraAttack,
         string maneuverName = "Grapple Natural Attack")
@@ -11187,41 +11714,12 @@ public class CharacterController : MonoBehaviour
         if (isHasteExtraAttack)
             label += " [Haste's extra attack]";
 
-        int totalDamage = attack.Hit ? attack.FinalDamageDealt : 0;
-        FullAttackResult rake = null;
-        if (Stats.HasRake
-            && !ProgressiveAttackPool.RakeUsedThisTurn
-            && !opponent.Stats.IsDead
-            && TryGetGrappleState(out CharacterController grappledOpponent, out _, out _, out _)
-            && grappledOpponent == opponent)
-        {
-            rake = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
-        }
-
-        int rakeCount = rake != null && rake.Attacks != null ? rake.Attacks.Count : 0;
         var logLines = new List<string>
         {
             $"{Stats.CharacterName} attacks {opponent.Stats.CharacterName} with its {naturalName} while grappling: one natural attack in place of an attack (PHB p.156; MM p.314).",
-            attack.GetAttackBreakdown(label)
+            attack.GetAttackBreakdown(label),
+            $"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}"
         };
-
-        if (rakeCount > 0)
-        {
-            logLines.Add($"Rake: {rakeCount} extra claw attack(s) against the grappled foe, once this turn (MM p.314).");
-            for (int i = 0; i < rake.Attacks.Count; i++)
-            {
-                CombatResult rakeAttack = rake.Attacks[i];
-                if (rakeAttack == null)
-                    continue;
-
-                if (rakeAttack.Hit)
-                    totalDamage += rakeAttack.FinalDamageDealt;
-                string rakeLabel = rake.AttackLabels != null && i < rake.AttackLabels.Count ? rake.AttackLabels[i] : $"Rake {i + 1}";
-                logLines.Add(rakeAttack.GetAttackBreakdown(rakeLabel));
-            }
-        }
-
-        logLines.Add($"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}");
 
         return new SpecialAttackResult
         {
@@ -11230,6 +11728,141 @@ public class CharacterController : MonoBehaviour
             CheckRoll = attack.DieRoll,
             CheckTotal = attack.TotalRoll,
             OpposedTotal = attack.TargetAC,
+            DamageDealt = attack.Hit ? attack.FinalDamageDealt : 0,
+            TargetKilled = opponent.Stats.IsDead,
+            Log = string.Join("\n", logLines)
+        };
+    }
+
+    // ----- Rake in a grapple (MM p.314; owner interpretation 2026-10-11, CMB-144) -----
+    // A monster with rake gains (usually two) extra claw attacks it can use only against a grappled foe, not subject to
+    // the -4 for attacking in a grapple. It must begin its turn grappling to rake: it cannot begin a grapple and rake
+    // in the same turn (a pounce at the end of a charge is the exception, resolved by the charge itself). The rake
+    // comes with a full attack, so it makes the turn a full attack: the move action is spent if the turn was not one
+    // already. Once a turn. The one rake rule for PCs (the grapple action menu) and the AI (AI_GrappleRestrictedTurn).
+
+    /// <summary>Whether this creature can rake its grapple opponent now (see the rule above); <paramref name="reason"/> says why not.</summary>
+    public bool CanRakeInGrapple(out string reason)
+    {
+        reason = string.Empty;
+        string actorName = Stats != null ? Stats.CharacterName : name;
+        if (Stats == null || !Stats.HasRake || Stats.GetRakeAttackDefinition() == null)
+        {
+            reason = $"{actorName} has no rake.";
+            return false;
+        }
+
+        if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _) || opponent == null)
+        {
+            reason = $"{actorName} is not grappling a foe to rake.";
+            return false;
+        }
+
+        // Rake claws are used only against a grappled foe (MM p.314); a holder with one body part is not grappled (MM p.310).
+        if (IsHeldByImprovedGrabHold(out CharacterController holder) && holder == opponent)
+        {
+            reason = $"{actorName} cannot rake {opponent.Stats.CharacterName}: a creature holding with one body part is not grappled, and a rake needs a grappled foe (MM p.310, p.314).";
+            return false;
+        }
+
+        if (isPinned)
+        {
+            reason = $"{actorName} is pinned and cannot rake.";
+            return false;
+        }
+
+        // A pinner's actions are limited while the pin's round lasts (PHB p.156, CMB-120).
+        if (IsGrappleActionBlockedWhilePinning(GrappleActionType.Rake, out string pinnerReason))
+        {
+            reason = pinnerReason;
+            return false;
+        }
+
+        if (!ProgressiveAttackPool.BeganTurnGrappling)
+        {
+            reason = $"{actorName} did not begin its turn grappling, so it cannot rake this turn (MM p.314).";
+            return false;
+        }
+
+        if (ProgressiveAttackPool.RakeUsedThisTurn)
+        {
+            reason = $"{actorName} already raked this turn.";
+            return false;
+        }
+
+        if (!ProgressiveAttackPool.IsFullAttack && !CanStillReachFullAttack())
+        {
+            reason = $"{actorName} cannot make a full attack this turn, and a rake needs one (MM p.314).";
+            return false;
+        }
+
+        if (!ProgressiveAttackPool.HasStartedAttacking && (Actions == null || !Actions.HasStandardAction))
+        {
+            reason = $"{actorName} has no standard action left for a full attack.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Rakes the grappled foe (see the rule above): makes the turn a full attack (spending the standard action when no
+    /// attack was made yet, and the move action), then the rake's claw attacks through <see cref="PerformRakeAttacks"/>.
+    /// Refused, with nothing spent, when <see cref="CanRakeInGrapple"/> says no.
+    /// </summary>
+    public SpecialAttackResult ResolveGrappleRake()
+    {
+        if (!CanRakeInGrapple(out string reason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Rake",
+                Success = false,
+                Log = reason
+            };
+        }
+
+        TryGetGrappleState(out CharacterController opponent, out _, out _, out _);
+        if (!ProgressiveAttackPool.IsFullAttack)
+        {
+            if (!ProgressiveAttackPool.HasStartedAttacking)
+                CommitStandardAction();
+            Actions?.UseMoveAction();
+            ProgressiveAttackPool.MarkFullAttackCommitted();
+        }
+
+        int targetHpBefore = opponent.Stats.CurrentHP;
+        FullAttackResult rake = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+        int rakeCount = rake != null && rake.Attacks != null ? rake.Attacks.Count : 0;
+        var logLines = new List<string>
+        {
+            $"{Stats.CharacterName} rakes {opponent.Stats.CharacterName}: {rakeCount} extra claw attack(s) against the grappled foe, without the -4 for grappling; this turn is a full attack (MM p.314)."
+        };
+
+        int totalDamage = 0;
+        bool anyHit = false;
+        for (int i = 0; i < rakeCount; i++)
+        {
+            CombatResult rakeAttack = rake.Attacks[i];
+            if (rakeAttack == null)
+                continue;
+
+            if (rakeAttack.Hit)
+            {
+                anyHit = true;
+                totalDamage += rakeAttack.FinalDamageDealt;
+            }
+
+            string rakeLabel = rake.AttackLabels != null && i < rake.AttackLabels.Count ? rake.AttackLabels[i] : $"Rake {i + 1}";
+            logLines.Add(rakeAttack.GetAttackBreakdown(rakeLabel));
+        }
+
+        logLines.Add($"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}");
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Rake",
+            Success = anyHit,
             DamageDealt = totalDamage,
             TargetKilled = opponent.Stats.IsDead,
             Log = string.Join("\n", logLines)
@@ -11421,6 +12054,8 @@ public class CharacterController : MonoBehaviour
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)
             || (Stats != null && Stats.IsSingleActionsOnly);
         ProgressiveAttackPool.Clear();
+        // A rake needs the creature to begin its turn grappling (MM p.314, CMB-144).
+        ProgressiveAttackPool.MarkTurnStartedGrappling(IsGrappling());
         AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
         ThreatSystem.ClearMovementOpportunities(this); // a new round of movement opportunities (PHB p.138, CMB-128)
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
@@ -12544,23 +13179,24 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        if (TryGetGrappleState(out CharacterController currentOpponent, out _, out _, out _))
+        // One grapple link per creature: a holder with one body part (not IsGrappling, MM p.310) counts too (CMB-163).
+        if (IsInAnyGrappleLink(out CharacterController currentOpponent))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Grapple",
                 Success = false,
-                Log = $"{Stats.CharacterName} is already grappling {currentOpponent.Stats.CharacterName}."
+                Log = $"{Stats.CharacterName} is already in a grapple with {currentOpponent.Stats.CharacterName}."
             };
         }
 
-        if (target.TryGetGrappleState(out CharacterController targetOpponent, out _, out _, out _))
+        if (target.IsInAnyGrappleLink(out CharacterController targetOpponent))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Grapple",
                 Success = false,
-                Log = $"{target.Stats.CharacterName} is already grappling {targetOpponent.Stats.CharacterName}."
+                Log = $"{target.Stats.CharacterName} is already in a grapple with {targetOpponent.Stats.CharacterName}."
             };
         }
 
@@ -12705,7 +13341,44 @@ public class CharacterController : MonoBehaviour
         return false;
     }
 
-    public SpecialAttackResult ResolveImprovedGrabFreeAttempt(CharacterController target)
+    /// <summary>
+    /// The natural attack of this creature that <paramref name="attackResult"/> was made with (by its name), or null: the
+    /// attack that establishes an Improved Grab hold (MM p.310, CMB-148).
+    /// </summary>
+    public NaturalAttackDefinition GetNaturalAttackForAttackResult(CombatResult attackResult)
+        => attackResult != null ? GetNaturalAttackByWeaponName(attackResult.WeaponName) : null;
+
+    /// <summary>This creature's natural attack named <paramref name="weaponName"/> (exact name first, then a name it contains), or null.</summary>
+    public NaturalAttackDefinition GetNaturalAttackByWeaponName(string weaponName)
+    {
+        if (Stats == null || Stats.NaturalAttacks == null || string.IsNullOrWhiteSpace(weaponName))
+            return null;
+
+        weaponName = weaponName.Trim();
+        NaturalAttackDefinition partial = null;
+        foreach (NaturalAttackDefinition natural in Stats.NaturalAttacks)
+        {
+            if (natural == null || string.IsNullOrWhiteSpace(natural.Name))
+                continue;
+            if (string.Equals(natural.Name.Trim(), weaponName, StringComparison.OrdinalIgnoreCase))
+                return natural;
+            if (partial == null && weaponName.IndexOf(natural.Name.Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                partial = natural;
+        }
+
+        return partial;
+    }
+
+    /// <summary>
+    /// The free grapple attempt of Improved Grab (MM p.310), the one resolver for PCs and NPCs. <paramref name="establishingAttack"/>
+    /// is the natural attack whose hit triggered it (recorded on the grapple link: its damage on later successful Damage
+    /// checks, CMB-148). With <paramref name="holdWithBodyPart"/> the controller chose to hold with that body part instead
+    /// of grappling normally: -20 on this check and on its later grapple checks, and it is not grappled (MM p.310; owner
+    /// ruling 2026-10-11, CMB-148, CMB-149). The choice is made before the check, so the -20 applies to it (MM p.310: "it
+    /// takes a -20 penalty on grapple checks").
+    /// </summary>
+    public SpecialAttackResult ResolveImprovedGrabFreeAttempt(CharacterController target, NaturalAttackDefinition establishingAttack = null,
+        bool holdWithBodyPart = false)
     {
         if (target == null || target.Stats == null || Stats == null)
         {
@@ -12740,48 +13413,62 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        if (TryGetGrappleState(out CharacterController currentOpponent, out _, out _, out _))
+        // One grapple link per creature: a holder with one body part (not IsGrappling, MM p.310) counts too (CMB-163).
+        if (IsInAnyGrappleLink(out CharacterController currentOpponent))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Improved Grab",
                 Success = false,
-                Log = $"{Stats.CharacterName} is already grappling {currentOpponent.Stats.CharacterName}."
+                Log = $"{Stats.CharacterName} is already in a grapple with {currentOpponent.Stats.CharacterName}."
             };
         }
 
-        if (target.TryGetGrappleState(out CharacterController targetOpponent, out _, out _, out _))
+        if (target.IsInAnyGrappleLink(out CharacterController targetOpponent))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Improved Grab",
                 Success = false,
-                Log = $"{target.Stats.CharacterName} is already grappling {targetOpponent.Stats.CharacterName}."
+                Log = $"{target.Stats.CharacterName} is already in a grapple with {targetOpponent.Stats.CharacterName}."
             };
         }
 
-        GrappleCheckResult attackerCheck = RollGrappleCheck();
+        // A hold needs the body part that made the attack (MM p.310); without one the grapple is conducted normally.
+        bool hold = holdWithBodyPart && establishingAttack != null;
+        string partName = establishingAttack != null && !string.IsNullOrWhiteSpace(establishingAttack.Name)
+            ? establishingAttack.Name.Trim().ToLowerInvariant()
+            : "trigger attack";
+        GrappleCheckResult attackerCheck = hold
+            ? RollGrappleCheck(additionalModifier: ImprovedGrabHoldGrappleCheckPenalty, additionalModifierLabel: $"Improved Grab hold with its {partName} (MM p.310)")
+            : RollGrappleCheck();
         GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
         bool success = DoesAttackerWinGrappleCheck(attackerCheck, defenderCheck);
 
         string grapplePositioningLog = string.Empty;
         if (success)
-            grapplePositioningLog = EstablishGrappleWith(target);
+            grapplePositioningLog = EstablishGrappleLink(target, establishingAttack, hold);
 
         string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total, success);
         string outcomeLine = success
-            ? $"{Stats.CharacterName} seizes {target.Stats.CharacterName} with Improved Grab!"
+            ? (hold
+                ? $"{Stats.CharacterName} holds {target.Stats.CharacterName} with its {partName}!"
+                : $"{Stats.CharacterName} seizes {target.Stats.CharacterName} with Improved Grab!")
             : $"{Stats.CharacterName} fails to secure the grapple.";
 
         if (success)
-            outcomeLine += " Both combatants gain the grappled condition.";
+            outcomeLine += hold
+                ? $" {target.Stats.CharacterName} is grappled; {Stats.CharacterName} is not (it takes -20 on grapple checks, keeps its Dex bonus, threatens and may attack other opponents; MM p.310)."
+                : " Both combatants gain the grappled condition.";
 
         if (success && !string.IsNullOrEmpty(grapplePositioningLog))
             outcomeLine += $" {grapplePositioningLog}";
 
         string log = string.Join("\n\n", new[]
         {
-            $"{Stats.CharacterName} attempts Improved Grab on {target.Stats.CharacterName} (free action).",
+            hold
+                ? $"{Stats.CharacterName} attempts Improved Grab on {target.Stats.CharacterName} (free action), holding with its {partName} only (-20)."
+                : $"{Stats.CharacterName} attempts Improved Grab on {target.Stats.CharacterName} (free action).",
             attackerCheck.GetBreakdown(),
             defenderCheck.GetBreakdown(),
             resultLine + "\n" + outcomeLine

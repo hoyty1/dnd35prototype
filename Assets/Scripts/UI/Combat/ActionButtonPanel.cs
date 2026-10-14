@@ -993,6 +993,18 @@ public class ActionButtonPanel : MonoBehaviour
             canGrappleDamage,
             canGrappleDamage ? $"{grappleDamageBaseLabel} ({context.IterativeTag})" : $"{grappleDamageBaseLabel} (No attacks left)"));
 
+        // A holder with one body part after Improved Grab (MM p.310) is not grappling: its one grapple action is the Damage
+        // check against the creature it holds, at -20, from the round after the grab (CMB-163).
+        if (pc.TryGetImprovedGrabHold(out CharacterController heldCreature, out _))
+        {
+            string heldName = heldCreature.Stats != null ? heldCreature.Stats.CharacterName : "held creature";
+            bool canHoldDamage = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc, GrappleActionType.DamageOpponent);
+            string holdTag = canHoldDamage
+                ? $"BAB {CharacterStats.FormatMod(context.Gm.GetCurrentGrappleAttackBonus(pc, GrappleActionType.DamageOpponent))} | {context.Gm.GetRemainingGrappleAttackActions(pc, GrappleActionType.DamageOpponent)} left, -20"
+                : (pc.IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType.DamageOpponent, out _) ? "No attacks left" : "from next round");
+            states.Set(GrappleDamageButton, new ActionButtonState(true, canHoldDamage, $"Grapple: Damage {heldName} ({holdTag})"));
+        }
+
         bool hasMainHandLightWeapon = pc.CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out _);
         bool canLightWeaponAttack = context.IsGrappling
             && !context.ShowOnlyPinnedEscapeActions
@@ -1013,22 +1025,30 @@ public class ActionButtonPanel : MonoBehaviour
             && context.HasGrappleUnarmedAttack
             && canUnarmedByRule
             && CanUseGrappleActionWhilePinning(pc, GrappleActionType.AttackUnarmed);
+        // The rake takes no step of the BAB ladder, so this button stays open for it (its natural-attack menu lists Rake;
+        // MM p.314, CMB-144); the one rake rule is CanRakeInGrapple.
+        bool canRake = context.IsGrappling && pc.UsesNaturalAttacksForGrappleAttack() && pc.CanRakeInGrapple(out _);
         // A creature fighting with its natural attacks makes one natural attack per grapple attack (PHB p.156, CMB-127).
         string grappleAttackName = pc.UsesNaturalAttacksForGrappleAttack() ? "Grapple: Natural Attack" : "Grapple: Attack Unarmed";
         string grappleUnarmedLabel = canUnarmedAttack
-            ? $"{grappleAttackName} (-4, {context.GrappleUnarmedAttackTag})"
-            : (canUnarmedByRule && !context.HasGrappleUnarmedAttack
-                ? $"{grappleAttackName} (-4, No attacks left)"
-                : $"{grappleAttackName} (-4, N/A)");
-        states.Set(GrappleUnarmedAttackButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions, canUnarmedAttack, grappleUnarmedLabel));
+            ? $"{grappleAttackName} (-4, {context.GrappleUnarmedAttackTag}{(canRake ? ", or Rake" : string.Empty)})"
+            : (canRake
+                ? $"{grappleAttackName} (Rake only)"
+                : (canUnarmedByRule && !context.HasGrappleUnarmedAttack
+                    ? $"{grappleAttackName} (-4, No attacks left)"
+                    : $"{grappleAttackName} (-4, N/A)"));
+        states.Set(GrappleUnarmedAttackButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions, canUnarmedAttack || canRake, grappleUnarmedLabel));
 
-        bool canPin = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.HasIterativeGrappleAttack && CanUseGrappleActionWhilePinning(pc, GrappleActionType.PinOpponent);
+        // A creature held with one body part cannot pin its holder, which is not grappled (MM p.310; CMB-163).
+        bool pinBlockedByHold = pc.IsGrappleActionBlockedByImprovedGrabHold(GrappleActionType.PinOpponent, out _);
+        bool canPin = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.HasIterativeGrappleAttack && CanUseGrappleActionWhilePinning(pc, GrappleActionType.PinOpponent)
+            && !pinBlockedByHold;
         states.Set(GrapplePinButton, new ActionButtonState(
             context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions,
             canPin,
             canPin
                 ? (context.PinRenewalDue ? $"Grapple: Pin Again ({context.IterativeTag})" : $"Grapple: Pin Opponent ({context.IterativeTag})")
-                : "Grapple: Pin Opponent (No attacks left)"));
+                : (pinBlockedByHold ? "Grapple: Pin (holder not grappled)" : "Grapple: Pin Opponent (No attacks left)")));
 
         // Deprecated for current pin model: pinned creatures now use escape actions only.
         states.Set(GrappleBreakPinButton, new ActionButtonState(false, false));
@@ -1066,10 +1086,12 @@ public class ActionButtonPanel : MonoBehaviour
             canEscapeCheck,
             canEscapeCheck ? $"Grapple: Escape Check ({context.IterativeTag})" : "Grapple: Escape Check (No attacks left)"));
 
-        bool canGrappleMove = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.Actions.HasStandardAction && CanUseGrappleActionWhilePinning(pc, GrappleActionType.MoveHalfSpeed);
+        bool moveBlockedByHold = pc.IsGrappleActionBlockedByImprovedGrabHold(GrappleActionType.MoveHalfSpeed, out _);
+        bool canGrappleMove = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.Actions.HasStandardAction && CanUseGrappleActionWhilePinning(pc, GrappleActionType.MoveHalfSpeed)
+            && !moveBlockedByHold;
         string grappleMoveLabel = canGrappleMove
             ? (context.ShowOnlyPinnerActions ? $"Move (dragging {context.GrappleOpponentName})" : "Grapple: Move (Std)")
-            : "Grapple: Move (Used/Blocked)";
+            : (moveBlockedByHold ? "Grapple: Move (holder not grappled)" : "Grapple: Move (Used/Blocked)");
         states.Set(GrappleMoveButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions, canGrappleMove, grappleMoveLabel));
     }
 
@@ -1098,6 +1120,14 @@ public class ActionButtonPanel : MonoBehaviour
             context.IsGrappling && context.ShowOnlyPinnerActions,
             canDisarmSmallObject,
             canDisarmSmallObject ? $"Disarm Small Object ({context.GrappleOpponentName})" : "Disarm Small Object (Used/Blocked)"));
+
+        // A creature holding with one body part after Improved Grab is not grappling; this button lets it go (MM p.310, CMB-163).
+        if (pc.TryGetImprovedGrabHold(out CharacterController heldFoe, out _))
+        {
+            string heldName = heldFoe.Stats != null ? heldFoe.Stats.CharacterName : "held creature";
+            states.Set(GrappleReleasePinnedButton, new ActionButtonState(true, true, $"Let go of {heldName} (free)"));
+            return;
+        }
 
         bool releaseVisible = context.IsGrappling && (context.ShowOnlyPinnerActions || (context.PinRenewalDue && !context.ShowOnlyPinnedEscapeActions));
         bool canReleasePin = releaseVisible && context.OpponentPinnedByActor;

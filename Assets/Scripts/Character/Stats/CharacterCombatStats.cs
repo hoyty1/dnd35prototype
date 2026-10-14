@@ -118,12 +118,14 @@ public class CharacterCombatStats : MonoBehaviour
         if (_character == null || _character.Stats == null)
             return 0;
 
+        // BAB + Str + the special size modifier + effects that name grapple checks (PHB p.155-156). Condition attack
+        // modifiers do not apply: a grapple check is not an attack roll (owner interpretation 2026-10-11, CMB-130).
         int sizeMod = _character.Stats.CurrentSizeCategory.GetGrappleModifier();
         int bab = baseAttackBonusOverride ?? _character.Stats.BaseAttackBonus;
         return bab
             + _character.Stats.STRMod
             + sizeMod
-            + _character.Stats.ConditionAttackPenalty
-            + (_character.Stats.HasFeat("Improved Grapple") ? 4 : 0);
+            + (_character.Stats.HasFeat("Improved Grapple") ? 4 : 0)
+            + _character.GetImprovedGrabHoldGrappleCheckPenalty();
     }
 }

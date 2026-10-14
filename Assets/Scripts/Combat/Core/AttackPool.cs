@@ -88,10 +88,16 @@ public sealed class AttackPool
     public bool IsNaturalAttackUsed(int naturalAttackIndex) => _usedNaturalAttackIndices.Contains(naturalAttackIndex);
 
     /// <summary>
-    /// A rake (MM p.314) was made this turn: its two extra claw attacks come once a turn, not once per grapple attack
-    /// (CMB-127). Set by <see cref="CharacterController.PerformRakeAttacks"/>.
+    /// A rake (MM p.314) was made this turn: its extra claw attacks come once a turn (CMB-127, CMB-144). Set by
+    /// <see cref="CharacterController.PerformRakeAttacks"/>.
     /// </summary>
     public bool RakeUsedThisTurn { get; private set; }
+
+    /// <summary>
+    /// The creature was grappling when this turn began: a rake needs it (MM p.314: it cannot begin a grapple and rake
+    /// in the same turn; owner interpretation 2026-10-11, CMB-144). Set by <see cref="CharacterController.StartNewTurn"/>.
+    /// </summary>
+    public bool BeganTurnGrappling { get; private set; }
 
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
@@ -109,6 +115,21 @@ public sealed class AttackPool
         LastSubstituteWasHasteExtraAttack = false;
         _usedNaturalAttackIndices.Clear();
         RakeUsedThisTurn = false;
+        BeganTurnGrappling = false;
+    }
+
+    internal void MarkTurnStartedGrappling(bool grappling)
+    {
+        BeganTurnGrappling = grappling;
+    }
+
+    /// <summary>
+    /// Makes this turn a full attack without recording an attack step: a rake in a grapple (MM p.314, CMB-144), whose
+    /// caller has spent the standard and move actions. Later steps pay nothing more (PHB p.143).
+    /// </summary>
+    internal void MarkFullAttackCommitted()
+    {
+        Mode = ProgressiveAttackMode.FullAttackCommitted;
     }
 
     internal void MarkNaturalAttackUsed(int naturalAttackIndex)

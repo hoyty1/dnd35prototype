@@ -761,11 +761,13 @@ public partial class GameManager
     /// otherwise stops the mover; the caller must then not take the step. Records each
     /// opponent listed at this step as having had its movement opportunity this round
     /// (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). Callers: PC moves and
-    /// withdraw, NPC, summon and compulsion moves, both charge paths, crawl and the overrun
-    /// continuation. The bull rush follow resolves and records its own steps
-    /// (ResolveBullRushStepAoOs). Not yet through here, so they resolve no movement AoOs and
-    /// record nothing: the PC move-through overrun, its Normal Move branch and the attacker's
-    /// follow after a targeted overrun push (CMB-151, CMB-116), and the grapple moves (CMB-152).
+    /// withdraw, NPC, summon and compulsion moves, both charge paths, crawl, the overrun
+    /// continuation, the grappler's drag (GrappleSystem.ExecuteGrappleMovement, through
+    /// ExecutePathWithMovementAoOs) and the escaper's adjacent move
+    /// (GrappleSystem.ExecuteFreeAdjacentGrappleMovement; both CMB-152). The bull rush follow
+    /// resolves and records its own steps (ResolveBullRushStepAoOs). Not yet through here, so they
+    /// resolve no movement AoOs and record nothing: the PC move-through overrun, its Normal Move
+    /// branch and the attacker's follow after a targeted overrun push (CMB-151, CMB-116).
     /// </summary>
     private IEnumerator ResolveMovementAoOsBeforeStep(
         CharacterController mover,
@@ -1472,6 +1474,13 @@ public partial class GameManager
 
         if (clicked != null && clicked.Stats != null && !clicked.Stats.IsDead && _highlightedCells.Contains(cell))
         {
+            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149): the shared rule.
+            if (pc.IsBarredFromOrdinaryAttackOn(clicked, out string holdReason))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
+                return;
+            }
+
             // Allow attacking any highlighted target (enemies, friendlies, neutrals).
             // This supports attacking mind-controlled allies, neutral creatures, etc.
             PerformPlayerAttack(pc, clicked);

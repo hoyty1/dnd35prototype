@@ -86,12 +86,11 @@ namespace Tests.Scenarios
     /// lion (Large Animal, pounce, bite trigger, no size clause, MM p.275).
     /// Grapple attacks with natural weapons (CMB-127; PHB p.156 Attack Your Opponent, MM p.314 Rake): each grapple attack
     /// action is one attack with one natural weapon, the attacker's pick, in place of one natural attack of its sequence,
-    /// at that attack's normal bonus -4 (the attacker's Grappled condition); a full attack of grapple attacks makes each
-    /// natural attack once (one per natural attack: an unconfirmed reading, PHB p.156 ties grapple actions to the BAB
-    /// ladder; owner question CMB-146), and the rake's two claws come once a turn. Grapple checks (pin, damage, escape)
-    /// stay on the BAB ladder for every creature (PHB p.156). MM lion (p.274-275): 2 claws +7, bite +2,
-    /// rake +7, BAB +3; rakes are not subject to the -4 (MM p.314),
-    /// which the code does not do yet (CMB-144, an XFail expectation).
+    /// at that attack's normal bonus -4 (the attacker's Grappled condition); grapple attacks and grapple checks (pin,
+    /// damage, escape) share the BAB ladder, one per iterative step (PHB p.156; owner interpretation 2026-10-11,
+    /// CMB-146). Rake (MM p.314; CMB-144): the creature must begin its turn grappling, the rake makes the turn a full
+    /// attack (owner interpretation 2026-10-11), once a turn, and its claws are not subject to the -4. MM lion
+    /// (p.274-275): 2 claws +7, bite +2, rake +7, BAB +3.
     /// Trip (Ex) trigger attack (CMB-125): every MM Trip (Ex) entry ties the free trip to one attack, a hit with the
     /// bite (wolf p.283, dire wolf p.66, worg p.257, hyena p.274, shadow mastiff p.222, yeth hound p.262, werewolf
     /// p.174) or, for the cheetah, the claw or bite (p.271): no touch attack, no AoO, and a failed attempt lets the
@@ -126,7 +125,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 116;
+        public const int Count = 118;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -225,6 +224,13 @@ namespace Tests.Scenarios
             yield return S("grapple-natural-attacks", GrappleNaturalAttacksAi);
             yield return S("grapple-natural-attacks-ui", GrappleNaturalAttacksUi);
             yield return S("grapple-natural-checks-ui", GrappleNaturalChecksUi);
+            yield return S("improved-grab-mid-sequence", ImprovedGrabMidSequence);
+            yield return S("grapple-rake-ui", GrappleRakeUi);
+            yield return S("improved-grab-hold-ui", ImprovedGrabHoldUi);
+            yield return S("improved-grab-hold-ai", ImprovedGrabHoldAi);
+            yield return S("grapple-escape-move-aoo", () => GrappleEscapeMoveAoO(false));
+            yield return S("grapple-escape-move-aoo-drop", () => GrappleEscapeMoveAoO(true));
+            yield return S("grapple-drag-aoo-ui", GrappleDragAoOUi);
             yield return S("combat-end-victory-ai", () => CombatEndVictory(false));
             yield return S("combat-end-victory-ui", () => CombatEndVictory(true));
             yield return S("combat-end-defeat-ally", CombatEndDefeatAlly);
@@ -3397,17 +3403,16 @@ namespace Tests.Scenarios
         /// <summary>
         /// A Large lion (MM p.274-275: 2 claws +7, bite +2, improved grab with the bite, rake +7; BAB +3, so one iterative
         /// attack) grabs a Medium human on round 1 with its bite (forced 19s; the grab's grapple checks forced to 10, the
-        /// lion +12 against +7) and fights the grapple with the AI from round 2. Each grapple attack action is one natural
-        /// attack (PHB p.156; MM p.314) in place of one natural attack of its sequence, so the lion has up to 3 a turn (the
-        /// count is the unconfirmed one-per-natural-attack reading, CMB-146; its grapple checks stay on its one iterative)
-        /// (claw, claw, then the bite: the AI picks the highest bonus first, NaturalAttackChoice), each at its normal bonus
-        /// -4 for grappling; the rake's 2 claws come once, with the first. The AI may stop early (a 20% chance after each
-        /// action, AI_GrappleRestrictedTurn), so a seed range covers 1 to 3 actions.
+        /// lion +12 against +7) and fights the grapple with the AI from round 2. Each of its grapple turns begins grappling,
+        /// so it rakes first (2 claws at +7, not subject to the -4 for grappling, MM p.314; the rake makes the turn a full
+        /// attack, owner interpretation 2026-10-11, CMB-144), then makes its one grapple action on the BAB ladder (PHB p.156;
+        /// owner interpretation 2026-10-11, CMB-146): one natural attack, the claw (the AI picks the highest bonus,
+        /// NaturalAttackChoice), at its normal bonus -4 for grappling.
         /// </summary>
         private static ScenarioDef GrappleNaturalAttacksAi()
         {
-            return ForceGrabDice(Rules("rules/grapple-natural-attacks", "Each grapple attack is one natural attack at its own bonus -4, up to one per natural attack (unconfirmed count, CMB-146); grapple checks on the BAB ladder; rake once a turn (PHB p.156, MM p.314, CMB-127)")
-                .Covers("CMB-127", "CMB-146", "PHB p.156", "MM p.314", "MM p.312", "MM p.274", "AI")
+            return ForceGrabDice(Rules("rules/grapple-natural-attacks", "A grappling lion rakes (no -4) and makes one grapple attack a turn on its BAB ladder, a natural attack at its own bonus -4 (PHB p.156, MM p.314, CMB-127, CMB-144, CMB-146)")
+                .Covers("CMB-127", "CMB-144", "CMB-146", "PHB p.156", "MM p.314", "MM p.312", "MM p.274", "AI")
                 .MaxRounds(3)
                 .Pc("hero", ActorSource.Stats(() => FighterOfRace("Hero", "Human")), 10, 10, Control.Scripted)
                 .Npc("lion", "lion", 11, 10, Control.Scripted)
@@ -3427,79 +3432,58 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("mods [" + string.Join(",", m) + "], hero grappled on the lion's round-2 turn", r1.Select(e => e.Seq).ToArray())
                         : ExpectResult.Fail("the hero is not grappled when the lion's round-2 turn starts");
                 })
-                .Expect("Each grapple turn: 1 to 3 natural-weapon grapple attacks (one per natural attack, though BAB +3 gives one iterative)", v =>
-                {
-                    var turns = LionGrappleTurns(v);
-                    if (turns.Count == 0) return ExpectResult.Inconclusive("the lion never started a turn grappling");
-                    foreach (var t in turns)
-                    {
-                        int natural = t.Count(a => a.Key == "AttackUnarmed");
-                        if (natural < 1 || natural > 3)
-                            return ExpectResult.Fail(natural + " natural grapple attacks in a turn (actions: " + string.Join(",", t.Select(a => a.Key)) + ")");
-                    }
-                    return ExpectResult.Pass(turns.Count + " turn(s): " + string.Join(" / ", turns.Select(t => t.Count + " action(s)")));
-                })
-                .Expect("A grapple check (pin, damage, escape) comes only as the turn's first action: BAB +3 gives one iterative step, and a grapple natural attack uses it (PHB p.156)", v =>
-                {
-                    var turns = LionGrappleTurns(v);
-                    if (turns.Count == 0) return ExpectResult.Inconclusive("the lion never started a turn grappling");
-                    int checks = 0;
-                    foreach (var t in turns)
-                    {
-                        for (int i = 0; i < t.Count; i++)
-                        {
-                            if (Array.IndexOf(new[] { "PinOpponent", "DamageOpponent", "OpposedGrappleEscape", "UseOpponentWeapon", "AttackWithLightWeapon" }, t[i].Key) < 0) continue;
-                            checks++;
-                            if (i > 0)
-                                return ExpectResult.Fail("grapple action " + (i + 1) + " was " + t[i].Key + " (actions: " + string.Join(",", t.Select(a => a.Key)) + ")");
-                        }
-                    }
-                    return ExpectResult.Pass(checks + " grapple check(s), none after a grapple attack");
-                })
-                .Expect("Each grapple attack is one attack; the first of a turn adds the rake's 2 claws, the others nothing (MM p.314)", v =>
-                {
-                    var turns = LionGrappleTurns(v);
-                    if (turns.Count == 0) return ExpectResult.Inconclusive("the lion never started a turn grappling");
-                    foreach (var t in turns)
-                    {
-                        for (int i = 0; i < t.Count; i++)
-                        {
-                            if (t[i].Key != "AttackUnarmed") continue;
-                            int expected = i == 0 ? 3 : 1;
-                            if (t[i].Value.Count != expected)
-                                return ExpectResult.Fail("grapple action " + (i + 1) + " made " + t[i].Value.Count + " attacks, expected " + expected,
-                                    t[i].Value.Select(e => e.Seq).ToArray());
-                        }
-                    }
-                    return ExpectResult.Pass("one natural attack per action, rake with the first");
-                })
-                .Expect("The grapple attacks are claw, claw, bite in that order, each at its round-1 bonus -4 (PHB p.156; MM p.312)", v =>
+                .Expect("Round 1, the grab's turn: no rake (MM p.314: it cannot begin a grapple and rake in the same turn)", v =>
                 {
                     List<TraceEvent> r1 = v.Attacks("lion", "hero", false, 1);
-                    if (r1.Count != 3) return ExpectResult.Fail(r1.Count + " round-1 attacks");
-                    int claw = r1[0].Int("mod"), bite = r1[2].Int("mod");
-                    int[] expected = { claw - 4, claw - 4, bite - 4 };
+                    return r1.Count == 3
+                        ? ExpectResult.Pass("3 attacks in round 1, no rake", r1.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail(r1.Count + " attacks in round 1", r1.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Each grapple turn: the rake first, then exactly one grapple action (BAB +3 gives one iterative step, PHB p.156)", v =>
+                {
                     var turns = LionGrappleTurns(v);
                     if (turns.Count == 0) return ExpectResult.Inconclusive("the lion never started a turn grappling");
-                    var seen = new List<string>();
                     foreach (var t in turns)
                     {
-                        int[] mods = t.Where(a => a.Key == "AttackUnarmed" && a.Value.Count > 0).Select(a => a.Value[0].Int("mod")).ToArray();
-                        for (int i = 0; i < mods.Length; i++)
-                        {
-                            if (mods[i] != expected[i])
-                                return ExpectResult.Fail("turn mods [" + string.Join(",", mods) + "], expected [" + string.Join(",", expected.Take(mods.Length)) + "]");
-                        }
-                        seen.Add("[" + string.Join(",", mods) + "]");
+                        int ladder = t.Count(a => a.Key != "Rake");
+                        if (t.Count == 0 || t[0].Key != "Rake" || t.Count(a => a.Key == "Rake") != 1 || ladder != 1)
+                            return ExpectResult.Fail("actions: " + string.Join(",", t.Select(a => a.Key)));
                     }
-                    return ExpectResult.Pass("mods " + string.Join(" ", seen) + " from claw " + claw + ", bite " + bite);
+                    return ExpectResult.Pass(turns.Count + " turn(s): " + string.Join(" / ", turns.Select(t => string.Join(",", t.Select(a => a.Key)))));
                 })
-                .ExpectXFail("CMB-144", "The rake's claws are not subject to the -4 for attacking in a grapple: each rolls at the claw's round-1 bonus (MM p.314, p.275)", v =>
+                .Expect("The rake makes 2 attacks and a grapple attack 1 (MM p.314)", v =>
+                {
+                    var turns = LionGrappleTurns(v);
+                    if (turns.Count == 0) return ExpectResult.Inconclusive("the lion never started a turn grappling");
+                    foreach (var t in turns)
+                    {
+                        foreach (var a in t)
+                        {
+                            int expected = a.Key == "Rake" ? 2 : a.Key == "AttackUnarmed" ? 1 : 0;
+                            if (a.Value.Count != expected)
+                                return ExpectResult.Fail(a.Key + " made " + a.Value.Count + " attacks, expected " + expected, a.Value.Select(e => e.Seq).ToArray());
+                        }
+                    }
+                    return ExpectResult.Pass("rake 2, grapple attack 1");
+                })
+                .Expect("The grapple attack is a claw at its round-1 bonus -4 (PHB p.156; MM p.312)", v =>
                 {
                     List<TraceEvent> r1 = v.Attacks("lion", "hero", false, 1);
                     if (r1.Count != 3) return ExpectResult.Fail(r1.Count + " round-1 attacks");
                     int claw = r1[0].Int("mod");
-                    List<TraceEvent> rakes = LionGrappleTurns(v).Where(t => t.Count > 0 && t[0].Value.Count == 3).SelectMany(t => t[0].Value.Skip(1)).ToList();
+                    var mods = LionGrappleTurns(v).SelectMany(t => t).Where(a => a.Key == "AttackUnarmed" && a.Value.Count > 0).Select(a => a.Value[0]).ToList();
+                    if (mods.Count == 0) return ExpectResult.Inconclusive("no grapple attack was made");
+                    TraceEvent wrong = mods.FirstOrDefault(e => e.Int("mod") != claw - 4);
+                    return wrong == null
+                        ? ExpectResult.Pass(mods.Count + " grapple claw attack(s) at " + (claw - 4), mods.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail("grapple attack at " + wrong.Int("mod") + ", expected " + (claw - 4), wrong.Seq);
+                })
+                .Expect("The rake's claws are not subject to the -4 for attacking in a grapple: each rolls at the claw's round-1 bonus (MM p.314, p.275; CMB-144)", v =>
+                {
+                    List<TraceEvent> r1 = v.Attacks("lion", "hero", false, 1);
+                    if (r1.Count != 3) return ExpectResult.Fail(r1.Count + " round-1 attacks");
+                    int claw = r1[0].Int("mod");
+                    List<TraceEvent> rakes = LionGrappleTurns(v).SelectMany(t => t).Where(a => a.Key == "Rake").SelectMany(a => a.Value).ToList();
                     if (rakes.Count == 0) return ExpectResult.Inconclusive("no rake was made");
                     TraceEvent wrong = rakes.FirstOrDefault(e => e.Int("mod") != claw);
                     return wrong == null
@@ -3512,13 +3496,14 @@ namespace Tests.Scenarios
         /// <summary>
         /// A PC fighting with a bite and two claws (Fighter 6: BAB +6, two iteratives; Improved Grapple, so the grapple
         /// provokes nothing) grapples on round 1 in place of its bite, then presses the grapple attack button and picks
-        /// natural attacks in the natural-attack menu (CMB-127): round 1 the two claws (the second is the only option
-        /// left, made at once), a fourth grapple attack is refused; round 2 claw, bite, claw, and a fourth is refused.
+        /// natural attacks in the natural-attack menu (CMB-127). Its grapple attacks follow its BAB ladder (PHB p.156;
+        /// owner interpretation 2026-10-11, CMB-146): round 1 the grapple took the first step, so one grapple claw attack
+        /// is made and the next is refused; round 2 claw and bite, and a third is refused.
         /// </summary>
         private static ScenarioDef GrappleNaturalAttacksUi()
         {
-            return Rules("rules/grapple-natural-attacks-ui", "A PC's grapple attack is one natural attack it picks, one per natural attack in its sequence (PHB p.156, CMB-127)")
-                .Covers("CMB-127", "PHB p.156", "MM p.312", "PC_NPC_PARITY")
+            return Rules("rules/grapple-natural-attacks-ui", "A PC's grapple attack is one natural attack it picks, one per step of its BAB ladder (PHB p.156, CMB-127, CMB-146)")
+                .Covers("CMB-127", "CMB-146", "PHB p.156", "MM p.312", "PC_NPC_PARITY")
                 .MaxRounds(2)
                 .Pc("hero", ActorSource.Stats(() => NaturalManeuverBeast("Hero", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Ui)
                 .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
@@ -3528,53 +3513,51 @@ namespace Tests.Scenarios
                 .Force(20, 20, "Touch attack")
                 .Force(20, 20, "Grapple check", -1)
                 .Turn("dummy", 0, Step.Pass())
-                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"))
-                .Turn("hero", 2, Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"))
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Claw"))
+                .Turn("hero", 2, Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"), Step.GrappleAttack("Claw"))
                 .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
-                .Expect("Round 1: the grapple and two grapple claw attacks are done; a fourth action finds no natural attack left", Expect.All(
+                .Expect("Round 1: the grapple and one grapple claw attack are done; a second is refused (BAB +6: two steps, the grapple took one)", Expect.All(
                     Expect.StepStatus("hero", 1, "Maneuver", 0, "done"),
                     Expect.StepStatus("hero", 1, "GrappleAction(Attack", 0, "done"),
-                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 1, "done"),
-                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 2, "refused", "dropped")))
-                .Expect("Round 1: one attack per grapple attack, two in all, both at the claw's bonus", v =>
+                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 1, "refused", "dropped")))
+                .Expect("Round 1: one attack, at the claw's bonus", v =>
                 {
                     List<TraceEvent> r1 = v.Attacks("hero", "dummy", false, 1);
-                    return r1.Count == 2 && r1[0].Int("mod") == r1[1].Int("mod")
-                        ? ExpectResult.Pass("mods " + r1[0].Int("mod") + ", " + r1[1].Int("mod"), r1.Select(e => e.Seq).ToArray())
+                    int bab = ActorInt(v, "hero", "bab");
+                    return r1.Count == 1 && r1[0].Int("mod") == bab - 5 + 3 - 4
+                        ? ExpectResult.Pass("mod " + r1[0].Int("mod"), r1.Select(e => e.Seq).ToArray())
                         : ExpectResult.Fail(r1.Count + " attacks, mods [" + string.Join(",", r1.Select(e => e.Int("mod"))) + "]", r1.Select(e => e.Seq).ToArray());
                 })
-                .Expect("Round 2: three grapple attacks are done; a fourth is refused (BAB +6 gives two iteratives, the sequence three natural attacks)", Expect.All(
+                .Expect("Round 2: two grapple attacks are done; a third is refused (BAB +6 gives two iteratives, PHB p.156)", Expect.All(
                     Expect.StepStatus("hero", 2, "GrappleAction(Attack", 0, "done"),
                     Expect.StepStatus("hero", 2, "GrappleAction(Attack", 1, "done"),
-                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 2, "done"),
-                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 3, "refused", "dropped")))
-                .Expect("Round 2: claw, bite, claw: the bite 5 above the claws (MM p.312), at BAB + STR -4 for grappling (PHB p.156)", v =>
+                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 2, "refused", "dropped")))
+                .Expect("Round 2: claw, bite: the bite 5 above the claw (MM p.312), at BAB + STR -4 for grappling (PHB p.156)", v =>
                 {
                     List<TraceEvent> r2 = v.Attacks("hero", "dummy", false, 2);
                     int[] m = r2.Select(e => e.Int("mod")).ToArray();
                     int bab = ActorInt(v, "hero", "bab");
                     string mods = "mods [" + string.Join(",", m) + "], BAB " + bab;
-                    if (m.Length != 3) return ExpectResult.Fail(m.Length + " attacks, " + mods, r2.Select(e => e.Seq).ToArray());
-                    return m[1] - m[0] == 5 && m[0] == m[2] && m[1] == bab + 3 - 4
+                    if (m.Length != 2) return ExpectResult.Fail(m.Length + " attacks, " + mods, r2.Select(e => e.Seq).ToArray());
+                    return m[1] - m[0] == 5 && m[1] == bab + 3 - 4
                         ? ExpectResult.Pass(mods, r2.Select(e => e.Seq).ToArray())
-                        : ExpectResult.Fail(mods + ", expected claw, bite (+5, = BAB +3 STR -4), claw", r2.Select(e => e.Seq).ToArray());
+                        : ExpectResult.Fail(mods + ", expected claw, bite (+5, = BAB +3 STR -4)", r2.Select(e => e.Seq).ToArray());
                 })
                 .Build();
         }
 
         /// <summary>
-        /// Grapple checks stay on the BAB ladder for a natural-weapon creature (PHB p.156; CMB-127). A PC fighting with a
-        /// bite and two claws at BAB +4 (Fighter 4: one iterative; Improved Grapple) grapples on round 1 in place of its
-        /// bite. That grapple took its one iterative step, so the Pin button is refused; its two grapple claw attacks are
-        /// natural steps and are made (the second is the only option left, made at once); a third grapple attack finds no
-        /// natural attack left. The number of grapple natural attacks (one per natural attack) is the unconfirmed
-        /// reading of CMB-146.
+        /// Grapple checks and grapple natural attacks share the BAB ladder (PHB p.156; CMB-127; owner interpretation
+        /// 2026-10-11, CMB-146). A PC fighting with a bite and two claws at BAB +4 (Fighter 4: one iterative; Improved
+        /// Grapple) grapples on round 1 in place of its bite. That grapple took its one step, so the Pin button and the
+        /// grapple attack button are refused. On round 2 its one step makes one grapple claw attack, and the pin after
+        /// it is refused.
         /// </summary>
         private static ScenarioDef GrappleNaturalChecksUi()
         {
-            return Rules("rules/grapple-natural-checks-ui", "A natural-weapon PC's grapple checks follow its BAB ladder; its grapple attacks follow its natural attacks (PHB p.156, CMB-127, CMB-146)")
+            return Rules("rules/grapple-natural-checks-ui", "A natural-weapon PC's grapple checks and grapple attacks share its BAB ladder (PHB p.156, CMB-127, CMB-146)")
                 .Covers("CMB-127", "CMB-146", "PHB p.156", "MM p.312", "PC_NPC_PARITY")
-                .MaxRounds(1)
+                .MaxRounds(2)
                 .Pc("hero", ActorSource.Stats(() =>
                 {
                     CharacterStats s = Fighter("Hero", 4, "Improved Grapple");
@@ -3590,24 +3573,437 @@ namespace Tests.Scenarios
                 .Force(20, 20, "Touch attack")
                 .Force(20, 20, "Grapple check", -1)
                 .Turn("dummy", 0, Step.Pass())
-                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"), Step.GrappleAction("Pin"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"))
-                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
-                .Expect("The grapple is done; the pin after it is refused (BAB +4 gives one iterative step, PHB p.156)", Expect.All(
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"), Step.GrappleAction("Pin"), Step.GrappleAttack("Claw"))
+                .Turn("hero", 2, Step.GrappleAttack("Claw"), Step.GrappleAction("Pin"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 1: the grapple is done; the pin and the grapple attack after it are refused (BAB +4 gives one step, PHB p.156)", Expect.All(
                     Expect.StepStatus("hero", 1, "Maneuver", 0, "done"),
-                    Expect.StepStatus("hero", 1, "GrappleAction(Pin", 0, "refused", "dropped")))
-                .Expect("Two grapple claw attacks are done; a third grapple attack finds no natural attack left (the bite was given up for the grapple)", Expect.All(
-                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 0, "done"),
-                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 1, "done"),
-                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 2, "refused", "dropped")))
-                .Expect("Two attacks in all, both at the claw's bonus (BAB +4 -5 secondary + STR +3 -4 grappling)", v =>
+                    Expect.StepStatus("hero", 1, "GrappleAction(Pin", 0, "refused", "dropped"),
+                    Expect.StepStatus("hero", 1, "GrappleAction(Attack", 0, "refused", "dropped")))
+                .Expect("Round 2: one grapple claw attack is done; the pin after it is refused", Expect.All(
+                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 0, "done"),
+                    Expect.StepStatus("hero", 2, "GrappleAction(Pin", 0, "refused", "dropped")))
+                .Expect("No attack in round 1; in round 2 one attack at the claw's bonus (BAB +4 -5 secondary + STR +3 -4 grappling)", v =>
                 {
                     List<TraceEvent> r1 = v.Attacks("hero", "dummy", false, 1);
+                    List<TraceEvent> r2 = v.Attacks("hero", "dummy", false, 2);
                     int bab = ActorInt(v, "hero", "bab");
-                    int[] m = r1.Select(e => e.Int("mod")).ToArray();
-                    string mods = "mods [" + string.Join(",", m) + "], BAB " + bab;
-                    return m.Length == 2 && m[0] == m[1] && m[0] == bab - 5 + 3 - 4
-                        ? ExpectResult.Pass(mods, r1.Select(e => e.Seq).ToArray())
-                        : ExpectResult.Fail(mods + ", expected two claws at BAB -5 +3 -4", r1.Select(e => e.Seq).ToArray());
+                    int[] m = r2.Select(e => e.Int("mod")).ToArray();
+                    string mods = "round 1: " + r1.Count + " attacks; round 2 mods [" + string.Join(",", m) + "], BAB " + bab;
+                    return r1.Count == 0 && m.Length == 1 && m[0] == bab - 5 + 3 - 4
+                        ? ExpectResult.Pass(mods, r2.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail(mods + ", expected none, then one claw at BAB -5 +3 -4", r1.Concat(r2).Select(e => e.Seq).ToArray());
+                })
+                .Build();
+        }
+
+
+        /// <summary>
+        /// A Large giant praying mantis (MM p.285: claws, claws, bite; improved grab with a claw; BAB +3, one iterative
+        /// attack) attacks a Medium human on round 1; the first claw hits (forced 19s) and its Improved Grab takes hold
+        /// (grapple checks forced to 10: the mantis +11 against +7). Grappling, it acts only through grapple actions (PHB
+        /// p.156; CMB-149): the rest of its natural sequence is not made (its one step on the BAB ladder is used, CMB-146).
+        /// From round 2 its successful Damage grapple checks deal the claw's damage, lethal (MM p.310, CMB-148). The AI
+        /// grapples normally: no other foe is in reach, so it does not hold with the claw alone.
+        /// </summary>
+        private static ScenarioDef ImprovedGrabMidSequence()
+        {
+            return ForceGrabDice(Rules("rules/improved-grab-mid-sequence", "Improved Grab mid-sequence: the grabber's remaining attacks become grapple actions, and later Damage checks deal the grabbing attack's damage (PHB p.156, MM p.310, CMB-148, CMB-149)")
+                .Covers("CMB-148", "CMB-149", "CMB-146", "PHB p.156", "MM p.310", "MM p.285", "AI")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => FighterOfRace("Hero", "Human")), 10, 10, Control.Scripted)
+                .Npc("mantis", "giant_praying_mantis", 11, 10, Control.Scripted)
+                .Tweak("hero", SturdyDummy)
+                .Initiative("mantis", "hero"))
+                .Turn("mantis", 1, Step.Attack("hero"))
+                .Turn("hero", 0, Step.Pass())
+                .AiWhenUnscripted("mantis")
+                .Expect("Round 1: the first claw hits and its grab holds the hero; no other attack follows (PHB p.156: a grappler acts only through grapple actions)", v =>
+                {
+                    List<TraceEvent> r1 = v.Attacks("mantis", null, false, 1);
+                    JsonObj h2 = v.Snapshot("hero", 2, "mantis");
+                    if (!HasCond(h2, "Grappled"))
+                        return ExpectResult.Inconclusive("the hero is not grappled when the mantis's round-2 turn starts");
+                    return r1.Count == 1 && r1[0].Bool("hit")
+                        ? ExpectResult.Pass("one claw, then the grapple", r1.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail(r1.Count + " attacks in round 1: " + string.Join(",", r1.Select(e => e.Str("weapon"))), r1.Select(e => e.Seq).ToArray());
+                })
+                .Expect("The mantis grapples normally: it is grappled too (no other foe in reach, so no -20 hold; MM p.310)", v =>
+                {
+                    JsonObj m2 = v.Snapshot("mantis", 2, "mantis");
+                    return m2 == null
+                        ? ExpectResult.Inconclusive("no round-2 snapshot of the mantis")
+                        : HasCond(m2, "Grappled") ? ExpectResult.Pass("mantis grappled on round 2") : ExpectResult.Fail("the mantis is not grappled on round 2");
+                })
+                .Expect("A successful grapple Damage check in a later round deals the claw's damage, lethal (MM p.310)", v =>
+                {
+                    List<TraceEvent> logs = v.Of("log").Where(e => e.Round >= 2 && (e.Str("text") ?? "").Contains("Giant Praying Mantis attempts to damage")).ToList();
+                    if (logs.Count == 0) return ExpectResult.Inconclusive("the mantis made no Damage grapple check");
+                    TraceEvent wrong = logs.FirstOrDefault(e => !(e.Str("text") ?? "").Contains("Claws's damage"));
+                    return wrong == null
+                        ? ExpectResult.Pass(logs.Count + " Damage check(s) with the claw's damage", logs.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail("a Damage check without the claw's damage", wrong.Seq);
+                })
+                .Build();
+        }
+
+
+        /// <summary>
+        /// The PC side of the rake (MM p.314; CMB-144): a PC fighting with a bite, two claws and a rake (Fighter 6: BAB +6, two
+        /// iteratives; Improved Grapple) grapples on round 1 in place of its bite; that turn it began free, so the grapple
+        /// natural-attack menu offers no rake and it makes one grapple claw attack. On round 2, begun grappling, it picks
+        /// Rake in the same menu (two claws at its full bonus, no -4, the turn becomes a full attack), then claw and bite on
+        /// its two ladder steps (PHB p.156; CMB-146). The AI takes the same rake through the same resolver (rules/grapple-natural-attacks).
+        /// </summary>
+        private static ScenarioDef GrappleRakeUi()
+        {
+            return Rules("rules/grapple-rake-ui", "A PC rakes in a grapple only on a turn begun grappling, without the -4, as part of a full attack (MM p.314, CMB-144)")
+                .Covers("CMB-144", "CMB-146", "MM p.314", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => NaturalManeuverBeast("Hero", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak("hero", c =>
+                {
+                    StripAllWeapons(c);
+                    c.Stats.HasRake = true;
+                    c.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+                })
+                .Tweak("dummy", SturdyDummyWithoutAoO)
+                .Initiative("hero", "dummy")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("dummy", 0, Step.Pass())
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"), Step.GrappleAttack("Claw"))
+                .Turn("hero", 2, Step.GrappleAttack("Rake"), Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"))
+                .Turn("hero", 3, Step.GrappleAttack("Claw"), Step.GrappleAttack("Bite"), Step.GrappleAttack("Rake"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 1, the grapple's turn: one grapple claw attack and no rake (MM p.314: it cannot begin a grapple and rake in the same turn)", v =>
+                {
+                    // The trace names natural and rake attacks "Unarmed strike"; the attacks are told apart by count and modifier.
+                    List<TraceEvent> r1 = v.Attacks("hero", "dummy", false, 1);
+                    int bab = ActorInt(v, "hero", "bab");
+                    return r1.Count == 1 && r1[0].Int("mod") == bab - 5 + 3 - 4
+                        ? ExpectResult.Pass("one claw attack at " + r1[0].Int("mod"), r1.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail(r1.Count + " attacks, mods [" + string.Join(",", r1.Select(e => e.Int("mod"))) + "]", r1.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Round 2: rake, claw and bite are done (the rake takes no ladder step)", Expect.All(
+                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 0, "done"),
+                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 1, "done"),
+                    Expect.StepStatus("hero", 2, "GrappleAction(Attack", 2, "done")))
+                .Expect("Round 2: two rake claws at the full bonus (BAB + STR, no -4), then the claw and the bite at their bonus -4", v =>
+                {
+                    List<TraceEvent> r2 = v.Attacks("hero", "dummy", false, 2);
+                    int bab = ActorInt(v, "hero", "bab");
+                    // In order: the two rake claws, then the claw and the bite (the trace names them all "Unarmed strike").
+                    int[] m = r2.Select(e => e.Int("mod")).ToArray();
+                    string seen = "mods [" + string.Join(",", m) + "], BAB " + bab;
+                    bool ok = m.Length == 4 && m[0] == bab + 3 && m[1] == bab + 3 && m[2] == bab - 5 + 3 - 4 && m[3] == bab + 3 - 4;
+                    return ok ? ExpectResult.Pass(seen, r2.Select(e => e.Seq).ToArray()) : ExpectResult.Fail(seen, r2.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Round 3: claw and bite spend the two ladder steps, and the rake is still offered and made after them (it takes no step)", Expect.All(
+                    Expect.StepStatus("hero", 3, "GrappleAction(Attack", 0, "done"),
+                    Expect.StepStatus("hero", 3, "GrappleAction(Attack", 1, "done"),
+                    Expect.StepStatus("hero", 3, "GrappleAction(Attack", 2, "done")))
+                .Expect("Round 3: claw and bite at their bonus -4, then two rake claws at the full bonus", v =>
+                {
+                    List<TraceEvent> r3 = v.Attacks("hero", "dummy", false, 3);
+                    int bab = ActorInt(v, "hero", "bab");
+                    int[] m = r3.Select(e => e.Int("mod")).ToArray();
+                    string seen = "mods [" + string.Join(",", m) + "], BAB " + bab;
+                    bool ok = m.Length == 4 && m[0] == bab - 5 + 3 - 4 && m[1] == bab + 3 - 4 && m[2] == bab + 3 && m[3] == bab + 3;
+                    return ok ? ExpectResult.Pass(seen, r3.Select(e => e.Seq).ToArray()) : ExpectResult.Fail(seen, r3.Select(e => e.Seq).ToArray());
+                })
+                .Build();
+        }
+
+
+        // ── Improved Grab hold with one body part (MM p.310; CMB-148, CMB-149, CMB-163) ──────────
+
+        /// <summary>A Small goblin that loses grapple checks: STR 1 and BAB +0 (grapple -5 -4 = -9), no AoOs, sturdy.</summary>
+        private static void WeakGrappleGoblin(CharacterController c)
+        {
+            SturdyDummyWithoutAoO(c);
+            c.Stats.STR = 1;
+            c.Stats.BaseAttackBonusOverride = 0;
+        }
+
+        /// <summary>
+        /// The PC side of the hold (MM p.310): a Medium PC fighting with a bite and two claws (Fighter 6, Improved Grapple:
+        /// grapple +13, so +13 -20 = -7 while holding) has Improved Grab on its claw. On round 1 its claw hits a Small goblin
+        /// (grapple -9), the Improved Grab menu opens and it picks the hold: the free check is rolled at -20 and still wins
+        /// (grapple dice forced to 10), the goblin is grappled and the hero is not. Its bite then goes to a second goblin,
+        /// and its second claw at the held goblin is refused (its remaining attacks go against other opponents; provisional,
+        /// CMB-163). On round 2 its Grapple: Damage button makes the hold's Damage check at -20, which deals the claw's
+        /// damage (MM p.310: each successful grapple check in successive rounds), and the Release button lets go.
+        /// </summary>
+        private static ScenarioDef ImprovedGrabHoldUi()
+        {
+            return ForceGrabDice(Rules("rules/improved-grab-hold-ui", "A PC's Improved Grab hold with the claw: -20, not grappled, attacks only others, later Damage checks deal the claw's damage, then lets go (MM p.310, CMB-148, CMB-149, CMB-163)")
+                .Covers("CMB-148", "CMB-149", "CMB-163", "MM p.310", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => NaturalManeuverBeast("Hero", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Ui)
+                .Npc("held", "goblin", 11, 10, Control.Scripted)
+                .Npc("other", "goblin", 11, 11, Control.Scripted)
+                .Tweak("hero", c =>
+                {
+                    StripAllWeapons(c);
+                    c.Stats.HasImprovedGrab = true;
+                    c.Stats.ImprovedGrabTriggerAttackName = "Claw";
+                })
+                .Tweak("held", WeakGrappleGoblin)
+                .Tweak("other", SturdyDummyWithoutAoO)
+                .Initiative("hero", "held", "other"))
+                .Turn("held", 0, Step.Pass())
+                .Turn("other", 0, Step.Pass())
+                .Turn("hero", 1, Step.NaturalAttack("held", "Claw"), Step.AnswerImprovedGrab("hold"),
+                    Step.NaturalAttack("other", "Bite"), Step.NaturalAttack("held", "Claw"))
+                .Turn("hero", 2, Step.GrappleDamage(), Step.GrappleAction("ReleasePin"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 1: the claw hits, the hold is chosen in the Improved Grab menu, and the bite on the other goblin is made", Expect.All(
+                    Expect.StepStatus("hero", 1, "NaturalAttack(Claw,held)", 0, "done"),
+                    Expect.StepStatus("hero", 1, "AnswerImprovedGrab(hold)", 0, "done"),
+                    Expect.StepStatus("hero", 1, "NaturalAttack(Bite,other)", 0, "done")))
+                .Expect("The free check is rolled at -20 for the hold (combat log)", v =>
+                {
+                    TraceEvent line = v.Of("log").FirstOrDefault(e => (e.Str("text") ?? "").Contains("holding with its claw only (-20)"));
+                    return line != null ? ExpectResult.Pass(line.Str("text"), line.Seq) : ExpectResult.Fail("no hold attempt at -20 in the log");
+                })
+                .Expect("The held goblin is grappled and the hero is not (MM p.310: the holder is not considered grappled)", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 2, "hero"), g = v.Snapshot("held", 2, "hero");
+                    if (h == null || g == null) return ExpectResult.Inconclusive("no round-2 snapshot");
+                    bool heroFree = !HasCond(h, "Grappled") && !(h.Get("gr") is bool hg && hg);
+                    return heroFree && HasCond(g, "Grappled")
+                        ? ExpectResult.Pass("goblin grappled, hero not")
+                        : ExpectResult.Fail("hero grappled " + HasCond(h, "Grappled") + ", goblin grappled " + HasCond(g, "Grappled"));
+                })
+                .Expect("The second claw at the held goblin is refused: the holder's other attacks go against other opponents (provisional, CMB-163)", v =>
+                {
+                    List<TraceEvent> claws = v.Steps("hero", "NaturalAttack(Claw,held)", 1);
+                    if (claws.Count < 2) return ExpectResult.Fail(claws.Count + " claw steps at the held goblin");
+                    TraceEvent bar = v.Of("log").FirstOrDefault(e => e.Round == 1 && (e.Str("text") ?? "").Contains("other attacks only against other opponents"));
+                    return claws[1].Str("status") == "refused" && bar != null
+                        ? ExpectResult.Pass("refused with the hold's reason", claws[1].Seq, bar.Seq)
+                        : ExpectResult.Fail("second claw " + claws[1].Str("status") + ", bar logged " + (bar != null), claws[1].Seq);
+                })
+                .Expect("Round 2: the hold's Damage check (at -20) is done and deals the claw's damage (MM p.310)", v =>
+                {
+                    TraceEvent step = v.Steps("hero", "GrappleAction(Damage", 2).FirstOrDefault();
+                    if (step == null || step.Str("status") != "done") return ExpectResult.Fail("the Damage step is " + (step != null ? step.Str("status") : "missing"));
+                    TraceEvent line = v.Of("log").FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").Contains("Claw's damage"));
+                    return line != null ? ExpectResult.Pass("claw damage logged", step.Seq, line.Seq) : ExpectResult.Fail("no claw damage in round 2", step.Seq);
+                })
+                .Expect("Round 2: the Release button lets go, and the goblin is no longer grappled", v =>
+                {
+                    TraceEvent step = v.Steps("hero", "GrappleAction(ReleasePin", 2).FirstOrDefault();
+                    if (step == null || step.Str("status") != "done") return ExpectResult.Fail("the release step is " + (step != null ? step.Str("status") : "missing"));
+                    JsonObj g = v.Final("held");
+                    return g != null && !HasCond(g, "Grappled") && !(g.Get("gr") is bool gg && gg)
+                        ? ExpectResult.Pass("goblin free", step.Seq)
+                        : ExpectResult.Fail("the goblin is still grappled", step.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The AI side of the hold (MM p.310): a Large giant praying mantis (grapple +11; claws trigger Improved Grab)
+        /// attacks a weak Small halfling (grapple -9) with a fighter also in its reach. Its default choice holds with the claw
+        /// (another foe in reach, and -9 against -9 keeps even odds; AIProfile.DefaultShouldHoldWithImprovedGrab), so it is
+        /// not grappled, and its sequence makes no further attack on the halfling. On round 2 it opens its turn with the
+        /// hold's Damage check, which deals the claws' damage. A second Improved Grab while holding (refused: one grapple
+        /// link per creature, CMB-163) is covered by GrappleDamageRulesTests.TestImprovedGrabOneGrappleLinkPerCreature.
+        /// Grapple dice: the grab's check 20 against 1, then the round-2 Damage check 20 against 1; every other d20 19.
+        /// </summary>
+        private static ScenarioDef ImprovedGrabHoldAi()
+        {
+            return Rules("rules/improved-grab-hold-ai", "An AI mantis holds a halfling with its claw while a fighter is in reach: not grappled, no second grab, and its later Damage checks deal the claw's damage (MM p.310, CMB-148, CMB-163)")
+                .Covers("CMB-148", "CMB-149", "CMB-163", "MM p.310", "MM p.285", "AI")
+                .MaxRounds(2)
+                .Pc("halfling", ActorSource.Stats(() => FighterOfRace("Halfling", "Halfling")), 10, 10, Control.Scripted)
+                .Pc("fighter", ActorSource.Stats(() => FighterOfRace("Fighter", "Human")), 10, 11, Control.Scripted)
+                .Npc("mantis", "giant_praying_mantis", 11, 10, Control.Scripted)
+                .Tweak("halfling", c => { SturdyDummy(c); c.Stats.STR = 1; c.Stats.BaseAttackBonusOverride = 0; })
+                .Tweak("fighter", SturdyDummy)
+                .Initiative("mantis", "halfling", "fighter")
+                .RecordDice()
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Force(20, 19, null, -1)
+                .Turn("mantis", 1, Step.Attack("halfling"))
+                .Turn("halfling", 0, Step.Pass())
+                .Turn("fighter", 0, Step.Pass())
+                .AiWhenUnscripted("mantis")
+                .Expect("Round 1: the claw hit on the halfling ends in a hold with the claw (combat log)", v =>
+                {
+                    TraceEvent line = v.Of("log").FirstOrDefault(e => e.Round == 1 && (e.Str("text") ?? "").Contains("holding with its claws only (-20)"));
+                    return line != null ? ExpectResult.Pass(line.Str("text"), line.Seq) : ExpectResult.Fail("no hold attempt in round 1");
+                })
+                .Expect("The halfling is grappled and the mantis is not on round 2 (MM p.310)", v =>
+                {
+                    JsonObj m = v.Snapshot("mantis", 2, "mantis"), h = v.Snapshot("halfling", 2, "mantis");
+                    if (m == null || h == null) return ExpectResult.Inconclusive("no round-2 snapshot");
+                    bool mantisFree = !HasCond(m, "Grappled") && !(m.Get("gr") is bool mg && mg);
+                    return mantisFree && HasCond(h, "Grappled")
+                        ? ExpectResult.Pass("halfling grappled, mantis not")
+                        : ExpectResult.Fail("mantis grappled " + HasCond(m, "Grappled") + ", halfling grappled " + HasCond(h, "Grappled"));
+                })
+                .Expect("After the hold no other attack in round 1 goes to the held halfling (its remaining attacks go against other opponents; provisional, CMB-163), and the fighter is never grabbed", v =>
+                {
+                    List<TraceEvent> onHalfling = v.Attacks("mantis", "halfling", false, 1);
+                    JsonObj f = v.Snapshot("fighter", 2, "mantis");
+                    return onHalfling.Count == 1 && !HasCond(f, "Grappled")
+                        ? ExpectResult.Pass("one attack on the halfling, fighter free", onHalfling.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail(onHalfling.Count + " attacks on the halfling, fighter grappled " + HasCond(f, "Grappled"), onHalfling.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Round 2: the mantis opens with the hold's Damage check and deals the claws' damage (MM p.310)", v =>
+                {
+                    TraceEvent header = v.Of("log").FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").Contains("chooses grapple action [DamageOpponent]") && (e.Str("text") ?? "").Contains("Improved Grab hold"));
+                    if (header == null) return ExpectResult.Fail("no hold Damage check in round 2");
+                    TraceEvent dmg = v.Of("log").FirstOrDefault(e => e.Round == 2 && e.Seq > header.Seq && (e.Str("text") ?? "").Contains("Claws's damage"));
+                    return dmg != null ? ExpectResult.Pass("hold damage", header.Seq, dmg.Seq) : ExpectResult.Fail("the Damage check dealt no claw damage", header.Seq);
+                })
+                .Build();
+        }
+
+        // ── Grapple moves and attacks of opportunity (owner interpretation 2026-10-11, CMB-152; PHB p.137, p.156-157) ──
+
+        /// <summary>
+        /// A Ui fighter (Improved Grapple) grapples an orc on round 1 (it moves into the orc's square, 11,10); an orc guard
+        /// stands next to that square. On round 2 the fighter escapes its own grapple (grapple checks forced) and takes the
+        /// free move to (10,10): leaving the guard's threatened square provokes one AoO from the guard, none from the former
+        /// grapple partner. With <paramref name="dropped"/>, the fighter is at 2 hp and the guard's AoO (forced 19) drops it:
+        /// the move stops and its turn ends (CMB-152), so its EndTurn step is dropped; an ally keeps the fight going.
+        /// </summary>
+        private static ScenarioDef GrappleEscapeMoveAoO(bool dropped)
+        {
+            string id = dropped ? "rules/grapple-escape-move-aoo-drop" : "rules/grapple-escape-move-aoo";
+            string title = dropped
+                ? "An AoO from a third party drops a PC on its escape move: the move stops and its turn ends (CMB-152)"
+                : "A PC's escape move provokes from a third party only, not from its former grapple partner (owner interpretation 2026-10-11, CMB-152)";
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("CMB-152", "PHB p.137", "PHB p.157", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => Fighter("Ally", 6)), 3, 3, Control.Scripted)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Npc("guard", "orc_berserker", 12, 10, Control.Scripted)
+                .Tweak("hero", c => { StripOffHand(c); c.Stats.CanMakeAttacksOfOpportunity = false; if (dropped) c.Stats.CurrentHP = 2; })
+                .Tweak("orc", SturdyDummy)
+                .Tweak("guard", SturdyDummy)
+                .Initiative("hero", "orc", "guard", "ally")
+                .RecordDice()
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1);
+            if (dropped)
+                b = b.Force(20, 19, null, -1);
+            b = b
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("hero", 2, Step.GrappleEscape(10, 10), Step.EndTurn())
+                .Turn("orc", 0, Step.Pass())
+                .Turn("guard", 0, Step.Pass())
+                .Turn("ally", 0, Step.Pass())
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 1: the grapple holds and the hero shares the orc's square (11,10) next to the guard", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 2, "hero");
+                    return HasCond(h, "Grappled") && Pos(h) == new Vector2Int(11, 10)
+                        ? ExpectResult.Pass("hero grappled at (11,10)")
+                        : ExpectResult.Fail("hero at " + Pos(h) + ", grappled " + HasCond(h, "Grappled"));
+                })
+                .Expect("Round 2: the escape (and its free move) is done", Expect.StepStatus("hero", 2, "GrappleAction(Escape", 0, "done"))
+                .Expect("The escape move provokes exactly one AoO, from the guard; none from the former grapple partner (CMB-152)", v =>
+                {
+                    List<TraceEvent> guard = v.AoOs("guard", "hero", "movement");
+                    List<TraceEvent> orc = v.AoOs("orc", "hero", "movement");
+                    return guard.Count == 1 && orc.Count == 0
+                        ? ExpectResult.Pass("guard 1, orc 0", guard.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail("guard " + guard.Count + ", orc " + orc.Count, guard.Concat(orc).Select(e => e.Seq).ToArray());
+                });
+            if (dropped)
+            {
+                b = b
+                    .Expect("The AoO drops the hero: the move stops in the shared square and the turn ends, so the EndTurn step is dropped", v =>
+                    {
+                        JsonObj h = v.Snapshot("hero", 2, "orc");
+                        TraceEvent move = v.Steps("hero", "EndTurn", 2).FirstOrDefault();
+                        if (h == null) return ExpectResult.Inconclusive("no snapshot at the orc's round-2 turn");
+                        bool down = ScenarioChecks.IsDownSnapshot(h);
+                        bool stayed = Pos(h) == new Vector2Int(11, 10);
+                        bool moveDropped = move != null && move.Str("status") == "dropped";
+                        return down && stayed && moveDropped
+                            ? ExpectResult.Pass("hero down at (11,10), EndTurn dropped", move.Seq)
+                            : ExpectResult.Fail("down " + down + ", at " + Pos(h) + ", EndTurn " + (move != null ? move.Str("status") : "missing"));
+                    });
+            }
+            else
+            {
+                b = b.Expect("The hero ends the escape move at (10,10), free of the grapple", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 2, "orc");
+                    if (h == null) return ExpectResult.Inconclusive("no snapshot at the orc's round-2 turn");
+                    if (ScenarioChecks.IsDownSnapshot(h)) return ExpectResult.Inconclusive("the hero was dropped by the AoO");
+                    TraceEvent mv = v.Moves("hero", 2).FirstOrDefault(e => e.Get("to") is Vector2Int to && to == new Vector2Int(10, 10));
+                    return mv != null && !HasCond(h, "Grappled")
+                        ? ExpectResult.Pass("moved to (10,10)", mv.Seq)
+                        : ExpectResult.Fail("no escape move to (10,10), or still grappled");
+                });
+            }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A Ui fighter (Improved Grapple) grapples an orc on round 1 (shared square 11,10, an orc guard next to it at
+        /// 12,10). On round 2 it wins the grapple move check (forced) and drags the orc two squares west to (9,10): leaving
+        /// the guard's threatened square provokes one AoO from the guard and none from the dragged orc (owner interpretation
+        /// 2026-10-11, CMB-152); the orc is dragged along.
+        /// </summary>
+        private static ScenarioDef GrappleDragAoOUi()
+        {
+            return Rules("rules/grapple-drag-aoo-ui", "A PC dragging its grapple partner provokes from a third party only (owner interpretation 2026-10-11, CMB-152)")
+                .Covers("CMB-152", "PHB p.137", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Npc("guard", "orc_berserker", 12, 10, Control.Scripted)
+                .Tweak("hero", c => { StripOffHand(c); c.Stats.CanMakeAttacksOfOpportunity = false; SturdyDummy(c); })
+                .Tweak("orc", SturdyDummy)
+                .Tweak("guard", SturdyDummy)
+                .Initiative("hero", "orc", "guard")
+                .RecordDice()
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", 2)
+                .Force(20, 1, "Grapple check", -1)
+                .Force(20, 20, "(attacker)", 1)
+                .Force(20, 1, "(defender)", 1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("hero", 2, Step.GrappleMove(9, 10))
+                .Turn("orc", 0, Step.Pass())
+                .Turn("guard", 0, Step.Pass())
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 2: the grapple move is done", Expect.StepStatus("hero", 2, "GrappleAction(Move", 0, "done"))
+                .Expect("The drag provokes exactly one AoO, from the guard; none from the dragged orc (CMB-152)", v =>
+                {
+                    List<TraceEvent> guard = v.AoOs("guard", "hero", "movement");
+                    List<TraceEvent> orc = v.AoOs("orc", "hero", "movement");
+                    return guard.Count == 1 && orc.Count == 0
+                        ? ExpectResult.Pass("guard 1, orc 0", guard.Select(e => e.Seq).ToArray())
+                        : ExpectResult.Fail("guard " + guard.Count + ", orc " + orc.Count, guard.Concat(orc).Select(e => e.Seq).ToArray());
+                })
+                .Expect("The hero ends at (9,10) and the orc is dragged along beside it, still grappled", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 2, "orc"), o = v.Snapshot("orc", 2, "orc");
+                    if (h == null || o == null) return ExpectResult.Inconclusive("no snapshot at the orc's round-2 turn");
+                    if (ScenarioChecks.IsDownSnapshot(h)) return ExpectResult.Inconclusive("the hero was dropped by the AoO");
+                    Vector2Int? hp = Pos(h), op = Pos(o);
+                    bool beside = hp.HasValue && op.HasValue && Mathf.Max(Mathf.Abs(hp.Value.x - op.Value.x), Mathf.Abs(hp.Value.y - op.Value.y)) <= 1;
+                    return hp == new Vector2Int(9, 10) && beside && op != new Vector2Int(11, 10) && HasCond(o, "Grappled")
+                        ? ExpectResult.Pass("hero at (9,10), orc dragged to " + op)
+                        : ExpectResult.Fail("hero at " + hp + ", orc at " + op + ", orc grappled " + HasCond(o, "Grappled"));
                 })
                 .Build();
         }

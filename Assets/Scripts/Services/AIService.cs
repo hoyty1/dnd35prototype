@@ -178,6 +178,25 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // An Improved Grab hold with one body part (MM p.310; CMB-148, CMB-149): the AI keeps holding while another foe is
+        // within reach to fight; otherwise it lets go (a free action until the owner rules, CMB-163) and acts normally.
+        if (npc.TryGetImprovedGrabHold(out CharacterController heldFoe, out _)
+            && !AIProfile.HasOtherEnemyInReach(npc, heldFoe, _gameManager.GetAllCharactersForAI()))
+        {
+            string released = npc.ReleaseImprovedGrabHold("no other foe within reach");
+            if (!string.IsNullOrEmpty(released))
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", released));
+        }
+
+        // Still holding: the hold's Damage check (at -20) in place of its first attack, when it keeps even odds
+        // (MM p.310; the same shared path as the PC's Grapple: Damage button, CMB-163).
+        if (npc.IsHoldingWithImprovedGrab())
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.AI_ImprovedGrabHoldDamageCheck(npc));
+            if (CombatEnded())
+                yield break;
+        }
+
         if (_gameManager.TryExecuteAnimateRopeEscapeForNpc(npc))
         {
             yield return new WaitForSeconds(0.35f);
@@ -3282,6 +3301,9 @@ public class AIService : MonoBehaviour
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
             if (!TeamUtility.IsEnemy(attacker, candidate))
+                continue;
+            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149).
+            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
                 continue;
 
             enemies.Add(candidate);

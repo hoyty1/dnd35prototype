@@ -1439,58 +1439,54 @@ public partial class GameManager
         return attack.WeaponName.IndexOf(triggerAttackName, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<bool> onResolved)
+    /// <summary>
+    /// PC choice after an Improved Grab trigger hit (MM p.310; owner ruling 2026-10-11, CMB-148): grapple normally, hold
+    /// with the body part that hit (-20 on grapple checks, not grappled; offered when the hit was a natural attack), or
+    /// skip. The AI makes the same choice with ChooseImprovedGrabForAI; both resolve through ResolveImprovedGrabChoice.
+    /// </summary>
+    private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<ImprovedGrabChoice> onResolved)
     {
         if (attacker == null || target == null || !attacker.IsControllable || CombatUI == null)
         {
-            onResolved?.Invoke(true);
+            onResolved?.Invoke(ImprovedGrabChoice.GrappleNormally);
             yield break;
         }
 
         bool resolved = false;
-        bool shouldGrab = false;
+        ImprovedGrabChoice choice = ImprovedGrabChoice.Skip;
         string attackLabel = string.IsNullOrWhiteSpace(attackName) ? "natural attack" : attackName;
+        NaturalAttackDefinition bodyPart = attacker.GetNaturalAttackByWeaponName(attackName);
 
-        CombatUI.ShowConfirmationDialog(
-            title: "Improved Grab",
-            message: $"{attacker.Stats.CharacterName} hit {target.Stats.CharacterName} with {attackLabel}. Start a grapple as a free action?",
-            confirmLabel: "Start Grapple",
-            cancelLabel: "Skip",
-            onConfirm: () =>
+        var choices = new List<ImprovedGrabChoice> { ImprovedGrabChoice.GrappleNormally };
+        var labels = new List<string> { $"Improved Grab: grapple {target.Stats.CharacterName} normally (free action)" };
+        if (bodyPart != null)
+        {
+            choices.Add(ImprovedGrabChoice.HoldWithBodyPart);
+            labels.Add($"Improved Grab: hold {target.Stats.CharacterName} with the {attackLabel} only (-20 on grapple checks; you are not grappled)");
+        }
+        choices.Add(ImprovedGrabChoice.Skip);
+        labels.Add("Skip the grapple");
+
+        CombatUI.ShowSpecialStyleSelectionMenu(
+            menuName: "ImprovedGrabMenu",
+            optionLabels: labels,
+            optionEnabledStates: null,
+            onSelect: index =>
             {
-                shouldGrab = true;
+                choice = index >= 0 && index < choices.Count ? choices[index] : ImprovedGrabChoice.Skip;
                 resolved = true;
             },
             onCancel: () =>
             {
-                shouldGrab = false;
+                choice = ImprovedGrabChoice.Skip;
                 resolved = true;
-            });
+            },
+            showWhileActionPanelHidden: true);
 
         while (!resolved)
             yield return null;
 
-        onResolved?.Invoke(shouldGrab);
-    }
-
-    private void ResolveRakeAfterSuccessfulImprovedGrab(CharacterController attacker, CharacterController target)
-    {
-        if (attacker == null || target == null || attacker.Stats == null || !attacker.Stats.HasRake || target.Stats == null || target.Stats.IsDead)
-            return;
-
-        FullAttackResult rakeResult = attacker.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
-        if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
-            return;
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"{attacker.Stats.CharacterName} rakes grappled opponent {target.Stats.CharacterName}!"));
-        CombatUI?.ShowCombatLog(rakeResult.GetFullSummary());
-
-        for (int i = 0; i < rakeResult.Attacks.Count; i++)
-        {
-            CombatResult atk = rakeResult.Attacks[i];
-            if (atk != null && atk.Hit && atk.TotalDamage > 0)
-                CheckConcentrationOnDamage(target, atk.TotalDamage);
-        }
+        onResolved?.Invoke(choice);
     }
 
     private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
@@ -1668,36 +1664,24 @@ public partial class GameManager
                         if (!CanAttemptImprovedGrabFromAttack(charger, target, attackResult))
                             continue;
 
-                        bool shouldAttemptGrab = true;
+                        ImprovedGrabChoice grabChoice = charger.IsControllable ? ImprovedGrabChoice.Skip : ChooseImprovedGrabForAI(charger, target);
                         if (charger.IsControllable)
-                        {
-                            bool playerDecision = false;
-                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, attackResult.WeaponName, decision => playerDecision = decision));
-                            shouldAttemptGrab = playerDecision;
-                        }
+                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, attackResult.WeaponName, decision => grabChoice = decision));
 
                         improvedGrabAttempted = true;
-                        if (!shouldAttemptGrab)
+                        if (grabChoice == ImprovedGrabChoice.Skip)
                         {
                             CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{charger.Stats.CharacterName} declines to start a grapple."));
                             continue;
                         }
 
-                        SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
+                        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(charger, target, attackResult, grabChoice);
                         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                         improvedGrabSucceeded = grabResult.Success;
 
+                        // The pounce's rakes came with its full attack; grapple actions begin next turn.
                         if (grabResult.Success)
-                        {
-                            if (usedPounce)
-                            {
-                                CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
-                            }
-                            else
-                            {
-                                ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
-                            }
-                        }
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
                     }
                 }
             }
@@ -1745,20 +1729,15 @@ public partial class GameManager
 
                     if (CanAttemptImprovedGrabFromAttack(charger, target, result))
                     {
-                        bool shouldAttemptGrab = true;
+                        ImprovedGrabChoice grabChoice = charger.IsControllable ? ImprovedGrabChoice.Skip : ChooseImprovedGrabForAI(charger, target);
                         if (charger.IsControllable)
-                        {
-                            bool playerDecision = false;
-                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, result.WeaponName, decision => playerDecision = decision));
-                            shouldAttemptGrab = playerDecision;
-                        }
+                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, result.WeaponName, decision => grabChoice = decision));
 
-                        if (shouldAttemptGrab)
+                        // No rake: a creature cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
+                        if (grabChoice != ImprovedGrabChoice.Skip)
                         {
-                            SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
+                            SpecialAttackResult grabResult = ResolveImprovedGrabChoice(charger, target, result, grabChoice);
                             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                            if (grabResult.Success)
-                                ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
                         }
                         else
                         {
@@ -2080,21 +2059,13 @@ public partial class GameManager
                         continue;
 
                     improvedGrabAttempted = true;
-                    SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
+                    SpecialAttackResult grabResult = ResolveImprovedGrabChoice(npc, target, attackResult, ChooseImprovedGrabForAI(npc, target));
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                     improvedGrabSucceeded = grabResult.Success;
 
+                    // The pounce's rakes came with its full attack; grapple actions begin next turn.
                     if (grabResult.Success)
-                    {
-                        if (usedPounce)
-                        {
-                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
-                        }
-                        else
-                        {
-                            ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
-                        }
-                    }
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
                 }
             }
         }
@@ -2120,12 +2091,11 @@ public partial class GameManager
                 if (result.Hit && !result.IsRangedAttack)
                     MeleeReactionService.TriggerReactions(npc, target, result);
 
+                // No rake: a creature cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
                 if (CanAttemptImprovedGrabFromAttack(npc, target, result))
                 {
-                    SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
+                    SpecialAttackResult grabResult = ResolveImprovedGrabChoice(npc, target, result, ChooseImprovedGrabForAI(npc, target));
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                    if (grabResult.Success)
-                        ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
                 }
             }
         }

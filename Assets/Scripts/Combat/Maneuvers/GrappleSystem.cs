@@ -24,6 +24,8 @@ public partial class GameManager
     private bool _isFreeAdjacentGrappleMoveSelection;
     private CharacterController _freeAdjacentGrappleMoveActor;
     private readonly List<Vector2Int> _freeAdjacentGrappleMoveDestinations = new List<Vector2Int>();
+    // The escaper's former grapple opponent, which gets no AoO for the escape move (CMB-152).
+    private CharacterController _freeAdjacentGrappleMoveFormerOpponent;
 
     private bool TryGetPinnedGrappleOpponent(CharacterController actor, out CharacterController opponent)
     {
@@ -97,6 +99,14 @@ public partial class GameManager
         if (character == null)
             return false;
 
+        // A holder with one body part after Improved Grab (MM p.310): only its Damage check (CMB-163).
+        if (character.IsHoldingWithImprovedGrab())
+            return character.IsGrappleActionAvailableToImprovedGrabHolder(action, out _);
+
+        // A creature held by an Improved Grab hold with one body part cannot pin or drag its holder (MM p.310, CMB-163).
+        if (character.IsGrappleActionBlockedByImprovedGrabHold(action, out _))
+            return false;
+
         // The pinner restrictions apply while the pin's round lasts; on the renewal turn every action is open
         // and Pin Opponent renews the pin (PHB p.156, CMB-120).
         if (character.IsHoldingPinThisRound())
@@ -162,7 +172,23 @@ public partial class GameManager
         actions.Add(GrappleActionType.DrawLightWeapon);
         actions.Add(GrappleActionType.RetrieveSpellComponent);
         actions.Add(GrappleActionType.ReleasePinnedOpponent);
+        if (character.Stats != null && character.Stats.HasRake)
+            actions.Add(GrappleActionType.Rake);
         return actions;
+    }
+
+    /// <summary>Why <see cref="CanUseGrappleAction"/> refuses <paramref name="action"/> to <paramref name="character"/>, for the combat log.</summary>
+    private static string DescribeBlockedGrappleAction(CharacterController character, GrappleActionType action)
+    {
+        string name = character != null && character.Stats != null ? character.Stats.CharacterName : "The creature";
+        if (character != null && character.IsHoldingWithImprovedGrab()
+            && !character.IsGrappleActionAvailableToImprovedGrabHolder(action, out string holderReason))
+            return holderReason;
+        if (character != null && character.IsGrappleActionBlockedByImprovedGrabHold(action, out string heldReason))
+            return heldReason;
+        if (character != null && character.IsGrappleActionBlockedWhilePinning(action, out string pinReason))
+            return pinReason;
+        return $"{name} cannot use {action} in the current pin state.";
     }
 
     private bool TryHandleDirectGrappleAction(GrappleActionType actionType)
@@ -174,7 +200,9 @@ public partial class GameManager
             return false;
         }
 
-        if (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out _, out _))
+        // A holder with one body part after Improved Grab (MM p.310) is not grappling, but takes its Damage check here (CMB-163).
+        bool isHolder = pc.IsHoldingWithImprovedGrab();
+        if (!isHolder && (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out _, out _)))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is not currently in a valid grapple state."));
             ShowActionChoices();
@@ -183,12 +211,14 @@ public partial class GameManager
 
         if (!CanUseGrappleAction(pc, actionType))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use {actionType} in the current pin state."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", DescribeBlockedGrappleAction(pc, actionType)));
             ShowActionChoices();
             return false;
         }
 
-        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !CanUseGrappleAttackOption(pc, actionType))
+        // The rake takes no ladder step, so the grapple attack button still opens the menu for it (MM p.314, CMB-144).
+        bool rakeStillOpen = actionType == GrappleActionType.AttackUnarmed && pc.UsesNaturalAttacksForGrappleAttack() && pc.CanRakeInGrapple(out _);
+        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !rakeStillOpen && !CanUseGrappleAttackOption(pc, actionType))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no grapple attacks remaining in the shared attack pool this turn."));
             ShowActionChoices();
@@ -237,7 +267,23 @@ public partial class GameManager
     public void OnGrappleMoveButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.MoveHalfSpeed);
     public void OnGrappleUseOpponentWeaponButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.UseOpponentWeapon);
     public void OnGrappleDisarmSmallObjectButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.DisarmSmallObject);
-    public void OnGrappleReleasePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+    public void OnGrappleReleasePinButtonPressed()
+    {
+        // A PC holding with one body part after Improved Grab lets go here (MM p.310; a free action until the owner
+        // rules, CMB-163); the AI does the same in AIService.ExecuteNPCTurn.
+        CharacterController pc = ActivePC;
+        if (pc != null && pc.IsHoldingWithImprovedGrab())
+        {
+            string released = pc.ReleaseImprovedGrabHold();
+            if (!string.IsNullOrEmpty(released))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", released));
+            UpdateAllStatsUI();
+            ShowActionChoices();
+            return;
+        }
+
+        TryHandleDirectGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+    }
 
     public void OnOverrunButtonPressed()
     {
@@ -412,16 +458,36 @@ public partial class GameManager
         return !actor.IsGrappling();
     }
 
-    private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result)
+    /// <summary>
+    /// After an escape (PHB p.157) the escaper moves into a space adjacent to its former opponent. Returns true when a PC
+    /// selection started (the caller waits for the click); otherwise <paramref name="autoMove"/>, when not null, is the
+    /// automatic move the caller must run (an NPC, or a creature that cannot choose now): the AI yields it, the PC flow
+    /// runs it before its after-attack delay. <paramref name="formerOpponent"/> is the creature the escaper was grappling
+    /// with, which gets no AoO for the move (owner interpretation 2026-10-11, CMB-152).
+    /// </summary>
+    private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result,
+        CharacterController formerOpponent, out IEnumerator autoMove)
     {
+        autoMove = null;
         if (!DidActorEndGrappleAndGainFreeAdjacentMove(actor, actionType, result))
             return false;
 
-        return OfferFreeAdjacentMovement(actor);
+        return OfferFreeAdjacentMovement(actor, formerOpponent, out autoMove);
     }
 
-    private bool OfferFreeAdjacentMovement(CharacterController actor)
+    /// <summary>The creature <paramref name="actor"/> grapples (or, held by a one-body-part hold, its holder), or null.</summary>
+    private static CharacterController GetGrappleOpponentOrHolder(CharacterController actor)
     {
+        if (actor == null)
+            return null;
+        if (actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
+            return opponent;
+        return actor.IsHeldByImprovedGrabHold(out CharacterController holder) ? holder : null;
+    }
+
+    private bool OfferFreeAdjacentMovement(CharacterController actor, CharacterController formerOpponent, out IEnumerator autoMove)
+    {
+        autoMove = null;
         if (actor == null || actor.Stats == null || actor.Stats.IsDead || Grid == null)
             return false;
 
@@ -439,11 +505,12 @@ public partial class GameManager
         if (!actorCanSelectNow)
         {
             Vector2Int selectedSquare = validSquares[UnityEngine.Random.Range(0, validSquares.Count)];
-            ExecuteFreeAdjacentGrappleMovement(actor, selectedSquare, showActionChoicesAfterMove: false);
+            autoMove = ExecuteFreeAdjacentGrappleMovement(actor, selectedSquare, formerOpponent, showActionChoicesAfterMove: false);
             return false;
         }
 
         BeginFreeAdjacentGrappleMoveSelection(actor, validSquares);
+        _freeAdjacentGrappleMoveFormerOpponent = formerOpponent; // after Begin, which clears the selection state
         return true;
     }
 
@@ -451,6 +518,7 @@ public partial class GameManager
     {
         _isFreeAdjacentGrappleMoveSelection = false;
         _freeAdjacentGrappleMoveActor = null;
+        _freeAdjacentGrappleMoveFormerOpponent = null;
         _freeAdjacentGrappleMoveDestinations.Clear();
     }
 
@@ -491,7 +559,8 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} can move to an adjacent square (free action). Right-click/ESC to remain in place."));
     }
 
-    private bool ExecuteFreeAdjacentGrappleMovement(CharacterController actor, Vector2Int destination, bool showActionChoicesAfterMove)
+    /// <summary>True when <paramref name="actor"/> may make the free escape move to <paramref name="destination"/>: an adjacent square it fits in.</summary>
+    private bool CanMakeFreeAdjacentGrappleMove(CharacterController actor, Vector2Int destination)
     {
         if (actor == null || actor.Stats == null || Grid == null)
             return false;
@@ -502,20 +571,26 @@ public partial class GameManager
         if (!Grid.CanPlaceCreature(destination, actor.GetVisualSquaresOccupied(), actor))
             return false;
 
-        SquareCell destinationCell = Grid.GetCell(destination);
-        if (destinationCell == null)
-            return false;
+        return Grid.GetCell(destination) != null;
+    }
 
-        actor.MoveToCell(destinationCell, markAsMoved: false);
-
-        if (actor.GridPosition != destination)
-            return false;
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{actor.Stats.CharacterName} moves to ({destination.x},{destination.y}) (free action after ending grapple)."));
-
-        RefreshFlankedConditions();
-        UpdateAllStatsUI();
-        InvalidatePreviewThreats();
+    /// <summary>
+    /// The escaper's move into an adjacent space after an escape (PHB p.157), for PCs and NPCs alike. Leaving a threatened
+    /// square provokes attacks of opportunity from third parties, not from the former grapple opponent (owner
+    /// interpretation 2026-10-11, CMB-152): the AoOs resolve before the step through the shared movement executor, which
+    /// also records each opponent's movement opportunity for the round (CMB-128). An AoO that drops or trips the escaper
+    /// stops the move; a dropped PC's turn ends (as a dropped PC's ordinary move does), and the caller of an automatic
+    /// move checks the same (<see cref="ThreatSystem.IsMoverIncapacitated"/>).
+    /// </summary>
+    private IEnumerator ExecuteFreeAdjacentGrappleMovement(CharacterController actor, Vector2Int destination, CharacterController formerOpponent,
+        bool showActionChoicesAfterMove)
+    {
+        if (!CanMakeFreeAdjacentGrappleMove(actor, destination))
+        {
+            if (showActionChoicesAfterMove)
+                ShowActionChoices();
+            yield break;
+        }
 
         if (_isFreeAdjacentGrappleMoveSelection)
         {
@@ -524,10 +599,44 @@ public partial class GameManager
             ClearFreeAdjacentGrappleMoveSelectionState();
         }
 
-        if (showActionChoicesAfterMove)
-            ShowActionChoices();
+        var path = new List<Vector2Int> { destination };
+        var excluded = new List<CharacterController>();
+        if (formerOpponent != null)
+            excluded.Add(formerOpponent);
+        List<AoOThreatInfo> provokedAoOs = ThreatSystem.AnalyzePathForAoOs(actor, path, GetAllCharacters(), excludedThreateners: excluded);
+        var outcome = new MovementAoOStepOutcome();
+        yield return StartCoroutine(ResolveMovementAoOsBeforeStep(actor, provokedAoOs, 0, "AoO (escape move)", 0.5f, outcome));
 
-        return true;
+        if (outcome.StopMovement)
+        {
+            if (actor.Stats != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{actor.Stats.CharacterName}'s escape move stops ({outcome.Reason}) after an attack of opportunity."));
+        }
+        else if (CanMakeFreeAdjacentGrappleMove(actor, destination))
+        {
+            actor.MoveToCell(Grid.GetCell(destination), markAsMoved: false);
+            if (actor.GridPosition == destination)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{actor.Stats.CharacterName} moves to ({destination.x},{destination.y}) (free action after ending grapple)."));
+        }
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+
+        // An AoO may have dropped the last creature of a side (CORE-011).
+        if (EvaluateCombatEnd("GrappleEscapeMove"))
+            yield break;
+
+        if (!showActionChoicesAfterMove)
+            yield break;
+
+        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        {
+            EndActivePCTurn();
+            yield break;
+        }
+
+        ShowActionChoices();
     }
 
     private void HandleFreeAdjacentGrappleMovementClick(CharacterController actor, SquareCell cell)
@@ -551,8 +660,16 @@ public partial class GameManager
         if (!_highlightedCells.Contains(cell) || !_freeAdjacentGrappleMoveDestinations.Contains(cell.Coords))
             return;
 
-        if (!ExecuteFreeAdjacentGrappleMovement(actor, cell.Coords, showActionChoicesAfterMove: true))
+        if (!CanMakeFreeAdjacentGrappleMove(actor, cell.Coords))
+        {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid adjacent free-move destination."));
+            return;
+        }
+
+        // Captured first: the coroutine clears the selection state.
+        CharacterController formerOpponent = _freeAdjacentGrappleMoveFormerOpponent;
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        StartCoroutine(ExecuteFreeAdjacentGrappleMovement(actor, cell.Coords, formerOpponent, showActionChoicesAfterMove: true));
     }
 
     private void CancelFreeAdjacentGrappleMovementSelection(CharacterController actor)
@@ -918,12 +1035,28 @@ public partial class GameManager
 
         List<CharacterController> temporarilyClearedOpponents = TemporarilyClearOccupancy(movedOpponents);
 
-        yield return StartCoroutine(actor.MoveAlongPath(actorPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+        // Moving the grapple provokes attacks of opportunity from third parties as the grappler leaves threatened
+        // squares, never from the creatures in the grapple (owner interpretation 2026-10-11, CMB-152). The shared executor
+        // resolves each before its step and records the round's movement opportunity (CMB-128); an AoO that drops or
+        // trips the grappler stops the move, and the opponents are dragged as far as it got. Whether the dragged
+        // creatures provoke too is still open (CMB-152).
+        List<AoOThreatInfo> dragAoOs = ThreatSystem.AnalyzePathForAoOs(actor, actorPath, GetAllCharacters(),
+            excludedThreateners: new List<CharacterController>(movedOpponents));
+        var dragOutcome = new MovementAoOStepOutcome();
+        yield return StartCoroutine(ExecutePathWithMovementAoOs(actor, actorPath, dragAoOs, PlayerMoveSecondsPerStep, "AoO (moving the grapple)", dragOutcome));
 
+        // An AoO that dropped the grappler ends the grapple (incapacitation release) and its drag: the opponents stay
+        // where they were, and a dropped PC's turn ends, as after its ordinary move.
+        bool grapplerDropped = dragOutcome.Incapacitated || ThreatSystem.IsMoverIncapacitated(actor) || !actor.IsGrappling();
         Vector2Int movementDelta = actor.GridPosition - actorStart;
         var draggedMessages = new List<string>();
 
-        if (movementDelta != Vector2Int.zero && movedOpponents.Count > 0)
+        if (grapplerDropped)
+        {
+            RestoreOccupancy(temporarilyClearedOpponents);
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{actor.Stats.CharacterName}'s grapple move stops after an attack of opportunity; nobody is dragged further."));
+        }
+        else if (movementDelta != Vector2Int.zero && movedOpponents.Count > 0)
         {
             var preferredOpponentDestinations = new Dictionary<CharacterController, Vector2Int>();
             for (int i = 0; i < movedOpponents.Count; i++)
@@ -1000,6 +1133,17 @@ public partial class GameManager
         InvalidatePreviewThreats();
 
         ClearGrappleMoveSelectionState();
+
+        // An AoO on the way may have dropped the last creature of a side (CORE-011).
+        if (EvaluateCombatEnd("GrappleMove"))
+            yield break;
+
+        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        {
+            EndActivePCTurn();
+            yield break;
+        }
+
         ShowActionChoices();
     }
 
@@ -1146,7 +1290,10 @@ public partial class GameManager
             }
             else
             {
-                AddOption(GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
+                NaturalAttackDefinition grabDamageAttack = actor.GetImprovedGrabDamageAttackForGrappleCheck();
+                AddOption(GrappleActionType.DamageOpponent, grabDamageAttack != null
+                    ? $"Deal grapple damage (opposed check + {grabDamageAttack.Name} damage, Improved Grab; choose lethal/nonlethal)"
+                    : "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
 
                 bool actorHasMainHandLightWeapon = actor.CanAttackWithLightWeaponWhileGrappling(out ItemData actorMainHandLightWeapon, out string actorLightWeaponReason);
                 options.Add((
@@ -1183,6 +1330,18 @@ public partial class GameManager
                 else
                     AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
                 AddOption(GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})");
+                if (actor.Stats != null && actor.Stats.HasRake)
+                {
+                    // MM p.314 (CMB-144): the rake's claws need a turn begun grappling and a full attack (it spends the move action).
+                    bool canRake = actor.CanRakeInGrapple(out string rakeReason);
+                    options.Add((
+                        GrappleActionType.Rake,
+                        canRake
+                            ? $"Rake {opponent.Stats.CharacterName} (extra claw attacks, no -4; makes this turn a full attack)"
+                            : $"Rake (Unavailable: {rakeReason})",
+                        canRake,
+                        canRake ? string.Empty : rakeReason));
+                }
                 AddOption(GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)");
                 AddOption(GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)");
                 AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
@@ -1317,15 +1476,24 @@ public partial class GameManager
             return;
         }
 
-        List<CharacterController.GrappleNaturalAttackOption> options = GetGrappleNaturalAttackOptionsFor(actor);
-        if (options.Count == 0)
+        // The rake (MM p.314, CMB-144) is offered here too, as its own option, whenever CanRakeInGrapple allows it: it
+        // takes no step of the BAB ladder, so it stays open after the turn's grapple actions are spent. The grapple action
+        // menu that also lists it is not reachable from the action panel (UI-028).
+        bool canRake = actor.CanRakeInGrapple(out _);
+        bool canGrappleAttack = CanUseGrappleAttackOption(actor, GrappleActionType.AttackUnarmed);
+        List<CharacterController.GrappleNaturalAttackOption> options = canGrappleAttack
+            ? GetGrappleNaturalAttackOptionsFor(actor)
+            : new List<CharacterController.GrappleNaturalAttackOption>();
+        if (options.Count == 0 && !canRake)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no natural attack left this turn."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", canGrappleAttack
+                ? $"{actor.Stats.CharacterName} has no natural attack left this turn."
+                : $"{actor.Stats.CharacterName} has no grapple attack left on its BAB ladder this turn (PHB p.156)."));
             ShowActionChoices();
             return;
         }
 
-        if (options.Count == 1)
+        if (options.Count == 1 && !canRake)
         {
             ExecuteGrappleAction(actor, GrappleActionType.AttackUnarmed, null, null, options[0].NaturalAttackIndex, options[0].IsHasteExtraAttack);
             return;
@@ -1333,7 +1501,10 @@ public partial class GameManager
 
         BeginGrappleContextMenuDisplayLock(actor);
 
-        var labels = new List<string>(options.Count);
+        int rakeOffset = canRake ? 1 : 0;
+        var labels = new List<string>(options.Count + rakeOffset);
+        if (canRake)
+            labels.Add("Rake (extra claw attacks, no -4; makes this turn a full attack; MM p.314)");
         for (int i = 0; i < options.Count; i++)
             labels.Add(BuildGrappleNaturalAttackLabel(actor, options[i]));
 
@@ -1347,14 +1518,21 @@ public partial class GameManager
             onSelect: selectedIndex =>
             {
                 LogMenuFlow("ShowGrappleNaturalAttackMenu:OPTION_SELECTED", actor, $"selectedIndex={selectedIndex}");
-                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                if (canRake && selectedIndex == 0)
+                {
+                    ExecuteGrappleAction(actor, GrappleActionType.Rake);
+                    return;
+                }
+
+                int optionIndex = selectedIndex - rakeOffset;
+                if (optionIndex < 0 || optionIndex >= options.Count)
                 {
                     ShowActionChoices();
                     return;
                 }
 
                 ExecuteGrappleAction(actor, GrappleActionType.AttackUnarmed, null, null,
-                    options[selectedIndex].NaturalAttackIndex, options[selectedIndex].IsHasteExtraAttack);
+                    options[optionIndex].NaturalAttackIndex, options[optionIndex].IsHasteExtraAttack);
             },
             onCancel: () =>
             {
@@ -1449,7 +1627,9 @@ public partial class GameManager
             return;
         }
 
-        if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
+        // A holder with one body part makes its Damage check against the creature it holds (MM p.310, CMB-163).
+        if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _)
+            && !actor.TryGetImprovedGrabHold(out opponent, out _))
         {
             LogMenuFlow("ShowGrappleDamageModeMenu:NO_LONGER_GRAPPLING", actor);
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is no longer in a grapple."));
@@ -1460,15 +1640,24 @@ public partial class GameManager
         BeginGrappleContextMenuDisplayLock(actor);
 
         bool isMonk = actor.Stats.IsMonk;
-        var options = new List<(AttackDamageMode mode, string label)>
-        {
-            isMonk
-                ? (AttackDamageMode.Lethal, "Lethal damage (Monk default, no grapple penalty)")
-                : (AttackDamageMode.Nonlethal, "Nonlethal damage (default, no grapple penalty)"),
-            isMonk
-                ? (AttackDamageMode.Nonlethal, "Nonlethal damage (Monk can choose this with no penalty)")
-                : (AttackDamageMode.Lethal, "Lethal damage (-4 penalty on your grapple check)")
-        };
+        // After an Improved Grab, the damage is that of the attack that established the hold, lethal by default
+        // (MM p.310, CMB-148); the same rule the resolver applies.
+        NaturalAttackDefinition holdAttack = actor.GetImprovedGrabDamageAttackForGrappleCheck();
+        var options = holdAttack != null
+            ? new List<(AttackDamageMode mode, string label)>
+            {
+                (AttackDamageMode.Lethal, $"Lethal damage ({holdAttack.Name} damage, Improved Grab; no grapple penalty)"),
+                (AttackDamageMode.Nonlethal, $"Nonlethal damage ({holdAttack.Name} damage; -4 penalty on your grapple check)")
+            }
+            : new List<(AttackDamageMode mode, string label)>
+            {
+                isMonk
+                    ? (AttackDamageMode.Lethal, "Lethal damage (Monk default, no grapple penalty)")
+                    : (AttackDamageMode.Nonlethal, "Nonlethal damage (default, no grapple penalty)"),
+                isMonk
+                    ? (AttackDamageMode.Nonlethal, "Nonlethal damage (Monk can choose this with no penalty)")
+                    : (AttackDamageMode.Lethal, "Lethal damage (-4 penalty on your grapple check)")
+            };
 
         var labels = new List<string>(options.Count);
         foreach (var option in options)
@@ -1659,7 +1848,8 @@ public partial class GameManager
         bool isFreeAction,
         bool usesIterativeAttack,
         int attackBonusUsed,
-        int attacksRemaining)
+        int attacksRemaining,
+        CharacterController formerOpponent = null)
     {
         if (actor == null || actor.Stats == null || result == null)
         {
@@ -1671,7 +1861,7 @@ public partial class GameManager
             ? " [Free Action]"
             : (usesIterativeAttack
                 ? $" [Attack BAB {CharacterStats.FormatMod(attackBonusUsed)} | {attacksRemaining} left]"
-                : " [Standard Action]");
+                : (actionType == GrappleActionType.Rake ? " [Full Attack]" : " [Standard Action]"));
         string grappleHeader = $"⚔ GRAPPLE [{actionType}]{actionCostLabel}";
         if (!string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
         {
@@ -1691,12 +1881,28 @@ public partial class GameManager
             return;
         }
 
-        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result))
+        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result, formerOpponent, out IEnumerator autoMove))
             return;
 
         float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
         LogMenuFlow("ExecuteGrappleAction:SCHEDULE_AFTER_ATTACK_DELAY", actor, $"actionType={actionType}, delay={delay:0.00}");
-        StartCoroutine(AfterAttackDelay(actor, delay));
+        StartCoroutine(autoMove != null ? RunGrappleAutoMoveThenAfterAttackDelay(autoMove, actor, delay) : AfterAttackDelay(actor, delay));
+    }
+
+    private IEnumerator RunGrappleAutoMoveThenAfterAttackDelay(IEnumerator autoMove, CharacterController actor, float delay)
+    {
+        yield return StartCoroutine(autoMove);
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
+
+        // An AoO on the escape move dropped the PC: its turn ends (CMB-152), as after a dropped PC's ordinary move.
+        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        {
+            EndActivePCTurn();
+            yield break;
+        }
+
+        yield return StartCoroutine(AfterAttackDelay(actor, delay));
     }
 
     private void ExecuteGrappleAction(
@@ -1718,7 +1924,7 @@ public partial class GameManager
 
         if (!CanUseGrappleAction(actor, actionType))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot use {actionType} in the current pin state."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", DescribeBlockedGrappleAction(actor, actionType)));
             ShowActionChoices();
             return;
         }
@@ -1736,8 +1942,20 @@ public partial class GameManager
         bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(actionType);
         int attackBonusUsed = 0;
         int attacksRemaining = 0;
+        // The rake pays its own cost: it makes the turn a full attack (MM p.314, CMB-144; CharacterController.ResolveGrappleRake).
+        bool isRake = actionType == GrappleActionType.Rake;
+        CharacterController formerOpponent = GetGrappleOpponentOrHolder(actor);
 
-        if (usesIterativeAttack)
+        if (isRake)
+        {
+            if (!actor.CanRakeInGrapple(out string rakeReason))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", rakeReason));
+                ShowActionChoices();
+                return;
+            }
+        }
+        else if (usesIterativeAttack)
         {
             if (!TryConsumeIterativeGrappleAttack(actor, actionType, out attackBonusUsed, out attacksRemaining, naturalAttackIndex, naturalAttackIsHasteExtra))
             {
@@ -1758,7 +1976,7 @@ public partial class GameManager
             && TryResolveOpposedGrappleEscapeWithPrompt(
                 actor,
                 usesIterativeAttack ? attackBonusUsed : (int?)null,
-                onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining)))
+                onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining, formerOpponent)))
         {
             return;
         }
@@ -1771,7 +1989,49 @@ public partial class GameManager
             naturalAttackIndex,
             naturalAttackIsHasteExtra);
 
-        FinalizeGrappleActionResolution(actor, actionType, directResult, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining);
+        FinalizeGrappleActionResolution(actor, actionType, directResult, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining, formerOpponent);
+    }
+
+    /// <summary>
+    /// AI side of the Improved Grab hold with one body part (MM p.310; CMB-163): at the start of its turn a holder makes
+    /// its Damage grapple check against the creature it holds, in place of its first attack, from the round after the
+    /// grab, when the check at -20 still keeps even odds (its grapple modifier, the -20 included, at least the held
+    /// creature's). Same path as the PC's Grapple: Damage button: the iterative step (TryConsumeIterativeGrappleAttack)
+    /// and the shared resolver (CharacterController.ResolveGrappleAction). The rest of its turn goes on as usual.
+    /// </summary>
+    public IEnumerator AI_ImprovedGrabHoldDamageCheck(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.TryGetImprovedGrabHold(out CharacterController held, out _))
+            yield break;
+
+        if (!npc.IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType.DamageOpponent, out _)
+            || !CanUseGrappleAttackOption(npc, GrappleActionType.DamageOpponent)
+            || npc.GetGrappleModifier() < held.GetGrappleModifier())
+            yield break;
+
+        if (!TryConsumeIterativeGrappleAttack(npc, GrappleActionType.DamageOpponent, out int attackBonusUsed, out int remainingAttacks))
+            yield break;
+
+        SpecialAttackResult result = npc.ResolveGrappleAction(GrappleActionType.DamageOpponent, AttackDamageMode.Lethal, null, attackBonusUsed);
+        string header = $"☠ {npc.Stats.CharacterName} chooses grapple action [{GrappleActionType.DamageOpponent}] [BAB {CharacterStats.FormatMod(attackBonusUsed)} | {remainingAttacks} left] against {held.Stats.CharacterName} (Improved Grab hold)";
+        if (result != null && !string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
+        {
+            CombatUI?.ShowCombatLog(header);
+            CombatUI?.ShowCombatLog(result.Log);
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{header}: {result?.Log}"));
+        }
+        UpdateAllStatsUI();
+
+        if (result != null && result.TargetKilled)
+            HandleSummonDeathCleanup(held);
+
+        if (EvaluateCombatEnd("NPCImprovedGrabHold.Damage"))
+            yield break;
+
+        yield return new WaitForSeconds(0.45f);
     }
 
     private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc)
@@ -1803,6 +2063,8 @@ public partial class GameManager
 
             bool isFreeAction = CharacterController.IsFreeGrappleAction(chosenAction.Value);
             bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(chosenAction.Value);
+            // The rake pays its own cost (it makes the turn a full attack) and the turn goes on (MM p.314, CMB-144).
+            bool isRake = chosenAction.Value == GrappleActionType.Rake;
             int? iterativeAttackBonusOverride = null;
             int remainingAttacks = 0;
 
@@ -1819,7 +2081,11 @@ public partial class GameManager
                 }
             }
 
-            if (usesIterativeAttack)
+            if (isRake)
+            {
+                // CanRakeInGrapple was checked by BuildNPCLegalGrappleActions; the resolver checks it again and pays.
+            }
+            else if (usesIterativeAttack)
             {
                 if (!TryConsumeIterativeGrappleAttack(npc, chosenAction.Value, out int attackBonusUsed, out remainingAttacks,
                         naturalPick.NaturalAttackIndex, naturalPick.IsHasteExtraAttack))
@@ -1871,7 +2137,13 @@ public partial class GameManager
             }
             UpdateAllStatsUI();
 
-            TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
+            // The escape move resolves its AoOs (third parties only, CMB-152) before the turn goes on.
+            if (!TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result, opponent, out IEnumerator escapeMove) && escapeMove != null)
+            {
+                yield return StartCoroutine(escapeMove);
+                if (CurrentPhase == TurnPhase.CombatOver || ThreatSystem.IsMoverIncapacitated(npc))
+                    yield break;
+            }
 
             if (result != null && result.TargetKilled)
                 HandleSummonDeathCleanup(opponent);
@@ -1883,8 +2155,16 @@ public partial class GameManager
             if (result != null && result.TargetKilled)
                 break;
 
-            float pause = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
+            float pause = isFreeAction ? 0.35f : (usesIterativeAttack || isRake ? 0.45f : 0.8f);
             yield return new WaitForSeconds(pause);
+
+            // After a rake the grapple actions of the full attack follow (MM p.314, CMB-144).
+            if (isRake)
+            {
+                if (!npc.ProgressiveAttackPool.RakeUsedThisTurn)
+                    break;
+                continue;
+            }
 
             // Non-iterative grapple actions end AI grapple sequence for the turn.
             if (!usesIterativeAttack)
@@ -1921,6 +2201,10 @@ public partial class GameManager
         // pays (ShouldNPCRenewDuePin); otherwise it takes the pinning choices below, which let the pin lapse.
         if (npc.IsPinRenewalDue() && legalActions.Contains(GrappleActionType.PinOpponent) && ShouldNPCRenewDuePin(npc, opponent))
             return GrappleActionType.PinOpponent;
+
+        // The rake's extra claws come with the full attack and cost no grapple action (MM p.314, CMB-144): take them first.
+        if (!actorPinned && legalActions.Contains(GrappleActionType.Rake))
+            return GrappleActionType.Rake;
 
         bool isPinning = npc.IsPinningOpponent();
         if (isPinning)
@@ -2099,12 +2383,17 @@ public partial class GameManager
             return true;
         }
 
-        // Each grapple attack action is one natural attack (PHB p.156, CMB-127); the rake's two claws come with
-        // the first one of the turn (MM p.314).
+        // The rake's claws first: they come with the full attack (MM p.314; turn begun grappling, CMB-144).
+        if (legalActions.Contains(GrappleActionType.Rake))
+        {
+            chosenAction = GrappleActionType.Rake;
+            return true;
+        }
+
+        // Each grapple attack action is one natural attack, one per step of the BAB ladder (PHB p.156, CMB-127, CMB-146).
         if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
         {
-            bool rakesNow = npc.Stats.HasRake && !npc.ProgressiveAttackPool.RakeUsedThisTurn;
-            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} attacks with a natural weapon in the grapple: {GetRemainingGrappleAttackActions(npc)} grapple attack(s) left, rake with this one: {rakesNow}.");
+            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} attacks with a natural weapon in the grapple: {GetRemainingGrappleAttackActions(npc, GrappleActionType.AttackUnarmed)} grapple attack(s) left.");
 
             chosenAction = GrappleActionType.AttackUnarmed;
             return true;
@@ -2129,7 +2418,13 @@ public partial class GameManager
 
         void TryAdd(GrappleActionType actionType)
         {
-            if (CharacterController.IsIterativeGrappleAttackAction(actionType))
+            if (actionType == GrappleActionType.Rake)
+            {
+                // The one rake rule (MM p.314, CMB-144): turn begun grappling, a full attack available, once a turn.
+                if (!npc.CanRakeInGrapple(out _))
+                    return;
+            }
+            else if (CharacterController.IsIterativeGrappleAttackAction(actionType))
             {
                 if (!CanUseGrappleAttackOption(npc, actionType))
                     return;
@@ -2139,7 +2434,8 @@ public partial class GameManager
                 return;
             }
 
-            if (npc.IsGrappleActionBlockedWhilePinning(actionType, out _))
+            if (npc.IsGrappleActionBlockedWhilePinning(actionType, out _)
+                || npc.IsGrappleActionBlockedByImprovedGrabHold(actionType, out _))
                 return;
 
             switch (actionType)
@@ -2204,6 +2500,7 @@ public partial class GameManager
             return actions;
         }
 
+        TryAdd(GrappleActionType.Rake);
         TryAdd(GrappleActionType.DamageOpponent);
         TryAdd(GrappleActionType.AttackWithLightWeapon);
         TryAdd(GrappleActionType.AttackUnarmed);
