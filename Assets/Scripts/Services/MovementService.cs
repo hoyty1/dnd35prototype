@@ -122,8 +122,6 @@ public class MovementService : MonoBehaviour
 
         int movementRange = maxRangeOverride >= 0 ? maxRangeOverride : mover.Stats.MoveRange;
         movementRange = Mathf.Max(0, movementRange);
-        int moverSize = mover.GetVisualSquaresOccupied();
-
         List<SquareCell> cells = _grid.GetCellsInRange(mover.GridPosition, movementRange);
         for (int i = 0; i < cells.Count; i++)
         {
@@ -131,7 +129,7 @@ public class MovementService : MonoBehaviour
             if (cell == null || cell.Coords == mover.GridPosition)
                 continue;
 
-            if (!_grid.CanPlaceCreature(cell.Coords, moverSize, mover))
+            if (!IsValidMoveDestination(mover, cell.Coords))
                 continue;
 
             // Intact Wall of Ice cells block movement — only breached cells allow passage.
@@ -162,6 +160,28 @@ public class MovementService : MonoBehaviour
         return cost;
     }
 
+    /// <summary>
+    /// Whether <paramref name="mover"/> may end a move with its footprint based at <paramref name="destination"/>:
+    /// on the grid and not sharing a square with a living creature (PHB p.148), except that a swarm may end in
+    /// an enemy's square (MM p.316). The same rule <see cref="FindPath(CharacterController, Vector2Int, bool, int?, bool, bool, bool)"/>
+    /// applies to the path's last node, so the PC highlight and click check agree with the AI's paths (GRID-001).
+    /// </summary>
+    public bool IsValidMoveDestination(CharacterController mover, Vector2Int destination)
+    {
+        if (_grid == null || mover == null || mover.Stats == null)
+            return false;
+
+        bool moverIsSwarm = mover.Stats.IsSwarm;
+        return _grid.CanTraversePathNode(
+            destination,
+            mover.GetVisualSquaresOccupied(),
+            mover,
+            isDestinationNode: true,
+            allowThroughAllies: true,
+            allowThroughEnemies: moverIsSwarm,
+            allowDestinationEnemyOverlap: moverIsSwarm);
+    }
+
     // ========== PATHFINDING ==========
 
     public AoOPathResult FindPath(
@@ -184,20 +204,23 @@ public class MovementService : MonoBehaviour
         allowThroughEnemies = allowThroughEnemies || moverIsSwarm;
         bool allowDestinationEnemyOverlap = moverIsSwarm;
 
+        // avoidThreats only makes the A* prefer routes that leave fewer threatened squares (the PC click
+        // path asks for it), and falls back to the direct route when the detour would stop short. Either way
+        // the caller's range, the pass-through flags and the Withdraw first-square rule apply exactly as for
+        // the AI movers, which pass avoidThreats: false (GRID-001).
+        HashSet<Vector2Int> threatenedSquares = null;
         if (avoidThreats)
         {
             List<CharacterController> allCharacters = _allCharactersProvider != null
                 ? _allCharactersProvider.Invoke()
                 : new List<CharacterController>();
-
-            result = _grid.FindSafePath(mover.GridPosition, destination, mover, allCharacters);
-            return result ?? new AoOPathResult();
+            threatenedSquares = ThreatSystem.GetSquaresThreatenedByEnemies(mover, allCharacters);
         }
 
         return FindPath(
             mover,
             destination,
-            threatenedSquares: null,
+            threatenedSquares: threatenedSquares,
             maxRangeOverride: maxRange,
             allowThroughAllies: allowThroughAllies,
             allowThroughEnemies: allowThroughEnemies,
@@ -233,11 +256,34 @@ public class MovementService : MonoBehaviour
             allowThroughEnemies: allowThroughEnemies,
             allowDestinationEnemyOverlap: allowDestinationEnemyOverlap) ?? new AoOPathResult();
 
+        // The threat cost only steers the route. A* prunes by straight-line distance, not path cost, so a
+        // threat-avoiding detour can cost more than the budget and come back trimmed short of the destination
+        // (or not at all) where the direct route, the one an AI mover takes, fits. Then use the direct route,
+        // so the PC click path never reaches less far than the AI's (GRID-001).
+        if (threatenedSquares != null && threatenedSquares.Count > 0 && !EndsAt(result, destination))
+        {
+            AoOPathResult direct = _grid.FindPathAoOAware(
+                mover.GridPosition,
+                destination,
+                null,
+                maxRange: maxRange,
+                moverSizeSquares: mover.GetVisualSquaresOccupied(),
+                mover: mover,
+                allowThroughAllies: allowThroughAllies,
+                allowThroughEnemies: allowThroughEnemies,
+                allowDestinationEnemyOverlap: allowDestinationEnemyOverlap);
+            if (EndsAt(direct, destination))
+                result = direct;
+        }
+
         if (result.Path != null && result.Path.Count > 0)
             result.ProvokedAoOs = CheckForAoO(mover, result.Path, suppressFirstSquareAoO);
 
         return result;
     }
+
+    private static bool EndsAt(AoOPathResult result, Vector2Int destination)
+        => result != null && result.Path != null && result.Path.Count > 0 && result.Path[result.Path.Count - 1] == destination;
 
     // ========== ATTACKS OF OPPORTUNITY ==========
 

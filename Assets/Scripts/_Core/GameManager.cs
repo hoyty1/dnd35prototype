@@ -6735,8 +6735,8 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc, maxRangeOverride: GetWithdrawMoveRangeSquares(pc));
         CombatUI.SetActionButtonsVisible(false);
-        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, first square avoids AoO)");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). First square is protected from attacks of opportunity."));
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving the first square provokes no AoO from enemies you can see)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). Leaving the first square provokes no attack of opportunity from enemies you can see (PHB p.143)."));
     }
 
     public bool CanTakeFiveFootStep(CharacterController character)
@@ -10854,7 +10854,7 @@ public partial class GameManager : MonoBehaviour
             : new AoOPathResult();
     public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, HashSet<Vector2Int> threatenedSquares, int maxRangeOverride, bool allowThroughAllies = true, bool allowThroughEnemies = false, bool suppressFirstSquareAoO = false)
         => _movementService != null
-            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies, suppressFirstSquareAoO)
+            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies, suppressFirstSquareAoO: suppressFirstSquareAoO)
             : new AoOPathResult();
     public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path, bool suppressFirstSquareAoO = false)
         => _movementService != null ? _movementService.CheckForAoO(mover, path, suppressFirstSquareAoO) : new List<AoOThreatInfo>();
@@ -11188,6 +11188,9 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private bool _previewThreatsDirty = true;
 
+    /// <summary>The mover the cached threatened squares were built for (the set depends on its team).</summary>
+    private CharacterController _previewThreatsMover;
+
     /// <summary>
     /// Mark the preview threat cache as dirty so it gets rebuilt on next hover.
     /// Call this when turn changes, characters move, or combat state changes.
@@ -11198,26 +11201,18 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Build the set of all enemy-threatened squares for the given PC.
-    /// Cached until invalidated to avoid per-frame recalculation.
+    /// Build the set of all enemy-threatened squares for the given PC: the same set
+    /// MovementService.FindPath(avoidThreats: true) routes the click path around, so the hover
+    /// preview shows the path the click takes (ThreatSystem.GetSquaresThreatenedByEnemies, GRID-001).
+    /// Cached per mover until invalidated to avoid per-frame recalculation.
     /// </summary>
     private HashSet<Vector2Int> GetPreviewThreatenedSquares(CharacterController pc)
     {
-        if (!_previewThreatsDirty && _previewThreatenedSquares != null)
+        if (!_previewThreatsDirty && _previewThreatenedSquares != null && _previewThreatsMover == pc)
             return _previewThreatenedSquares;
 
-        _previewThreatenedSquares = new HashSet<Vector2Int>();
-        var allChars = GetAllCharacters();
-        foreach (var character in allChars)
-        {
-            if (character == pc) continue;
-            if (character.Stats.IsDead) continue;
-            if (character.Team == pc.Team) continue;
-
-            var threats = ThreatSystem.GetThreatenedSquares(character);
-            _previewThreatenedSquares.UnionWith(threats);
-        }
-
+        _previewThreatenedSquares = ThreatSystem.GetSquaresThreatenedByEnemies(pc, GetAllCharacters());
+        _previewThreatsMover = pc;
         _previewThreatsDirty = false;
         return _previewThreatenedSquares;
     }
@@ -11306,6 +11301,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         bool previewAllowThroughEnemies = _isSelectingOverrunDestination;
+        bool previewIsSwarm = pc.Stats != null && pc.Stats.IsSwarm;
         HashSet<Vector2Int> threatenedSquares = previewAllowThroughEnemies
             ? null
             : GetPreviewThreatenedSquares(pc);
@@ -11313,15 +11309,28 @@ public partial class GameManager : MonoBehaviour
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
             : (_isFreeAdjacentGrappleMoveSelection ? 1 : (_isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc)));
-        var pathResult = Grid.FindPathAoOAware(
-            pc.GridPosition,
-            gridCoord,
-            threatenedSquares,
-            previewMaxRange,
-            pc.GetVisualSquaresOccupied(),
-            pc,
-            allowThroughAllies: true,
-            allowThroughEnemies: previewAllowThroughEnemies);
+        // A swarm moves through and ends in enemy squares (MM p.316), as MovementService.FindPath allows it.
+        // MovementService.FindPath also falls back to the direct route when the threat-avoiding one would stop
+        // short, as the click path does (GRID-001).
+        var pathResult = _movementService != null
+            ? _movementService.FindPath(
+                pc,
+                gridCoord,
+                threatenedSquares,
+                previewMaxRange,
+                allowThroughAllies: true,
+                allowThroughEnemies: previewAllowThroughEnemies || previewIsSwarm,
+                allowDestinationEnemyOverlap: previewIsSwarm)
+            : Grid.FindPathAoOAware(
+                pc.GridPosition,
+                gridCoord,
+                threatenedSquares,
+                previewMaxRange,
+                pc.GetVisualSquaresOccupied(),
+                pc,
+                allowThroughAllies: true,
+                allowThroughEnemies: previewAllowThroughEnemies || previewIsSwarm,
+                allowDestinationEnemyOverlap: previewIsSwarm);
 
         Debug.Log($"[PathPreview] mode={(previewAllowThroughEnemies ? "OverrunThroughEnemies" : "NormalMove")}, from=({pc.GridPosition.x},{pc.GridPosition.y}) to=({gridCoord.x},{gridCoord.y}), threatAware={(threatenedSquares != null)}");
 

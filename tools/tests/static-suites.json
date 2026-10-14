@@ -796,11 +796,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 122,
+      "passed": 172,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). 172 since GRID-001 (2026-10-14): the Withdraw start square is exempt only from enemies the mover can see (CanVisuallyPerceive: invisible enemies and a blinded mover provoke, incorporeal, displaced and blinking enemies do not; PHB p.143), and MovementService.FindPath with avoidThreats keeps the range, withdraw rule and swarm flags and falls back to the direct route when a detour would stop short, on a test grid, for both sides."
     },
     {
       "type": "Tests.Combat.FlatFootedRulesTests",

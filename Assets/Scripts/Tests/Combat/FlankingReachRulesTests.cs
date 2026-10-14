@@ -13,7 +13,10 @@ namespace Tests.Combat
 /// what stops a mover, who a grapple, sunder, trip, disarm, bull rush or coup de grace
 /// provokes, CMB-014) for PC and NPC sides,
 /// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074),
-/// and reach into one's own square (a square-mate is threatened and may be attacked, CMB-131).
+/// and reach into one's own square (a square-mate is threatened and may be attacked, CMB-131),
+/// and Withdraw (start square exempt from enemies the mover can see, CanVisuallyPerceive, PHB p.143) through the
+/// threat-aware PC click path, which keeps the caller's range, withdraw rule and swarm flags and falls back to the
+/// direct route when a detour would stop short (GRID-001).
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
 public class FlankingReachRulesTests : MonoBehaviour
@@ -55,6 +58,12 @@ public class FlankingReachRulesTests : MonoBehaviour
         TestPathAoOsOncePerOpponent(CharacterTeam.Player, ref passed, ref failed);
         TestPathAoOsOncePerRound(CharacterTeam.Enemy, ref passed, ref failed);
         TestPathAoOsOncePerRound(CharacterTeam.Player, ref passed, ref failed);
+        TestWithdrawStartSquareUnseenEnemy(CharacterTeam.Enemy, ref passed, ref failed);
+        TestWithdrawStartSquareUnseenEnemy(CharacterTeam.Player, ref passed, ref failed);
+        TestThreatAwarePathKeepsCallerRules(CharacterTeam.Enemy, ref passed, ref failed);
+        TestThreatAwarePathKeepsCallerRules(CharacterTeam.Player, ref passed, ref failed);
+        TestThreatAwarePathFallsBackToDirectRoute(CharacterTeam.Enemy, ref passed, ref failed);
+        TestThreatAwarePathFallsBackToDirectRoute(CharacterTeam.Player, ref passed, ref failed);
         TestMovementStopsOnlyOnAoOChanges(ref passed, ref failed);
         TestSharedSquareThreat(CharacterTeam.Enemy, ref passed, ref failed);
         TestSharedSquareThreat(CharacterTeam.Player, ref passed, ref failed);
@@ -290,6 +299,235 @@ public class FlankingReachRulesTests : MonoBehaviour
         {
             TestHelpers.Cleanup(mover != null ? mover.gameObject : null, threatener != null ? threatener.gameObject : null,
                 second != null ? second.gameObject : null);
+        }
+    }
+
+    /// <summary>Gives <paramref name="target"/> Invisibility's total concealment (no See Invisibility on the observer).</summary>
+    private static void MakeInvisible(CharacterController target)
+        => AddConcealmentEffect(target, SpellNames.INVISIBILITY, "Invisibility", 50, isTotal: true);
+
+    /// <summary>A concealment-style spell effect as StatusEffectManager records it (MissChance, IsTotalConcealment).</summary>
+    private static void AddConcealmentEffect(CharacterController target, string spellId, string name, int missChance, bool isTotal)
+    {
+        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+        {
+            statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            statusMgr.Init(target.Stats);
+        }
+
+        statusMgr.ActiveEffects.Add(new ActiveSpellEffect
+        {
+            Spell = new SpellData { SpellId = spellId, Name = name },
+            CasterName = "UnitTest",
+            CasterLevel = 5,
+            RemainingRounds = 5,
+            DurationType = DurationType.Rounds,
+            AffectedCharacterName = target.Stats.CharacterName,
+            BonusTypeLegacy = "Concealment",
+            BonusTypeEnum = BonusType.Concealment,
+            IsApplied = true,
+            MissChance = missChance,
+            IsTotalConcealment = isTotal,
+            ConcealmentSource = name
+        });
+    }
+
+    private static void TestWithdrawStartSquareUnseenEnemy(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // PHB p.143 (GRID-001): a withdrawer's start square is not threatened by opponents it can see; invisible
+        // opponents still get their AoO for it. Later squares provoke as normal.
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController enemy = null;
+        try
+        {
+            mover = CreateTeamCharacter("WithdrawMover", moverTeam, 0, 0);
+            enemy = CreateTeamCharacter("WithdrawEnemy", threatTeam, 1, 0);
+            enemy.Stats.MaxAttacksOfOpportunity = 1;
+            enemy.Stats.AttacksOfOpportunityUsed = 0;
+            var all = new List<CharacterController> { mover, enemy };
+            // Straight away from the enemy: only the start square is threatened.
+            var path = new List<Vector2Int> { new Vector2Int(-1, 0), new Vector2Int(-2, 0), new Vector2Int(-3, 0) };
+
+            Assert(mover.CanVisuallyPerceive(enemy) && ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} withdraw: leaving the start square provokes no AoO from a visible enemy", ref passed, ref failed);
+
+            // Seen despite a 50% miss chance: incorporeal (MM p.310), Displacement (PHB p.223: not real total
+            // concealment) and Blink (ethereal, PHB p.206). The miss-chance test CanSee calls these unseen (CMB-078);
+            // the withdraw rule asks whether the mover sees the enemy.
+            enemy.ConfigureIncorporeal(true);
+            Assert(mover.CanVisuallyPerceive(enemy) && ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} withdraw: an incorporeal enemy is seen, so the start square provokes nothing", ref passed, ref failed);
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, path, all).Count == 1,
+                $"{side} ordinary move: the incorporeal enemy provokes on leaving the start square", ref passed, ref failed);
+            enemy.ConfigureIncorporeal(false);
+
+            AddConcealmentEffect(enemy, SpellNames.DISPLACEMENT, "Displacement", 50, isTotal: false);
+            AddConcealmentEffect(enemy, SpellNames.BLINK, "Blink", 50, isTotal: false);
+            Assert(mover.CanVisuallyPerceive(enemy) && ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} withdraw: a displaced and blinking enemy is seen, so the start square provokes nothing", ref passed, ref failed);
+            enemy.GetComponent<StatusEffectManager>().ActiveEffects.Clear();
+
+            // A blinded mover sees no one (DMG p.300), so an adjacent enemy keeps its AoO for the start square.
+            mover.ApplyCondition(CombatConditionType.Blinded, 3, "Unit Test");
+            List<AoOThreatInfo> blindAoOs = ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true);
+            Assert(!mover.CanVisuallyPerceive(enemy) && blindAoOs.Count == 1 && blindAoOs[0].PathIndex == 0,
+                $"{side} withdraw: a blinded mover provokes from the enemy it cannot see (got {blindAoOs.Count})", ref passed, ref failed);
+            mover.RemoveCondition(CombatConditionType.Blinded);
+
+            MakeInvisible(enemy);
+            Assert(!mover.CanVisuallyPerceive(enemy),
+                $"{side} withdraw: precondition, the mover cannot see the invisible enemy", ref passed, ref failed);
+            List<AoOThreatInfo> aoos = ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true);
+            Assert(aoos.Count == 1 && aoos[0].Threatener == enemy && aoos[0].PathIndex == 0,
+                $"{side} withdraw: an invisible enemy still gets its AoO for the start square (PHB p.143; got {aoos.Count})",
+                ref passed, ref failed);
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, path, all).Count == 1,
+                $"{side} ordinary move: the invisible enemy provokes on leaving the start square", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, enemy != null ? enemy.gameObject : null);
+        }
+    }
+
+    private static void TestThreatAwarePathKeepsCallerRules(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // GRID-001: the PC click path (MovementService.FindPath with avoidThreats: true) keeps the caller's range
+        // (a withdraw's double move), the withdraw start-square rule and the swarm flags, exactly like the AI's
+        // avoidThreats: false calls; only the route preference differs.
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        SquareGrid previousGrid = SquareGrid.Instance;
+        GameObject gridGo = null;
+        GameObject serviceGo = null;
+        CharacterController mover = null;
+        CharacterController enemy = null;
+        try
+        {
+            gridGo = new GameObject("GRID001_Grid");
+            SquareGrid grid = gridGo.AddComponent<SquareGrid>();
+            grid.Width = 16;
+            grid.Height = 5;
+            grid.GenerateGrid();
+
+            mover = CreateTeamCharacter("ThreatPathMover", moverTeam, 12, 2);
+            enemy = CreateTeamCharacter("ThreatPathEnemy", threatTeam, 13, 2);
+            grid.SetCreatureOccupancy(mover, mover.GridPosition, 1);
+            grid.SetCreatureOccupancy(enemy, enemy.GridPosition, 1);
+            enemy.Stats.MaxAttacksOfOpportunity = 1;
+            enemy.Stats.AttacksOfOpportunityUsed = 0;
+            var all = new List<CharacterController> { mover, enemy };
+
+            serviceGo = new GameObject("GRID001_MovementService");
+            MovementService service = serviceGo.AddComponent<MovementService>();
+            service.Initialize(grid, () => all);
+
+            int single = mover.Stats.MoveRange;
+            var farSquare = new Vector2Int(2, 2); // 10 squares west: beyond a single move, within a withdraw
+            Assert(single > 0 && single < 10 && single * 2 >= 10,
+                $"{side} threat-aware path: precondition, 50 ft is beyond one move ({single} sq) but within a withdraw", ref passed, ref failed);
+
+            foreach (bool avoidThreats in new[] { true, false })
+            {
+                string mode = avoidThreats ? "PC click (avoidThreats)" : "AI (no threat routing)";
+                AoOPathResult withdraw = service.FindPath(mover, farSquare, avoidThreats: avoidThreats,
+                    maxRangeOverride: single * 2, suppressFirstSquareAoO: true);
+                bool reaches = withdraw != null && withdraw.Path != null && withdraw.Path.Count > 0
+                    && withdraw.Path[withdraw.Path.Count - 1] == farSquare;
+                Assert(reaches, $"{side} {mode}: a withdraw reaches a square 10 squares away with its double-move range", ref passed, ref failed);
+                Assert(reaches && withdraw.ProvokedAoOs.Count == 0,
+                    $"{side} {mode}: a withdraw's start square provokes no AoO from the visible adjacent enemy (got {withdraw?.ProvokedAoOs?.Count})",
+                    ref passed, ref failed);
+
+                AoOPathResult move = service.FindPath(mover, new Vector2Int(9, 2), avoidThreats: avoidThreats, maxRangeOverride: single);
+                Assert(move != null && move.Path != null && move.Path.Count > 0 && move.ProvokedAoOs.Count == 1 && move.ProvokedAoOs[0].PathIndex == 0,
+                    $"{side} {mode}: an ordinary move out of the threatened start square provokes once", ref passed, ref failed);
+
+                AoOPathResult tooFar = service.FindPath(mover, farSquare, avoidThreats: avoidThreats, maxRangeOverride: single);
+                Assert(tooFar == null || tooFar.Path == null || tooFar.Path.Count == 0 || tooFar.Path[tooFar.Path.Count - 1] != farSquare,
+                    $"{side} {mode}: a single move does not reach 10 squares", ref passed, ref failed);
+            }
+
+            // Swarms move through and end in enemy squares (MM p.316), on the PC click path and its destination check too.
+            Assert(!service.IsValidMoveDestination(mover, enemy.GridPosition),
+                $"{side} move destination: a non-swarm cannot end in an enemy's square (PHB p.148)", ref passed, ref failed);
+            mover.Stats.IsSwarm = true;
+            Assert(service.IsValidMoveDestination(mover, enemy.GridPosition),
+                $"{side} move destination: a swarm may end in an enemy's square (MM p.316)", ref passed, ref failed);
+            AoOPathResult swarmPath = service.FindPath(mover, enemy.GridPosition, avoidThreats: true, maxRangeOverride: single);
+            Assert(swarmPath != null && swarmPath.Path != null && swarmPath.Path.Count > 0 && swarmPath.Path[swarmPath.Path.Count - 1] == enemy.GridPosition,
+                $"{side} PC click path: a swarm's threat-aware path ends in the enemy's square", ref passed, ref failed);
+            mover.Stats.IsSwarm = false;
+        }
+        finally
+        {
+            if (serviceGo != null) Object.DestroyImmediate(serviceGo);
+            if (gridGo != null) Object.DestroyImmediate(gridGo);
+            // SquareGrid.Awake replaced the static Instance; put the previous grid back (GRID-010).
+            typeof(SquareGrid).GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?.SetValue(null, previousGrid);
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, enemy != null ? enemy.gameObject : null);
+        }
+    }
+
+    private static void TestThreatAwarePathFallsBackToDirectRoute(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // GRID-001 review: A* prunes by straight-line distance, so a threat-avoiding detour can cost more than the
+        // budget and come back trimmed. The PC click path (avoidThreats: true) then takes the direct route, so it
+        // reaches as far as the AI's path. Mover (2,2), enemy (6,2) threatening x 5-7, y 1-3, destination (9,2), budget
+        // 8 squares: the direct route past the enemy costs 8 (one AoO), the detour along y = 0 costs 9.
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        SquareGrid previousGrid = SquareGrid.Instance;
+        GameObject gridGo = null;
+        GameObject serviceGo = null;
+        CharacterController mover = null;
+        CharacterController enemy = null;
+        try
+        {
+            gridGo = new GameObject("GRID001_FallbackGrid");
+            SquareGrid grid = gridGo.AddComponent<SquareGrid>();
+            grid.Width = 16;
+            grid.Height = 5;
+            grid.GenerateGrid();
+
+            mover = CreateTeamCharacter("FallbackMover", moverTeam, 2, 2);
+            enemy = CreateTeamCharacter("FallbackEnemy", threatTeam, 6, 2);
+            grid.SetCreatureOccupancy(mover, mover.GridPosition, 1);
+            grid.SetCreatureOccupancy(enemy, enemy.GridPosition, 1);
+            enemy.Stats.MaxAttacksOfOpportunity = 1;
+            enemy.Stats.AttacksOfOpportunityUsed = 0;
+            var all = new List<CharacterController> { mover, enemy };
+
+            serviceGo = new GameObject("GRID001_FallbackService");
+            MovementService service = serviceGo.AddComponent<MovementService>();
+            service.Initialize(grid, () => all);
+
+            var destination = new Vector2Int(9, 2);
+            foreach (bool avoidThreats in new[] { true, false })
+            {
+                string mode = avoidThreats ? "PC click (avoidThreats)" : "AI (no threat routing)";
+                AoOPathResult r = service.FindPath(mover, destination, avoidThreats: avoidThreats, maxRangeOverride: 8);
+                bool reaches = r != null && r.Path != null && r.Path.Count > 0 && r.Path[r.Path.Count - 1] == destination;
+                Assert(reaches && SquareGridUtils.CalculatePathCost(mover.GridPosition, r.Path) <= 8,
+                    $"{side} {mode}: reaches (9,2) within 8 squares when only the direct route fits", ref passed, ref failed);
+                Assert(reaches && r.ProvokedAoOs.Count == 1,
+                    $"{side} {mode}: the direct route past the enemy provokes once (got {r?.ProvokedAoOs?.Count})", ref passed, ref failed);
+            }
+
+            AoOPathResult roomy = service.FindPath(mover, destination, avoidThreats: true, maxRangeOverride: 9);
+            Assert(roomy != null && roomy.Path != null && roomy.Path.Count > 0 && roomy.Path[roomy.Path.Count - 1] == destination && roomy.ProvokedAoOs.Count == 0,
+                $"{side} PC click (avoidThreats): with 9 squares the detour fits and provokes nothing", ref passed, ref failed);
+        }
+        finally
+        {
+            if (serviceGo != null) Object.DestroyImmediate(serviceGo);
+            if (gridGo != null) Object.DestroyImmediate(gridGo);
+            // SquareGrid.Awake replaced the static Instance; put the previous grid back (GRID-010).
+            typeof(SquareGrid).GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?.SetValue(null, previousGrid);
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, enemy != null ? enemy.gameObject : null);
         }
     }
 

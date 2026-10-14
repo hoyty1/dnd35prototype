@@ -133,7 +133,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 142;
+        public const int Count = 146;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -143,6 +143,10 @@ namespace Tests.Scenarios
             yield return S("movement-aoo-move", () => MovementAoO("rules/movement-aoo-move", "Moving out of a threatened square provokes once (PHB p.137)", Step.Move(14, 10)));
             yield return S("movement-aoo-5ft", () => MovementAoO("rules/movement-aoo-5ft", "A 5-foot step provokes nothing (PHB p.144)", Step.FiveFootStep(12, 10)));
             yield return S("movement-aoo-withdraw", () => MovementAoO("rules/movement-aoo-withdraw", "Withdraw: the first square provokes nothing (PHB p.143)", Step.Withdraw(16, 10)));
+            yield return S("movement-aoo-withdraw-far", () => WithdrawFar(false));
+            yield return S("movement-aoo-withdraw-far-ui", () => WithdrawFar(true));
+            yield return S("movement-through-ally", () => MoveThroughAlly(false));
+            yield return S("movement-through-ally-ui", () => MoveThroughAlly(true));
             yield return S("movement-aoo-double-move", () => DoubleMoveAoOs(false));
             yield return S("movement-aoo-double-move-ui", () => DoubleMoveAoOs(true));
             yield return S("flanking", () => Flanking(true));
@@ -378,6 +382,122 @@ namespace Tests.Scenarios
                     })
                  .Expect("Withdrawing from the only threatened square provokes nothing (PHB p.143)", Expect.None("aoo", null));
             }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// GRID-001 (PHB p.143): a withdraw moves up to double speed, and leaving the start square provokes no AoO from
+        /// a visible enemy. The mover at (10,10) withdraws 9 squares east, to (19,10), from the enemy at (9,10): beyond
+        /// one move (30 ft for the hero, 40 ft for the barbarian orc; a fixture step checks the budget) and within the withdraw's double move, and only the start square
+        /// is threatened. Scripted: an NPC orc through the NPC withdraw executor; Ui: a PC hero through the PC Withdraw
+        /// button and click, which before the fix was cut to a single move and provoked on leaving the start square.
+        /// </summary>
+        private static ScenarioDef WithdrawFar(bool ui)
+        {
+            string mover = ui ? "hero" : "orc";
+            string threat = ui ? "orc" : "fighter";
+            var destination = new Vector2Int(19, 10);
+            ScenarioBuilder b = Rules(ui ? "rules/movement-aoo-withdraw-far-ui" : "rules/movement-aoo-withdraw-far",
+                    "Withdraw moves double speed and its first square provokes nothing (PHB p.143, GRID-001)"
+                    + (ui ? ", through the PC buttons" : ""))
+                .Covers("GRID-001", "PHB p.143", "PC_NPC_PARITY")
+                .MaxRounds(1);
+            if (ui)
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
+                 .Npc("orc", "orc_berserker", 9, 10, Control.Scripted)
+                 .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); });
+            else
+                b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 9, 10, Control.Scripted)
+                 .Npc("orc", "orc_berserker", 10, 10, Control.Scripted)
+                 .Tweak("orc", SturdyDummy);
+
+            Step fixture = Step.Assert("fixture: 9 squares is beyond one move and within a withdraw, and the enemy has an AoO", ctx =>
+            {
+                int single = GameManager.Instance.GetCurrentMoveRangeSquares(ctx.Get(mover));
+                CharacterController t = ctx.Get(threat);
+                return single > 0 && single < 9 && single * 2 >= 9
+                    && t.Stats.MaxAttacksOfOpportunity > t.Stats.AttacksOfOpportunityUsed;
+            });
+            b.Initiative(threat, mover)
+             .Turn(threat, 1, Step.Pass())
+             .Turn(mover, 1, fixture, Step.Withdraw(destination.x, destination.y));
+            if (ui)
+                b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+
+            b.Expect("The withdraw is done and ends at (19,10)", v =>
+                {
+                    ExpectResult r = Expect.All(Expect.StepStatus(mover, 1, "Withdraw", 0, "done"), Expect.AssertsPass())(v);
+                    if (!r.IsPass) return r;
+                    Vector2Int? p = Pos(v.Final(mover));
+                    return p == destination ? ExpectResult.Pass("at (19,10)") : ExpectResult.Fail("at " + p);
+                })
+             .Expect("Withdrawing from the only threatened square provokes nothing (PHB p.143)", Expect.None("aoo", null));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// GRID-001 review (PHB p.148): a mover may pass through an ally's square. The mover at (10,10) moves 3 squares
+        /// east to (13,10); the straight path crosses its ally at (11,10), and the only enemy stands far away. The move
+        /// ends at (13,10) one square at a time, and the ally stays put. Scripted: an NPC orc past a goblin through the NPC
+        /// move executor; Ui: a PC hero past a fighter through the PC Move button and click, whose per-step executor
+        /// treated every step as the destination, refused the ally's square and then jumped two squares.
+        /// </summary>
+        private static ScenarioDef MoveThroughAlly(bool ui)
+        {
+            string mover = ui ? "hero" : "orc";
+            string ally = ui ? "ally" : "goblin";
+            var destination = new Vector2Int(13, 10);
+            var allySquare = new Vector2Int(11, 10);
+            ScenarioBuilder b = Rules(ui ? "rules/movement-through-ally-ui" : "rules/movement-through-ally",
+                    "A move passes through an ally's square (PHB p.148)" + (ui ? ", through the PC buttons" : ""))
+                .Covers("GRID-001", "PHB p.148", "PC_NPC_PARITY")
+                .MaxRounds(1);
+            if (ui)
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
+                 .Pc("ally", ActorSource.Stats(() => Fighter("Ally", 6)), allySquare.x, allySquare.y, Control.Idle)
+                 .Npc("orc", "orc_berserker", 18, 3, Control.Scripted)
+                 .Initiative("orc", "hero", "ally")
+                 .Turn("orc", 1, Step.Pass())
+                 .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            else
+                b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 18, 3, Control.Scripted)
+                 .Npc("orc", "orc_berserker", 10, 10, Control.Scripted)
+                 .Npc("goblin", "goblin", allySquare.x, allySquare.y, Control.Idle)
+                 .Initiative("fighter", "orc", "goblin")
+                 .Turn("fighter", 1, Step.Pass());
+
+            b.Turn(mover, 1, Step.Move(destination.x, destination.y))
+             .Expect("The move is done and ends at (13,10)", v =>
+                {
+                    ExpectResult r = Expect.StepStatus(mover, 1, "Move", 0, "done")(v);
+                    if (!r.IsPass) return r;
+                    Vector2Int? p = Pos(v.Final(mover));
+                    return p == destination ? ExpectResult.Pass("at (13,10)") : ExpectResult.Fail("at " + p);
+                })
+             .Expect("The move is contiguous: each segment starts where the last ended, and the steps add up to 3 squares", v =>
+                {
+                    List<TraceEvent> moves = v.Moves(mover, 1);
+                    if (moves.Count == 0) return ExpectResult.Fail("no move");
+                    Vector2Int at = new Vector2Int(10, 10);
+                    int squares = 0;
+                    foreach (TraceEvent e in moves)
+                    {
+                        Vector2Int? from = e.Get("from") is Vector2Int f ? f : (Vector2Int?)null;
+                        if (from != at) return ExpectResult.Fail("a segment starts at " + from + ", not " + at, e.Seq);
+                        if (e.Get("to") is Vector2Int to) at = to;
+                        squares += e.Int("sq");
+                    }
+                    if (ui && moves.Any(e => e.Int("sq") != 1))
+                        return ExpectResult.Fail("the PC executor moves one square per step; a step of " + moves.First(e => e.Int("sq") != 1).Int("sq") + " squares is a jump",
+                            moves.Select(e => e.Seq).ToArray());
+                    return squares == 3 ? ExpectResult.Pass(moves.Count + " segment(s), 3 squares") : ExpectResult.Fail(squares + " squares in all");
+                })
+             .Expect("The ally stays in its square", v =>
+                {
+                    Vector2Int? p = Pos(v.Final(ally));
+                    return p == allySquare ? ExpectResult.Pass("ally at (11,10)") : ExpectResult.Fail("ally at " + p);
+                })
+             .Expect("No AoO", Expect.None("aoo", null));
             return b.Build();
         }
 
@@ -2345,6 +2465,19 @@ namespace Tests.Scenarios
                  .Turn("hero", 2, Step.GrappleAction("Pin"), Step.GrappleAction("ReleasePin"))
                  .Turn("orc", 2, leave);
             }
+
+            if (how == "withdraw")
+                b.Expect("Leaving the shared start square of a withdraw provokes no AoO from the visible " + stayer + " (PHB p.143, GRID-001)", v =>
+                {
+                    TraceEvent release = v.Steps("hero", "GrappleAction(ReleasePin)").FirstOrDefault();
+                    if (release == null) return ExpectResult.Fail("no release step");
+                    TraceEvent mv = v.Moves(leaver, leaveRound).FirstOrDefault(e => e.Seq > release.Seq);
+                    if (mv == null) return ExpectResult.Fail("no move after the release", release.Seq);
+                    List<TraceEvent> early = v.AoOs(stayer, leaver, "movement").Where(e => e.Seq > release.Seq && e.Seq < mv.Seq).ToList();
+                    return early.Count == 0
+                        ? ExpectResult.Pass("no movement AoO before the first step #" + mv.Seq, mv.Seq)
+                        : ExpectResult.Fail(early.Count + " movement AoO(s) before the first step", early.Select(e => e.Seq).Concat(new[] { mv.Seq }).ToArray());
+                });
 
             return b
                 .Expect("The release is done", Expect.StepStatus("hero", leaveRound, "GrappleAction(ReleasePin)", 0, "done"))

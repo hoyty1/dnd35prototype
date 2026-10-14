@@ -409,7 +409,6 @@ public class CharacterController : MonoBehaviour
     [HideInInspector] public bool HasTakenFiveFootStep;
     [HideInInspector] public bool HasAttackedThisTurn;
     [HideInInspector] public bool IsWithdrawing;
-    [HideInInspector] public bool WithdrawFirstStepProtected;
 
     /// <summary>Action economy tracker for the current turn.</summary>
     public ActionEconomy Actions = new ActionEconomy();
@@ -4343,7 +4342,6 @@ public class CharacterController : MonoBehaviour
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
         IsWithdrawing = false;
-        WithdrawFirstStepProtected = false;
         Actions.Reset();
         ProgressiveAttackPool.Clear();
         AIManeuverMemory.Clear();
@@ -9977,6 +9975,64 @@ public class CharacterController : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Whether this creature can see <paramref name="target"/> in the sense of rules worded "an opponent you can
+    /// see", such as Withdraw's start square (PHB p.143). Unlike <see cref="CanSee"/>, which tests the 50% miss
+    /// chance (CMB-078), this is a sight test only: false when this creature is Blinded (DMG p.300) or the target
+    /// has total visual concealment from it (invisibility it cannot pierce with See Invisibility or a Glitterdust
+    /// outline, or a fog or mist that hides it, PHB p.152); true against an incorporeal creature, Displacement
+    /// (PHB p.223: not real total concealment), Blink (ethereal, not visual) and a cloak of displacement, whose
+    /// miss chances do not hide the creature from view. Actor-agnostic: PCs and NPCs use it alike.
+    /// </summary>
+    public bool CanVisuallyPerceive(CharacterController target)
+    {
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+        if (target == this)
+            return true;
+        if (HasCondition(CombatConditionType.Blinded))
+            return false;
+
+        bool invisibilityPierced = CanSeeInvisible(target) || target.IsOutlinedByGlitterdust;
+        if (target.HasActiveInvisibilityEffect && !invisibilityPierced)
+            return false;
+
+        StatusEffectManager statusEffectManager = target.StatusEffectManager;
+        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null)
+            return true;
+
+        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+            if (effect == null || effect.MissChance <= 0)
+                continue;
+
+            // Miss chances that do not hide the creature from view.
+            if (IsBlinkConcealmentEffect(effect) || effect.MissChanceAgainstRangedOnly)
+                continue;
+            if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DISPLACEMENT, StringComparison.Ordinal))
+                continue;
+
+            bool isInvisibility = IsInvisibilityConcealmentEffect(effect)
+                || (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY_SPHERE, StringComparison.Ordinal));
+            if (isInvisibility)
+            {
+                if (!invisibilityPierced)
+                    return false;
+                continue;
+            }
+
+            if (effect.IsTotalConcealment)
+                return false;
+
+            // Fog, mist and darkness: total concealment (50%) from this observer hides the target (PHB p.152).
+            if (target.EvaluateEffectMissChanceAgainstAttacker(effect, this, incomingIsRangedAttack: false) >= 50)
+                return false;
+        }
+
+        return true;
+    }
+
     public void UpdateLastKnownPosition(CharacterController target, bool incomingIsRangedAttack = false)
     {
         if (target == null || target.Stats == null || target.Stats.IsDead)
@@ -12075,7 +12131,6 @@ public class CharacterController : MonoBehaviour
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
         IsWithdrawing = false;
-        WithdrawFirstStepProtected = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)

@@ -384,6 +384,32 @@ public static class ThreatSystem
     // ========================================================================
 
     /// <summary>
+    /// Every square threatened by a living enemy of <paramref name="mover"/>: the set the threat-aware
+    /// pathfinder routes around (MovementService.FindPath with avoidThreats) and the hover path preview
+    /// colours. It only steers path choice and display; which AoOs a path really provokes comes from
+    /// <see cref="AnalyzePathForAoOs"/>. One builder for both, so the preview shows the path a click takes
+    /// (GRID-001).
+    /// </summary>
+    public static HashSet<Vector2Int> GetSquaresThreatenedByEnemies(CharacterController mover, IList<CharacterController> allCharacters)
+    {
+        var threatened = new HashSet<Vector2Int>();
+        if (mover == null || allCharacters == null)
+            return threatened;
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController character = allCharacters[i];
+            if (character == null || character == mover || character.Stats == null) continue;
+            if (character.Stats.IsDead) continue;
+            if (character.Team == mover.Team) continue;
+
+            threatened.UnionWith(GetThreatenedSquares(character));
+        }
+
+        return threatened;
+    }
+
+    /// <summary>
     /// Analyze a movement path and determine which AoOs would be provoked.
     /// PHB p.137-138: moving out of a threatened square provokes an AoO from the threatening
     /// enemy, and moving out of more than one square threatened by the same enemy in the same
@@ -396,9 +422,12 @@ public static class ThreatSystem
     /// bull rush follow, a charge before its bull rush follow). The executors record the
     /// opportunity when they resolve the step (<see cref="RecordMovementOpportunity"/>); this
     /// analysis only reads it, so calling it changes nothing. Its result (the PC AoO confirmation
-    /// prompt, the AI's provoke counts) therefore reflects the record; the hover path preview
-    /// (GameManager.GetPreviewThreatenedSquares) and the A* threat cost (SquareGrid.FindSafePath)
-    /// use raw threatened squares and do not (GRID-020).
+    /// prompt, the AI's provoke counts) therefore reflects the record; the hover path preview and the
+    /// A* threat cost (both from <see cref="GetSquaresThreatenedByEnemies"/>) use raw threatened
+    /// squares and do not (GRID-020).
+    /// <paramref name="suppressFirstSquareAoO"/> marks a Withdraw (PHB p.143): leaving the start square
+    /// provokes no AoO from an enemy the mover can see, but still does from one it cannot see
+    /// (<see cref="CharacterController.CanVisuallyPerceive"/>, GRID-001).
     /// A bull rush push reads and writes the same record for the pushed defender (owner interpretation
     /// 2026-10-11, CMB-150: forced movement creates no movement opportunity beyond the one per round).
     /// <paramref name="excludedThreateners"/> get no AoO from this movement: the creatures in the same grapple as a
@@ -444,17 +473,21 @@ public static class ThreatSystem
             Vector2Int currentBaseSquare = path[i];
             List<Vector2Int> previousOccupiedSquares = mover.GetOccupiedSquaresAt(previousBaseSquare);
 
-            if (suppressFirstSquareAoO && i == 0)
-            {
-                previousBaseSquare = currentBaseSquare;
-                continue;
-            }
+            // Withdraw (PHB p.143): the starting square is not threatened by any opponent the mover can
+            // see, so leaving it provokes only from enemies it cannot see (an invisible enemy, one hidden by
+            // fog, or every enemy of a blinded mover). Sight is CanVisuallyPerceive, not the miss-chance test
+            // CanSee: an incorporeal, displaced or blinking enemy is still seen. Every later square provokes
+            // as normal; whether the rest of a Large withdrawer's starting space is exempt is open (GRID-021).
+            bool withdrawStartSquare = suppressFirstSquareAoO && i == 0;
 
             // Check each enemy: does leaving any previously occupied square provoke?
             foreach (var kvp in enemyThreats)
             {
                 var enemy = kvp.Key;
                 var threatenedSquares = kvp.Value;
+
+                if (withdrawStartSquare && mover.CanVisuallyPerceive(enemy))
+                    continue;
 
                 bool provoked = false;
                 for (int s = 0; s < previousOccupiedSquares.Count; s++)

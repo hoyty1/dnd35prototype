@@ -539,49 +539,6 @@ public class SquareGrid : MonoBehaviour
     }
 
     /// <summary>
-    /// Find a "safe" path that avoids threatened squares when possible.
-    /// If no safe path exists within movement range, returns the direct path.
-    /// Also returns which AoOs the path would provoke.
-    /// </summary>
-    /// <param name="start">Starting position.</param>
-    /// <param name="destination">Target position.</param>
-    /// <param name="mover">The character moving.</param>
-    /// <param name="allCharacters">All characters in combat (for threat calculation).</param>
-    /// <returns>AoOPathResult with path and provoked AoO info.</returns>
-    public AoOPathResult FindSafePath(Vector2Int start, Vector2Int destination,
-        CharacterController mover, List<CharacterController> allCharacters)
-    {
-        // Build combined set of all enemy-threatened squares
-        var allThreatened = new HashSet<Vector2Int>();
-        foreach (var character in allCharacters)
-        {
-            if (character == mover) continue;
-            if (character.Stats.IsDead) continue;
-            if (character.Team == mover.Team) continue;
-
-            var threats = ThreatSystem.GetThreatenedSquares(character);
-            allThreatened.UnionWith(threats);
-        }
-
-        if (allThreatened.Count > 0)
-        {
-            Debug.Log($"[SquareGrid] Total threatened squares: {allThreatened.Count}");
-        }
-
-        // Run A* with threat awareness
-        int moverSizeSquares = mover != null ? mover.GetVisualSquaresOccupied() : 1;
-        var pathResult = FindPathAoOAware(start, destination, allThreatened, mover.Stats.MoveRange, moverSizeSquares, mover);
-
-        // If we got a path, analyze it for actual AoOs
-        if (pathResult.Path.Count > 0)
-        {
-            pathResult.ProvokedAoOs = ThreatSystem.AnalyzePathForAoOs(mover, pathResult.Path, allCharacters);
-        }
-
-        return pathResult;
-    }
-
-    /// <summary>
     /// Clear all highlights on the grid.
     /// </summary>
     public void ClearAllHighlights()

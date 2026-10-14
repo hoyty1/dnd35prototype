@@ -30,8 +30,8 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
-| [Combat](issues/CMB.md) | CMB | 0 | 52 | 62 | 114 | CMB-168 |
-| [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
+| [Combat](issues/CMB.md) | CMB | 0 | 53 | 62 | 115 | CMB-169 |
+| [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 13 | 21 | GRID-023 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 2 | 61 | 61 | 124 | SPL-139 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 3 | 28 | 41 | 72 | CHR-080 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 30 | 58 | CRE-067 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-042 |
-| **All** | | 9 | 282 | 388 | 679 | |
+| **All** | | 8 | 283 | 390 | 681 | |
 
 ## Top issues
 

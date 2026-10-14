@@ -653,21 +653,25 @@ public partial class GameManager
             return;
         }
 
-        if (!_highlightedCells.Contains(cell) || !Grid.CanPlaceCreature(cell.Coords, pc.GetVisualSquaresOccupied(), pc))
+        if (!_highlightedCells.Contains(cell) || _movementService == null || !_movementService.IsValidMoveDestination(pc, cell.Coords))
             return;
 
-        int movementRangeOverride = _isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : -1;
-        bool suppressFirstSquareAoO = _isSelectingWithdraw;
-        var pathResult = _movementService != null
-            ? _movementService.FindPath(
-                pc,
-                cell.Coords,
-                avoidThreats: true,
-                maxRangeOverride: movementRangeOverride > 0 ? movementRangeOverride : (int?)null,
-                allowThroughAllies: true,
-                allowThroughEnemies: false,
-                suppressFirstSquareAoO: suppressFirstSquareAoO)
-            : Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, GetAllCharacters());
+        // The same path rules as the AI's moves (MoveCharacterAlongComputedPath[Withdraw]): the move or
+        // withdraw budget the highlight and hover preview use, the swarm pass-through flags, and for a
+        // withdraw the start-square exemption (PHB p.143). Only the route preference (avoidThreats) is the
+        // PC UI's own (GRID-001).
+        int movementRange = _isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
+        if (movementRange <= 0)
+            return;
+
+        var pathResult = _movementService.FindPath(
+            pc,
+            cell.Coords,
+            avoidThreats: true,
+            maxRangeOverride: movementRange,
+            allowThroughAllies: true,
+            allowThroughEnemies: false,
+            suppressFirstSquareAoO: _isSelectingWithdraw);
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
         {
@@ -712,7 +716,7 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator(_isGrappleMoveSelection
                     ? $"{pc.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)"
                     : (_isSelectingWithdraw
-                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, first square avoids AoO)"
+                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving the first square provokes no AoO from enemies you can see)"
                         : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)"));
             }
         });
@@ -1074,7 +1078,6 @@ public partial class GameManager
             }
 
             pc.IsWithdrawing = true;
-            pc.WithdrawFirstStepProtected = true;
         }
         else
         {
@@ -1128,10 +1131,21 @@ public partial class GameManager
 
             var stepPath = new List<Vector2Int> { step };
 
+            // Only the path's last square is the destination: an ally's square the path passes through is
+            // a legal intermediate step (PHB p.148), as in ExecutePathWithMovementAoOs for the AI movers.
+            bool stepIsDestination = pathIndex == path.Count - 1;
             if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
+                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination));
             else
-                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
+                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination));
+
+            // Blocked (MoveAlongPath refused the square): stop here rather than jump to the next square.
+            if (pc.GridPosition != step)
+            {
+                if (!interruptedByIncapacitation && pc.Stats != null && pc.Stats.CurrentHP <= 0)
+                    interruptedByIncapacitation = true;
+                break;
+            }
 
             movementCostConsumed += stepCost;
 
@@ -1163,12 +1177,8 @@ public partial class GameManager
         PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
 
-        if (isWithdraw)
-        {
-            pc.WithdrawFirstStepProtected = false;
-            if (!interruptedByIncapacitation)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} completes Withdraw."));
-        }
+        if (isWithdraw && !interruptedByIncapacitation)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} completes Withdraw."));
 
         InvalidatePreviewThreats();
 
@@ -1227,18 +1237,16 @@ public partial class GameManager
 
         mover.Actions.UseFullRoundAction();
         mover.IsWithdrawing = true;
-        mover.WithdrawFirstStepProtected = true;
 
-        // The first square is already exempt in ProvokedAoOs (suppressFirstSquareAoO);
-        // the rest resolve before the step that provokes them, like any other movement.
+        // Leaving the first square is already exempt in ProvokedAoOs from the enemies the mover can see
+        // (suppressFirstSquareAoO, CharacterController.CanVisuallyPerceive, PHB p.143); the rest resolve
+        // before the step that provokes them, like any other movement.
         List<AoOThreatInfo> provokedAoOs = pathResult != null ? pathResult.ProvokedAoOs : null;
         var moveOutcome = new MovementAoOStepOutcome();
         yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, secondsPerStep, "AoO (Withdraw)", moveOutcome));
 
         CheckTurnUndeadProximityBreakingForMover(mover);
         PruneTurnUndeadTrackers();
-
-        mover.WithdrawFirstStepProtected = false;
     }
 
     private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep)
