@@ -259,6 +259,7 @@ namespace Tests.Scenarios
             yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
+            yield return S("template-applied-once", TemplateAppliedOnce);
             yield return S("spell-save-dc", SpellSaveDc);
             yield return S("save-bonuses", SaveBonuses);
             yield return S("spell-durations", SpellDurations);
@@ -5524,13 +5525,13 @@ namespace Tests.Scenarios
         /// Two Human bards built at 1st level and raised to 5 and 4 through ApplyPendingLevelUp: HD 5 and 4, BAB +3,
         /// every new die a d6 with CON +1 and a minimum of 1. A scripted Wizard 3 then casts Daze (4 HD or less) at both:
         /// the HD 5 bard is refused before the slot is spent, the HD 4 bard is a legal target (CHR-071). Templated undead
-        /// count their template's HD, not their Level (owlbear skeleton 5; bugbear zombie 6, an XFail while the spawn
-        /// applies the zombie template twice, CRE-001). NPC max HP counts CON once (CreatureHitPointChecks).
+        /// count their template's HD, not their Level (owlbear skeleton 5; bugbear zombie 6, its template applied once at
+        /// spawn, CRE-001). NPC max HP counts CON once (CreatureHitPointChecks).
         /// </summary>
         private static ScenarioDef ClassProgressionHpBabHd()
         {
             return Rules("rules/class-progression", "Class HP, BAB and Hit Dice follow the class tables and every level-up (PHB p.9, p.22-23, p.59, p.309; CHR-001, CHR-002, CHR-071, CRE-041)")
-                .Covers("CHR-001", "CHR-002", "CHR-071", "CRE-041", "PHB p.9", "PHB p.22", "PHB p.23", "PHB p.59", "PHB p.309", "PHB p.217", "PC_NPC_PARITY")
+                .Covers("CHR-001", "CHR-002", "CHR-071", "CRE-041", "CRE-001", "PHB p.9", "PHB p.22", "PHB p.23", "PHB p.59", "PHB p.309", "PHB p.217", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Pc("bard", ActorSource.QuickStart("Bard"), 3, 4, Control.Idle)
                 .Pc("ranger", ActorSource.QuickStart("Ranger"), 3, 6, Control.Idle)
@@ -5566,7 +5567,7 @@ namespace Tests.Scenarios
                     }
                     ok &= ProgressionCheck(ctx, "owlbear skeleton HD (MM p.226)", TeamUtility.GetHitDice(ctx.Get("skeleton")), 5);
                     ok &= CreatureHitPointChecks(ctx);
-                    // Recorded for the CRE-001 XFail below: the spawn applies the zombie template a second time.
+                    // Recorded for the CRE-001 expectation below: the spawn must not apply the zombie template again.
                     ctx.Note("class-progression zombie-hd=" + TeamUtility.GetHitDice(ctx.Get("zombie")));
                     return ok;
                 }))
@@ -5580,7 +5581,7 @@ namespace Tests.Scenarios
                 .Expect("Daze on the HD 5 bard is refused (4 HD or less, PHB p.217); on the HD 4 bard it is cast", Expect.All(
                     Expect.StepStatus("mage", 1, "Cast", 0, "refused"),
                     Expect.StepStatus("mage", 1, "Cast", 1, "done")))
-                .ExpectXFail("CRE-001", "The bugbear zombie has 6 HD, its 3 racial HD doubled once (MM p.267)", v =>
+                .Expect("The bugbear zombie has 6 HD, its 3 racial HD doubled once (MM p.267; CRE-001)", v =>
                 {
                     const string prefix = "class-progression zombie-hd=";
                     TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(prefix, StringComparison.Ordinal));
@@ -5699,6 +5700,67 @@ namespace Tests.Scenarios
                 .Expect("Bugbear: 3 racial HD, good Ref: BAB +2, base Fort +1, Ref +3, Will +1 (MM p.29)", v => ActorProgression(v, "bugbear", 3, 3, 2, 1, 3, 1))
                 .Expect("Ogre: 4 giant HD: BAB +3, base Fort +4, Ref +1, Will +1 (MM p.199)", v => ActorProgression(v, "ogre", 4, 4, 3, 4, 1, 1))
                 .Expect("Human paladin 5: BAB +5, base Fort +4, Ref +1, Will +1 (PHB p.43)", v => ActorProgression(v, "paladin", 5, 0, 5, 4, 1, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// A template is added to a creature once (MM p.291, p.293; CRE-001). Through the game's encounter spawn
+        /// (SetupEnemyEncounter -> BuildEncounterDefinitionForSpawn -> CreatureTemplateRegistry.ApplyTemplatesClone):
+        /// the human warrior skeleton has Dex 13 and 1 HD (MM p.226), the bugbear zombie 6 HD, Str 17 and Dex 10
+        /// (MM p.267), the factory-built werewolf its database statistics, and the fiendish wolf, whose fiendish
+        /// template is a request applied at spawn, the statistics of one application to the base wolf (MM p.108). Two
+        /// registry passes, as the dungeon spawner plus the encounter spawn make, change nothing. Before the fix the spawn applied
+        /// the factory templates again: skeleton Dex 15, zombie 12 HD, the werewolf's animal stats added twice.
+        /// </summary>
+        private static ScenarioDef TemplateAppliedOnce()
+        {
+            return Rules("rules/template-applied-once", "Spawned templated creatures carry each template once (MM p.226, p.267, p.291, p.293; CRE-001)")
+                .Covers("CRE-001", "MM p.226", "MM p.267", "MM p.291", "MM p.293", "MM p.108", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => Fighter("Dummy", 1)), 10, 10, Control.Scripted)
+                .Npc("skeleton", "skeleton_human_warrior", 16, 4, Control.Idle)
+                .Npc("zombie", "zombie_bugbear", 16, 8, Control.Idle)
+                .Npc("werewolf", "werewolf", 16, 12, Control.Idle)
+                .Npc("fwolf", "fiendish_wolf", 16, 16, Control.Idle)
+                .Initiative("dummy", "skeleton", "zombie", "werewolf", "fwolf")
+                .Turn("dummy", 1, Step.Assert("Every spawned templated creature shows one application of its template", ctx =>
+                {
+                    bool ok = true;
+                    CharacterStats skel = ctx.Get("skeleton").Stats;
+                    ok &= ProgressionCheck(ctx, "human warrior skeleton Dex (MM p.226)", skel.DEX, 13);
+                    ok &= ProgressionCheck(ctx, "human warrior skeleton HD (MM p.226)", skel.GetHitDice(), 1);
+                    CharacterStats zombie = ctx.Get("zombie").Stats;
+                    ok &= ProgressionCheck(ctx, "bugbear zombie HD (MM p.267)", zombie.GetHitDice(), 6);
+                    ok &= ProgressionCheck(ctx, "bugbear zombie Str (MM p.267)", zombie.STR, 17);
+                    ok &= ProgressionCheck(ctx, "bugbear zombie Dex (MM p.267)", zombie.DEX, 10);
+                    NPCDefinition wereDef = NPCDatabase.Get("werewolf");
+                    CharacterStats were = ctx.Get("werewolf").Stats;
+                    ok &= ProgressionCheck(ctx, "werewolf Str = factory value", were.STR, wereDef.STR);
+                    ok &= ProgressionCheck(ctx, "werewolf Dex = factory value", were.DEX, wereDef.DEX);
+                    ok &= ProgressionCheck(ctx, "werewolf HD = factory value", were.GetHitDice(), wereDef.HitDice);
+                    // Expected fiendish wolf: the base wolf with the fiendish template applied once (MM p.108), built
+                    // independently of the fiendish_wolf entry the spawn uses.
+                    NPCDefinition fwolfOnce = NPCDatabase.Get("wolf_pack_hunter").Clone();
+                    fwolfOnce.AppliedTemplateIds = new List<string> { "fiendish" };
+                    fwolfOnce = CreatureTemplateRegistry.ApplyTemplatesClone(fwolfOnce);
+                    CharacterStats fwolf = ctx.Get("fwolf").Stats;
+                    ok &= ProgressionCheck(ctx, "fiendish wolf Str = one application to the base wolf", fwolf.STR, fwolfOnce.STR);
+                    ok &= ProgressionCheck(ctx, "fiendish wolf Dex = one application to the base wolf", fwolf.DEX, fwolfOnce.DEX);
+                    ok &= ProgressionCheck(ctx, "fiendish wolf Cha = one application to the base wolf", fwolf.CHA, fwolfOnce.CHA);
+                    // The dungeon path: DungeonEncounterSpawner applies the templates, then the encounter spawn passes
+                    // the result through the registry again; the second pass must change nothing (CRE-001).
+                    NPCDefinition dungeonPath = CreatureTemplateRegistry.ApplyTemplatesClone(
+                        CreatureTemplateRegistry.ApplyTemplatesClone(NPCDatabase.Get("fiendish_wolf")));
+                    ok &= ProgressionCheck(ctx, "fiendish wolf Str after two registry passes (dungeon path)", dungeonPath.STR, fwolfOnce.STR);
+                    ok &= ProgressionCheck(ctx, "fiendish wolf Cha after two registry passes (dungeon path)", dungeonPath.CHA, fwolfOnce.CHA);
+                    NPCDefinition zombieDungeon = CreatureTemplateRegistry.ApplyTemplatesClone(
+                        CreatureTemplateRegistry.ApplyTemplatesClone(NPCDatabase.Get("zombie_bugbear")));
+                    ok &= ProgressionCheck(ctx, "bugbear zombie HD after two registry passes (dungeon path)", zombieDungeon.HitDice, 6);
+                    ctx.Note("template-applied-once skeleton-dex=" + skel.DEX + " zombie-hd=" + zombie.GetHitDice()
+                             + " werewolf-str=" + were.STR + " fwolf-cha=" + fwolf.CHA);
+                    return ok;
+                }))
+                .Expect("Every template is applied once at spawn", Expect.AssertsPass())
                 .Build();
         }
 

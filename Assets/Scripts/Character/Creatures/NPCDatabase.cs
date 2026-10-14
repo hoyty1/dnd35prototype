@@ -639,8 +639,16 @@ public class NPCDefinition
     // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
     public List<string> SpecialAbilities = new List<string>();
 
-    // Runtime template descriptors.
+    // Runtime template descriptors: every template this creature has, whether still to be applied at spawn (a request
+    // such as fiendish_wolf's "fiendish") or already folded into these statistics.
     public List<string> AppliedTemplateIds = new List<string>();
+
+    /// <summary>
+    /// Templates whose changes are already in this definition's statistics (a factory-built skeleton, zombie or
+    /// lycanthrope entry, or a definition that went through <see cref="CreatureTemplateRegistry.ApplyTemplatesClone"/>).
+    /// The registry skips them, so a template is added to a creature once (MM p.291, p.293; CRE-001).
+    /// </summary>
+    public List<string> BakedTemplateIds = new List<string>();
 
     /// <summary>
     /// Source template identifier (e.g., "Fighter_10") for spell auto-update system.
@@ -854,6 +862,9 @@ public class NPCDefinition
             : new List<string>();
         clone.AppliedTemplateIds = AppliedTemplateIds != null
             ? new List<string>(AppliedTemplateIds)
+            : new List<string>();
+        clone.BakedTemplateIds = BakedTemplateIds != null
+            ? new List<string>(BakedTemplateIds)
             : new List<string>();
         clone.SourceTemplateId = SourceTemplateId;
 

@@ -492,7 +492,7 @@ Pitfalls:
 
 1. Implement `ICreatureTemplate` (`Character/Templates/CreatureTemplateFramework.cs:10-25`): `TemplateId`, `ApplicationOrder` (10 undead, 15 lycanthrope, 20 outsider; lower first), `ApplyToDefinition(NPCDefinition)`, which mutates IN PLACE a clone made by `CreatureTemplateRegistry.ApplyTemplatesClone`. Stat overlays subclass `OutsiderTemplateBase` (`CelestialTemplate`, `FiendishTemplate`). Static templates that return a new object are wrapped like `SkeletonCreatureTemplate` (call the static `Apply`, then `CopyDefinitionFields` back).
 2. Register an instance in `CreatureTemplateRegistry._templates` (`:28-42`). The dictionary KEY is the id matched against `AppliedTemplateIds` (case-insensitive, trimmed); `TemplateId` is not used for lookup.
-3. Make it idempotent: check for its own id or a marker before mutating; de-duplicate `AppliedTemplateIds` as `OutsiderTemplateBase.AddTemplateId` does.
+3. Keep its id in `AppliedTemplateIds` when it applies (de-duplicated, as `OutsiderTemplateBase.AddTemplateId` does) and remove it when it refuses the base: `ApplyTemplatesClone` then records it in `BakedTemplateIds` and never applies it to that definition again (CRE-001). A static factory that builds pre-baked entries adds its ids to both lists of its clone of the base with `CreatureTemplateRegistry.MarkTemplateApplied`, keeping the ids already there, as `SkeletonTemplate.Apply` does; an adapter's `CopyDefinitionFields` copies both lists.
 4. Apply through data: `NPCDefinition.AppliedTemplateIds` (e.g. fiendish wolf, `NPCDatabaseCustom.cs:831`), `SummonMonsterOption.TemplateId` (applied in `GameManager.SpellCasting.cs:262-273`), dungeon `EncounterCreatureEntry.CreatureTemplateIds`, or scenario injection in `GameManager.BuildEncounterDefinitionForSpawn` (`_Core/GameManager.cs:2830-2862`).
 5. Runtime flags NPCDefinition cannot express are mapped in `InitializeNPCFromDefinition` (celestial/fiendish smite, `NPCSetup.cs:809-829`; summons at `GameManager.SpellCasting.cs:277-278`).
 6. Optional pre-baked variants: a static factory like `SkeletonFactory`, registered in `NPCDatabase_Skeletons.cs` etc., with presets from the matching `Get*EncounterPresets()`.
@@ -501,7 +501,7 @@ Pitfalls:
 Files: `Character/Templates/CreatureTemplateFramework.cs`, the Skeleton/Zombie/Lycanthrope template files, `UndeadTemplateUtils.cs`, `_Core/GameManager.NPCSetup.cs`, `_Core/GameManager.cs`, `Spell/Resolution/GameManager.SpellCasting.cs`, `Encounters/DungeonEncounterSpawner.cs`. Examples: 9570426, 137c9e1, 9c70d7c, 5da7ce9, 2df0304, 2691203, f36567c.
 
 Pitfalls:
-- Templates are probably applied twice (code reading; not verified in Play mode). Every spawn runs `ApplyTemplatesClone`; pre-baked skeletons, zombies and lycanthropes already carry their ids, the static `Apply` methods have no guard, and `DungeonEncounterSpawner` applies templates before the spawn applies them again (outsider bonuses stack).
+- Every spawn runs `ApplyTemplatesClone`, and `DungeonEncounterSpawner` runs it before the spawn runs it again; only `BakedTemplateIds` keeps a template from being applied twice (CRE-001, fixed 2026-10-14), so a definition built outside the registry with a template's changes must list that template there. The static `Apply` methods themselves have no guard. `ApplicationOrder` puts undead before outsider templates, against MM p.293's inherited-first order (CRE-064).
 - `CopyDefinitionFields` copies a fixed subset. Fields that `SkeletonTemplate.Apply` clears (breath weapons, engulf, auras, regeneration, incorporeal) are not copied back. Extend the lists when `NPCDefinition` gains fields.
 - Unknown template ids are ignored silently. The parser emits `half-dragon`, which is not registered.
 - The summon path clears `AppliedTemplateIds` before adding `option.TemplateId`.
@@ -597,7 +597,7 @@ Files: `Assets/StreamingAssets/dungeon_encounters.csv`, `Encounters/DungeonEncou
 Pitfalls:
 - Unresolved names fail only at spawn ("base creature '<id>' not found", entry skipped). 40e0383 removed map entries that pointed at nonexistent ids. If every entry fails, the encounter does not start and the selection panel reopens.
 - `spawn_*` ids are never cleaned up on the live path: each DMG encounter leaves its `NPCDatabase` entries for the rest of the session, and they show up in the custom builder list and as random-encounter candidates ([ENC-004](issues/ENC.md)). A new filter over `NPCDatabase` should exclude the `spawn_` prefix.
-- Templates are applied twice (spawner, then `BuildEncounterDefinitionForSpawn`); celestial/fiendish bonuses stack.
+- The spawner applies templates and `BuildEncounterDefinitionForSpawn` calls the registry again; `BakedTemplateIds` makes the second call a no-op (CRE-001, fixed 2026-10-14).
 - More than 5 creatures use off-grid default positions (see the previous recipe); more than 15 are truncated.
 - `Phase5IntegrationTests` still asserts `MaxLevel == 9` and fails since 6008d6f; update it when you touch the tables.
 - Editing the CSV does not update the hard-coded fallback.

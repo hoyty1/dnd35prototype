@@ -101,6 +101,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.SpecialAbilities = source.SpecialAbilities;
         target.CreatureTags = source.CreatureTags;
         target.AppliedTemplateIds = source.AppliedTemplateIds;
+        target.BakedTemplateIds = source.BakedTemplateIds;
         target.ChallengeRating = source.ChallengeRating;
 
         // Feats (skeleton clears these)

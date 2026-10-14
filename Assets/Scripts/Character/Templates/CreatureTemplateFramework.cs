@@ -64,6 +64,14 @@ public static class CreatureTemplateRegistry
         return resolved;
     }
 
+    /// <summary>
+    /// Returns a clone of <paramref name="source"/> with every template in its <c>AppliedTemplateIds</c> applied once.
+    /// A template already in <c>BakedTemplateIds</c> (a factory-built skeleton, zombie or lycanthrope entry, or a
+    /// definition that already went through this method, such as a dungeon spawn definition that the encounter spawn
+    /// passes here again) is skipped: a template is a single set of changes to a base creature, applied one at a time
+    /// (MM p.291, p.293), never twice (CRE-001). Each template that is applied, and not refused, is recorded as baked,
+    /// so calling this method again on the result changes nothing. PCs and NPCs share this one path.
+    /// </summary>
     public static NPCDefinition ApplyTemplatesClone(NPCDefinition source)
     {
         if (source == null)
@@ -71,12 +79,62 @@ public static class CreatureTemplateRegistry
 
         NPCDefinition clone = source.Clone();
         List<ICreatureTemplate> templates = ResolveTemplates(clone);
+        templates.RemoveAll(t => IsTemplateBaked(clone, t.TemplateId));
         // Sort by ApplicationOrder so radical changes (undead) happen before enhancements (outsider)
         templates.Sort((a, b) => a.ApplicationOrder.CompareTo(b.ApplicationOrder));
         for (int i = 0; i < templates.Count; i++)
+        {
             templates[i].ApplyToDefinition(clone);
+            // A refused template (an illegal base, CRE-057) removes its own id; only an applied one is baked.
+            if (ContainsId(clone.AppliedTemplateIds, templates[i].TemplateId))
+                MarkTemplateBaked(clone, templates[i].TemplateId);
+        }
 
         return clone;
+    }
+
+    /// <summary>Whether the changes of template <paramref name="templateId"/> are already in the definition's statistics (CRE-001).</summary>
+    public static bool IsTemplateBaked(NPCDefinition definition, string templateId)
+        => definition != null && ContainsId(definition.BakedTemplateIds, templateId);
+
+    /// <summary>Records that the changes of template <paramref name="templateId"/> are in the definition's statistics (CRE-001).</summary>
+    public static void MarkTemplateBaked(NPCDefinition definition, string templateId)
+    {
+        if (definition == null || string.IsNullOrWhiteSpace(templateId))
+            return;
+        if (definition.BakedTemplateIds == null)
+            definition.BakedTemplateIds = new List<string>();
+        if (!ContainsId(definition.BakedTemplateIds, templateId))
+            definition.BakedTemplateIds.Add(templateId.Trim());
+    }
+
+    /// <summary>
+    /// Records that template <paramref name="templateId"/> has been applied: adds it to both <c>AppliedTemplateIds</c>
+    /// and <c>BakedTemplateIds</c>, keeping every id already there (a template applied earlier stays recorded; CRE-001).
+    /// The skeleton, zombie and lycanthrope factories call this on their clone of the base creature.
+    /// </summary>
+    public static void MarkTemplateApplied(NPCDefinition definition, string templateId)
+    {
+        if (definition == null || string.IsNullOrWhiteSpace(templateId))
+            return;
+        if (definition.AppliedTemplateIds == null)
+            definition.AppliedTemplateIds = new List<string>();
+        if (!ContainsId(definition.AppliedTemplateIds, templateId))
+            definition.AppliedTemplateIds.Add(templateId.Trim());
+        MarkTemplateBaked(definition, templateId);
+    }
+
+    private static bool ContainsId(List<string> ids, string templateId)
+    {
+        if (ids == null || string.IsNullOrWhiteSpace(templateId))
+            return false;
+        string wanted = templateId.Trim();
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (ids[i] != null && string.Equals(ids[i].Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 }
 

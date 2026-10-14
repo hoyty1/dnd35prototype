@@ -115,6 +115,7 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.SpecialAbilities = source.SpecialAbilities;
         target.CreatureTags = source.CreatureTags;
         target.AppliedTemplateIds = source.AppliedTemplateIds;
+        target.BakedTemplateIds = source.BakedTemplateIds;
         target.ChallengeRating = source.ChallengeRating;
 
         // Feats

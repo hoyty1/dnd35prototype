@@ -260,7 +260,9 @@ public static class SkeletonTemplate
         skel.SpecialAbilities = BuildSkeletonAbilities(skel.SizeCategory, racialHD);
 
         // ── Template tracking ──
-        skel.AppliedTemplateIds = new List<string> { "skeleton" };
+        // Added to the base's lists, not replacing them, so a template applied earlier stays recorded; marked baked
+        // because the changes are in these statistics and the spawn-time registry must not apply them again (CRE-001).
+        CreatureTemplateRegistry.MarkTemplateApplied(skel, "skeleton");
 
         // ── AI: mindless melee ──
         skel.AIBehavior = NPCAIBehavior.AggressiveMelee;

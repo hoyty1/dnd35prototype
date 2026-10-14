@@ -128,6 +128,17 @@
       "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
+      "type": "Tests.Character.CreatureTemplateOnceTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 16,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-001: a template is applied to a creature once (MM p.291, p.293): every factory-built skeleton, zombie and lycanthrope entry records its template in BakedTemplateIds and passes through CreatureTemplateRegistry.ApplyTemplatesClone unchanged, and every entry naming one of those templates has it baked; a second registry call changes no templated database entry; human warrior skeleton Dex 13 (MM p.226), bugbear zombie 6 HD, Str 17, Dex 10 (MM p.267); fiendish_wolf applies its requested template once; a refused celestial template (CRE-057) is not baked; Clone copies the list; a factory template (SkeletonTemplate.Apply and the skeleton adapter) keeps a template baked before it in both lists. Pure data, no scene"
+    },
+    {
       "type": "Tests.Character.DeityAlignmentRestrictionTests",
       "needs": "either",
       "skip": "",

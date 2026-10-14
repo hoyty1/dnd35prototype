@@ -98,6 +98,7 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
         target.SpecialAbilities = source.SpecialAbilities;
         target.CreatureTags = source.CreatureTags;
         target.AppliedTemplateIds = source.AppliedTemplateIds;
+        target.BakedTemplateIds = source.BakedTemplateIds;
         target.ChallengeRating = source.ChallengeRating;
 
         // Feats (zombie keeps Toughness)

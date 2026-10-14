@@ -390,7 +390,10 @@ public static class LycanthropeTemplate
             animalType, isNatural, animal, lycan, totalHD, creatureHD);
 
         // ── Template tracking ──
-        lycan.AppliedTemplateIds = new List<string> { "lycanthrope", prefix };
+        // Added to the base's lists, not replacing them, so a template applied earlier stays recorded; marked baked
+        // because the changes are in these statistics and the spawn-time registry must not apply them again (CRE-001).
+        CreatureTemplateRegistry.MarkTemplateApplied(lycan, "lycanthrope");
+        CreatureTemplateRegistry.MarkTemplateApplied(lycan, prefix);
 
         // ── AI: intelligent melee combatant ──
         lycan.AIBehavior = NPCAIBehavior.AggressiveMelee;

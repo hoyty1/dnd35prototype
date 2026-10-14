@@ -195,7 +195,7 @@ combat ends
 
 ## Creatures
 
-`NPCDefinition` (Character/Creatures/NPCDatabase.cs:489) is the full creature record: ability scores, HitDice, BaseHitDieHP, progression overrides (`BABOverride`, `BaseAttackBonusOverride`, `*SaveOverride`), natural attacks, defenses, special-ability payloads (breath, engulf, aura, blood drain, ...), tags, feats, spells, equipment, AI archetype, colors, `AppliedTemplateIds`, `SourceTemplateId`. `Clone()` (L641) is `MemberwiseClone` plus explicit copies of the lists, immunities, swarm traits, rake attack and five ability payloads; RangedSpecialAttack, BloodDrain and TerrainManipulation stay shared references.
+`NPCDefinition` (Character/Creatures/NPCDatabase.cs:489) is the full creature record: ability scores, HitDice, BaseHitDieHP, progression overrides (`BABOverride`, `BaseAttackBonusOverride`, `*SaveOverride`), natural attacks, defenses, special-ability payloads (breath, engulf, aura, blood drain, ...), tags, feats, spells, equipment, AI archetype, colors, `AppliedTemplateIds`, `BakedTemplateIds` (CRE-001), `SourceTemplateId`. `Clone()` (L641) is `MemberwiseClone` plus explicit copies of the lists, immunities, swarm traits, rake attack and five ability payloads; RangedSpecialAttack, BloodDrain and TerrainManipulation stay shared references.
 
 `NPCDatabase` is a static partial class with a `Dictionary<string, NPCDefinition>`:
 - NPCDatabase.cs: `Init`, `Get`, `RegisterExternal`, `Unregister`, summon aliases, encounter presets, the NPCDefinition class, payload types, ChallengeRatingUtils.
@@ -245,15 +245,14 @@ Alignment: the spawned alignment is the definition's (CRE-002, fixed 2026-10-08)
 
 ## Templates, dragons and class levels on monsters
 
-**Template framework.** Character/Templates/CreatureTemplateFramework.cs defines `ICreatureTemplate` and `CreatureTemplateRegistry`, keyed by ID: skeleton, zombie (ApplicationOrder 10), werewolf, wererat, wereboar, weretiger, werebear (15), celestial, fiendish (20). `ApplyTemplatesClone` clones, resolves every ID in `AppliedTemplateIds`, sorts by ApplicationOrder ascending and applies each in place.
+**Template framework.** Character/Templates/CreatureTemplateFramework.cs defines `ICreatureTemplate` and `CreatureTemplateRegistry`, keyed by ID: skeleton, zombie (ApplicationOrder 10), werewolf, wererat, wereboar, weretiger, werebear (15), celestial, fiendish (20). `ApplyTemplatesClone` clones, resolves every ID in `AppliedTemplateIds`, drops those already in `BakedTemplateIds` (templates whose changes are in the statistics), sorts the rest by ApplicationOrder ascending, applies each in place and records each one not refused in `BakedTemplateIds`, so a second call changes nothing (MM p.291, p.293; CRE-001, fixed 2026-10-14; checked in Play mode by `CreatureTemplateOnceTests` and `rules/template-applied-once`). The ascending order puts acquired undead templates before inherited outsider ones, against MM p.293 (CRE-064).
 
 Each undead and lycanthrope template has two code paths:
 - Factory path: `SkeletonTemplate.Apply` / `ZombieTemplate.Apply` / `LycanthropeTemplate.Apply` return a new definition. The `SkeletonFactory`, `ZombieFactory` and `LycanthropeFactory` presets use it to build the baked entries registered in NPCDatabase.
 - Registry path: adapters (SkeletonCreatureTemplate, ZombieCreatureTemplate, LycanthropeTemplateBase subclasses) call the same Apply and copy back only a subset of fields, so the two paths give different results. The skeleton adapter always passes `hasHands: true`; lycanthrope adapters are always natural lycanthropes.
 
 Known template problems **[KI]** (traced statically, not verified in Play mode):
-- The factories stamp their own template ID into `AppliedTemplateIds` ("skeleton", "zombie", or "lycanthrope" plus the animal prefix). The field means both "to apply" and "already applied".
-- BuildEncounterDefinitionForSpawn re-applies templates on every spawn with no idempotence check, so baked skeletons, zombies and lycanthropes are templated twice. DungeonEncounterSpawner applies templates before registering, and the encounter path applies them again. Only the summon path clears the list first.
+- The factories add their own template ID to the base's `AppliedTemplateIds` and `BakedTemplateIds` ("skeleton", "zombie", or "lycanthrope" plus the animal prefix) through `CreatureTemplateRegistry.MarkTemplateApplied`, keeping the ids already there, so a template applied earlier stays recorded in both lists; the adapters copy both lists back. `AppliedTemplateIds` lists every template the creature has, requested (fiendish_wolf, dungeon rows, summons, the celestial test encounter) or applied; `BakedTemplateIds` only the applied ones. BuildEncounterDefinitionForSpawn and DungeonEncounterSpawner both call `ApplyTemplatesClone`, which applies only the templates not baked yet (CRE-001, fixed 2026-10-14). Only the summon path clears `AppliedTemplateIds` first.
 - Celestial/fiendish add ability bonuses and grant SR only at 8+ HD, unlike the 3.5 Monster Manual.
 - Lycanthropes are hybrid form only. Their bite exposes the target to `DiseaseType.Lycanthropy`, which has no DiseaseDatabase entry, so nothing happens. `CalculateLycanthropeCR` truncates (the werebear is CR 4).
 

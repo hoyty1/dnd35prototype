@@ -91,7 +91,7 @@ For the step-by-step recipe and its pitfalls, follow "Add a monster or NPC" and 
 | Ability payloads | `BreathWeapon`, `SecondaryBreathWeapon`, `FrightfulPresence`, `Engulf`, `AuraAbility`, `RangedSpecialAttack`, `BloodDrain`, `TerrainManipulation`, `StenchAuraDC/Range`, `IsSwarm` + `SwarmTraits` | Each needs Clone, Configure*, spawn wiring and AI use (recipe step 6); a new controller field for one must also be cleared in `CharacterController.ResetForNewCreature`, since encounter slots are reused (fixed 2026-10-08, CRE-046) |
 | Magic | `KnownSpellIds`, `PreparedSpellSlotIds` | The only route for spell-like abilities. Casting initializes only for a spellcasting class |
 | AI | `AIBehavior`, `AIProfileArchetype`, `CreatureTags` | See [AI.md](AI.md#24-where-configuration-comes-from) and [AI.md section 6](AI.md#6-profiles-and-archetypes) |
-| Templates | `AppliedTemplateIds` | Means both "apply" and "already applied" (CRE-001) |
+| Templates | `AppliedTemplateIds`, `BakedTemplateIds` | `AppliedTemplateIds` lists every template the creature has, requested or applied; `BakedTemplateIds` those already in its statistics, which `CreatureTemplateRegistry.ApplyTemplatesClone` skips (CRE-001, fixed 2026-10-14) |
 
 `SpecialAbilities` and `Description` are display text only. Before declaring an ability missing, check all three places mechanics can live: an ability payload on NPCDefinition, an on-hit field on NaturalAttackDefinition, and bespoke ID-checked code (for example `giant_bombardier_beetle` in `GameManager.TryNPCUseBombardierAcidSpray`).
 
@@ -158,9 +158,9 @@ Registry IDs and application order are described in [characters-and-creatures.md
 
 | Template | How it is applied | Status vs MM 3.5 | Known problems |
 |---|---|---|---|
-| skeleton (order 10) | SkeletonFactory builds 8 baked IDs; registry adapter `SkeletonCreatureTemplate` | Undead with d12 HD, Poor BAB override, Dex +2, cold immunity, DR 5/bludgeoning, Improved Initiative, claws by size, CR by HD | Always neutral evil (MM p.226; set since 2026-10-08). Applied twice at spawn (CRE-001). The adapter always passes `hasHands: true` and copies back only part of the result (CRE-023). Reports Fighter 1 (CRE-024) |
-| zombie (10) | ZombieFactory builds 7 baked IDs; `ZombieCreatureTemplate` | HD doubled, Str +2 / Dex -2, Toughness, DR 5/slashing, single actions only (`IsSingleActionsOnly`), Poor BAB | Always neutral evil (MM p.266; set since 2026-10-08). CRE-001, CRE-023, CRE-024 |
-| werewolf, wererat, wereboar, weretiger, werebear (15) | LycanthropeFactory builds 8 baked IDs; `LycanthropeTemplateBase` subclasses | Hybrid form only. HD and BAB merge with the animal's; DR 10/silver (natural) or 5/silver (afflicted); Iron Will; scent; claws plus bite; curse on bite (natural only) | CRE-001: re-applied at spawn, and the afflicted werewolf is re-applied as natural. CRE-011: no forms and no curse. CR is truncated (werebear 4; MM 5). Wereboar is ChaoticNeutral (MM: neutral). The template's alignment is copied at spawn |
+| skeleton (order 10) | SkeletonFactory builds 8 baked IDs; registry adapter `SkeletonCreatureTemplate` | Undead with d12 HD, Poor BAB override, Dex +2, cold immunity, DR 5/bludgeoning, Improved Initiative, claws by size, CR by HD | Always neutral evil (MM p.226; set since 2026-10-08). Applied once: the factory records it in `BakedTemplateIds` and the spawn skips it (CRE-001, fixed 2026-10-14). The adapter always passes `hasHands: true` and copies back only part of the result (CRE-023). Reports Fighter 1 (CRE-024) |
+| zombie (10) | ZombieFactory builds 7 baked IDs; `ZombieCreatureTemplate` | HD doubled, Str +2 / Dex -2, Toughness, DR 5/slashing, single actions only (`IsSingleActionsOnly`), Poor BAB | Always neutral evil (MM p.266; set since 2026-10-08). Applied once since 2026-10-14 (bugbear zombie 6 HD, MM p.267; CRE-001). CRE-023, CRE-024 |
+| werewolf, wererat, wereboar, weretiger, werebear (15) | LycanthropeFactory builds 8 baked IDs; `LycanthropeTemplateBase` subclasses | Hybrid form only. HD and BAB merge with the animal's; DR 10/silver (natural) or 5/silver (afflicted); Iron Will; scent; claws plus bite; curse on bite (natural only) | Applied once since 2026-10-14 (CRE-001; before, the spawn re-applied it and made the afflicted werewolf natural). CRE-011: no forms and no curse. CR is truncated (werebear 4; MM 5). Wereboar is ChaoticNeutral (MM: neutral). The template's alignment is copied at spawn |
 | celestial, fiendish (20) | `AppliedTemplateIds` (fiendish_wolf, fiendish_dire_bear, ...), `SummonMonsterOption.TemplateId`, dungeon `CreatureTemplateIds` | DR 5/magic at 4+ HD and 10/magic at 12+; resistances 5/10; smite 1/day | Ability bonuses, and SR only from 8 HD (CRE-008). Alignment: the template makes the good-evil component good or evil (MM p.31, p.108: always good or evil, "any") and keeps the base creature's law-chaos component (owner interpretation 2026-10-11, CRE-057), so a neutral wolf becomes NE as a fiendish wolf and an LN monk LG as a celestial one. An illegal base is refused and keeps its base statistics (`OutsiderTemplateBase.CanApplyTo`: celestial needs a nonevil base, fiendish a nongood one; a warning is logged). Summons take the PHB summon table's alignment instead; every templated summon option has a legal base (`NpcAlignmentGearTests`). The smite misses targets whose data sets no alignment (CRE-056) |
 | half-dragon | Emitted only by `EncounterDescriptionParser` ("1 half-dragon 4th-level fighter") | Not registered | `ResolveTemplates` drops it silently (ENC-005) |
 
@@ -179,12 +179,12 @@ Registry IDs and application order are described in [characters-and-creatures.md
 
 There are 7 lycanthrope encounter presets. The werewolf_lord preset's escorts are two werewolves.
 
-**Factory path vs registry path.** The baked IDs are build-time results that are registered in NPCDatabase. The registry is for runtime templating; Summon Monster, for example, picks arbitrary bases. The two paths give different results, because the adapters copy back about 33-37 fields. Only the summon path clears `AppliedTemplateIds` before adding its template.
+**Factory path vs registry path.** The baked IDs are build-time results that are registered in NPCDatabase. The registry is for runtime templating; Summon Monster, for example, picks arbitrary bases. The two paths give different results, because the adapters copy back about 33-37 fields. Only the summon path clears `AppliedTemplateIds` before adding its template. Since 2026-10-14 (CRE-001) both paths record what they applied in `BakedTemplateIds`, so a template is applied once whichever path ran first (MM p.291, p.293); the registry still applies undead templates before inherited outsider ones and puts celestial or fiendish on undead (CRE-064).
 
 **Missing MM templates:** ghost, vampire and lich (only fixed `ghost` CR 7, `vampire` and `lich` entries exist), half-celestial, half-fiend, half-dragon, and lycanthropes on non-human bases (`LycanthropeFactory.CreateFromRegistered` exists but has no data).
 
 **Template backlog:**
-- Fix double application (CRE-001) before adding any template.
+- Apply inherited templates before acquired ones and check the base type (CRE-064) before adding any template.
 - Multi-form lycanthropes: humanoid, animal and hybrid forms, a shape-change action, involuntary change, and AI form choice.
 - A Lycanthropy DiseaseDatabase entry (DC 15 Fort), plus the belladonna, Remove Disease and Remove Curse cures.
 - Animate Dead using the registry IDs. It exists only as a spell descriptor and an Adept spell-list entry.
@@ -339,7 +339,6 @@ Ordered by impact on "fights play like 3.5e".
 
 1. **Spawn correctness first.**
    - Give every definition its MM alignment (CRE-056; the spawn copies it since CRE-002 was fixed).
-   - Stop double templating (CRE-001).
    - Delete the overwriting summon aliases (CRE-003).
    - Change Undead to Poor BAB (CRE-009).
    - Fix celestial and fiendish to MM values (CRE-008).
