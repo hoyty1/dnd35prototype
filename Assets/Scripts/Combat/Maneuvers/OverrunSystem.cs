@@ -687,6 +687,8 @@ public partial class GameManager
         if (!IsOverrunTargetSizeLegal(attacker, target, out reason))
             return false;
 
+        // Adjacent only: the overrunner moves through the defender's space (PHB p.157), so a creature sharing the
+        // overrunner's square cannot be overrun (owner interpretation 2026-10-11, CMB-154).
         if (requireAdjacency)
         {
             int distance = attacker.GetMinimumDistanceToTarget(target, chebyshev: true);

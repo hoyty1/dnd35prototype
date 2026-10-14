@@ -30,7 +30,7 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
-| [Combat](issues/CMB.md) | CMB | 0 | 51 | 67 | 118 | CMB-164 |
+| [Combat](issues/CMB.md) | CMB | 0 | 51 | 65 | 116 | CMB-167 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 3 | 58 | 63 | 124 | SPL-135 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 3 | 27 | 41 | 71 | CHR-078 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 29 | 37 | TST-041 |
-| **All** | | 13 | 278 | 393 | 684 | |
+| **All** | | 13 | 278 | 391 | 682 | |
 
 ## Top issues
 

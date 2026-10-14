@@ -1198,6 +1198,10 @@ public partial class GameManager
             return false;
         }
 
+        // A charger that shares its square with another creature (after a pin release, PHB p.157) may charge out of
+        // it: the creature in the starting square does not block the charge line (owner interpretation 2026-10-11,
+        // CMB-153). The path starts outside the starting square, so only the squares entered are checked; leaving the
+        // shared square provokes from the creature there, as any move out of a threatened square does (CMB-131).
         int minDistance = MinChargeMovementSquares; // Must move at least 2 squares (10 ft per PHB p.154)
         int maxDistance = Mathf.Max(minDistance, GetCurrentMoveRangeSquares(charger) * 2);
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());

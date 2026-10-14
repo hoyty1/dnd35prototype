@@ -243,7 +243,8 @@ public class FlankingReachRulesTests : MonoBehaviour
         // PHB p.138 (owner ruling 2026-10-08, CMB-128): the single opportunity covers the whole round, so a
         // second move this round (a double move, a bull rush follow after a move) lists no opponent whose
         // movement opportunity against this mover already came; other opponents are unaffected; the mover's
-        // turn start (the round boundary) clears it; a bull rush push (forcedMovement) ignores it (CMB-150).
+        // turn start (the round boundary) clears it. A bull rush push reads the same record (owner interpretation
+        // 2026-10-11, CMB-150); BullRushRulesTests checks the push itself.
         CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
         string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
         CharacterController mover = null;
@@ -270,10 +271,6 @@ public class FlankingReachRulesTests : MonoBehaviour
             List<AoOThreatInfo> later = ThreatSystem.AnalyzePathForAoOs(mover, path, all);
             Assert(later.Count == 1 && later[0].Threatener == second,
                 $"{side} round record: a later move this round provokes only the opponent that has not had its opportunity (got {later.Count})",
-                ref passed, ref failed);
-
-            List<AoOThreatInfo> pushed = ThreatSystem.AnalyzePathForAoOs(mover, path, all, forcedMovement: true);
-            Assert(pushed.Count == 2, $"{side} round record: forced movement (a bull rush push) ignores the record (got {pushed.Count})",
                 ref passed, ref failed);
 
             ThreatSystem.ClearMovementOpportunities(mover);

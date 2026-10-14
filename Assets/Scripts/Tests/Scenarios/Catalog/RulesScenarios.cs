@@ -125,7 +125,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 118;
+        public const int Count = 131;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -157,6 +157,8 @@ namespace Tests.Scenarios
             yield return S("maneuver-trip-counter-ally-ui", () => CounterTripAlly(true));
             yield return S("maneuver-trip-counter-ally-ai", () => CounterTripAlly(false));
             yield return S("maneuver-trip-counter-disabled", CounterTripDisabled);
+            yield return S("maneuver-trip-counter-improved", () => CounterTripImproved(false));
+            yield return S("maneuver-trip-counter-improved-ui", () => CounterTripImproved(true));
             yield return S("maneuver-trip-improved-unarmed", () => ImprovedTripFallback("unarmed"));
             yield return S("maneuver-trip-improved-unarmed-ius", () => ImprovedTripFallback("unarmed-ius"));
             yield return S("maneuver-trip-improved-offhand", () => ImprovedTripFallback("offhand"));
@@ -168,6 +170,8 @@ namespace Tests.Scenarios
             yield return S("maneuver-bullrush-reflexes", () => BullRushWatcherAoOs(false, true));
             yield return S("maneuver-bullrush-after-move", BullRushAfterMove);
             yield return S("maneuver-bullrush-then-move", BullRushThenMove);
+            yield return S("maneuver-bullrush-push-round-record", () => BullRushPushRoundRecord(true));
+            yield return S("maneuver-bullrush-push-control", () => BullRushPushRoundRecord(false));
             yield return S("maneuver-grapple", Grapple);
             yield return S("maneuver-freetrip", FreeTrip);
             yield return S("freetrip-trigger", () => FreeTripTrigger(false));
@@ -187,6 +191,7 @@ namespace Tests.Scenarios
             yield return S("shared-square-5ft-no-aoo", () => SharedSquareLeave(true));
             yield return S("shared-square-melee", SharedSquareMelee);
             yield return S("shared-square-coup-de-grace", SharedSquareCoupDeGrace);
+            yield return S("shared-square-no-bullrush", SharedSquareNoBullRush);
             yield return S("grappler-feared-stays", GrapplerFearedStays);
             yield return S("pin-duration-ui", PinDurationUi);
             yield return S("pin-duration-ai", PinDurationAi);
@@ -198,6 +203,9 @@ namespace Tests.Scenarios
             yield return S("natural-weapon-maneuvers", NaturalWeaponManeuvers);
             yield return S("natural-sunder-gore-refused", NaturalSunderGoreRefused);
             yield return S("natural-sunder-ui", NaturalSunderUi);
+            yield return S("unarmed-sunder", () => UnarmedSunder(false));
+            yield return S("unarmed-sunder-ui", () => UnarmedSunder(true));
+            yield return S("unarmed-sunder-monk", UnarmedSunderMonk);
             yield return S("natural-maneuvers-size", NaturalManeuversSize);
             yield return S("haste-natural-extra", () => HasteNaturalExtra(false));
             yield return S("haste-natural-extra-ui", () => HasteNaturalExtra(true));
@@ -1652,6 +1660,290 @@ namespace Tests.Scenarios
                 .Build();
         }
 
+        /// <summary>
+        /// Owner interpretation 2026-10-11 (CMB-150; PHB p.138, p.154): a bull rush push shares the pushed defender's
+        /// per-round movement record (CMB-128), so an opponent gets one movement opportunity against the defender per
+        /// round, for its own moves and the pushes together. The watcher (a fighter ally of the bull rusher, Combat
+        /// Reflexes, DEX 12: 2 AoOs a round, set only at its turn start, CMB-164, so it acts first) at (12,9) threatens (11..13, 8..10).
+        /// With <paramref name="movedFirst"/> the
+        /// orc starts at (13,10) and moves to (11,10) on its own turn, leaving the watcher's square (13,10): one movement
+        /// AoO. The fighter at (10,10) then bull rushes it east (forced dice: a margin of 15 or more), out of (11,10),
+        /// (12,10) and (13,10), all threatened by the watcher: no further AoO, though the watcher has one left. The
+        /// control starts the orc at (11,10) and it passes: the push gives the watcher exactly one AoO. The orc makes
+        /// no AoO.
+        /// </summary>
+        private static ScenarioDef BullRushPushRoundRecord(bool movedFirst)
+        {
+            string id = movedFirst ? "rules/maneuver-bullrush-push-round-record" : "rules/maneuver-bullrush-push-control";
+            string title = movedFirst
+                ? "A pushed defender that already provoked this round by moving provokes no more from the same opponent (PHB p.138, p.154; CMB-150)"
+                : "A pushed defender provokes once from an opponent whose squares it is pushed out of (PHB p.138, p.154; CMB-150)";
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("CMB-150", "CMB-128", "PHB p.92", "PHB p.138", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
+                .Pc("watcher", ActorSource.Stats(() => Fighter("Watcher", 6, "Combat Reflexes")), 12, 9, Control.Scripted)
+                .Npc("orc", "orc_berserker", movedFirst ? 13 : 11, 10, Control.Scripted)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Initiative("watcher", "orc", "fighter")
+                .Force(20, 20, "Bull rush check")
+                .Force(20, 1, "Bull rush defense")
+                .Turn("watcher", 1, Step.Pass())
+                .Turn("orc", 1, movedFirst ? Step.Move(11, 10) : Step.Pass())
+                .Turn("fighter", 1,
+                    Step.Assert("fixture: the orc is at (11,10) beside the fighter and the watcher has 2 AoOs a round", ctx =>
+                        ctx.Get("orc").GridPosition == new Vector2Int(11, 10) && ctx.Get("watcher").Stats.MaxAttacksOfOpportunity >= 2),
+                    Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"))
+                .Expect("The bull rush step and the fixture check are done", Expect.All(
+                    Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"),
+                    Expect.AssertsPass()))
+                .Expect("The orc makes no AoO (fixture check)", Expect.None("aoo", e => e.Str("by") == "orc"))
+                .Expect("The bull rush succeeds and pushes the orc 3 squares or more east (fixture check)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    if (!m.Bool("success")) return ExpectResult.Fail("bull rush failed with forced dice", m.Seq);
+                    if (ScenarioChecks.IsDownSnapshot(v.Final("orc"))) return ExpectResult.Inconclusive("the orc went down");
+                    Vector2Int? o = Pos(v.Final("orc"));
+                    return o != null && o.Value.y == 10 && o.Value.x >= 14
+                        ? ExpectResult.Pass("orc pushed to " + o, m.Seq)
+                        : ExpectResult.Fail("orc at " + o, m.Seq);
+                });
+
+            if (movedFirst)
+            {
+                b.Expect("The orc's own move out of the watcher's square provokes one movement AoO (PHB p.137)", v =>
+                {
+                    List<TraceEvent> moveAoOs = v.AoOs("watcher", "orc", "movement");
+                    return moveAoOs.Count == 1
+                        ? ExpectResult.Pass("movement AoO #" + moveAoOs[0].Seq, moveAoOs[0].Seq)
+                        : ExpectResult.Fail(moveAoOs.Count + " movement AoOs by the watcher", moveAoOs.Select(e => e.Seq).ToArray());
+                });
+                b.Expect("The push out of three watcher squares provokes no further AoO: the watcher's movement opportunity this round came on the orc's move (CMB-150)",
+                    Expect.None("aoo", e => e.Str("by") == "watcher" && e.Str("trigger") == "bullrush-move"));
+            }
+            else
+            {
+                b.Expect("The orc did not move on its own turn (fixture check)", Expect.None("aoo", e => e.Str("by") == "watcher" && e.Str("trigger") == "movement"));
+                b.Expect("The push out of three watcher squares provokes exactly one AoO from the watcher, though it has two a round (PHB p.138, CMB-150)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    List<TraceEvent> pushAoOs = v.AoOs("watcher", null, "bullrush-move");
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    return pushAoOs.Count == 1
+                        ? ExpectResult.Pass("push AoO #" + pushAoOs[0].Seq, pushAoOs[0].Seq)
+                        : ExpectResult.Fail(pushAoOs.Count + " push AoOs by the watcher", pushAoOs.Select(e => e.Seq).ToArray());
+                });
+            }
+
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Owner interpretation 2026-10-11 (CMB-154; PHB p.154, p.157): a creature cannot bull rush a creature that shares
+        /// its square; bull rush moves into the defender's space and needs an adjacent defender. The Ui hero pins the orc in
+        /// round 2 and releases it at the start of round 3, so both stand in one square (PHB p.157, CMB-089); its bull rush
+        /// on the square-mate is refused through the PC wrapper, and it still attacks. The scripted orc's bull rush on the
+        /// hero is refused on the NPC path, and its Attack step still runs.
+        /// </summary>
+        private static ScenarioDef SharedSquareNoBullRush()
+        {
+            return Rules("rules/shared-square-no-bullrush", "No bull rush of a creature sharing the square, for the Ui hero and the NPC orc (PHB p.154; CMB-154)")
+                .Covers("CMB-154", "CMB-131", "PHB p.154", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Tweak("hero", StripOffHand)
+                .Initiative("hero", "orc")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("orc", 0, Step.Pass())
+                .Turn("hero", 2, Step.GrappleAction("Pin"))
+                .Turn("hero", 3, Step.GrappleAction("ReleasePin"), Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"), Step.Attack("orc"))
+                .Turn("orc", 3, Step.Maneuver(SpecialAttackType.BullRushAttack, "hero"), Step.Attack("hero"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("The release is done; the hero's bull rush on its square-mate is refused and its attack is done", Expect.All(
+                    Expect.StepStatus("hero", 3, "GrappleAction(ReleasePin)", 0, "done"),
+                    Expect.StepStatus("hero", 3, "Maneuver", 0, "refused"),
+                    Expect.StepStatus("hero", 3, "Attack", 0, "done")))
+                .Expect("The orc's bull rush on its square-mate is refused on the NPC path and its attack is done", v =>
+                {
+                    TraceEvent t = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 3);
+                    if (t == null)
+                        return ScenarioChecks.IsDownSnapshot(v.Final("orc")) ? ExpectResult.Inconclusive("the orc went down") : ExpectResult.Fail("no orc turn in round 3");
+                    JsonObj o = v.Snapshot("orc", 3, "orc"), h = v.Snapshot("hero", 3, "orc");
+                    if (Pos(o) != SharedSquare || Pos(h) != SharedSquare) return ExpectResult.Fail("orc at " + Pos(o) + ", hero at " + Pos(h) + " at the orc's turn start", t.Seq);
+                    return Expect.All(
+                        Expect.StepStatus("orc", 3, "Maneuver", 0, "refused"),
+                        Expect.StepStatus("orc", 3, "Attack", 0, "done"))(v);
+                })
+                .Expect("No bull rush is resolved by either side", Expect.None("maneuver", e =>
+                    e.Get("type") is SpecialAttackType t && (t == SpecialAttackType.BullRushAttack || t == SpecialAttackType.BullRushCharge)))
+                .Build();
+        }
+
+        /// <summary>
+        /// Owner interpretation 2026-10-11 (CMB-134; PHB p.96, p.158): a counter-trip that lands gives Improved Trip's attack
+        /// at the counter-tripper's best melee bonus. Without <paramref name="ui"/>: a scripted fighter 6 without Improved
+        /// Trip trips an orc berserker with Improved Trip, so the orc's AoO comes first (at its full BAB); the trip loses the
+        /// opposed check (2 against 18), the AI-run orc trips back (18 against 2) and the fighter is prone; the orc then
+        /// attacks it once more, at the same modifier as its AoO (full BAB, same greataxe). With <paramref name="ui"/>: the
+        /// scripted orc (no Improved Trip) trips a Ui hero with Improved Trip; the hero's AoO comes first, the trip fails,
+        /// the hero answers Trip Back, the counter-trip lands, and the hero attacks the prone orc at its AoO's modifier
+        /// before the orc's step settles.
+        /// </summary>
+        private static ScenarioDef CounterTripImproved(bool ui)
+        {
+            string tripper = ui ? "orc" : "fighter";
+            string defender = ui ? "hero" : "orc";
+            ScenarioBuilder b = Rules(ui ? "rules/maneuver-trip-counter-improved-ui" : "rules/maneuver-trip-counter-improved",
+                    ui
+                        ? "A controllable defender with Improved Trip trips back and attacks the prone tripper at its best bonus (PHB p.96, p.158; CMB-134)"
+                        : "An AI-run defender with Improved Trip trips back and attacks the prone tripper at its best bonus (PHB p.96, p.158; CMB-134)")
+                .Covers("CMB-134", "CMB-079", "PHB p.96", "PHB p.158", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 2, "Trip Strength check")
+                .Force(20, 18, "Trip defense check")
+                .Force(20, 18, "Counter-trip check")
+                .Force(20, 2, "Counter-trip resist check");
+
+            if (ui)
+            {
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Trip")), 10, 10, Control.Ui)
+                    .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                    .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); })
+                    .Tweak("orc", SturdyDummy)
+                    .Initiative("orc", "hero")
+                    .CounterTripAnswer("hero", true)
+                    .Turn("orc", 1, Step.Maneuver(SpecialAttackType.Trip, "hero"))
+                    .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                    .Expect("The orc's trip step is done", Expect.StepStatus("orc", 1, "Maneuver", 0, "done"));
+            }
+            else
+            {
+                b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
+                    .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                    .Tweak("fighter", SturdyDummy)
+                    .Tweak("orc", c => { SturdyDummy(c); c.Stats.Feats.Add("Improved Trip"); })
+                    .Initiative("fighter", "orc")
+                    .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Trip, "orc"))
+                    .Turn("orc", 1, Step.Pass())
+                    .Expect("The fighter's trip step is done", Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"));
+            }
+
+            b.Expect("The trip fails; the " + defender + " trips back and the " + tripper + " is prone (PHB p.158)", v =>
+            {
+                TraceEvent m = v.Maneuvers(tripper, SpecialAttackType.Trip).FirstOrDefault(e => !e.Bool("counter"));
+                TraceEvent counter = v.Maneuvers(defender, SpecialAttackType.Trip).FirstOrDefault(e => e.Bool("counter"));
+                if (m == null) return ExpectResult.Fail("no trip by the " + tripper);
+                if (m.Bool("success")) return ExpectResult.Fail("the trip landed with forced dice", m.Seq);
+                if (counter == null) return ExpectResult.Fail("no counter-trip by the " + defender, m.Seq);
+                if (!counter.Bool("success")) return ExpectResult.Fail("counter-trip failed with forced dice", counter.Seq);
+                return HasCond(v.Final(tripper), "Prone")
+                    ? ExpectResult.Pass(tripper + " prone", m.Seq, counter.Seq)
+                    : ExpectResult.Fail(tripper + " not prone", counter.Seq);
+            });
+            b.Expect("Improved Trip: one attack on the prone " + tripper + " right after the counter-trip, at the " + defender + "'s best bonus: the modifier of its AoO, also made at full BAB with the same weapon (CMB-134)", v =>
+            {
+                TraceEvent counter = v.Maneuvers(defender, SpecialAttackType.Trip).FirstOrDefault(e => e.Bool("counter"));
+                if (counter == null) return ExpectResult.Fail("no counter-trip");
+                List<TraceEvent> aoos = v.Attacks(defender, tripper, true, 1);
+                List<TraceEvent> after = v.Attacks(defender, tripper, false, 1).Where(e => e.Seq > counter.Seq).ToList();
+                int[] seqs = aoos.Concat(after).Select(e => e.Seq).ToArray();
+                if (aoos.Count != 1) return ExpectResult.Fail(aoos.Count + " AoOs by the " + defender + " (fixture: the trip provokes one)", seqs);
+                if (after.Count != 1) return ExpectResult.Fail(after.Count + " attacks by the " + defender + " after the counter-trip", seqs);
+                if (ui)
+                {
+                    TraceEvent step = v.Steps("orc", "Maneuver", 1).FirstOrDefault();
+                    if (step != null && step.Seq < after[0].Seq) return ExpectResult.Fail("the orc's step settled before the hero's attack", step.Seq, after[0].Seq);
+                }
+                return after[0].Int("mod") == aoos[0].Int("mod") && after[0].Str("weapon") == aoos[0].Str("weapon")
+                    ? ExpectResult.Pass("attack mod " + after[0].Int("mod") + " with " + after[0].Str("weapon") + " (AoO mod " + aoos[0].Int("mod") + ")", seqs)
+                    : ExpectResult.Fail("attack mod " + after[0].Int("mod") + " with " + after[0].Str("weapon") + ", AoO mod " + aoos[0].Int("mod") + " with " + aoos[0].Str("weapon"), seqs);
+            });
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Owner interpretation 2026-10-11 (CMB-141; PHB p.116 Table 7-5, p.158): an unarmed strike is a bludgeoning light weapon, so
+        /// an unarmed creature may sunder, at -4 on the opposed roll. A fighter 6 (STR 16) with Improved Sunder (no AoO) and
+        /// Improved Unarmed Strike (lethal, so no -4 for lethal damage; PHB p.139), all weapons stripped, sunders the orc's
+        /// greataxe; the roll is forced to fail so the modifier can be read: +6 BAB +3 STR +4 Improved Sunder -4 light = 9.
+        /// <paramref name="ui"/> runs it through the PC Sunder button; otherwise the scripted fighter takes the NPC executor.
+        /// </summary>
+        private static ScenarioDef UnarmedSunder(bool ui)
+        {
+            string key = ui ? "hero" : "fighter";
+            return Rules(ui ? "rules/unarmed-sunder-ui" : "rules/unarmed-sunder",
+                    ui
+                        ? "A Ui PC sunders with an unarmed strike at the light-weapon -4 (PHB p.158; CMB-141)"
+                        : "An unarmed creature sunders at the light-weapon -4 on the NPC path (PHB p.158; CMB-141)")
+                .Covers("CMB-141", "PHB p.116", "PHB p.139", "PHB p.158", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() => Fighter(ui ? "Hero" : "Fighter", 6, "Improved Sunder", "Improved Unarmed Strike")), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak(key, StripAllWeapons)
+                .Tweak("orc", SturdyArmedDummyWeaponOnly)
+                .Initiative(key, "orc")
+                .Force(20, 1, "Sunder attack roll")
+                .Force(20, 20, "Sunder defense roll")
+                .Turn("orc", 0, Step.Pass())
+                .Turn(key, 1, Step.Maneuver(SpecialAttackType.Sunder, "orc"))
+                .Expect("The unarmed sunder step is done", Expect.StepStatus(key, 1, "Maneuver", 0, "done"))
+                .Expect("The unarmed sunder rolls +6 BAB +3 STR +4 Improved Sunder -4 light weapon = 9", v =>
+                {
+                    TraceEvent sunder = v.Maneuvers(key, SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null) return ExpectResult.Fail("no sunder by the " + key);
+                    if (sunder.Int("checkRoll") != 1) return ExpectResult.Fail("the sunder roll was not the forced 1", sunder.Seq);
+                    return CheckMod(sunder) == 9
+                        ? ExpectResult.Pass("sunder mod 9", sunder.Seq)
+                        : ExpectResult.Fail("sunder mod " + CheckMod(sunder), sunder.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// Owner interpretation 2026-10-11 (CMB-141): an NPC monk whose data lists "Unarmed Strike" as a natural attack
+        /// (human_monk_3: BAB +2, STR 14) sunders a dummy's longsword with it, on the NPC path, at the light-weapon -4: +2 +2 -4
+        /// = 0. The dummy makes no AoO; the roll is forced to fail.
+        /// </summary>
+        private static ScenarioDef UnarmedSunderMonk()
+        {
+            return Rules("rules/unarmed-sunder-monk", "An NPC monk sunders with its listed unarmed strike at the light-weapon -4 (PHB p.158; CMB-141)")
+                .Covers("CMB-141", "PHB p.158", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => FighterOfRace("Dummy", "Human")), 10, 10, Control.Scripted)
+                .Npc("monk", "human_monk_3", 11, 10, Control.Scripted)
+                .Tweak("dummy", c =>
+                {
+                    InventoryComponent inv = c.GetComponent<InventoryComponent>();
+                    inv.CharacterInventory.RightHandSlot = null;
+                    inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponLongsword), EquipSlot.RightHand);
+                    SturdyArmedDummyWeaponOnly(c);
+                })
+                .Initiative("monk", "dummy")
+                .Force(20, 1, "Sunder attack roll")
+                .Force(20, 20, "Sunder defense roll")
+                .Turn("monk", 1, Step.Maneuver(SpecialAttackType.Sunder, "dummy"))
+                .Turn("dummy", 1, Step.Pass())
+                .Expect("The monk's sunder step is done", Expect.StepStatus("monk", 1, "Maneuver", 0, "done"))
+                .Expect("The monk's unarmed sunder rolls BAB + STR - 4 (light weapon) = 0", v =>
+                {
+                    NPCDefinition def = NPCDatabase.Get("human_monk_3");
+                    if (def == null) return ExpectResult.Fail("no NPC entry human_monk_3");
+                    int expected = def.BAB + Mathf.FloorToInt((def.STR - 10) / 2f) - 4;
+                    TraceEvent sunder = v.Maneuvers("monk", SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null) return ExpectResult.Fail("no sunder by the monk");
+                    if (sunder.Int("checkRoll") != 1) return ExpectResult.Fail("the sunder roll was not the forced 1", sunder.Seq);
+                    return CheckMod(sunder) == expected
+                        ? ExpectResult.Pass("sunder mod " + expected, sunder.Seq)
+                        : ExpectResult.Fail("sunder mod " + CheckMod(sunder) + ", expected " + expected, sunder.Seq);
+                })
+                .Build();
+        }
+
         private static ScenarioDef Grapple()
         {
             return Rules("rules/maneuver-grapple", "Grapple: AoO first (foiled if it deals damage), touch attack, opposed check, both grappled (PHB p.156)")
@@ -2822,7 +3114,8 @@ namespace Tests.Scenarios
         /// The size and handedness terms of the disarm and sunder opposed rolls (PHB p.155, p.158): a Medium bite/claw/claw
         /// beast (BAB +6, STR +3, the Improved feats) against a Large ogre (BAB +3, STR +5, size -1) holding its greatclub
         /// (two-handed). Every roll is forced to fail. Only the larger combatant gets +4 per size category; the smaller one
-        /// takes no penalty. The bite sunder: 6 +3 +4 = 13 with no handedness or size term (a natural weapon, CMB-141);
+        /// takes no penalty. The bite sunder: 6 +3 +4 = 13 with no handedness or size term (a natural weapon, owner ruling
+        /// 2026-10-11, CMB-141);
         /// the ogre 3 +5 -1 +4 greatclub +4 larger = 15. The claw disarm: 1 +3 +4 = 8 (a one-handed weapon of its own size,
         /// owner ruling 2026-10-08); the ogre 15 again.
         /// </summary>

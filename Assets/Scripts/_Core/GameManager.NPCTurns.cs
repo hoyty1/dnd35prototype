@@ -456,9 +456,9 @@ public partial class GameManager
             return false;
         }
 
-        // Sunder needs a weapon or a natural attack that deals slashing or bludgeoning damage
+        // Sunder needs a weapon, a natural attack that deals slashing or bludgeoning damage or an unarmed strike
         // (CharacterController.CanSunderWithAttack, the check the PC buttons and the AI use; PHB p.158,
-        // owner ruling 2026-10-08, CMB-102), refused before any attack step or AoO is spent. A natural-attack
+        // owner ruling 2026-10-08, CMB-102, and owner interpretation 2026-10-11, CMB-141), refused before any attack step or AoO is spent. A natural-attack
         // NPC sunders with the natural attack at its current step; at Haste's extra natural attack it picks
         // one that can sunder (GetSunderNaturalAttackIndexForStep).
         if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithAttack(-1, out string sunderReason))

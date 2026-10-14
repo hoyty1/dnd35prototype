@@ -1673,7 +1673,7 @@ public partial class GameManager
             int distance = attacker.GetMinimumDistanceToTarget(occupant, chebyshev: true);
             // Feint and coup de grace need a foe adjacent or in the attacker's own square (PHB p.149, CMB-131); coup de
             // grace through the one test the button, the AI and the resolver share. Bull rush enters the defender's
-            // space, so it needs an adjacent target (PHB p.154; a square-mate is refused, an owner question in CMB-154).
+            // space, so it needs an adjacent target (PHB p.154; a square-mate is refused, owner interpretation 2026-10-11, CMB-154).
             bool inRange = type == SpecialAttackType.CoupDeGrace
                 ? attacker.IsInCoupDeGraceReach(occupant)
                 : type == SpecialAttackType.Feint

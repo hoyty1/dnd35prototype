@@ -37,7 +37,7 @@ public static class BullRushRulesTests
         TestScenarioProneAttackerCannotFollow();
         TestPartnerNeverTakesAnAoO();
         TestScenarioAlreadyProvokedOpponentsSkipFollowAoO();
-        TestScenarioPushIsNotInTheRoundRecord();
+        TestScenarioPushSharesTheRoundRecord();
         TestScenarioFollowLeavesLaterMoveWhole();
 
         Debug.Log($"========== BULL RUSH RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -475,12 +475,12 @@ public static class BullRushRulesTests
 
             MethodInfo step = typeof(GameManager).GetMethod("ResolveBullRushStepAoOs", BindingFlags.Instance | BindingFlags.NonPublic);
             var next = new Vector2Int(14, 4);
-            // A null set is the follower's step (the round record, CMB-128); a set is a push's own record.
-            step.Invoke(s.Gm, new object[] { attacker, target, next, null, "following" });
+            // Follower and pushed defender share one path: the mover's round record (CMB-128, CMB-150).
+            step.Invoke(s.Gm, new object[] { attacker, target, next, "following" });
             Assert(target.Stats.AttacksOfOpportunityUsed == 0,
                 $"The defender takes no AoO against the attacker moving with it, though it threatens the square left (used {target.Stats.AttacksOfOpportunityUsed})");
 
-            step.Invoke(s.Gm, new object[] { attacker, null, next, null, "control" });
+            step.Invoke(s.Gm, new object[] { attacker, null, next, "control" });
             Assert(target.Stats.AttacksOfOpportunityUsed == 1,
                 $"Control: without the partner exclusion the same creature takes the AoO (used {target.Stats.AttacksOfOpportunityUsed})");
         }
@@ -551,13 +551,15 @@ public static class BullRushRulesTests
         }
     }
 
-    private static void TestScenarioPushIsNotInTheRoundRecord()
+    private static void TestScenarioPushSharesTheRoundRecord()
     {
-        // The pushed defender keeps the push's own one-AoO-per-opponent set and neither reads nor writes the
-        // round record (forced movement; open owner question CMB-150, behaviour unchanged). The attacker's ally
-        // is already in the defender's round record; the push still provokes it, and the push records nothing
-        // for the other ally it provokes.
-        if (!TryBeginScenario("Push outside the round record", out Scenario s))
+        // Owner interpretation 2026-10-11 (CMB-150; PHB p.138, p.154): the pushed defender provokes as it is moved,
+        // but the push shares its per-round movement record (CMB-128), so an opponent gets at most one movement
+        // opportunity against it per round, its own moves and pushes together. The attacker's ally is already in
+        // the defender's round record (the defender left one of its squares earlier this round): the push provokes
+        // nothing from it. The other ally (3 AoOs a round, as with Combat Reflexes) threatens the first two squares
+        // the defender leaves: one AoO, recorded, and none on the second square. The defender's turn start clears it.
+        if (!TryBeginScenario("Push shares the round record", out Scenario s))
             return;
         try
         {
@@ -565,16 +567,21 @@ public static class BullRushRulesTests
             var target = AddActor(s, "BRPushDefender", CharacterTeam.Enemy, new Vector2Int(5, 3), SizeCategory.Medium);
             var ally = AddActor(s, "BRPushAlly", CharacterTeam.Player, new Vector2Int(5, 4), SizeCategory.Medium);
             var other = AddActor(s, "BRPushOtherAlly", CharacterTeam.Player, new Vector2Int(6, 2), SizeCategory.Medium);
+            other.Stats.MaxAttacksOfOpportunity = 3;
             GameManager.BullRushMisdirectionRollOverride = () => 100;
 
             ThreatSystem.RecordMovementOpportunity(ally, target);
-            ResolvePush(s.Gm, attacker, target, margin: 0);
-            Assert(target.GridPosition == new Vector2Int(6, 3),
-                $"Push record: defender pushed to (6,3) (at {target.GridPosition})");
-            Assert(ally.Stats.AttacksOfOpportunityUsed == 1,
-                $"Push record: the push provokes an opponent already in the defender's round record (used {ally.Stats.AttacksOfOpportunityUsed})");
-            Assert(other.Stats.AttacksOfOpportunityUsed == 1 && !ThreatSystem.HasHadMovementOpportunity(other, target),
-                $"Push record: the push provokes the other ally and writes nothing to the defender's round record (used {other.Stats.AttacksOfOpportunityUsed})");
+            ResolvePush(s.Gm, attacker, target, margin: 10);
+            Assert(target.GridPosition.x >= 7 && target.GridPosition.y == 3,
+                $"Push record: defender pushed 2 squares or more east (at {target.GridPosition})");
+            Assert(ally.Stats.AttacksOfOpportunityUsed == 0,
+                $"Push record: no AoO from an opponent already in the defender's round record (used {ally.Stats.AttacksOfOpportunityUsed})");
+            Assert(other.Stats.AttacksOfOpportunityUsed == 1 && ThreatSystem.HasHadMovementOpportunity(other, target),
+                $"Push record: the other ally takes one AoO for the whole push although it has AoOs left, and the push records it (used {other.Stats.AttacksOfOpportunityUsed})");
+
+            target.StartNewTurn();
+            Assert(!ThreatSystem.HasHadMovementOpportunity(other, target) && !ThreatSystem.HasHadMovementOpportunity(ally, target),
+                "Push record: the defender's turn start ends its round's record (StartNewTurn)");
         }
         catch (System.Exception ex)
         {

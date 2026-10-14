@@ -188,8 +188,8 @@ public partial class GameManager
         if (attacker == null || attacker.Actions == null)
             return false;
 
-        // Sunder needs a weapon or a natural attack that deals slashing or bludgeoning damage (PHB p.158;
-        // owner ruling 2026-10-08, CMB-102). The active PC fighting with natural attacks sunders with the
+        // Sunder needs a weapon, a natural attack that deals slashing or bludgeoning damage (PHB p.158;
+        // owner ruling 2026-10-08, CMB-102) or an unarmed strike (owner interpretation 2026-10-11, CMB-141). The active PC fighting with natural attacks sunders with the
         // natural attack its maneuvers give up next, when that one can (GetPcSunderNaturalAttackIndex); any
         // other creature with the shared check the AI and the NPC executor use (CanSunderWithAttack at its
         // current step). Both sides give up the next natural attack in order (CMB-102 open item 8).
@@ -1284,9 +1284,9 @@ public partial class GameManager
     /// (ThreatSystem.ShouldStopMovementAfterAoO) or it is incapacitated. Each step must fit the
     /// mover's whole footprint (SquareGrid.CanPlaceCreature). Before each step each mover provokes
     /// from every opponent threatening a square it leaves, except the other participant (PHB p.154):
-    /// the follower at most once per opponent per round, shared with its other movement this round
-    /// (PHB p.138, owner ruling 2026-10-08, CMB-128), the pushed defender at most once per opponent
-    /// per push (forced movement; CMB-150 asks the owner whether it shares the round record). Each
+    /// each mover at most once per opponent per round, shared with its other movement this round
+    /// (PHB p.138, owner ruling 2026-10-08, CMB-128; for the pushed defender owner interpretation
+    /// 2026-10-11, CMB-150: the push shares the defender's round record). Each
     /// such AoO may strike the other participant instead (<see cref="ResolveBullRushAoO"/>). Owner decision 2026-10-07: a push interrupted by an
     /// AoO goes on unless the defender dies (or leaves the combat), so a defender knocked prone,
     /// dying or unconscious keeps being pushed; a push into an occupied square or a wall stops
@@ -1312,7 +1312,6 @@ public partial class GameManager
             ? $"{attackerName} moves with {targetName}, pushing up to {pushSquares} square{(pushSquares == 1 ? string.Empty : "s")} ({pushSquares * 5} feet)."
             : $"{attackerName} pushes {targetName} 5 feet and stays."));
 
-        var pushProvoked = new HashSet<CharacterController>();
         bool obstructed = false;
         string pushStopReason = null;
         string followStopReason = null;
@@ -1351,7 +1350,7 @@ public partial class GameManager
                 else
                 {
                     ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(attacker);
-                    outcome.SomeoneDropped |= ResolveBullRushStepAoOs(attacker, target, attackerNext, null, "following");
+                    outcome.SomeoneDropped |= ResolveBullRushStepAoOs(attacker, target, attackerNext, "following");
                     if (ThreatSystem.ShouldStopMovementAfterAoO(attacker, before, out string stopReason))
                         why = stopReason;
                 }
@@ -1365,7 +1364,7 @@ public partial class GameManager
                 }
             }
 
-            outcome.SomeoneDropped |= ResolveBullRushStepAoOs(target, attacker, targetNext, pushProvoked, "pushed");
+            outcome.SomeoneDropped |= ResolveBullRushStepAoOs(target, attacker, targetNext, "pushed");
             if (IsBullRushDefenderGone(target))
             {
                 pushStopReason = $"{targetName} is dead";
@@ -1441,31 +1440,28 @@ public partial class GameManager
     /// <summary>
     /// Resolves the AoOs one bull rush step provokes from <paramref name="mover"/> leaving its current
     /// squares (ThreatSystem.AnalyzePathForAoOs for a one-square path). <paramref name="partner"/> (the
-    /// other bull rush participant) gets none. <paramref name="pushProvoked"/> is null for the follower:
-    /// its step is ordinary movement, so an opponent whose movement opportunity against it already came
-    /// this round gets none, and each opponent listed now is recorded for the round, whether or not it
-    /// can make the AoO (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). For the pushed
-    /// defender it is the push's own set, as before: an opponent in it gets none, and the round record
-    /// is neither read nor written (forced movement, CMB-150). Returns true when an AoO left either
-    /// participant at 0 HP or below.
+    /// other bull rush participant) gets none. The follower and the pushed defender alike: an opponent whose
+    /// movement opportunity against the mover already came in the mover's round gets none, and each opponent
+    /// listed now is recorded for that round, whether or not it can make the AoO
+    /// (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). For the pushed defender this is the owner
+    /// interpretation of 2026-10-11 (CMB-150): the push shares the defender's per-round movement record, so being
+    /// pushed creates no movement opportunity beyond the one PHB p.138 gives each opponent per round. The round is
+    /// the defender's own (from the start of its turn to the start of its next), as for its other movement.
+    /// Returns true when an AoO left either participant at 0 HP or below.
     /// </summary>
-    private bool ResolveBullRushStepAoOs(CharacterController mover, CharacterController partner, Vector2Int next, HashSet<CharacterController> pushProvoked, string context)
+    private bool ResolveBullRushStepAoOs(CharacterController mover, CharacterController partner, Vector2Int next, string context)
     {
-        bool forced = pushProvoked != null;
-        List<AoOThreatInfo> threats = ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { next }, GetAllCharacters(), forcedMovement: forced);
+        List<AoOThreatInfo> threats = ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { next }, GetAllCharacters());
         bool dropped = false;
         for (int i = 0; i < threats.Count; i++)
         {
             CharacterController provoker = threats[i] != null ? threats[i].Threatener : null;
             if (provoker == null || provoker == partner)
                 continue;
-            if (!forced)
-                ThreatSystem.RecordMovementOpportunity(provoker, mover);
-            if ((forced && pushProvoked.Contains(provoker)) || !ThreatSystem.CanMakeAoO(provoker))
+            ThreatSystem.RecordMovementOpportunity(provoker, mover);
+            if (!ThreatSystem.CanMakeAoO(provoker))
                 continue;
 
-            if (forced)
-                pushProvoked.Add(provoker);
             int moverHpBefore = mover.Stats.CurrentHP;
             int partnerHpBefore = partner != null && partner.Stats != null ? partner.Stats.CurrentHP : 0;
             ResolveBullRushAoO(provoker, mover, partner, isFromMovement: true, context: $"Bull Rush ({mover.Stats.CharacterName} {context})");
@@ -1593,18 +1589,7 @@ public partial class GameManager
     /// </summary>
     internal void HandleTripAftermath(CharacterController attacker, CharacterController target, SpecialAttackResult result, Action onDone)
     {
-        // Made and reported once: ResolveImprovedTripFollowUp clears the pending flag.
-        bool followUpPending = result != null && result.ImprovedTripFollowUpPending && attacker != null
-            && CurrentPhase != TurnPhase.CombatOver;
-        if (followUpPending)
-        {
-            ResolveImprovedTripUnarmedAoO(attacker, target, result);
-            attacker.ResolveImprovedTripFollowUp(target, result);
-            if (result.FollowUpAttack != null)
-                ReportImprovedTripFollowUp(attacker, target, result);
-            else if (!string.IsNullOrEmpty(result.FollowUpNote))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", result.FollowUpNote));
-        }
+        ResolvePendingImprovedTripAttack(attacker, target, result);
 
         if (result == null || !result.CounterTripAllowed || attacker == null || target == null
             || CurrentPhase == TurnPhase.CombatOver
@@ -1625,6 +1610,27 @@ public partial class GameManager
             : DND35.AI.AIProfile.DefaultShouldCounterTrip(target, attacker);
         ResolveCounterTripChoice(target, attacker, tripBack);
         onDone?.Invoke();
+    }
+
+    /// <summary>
+    /// Makes and reports the Improved Trip attack <paramref name="result"/> still holds (PHB p.96), once:
+    /// <see cref="CharacterController.ResolveImprovedTripFollowUp"/> clears the pending flag. An unarmed strike that
+    /// provokes gets the target's AoO first (<see cref="ResolveImprovedTripUnarmedAoO"/>). Run after the trip's own
+    /// log and melee reactions: by <see cref="HandleTripAftermath"/> for a trip, by <see cref="ResolveCounterTripChoice"/>
+    /// for a counter-trip that lands (owner interpretation 2026-10-11, CMB-134), with the counter-tripper as
+    /// <paramref name="attacker"/>.
+    /// </summary>
+    private void ResolvePendingImprovedTripAttack(CharacterController attacker, CharacterController target, SpecialAttackResult result)
+    {
+        if (result == null || !result.ImprovedTripFollowUpPending || attacker == null || CurrentPhase == TurnPhase.CombatOver)
+            return;
+
+        ResolveImprovedTripUnarmedAoO(attacker, target, result);
+        attacker.ResolveImprovedTripFollowUp(target, result);
+        if (result.FollowUpAttack != null)
+            ReportImprovedTripFollowUp(attacker, target, result);
+        else if (!string.IsNullOrEmpty(result.FollowUpNote))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", result.FollowUpNote));
     }
 
     /// <summary>
@@ -1720,6 +1726,10 @@ public partial class GameManager
         string allyNote = TeamUtility.IsAlly(defender, tripper)
             ? $"\n\n{tripperName} is on your side."
             : string.Empty;
+        // Owner interpretation 2026-10-11 (CMB-134): Improved Trip's attack follows a counter-trip that lands.
+        string improvedTripNote = defender.Stats.HasFeat("Improved Trip")
+            ? $"\n\nImproved Trip: if {tripperName} falls, you make a melee attack on {tripperName} at your best melee bonus."
+            : string.Empty;
 
         CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {defenderName}'s decision: trip {tripperName} back?"));
         CombatUI.ShowConfirmationDialog(
@@ -1728,6 +1738,7 @@ public partial class GameManager
                 + $"{defenderName} may react at once and try to trip {tripperName}: a Strength check {CharacterStats.FormatMod(checkModifier)} "
                 + $"against {tripperName}'s Strength or Dexterity check {CharacterStats.FormatMod(resistModifier)}. "
                 + $"No touch attack and no attack of opportunity (PHB p.158).\n\nChance to trip: about {chance}%."
+                + improvedTripNote
                 + allyNote
                 + wardNote,
             confirmLabel: "Trip Back",
@@ -1792,6 +1803,10 @@ public partial class GameManager
             MeleeReactionService.TriggerReactions(defender, tripper, null);
             SettleTripAftermathCasualties("CounterTrip", defender, tripper);
         }
+
+        // A counter-trip that lands gives Improved Trip's attack at the defender's best melee bonus (PHB p.96;
+        // owner interpretation 2026-10-11, CMB-134), after the counter-trip's own contact side effects.
+        ResolvePendingImprovedTripAttack(defender, tripper, counter);
 
         UpdateAllStatsUI();
     }

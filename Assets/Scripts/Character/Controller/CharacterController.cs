@@ -1060,8 +1060,9 @@ public class CharacterController : MonoBehaviour
     /// - a creature fighting with its natural attacks sunders with the natural attack the sunder replaces,
     ///   which must deal slashing or bludgeoning damage (owner ruling 2026-10-08, CMB-102; MM p.312: a bite,
     ///   claw, talon, slam or tentacle can, a gore or sting cannot; <see cref="NaturalAttackDefinition.CanSunder"/>);
-    /// - a creature with neither cannot sunder; an unarmed strike, also one an NPC lists as a natural attack
-    ///   (the monks), is refused on both sides until the owner rules on it (CMB-141).
+    /// - a creature with neither sunders with an unarmed strike, a bludgeoning light weapon (PHB p.116 Table 7-5),
+    ///   and so does an NPC that lists "Unarmed Strike" as a natural attack (the monks): owner interpretation 2026-10-11
+    ///   (CMB-141); <see cref="ResolveSunder"/> gives it the light-weapon -4.
     /// <paramref name="naturalAttackIndex"/> names the natural attack given up; a negative value means the
     /// one at the current step, the order the NPC sequence resolves them in
     /// (<see cref="GetSunderNaturalAttackIndexForStep"/>).
@@ -1077,8 +1078,9 @@ public class CharacterController : MonoBehaviour
 
         if (!UsesInnateNaturalAttackSequence())
         {
-            reason = $"{actorName} cannot sunder without a weapon.";
-            return false;
+            // An unarmed strike (owner interpretation 2026-10-11, CMB-141).
+            reason = string.Empty;
+            return true;
         }
 
         int index = naturalAttackIndex >= 0
@@ -1088,12 +1090,6 @@ public class CharacterController : MonoBehaviour
         if (natural == null)
         {
             reason = $"{actorName} has no natural attack left that can sunder.";
-            return false;
-        }
-
-        if (natural.IsUnarmedStrike)
-        {
-            reason = $"{actorName} cannot sunder without a weapon.";
             return false;
         }
 
@@ -1111,7 +1107,8 @@ public class CharacterController : MonoBehaviour
     /// True when this creature fights with natural weapons (MM p.312: armed): it uses its innate natural
     /// sequence and at least one of its natural attacks is not an unarmed strike. An NPC that lists only
     /// unarmed strikes as natural attacks (the monks) is unarmed, as a PC monk is: its disarm takes the
-    /// light-weapon -4 and catches the weapon (PHB p.155), and it cannot sunder (CMB-141).
+    /// light-weapon -4 and catches the weapon (PHB p.155), and its sunder takes the light-weapon -4 (PHB p.158;
+    /// owner interpretation 2026-10-11, CMB-141).
     /// </summary>
     public bool FightsWithNaturalWeapons()
     {
@@ -12502,8 +12499,10 @@ public class CharacterController : MonoBehaviour
     /// opportunity; it is an attack for invisibility and Sanctuary. On a win the tripper is prone. Raises
     /// <see cref="ScenarioHooks.ManeuverResolved"/> as a trip by this creature with
     /// <see cref="SpecialAttackResult.IsCounterTrip"/> set. The caller asks the defender first
-    /// (GameManager.HandleTripAftermath, which also runs the contact side effects); no Improved Trip
-    /// follow-up comes from it (CMB-134).
+    /// (GameManager.HandleTripAftermath, which also runs the contact side effects). A counter-trip that lands
+    /// records Improved Trip's attack (PHB p.96) at this creature's best melee bonus
+    /// (<see cref="PrepareImprovedTripFollowUp"/>; owner interpretation 2026-10-11, CMB-134), made by
+    /// GameManager.ResolveCounterTripChoice after the counter-trip's contact side effects.
     /// </summary>
     public SpecialAttackResult ResolveCounterTrip(CharacterController tripper)
     {
@@ -12549,6 +12548,7 @@ public class CharacterController : MonoBehaviour
             ? $"{Stats.CharacterName} trips {tripper.Stats.CharacterName} back! {checkLine} → PRONE (until standing)."
             : $"{Stats.CharacterName} tries to trip {tripper.Stats.CharacterName} back and fails. {checkLine}.";
 
+        PrepareImprovedTripFollowUp(result, null, freeTripTrigger: null);
         ScenarioHooks.ManeuverResolved?.Invoke(this, tripper, SpecialAttackType.Trip, result);
         return result;
     }
@@ -12585,16 +12585,27 @@ public class CharacterController : MonoBehaviour
     /// that step's bonus (for a PC in a two-weapon round it already includes the main-hand penalty, added by
     /// GameManager.TryCommitMainHandManeuverStep); a natural step is the natural attack the trip gave up
     /// (<see cref="AttackPool.LastSubstituteNaturalAttackIndex"/>). After a free trip (MM trip on a hit,
-    /// <paramref name="freeTripTrigger"/> set) the attack that hit is made again. A counter-trip records none
-    /// (CMB-134). GameManager.HandleTripAftermath makes the attack (<see cref="ResolveImprovedTripFollowUp"/>)
-    /// after the trip's own log and melee reactions.
+    /// <paramref name="freeTripTrigger"/> set) the attack that hit is made again. A counter-trip (PHB p.158) used no
+    /// attack, so the feat's "as if you hadn't used your attack" has no attack to point at; owner interpretation
+    /// 2026-10-11 (CMB-134): the attack is made at this creature's best melee bonus, full BAB with a weapon or an
+    /// unarmed strike, or its best natural attack (<see cref="GetDefaultHasteNaturalAttackIndex"/>: the highest
+    /// bonus). GameManager.HandleTripAftermath (GameManager.ResolveCounterTripChoice for a counter-trip) makes the
+    /// attack (<see cref="ResolveImprovedTripFollowUp"/>) after the trip's own log and melee reactions.
     /// </summary>
     private void PrepareImprovedTripFollowUp(SpecialAttackResult result, int? tripAttackBonus, CombatResult freeTripTrigger)
     {
-        if (result == null || !result.Success || result.IsCounterTrip || Stats == null || !Stats.HasFeat("Improved Trip"))
+        if (result == null || !result.Success || Stats == null || !Stats.HasFeat("Improved Trip"))
             return;
 
         result.ImprovedTripFollowUpPending = true;
+        if (result.IsCounterTrip)
+        {
+            result.FollowUpAttackBonus = Stats.BaseAttackBonus;
+            result.FollowUpTrigger = null;
+            result.FollowUpNaturalAttackIndex = UsesInnateNaturalAttackSequence() ? GetDefaultHasteNaturalAttackIndex() : -1;
+            return;
+        }
+
         result.FollowUpAttackBonus = tripAttackBonus;
         result.FollowUpTrigger = freeTripTrigger;
         result.FollowUpNaturalAttackIndex = !UsesInnateNaturalAttackSequence()
@@ -13536,9 +13547,9 @@ public class CharacterController : MonoBehaviour
             }
 
             attackerWeapon = GetEquippedMainWeapon();
-            if (attackerWeapon == null)
+            if (attackerWeapon == null && UsesInnateNaturalAttackSequence())
                 sunderNatural = Stats.GetNaturalAttackAtSequenceIndex(naturalIndex);
-            if (attackerWeapon == null && sunderNatural == null)
+            if (attackerWeapon == null && sunderNatural == null && UsesInnateNaturalAttackSequence())
             {
                 return new SpecialAttackResult
                 {
@@ -13549,6 +13560,19 @@ public class CharacterController : MonoBehaviour
             }
         }
 
+        // An unarmed strike (owner interpretation 2026-10-11, CMB-141): no weapon in hand and no natural sequence, or
+        // an "Unarmed Strike" the creature lists as a natural attack (the NPC monks). A light weapon on the opposed
+        // roll (PHB p.158; PHB p.116 Table 7-5).
+        bool unarmedSunder = attackerWeapon == null && (sunderNatural == null || sunderNatural.IsUnarmedStrike);
+        // The attack's damage mode, the same one an attack with this weapon or unarmed strike would use: a plain
+        // unarmed strike deals nonlethal damage unless the creature has Improved Unarmed Strike (or a gauntlet) or
+        // takes -4 for lethal damage (PHB p.139); a nonlethal weapon (sap, whip) takes -4 for lethal damage and a
+        // lethal weapon -4 for nonlethal (PHB p.146). The opposed roll is an attack roll (PHB p.158), so that -4
+        // applies to it, and objects are immune to nonlethal damage (PHB p.165), so a nonlethal sunder that wins
+        // deals the item nothing. A natural attack, a natural "Unarmed Strike" included, is always lethal (the NPC
+        // monks have Improved Unarmed Strike).
+        DamageModeAttackProfile sunderDamageMode = GetSunderDamageModeProfile(attackerWeapon, sunderNatural);
+
         targetItem.EnsureDurabilityInitialized();
 
         int attackRoll = DiceService.D20("Sunder attack roll");
@@ -13556,11 +13580,17 @@ public class CharacterController : MonoBehaviour
         int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
         int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
         // PHB p.158 Step 2: each side rolls with its own weapon, +4 for a two-handed one and -4 for a light
-        // one, and the larger combatant gets +4 per size category of difference. The defender rolls with the
-        // targeted weapon, or its main-hand weapon when a shield or armor is targeted (none: 0). A natural
-        // weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for disarm; for
-        // sunder pending owner confirmation, CMB-141).
-        int handednessBonus = sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon);
+        // one, and the larger combatant gets +4 per size category of difference: the size term compares the
+        // combatants (PHB p.158; recorded 2026-10-11, CMB-141). The defender rolls with the targeted weapon, or its
+        // main-hand weapon when a shield or armor is targeted (none: 0; worn armor should not be a target at all,
+        // CMB-166; whether a defender with no weapon rolls as a light weapon is an owner question, CMB-165). A natural
+        // weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for disarm and owner
+        // interpretation 2026-10-11 for sunder, CMB-141); the attacker's unarmed strike is a light weapon, -4 (owner
+        // interpretation 2026-10-11, CMB-141).
+        int handednessBonus = unarmedSunder
+            ? UnarmedStrikeSunderHandednessModifier
+            : sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon);
+        int damageModePenalty = sunderDamageMode.AttackPenalty;
         int sizeBonus = GetLargerCombatantSizeBonus(this, target);
         ItemData defenderWeapon = targetItem.IsWeapon && !targetItem.IsShield ? targetItem : target.GetEquippedMainWeapon();
         int defenderHandednessBonus = GetSunderHandednessModifier(defenderWeapon);
@@ -13577,6 +13607,7 @@ public class CharacterController : MonoBehaviour
             + Stats.ConditionAttackPenalty
             + improvedSunderBonus
             + handednessBonus
+            + damageModePenalty
             + sizeBonus
             + racialBonus;
 
@@ -13595,12 +13626,17 @@ public class CharacterController : MonoBehaviour
 
         logLines.Add(sunderNatural != null
             ? $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({sunderNatural.Name})"
-            : $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({handLabel})");
+            : unarmedSunder
+                ? $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} (Unarmed strike, {(sunderDamageMode.DealNonlethalDamage ? "nonlethal" : "lethal")})"
+                : $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({handLabel})");
         logLines.Add(
             $"Attacker check: d20 {attackRoll} + BAB {CharacterStats.FormatMod(attackBab)} + STR {CharacterStats.FormatMod(Stats.STRMod)} + size {CharacterStats.FormatMod(Stats.SizeModifier)}"
             + (Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(Stats.ConditionAttackPenalty)}" : string.Empty)
             + (improvedSunderBonus != 0 ? $" + Improved Sunder {CharacterStats.FormatMod(improvedSunderBonus)}" : string.Empty)
-            + (handednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
+            + (handednessBonus != 0 ? $" + {(unarmedSunder ? "unarmed strike (light)" : "handedness")} {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
+            + (damageModePenalty != 0
+                ? $" + {(unarmedSunder ? "lethal unarmed strike" : (sunderDamageMode.DealNonlethalDamage ? "nonlethal" : "lethal") + " with " + attackerWeapon.Name)} {CharacterStats.FormatMod(damageModePenalty)}"
+                : string.Empty)
             + (sizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(sizeBonus)}" : string.Empty)
             + (racialBonus != 0 ? $" + racial {CharacterStats.FormatMod(racialBonus)}" : string.Empty)
             + (attackerDualWieldPenaltyForLog != 0 ? $" [includes dual-wield penalty {CharacterStats.FormatMod(attackerDualWieldPenaltyForLog)} in BAB]" : string.Empty)
@@ -13635,7 +13671,33 @@ public class CharacterController : MonoBehaviour
         // damage roll adds the same terms (Strength share, enhancement, Weapon Specialization, morale, conditions). No
         // Power Attack: the sunder's opposed roll above does not take its penalty or the other attack-side feat terms
         // (CMB-159).
-        if (sunderNatural != null)
+        if (sunderDamageMode.DealNonlethalDamage)
+        {
+            // Objects are immune to nonlethal damage (PHB p.165).
+            string nonlethalSource = unarmedSunder ? "unarmed strike" : attackerWeapon.Name;
+            logLines.Add($"Damage: none. {Stats.CharacterName}'s {nonlethalSource} deals nonlethal damage, and objects are immune to nonlethal damage (PHB p.165).");
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Sunder",
+                Success = true,
+                CheckRoll = attackRoll,
+                CheckTotal = attackTotal,
+                OpposedRoll = defenseRoll,
+                OpposedTotal = defenseTotal,
+                DamageDealt = 0,
+                Log = string.Join("\n", logLines)
+            };
+        }
+
+        if (unarmedSunder && sunderNatural == null)
+        {
+            // A plain unarmed strike: 1d3 at Medium, scaled for size, or the monk's unarmed damage (PHB p.40).
+            (damageDiceCount, damageDiceSides, _) = GetUnarmedDamage();
+            damageDiceSides = Mathf.Max(1, damageDiceSides);
+            damageDiceCount = Mathf.Max(1, damageDiceCount);
+            sunderDamage = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false, DamageOnlyFeatModifiers(null));
+        }
+        else if (sunderNatural != null)
         {
             // The natural attack's own damage: its dice scaled for size and its Strength share (half for a
             // secondary attack, MM p.312).
@@ -13872,6 +13934,8 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
+        // Adjacent only: the bull rusher moves into the defender's space (PHB p.154), so a creature sharing this
+        // creature's square cannot be bull rushed (owner interpretation 2026-10-11, CMB-154).
         if (!atEndOfCharge && GetMinimumDistanceToTarget(target, chebyshev: true) != 1)
         {
             reason = $"{target.Stats.CharacterName} is not adjacent";
@@ -14268,9 +14332,46 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Handedness modifier of a natural weapon on a disarm roll: a one-handed weapon of the creature's own
     /// size, so 0 (owner ruling 2026-10-08, CMB-102; PHB p.155). <see cref="ResolveSunder"/> uses the same
-    /// value for a natural weapon, pending owner confirmation (CMB-141).
+    /// value for a natural weapon on the sunder roll (PHB p.158; owner interpretation 2026-10-11, CMB-141).
     /// </summary>
     public const int NaturalWeaponDisarmHandednessModifier = 0;
+
+    /// <summary>
+    /// Handedness modifier of an unarmed strike on a sunder roll: a light weapon (PHB p.116 Table 7-5), so -4 (PHB
+    /// p.158; owner interpretation 2026-10-11, CMB-141), for a PC's unarmed strike and an NPC's "Unarmed Strike" natural attack.
+    /// </summary>
+    public const int UnarmedStrikeSunderHandednessModifier = -4;
+
+    /// <summary>
+    /// True when a sunder by this creature now would deal nonlethal damage (PHB p.139, p.146): a plain unarmed strike
+    /// without Improved Unarmed Strike or a gauntlet, a nonlethal weapon such as a sap, or a weapon used in nonlethal
+    /// mode. Objects are immune to nonlethal damage (PHB p.165). The rules allow the attempt (<see cref="ResolveSunder"/>
+    /// deals the item nothing); the AI reads it to skip a pointless sunder. A natural attack is always lethal.
+    /// </summary>
+    public bool WouldSunderDealNonlethalDamage()
+    {
+        if (Stats == null)
+            return false;
+
+        ItemData weapon = GetEquippedMainWeapon();
+        if (weapon == null && UsesInnateNaturalAttackSequence())
+            return false;
+
+        return GetSunderDamageModeProfile(weapon, null).DealNonlethalDamage;
+    }
+
+    /// <summary>
+    /// The damage mode of a sunder made with <paramref name="weapon"/> (null: an unarmed strike) or the natural
+    /// attack <paramref name="natural"/> (always lethal, no penalty), as the same attack would have it (PHB p.139,
+    /// p.146; <see cref="ResolveDamageModeAttackProfileCore"/>).
+    /// </summary>
+    private DamageModeAttackProfile GetSunderDamageModeProfile(ItemData weapon, NaturalAttackDefinition natural)
+    {
+        if (weapon == null && natural != null)
+            return default(DamageModeAttackProfile);
+
+        return ResolveDamageModeAttackProfileCore(weapon, unarmedStrike: weapon == null);
+    }
 
     /// <summary>
     /// PHB p.155: a disarmer that attempted the disarm unarmed now has the weapon; an armed one knocks
@@ -14296,9 +14397,9 @@ public class CharacterController : MonoBehaviour
         // attack (the monks; FightsWithNaturalWeapons). A natural weapon is not an unarmed strike (MM p.312:
         // armed); it counts as a one-handed weapon of the creature's own size, so it gets neither the
         // two-handed +4 nor the light -4 (owner ruling 2026-10-08, CMB-102). The larger combatant gets +4 per
-        // size category of difference (PHB p.155); the smaller one takes no penalty. The code compares the
-        // combatants, as PHB p.155 does; the owner's ruling worded it as the two items, which is the same
-        // while each weapon is its wielder's size (CMB-141).
+        // size category of difference (PHB p.155); the smaller one takes no penalty. The size term compares the
+        // combatants, as PHB p.155 and p.158 do (rules as written, recorded 2026-10-11, CMB-141; the 2026-10-08 disarm ruling
+        // worded it as the two items, which is the same while each weapon is its wielder's size, ITM-071).
         bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.FightsWithNaturalWeapons();
         int atkHeldItemMod = attackerUsesNaturalWeapon
             ? NaturalWeaponDisarmHandednessModifier
@@ -14568,6 +14669,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// The size term of the disarm and sunder opposed rolls (PHB p.155, p.158): the larger combatant gets +4
     /// per size category of difference; the smaller one gets nothing (no penalty), so the swing is 4 per category.
+    /// It compares the combatants, not the items (PHB p.155, p.158; recorded 2026-10-11, CMB-141).
     /// </summary>
     private static int GetLargerCombatantSizeBonus(CharacterController actor, CharacterController opponent)
     {

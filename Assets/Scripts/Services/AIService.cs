@@ -2409,7 +2409,10 @@ public class AIService : MonoBehaviour
                     return profile.ShouldInitiateGrapple(npc, target);
 
                 if (preferred.Value == SpecialAttackType.Sunder)
-                    return target.HasSunderableItemEquipped() && npc.CanSunderWithAttack(-1, out _); // PHB p.158, CMB-102
+                    // PHB p.158, CMB-102, CMB-141; a sunder dealing nonlethal damage (an unarmed strike without Improved Unarmed Strike,
+                    // a weapon in nonlethal mode) cannot harm an object (PHB p.165), so the AI skips it.
+                    return target.HasSunderableItemEquipped() && npc.CanSunderWithAttack(-1, out _)
+                        && !npc.WouldSunderDealNonlethalDamage();
 
                 return true;
             }

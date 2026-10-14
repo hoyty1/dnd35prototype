@@ -100,16 +100,16 @@ public class NaturalAttackDefinition
     /// Sunder needs a slashing or bludgeoning weapon (PHB p.158). A natural attack may sunder when it deals
     /// either (owner ruling 2026-10-08, CMB-102): bites, claws, talons, slams, slaps and tentacles can; gores
     /// and stings, which deal only piercing damage, cannot. An unarmed strike listed as a natural attack (the
-    /// NPC monks) is not a natural weapon and cannot sunder, as a PC's unarmed strike cannot, until the owner
-    /// rules on unarmed sunder (CMB-141).
+    /// NPC monks) is bludgeoning (PHB p.116 Table 7-5), so it may sunder as a light weapon, as a PC's unarmed
+    /// strike may (owner interpretation 2026-10-11, CMB-141).
     /// </summary>
-    public bool CanSunder => !IsUnarmedStrike
-        && (GetPhysicalDamageTypes() & (DamageBypassTag.Bludgeoning | DamageBypassTag.Slashing)) != DamageBypassTag.None;
+    public bool CanSunder
+        => (GetPhysicalDamageTypes() & (DamageBypassTag.Bludgeoning | DamageBypassTag.Slashing)) != DamageBypassTag.None;
 
     /// <summary>
     /// True for an entry named "Unarmed Strike" (the NPC monks list their unarmed strike as a natural attack).
-    /// It is bludgeoning (PHB p.116 Table 7-5) but not a natural weapon: disarm treats it as a light weapon
-    /// (PHB p.155) and sunder refuses it (CMB-141), as for a PC's unarmed strike.
+    /// It is bludgeoning (PHB p.116 Table 7-5) but not a natural weapon: disarm and sunder treat it as a light
+    /// weapon (PHB p.155, p.158; owner interpretation 2026-10-11 for sunder, CMB-141), as for a PC's unarmed strike.
     /// </summary>
     public bool IsUnarmedStrike => GetBaseAttackName(Name) == "unarmed strike";
 
@@ -131,7 +131,7 @@ public class NaturalAttackDefinition
     /// bludgeoning, piercing and slashing; claw or talon piercing and slashing (a rake is a claw attack); gore
     /// piercing (an antler or horn, so "horn" too); slap or slam bludgeoning (a tail slap too); sting piercing;
     /// tentacle bludgeoning. The MM dragon entry (p.68) describes a wing attack as a slam, so "wing" is
-    /// bludgeoning, and an unarmed strike is bludgeoning (PHB p.116 Table 7-5; it still cannot sunder,
+    /// bludgeoning, and an unarmed strike is bludgeoning (PHB p.116 Table 7-5; it sunders as a light weapon,
     /// <see cref="IsUnarmedStrike"/>). Matched case-insensitively on
     /// the name without a parenthetical ("Bite (lion)"). Any other name returns None: touches, rays and other
     /// attacks that deal no physical damage, and names the list does not cover (filed as CMB-138; set

@@ -101,6 +101,7 @@ public static class GrappleDamageRulesTests
         TestNaturalWeaponSunderBySlashingOrBludgeoning();
         TestNaturalWeaponDisarmOneHandedOwnSize();
         TestSunderOpposedRollSizeAndHandedness();
+        TestUnarmedSunderLightWeapon();
         TestNaturalSunderAtHasteStep();
         TestNaturalSecondaryGrapplePenaltyOnTouchOnly();
         TestNpcNaturalSequenceMakesOneSubstitute();
@@ -163,6 +164,7 @@ public static class GrappleDamageRulesTests
         TestCounterTripTriggersMeleeReactions();
         TestCounterTripByDisabledDefender();
         TestImprovedTripFollowUpWeaponFallback();
+        TestImprovedTripAfterCounterTrip();
         TestDefenderImprovedDisarmGivesNoBonus();
         TestImprovedDisarmDeniesCounterDisarm();
         TestGrappleHoldFailsAgainstMuchLargerTarget();
@@ -1905,6 +1907,33 @@ public static class GrappleDamageRulesTests
             Assert(!attacker.CanBullRush(target, false, out _), "An incorporeal creature cannot be bull rushed (MM p.311)");
             target.ConfigureIncorporeal(false);
 
+            target.GridPosition = new Vector2Int(0, 0);
+            Assert(!attacker.CanBullRush(target, false, out string squareMateReason) && squareMateReason.Contains("not adjacent"),
+                "A creature sharing the attacker's square cannot be bull rushed (owner interpretation 2026-10-11, CMB-154)");
+            GameManager overrunGm = GameManager.Instance;
+            MethodInfo validOverrun = typeof(GameManager).GetMethod("IsValidOverrunTarget", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (overrunGm != null && validOverrun != null)
+            {
+                target.SetTeam(CharacterTeam.Player);
+                object[] shared = { attacker, target, null, true };
+                bool sharedValid = (bool)validOverrun.Invoke(overrunGm, shared);
+                target.GridPosition = new Vector2Int(1, 0);
+                object[] adjacent = { attacker, target, null, true };
+                bool adjacentValid = (bool)validOverrun.Invoke(overrunGm, adjacent);
+                target.SetTeam(CharacterTeam.Enemy);
+                // The adjacent control passes every check before and at adjacency (target, team, size); the only
+                // later check is the room behind the defender, which depends on the test grid.
+                bool adjacentPassesAdjacency = adjacentValid
+                    ? string.IsNullOrEmpty((string)adjacent[2])
+                    : (string)adjacent[2] == "No room to pass";
+                Assert(!sharedValid && (string)shared[2] == "Not adjacent" && adjacentPassesAdjacency,
+                    $"A creature sharing the attacker's square cannot be overrun; an adjacent one passes the target, size and adjacency tests (owner interpretation 2026-10-11, CMB-154; shared '{shared[2]}', adjacent {adjacentValid} '{adjacent[2]}')");
+            }
+            else
+            {
+                Debug.Log("  [SKIP] GameManager.Instance is null; overrun square-mate check needs Play mode");
+            }
+
             target.GridPosition = new Vector2Int(2, 0);
             Assert(!attacker.CanBullRush(target, false, out _), "A target two squares away is refused (must enter its space)");
             Assert(attacker.CanBullRush(target, true, out string chargeReason),
@@ -2444,9 +2473,9 @@ public static class GrappleDamageRulesTests
             && !NaturalAttackNamedCanSunder("Gore") && !NaturalAttackNamedCanSunder("Sting") && !NaturalAttackNamedCanSunder("Horn")
             && !NaturalAttackNamedCanSunder("Hoof"),
             "Bites, claws, slams and tentacles can sunder; gores, stings and other piercing-only attacks cannot (PHB p.158)");
-        Assert(new NaturalAttackDefinition { Name = "Unarmed Strike" }.IsUnarmedStrike && !NaturalAttackNamedCanSunder("Unarmed Strike")
+        Assert(new NaturalAttackDefinition { Name = "Unarmed Strike" }.IsUnarmedStrike && NaturalAttackNamedCanSunder("Unarmed Strike")
             && !new NaturalAttackDefinition { Name = "Slam" }.IsUnarmedStrike,
-            "An 'Unarmed Strike' natural attack (the NPC monks) is bludgeoning but cannot sunder, as a PC's unarmed strike cannot (CMB-141)");
+            "An 'Unarmed Strike' natural attack (the NPC monks) is bludgeoning and may sunder, as a PC's unarmed strike may (owner interpretation 2026-10-11, CMB-141)");
 
         var explicitPiercing = new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, PhysicalDamageTypes = P };
         NaturalAttackDefinition clone = explicitPiercing.Clone();
@@ -2511,9 +2540,8 @@ public static class GrappleDamageRulesTests
         {
             Assert(bear.CanSunderWithAttack(-1, out _) && fighter.CanSunderWithAttack(-1, out _)
                 && !goring.CanSunderWithAttack(-1, out string goreReason) && goreReason.Contains("Gore")
-                && !unarmed.CanSunderWithAttack(-1, out string unarmedReason) && !string.IsNullOrEmpty(unarmedReason)
-                && !monk.CanSunderWithAttack(-1, out string monkReason) && monkReason == unarmedReason.Replace("NaturalSunderUnarmed", "NaturalSunderMonk"),
-                "Sunder legality: a bite or a sword may sunder; a gore (piercing only), an empty hand without natural attacks or an 'Unarmed Strike' natural attack may not");
+                && unarmed.CanSunderWithAttack(-1, out _) && monk.CanSunderWithAttack(-1, out _),
+                "Sunder legality: a bite, a sword, an unarmed strike and an 'Unarmed Strike' natural attack may sunder (owner interpretation 2026-10-11, CMB-141); a gore (piercing only) may not");
             Assert(!goreClaws.CanSunderWithAttack(-1, out _) && goreClaws.CanSunderWithAttack(1, out _)
                 && goreClaws.GetFirstSunderCapableNaturalAttackIndex() == 1 && goreClaws.GetSunderNaturalAttackIndexForStep(0) == 0,
                 "A gore/claw/claw creature: not with the gore at its first step, but with a claw");
@@ -2672,6 +2700,111 @@ public static class GrappleDamageRulesTests
         }
     }
 
+    private static void TestUnarmedSunderLightWeapon()
+    {
+        // Owner interpretation 2026-10-11 (CMB-141; PHB p.116 Table 7-5, p.158): an unarmed strike is a bludgeoning light
+        // weapon, so a creature with no weapon in hand, and an NPC monk whose data lists "Unarmed Strike" as a
+        // natural attack, may sunder, at the light-weapon -4 on the opposed roll. Without Improved Unarmed Strike the
+        // strike deals nonlethal damage unless lethal is chosen at -4 more (PHB p.139), and objects are immune to
+        // nonlethal damage (PHB p.165): such a sunder can win and still deal the item nothing.
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        var unarmed = CreateTestCharacter("UnarmedSunderFighter", "Fighter");
+        var trained = CreateTestCharacter("UnarmedSunderTrained", "Fighter");
+        var monk = CreateNaturalCreature("UnarmedSunderMonk", 1, ("Unarmed Strike", true, 1));
+        var defender = CreateWeakDefender("UnarmedSunderDefender");
+        var swordFighter = CreateTestCharacter("NonlethalSwordSunder", "Fighter");
+        swordFighter.Stats.NaturalAttacks.Clear();
+        swordFighter.Stats.BaseAttackBonusOverride = 1;
+        swordFighter.GridPosition = new Vector2Int(20, 13);
+        unarmed.Stats.NaturalAttacks.Clear();
+        trained.Stats.NaturalAttacks.Clear();
+        unarmed.Stats.BaseAttackBonusOverride = 1;
+        trained.Stats.BaseAttackBonusOverride = 1;
+        trained.Stats.Feats.Add("Improved Unarmed Strike");
+        monk.Stats.Feats.Add("Improved Unarmed Strike");
+        unarmed.GridPosition = new Vector2Int(20, 12);
+        defender.GridPosition = new Vector2Int(21, 12);
+        trained.GridPosition = new Vector2Int(22, 12);
+        monk.GridPosition = new Vector2Int(21, 13);
+        ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(sword, EquipSlot.RightHand);
+        try
+        {
+            Assert(unarmed.GetEquippedMainWeapon() == null && !unarmed.UsesInnateNaturalAttackSequence()
+                && unarmed.CanSunderWithAttack(-1, out _) && trained.CanSunderWithAttack(-1, out _) && monk.CanSunderWithAttack(-1, out _),
+                "Unarmed sunder legality: an empty-handed fighter, one with Improved Unarmed Strike and an 'Unarmed Strike' natural attack may sunder (CMB-141)");
+            Assert(unarmed.WouldSunderDealNonlethalDamage() && !trained.WouldSunderDealNonlethalDamage() && !monk.WouldSunderDealNonlethalDamage(),
+                "Unarmed sunder damage mode: nonlethal without Improved Unarmed Strike (PHB p.139); lethal with it and for a monk's natural unarmed strike");
+
+            // Forced losses: the opposed roll's modifiers.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural;
+            var plain = ForcedSunderModifiers(unarmed, defender);
+            var withFeat = ForcedSunderModifiers(trained, defender);
+            var monkRoll = ForcedSunderModifiers(monk, defender);
+            unarmed.SetAttackDamageMode(AttackDamageMode.Lethal);
+            var lethalChoice = ForcedSunderModifiers(unarmed, defender);
+            Assert(plain.attack == PlainOpposedMod(unarmed) - 4 && withFeat.attack == PlainOpposedMod(trained) - 4
+                && monkRoll.attack == PlainOpposedMod(monk) - 4 && plain.result.Log.Contains("unarmed strike (light) -4")
+                && monkRoll.result.Log.Contains("(Unarmed Strike)") && !plain.result.Success && !monkRoll.result.Success,
+                $"Unarmed sunder: the light-weapon -4 on the opposed roll for a plain unarmed strike ({plain.attack} vs base {PlainOpposedMod(unarmed)}), with Improved Unarmed Strike ({withFeat.attack}) and a monk's natural unarmed strike ({monkRoll.attack} vs base {PlainOpposedMod(monk)})");
+            Assert(lethalChoice.attack == PlainOpposedMod(unarmed) - 8 && lethalChoice.result.Log.Contains("lethal unarmed strike -4")
+                && !unarmed.WouldSunderDealNonlethalDamage(),
+                $"Unarmed sunder without Improved Unarmed Strike, lethal damage chosen: -4 more on the attack roll (PHB p.139; {lethalChoice.attack})");
+            unarmed.SetAttackDamageMode(AttackDamageMode.Nonlethal);
+
+            // Forced wins: the nonlethal strike deals the sword nothing; the lethal ones roll their own damage.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 20 : ctx == "Sunder defense roll" ? 1 : natural;
+            sword.EnsureDurabilityInitialized();
+            int swordHp = sword.CurrentHitPoints;
+            SpecialAttackResult nonlethal = unarmed.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender);
+            Assert(nonlethal != null && nonlethal.Success && nonlethal.DamageDealt == 0 && sword.CurrentHitPoints == swordHp
+                && nonlethal.Log.Contains("immune to nonlethal"),
+                "Unarmed sunder that wins with a nonlethal strike: the sword takes no damage (objects are immune to nonlethal damage, PHB p.165)");
+            SpecialAttackResult lethal = trained.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender);
+            SpecialAttackResult monkHit = monk.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender);
+            Assert(lethal != null && lethal.Success && lethal.Log.Contains("Damage: 1d3")
+                && monkHit != null && monkHit.Success && monkHit.Log.Contains("Damage: 1d6"),
+                "Unarmed sunder that wins with a lethal strike: 1d3 for a Medium unarmed strike (PHB p.139), the natural unarmed strike's own dice for the monk");
+
+            // A weapon used in nonlethal mode takes -4 (PHB p.146) and deals nonlethal damage, which cannot harm an
+            // object (PHB p.165): the same rule as the unarmed strike's, on the weapon branch (GetSunderDamageModeProfile).
+            ItemData swordInHand = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+            swordFighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(swordInHand, EquipSlot.RightHand);
+            swordFighter.SetAttackDamageMode(AttackDamageMode.Nonlethal);
+            // The lethal sunders above may have destroyed the defender's sword: give it a fresh one to target.
+            ItemData targetSword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+            defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(targetSword, EquipSlot.RightHand);
+            targetSword.EnsureDurabilityInitialized();
+            bool swordNonlethalForAi = swordFighter.WouldSunderDealNonlethalDamage();
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural;
+            var swordLoss = ForcedSunderModifiers(swordFighter, defender);
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 20 : ctx == "Sunder defense roll" ? 1 : natural;
+            int swordHpBefore = targetSword.CurrentHitPoints;
+            SpecialAttackResult swordWin = swordFighter.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender);
+            Assert(swordNonlethalForAi && swordLoss.result != null && swordLoss.attack == PlainOpposedMod(swordFighter) - 4
+                && swordLoss.result.Log.Contains("nonlethal with ") && swordWin != null && swordWin.Success
+                && swordWin.DamageDealt == 0 && targetSword.CurrentHitPoints == swordHpBefore && swordWin.Log.Contains("immune to nonlethal"),
+                $"Sunder with a longsword in nonlethal mode: -4 on the opposed roll (PHB p.146; {swordLoss.attack} vs base {PlainOpposedMod(swordFighter)}) and no damage to the item when it wins (PHB p.165)");
+            swordFighter.SetAttackDamageMode(AttackDamageMode.Lethal);
+            Assert(!swordFighter.WouldSunderDealNonlethalDamage(),
+                "Sunder with a longsword in lethal mode deals lethal damage (the AI may choose it)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Unarmed sunder check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(unarmed, trained, monk, defender, swordFighter);
+        }
+    }
+
     private static int RollNaturalDisarmModifier(MethodInfo rollDisarm, CharacterController attacker, CharacterController defender,
         ItemData attackerItem, ItemData defenderItem, string side)
         => GetDisarmModifier(rollDisarm.Invoke(null, new object[] { attacker, defender, attackerItem, defenderItem, EquipSlot.RightHand, 0, string.Empty, null, 0 }), side);
@@ -2690,7 +2823,7 @@ public static class GrappleDamageRulesTests
     {
         // PHB p.158 Step 2: both sides roll with their own weapon (+4 two-handed, -4 light) and the larger
         // combatant gets +4 per size category of difference; the smaller one takes no penalty. A natural weapon
-        // gets no handedness modifier (as on a disarm roll; pending owner confirmation for sunder, CMB-141).
+        // gets no handedness modifier, as on a disarm roll (owner interpretation 2026-10-11, CMB-141).
         System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
         var bear = CreateBiteClawsCreature("SunderRollBear", 6, false);
         var fighter = CreateIterativeAttacker("SunderRollFighter");
@@ -5741,6 +5874,107 @@ public static class GrappleDamageRulesTests
         // The trippers stay on the Enemy team the test characters start on; the target is their foe.
         target.SetTeam(CharacterTeam.Player);
         return target;
+    }
+
+    private static void TestImprovedTripAfterCounterTrip()
+    {
+        // Owner interpretation 2026-10-11 (CMB-134; PHB p.96, p.158): a counter-trip that lands gives Improved Trip's
+        // attack, at the counter-tripper's best melee bonus: full BAB with its weapon, or its best natural attack.
+        // The NPC executor's trip fails at the opposed check, the AI-run defender trips back (forced dice) and attacks
+        // the prone tripper once; without the feat, or when the counter-trip fails, no attack follows.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; counter-trip Improved Trip check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CombatResult> savedAttack = ScenarioHooks.AttackResolved;
+        var attacks = new System.Collections.Generic.List<(CharacterController by, CombatResult r)>();
+        var created = new System.Collections.Generic.List<CharacterController>();
+        CharacterController MakeTripper(string name, int y)
+        {
+            var tripper = CreateIterativeAttacker(name);
+            tripper.IsControllable = false;
+            tripper.Stats.CanMakeAttacksOfOpportunity = false;
+            tripper.Stats.AdjustMaxHP(500);
+            tripper.Stats.CurrentHP += 500;
+            tripper.GridPosition = new Vector2Int(46, y);
+            created.Add(tripper);
+            return tripper;
+        }
+        void MakeDefender(CharacterController defender, int y)
+        {
+            defender.SetTeam(CharacterTeam.Player);
+            defender.IsControllable = false;
+            defender.Stats.CanMakeAttacksOfOpportunity = false;
+            defender.GridPosition = new Vector2Int(47, y);
+            created.Add(defender);
+        }
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
+            ScenarioHooks.AttackResolved = (by, r) => attacks.Add((by, r));
+
+            // A longsword fighter, BAB +9 (+9/+4): the attack is made at +9.
+            CharacterController tripper = MakeTripper("CounterImprovedTripper", 30);
+            var fighter = CreateIterativeAttacker("CounterImprovedFighter");
+            fighter.Stats.BaseAttackBonusOverride = 9;
+            fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            fighter.Stats.Feats.Add("Improved Trip");
+            MakeDefender(fighter, 30);
+            bool acted = gm.TryNPCSpecialAttackByTypeForAI(tripper, fighter, SpecialAttackType.Trip);
+            var byFighter = attacks.FindAll(a => a.by == fighter);
+            Assert(acted && tripper.HasCondition(CombatConditionType.Prone) && byFighter.Count == 1
+                && byFighter[0].r.Defender == tripper && byFighter[0].r.BreakdownBAB == 9 && byFighter[0].r.WeaponName == "Longsword"
+                && !byFighter[0].r.IsAttackOfOpportunity && fighter.ProgressiveAttackPool.MainHandStepsUsed == 0,
+                $"Counter-trip with Improved Trip: one longsword attack on the prone tripper at full BAB +9, spending no attack step (attacks {byFighter.Count}, BAB {(byFighter.Count > 0 ? byFighter[0].r.BreakdownBAB : 0)}; CMB-134)");
+
+            // A bite/claw/claw creature: the attack is its best natural attack, the bite.
+            attacks.Clear();
+            CharacterController tripper2 = MakeTripper("CounterImprovedTripper2", 33);
+            var beast = CreateBiteClawsCreature("CounterImprovedBeast", 4, false);
+            beast.Stats.Feats.Add("Improved Trip");
+            MakeDefender(beast, 33);
+            int bestIndex = beast.GetDefaultHasteNaturalAttackIndex();
+            gm.TryNPCSpecialAttackByTypeForAI(tripper2, beast, SpecialAttackType.Trip);
+            var byBeast = attacks.FindAll(a => a.by == beast);
+            Assert(tripper2.HasCondition(CombatConditionType.Prone) && byBeast.Count == 1 && byBeast[0].r.WeaponName == "Bite"
+                && bestIndex >= 0 && beast.Stats.GetNaturalAttackAtSequenceIndex(bestIndex).Name == "Bite",
+                $"Counter-trip with Improved Trip by a natural-attack creature: one attack with its best natural attack, the bite (attacks {string.Join(",", byBeast.ConvertAll(a => a.r.WeaponName))})");
+
+            // Without the feat: the counter-trip lands and no attack follows.
+            attacks.Clear();
+            CharacterController tripper3 = MakeTripper("CounterImprovedTripper3", 36);
+            var plain = CreateIterativeAttacker("CounterImprovedPlain");
+            MakeDefender(plain, 36);
+            gm.TryNPCSpecialAttackByTypeForAI(tripper3, plain, SpecialAttackType.Trip);
+            Assert(tripper3.HasCondition(CombatConditionType.Prone) && attacks.FindAll(a => a.by == plain).Count == 0,
+                "A counter-trip that lands without Improved Trip is followed by no attack");
+
+            // A failed counter-trip gives no attack.
+            attacks.Clear();
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 1, 20);
+            CharacterController tripper4 = MakeTripper("CounterImprovedTripper4", 39);
+            var failer = CreateIterativeAttacker("CounterImprovedFailer");
+            failer.Stats.Feats.Add("Improved Trip");
+            MakeDefender(failer, 39);
+            gm.TryNPCSpecialAttackByTypeForAI(tripper4, failer, SpecialAttackType.Trip);
+            Assert(!tripper4.HasCondition(CombatConditionType.Prone) && attacks.FindAll(a => a.by == failer).Count == 0,
+                "A counter-trip that fails gives no Improved Trip attack");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Counter-trip Improved Trip check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.AttackResolved = savedAttack;
+            Cleanup(created.ToArray());
+        }
     }
 
     /// <summary>
