@@ -1283,6 +1283,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Inventory.StoreSellingRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 37,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "ITM-003 (PHB p.112, DMG p.214): selling counts stack units, not ItemData objects. StoreSelling builds sell rows keyed by name and unit sell price (wands also by charges) and removes units through Inventory.RemoveUnits / PartyStash.RemoveUnits, so selling two of five potions pays twice the unit price and leaves three in the slot; a row spans several stash entries; a locked stash gives up nothing; same-named wands with different charges sell in separate rows at their own prorated price; EconomyService.SellItem sells one unit of a stack and CalculateTotalSellValue counts every unit; a lot is paid its value rounded down once (three 25 gp scrolls pay 37 gp, PHB p.112 half price, gold in whole gp). Two StoreInventory price checks (per-unit potion price, wand proration 375/75 gp) run only when a scene StoreInventory exists (otherwise a warning). Added 2026-10-14; 26/26 in edit mode (all=true), 28/28 in its first Play pass (the store checks run there); 35/35 and 37/37 after the lot-rounding review fix"
+    },
+    {
       "type": "Tests.Magic.MetamagicSystemTests",
       "needs": "either",
       "skip": "",

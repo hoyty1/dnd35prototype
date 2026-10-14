@@ -276,7 +276,7 @@ Assets/Scripts/
     AreaEffects/ (32), StatusEffects/ (29)
   Equipment/             Items/ (9), Inventory/ (10), Weapons/ (18), Armor/ (10), Rings/ (7),
                          Rods/ (5), Staves/ (3), Wondrous/ (4), SpecificItems/ (4), Enchantments/ (7),
-                         Materials/ (1), SpellStorage/ (3), Effects/ (1), Store/ (2: StoreInventory, StoreUI)
+                         Materials/ (1), SpellStorage/ (3), Effects/ (1), Store/ (3: StoreInventory, StoreUI, StoreSelling)
                          (root also holds legacy design .md files)
   UI/                    Common/ (8), Combat/ (12), CharacterCreation/ (6), CharacterSheet/ (5),
                          Inventory/ (3), Spells/ (6), Encounter/ (6), Crafting/ (1), Wish/ (1)

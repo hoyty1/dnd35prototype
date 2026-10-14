@@ -213,6 +213,47 @@ public class Inventory
         return removed;
     }
 
+    /// <summary>
+    /// Removes up to <paramref name="count"/> units of a specific item instance held here: a stackable item
+    /// (potions, scrolls) loses that many from its <see cref="ItemData.StackCount"/> and stays while any remain;
+    /// otherwise the item is removed as by <see cref="RemoveItem"/>. Returns the units removed (0 when the item is not held).
+    /// </summary>
+    public int RemoveUnits(ItemData item, int count)
+    {
+        if (item == null || count <= 0 || !Holds(item))
+            return 0;
+
+        int units = StoreSelling.UnitsIn(item);
+        if (count >= units)
+            return RemoveItem(item) ? units : 0;
+
+        item.StackCount = units - count;
+        if (!_isRecalculating)
+            RecalculateStats();
+        return count;
+    }
+
+    /// <summary>True when this exact item instance is equipped or in a general slot.</summary>
+    public bool Holds(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            if (ReferenceEquals(GeneralSlots[i], item))
+                return true;
+        }
+
+        foreach (EquipSlot slot in AllEquipmentSlots)
+        {
+            if (ReferenceEquals(GetEquipped(slot), item))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Get the equipped item in a given slot. A MainHand, OffHand or Ranged slot reads the hand it stands for
     /// (<see cref="ItemData.ResolveHandAlias"/>, ITM-004).</summary>
     public ItemData GetEquipped(EquipSlot slot)

@@ -45,6 +45,40 @@ public class PartyStash
         return _items.Remove(item);
     }
 
+    /// <summary>
+    /// Removes up to <paramref name="count"/> units of a specific item instance in the stash: a stackable item loses
+    /// that many from its <see cref="ItemData.StackCount"/> and stays while any remain; otherwise the item is removed.
+    /// Returns the units removed (0 when the stash is locked or does not hold the item).
+    /// </summary>
+    public int RemoveUnits(ItemData item, int count)
+    {
+        if (item == null || count <= 0 || IsLocked || _items == null)
+            return 0;
+
+        int index = -1;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (ReferenceEquals(_items[i], item))
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return 0;
+
+        int units = StoreSelling.UnitsIn(item);
+        if (count >= units)
+        {
+            _items.RemoveAt(index);
+            return units;
+        }
+
+        item.StackCount = units - count;
+        return count;
+    }
+
     public bool TryRemoveFirstById(string itemId, out ItemData removed)
     {
         removed = null;

@@ -8,33 +8,6 @@ using UnityEngine.UI;
 /// </summary>
 public class StoreUI : MonoBehaviour
 {
-    private sealed class SellItemSource
-    {
-        public ItemData Item;
-        public bool FromStash;
-        public CharacterInventory InventoryOwner;
-        public string OwnerName;
-    }
-
-    private sealed class SellStack
-    {
-        public string StackKey;
-        public string ItemName;
-        public ItemData RepresentativeItem;
-        public int UnitSellPrice;
-        public readonly List<SellItemSource> Sources = new List<SellItemSource>();
-
-        public int Quantity => Sources.Count;
-
-        public void AddSource(SellItemSource source)
-        {
-            if (source == null || source.Item == null)
-                return;
-
-            Sources.Add(source);
-        }
-    }
-
     private GameObject _root;
     private GameObject _buyPanel;
     private GameObject _sellPanel;
@@ -1435,8 +1408,8 @@ public class StoreUI : MonoBehaviour
         {
             string aName = a != null ? a.ItemName : string.Empty;
             string bName = b != null ? b.ItemName : string.Empty;
-            int aPrice = a != null ? a.UnitSellPrice : 0;
-            int bPrice = b != null ? b.UnitSellPrice : 0;
+            decimal aPrice = a != null ? a.UnitSellValue : 0m;
+            decimal bPrice = b != null ? b.UnitSellValue : 0m;
 
             if (_sellSortMode == SortMode.Price)
             {
@@ -1478,7 +1451,7 @@ public class StoreUI : MonoBehaviour
                     if (item == null || !MatchesSellCategory(item))
                         continue;
 
-                    AddItemToSellStack(stackLookup, item, true, null, "Stash");
+                    AddItemToSellStack(stackLookup, item, _partyStash, null, "Stash");
                 }
             }
         }
@@ -1498,7 +1471,7 @@ public class StoreUI : MonoBehaviour
                     if (item == null || !MatchesSellCategory(item))
                         continue;
 
-                    AddItemToSellStack(stackLookup, item, false, inventory, ownerName);
+                    AddItemToSellStack(stackLookup, item, null, rawInventory, ownerName);
                 }
             }
         }
@@ -1509,38 +1482,15 @@ public class StoreUI : MonoBehaviour
     private void AddItemToSellStack(
         Dictionary<string, SellStack> stackLookup,
         ItemData item,
-        bool fromStash,
-        CharacterInventory inventoryOwner,
+        PartyStash stash,
+        Inventory inventory,
         string ownerName)
     {
         if (item == null)
             return;
 
-        string key = BuildSellStackKey(item);
-        if (!stackLookup.TryGetValue(key, out SellStack stack))
-        {
-            stack = new SellStack
-            {
-                StackKey = key,
-                ItemName = item.FullNameWithEnhancement,
-                RepresentativeItem = item,
-                UnitSellPrice = StoreInventory.Instance.GetSellPrice(item)
-            };
-            stackLookup[key] = stack;
-        }
-
-        stack.AddSource(new SellItemSource
-        {
-            Item = item,
-            FromStash = fromStash,
-            InventoryOwner = inventoryOwner,
-            OwnerName = ownerName
-        });
-    }
-
-    private static string BuildSellStackKey(ItemData item)
-    {
-        return item != null ? (item.FullNameWithEnhancement ?? string.Empty).Trim() : string.Empty;
+        // ITM-003: rows group items by name and unit sell price (wands also by charges), and count stack units.
+        StoreSelling.AddToStacks(stackLookup, item, StoreInventory.Instance.GetSellValue(item), stash, inventory, ownerName);
     }
 
     private bool MatchesSellCategory(ItemData item)
@@ -1609,7 +1559,11 @@ public class StoreUI : MonoBehaviour
         int total = 0;
 
         if (_partyStash != null)
-            total += _partyStash.GetItemsSnapshot().Count;
+        {
+            List<ItemData> stashItems = _partyStash.GetItemsSnapshot();
+            for (int i = 0; i < stashItems.Count; i++)
+                total += StoreSelling.UnitsIn(stashItems[i]);
+        }
 
         for (int i = 0; i < _partyMembers.Count; i++)
         {
@@ -1627,8 +1581,7 @@ public class StoreUI : MonoBehaviour
 
             for (int slotIndex = 0; slotIndex < rawInventory.GeneralSlots.Length; slotIndex++)
             {
-                if (rawInventory.GeneralSlots[slotIndex] != null)
-                    total++;
+                total += StoreSelling.UnitsIn(rawInventory.GeneralSlots[slotIndex]);
             }
         }
 
@@ -1928,7 +1881,8 @@ public class StoreUI : MonoBehaviour
         if (stack == null || stack.RepresentativeItem == null)
             return;
 
-        int sellPrice = stack.UnitSellPrice;
+        // Unit value as shown (12.5 gp for half a 25 gp scroll); a sale pays the lot rounded down once (ITM-003).
+        string sellPrice = StoreSelling.FormatGp(stack.UnitSellValue);
 
         GameObject row = CreatePanel(parent, $"Sell_{stack.ItemName}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
@@ -1990,7 +1944,7 @@ public class StoreUI : MonoBehaviour
         nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
         nameText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        int baseValue = sellPrice * 2;
+        string baseValue = StoreSelling.FormatGp(stack.UnitSellValue * 2m);
         string sourceSummary = BuildSellStackSourceSummary(stack);
         string itemDescription = GetItemDescription(stack.RepresentativeItem, string.Empty);
 
@@ -2064,7 +2018,7 @@ public class StoreUI : MonoBehaviour
 
         for (int i = 0; i < stack.Sources.Count; i++)
         {
-            SellItemSource source = stack.Sources[i];
+            SellSource source = stack.Sources[i];
             if (source == null)
                 continue;
 
@@ -2152,7 +2106,7 @@ public class StoreUI : MonoBehaviour
 
         CreateDialogText(panel.transform, "Title", "How many to sell?", 28, FontStyle.Bold, Color.white, 40f);
 
-        int sellPrice = stack.UnitSellPrice;
+        string sellPrice = StoreSelling.FormatGp(stack.UnitSellValue);
         CreateDialogText(panel.transform, "Info", $"{stack.ItemName}\n{sellPrice} gp each × {stack.Quantity} available", 18, FontStyle.Normal, new Color(0.9f, 0.9f, 0.9f), 60f);
 
         int currentQuantity = 1;
@@ -2198,7 +2152,7 @@ public class StoreUI : MonoBehaviour
         Action updateTotal = () =>
         {
             quantityText.text = currentQuantity.ToString();
-            totalText.text = $"Total: {sellPrice * currentQuantity} gp";
+            totalText.text = $"Total: {stack.LotPrice(currentQuantity)} gp";
         };
 
         Button minusButtonComp = minusButton.GetComponent<Button>();
@@ -2320,32 +2274,14 @@ public class StoreUI : MonoBehaviour
             return;
         }
 
-        int removedCount = 0;
-        int unitPrice = stack.UnitSellPrice;
+        string unitPrice = StoreSelling.FormatGp(stack.UnitSellValue);
 
-        for (int i = 0; i < stack.Sources.Count && removedCount < quantityToSell; i++)
+        // ITM-003: sell units, not ItemData objects; part of a potion or scroll stack stays behind.
+        int removedCount = StoreSelling.RemoveUnits(stack, quantityToSell, (source, units) =>
         {
-            SellItemSource source = stack.Sources[i];
-            if (source == null || source.Item == null)
-                continue;
-
-            bool removed;
-            if (source.FromStash)
-            {
-                removed = _partyStash != null && _partyStash.RemoveItem(source.Item);
-            }
-            else
-            {
-                removed = source.InventoryOwner != null && source.InventoryOwner.RemoveItem(source.Item);
-            }
-
-            if (!removed)
-                continue;
-
-            removedCount++;
             string sourceLabel = source.FromStash ? "stash" : source.OwnerName;
-            Debug.Log($"[Store] Sold {source.Item.Name} from {sourceLabel} for {unitPrice} gp");
-        }
+            Debug.Log($"[Store] Sold {units}x {source.Item.Name} from {sourceLabel} for {unitPrice} gp each");
+        });
 
         if (removedCount <= 0)
         {
@@ -2353,7 +2289,7 @@ public class StoreUI : MonoBehaviour
             return;
         }
 
-        int totalGold = unitPrice * removedCount;
+        int totalGold = stack.LotPrice(removedCount); // the lot's value rounded down once (PHB p.112)
         GameManager.Instance.AddGold(totalGold);
 
         Debug.Log($"[Store] Sold {removedCount}x {stack.ItemName} for {totalGold} gp total");

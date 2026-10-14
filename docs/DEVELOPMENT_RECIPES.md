@@ -431,11 +431,11 @@ Pitfalls:
 4. Use a category that `StoreUI.MatchesBuyCategory` (`StoreUI.cs:780-811`) maps: "Weapons" = contains "Weapon"; "Armor" = exactly "Armor" or "Magic Armor"; "Shields" = contains "Shield"; Scrolls/Potions/Wands by prefix; Rings, Rods, Wondrous Items, Ammunition by exact name; "Gear" = "Gear" or "Spell Component". Anything else shows only under "All". A new dropdown category needs `BuyCategoryOptions`, a `MatchesBuyCategory` case, and optionally sub-filters; selling uses `GetSellItemCategory`.
 5. Pricing: `priceGp` is the buy price, used by `ResolveBaseValue` for selling, and copied to `BasePriceGp` only if that is <= 0. `StoreUI.BuyItem` clones the item, calls `GameManager.SpendGold`, adds it to `PartyStash`, and refunds if the stash rejects it. Check the log `[Store] Initialized with N items`.
 
-Files: `Equipment/Store/StoreInventory.cs`, `StoreUI.cs`, `Equipment/Items/ItemDatabase.cs`, `ItemID.cs`, `Services/EconomyService.cs`. Examples: fdd49c9, 4111694, b0e35ac, ab503e8, 537b9e9, afd2df5, 6bfa259, 2c4d076.
+Files: `Equipment/Store/StoreInventory.cs`, `StoreUI.cs`, `StoreSelling.cs`, `Equipment/Items/ItemDatabase.cs`, `ItemID.cs`, `Services/EconomyService.cs`. Examples: fdd49c9, 4111694, b0e35ac, ab503e8, 537b9e9, afd2df5, 6bfa259, 2c4d076.
 
 Pitfalls:
 - `AddEnhancedStoreVariants` writes `BasePriceGp` on the SHARED ItemDatabase template (`StoreInventory.cs:160`).
-- Sell price has two implementations: `StoreInventory.GetSellPrice` (StoreUI) and `EconomyService.GetSellPrice` (`BasePriceGp/2`, used by `SellItem` and tests). Change both.
+- Sell price has two implementations: `StoreInventory.GetSellPrice` (StoreUI) and `EconomyService.GetSellPrice` (`BasePriceGp/2`, used by `SellItem` and tests). Change both. Both round one unit down; the shared math is `StoreSelling.SellValue` (half the listed price as an unrounded `decimal`, wands prorated by charges), and both stores expose it as `GetSellValue`. A sale of N units pays the lot's value rounded down once (`SellStack.LotPrice`, `StoreSelling.LotPrice`), never the rounded unit price times N. `StoreSelling` (`Equipment/Store/StoreSelling.cs`) builds the sell rows (name + unrounded unit value, wands also by charges) and removes units with `Inventory.RemoveUnits`/`PartyStash.RemoveUnits`, so a potion or scroll stack sells unit by unit (ITM-003). Never remove a stack with `RemoveItem` to sell part of it.
 - The "Special Properties", "Specific" and "Special Material" sub-filters match nothing currently listed; staves are never listed.
 - Rings, rods and wondrous items are listed only because their `AddXToStore` helpers inject them into ItemDatabase first (b0e35ac).
 

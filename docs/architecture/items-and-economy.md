@@ -101,7 +101,7 @@ Three similarly named types are easy to confuse:
 
 **AddItem** (Inventory.cs:85) merges a stackable item into existing stacks with the same `Id` (case-insensitive) up to `MaxStackSize`. For a stackable item, any new stack is made from `ItemDatabase.CloneItem(item.Id)` (Inventory.cs:131), which discards per-instance state on the incoming item. It falls back to the item itself only when the Id is unknown. Non-stackable items (wands, gear) are stored as the passed instance. Other gaps:
 
-- `RemoveItem` (:179) searches equipped and general slots but not `SlotlessItems`.
+- `RemoveItem` (:179) searches equipped and general slots but not `SlotlessItems`. `RemoveUnits` (:221) takes N units of one held instance: it lowers a stackable item's `StackCount` and removes the item only when none remain (used by store selling, ITM-003).
 - `GetTotalCarriedWeightLbs` ignores `StackCount` and ammo `Quantity`.
 
 **Equip flow.** The UI (`UI/Inventory/PreCombatInventoryUI.cs`, `InventoryUI.cs`) calls `EquipFromInventory`, `Unequip`, `DirectEquip` or the slotless methods. The body and hand slot methods run `SetEquipSlot` (Inventory.cs:385) and then `RecalculateStats`; `EquipSlotless`/`UnequipSlotless` edit `SlotlessItems` directly. `SetEquipSlot` calls `RingActivationManager.OnRingUnequipped/OnRingEquipped` only for rings with `HasActiveRingAbility`. It calls `WondrousItemActivation.OnWondrousEquipped`, which only sets an instance id and logs. For body slots the previous item's unequip hook is a no-op stub (Inventory.cs:428-434); `OnWondrousUnequipped` (also log-only) is called only from `UnequipSlotless`.
@@ -126,7 +126,7 @@ Three similarly named types are easy to confuse:
 
 Several `Ring*`/`Wondrous*` flags on `CharacterStats` are written here but never read by gameplay: feather fall, water walking, sustenance, mind shielding, flight, spider climb, levitation, caster-level bonus, see invisible and others. Grep for a reader before relying on one.
 
-**PartyStash** (`Equipment/Inventory/PartyStash.cs`) is a plain `List<ItemData>` with no stacking, owned by `Services/EconomyService.cs`. When it is locked, `AddItem` and `RemoveItem` fail. `GameManager` locks it when combat starts (`ForceStartEncounterFromPreCombat`, GameManager.cs:1611) and unlocks it in the pre-combat menus and during post-combat loot collection. `SeedDefaultItemsIfEmpty` adds starter gear, including 30 separate Cure Light Wounds potions.
+**PartyStash** (`Equipment/Inventory/PartyStash.cs`) is a plain `List<ItemData>` with no stacking, owned by `Services/EconomyService.cs`; an entry can still carry `StackCount` > 1 when a character's merged stack is moved in. When it is locked, `AddItem`, `RemoveItem` and `RemoveUnits` fail; `RemoveUnits` takes part of a stack as `Inventory.RemoveUnits` does. `GameManager` locks it when combat starts (`ForceStartEncounterFromPreCombat`, GameManager.cs:1611) and unlocks it in the pre-combat menus and during post-combat loot collection. `SeedDefaultItemsIfEmpty` adds starter gear, including 30 separate Cure Light Wounds potions.
 
 ## Consumables: potions, scrolls, wands, staves
 
@@ -230,20 +230,21 @@ Despite its name, `Equipment/SpellStorage/` holds the Ring of Spell Storing and 
 - 2 potions, spell components and gear
 - then every generated scroll, potion and wand, and every ring, rod and wondrous item
 
-`StoreUI` (`Equipment/Store/StoreUI.cs`, about 2,570 lines of code-built uGUI) is opened from the pre-combat hub through `GameManager.OpenStoreFromPreCombat` (GameManager.cs:1499).
+`StoreUI` (`Equipment/Store/StoreUI.cs`, about 2,510 lines of code-built uGUI; the sell logic is in `StoreSelling.cs`) is opened from the pre-combat hub through `GameManager.OpenStoreFromPreCombat` (GameManager.cs:1499).
 
 ```
-Buy  StoreUI.BuyItem (:2093)
+Buy  StoreUI.BuyItem (:2046)
        CreateItemInstance(entry.ItemId) -> CloneItem
        GameManager.SpendGold(entry.PriceGp) -> PartyStash.AddItem   (refund if the stash is locked)
-Sell StoreUI.BuildSellStacks (:1463)  stash, or the chosen character's GeneralSlots only
-       grouped by FullNameWithEnhancement; UnitSellPrice = GetSellPrice(first item)
-     StoreUI.SellStackItems (:2312)  remove N instances -> GameManager.AddGold(unit x N)
+Sell StoreUI.BuildSellStacks (:1436)  stash, or the chosen character's GeneralSlots only
+       StoreSelling.AddToStacks: rows keyed by name + unrounded unit sell value (+ charges for wands);
+       Quantity = sum of StackCount units (Equipment/Store/StoreSelling.cs, ITM-003)
+     StoreUI.SellStackItems (:2266)  StoreSelling.RemoveUnits(N units) -> GameManager.AddGold(SellStack.LotPrice(N))
 ```
 
-**Pricing.** The buy price is `StoreItemEntry.PriceGp`. The sell price is `StoreInventory.GetSellPrice` (:383), which is floor(`ResolveBaseValue` x 0.5). For wands that result is then scaled by current/max charges, preferring the `WandData` values (commit 6bfa259). `ResolveBaseValue` takes the first match in this order:
+**Pricing.** The buy price is `StoreItemEntry.PriceGp`. The sell value is `StoreInventory.GetSellValue` (:394), which is `StoreSelling.SellValue(ResolveBaseValue)`: half the base value as an unrounded `decimal`, and for wands times current/max charges, preferring the `WandData` values (DMG p.214). `GetSellPrice` (:384) is one unit rounded down. A sale pays `SellStack.LotPrice(N)`, the lot's value rounded down once, because gold is kept in whole gp (three 25 gp scrolls pay 37 gp). `ResolveBaseValue` takes the first match in this order:
 
-1. The appraised value, for appraised treasure items such as gems and art. They sell at 50% of it.
+1. The appraised value, for appraised treasure items such as gems and art. They sell at 50% of it, although PHB p.112 makes them trade goods sold at full value (ITM-082).
 2. The listed store price for the item's `Id`.
 3. `GetEnhancedPriceGp(BasePriceGp)`.
 4. A flat fallback by `ItemType`.
@@ -251,10 +252,9 @@ Sell StoreUI.BuildSellStacks (:1463)  stash, or the chosen character's GeneralSl
 Store quirks (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
 - `Add` writes the store price into a template's `BasePriceGp` when it is 0 (:285), and `AddEnhancedStoreVariants` overwrites the +1/+2 templates' `BasePriceGp` (:165). Prices seen elsewhere can therefore depend on whether the store has been opened.
-- A sell stack's quantity is the number of `ItemData` instances. A character-inventory stack (`StackCount` > 1) therefore sells as one unit, and the whole stack is removed.
-- Stacks are keyed by display name, so wands with different charge counts share the first wand's price.
 - Treasure magic weapons and armor already include their enhancement in `BasePriceGp`, and `GetEnhancedPriceGp` adds it again.
-- `EconomyService` has its own `GetBuyPrice`, `GetSellPrice`, `BuyItem` and `SellItem` with different rules. `BuyItem` and `SellItem` have no callers. The two price methods are used only by `Tests/Services/EconomyServiceTests.cs`, so that test does not cover the real store.
+- Only wands are prorated by charges; charged rings and wondrous items sell at half their full price whatever their charges (ITM-083).
+- `EconomyService` has its own `GetBuyPrice`, `GetSellPrice`/`GetSellValue` (base price or appraised value, then `StoreSelling.SellValue`), `BuyItem` and `SellItem`. `BuyItem` and `SellItem` have no callers; `SellItem` sells one unit of a stack (ITM-003). The two price methods are used only by `Tests/Services/EconomyServiceTests.cs`, so that test does not cover the real store.
 
 **Gold pools.** There are two, and no code moves gold between them:
 

@@ -207,33 +207,29 @@ public class EconomyService : MonoBehaviour
     /// </summary>
     public int GetSellPrice(ItemData item)
     {
-        if (item == null)
-            return 0;
-
-        // Treasure items use appraised value for sell price calculations
-        if (item.IsTreasureItem && item.IsAppraised && item.AppraisedValueGp > 0)
-            return Mathf.Max(0, item.AppraisedValueGp / 2);
-
-        int sellPrice = Mathf.Max(0, item.BasePriceGp / 2);
-
-        // Wand sell value is proportional to remaining charges
-        // D&D 3.5e: a partially-used wand is worth less proportionally.
-        // 0 charges = 0 gp (depleted wand is a useless stick).
-        if (item.IsWand)
-        {
-            int maxCharges = item.Wand != null ? item.Wand.MaxCharges : item.MaxCharges;
-            int currentCharges = item.Wand != null ? item.Wand.CurrentCharges : item.CurrentCharges;
-            if (maxCharges > 0)
-                sellPrice = Mathf.FloorToInt(sellPrice * ((float)currentCharges / maxCharges));
-            else
-                sellPrice = 0;
-        }
-
-        return sellPrice;
+        return StoreSelling.FloorGp(GetSellValue(item));
     }
 
     /// <summary>
-    /// Process selling an item: remove from stash and add gold.
+    /// One unit's unrounded sell value: half the listed (or appraised) price, prorated by charges for a wand
+    /// (PHB p.112, DMG p.214; <see cref="StoreSelling.SellValue"/>).
+    /// </summary>
+    public decimal GetSellValue(ItemData item)
+    {
+        if (item == null)
+            return 0m;
+
+        // Treasure items use appraised value for sell price calculations
+        int listed = item.IsTreasureItem && item.IsAppraised && item.AppraisedValueGp > 0
+            ? item.AppraisedValueGp
+            : item.BasePriceGp;
+
+        return StoreSelling.SellValue(listed, item, 1);
+    }
+
+    /// <summary>
+    /// Process selling one unit of an item from the stash and add gold: one potion or scroll of a stack
+    /// (the rest of the stack stays, ITM-003), or the whole item when it does not stack.
     /// Returns true on success.
     /// </summary>
     public bool SellItem(ItemData item)
@@ -245,7 +241,7 @@ public class EconomyService : MonoBehaviour
         }
 
         int sellPrice = GetSellPrice(item);
-        bool removed = _partyStash != null && _partyStash.RemoveItem(item);
+        bool removed = _partyStash != null && _partyStash.RemoveUnits(item, 1) == 1;
 
         if (!removed)
         {
@@ -322,14 +318,15 @@ public class EconomyService : MonoBehaviour
         if (items == null)
             return 0;
 
-        int total = 0;
+        // A stack sells per unit, and the whole lot is rounded down once (ITM-003, PHB p.112).
+        decimal total = 0m;
         foreach (ItemData item in items)
         {
             if (item != null && !item.IsDestroyed)
-                total += GetSellPrice(item);
+                total += GetSellValue(item) * StoreSelling.UnitsIn(item);
         }
 
-        return total;
+        return StoreSelling.FloorGp(total);
     }
 
     /// <summary>

@@ -380,28 +380,23 @@ public class StoreInventory : MonoBehaviour
         return false;
     }
 
+    /// <summary>One unit's sell price in whole gp: <see cref="GetSellValue"/> rounded down.</summary>
     public int GetSellPrice(ItemData item)
     {
+        return StoreSelling.FloorGp(GetSellValue(item));
+    }
+
+    /// <summary>
+    /// One unit's unrounded sell value: half the listed price (PHB p.112), prorated by remaining charges for a wand
+    /// (DMG p.214; an empty wand is worth nothing). A lot sold together is paid this times the count, rounded down once
+    /// (<see cref="StoreSelling.LotPrice"/>, ITM-003).
+    /// </summary>
+    public decimal GetSellValue(ItemData item)
+    {
         if (item == null)
-            return 0;
+            return 0m;
 
-        int baseValue = ResolveBaseValue(item);
-        int sellPrice = Mathf.FloorToInt(baseValue * 0.5f);
-
-        // Wand sell value is proportional to remaining charges
-        // D&D 3.5e: a partially-used wand is worth less proportionally.
-        // 0 charges = 0 gp (depleted wand is a useless stick).
-        if (item.IsWand)
-        {
-            int maxCharges = item.Wand != null ? item.Wand.MaxCharges : item.MaxCharges;
-            int currentCharges = item.Wand != null ? item.Wand.CurrentCharges : item.CurrentCharges;
-            if (maxCharges > 0)
-                sellPrice = Mathf.FloorToInt(sellPrice * ((float)currentCharges / maxCharges));
-            else
-                sellPrice = 0;
-        }
-
-        return Mathf.Max(0, sellPrice);
+        return StoreSelling.SellValue(ResolveBaseValue(item), item, 1);
     }
 
     private int ResolveBaseValue(ItemData item)
