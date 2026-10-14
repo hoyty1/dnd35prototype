@@ -488,6 +488,20 @@ public enum TerrainEffectType
 }
 
 /// <summary>
+/// What a Vorpal weapon's severed head does to a creature (DMG p.226): it has no head, it is not affected by the loss of
+/// its head, or it dies. <see cref="ByType"/> leaves it to the creature-type defaults in
+/// <see cref="CharacterStats.GetVorpalBeheadingResult"/>; the other values are per-creature readings of the MM
+/// description (delegated RAW reading 2026-10-14, ITM-067).
+/// </summary>
+public enum BeheadingResult
+{
+    ByType = 0,
+    NoHead,
+    Unaffected,
+    Dies
+}
+
+/// <summary>
 /// Complete definition of an NPC type — everything needed to instantiate
 /// a fully configured CharacterStats, equip items, and choose AI behavior.
 /// </summary>
@@ -572,6 +586,11 @@ public class NPCDefinition
     /// <see cref="CharacterStats.IsExceptionallyStable"/>.
     /// </summary>
     public bool IsExceptionallyStable;
+    /// <summary>
+    /// Vorpal beheading override from the MM description (DMG p.226): <see cref="BeheadingResult.ByType"/> uses the
+    /// type defaults. Copied to <see cref="CharacterStats.Beheading"/> (ITM-067).
+    /// </summary>
+    public BeheadingResult Beheading = BeheadingResult.ByType;
     public SwarmTraits SwarmTraits = new SwarmTraits();
     public bool CanMakeAttacksOfOpportunity = true;
     public int RegenerationAmount;
@@ -833,6 +852,7 @@ public class NPCDefinition
         clone.IsSingleActionsOnly = IsSingleActionsOnly;
         clone.IsSwarm = IsSwarm;
         clone.IsExceptionallyStable = IsExceptionallyStable;
+        clone.Beheading = Beheading;
         clone.ImprovedGrabMaxTargetSize = ImprovedGrabMaxTargetSize;
         clone.SwarmTraits = SwarmTraits != null
             ? new SwarmTraits

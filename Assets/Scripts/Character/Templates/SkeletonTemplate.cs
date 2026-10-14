@@ -63,6 +63,9 @@ public static class SkeletonTemplate
 
         // ── Type → Undead ──
         skel.CreatureType = "Undead";
+        // DMG p.226: undead other than vampires are not affected by the loss of their heads; a headless base creature
+        // keeps no head (delegated RAW reading 2026-10-14, ITM-067).
+        skel.Beheading = skel.Beheading == BeheadingResult.NoHead ? BeheadingResult.NoHead : BeheadingResult.ByType;
         skel.MaterialComposition = MaterialComposition.Bone;
         // A skeleton loses the base creature's racial traits (MM p.226; CHR-019).
         skel.RaceName = null;

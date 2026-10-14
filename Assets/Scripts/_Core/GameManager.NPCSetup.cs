@@ -774,6 +774,7 @@ public partial class GameManager
         stats.TripAttackCheckBonus = def.TripAttackCheckBonus;
         stats.TripTriggerAttackName = def.TripTriggerAttackName;
         stats.IsExceptionallyStable = def.IsExceptionallyStable;
+        stats.Beheading = def.Beheading;
         stats.HasImprovedGrab = def.HasImprovedGrab;
         stats.ImprovedGrabTriggerAttackName = def.ImprovedGrabTriggerAttackName;
         stats.ImprovedGrabMaxTargetSize = def.ImprovedGrabMaxTargetSize;

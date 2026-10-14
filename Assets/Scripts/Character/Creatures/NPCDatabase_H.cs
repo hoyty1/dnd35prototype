@@ -744,6 +744,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_5head",
+            Beheading = BeheadingResult.Unaffected, // Vorpal (DMG p.226): a severed head does not kill a hydra, which dies only when every head is severed or its body is slain, MM p.155-156; head severing is not modelled; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Five-Headed Hydra",
             ChallengeRating = "4",
@@ -797,6 +798,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_7head",
+            Beheading = BeheadingResult.Unaffected, // Vorpal (DMG p.226): a severed head does not kill a hydra, which dies only when every head is severed or its body is slain, MM p.155-156; head severing is not modelled; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Seven-Headed Hydra",
             ChallengeRating = "6",
@@ -850,6 +852,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_9head",
+            Beheading = BeheadingResult.Unaffected, // Vorpal (DMG p.226): a severed head does not kill a hydra, which dies only when every head is severed or its body is slain, MM p.155-156; head severing is not modelled; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Nine-Headed Hydra",
             ChallengeRating = "8",

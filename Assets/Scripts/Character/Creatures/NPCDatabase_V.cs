@@ -197,6 +197,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "vampire_spawn",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): slain by what slays vampires, MM p.254; DMG p.226; delegated RAW reading 2026-10-14, ITM-067
             Name = "Vampire Spawn",
             ChallengeRating = "4",
             Level = 4,
@@ -248,6 +249,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "vampire",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): DMG p.226: vampires are the undead that lose their heads; MM p.253; delegated RAW reading 2026-10-14, ITM-067
             Name = "Vampire",
             ChallengeRating = "7",
             // MM p.250 sample: a 5th-level human fighter with the template, 5d12 HD (32 hp), BAB +5 and base saves
@@ -378,6 +380,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "violet_fungus",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a fungal mass, MM p.112; delegated RAW reading 2026-10-14, ITM-067
             Name = "Violet Fungus",
             ChallengeRating = "3",
             Level = 2,

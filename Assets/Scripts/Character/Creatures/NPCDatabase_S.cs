@@ -440,6 +440,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "shrieker",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a fungal mass, MM p.112; delegated RAW reading 2026-10-14, ITM-067
             Name = "Shrieker",
             ChallengeRating = "1",
             Level = 2,

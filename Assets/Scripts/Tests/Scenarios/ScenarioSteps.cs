@@ -51,7 +51,7 @@ namespace Tests.Scenarios
         private Step(StepKind kind) { Kind = kind; }
 
         public static Step Move(int x, int y) => new Step(StepKind.Move) { Cell = new Vector2Int(x, y) };
-        /// <summary>Withdraw (full-round double move; the first square provokes no AoO from the creatures threatening it, PHB p.143).</summary>
+        /// <summary>Withdraw (full-round double move; vacating the starting space provokes no AoO from the visible creatures threatening it, PHB p.143, GRID-021).</summary>
         public static Step Withdraw(int x, int y) => new Step(StepKind.Withdraw) { Cell = new Vector2Int(x, y) };
         public static Step FiveFootStep(int x, int y) => new Step(StepKind.FiveFootStep) { Cell = new Vector2Int(x, y) };
         public static Step StandUp() => new Step(StepKind.StandUp);

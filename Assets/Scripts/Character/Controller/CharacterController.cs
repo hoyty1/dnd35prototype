@@ -7165,15 +7165,21 @@ public class CharacterController : MonoBehaviour
     /// vicious (with its backlash to the wielder), vorpal (a confirmed critical on a natural 20) and wounding. These are
     /// extra damage over the weapon's normal damage, so they are added once and never multiplied on a critical hit
     /// (PHB p.140; burst dice scale with the multiplier themselves, DMG p.224). <paramref name="critEffectsOnly"/> is a
-    /// confirmed critical against a creature immune to critical hits: burst dice still apply (DMG p.222, "Magic Weapons
-    /// and Critical Hits"), Vorpal does not (undead and golems are unaffected by losing their heads, oozes have none,
-    /// DMG p.226; ITM-067). Log notes go to <paramref name="notes"/>. Shared by
-    /// <see cref="PerformSingleAttackWithCritCore"/> and <see cref="ResolveCoupDeGrace"/> (an automatic critical hit,
-    /// PHB p.153), for PCs and NPCs alike.
+    /// confirmed critical against a creature immune to critical hits: burst dice and Vorpal still apply (DMG p.222, "Magic
+    /// Weapons and Critical Hits"), without multiplied damage. <paramref name="critConfirmed"/> and
+    /// <paramref name="critEffectsOnly"/> are the critical as it stands after the defender's Fortification: a negated
+    /// critical is a normal hit, so no crit-only dice and no Vorpal (DMG p.219; delegated RAW reading 2026-10-14,
+    /// ITM-067). Vorpal needs a natural 20 (a coup de grace passes 0, PHB p.153) and then follows its own text
+    /// (DMG p.226), not critical-hit immunity: <see cref="CharacterStats.GetVorpalBeheadingResult"/>. A severed head
+    /// that slays the creature is reported through <paramref name="beheaded"/>: the caller kills it outright after the
+    /// hit's damage is applied, so nothing that reacts to hit point loss (regeneration, death prevention) keeps it up.
+    /// Log notes go to <paramref name="notes"/>. Shared by <see cref="PerformSingleAttackWithCritCore"/> and
+    /// <see cref="ResolveCoupDeGrace"/> (an automatic critical hit, PHB p.153), for PCs and NPCs alike.
     /// </summary>
     private int RollWeaponEnchantmentRiderDamage(ItemData weapon, CharacterController target, bool critConfirmed,
-        bool critEffectsOnly, int critMultiplier, int naturalRoll, List<string> notes)
+        bool critEffectsOnly, int critMultiplier, int naturalRoll, List<string> notes, out bool beheaded)
     {
+        beheaded = false;
         if (weapon == null || !weapon.IsEnchanted)
             return 0;
 
@@ -7231,15 +7237,27 @@ public class CharacterController : MonoBehaviour
             }
         }
 
-        // --- Vorpal (instant kill on natural 20 confirmed crit) ---
-        if (EnchantmentEffects.CheckVorpalEffect(weapon, naturalRoll, critConfirmed))
+        // --- Vorpal (DMG p.226: a natural 20 followed by a confirmed critical severs the head, if it has one) ---
+        // Works against creatures immune to critical hits too (DMG p.222); what losing the head does follows Vorpal's own
+        // text (delegated RAW reading 2026-10-14, ITM-067). Beheading slays outright: it is not damage, so the caller
+        // sets the creature dead after the hit's damage, where nothing that reacts to hit point loss can keep it up.
+        if (EnchantmentEffects.CheckVorpalEffect(weapon, naturalRoll, critConfirmed || critEffectsOnly)
+            && target != null && target.Stats != null)
         {
-            if (target != null && target.Stats != null)
+            BeheadingResult beheading = target.Stats.GetVorpalBeheadingResult();
+            if (beheading == BeheadingResult.Dies)
             {
                 Debug.Log($"[Enchantment] VORPAL! {Stats.CharacterName}'s {weapon.Name} decapitates {target.Stats.CharacterName}!");
                 notes?.Add("⚔ VORPAL DECAPITATION!");
-                // Vorpal is instant death (set HP to lethal threshold)
-                target.Stats.TakeDamage(target.Stats.CurrentHP + 100);
+                beheaded = true;
+            }
+            else
+            {
+                string why = beheading == BeheadingResult.NoHead
+                    ? "has no head to sever"
+                    : "is not affected by the loss of its head";
+                Debug.Log($"[Enchantment] Vorpal: {target.Stats.CharacterName} {why} (DMG p.226).");
+                notes?.Add($"Vorpal: {target.Stats.CharacterName} {why}.");
             }
         }
 
@@ -7262,7 +7280,8 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// A specific weapon's OnDamageRoll (e.g. Sword of Subtlety +4, Sylvan Scimitar +1d6) and, on a confirmed critical
     /// hit, its OnCriticalHit hook, also against a creature immune to critical hits (<paramref name="critEffectsOnly"/>;
-    /// DMG p.222: a mace of smiting destroys an iron golem on a confirmed critical). Adjusts
+    /// DMG p.222: a mace of smiting destroys an iron golem on a confirmed critical). Both flags are the critical after the
+    /// defender's Fortification: a negated critical runs no OnCriticalHit (DMG p.219, ITM-067). Adjusts
     /// <paramref name="rawTotalDamage"/> and returns how much OnDamageRoll changed it. Specific-item damage that RAW
     /// multiplies on a critical is still added once (ITM-077).
     /// </summary>
@@ -7974,6 +7993,60 @@ public class CharacterController : MonoBehaviour
                 }
             }
 
+            // Sneak attack: applies if attacker is Rogue and target is either flanked
+            // or denied DEX to AC (feint, flat-footed, stunned, etc.).
+            // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule). Eligibility is settled here, before
+            // Fortification; the dice are rolled after the weapon damage.
+            bool deniedDexForSneak = IsTargetDeniedDexForSneakAttack(target, !isRangedAttack, feintWindowConsumed, out string dexDeniedReason);
+            bool sneakAttackEligible = Stats.IsRogue && (isFlanking || deniedDexForSneak);
+
+            if (sneakAttackEligible && target.HasConcealment(isRangedAttack))
+            {
+                result.SneakAttackTriggerReason = "target has concealment";
+                Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: target has concealment.");
+                sneakAttackEligible = false;
+            }
+
+            if (sneakAttackEligible && IsTargetImmuneToSneakAttackDamage(target))
+            {
+                string immunityReason = target.IsImmuneToCriticalHits()
+                    ? $"{target.Stats.CharacterName} is immune to critical hits, so to sneak attack ({target.Stats.CreatureType})"
+                    : $"target creature type '{target.Stats.CreatureType}' is immune to sneak attack precision damage";
+                result.SneakAttackTriggerReason = immunityReason;
+                Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: {immunityReason}.");
+                sneakAttackEligible = false;
+            }
+
+            // Fortification (defender's armor or shield, DMG p.219) is rolled as soon as a critical hit (or a sneak
+            // attack) is scored, before any damage: a negated critical is no critical hit, so the damage is rolled
+            // normally and nothing that needs a critical hit happens (burst and Thundering dice, a specific weapon's
+            // OnCriticalHit, Vorpal). One roll decides both the critical and the sneak attack. A confirmed critical's
+            // effects against a creature immune to critical hits (critEffectsOnly, DMG p.222) are a critical scored on
+            // the wearer too. Delegated RAW reading 2026-10-14 (ITM-067).
+            if ((critConfirmed || critEffectsOnly || sneakAttackEligible)
+                && RollDefenderFortification(target, out int fortPercent))
+            {
+                if (critConfirmed || critEffectsOnly)
+                {
+                    critConfirmed = false;
+                    critEffectsOnly = false;
+                    result.CritConfirmed = false;
+                    result.CritEffectsOnly = false;
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? $"Fortification ({fortPercent}%): crit negated"
+                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): crit negated";
+                }
+
+                if (sneakAttackEligible)
+                {
+                    sneakAttackEligible = false;
+                    result.SneakAttackTriggerReason = $"negated by Fortification ({fortPercent}%)";
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? $"Fortification ({fortPercent}%): sneak attack negated"
+                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): sneak attack negated";
+                }
+            }
+
             // Step 3: Roll weapon damage. The static modifier is built once for every attack path (CMB-003,
             // BuildWeaponDamageBonus). A normal hit rolls the weapon dice plus that modifier once; a confirmed critical
             // rolls both the multiplier number of times and adds the rolls (PHB p.134 and p.140; CMB-004, owner ruling
@@ -7991,49 +8064,25 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Damage] {Stats.CharacterName} -> {(target != null && target.Stats != null ? target.Stats.CharacterName : "?")}: "
                 + $"{(critConfirmed ? "critical " : string.Empty)}{weaponRoll.Describe()} weapon damage; modifier per roll [{damageBonus.Describe()}]");
 
-            // Sneak attack: applies if attacker is Rogue and target is either flanked
-            // or denied DEX to AC (feint, flat-footed, stunned, etc.).
-            // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule)
             int rawSneakDamage = 0;
-            bool deniedDexForSneak = IsTargetDeniedDexForSneakAttack(target, !isRangedAttack, feintWindowConsumed, out string dexDeniedReason);
-            bool sneakAttackEligible = Stats.IsRogue && (isFlanking || deniedDexForSneak);
-
-            if (sneakAttackEligible && target.HasConcealment(isRangedAttack))
-            {
-                result.SneakAttackTriggerReason = "target has concealment";
-                Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: target has concealment.");
-                sneakAttackEligible = false;
-            }
-
             if (sneakAttackEligible)
             {
-                if (IsTargetImmuneToSneakAttackDamage(target))
-                {
-                    string immunityReason = target.IsImmuneToCriticalHits()
-                        ? $"{target.Stats.CharacterName} is immune to critical hits, so to sneak attack ({target.Stats.CreatureType})"
-                        : $"target creature type '{target.Stats.CreatureType}' is immune to sneak attack precision damage";
-                    result.SneakAttackTriggerReason = immunityReason;
-                    Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: {immunityReason}.");
-                }
-                else
-                {
-                    int rogueLevel = Stats.GetClassLevel("Rogue");
-                    int sneakDice = CombatUtils.GetSneakAttackDice(rogueLevel);
-                    rawSneakDamage = CombatUtils.RollSneakAttackDamage(rogueLevel);
-                    result.SneakAttackApplied = true;
-                    result.SneakAttackDice = sneakDice;
-                    result.SneakAttackDamage = rawSneakDamage;
-                    result.SneakAttackByFlanking = isFlanking;
-                    result.SneakAttackByDexDenied = deniedDexForSneak;
-                    result.SneakAttackTriggerReason = isFlanking
-                        ? "target is flanked"
-                        : dexDeniedReason;
+                int rogueLevel = Stats.GetClassLevel("Rogue");
+                int sneakDice = CombatUtils.GetSneakAttackDice(rogueLevel);
+                rawSneakDamage = CombatUtils.RollSneakAttackDamage(rogueLevel);
+                result.SneakAttackApplied = true;
+                result.SneakAttackDice = sneakDice;
+                result.SneakAttackDamage = rawSneakDamage;
+                result.SneakAttackByFlanking = isFlanking;
+                result.SneakAttackByDexDenied = deniedDexForSneak;
+                result.SneakAttackTriggerReason = isFlanking
+                    ? "target is flanked"
+                    : dexDeniedReason;
 
-                    string triggerReason = string.IsNullOrEmpty(result.SneakAttackTriggerReason)
-                        ? "qualifying condition met"
-                        : result.SneakAttackTriggerReason;
-                    Debug.Log($"[Sneak Attack] {Stats.CharacterName} triggered sneak attack vs {target.Stats.CharacterName}: {triggerReason}. +{rawSneakDamage} ({sneakDice}d6)");
-                }
+                string triggerReason = string.IsNullOrEmpty(result.SneakAttackTriggerReason)
+                    ? "qualifying condition met"
+                    : result.SneakAttackTriggerReason;
+                Debug.Log($"[Sneak Attack] {Stats.CharacterName} triggered sneak attack vs {target.Stats.CharacterName}: {triggerReason}. +{rawSneakDamage} ({sneakDice}d6)");
             }
 
             int rawTotalDamage = rawWeaponDamage + rawSneakDamage;
@@ -8054,52 +8103,20 @@ public class CharacterController : MonoBehaviour
             }
 
             // ================================================================
-            // EXTRA DAMAGE, SPECIFIC ITEMS, FORTIFICATION (shared with the coup de grace, CMB-004)
+            // EXTRA DAMAGE, SPECIFIC ITEMS (shared with the coup de grace, CMB-004)
             // ================================================================
             // Special-ability dice are extra damage over the weapon's normal damage: added once, never multiplied on a
             // critical (PHB p.140). The same helpers run for a coup de grace (ResolveCoupDeGrace), an automatic critical.
+            // They see the critical as it stands after Fortification (ITM-067).
             var extraDamageNotes = new List<string>();
             int enchantmentBonusDamage = RollWeaponEnchantmentRiderDamage(weapon, target, critConfirmed, critEffectsOnly,
-                critMultiplier, result.DieRoll, extraDamageNotes);
+                critMultiplier, result.DieRoll, extraDamageNotes, out bool vorpalBeheaded);
             rawTotalDamage += enchantmentBonusDamage;
 
             int specificDelta = ApplySpecificItemDamageHooks(weapon, target, critConfirmed, critEffectsOnly, ref rawTotalDamage,
                 extraDamageNotes);
             rawWeaponDamage += specificDelta; // Track in weapon damage too
             AppendSpecialAttackNotes(result, extraDamageNotes);
-
-            // Fortification (defender's armor or shield, DMG p.219) may negate a critical hit or sneak attack.
-            if ((critConfirmed || (result.SneakAttackApplied && rawSneakDamage > 0))
-                && RollDefenderFortification(target, out int fortPercent))
-            {
-                // Negate critical: revert to normal damage
-                if (critConfirmed)
-                {
-                    // Recalculate as non-crit damage: the weapon dice and the static modifier rolled once.
-                    WeaponDamageRoll normalRoll = WeaponDamageRoll.Roll(damageCount, damageDice, staticDamage, 1);
-                    rawWeaponDamage = normalRoll.Total + specificDelta;
-                    result.BaseDamageRoll = normalRoll.DiceTotal;
-                    result.WeaponDamageRoll = normalRoll;
-                    result.CritDamageDice = null;
-                    result.CritConfirmed = false;
-                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                        ? $"Fortification ({fortPercent}%): crit negated"
-                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): crit negated";
-                }
-
-                // Negate sneak attack damage
-                if (result.SneakAttackApplied)
-                {
-                    rawSneakDamage = 0;
-                    result.SneakAttackDamage = 0;
-                    result.SneakAttackApplied = false;
-                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                        ? $"Fortification ({fortPercent}%): sneak attack negated"
-                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): sneak attack negated";
-                }
-
-                rawTotalDamage = rawWeaponDamage + rawSneakDamage + enchantmentBonusDamage;
-            }
 
             result.Damage = rawWeaponDamage;
             result.RawTotalDamage = rawTotalDamage;
@@ -8136,6 +8153,14 @@ public class CharacterController : MonoBehaviour
                 result.DamageTypeSummary = string.IsNullOrEmpty(result.DamageTypeSummary)
                     ? "nonlethal"
                     : $"{result.DamageTypeSummary}, nonlethal";
+            }
+
+            // A Vorpal beheading slays outright (DMG p.226): set after the damage, so regeneration's death prevention in
+            // TakeDamage cannot keep the creature at -9 (ITM-067).
+            if (vorpalBeheaded && target.Stats.CurrentHP > -10)
+            {
+                target.Stats.CurrentHP = -10;
+                target.SyncHPStateFromCurrentHP(emitLog: false);
             }
 
             if (target.Stats.IsDead)
@@ -14451,7 +14476,17 @@ public class CharacterController : MonoBehaviour
         // rolled the weapon's multiplier number of times (PHB p.134, p.140), the same roll as a confirmed critical on
         // any attack path (WeaponDamageRoll, CMB-004). Unarmed and natural attacks are x2 (ResolveWeaponCritProfile).
         ResolveWeaponCritProfile(weapon, out _, out int critMultiplier);
-        WeaponDamageRoll cdgRoll = WeaponDamageRoll.Roll(damageCount, damageDice, cdgDamage.Total, critMultiplier);
+
+        // Fortification on the target's armor or shield is rolled first, as on any attack path: a negated critical is a
+        // normal hit, so the damage is rolled once, with no sneak attack and nothing that needs a critical hit (burst
+        // dice, a specific weapon's OnCriticalHit) (DMG p.219; delegated RAW reading 2026-10-14, ITM-067).
+        var cdgNotes = new List<string>();
+        bool sneakEligible = Stats.IsRogue && !IsTargetImmuneToSneakAttackDamage(target);
+        bool critNegated = RollDefenderFortification(target, out int fortPercent);
+        if (critNegated)
+            cdgNotes.Add($"Fortification ({fortPercent}%): critical hit{(sneakEligible ? " and sneak attack" : string.Empty)} negated, damage rolled normally.");
+
+        WeaponDamageRoll cdgRoll = WeaponDamageRoll.Roll(damageCount, damageDice, cdgDamage.Total, critNegated ? 1 : critMultiplier);
         int weaponDamage = cdgRoll.Total;
 
         // Sneak attack dice are extra damage over the weapon's normal damage: added once, never multiplied (PHB p.134,
@@ -14459,7 +14494,7 @@ public class CharacterController : MonoBehaviour
         int sneakDamage = 0;
         int sneakDice = 0;
         bool sneakApplied = false;
-        if (Stats.IsRogue && !IsTargetImmuneToSneakAttackDamage(target))
+        if (sneakEligible && !critNegated)
         {
             int rogueLevel = Stats.GetClassLevel("Rogue");
             sneakDice = CombatUtils.GetSneakAttackDice(rogueLevel);
@@ -14467,28 +14502,14 @@ public class CharacterController : MonoBehaviour
             sneakApplied = sneakDamage > 0;
         }
 
-        // Everything after the weapon roll is the same as on a confirmed critical on any attack path (CMB-004): the
-        // special-ability dice added once (burst dice included), the specific-item hooks, then Fortification on the
-        // target's armor or shield, which can negate the critical and the sneak attack (DMG p.219).
-        var cdgNotes = new List<string>();
-        int riderDamage = RollWeaponEnchantmentRiderDamage(weapon, target, critConfirmed: true, critEffectsOnly: false,
-            critMultiplier, naturalRoll: 0, cdgNotes);
+        // Everything after the weapon roll is the same as on any attack path (CMB-004): the special-ability dice added
+        // once (burst dice only on a critical that stands), then the specific-item hooks. No natural 20, so no Vorpal.
+        int riderDamage = RollWeaponEnchantmentRiderDamage(weapon, target, critConfirmed: !critNegated, critEffectsOnly: false,
+            critMultiplier, naturalRoll: 0, cdgNotes, out _);
         int rawCriticalDamage = weaponDamage + sneakDamage + riderDamage;
-        int specificDelta = ApplySpecificItemDamageHooks(weapon, target, critConfirmed: true, critEffectsOnly: false,
+        int specificDelta = ApplySpecificItemDamageHooks(weapon, target, critConfirmed: !critNegated, critEffectsOnly: false,
             ref rawCriticalDamage, cdgNotes);
         weaponDamage += specificDelta;
-
-        bool critNegated = false;
-        if (RollDefenderFortification(target, out int fortPercent))
-        {
-            critNegated = true;
-            cdgRoll = WeaponDamageRoll.Roll(damageCount, damageDice, cdgDamage.Total, 1);
-            weaponDamage = cdgRoll.Total + specificDelta;
-            cdgNotes.Add($"Fortification ({fortPercent}%): critical hit{(sneakApplied ? " and sneak attack" : string.Empty)} negated, damage rolled normally.");
-            sneakDamage = 0;
-            sneakApplied = false;
-            rawCriticalDamage = weaponDamage + riderDamage;
-        }
 
         var damageTypes = weapon != null
             ? weapon.GetDamageTypes()

@@ -447,7 +447,7 @@ public partial class GameManager
         // (SquareGrid.FindPathAoOAware accepts a shared start square, CMB-122). Nothing forces the other
         // out: it may stay in that square until it moves, and no move may end in an occupied square. While
         // they share it each threatens the other and may melee it (PHB p.149, p.137; owner ruling CMB-131), so
-        // leaving the square provokes from the creature left in it (not on a 5-foot step or a withdraw's first square).
+        // leaving the square provokes from the creature left in it (not on a 5-foot step or when it vacates a withdraw's starting space).
         bool wasEscapeAction = actionType == GrappleActionType.EscapeArtist
             || actionType == GrappleActionType.OpposedGrappleEscape;
         if (!wasEscapeAction)

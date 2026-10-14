@@ -56,6 +56,9 @@ public static class ZombieTemplate
 
         // ── Type → Undead ──
         zombie.CreatureType = "Undead";
+        // DMG p.226: undead other than vampires are not affected by the loss of their heads; a headless base creature
+        // keeps no head (delegated RAW reading 2026-10-14, ITM-067).
+        zombie.Beheading = zombie.Beheading == BeheadingResult.NoHead ? BeheadingResult.NoHead : BeheadingResult.ByType;
         // A zombie loses the base creature's racial traits (MM p.266; CHR-019).
         zombie.RaceName = null;
         zombie.MaterialComposition = MaterialComposition.Organic; // still has flesh, unlike skeleton

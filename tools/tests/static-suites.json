@@ -662,11 +662,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 44,
+      "passed": 103,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CMB-004, CMB-064 (2026-10-09; owner ruling 2026-10-08: RAW): a confirmed critical rolls the weapon dice and every static modifier the multiplier number of times (PHB p.134, p.140), sneak attack is added once, a creature immune to critical hits (including elementals and plants, MM p.308, p.313) takes normal damage and no sneak attack (MM p.317, PHB p.50) while a confirmed threat still applies burst dice (DMG p.222), swarms too (MM p.316), and a coup de grace multiplies the weapon damage but not sneak attack, adds bane, energy dice and Fortification like any critical, and is refused against helpless crit-immune targets (PHB p.153). Forces the d20s and weapon dice through ScenarioHooks.RollFilter. Play only (CharacterController.Init). Assertions counted from the source (42), confirmed 42/42 by the batch 8 Play pass 20261009T205254Z-play."
+      "notes": "CMB-004, CMB-064 (2026-10-09; owner ruling 2026-10-08: RAW): a confirmed critical rolls the weapon dice and every static modifier the multiplier number of times (PHB p.134, p.140), sneak attack is added once, a creature immune to critical hits (including elementals and plants, MM p.308, p.313) takes normal damage and no sneak attack (MM p.317, PHB p.50) while a confirmed threat still applies burst dice (DMG p.222), swarms too (MM p.316), and a coup de grace multiplies the weapon damage but not sneak attack, adds bane, energy dice and Fortification like any critical, and is refused against helpless crit-immune targets (PHB p.153). Forces the d20s and weapon dice through ScenarioHooks.RollFilter. Play only (CharacterController.Init). Assertions counted from the source (42), confirmed 42/42 by the batch 8 Play pass 20261009T205254Z-play. 86 since ITM-067 (delegated RAW reading 2026-10-14; Play pass 20261014T232629Z-play): Fortification is rolled before the damage, so a negated critical (or crit-effects-only critical) gets no burst die, OnCriticalHit or Vorpal, on the attack path and the coup de grace; Vorpal needs a natural 20, reaches creatures immune to critical hits and then follows DMG p.226 (undead and golems unaffected, oozes, swarms and the air elemental headless, vampires, elementals with a head and non-golem constructs die), with the per-creature NPC data checked."
     },
     {
       "type": "Tests.Combat.DamageModifierTests",
@@ -807,11 +807,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 172,
+      "passed": 194,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). 172 since GRID-001 (2026-10-14): the Withdraw start square is exempt only from enemies the mover can see (CanVisuallyPerceive: invisible enemies and a blinded mover provoke, incorporeal, displaced and blinking enemies do not; PHB p.143), and MovementService.FindPath with avoidThreats keeps the range, withdraw rule and swarm flags and falls back to the direct route when a detour would stop short, on a test grid, for both sides."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). 172 since GRID-001 (2026-10-14): the Withdraw start square is exempt only from enemies the mover can see (CanVisuallyPerceive: invisible enemies and a blinded mover provoke, incorporeal, displaced and blinking enemies do not; PHB p.143), and MovementService.FindPath with avoidThreats keeps the range, withdraw rule and swarm flags and falls back to the direct route when a detour would stop short, on a test grid, for both sides. 194 since GRID-021 and GRID-023 (delegated RAW readings 2026-10-14; Play pass 20261014T232629Z-play): a Large withdrawer's whole starting space is exempt from a visible enemy for the whole withdraw, square by square (an unseen enemy and a square outside the space still provoke; a creature inside the space gets nothing, DMG p.29; a Medium withdrawer looping back through its start square provokes nothing), and a step provokes only for the squares it vacates."
     },
     {
       "type": "Tests.Combat.FlatFootedRulesTests",

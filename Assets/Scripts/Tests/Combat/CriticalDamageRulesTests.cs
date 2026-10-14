@@ -9,7 +9,9 @@ namespace Tests.Combat
 /// "Critical Hits"); extra dice such as sneak attack are added once (same pages); a creature not subject to critical
 /// hits takes normal damage (MM p.307-317 type traits; CMB-064) and no sneak attack (PHB p.50), though a confirmed threat
 /// still applies the weapon's critical-hit effects (DMG p.222); a coup de grace is an automatic critical hit under the same
-/// rule (PHB p.153), with the same extra dice, bane bonus and Fortification as any critical. Checks the shared roll
+/// rule (PHB p.153), with the same extra dice, bane bonus and Fortification as any critical. ITM-067 (delegated RAW
+/// reading 2026-10-14): Fortification is rolled before the damage and a negated critical is a normal hit with no burst
+/// dice or Vorpal; Vorpal (natural 20 only) reaches crit-immune creatures and follows DMG p.226. Checks the shared roll
 /// (WeaponDamageRoll) with injected dice, then the attack core and the coup de grace with the scenario dice filter forcing
 /// the d20s and the weapon dice. Needs Play mode (CharacterController.Init).
 /// </summary>
@@ -44,6 +46,15 @@ public static class CriticalDamageRulesTests
         TestCoupDeGraceAddsRidersOnceLikeAnAttack();
         TestCoupDeGraceAgainstFortification();
         TestCoupDeGraceAddsNoPowerAttack();
+        TestFortificationNegatesBurstDice();
+        TestFortificationNegatesCritEffectsOnImmuneWearer();
+        TestCoupDeGraceFortificationDropsBurstDice();
+        TestVorpalKillsOnAStandingCritical();
+        TestVorpalStoppedByFortification();
+        TestVorpalAgainstCritImmuneCreatures();
+        TestBeheadingDefaultsAndData();
+        TestVorpalKillsThroughRegeneration();
+        TestSpawnedAndTemplatedBeheading();
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -506,6 +517,364 @@ public static class CriticalDamageRulesTests
         {
             ScenarioHooks.RollFilter = saved;
             Cleanup(a, t);
+        }
+    }
+
+    // ── ITM-067 (delegated RAW reading 2026-10-14): Fortification first, then Vorpal ─────────────────────────────
+
+    /// <summary>A longsword with the given special abilities (DMG p.223-226).</summary>
+    private static ItemData EquipEnchantedLongsword(CharacterController c, params EnchantmentType[] abilities)
+    {
+        ItemData sword = Equip(c, ItemID.WeaponLongsword, EquipSlot.RightHand);
+        sword.Enchantment = new ItemEnchantmentData();
+        foreach (EnchantmentType e in abilities)
+            sword.Enchantment.Abilities.Add(e);
+        c.GetComponent<InventoryComponent>().CharacterInventory.RecalculateStats();
+        return sword;
+    }
+
+    /// <summary>A chain shirt of heavy fortification on <paramref name="c"/> (DMG p.219).</summary>
+    private static void GiveHeavyFortification(CharacterController c)
+    {
+        ItemData armor = Equip(c, ItemID.ArmorChainShirt, EquipSlot.Armor);
+        armor.Enchantment = new ItemEnchantmentData();
+        armor.Enchantment.Abilities.Add(EnchantmentType.FortificationHeavy);
+    }
+
+    /// <summary><see cref="Forced"/> plus every d10 rolling <paramref name="d10"/> and every d100 rolling <paramref name="d100"/>.</summary>
+    private static System.Func<int, string, int, int> ForcedWithPercentile(int d20, int weaponDie, int d6, int d10, int d100)
+    {
+        System.Func<int, string, int, int> forced = Forced(d20, weaponDie, d6);
+        return (sides, ctx, natural) => sides == 100 ? d100 : sides == 10 ? d10 : forced(sides, ctx, natural);
+    }
+
+    // DMG p.219, p.224: a critical negated by Fortification is a normal hit, so a flaming burst longsword (STR 16 +3) adds
+    // its flaming 1d6 but not its burst 1d10: 1d8(5) + 3 = 8, + 1 = 9. Without fortification: (5 + 3) x 2 + 1 + 7 = 24.
+    private static void TestFortificationNegatesBurstDice()
+    {
+        CharacterController a = null, t = null, t2 = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("BurstFort", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Humanoid");
+            t2 = CreateDefender(new Vector2Int(0, 1), "Humanoid");
+            GiveHeavyFortification(t);
+            EquipEnchantedLongsword(a, EnchantmentType.FlamingBurst);
+            ScenarioHooks.RollFilter = ForcedWithPercentile(20, 5, 1, 7, 1);
+
+            CombatResult r = a.Attack(t, false, 0, null);
+            Assert(r != null && r.Hit && r.IsCritThreat && !r.CritConfirmed && r.DamageRollCount == 1 && r.Damage == 8,
+                "Fortification negates the critical before damage: the longsword rolls once, 8 (DMG p.219; ITM-067)",
+                r != null ? $"confirmed {r.CritConfirmed}, rolls {r.DamageRollCount}, damage {r.Damage}; {r.SpecialAttackNote}" : "no result");
+            Assert(r != null && r.RawTotalDamage == 9 && r.SpecialAttackNote != null && r.SpecialAttackNote.Contains("Fortification"),
+                "A negated critical adds no burst die, only the flaming 1d6: 8 + 1 = 9 (DMG p.224)",
+                r != null ? $"raw {r.RawTotalDamage}; {r.SpecialAttackNote}" : "no result");
+
+            CombatResult control = a.Attack(t2, false, 0, null);
+            Assert(control != null && control.CritConfirmed && control.RawTotalDamage == 24,
+                "Positive control: without fortification the critical adds the burst die: 16 + 1 + 7 = 24",
+                control != null ? $"confirmed {control.CritConfirmed}, raw {control.RawTotalDamage}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t, t2);
+        }
+    }
+
+    // DMG p.222 + p.219: a confirmed critical against an undead applies only its effects, and that is a critical scored on
+    // the wearer, so heavy fortification negates it too: no burst die, 8 + flaming 1 = 9 (delegated RAW reading).
+    private static void TestFortificationNegatesCritEffectsOnImmuneWearer()
+    {
+        CharacterController a = null, t = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("BurstFortUndead", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Undead");
+            GiveHeavyFortification(t);
+            EquipEnchantedLongsword(a, EnchantmentType.FlamingBurst);
+            ScenarioHooks.RollFilter = ForcedWithPercentile(20, 5, 1, 7, 1);
+
+            CombatResult r = a.Attack(t, false, 0, null);
+            Assert(r != null && r.Hit && r.CritImmunityPrevented && !r.CritEffectsOnly && r.RawTotalDamage == 9,
+                "Fortification on a creature immune to critical hits negates the critical's effects: no burst die, 9",
+                r != null ? $"effects only {r.CritEffectsOnly}, raw {r.RawTotalDamage}; {r.SpecialAttackNote}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t);
+        }
+    }
+
+    // A coup de grace's critical negated by Fortification is a normal hit too: a flaming burst longsword (STR 14 +2) rolls
+    // 1d8(5) + 2 = 7 once and adds flaming 1, no burst: 8. Without fortification: (5 + 2) x 2 + 1 + 7 = 22.
+    private static void TestCoupDeGraceFortificationDropsBurstDice()
+    {
+        CharacterController a = null, t = null, t2 = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("BurstCoup", 14, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Humanoid");
+            t2 = CreateDefender(new Vector2Int(0, 1), "Humanoid");
+            GiveHeavyFortification(t);
+            EquipEnchantedLongsword(a, EnchantmentType.FlamingBurst);
+            t.ApplyCondition(CombatConditionType.Unconscious, 5, "Test");
+            t2.ApplyCondition(CombatConditionType.Unconscious, 5, "Test");
+            ScenarioHooks.RollFilter = ForcedWithPercentile(20, 5, 1, 7, 1);
+
+            SpecialAttackResult cdg = a.ExecuteSpecialAttack(SpecialAttackType.CoupDeGrace, t);
+            Assert(cdg != null && cdg.Success && cdg.CritNegated && cdg.WeaponDamageRoll.Multiplier == 1 && cdg.WeaponDamageRoll.Total == 7
+                   && cdg.ExtraDamage == 1 && cdg.RawDamage == 8,
+                "A coup de grace negated by Fortification adds no burst die: 7 + flaming 1 = 8 (DMG p.219, p.224)",
+                cdg != null ? $"extra {cdg.ExtraDamage}, raw {cdg.RawDamage}; {cdg.Log}" : "no result");
+
+            SpecialAttackResult control = a.ExecuteSpecialAttack(SpecialAttackType.CoupDeGrace, t2);
+            Assert(control != null && control.Success && !control.CritNegated && control.RawDamage == 22,
+                "Positive control: without fortification the coup de grace adds the burst die: 14 + 1 + 7 = 22",
+                control != null ? $"raw {control.RawDamage}; {control.Log}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t, t2);
+        }
+    }
+
+    // DMG p.226: a natural 20 followed by a confirmed critical severs a humanoid's head; a 19 that confirms does not.
+    private static void TestVorpalKillsOnAStandingCritical()
+    {
+        CharacterController a = null, t = null, t2 = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("Vorpalist", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Humanoid");
+            t2 = CreateDefender(new Vector2Int(0, 1), "Humanoid");
+            EquipEnchantedLongsword(a, EnchantmentType.Keen, EnchantmentType.Vorpal);
+
+            ScenarioHooks.RollFilter = Forced(19, 5, 1);
+            CombatResult nineteen = a.Attack(t2, false, 0, null);
+            Assert(nineteen != null && nineteen.CritConfirmed && !t2.Stats.IsDead,
+                "A confirmed critical on a natural 19 does not trigger Vorpal (DMG p.226: natural 20)",
+                nineteen != null ? $"confirmed {nineteen.CritConfirmed}, dead {t2.Stats.IsDead}" : "no result");
+
+            ScenarioHooks.RollFilter = Forced(20, 5, 1);
+            CombatResult r = a.Attack(t, false, 0, null);
+            Assert(r != null && r.CritConfirmed && t.Stats.IsDead && r.TargetKilled
+                   && r.SpecialAttackNote != null && r.SpecialAttackNote.Contains("VORPAL"),
+                "A natural 20 that confirms severs the humanoid's head and slays it outright, whatever its hit points",
+                r != null ? $"confirmed {r.CritConfirmed}, dead {t.Stats.IsDead}, hp {t.Stats.CurrentHP}; {r.SpecialAttackNote}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t, t2);
+        }
+    }
+
+    // ITM-067: Fortification is rolled as soon as the critical is confirmed; a negated critical is no critical hit, so a
+    // natural 20 with a vorpal longsword (STR 16) deals 1d8(5) + 3 = 8 once and the head stays on.
+    private static void TestVorpalStoppedByFortification()
+    {
+        CharacterController a = null, t = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("VorpalFort", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Humanoid");
+            GiveHeavyFortification(t);
+            EquipEnchantedLongsword(a, EnchantmentType.Keen, EnchantmentType.Vorpal);
+            ScenarioHooks.RollFilter = ForcedWithPercentile(20, 5, 1, 7, 1);
+
+            CombatResult r = a.Attack(t, false, 0, null);
+            Assert(r != null && r.Hit && !r.CritConfirmed && r.Damage == 8 && !t.Stats.IsDead
+                   && (r.SpecialAttackNote == null || !r.SpecialAttackNote.Contains("VORPAL")),
+                "Heavy fortification negates the critical, so Vorpal does not sever the head: a normal hit of 8 (DMG p.219, p.226)",
+                r != null ? $"confirmed {r.CritConfirmed}, damage {r.Damage}, dead {t.Stats.IsDead}; {r.SpecialAttackNote}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t);
+        }
+    }
+
+    // DMG p.222 + p.226: Vorpal is a critical-hit effect, so it reaches creatures immune to critical hits (damage not
+    // multiplied); then its own text decides: undead (not vampires) and golems are unaffected, oozes and swarms have no
+    // head, and a vampire, an elemental with a head and a construct that is not a golem die.
+    private static void TestVorpalAgainstCritImmuneCreatures()
+    {
+        var cases = new (string label, string type, bool swarm, BeheadingResult overrideResult, string npcId, bool expectDead)[]
+        {
+            ("an undead", "Undead", false, BeheadingResult.ByType, null, false),
+            ("a vampire", "Undead", false, BeheadingResult.Dies, "vampire", true),
+            ("an ooze", "Ooze", false, BeheadingResult.ByType, null, false),
+            ("a swarm", null, true, BeheadingResult.ByType, null, false),
+            ("a golem", "Construct", false, BeheadingResult.ByType, "flesh_golem", false),
+            ("a construct that is not a golem", "Construct", false, BeheadingResult.ByType, null, true),
+            ("an elemental with a head", "Elemental", false, BeheadingResult.ByType, null, true),
+            ("an air elemental (no head)", "Elemental", false, BeheadingResult.NoHead, "small_air_elemental", false),
+        };
+
+        foreach (var c in cases)
+        {
+            CharacterController a = null, t = null;
+            System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+            try
+            {
+                a = Create("VorpalVs", 16, new Vector2Int(0, 0));
+                t = CreateDefender(new Vector2Int(1, 0), c.type);
+                t.Stats.IsSwarm = c.swarm;
+                t.Stats.Beheading = c.overrideResult;
+                t.Stats.SourceNpcDefinitionId = c.npcId;
+                EquipEnchantedLongsword(a, EnchantmentType.Keen, EnchantmentType.Vorpal);
+                ScenarioHooks.RollFilter = Forced(20, 5, 1);
+
+                CombatResult r = a.Attack(t, false, 0, null);
+                bool dead = t.Stats.IsDead;
+                Assert(r != null && r.Hit && r.CritImmunityPrevented && r.CritEffectsOnly && r.DamageRollCount == 1 && dead == c.expectDead,
+                    $"Vorpal against {c.label}: damage not multiplied, {(c.expectDead ? "the head is severed and it dies" : "no effect")} (DMG p.222, p.226)",
+                    r != null ? $"effects only {r.CritEffectsOnly}, rolls {r.DamageRollCount}, dead {dead}; {r.SpecialAttackNote}" : "no result");
+                if (!c.expectDead)
+                    Assert(r != null && r.SpecialAttackNote != null && r.SpecialAttackNote.Contains("Vorpal:"),
+                        $"The log says why Vorpal had no effect on {c.label}", r != null ? r.SpecialAttackNote : "no result");
+            }
+            finally
+            {
+                ScenarioHooks.RollFilter = saved;
+                Cleanup(a, t);
+            }
+        }
+    }
+
+    // The type defaults and the per-creature MM readings carried by the NPC data (delegated RAW reading 2026-10-14).
+    private static void TestBeheadingDefaultsAndData()
+    {
+        NPCDatabase.Init();
+        var expected = new (string id, BeheadingResult result)[]
+        {
+            ("vampire", BeheadingResult.Dies), ("vampire_spawn", BeheadingResult.Dies),
+            ("small_air_elemental", BeheadingResult.NoHead), ("medium_air_elemental", BeheadingResult.NoHead),
+            ("small_earth_elemental", BeheadingResult.Dies), ("medium_fire_elemental", BeheadingResult.Dies),
+            ("small_water_elemental", BeheadingResult.Dies), ("treant", BeheadingResult.Dies),
+            ("shrieker", BeheadingResult.NoHead), ("violet_fungus", BeheadingResult.NoHead), ("phantom_fungus", BeheadingResult.NoHead),
+            ("thoqqua", BeheadingResult.NoHead), ("flesh_golem", BeheadingResult.Unaffected),
+            ("gibbering_mouther", BeheadingResult.NoHead), ("cloaker", BeheadingResult.NoHead), ("ethereal_filcher", BeheadingResult.NoHead),
+            ("hydra_5head", BeheadingResult.Unaffected), ("hydra_7head", BeheadingResult.Unaffected),
+            ("hydra_9head", BeheadingResult.Unaffected), ("chimera", BeheadingResult.Dies), ("ettin", BeheadingResult.Dies),
+        };
+        foreach (var e in expected)
+        {
+            NPCDefinition def = NPCDatabase.Get(e.id);
+            Assert(def != null && def.Beheading == e.result && def.Clone().Beheading == e.result,
+                $"{e.id}: Vorpal reading {e.result} (and its clone keeps it)", def != null ? def.Beheading.ToString() : "missing");
+        }
+
+        CharacterController probe = null;
+        try
+        {
+            probe = CreateDefender(new Vector2Int(5, 5), "Humanoid");
+            CharacterStats s = probe.Stats;
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.Dies, "Default: a humanoid (every PC) has a head and dies");
+            s.CreatureType = "Ooze";
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.NoHead, "Default: an ooze has no head");
+            s.CreatureType = "Undead";
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.Unaffected, "Default: an undead is unaffected");
+            s.CreatureType = "Construct";
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.Dies, "Default: a construct that is not a golem dies");
+            s.SourceNpcDefinitionId = "flesh_golem";
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.Unaffected, "Default: a golem is unaffected");
+            s.SourceNpcDefinitionId = null;
+            s.CharacterName = "Golemancer";
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.Dies,
+                "A construct whose display name contains 'golem' is not a golem (matched by entry id only, CORE-017)");
+            s.CreatureType = "Animal";
+            s.IsSwarm = true;
+            Assert(s.GetVorpalBeheadingResult() == BeheadingResult.NoHead, "Default: a swarm has no head (MM p.316)");
+            s.IsSwarm = false;
+        }
+        finally
+        {
+            Cleanup(probe);
+        }
+    }
+
+    // DMG p.226: beheading slays outright. A ring of regeneration keeps its wearer from dying of hit point damage
+    // (DMG p.232) but not from a severed head, so a Vorpal critical kills a regenerating humanoid (ITM-067).
+    private static void TestVorpalKillsThroughRegeneration()
+    {
+        CharacterController a = null, t = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("VorpalRegen", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0), "Humanoid");
+            t.gameObject.AddComponent<RegenerationEffect>().IsActive = true;
+            EquipEnchantedLongsword(a, EnchantmentType.Keen, EnchantmentType.Vorpal);
+            ScenarioHooks.RollFilter = Forced(20, 5, 1);
+
+            CombatResult r = a.Attack(t, false, 0, null);
+            Assert(r != null && r.CritConfirmed && t.Stats.IsDead && r.TargetKilled,
+                "A Vorpal critical kills a ring of regeneration wearer: beheading is not hit point damage (DMG p.226, p.232)",
+                r != null ? $"confirmed {r.CritConfirmed}, dead {t.Stats.IsDead}, hp {t.Stats.CurrentHP}; {r.SpecialAttackNote}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t);
+        }
+    }
+
+    // The NPC data reaches the spawned creature (GameManager.InitializeNPCFromDefinition), and the zombie and skeleton
+    // templates turn a base creature with a head into an unaffected undead while a headless one keeps no head.
+    private static void TestSpawnedAndTemplatedBeheading()
+    {
+        NPCDatabase.Init();
+        if (GameManager.Instance == null)
+        {
+            Assert(false, "Spawned beheading readings need a GameManager (Play mode)");
+            return;
+        }
+
+        var cases = new (string label, NPCDefinition def, BeheadingResult expected)[]
+        {
+            ("a spawned vampire", NPCDatabase.Get("vampire")?.Clone(), BeheadingResult.Dies),
+            ("a spawned small air elemental", NPCDatabase.Get("small_air_elemental")?.Clone(), BeheadingResult.NoHead),
+            ("a spawned five-headed hydra", NPCDatabase.Get("hydra_5head")?.Clone(), BeheadingResult.Unaffected),
+            ("a spawned ogre", NPCDatabase.Get("ogre")?.Clone(), BeheadingResult.Dies),
+            ("a goblin zombie", ZombieTemplate.Apply(NPCDatabase.Get("goblin")), BeheadingResult.Unaffected),
+            ("a beholder zombie", ZombieTemplate.Apply(NPCDatabase.Get("beholder")), BeheadingResult.NoHead),
+            ("a goblin skeleton", SkeletonTemplate.Apply(NPCDatabase.Get("goblin")), BeheadingResult.Unaffected),
+            ("a beholder skeleton", SkeletonTemplate.Apply(NPCDatabase.Get("beholder")), BeheadingResult.NoHead),
+        };
+
+        foreach (var c in cases)
+        {
+            if (c.def == null)
+            {
+                Assert(false, $"{c.label}: definition exists");
+                continue;
+            }
+
+            var go = new GameObject("CritDamageTest_Spawn");
+            CharacterController cc = go.AddComponent<CharacterController>();
+            try
+            {
+                GameManager.Instance.InitializeNPCFromDefinition(cc, c.def, new Vector2Int(-60, -60), null, null);
+                BeheadingResult got = cc.Stats != null ? cc.Stats.GetVorpalBeheadingResult() : BeheadingResult.ByType;
+                Assert(got == c.expected, $"{c.label}: Vorpal reading {c.expected} after spawn", got.ToString());
+            }
+            finally
+            {
+                GameManager gm = GameManager.Instance;
+                if (gm != null && gm.Grid != null)
+                    gm.Grid.ClearCreatureOccupancy(cc);
+                Object.DestroyImmediate(go);
+            }
         }
     }
 }

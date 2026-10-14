@@ -2566,6 +2566,46 @@ public class CharacterStats
     /// </summary>
     public bool IsExceptionallyStable;
 
+    /// <summary>
+    /// Per-creature Vorpal beheading reading from the MM description, copied from
+    /// <see cref="NPCDefinition.Beheading"/>; <see cref="BeheadingResult.ByType"/> (every PC) uses the type defaults in
+    /// <see cref="GetVorpalBeheadingResult"/> (ITM-067).
+    /// </summary>
+    public BeheadingResult Beheading = BeheadingResult.ByType;
+
+    /// <summary>
+    /// What a Vorpal weapon's severed head does to this creature (DMG p.226): oozes and many aberrations have no head,
+    /// golems and undead other than vampires are not affected by its loss, and most other creatures die. Defaults by
+    /// type: ooze and swarm (no discernible anatomy, MM p.316) have no head; undead and golems are unaffected; every
+    /// other creature, constructs other than golems, elementals and plants included, has a head and dies. A
+    /// per-creature <see cref="Beheading"/> from the MM description overrides it (vampires and vampire spawn die, MM
+    /// p.253-254; the air elemental, the fungi and the thoqqua have no head; headless aberrations; hydras are unaffected
+    /// because one severed head does not kill them, MM p.155-156). Delegated RAW reading
+    /// 2026-10-14 (ITM-067), the same for PCs and NPCs.
+    /// </summary>
+    public BeheadingResult GetVorpalBeheadingResult()
+    {
+        if (Beheading != BeheadingResult.ByType)
+            return Beheading;
+        if (IsSwarm)
+            return BeheadingResult.NoHead;
+
+        string type = string.IsNullOrEmpty(CreatureType) ? string.Empty : CreatureType.Trim().ToLowerInvariant();
+        if (type == "ooze")
+            return BeheadingResult.NoHead;
+        if (type == "undead")
+            return BeheadingResult.Unaffected;
+        if (type == "construct" && IsGolem())
+            return BeheadingResult.Unaffected;
+        return BeheadingResult.Dies;
+    }
+
+    /// <summary>A golem by its MM entry id (flesh_golem), for <see cref="GetVorpalBeheadingResult"/>; never by display name (CORE-017).</summary>
+    private bool IsGolem()
+    {
+        return SourceNpcDefinitionId != null && SourceNpcDefinitionId.IndexOf("golem", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     /// <summary>Monster special: successful natural-attack hit can start a grapple as a free action.</summary>
     public bool HasImprovedGrab;
 

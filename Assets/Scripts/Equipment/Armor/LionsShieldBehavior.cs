@@ -305,6 +305,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.IsTallCreature = def.IsTallCreature;
         stats.IsQuadruped = def.IsQuadruped;
         stats.IsExceptionallyStable = def.IsExceptionallyStable;
+        stats.Beheading = def.Beheading;
         stats.HasPounce = def.HasPounce;
         stats.HasRake = def.HasRake;
         stats.HasScent = def.HasScent;

@@ -62,6 +62,7 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
         target.CharacterAlignment = source.CharacterAlignment; // always neutral evil (CRE-002)
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
+        target.Beheading = source.Beheading;
 
         // Proficiency data (CHR-072; CreatureProficiency.ApplyFromDefinition)
         target.EntryWeaponIds = source.EntryWeaponIds;

@@ -138,6 +138,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "flesh_golem",
+            Beheading = BeheadingResult.Unaffected, // Vorpal (DMG p.226): golems are not affected, DMG p.226; delegated RAW reading 2026-10-14, ITM-067
             Name = "Flesh Golem",
             ChallengeRating = "7",
             Level = 9,

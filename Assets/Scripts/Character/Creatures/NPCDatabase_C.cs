@@ -35,6 +35,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "cloaker",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): maw and eyes set in a raylike body, no head described, MM p.36; delegated RAW reading 2026-10-14, ITM-067
             Name = "Cloaker",
             ChallengeRating = "5",
             Level = 6,
@@ -601,6 +602,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "chimera",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): three heads, but unlike the hydra (MM p.155-156) no text lets it survive losing one, so the general rule applies, MM p.34; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Chimera",
             ChallengeRating = "7",

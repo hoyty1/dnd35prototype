@@ -720,7 +720,7 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator(_isGrappleMoveSelection
                     ? $"{pc.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)"
                     : (_isSelectingWithdraw
-                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving the first square provokes no AoO from enemies you can see)"
+                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving your starting space provokes no AoO from enemies you can see)"
                         : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)"));
             }
         });
@@ -1242,8 +1242,9 @@ public partial class GameManager
         mover.Actions.UseFullRoundAction();
         mover.IsWithdrawing = true;
 
-        // Leaving the first square is already exempt in ProvokedAoOs from the enemies the mover can see
-        // (suppressFirstSquareAoO, CharacterController.CanVisuallyPerceive, PHB p.143); the rest resolve
+        // Leaving the starting space (every square the mover starts in, for the whole withdraw) is already exempt in
+        // ProvokedAoOs from the enemies the mover can see (the startSpace rule in ThreatSystem.AnalyzePathForAoOs,
+        // suppressFirstSquareAoO, CharacterController.CanVisuallyPerceive, PHB p.143, DMG p.29, GRID-021); the rest resolve
         // before the step that provokes them, like any other movement.
         List<AoOThreatInfo> provokedAoOs = pathResult != null ? pathResult.ProvokedAoOs : null;
         var moveOutcome = new MovementAoOStepOutcome();

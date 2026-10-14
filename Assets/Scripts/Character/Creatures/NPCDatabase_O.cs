@@ -222,6 +222,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "otyugh",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a round body with a sensory stalk and a mouth in the body, MM p.204; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Otyugh",
             ChallengeRating = "4",

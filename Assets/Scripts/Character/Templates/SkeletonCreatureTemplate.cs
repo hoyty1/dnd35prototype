@@ -68,6 +68,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.MaterialComposition = source.MaterialComposition;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
+        target.Beheading = source.Beheading;
 
         // Proficiency data (CHR-072; CreatureProficiency.ApplyFromDefinition)
         target.EntryWeaponIds = source.EntryWeaponIds;

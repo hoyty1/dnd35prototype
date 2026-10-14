@@ -555,6 +555,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "mimic",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): an amorphous shapechanger, MM p.186; delegated RAW reading 2026-10-14, ITM-067
             Name = "Mimic",
             ChallengeRating = "4",
             Level = 7,

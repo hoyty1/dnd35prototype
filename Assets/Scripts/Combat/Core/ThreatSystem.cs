@@ -440,9 +440,16 @@ public static class ThreatSystem
     /// prompt, the AI's provoke counts) therefore reflects the record; the hover path preview and the
     /// A* threat cost (both from <see cref="GetSquaresThreatenedByEnemies"/>) use raw threatened
     /// squares and do not (GRID-020).
-    /// <paramref name="suppressFirstSquareAoO"/> marks a Withdraw (PHB p.143): leaving the start square
-    /// provokes no AoO from an enemy the mover can see, but still does from one it cannot see
-    /// (<see cref="CharacterController.CanVisuallyPerceive"/>, GRID-001).
+    /// A step provokes only for the squares it vacates: the previous footprint minus the new one. A square
+    /// a multi-square mover still covers after the step has not been moved out of (PHB p.137-138; DMG p.29
+    /// ties the AoO to moving "out of" a space; delegated RAW reading 2026-10-14, GRID-023).
+    /// <paramref name="suppressFirstSquareAoO"/> marks a Withdraw (PHB p.143): every square of the starting
+    /// space (the whole footprint at <c>mover.GridPosition</c>) is not threatened by an enemy the mover can
+    /// see, for the whole withdraw, so vacating any of them, at any step, provokes no AoO from that enemy; an
+    /// enemy it cannot see (<see cref="CharacterController.CanVisuallyPerceive"/>, GRID-001) still gets one,
+    /// and squares outside the starting space provoke as normal, square by square (DMG p.29: a smaller
+    /// creature inside a larger one's space gets no AoO when the larger one withdraws; delegated RAW reading
+    /// 2026-10-14, GRID-021).
     /// A bull rush push reads and writes the same record for the pushed defender (owner interpretation
     /// 2026-10-11, CMB-150: forced movement creates no movement opportunity beyond the one per round).
     /// <paramref name="excludedThreateners"/> get no AoO from this movement: the creatures in the same grapple as a
@@ -485,33 +492,60 @@ public static class ThreatSystem
         // The mover starts at their current base position.
         Vector2Int previousBaseSquare = mover.GridPosition;
 
+        // Withdraw (PHB p.143, DMG p.29): the whole starting space is "the square you start out in". It is not
+        // threatened by any opponent the mover can see, for the whole withdraw, so vacating any of its squares at
+        // any step provokes only from enemies the mover cannot see (an invisible enemy, one hidden by fog, or every
+        // enemy of a blinded mover). Sight is CanVisuallyPerceive, not the miss-chance test CanSee: an incorporeal,
+        // displaced or blinking enemy is still seen. Squares outside the starting space provoke as normal, square
+        // by square. Delegated RAW reading 2026-10-14 (GRID-021).
+        HashSet<Vector2Int> withdrawStartSpace = suppressFirstSquareAoO
+            ? new HashSet<Vector2Int>(mover.GetOccupiedSquaresAt(previousBaseSquare))
+            : null;
+        var seenEnemies = new Dictionary<CharacterController, bool>();
+
         for (int i = 0; i < path.Count; i++)
         {
             Vector2Int currentBaseSquare = path[i];
             List<Vector2Int> previousOccupiedSquares = mover.GetOccupiedSquaresAt(previousBaseSquare);
 
-            // Withdraw (PHB p.143): the starting square is not threatened by any opponent the mover can
-            // see, so leaving it provokes only from enemies it cannot see (an invisible enemy, one hidden by
-            // fog, or every enemy of a blinded mover). Sight is CanVisuallyPerceive, not the miss-chance test
-            // CanSee: an incorporeal, displaced or blinking enemy is still seen. Every later square provokes
-            // as normal; whether the rest of a Large withdrawer's starting space is exempt is open (GRID-021).
-            bool withdrawStartSquare = suppressFirstSquareAoO && i == 0;
+            // A step moves out of only the squares it vacates: the previous footprint minus the new one. A
+            // multi-square mover that shifts one square still occupies the rest (PHB p.137-138, DMG p.29;
+            // delegated RAW reading 2026-10-14, GRID-023).
+            var stillOccupied = new HashSet<Vector2Int>(mover.GetOccupiedSquaresAt(currentBaseSquare));
+            var vacatedSquares = new List<Vector2Int>(previousOccupiedSquares.Count);
+            for (int s = 0; s < previousOccupiedSquares.Count; s++)
+            {
+                if (!stillOccupied.Contains(previousOccupiedSquares[s]))
+                    vacatedSquares.Add(previousOccupiedSquares[s]);
+            }
 
-            // Check each enemy: does leaving any previously occupied square provoke?
+            // Check each enemy: does vacating any square it threatens provoke?
             foreach (var kvp in enemyThreats)
             {
                 var enemy = kvp.Key;
                 var threatenedSquares = kvp.Value;
 
-                if (withdrawStartSquare && mover.CanVisuallyPerceive(enemy))
-                    continue;
+                bool exemptStartSpace = false;
+                if (withdrawStartSpace != null)
+                {
+                    if (!seenEnemies.TryGetValue(enemy, out exemptStartSpace))
+                    {
+                        exemptStartSpace = mover.CanVisuallyPerceive(enemy);
+                        seenEnemies[enemy] = exemptStartSpace;
+                    }
+                }
 
                 bool provoked = false;
-                for (int s = 0; s < previousOccupiedSquares.Count; s++)
+                Vector2Int provokedFrom = previousBaseSquare;
+                for (int s = 0; s < vacatedSquares.Count; s++)
                 {
-                    if (threatenedSquares.Contains(previousOccupiedSquares[s]))
+                    Vector2Int square = vacatedSquares[s];
+                    if (exemptStartSpace && withdrawStartSpace.Contains(square))
+                        continue;
+                    if (threatenedSquares.Contains(square))
                     {
                         provoked = true;
+                        provokedFrom = square;
                         break;
                     }
                 }
@@ -531,10 +565,6 @@ public static class ThreatSystem
 
                 if (usedThisMovement == 0 && remainingGlobal > 0)
                 {
-                    Vector2Int provokedFrom = previousOccupiedSquares.Count > 0
-                        ? previousOccupiedSquares[0]
-                        : previousBaseSquare;
-
                     provokedAoOs.Add(new AoOThreatInfo(enemy, provokedFrom, i));
                     enemyAoOUsedThisMovement[enemy]++;
                     Debug.Log($"[ThreatSystem] Movement from base ({previousBaseSquare.x},{previousBaseSquare.y}) to ({currentBaseSquare.x},{currentBaseSquare.y}) provokes AoO from {enemy.Stats.CharacterName}");

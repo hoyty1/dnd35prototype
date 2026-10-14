@@ -113,6 +113,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "thoqqua",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a worm-like body with no head described, MM p.242; delegated RAW reading 2026-10-14, ITM-067
             Name = "Thoqqua",
             ChallengeRating = "2",
             Level = 3,
@@ -152,6 +153,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "treant",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a head with eyes above its trunk, MM p.245; delegated RAW reading 2026-10-14, ITM-067
             Name = "Treant",
             ChallengeRating = "8",
             Level = 7,

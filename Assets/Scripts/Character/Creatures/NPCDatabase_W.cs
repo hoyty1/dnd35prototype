@@ -99,6 +99,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "will_o_wisp",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a glowing globe of spongy material, MM p.255; delegated RAW reading 2026-10-14, ITM-067
             Name = "Will-o'-Wisp",
             ChallengeRating = "6",
             Level = 9,

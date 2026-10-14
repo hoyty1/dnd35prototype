@@ -102,6 +102,7 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.TripAttackCheckBonus = source.TripAttackCheckBonus;
         target.TripTriggerAttackName = source.TripTriggerAttackName;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
+        target.Beheading = source.Beheading;
 
         // Proficiency data (CHR-072; CreatureProficiency.ApplyFromDefinition)
         target.EntryWeaponIds = source.EntryWeaponIds;

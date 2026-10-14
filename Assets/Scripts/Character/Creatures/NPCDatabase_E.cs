@@ -119,6 +119,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "small_air_elemental",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): an amorphous cloud, MM p.95; delegated RAW reading 2026-10-14, ITM-067
             Name = "Small Air Elemental",
             ChallengeRating = "1",
             Level = 2,
@@ -158,6 +159,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "small_fire_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a humanoid-shaped conflagration, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Small Fire Elemental",
             ChallengeRating = "1",
             Level = 2,
@@ -200,6 +202,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "small_earth_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a featureless head, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Small Earth Elemental",
             ChallengeRating = "1",
             Level = 2,
@@ -239,6 +242,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "small_water_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a humanoid-shaped whirlpool, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Small Water Elemental",
             ChallengeRating = "1",
             Level = 2,
@@ -289,6 +293,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "medium_air_elemental",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): an amorphous cloud, MM p.95; delegated RAW reading 2026-10-14, ITM-067
             Name = "Medium Air Elemental",
             ChallengeRating = "3",
             Level = 4,
@@ -335,6 +340,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "medium_earth_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a featureless head, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Medium Earth Elemental",
             ChallengeRating = "3",
             Level = 4,
@@ -382,6 +388,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "medium_fire_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a humanoid-shaped conflagration, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Medium Fire Elemental",
             ChallengeRating = "3",
             Level = 4,
@@ -430,6 +437,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "medium_water_elemental",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): a humanoid-shaped whirlpool, MM p.98; delegated RAW reading 2026-10-14, ITM-067
             Name = "Medium Water Elemental",
             ChallengeRating = "3",
             Level = 4,
@@ -590,6 +598,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "ethereal_filcher",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a baglike body with its face in the center of the body, no head, MM p.104; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = false, // PHB p.154/157/158: not stable; MM p.104 balances it on a single leg (the 2026-10-07 "three legs" classification was wrong; owner informed 2026-10-08, CRE-045)
             Name = "Ethereal Filcher",
             ChallengeRating = "3",
@@ -694,6 +703,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "ettin",
+            Beheading = BeheadingResult.Dies, // Vorpal (DMG p.226): two heads, but unlike the hydra (MM p.155-156) no text lets it survive losing one, so the general rule applies, MM p.106; delegated RAW reading 2026-10-14, ITM-067
             Name = "Ettin",
             ChallengeRating = "6",
             Level = 10,

@@ -6739,8 +6739,8 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc, maxRangeOverride: GetWithdrawMoveRangeSquares(pc));
         CombatUI.SetActionButtonsVisible(false);
-        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving the first square provokes no AoO from enemies you can see)");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). Leaving the first square provokes no attack of opportunity from enemies you can see (PHB p.143)."));
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving your starting space provokes no AoO from enemies you can see)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). Leaving your starting space (every square you start in) provokes no attack of opportunity from enemies you can see (PHB p.143, DMG p.29)."));
     }
 
     public bool CanTakeFiveFootStep(CharacterController character)

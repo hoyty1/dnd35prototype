@@ -709,6 +709,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "gibbering_mouther",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): an amorphous mass of eyes and mouths, MM p.126; delegated RAW reading 2026-10-14, ITM-067
             Name = "Gibbering Mouther",
             ChallengeRating = "5",
             Level = 4,
@@ -1130,6 +1131,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "gauth",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a single orb with eyestalks, no head apart from the body, MM p.26; delegated RAW reading 2026-10-14, ITM-067
             Name = "Gauth",
             ChallengeRating = "6",
             Level = 6,

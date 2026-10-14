@@ -20,6 +20,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "phantom_fungus",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a fungal mass, MM p.207; delegated RAW reading 2026-10-14, ITM-067
             IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Phantom Fungus",
             ChallengeRating = "3",
@@ -97,6 +98,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "phasm",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): an amorphous blob in its natural form, MM p.208; delegated RAW reading 2026-10-14, ITM-067
             Name = "Phasm",
             ChallengeRating = "7",
             Level = 15,

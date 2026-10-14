@@ -16,7 +16,8 @@ namespace Tests.Combat
 /// and reach into one's own square (a square-mate is threatened and may be attacked, CMB-131),
 /// and Withdraw (start square exempt from enemies the mover can see, CanVisuallyPerceive, PHB p.143) through the
 /// threat-aware PC click path, which keeps the caller's range, withdraw rule and swarm flags and falls back to the
-/// direct route when a detour would stop short (GRID-001).
+/// direct route when a detour would stop short (GRID-001), a multi-square withdrawer's whole starting space exempt for
+/// the whole withdraw, square by square (GRID-021), and a step provoking only for the squares it vacates (GRID-023).
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
 public class FlankingReachRulesTests : MonoBehaviour
@@ -60,6 +61,10 @@ public class FlankingReachRulesTests : MonoBehaviour
         TestPathAoOsOncePerRound(CharacterTeam.Player, ref passed, ref failed);
         TestWithdrawStartSquareUnseenEnemy(CharacterTeam.Enemy, ref passed, ref failed);
         TestWithdrawStartSquareUnseenEnemy(CharacterTeam.Player, ref passed, ref failed);
+        TestWithdrawWholeStartingSpace(CharacterTeam.Enemy, ref passed, ref failed);
+        TestWithdrawWholeStartingSpace(CharacterTeam.Player, ref passed, ref failed);
+        TestMultiSquareStepProvokesOnlyForVacatedSquares(CharacterTeam.Enemy, ref passed, ref failed);
+        TestMultiSquareStepProvokesOnlyForVacatedSquares(CharacterTeam.Player, ref passed, ref failed);
         TestThreatAwarePathKeepsCallerRules(CharacterTeam.Enemy, ref passed, ref failed);
         TestThreatAwarePathKeepsCallerRules(CharacterTeam.Player, ref passed, ref failed);
         TestThreatAwarePathFallsBackToDirectRoute(CharacterTeam.Enemy, ref passed, ref failed);
@@ -386,6 +391,130 @@ public class FlankingReachRulesTests : MonoBehaviour
                 ref passed, ref failed);
             Assert(ThreatSystem.AnalyzePathForAoOs(mover, path, all).Count == 1,
                 $"{side} ordinary move: the invisible enemy provokes on leaving the start square", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, enemy != null ? enemy.gameObject : null);
+        }
+    }
+
+    private static void TestWithdrawWholeStartingSpace(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // GRID-021 (delegated RAW reading 2026-10-14; PHB p.143, DMG p.29): every square of a withdrawer's starting
+        // space is "the square you start out in", not threatened by an enemy it can see for the whole withdraw, square by
+        // square: vacating a starting-space square at any step provokes only from an unseen enemy, and squares outside
+        // the starting space provoke as normal.
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController enemy = null;
+        CharacterController far = null;
+        CharacterController inside = null;
+        try
+        {
+            // A Large mover based at (1,0) covers (1,0), (2,0), (1,1), (2,1). Withdrawing east to base (2,0) vacates
+            // (1,0) and (1,1); on to (3,0) vacates (2,0) and (2,1). An enemy at (1,-1) threatens (1,0) and (2,0).
+            mover = CreateTeamCharacter("LargeWithdrawer", moverTeam, 1, 0);
+            mover.Stats.CurrentSizeCategory = SizeCategory.Large;
+            enemy = CreateTeamCharacter("LargeWithdrawEnemy", threatTeam, 1, -1);
+            enemy.Stats.MaxAttacksOfOpportunity = 1;
+            enemy.Stats.AttacksOfOpportunityUsed = 0;
+            var all = new List<CharacterController> { mover, enemy };
+            var east = new List<Vector2Int> { new Vector2Int(2, 0), new Vector2Int(3, 0) };
+
+            Assert(mover.GetOccupiedSquaresAt(mover.GridPosition).Count == 4,
+                $"{side} Large withdraw: precondition, the mover covers 2x2 squares", ref passed, ref failed);
+            List<AoOThreatInfo> withdraw = ThreatSystem.AnalyzePathForAoOs(mover, east, all, suppressFirstSquareAoO: true);
+            Assert(withdraw.Count == 0,
+                $"{side} Large withdraw: leaving any square of the starting space, at any step, provokes nothing from a visible enemy (got {withdraw.Count})",
+                ref passed, ref failed);
+            List<AoOThreatInfo> ordinary = ThreatSystem.AnalyzePathForAoOs(mover, east, all);
+            Assert(ordinary.Count == 1 && ordinary[0].PathIndex == 0 && ordinary[0].ProvokedAtSquare == new Vector2Int(1, 0),
+                $"{side} Large ordinary move: the same path provokes at the first step, from the square it vacates (got {ordinary.Count})",
+                ref passed, ref failed);
+
+            // An enemy the mover cannot see still threatens the starting space (PHB p.143).
+            MakeInvisible(enemy);
+            List<AoOThreatInfo> unseen = ThreatSystem.AnalyzePathForAoOs(mover, east, all, suppressFirstSquareAoO: true);
+            Assert(!mover.CanVisuallyPerceive(enemy) && unseen.Count == 1 && unseen[0].PathIndex == 0,
+                $"{side} Large withdraw: an invisible enemy still gets its AoO, at the first step (got {unseen.Count})", ref passed, ref failed);
+            enemy.GetComponent<StatusEffectManager>().ActiveEffects.Clear();
+
+            // Square by square: an enemy at (4,-1) threatens (3,0), outside the starting space. One more step to base
+            // (4,0) vacates (3,0), so it provokes at index 2 even during the withdraw.
+            far = CreateTeamCharacter("LargeWithdrawFar", threatTeam, 4, -1);
+            far.Stats.MaxAttacksOfOpportunity = 1;
+            far.Stats.AttacksOfOpportunityUsed = 0;
+            var withFar = new List<CharacterController> { mover, enemy, far };
+            var further = new List<Vector2Int> { new Vector2Int(2, 0), new Vector2Int(3, 0), new Vector2Int(4, 0) };
+            List<AoOThreatInfo> squareBySquare = ThreatSystem.AnalyzePathForAoOs(mover, further, withFar, suppressFirstSquareAoO: true);
+            Assert(squareBySquare.Count == 1 && squareBySquare[0].Threatener == far && squareBySquare[0].PathIndex == 2
+                   && squareBySquare[0].ProvokedAtSquare == new Vector2Int(3, 0),
+                $"{side} Large withdraw: a square outside the starting space provokes as normal (got {squareBySquare.Count})", ref passed, ref failed);
+
+            // DMG p.29: a smaller creature inside a larger creature's space gets no AoO when the larger one withdraws
+            // out of it, though the squares are left at two different steps.
+            TestHelpers.Cleanup(far.gameObject);
+            far = null;
+            inside = CreateTeamCharacter("LargeWithdrawInside", threatTeam, 2, 1);
+            inside.Stats.MaxAttacksOfOpportunity = 1;
+            inside.Stats.AttacksOfOpportunityUsed = 0;
+            var withInside = new List<CharacterController> { mover, inside };
+            var west = new List<Vector2Int> { new Vector2Int(0, 0), new Vector2Int(-1, 0) };
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, west, withInside, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} Large withdraw: a creature inside the starting space gets no AoO (DMG p.29)", ref passed, ref failed);
+            List<AoOThreatInfo> insideOrdinary = ThreatSystem.AnalyzePathForAoOs(mover, west, withInside);
+            Assert(insideOrdinary.Count == 1 && insideOrdinary[0].Threatener == inside,
+                $"{side} Large ordinary move: the creature inside the space gets its AoO (got {insideOrdinary.Count})", ref passed, ref failed);
+
+            // A Medium withdrawer that comes back through its start square and leaves it again: still exempt.
+            TestHelpers.Cleanup(inside.gameObject);
+            inside = null;
+            mover.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            TestHelpers.SetGridPosition(mover, 0, 0);
+            TestHelpers.SetGridPosition(enemy, 1, 0);
+            var loop = new List<Vector2Int> { new Vector2Int(-1, 0), new Vector2Int(0, 0), new Vector2Int(-1, 1) };
+            Assert(mover.GetOccupiedSquaresAt(mover.GridPosition).Count == 1
+                   && ThreatSystem.AnalyzePathForAoOs(mover, loop, all, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} Medium withdraw: leaving the start square a second time provokes nothing from a visible enemy", ref passed, ref failed);
+            List<AoOThreatInfo> loopOrdinary = ThreatSystem.AnalyzePathForAoOs(mover, loop, all);
+            Assert(loopOrdinary.Count == 1 && loopOrdinary[0].PathIndex == 0,
+                $"{side} Medium ordinary move: the same loop provokes on first leaving the start square (got {loopOrdinary.Count})", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, enemy != null ? enemy.gameObject : null,
+                far != null ? far.gameObject : null, inside != null ? inside.gameObject : null);
+        }
+    }
+
+    private static void TestMultiSquareStepProvokesOnlyForVacatedSquares(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // GRID-023 (delegated RAW reading 2026-10-14; PHB p.137-138, DMG p.29): a step moves out of only the squares it
+        // vacates (the previous footprint minus the new one). A Large mover based at (0,0) shifting east to (1,0)
+        // vacates (0,0) and (0,1) and still covers (1,0); an enemy at (2,-1) threatens (1,0) but neither vacated square.
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController enemy = null;
+        try
+        {
+            mover = CreateTeamCharacter("LargeShifter", moverTeam, 0, 0);
+            mover.Stats.CurrentSizeCategory = SizeCategory.Large;
+            enemy = CreateTeamCharacter("ShiftEnemy", threatTeam, 2, -1);
+            enemy.Stats.MaxAttacksOfOpportunity = 1;
+            enemy.Stats.AttacksOfOpportunityUsed = 0;
+            var all = new List<CharacterController> { mover, enemy };
+
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { new Vector2Int(1, 0) }, all).Count == 0,
+                $"{side} Large one-square shift: no AoO from an enemy that threatens only a square the mover still covers", ref passed, ref failed);
+
+            // The next step east vacates (1,0) and (1,1): now it provokes.
+            List<AoOThreatInfo> twoSteps = ThreatSystem.AnalyzePathForAoOs(mover,
+                new List<Vector2Int> { new Vector2Int(1, 0), new Vector2Int(2, 0) }, all);
+            Assert(twoSteps.Count == 1 && twoSteps[0].PathIndex == 1 && twoSteps[0].ProvokedAtSquare == new Vector2Int(1, 0),
+                $"{side} Large move: the AoO comes when the threatened square is vacated, at the second step (got {twoSteps.Count})",
+                ref passed, ref failed);
         }
         finally
         {

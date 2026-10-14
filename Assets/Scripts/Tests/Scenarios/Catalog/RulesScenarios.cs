@@ -135,7 +135,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 152;
+        public const int Count = 154;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -147,6 +147,8 @@ namespace Tests.Scenarios
             yield return S("movement-aoo-withdraw", () => MovementAoO("rules/movement-aoo-withdraw", "Withdraw: the first square provokes nothing (PHB p.143)", Step.Withdraw(16, 10)));
             yield return S("movement-aoo-withdraw-far", () => WithdrawFar(false));
             yield return S("movement-aoo-withdraw-far-ui", () => WithdrawFar(true));
+            yield return S("movement-aoo-withdraw-large", () => WithdrawLarge(false));
+            yield return S("movement-aoo-withdraw-large-ui", () => WithdrawLarge(true));
             yield return S("movement-through-ally", () => MoveThroughAlly(false));
             yield return S("movement-through-ally-ui", () => MoveThroughAlly(true));
             yield return S("movement-aoo-double-move", () => DoubleMoveAoOs(false));
@@ -440,6 +442,61 @@ namespace Tests.Scenarios
                     return p == destination ? ExpectResult.Pass("at (19,10)") : ExpectResult.Fail("at " + p);
                 })
              .Expect("Withdrawing from the only threatened square provokes nothing (PHB p.143)", Expect.None("aoo", null));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// GRID-021 (delegated RAW reading 2026-10-14; PHB p.143, DMG p.29): a Large withdrawer's whole starting space is
+        /// "the square you start out in", not threatened by an enemy it can see for the whole withdraw. The Large mover
+        /// based at (10,10) covers (10,10)-(11,11); the enemy at (11,9) threatens (10,10) and (11,10). Withdrawing 6
+        /// squares west, the first step vacates (11,10) and the second (10,10): before the fix the second step provoked.
+        /// Scripted: an NPC ogre (MM Large) through the NPC withdraw executor; Ui: a PC hero under Enlarge Person
+        /// (PHB p.226) through the PC Withdraw button and click.
+        /// </summary>
+        private static ScenarioDef WithdrawLarge(bool ui)
+        {
+            string mover = ui ? "hero" : "ogre";
+            string threat = ui ? "orc" : "fighter";
+            var destination = new Vector2Int(4, 10);
+            ScenarioBuilder b = Rules(ui ? "rules/movement-aoo-withdraw-large-ui" : "rules/movement-aoo-withdraw-large",
+                    "A Large withdrawer's whole starting space provokes nothing from a visible enemy (PHB p.143, DMG p.29, GRID-021)"
+                    + (ui ? ", through the PC buttons" : ""))
+                .Covers("GRID-021", "PHB p.143", "DMG p.29", "PC_NPC_PARITY")
+                .MaxRounds(1);
+            if (ui)
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
+                 .Npc("orc", "orc_berserker", 11, 9, Control.Scripted)
+                 .Tweak("hero", c => { WithSizeSpell(DND35e.Identifiers.SpellNames.ENLARGE_PERSON)(c); SturdyDummy(c); });
+            else
+                b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 11, 9, Control.Scripted)
+                 .Npc("ogre", "ogre", 10, 10, Control.Scripted)
+                 .Tweak("ogre", SturdyDummy);
+
+            Step fixture = Step.Assert("fixture: the mover is Large, the enemy threatens two starting-space squares and has an AoO", ctx =>
+            {
+                CharacterController m = ctx.Get(mover);
+                CharacterController t = ctx.Get(threat);
+                HashSet<Vector2Int> threatened = ThreatSystem.GetThreatenedSquares(t);
+                return m.GetOccupiedSquares().Count == 4
+                    && threatened.Contains(new Vector2Int(10, 10)) && threatened.Contains(new Vector2Int(11, 10))
+                    && t.Stats.MaxAttacksOfOpportunity > t.Stats.AttacksOfOpportunityUsed
+                    && m.CanVisuallyPerceive(t);
+            });
+            b.Initiative(threat, mover)
+             .Turn(threat, 1, Step.Pass())
+             .Turn(mover, 1, fixture, Step.Withdraw(destination.x, destination.y));
+            if (ui)
+                b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+
+            b.Expect("The mover is Large (fixture check)", ActorSize(mover, SizeCategory.Large))
+             .Expect("The withdraw is done and ends at (4,10)", v =>
+                {
+                    ExpectResult r = Expect.All(Expect.StepStatus(mover, 1, "Withdraw", 0, "done"), Expect.AssertsPass())(v);
+                    if (!r.IsPass) return r;
+                    Vector2Int? p = Pos(v.Final(mover));
+                    return p == destination ? ExpectResult.Pass("at (4,10)") : ExpectResult.Fail("at " + p);
+                })
+             .Expect("Leaving every square of the starting space provokes nothing from the visible enemy (GRID-021)", Expect.None("aoo", null));
             return b.Build();
         }
 

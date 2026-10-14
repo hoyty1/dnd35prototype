@@ -819,6 +819,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "beholder",
+            Beheading = BeheadingResult.NoHead, // Vorpal (DMG p.226): a single orb with eyestalks, no head apart from the body, MM p.26; delegated RAW reading 2026-10-14, ITM-067
             Name = "Beholder",
             ChallengeRating = "13",
             Level = 11,
