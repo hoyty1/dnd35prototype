@@ -2074,7 +2074,11 @@ public class CharacterController : MonoBehaviour
     public void ClearDisguiseSelfEffect()
     {
         ActiveDisguiseSelfEffect = null;
-        ResetDisplayedRaceToActual();
+        // In a wild shape the sheet keeps showing the form (WildShapeRules; CHR-020).
+        if (WildShapeRules.IsWildShaped(Stats))
+            SetDisplayedRace(Stats.ActiveWildShape.FormName);
+        else
+            ResetDisplayedRaceToActual();
     }
 
     public void ApplyExpeditiousRetreatEffect(int speedBonusFeet, int durationRemainingRounds, CharacterController caster)
@@ -5490,14 +5494,21 @@ public class CharacterController : MonoBehaviour
             return;
 
         // --- Poison on hit ---
+        // A wild-shaped druid's DC is figured for her, not copied from the form (WildShapeRules.OnHitSaveDcModifier,
+        // MM p.313, p.6; delegated RAW reading 2026-10-14, CHR-020); 0 for every creature in its own form.
         string poisonId = naturalAttack.PoisonOnHitId;
         if (!string.IsNullOrWhiteSpace(poisonId))
-            target.ApplyPoison(poisonId);
+        {
+            PoisonData poison = PoisonDatabase.GetPoison(poisonId);
+            target.ApplyPoison(poisonId, poison != null ? WildShapeRules.OnHitSaveDcModifier(Stats, poison.FortitudeDC) : 0);
+        }
 
         // --- Disease on hit (Dire Rat filth fever, etc.) ---
         if (naturalAttack.HasDiseaseOnHit)
         {
-            target.ExposeToDisease(naturalAttack.DiseaseOnHitType);
+            DiseaseData disease = DiseaseDatabase.GetDisease(naturalAttack.DiseaseOnHitType);
+            target.ExposeToDisease(naturalAttack.DiseaseOnHitType,
+                disease != null ? WildShapeRules.OnHitSaveDcModifier(Stats, disease.FortitudeDC) : 0);
             Debug.Log($"[OnHit] {Stats?.CharacterName ?? "?"} exposes {target.Stats?.CharacterName ?? "?"} to {naturalAttack.DiseaseOnHitType}");
         }
 
@@ -8801,6 +8812,54 @@ public class CharacterController : MonoBehaviour
         RefreshGridOccupancy();
         UpdateVisualSize();
         return true;
+    }
+
+    /// <summary>
+    /// The current size with <paramref name="newBase"/> as the natural size and any temporary shift (Enlarge or Reduce
+    /// Person) kept on top.
+    /// </summary>
+    private SizeCategory CurrentSizeForNaturalSize(SizeCategory newBase)
+    {
+        // Delegated RAW reading 2026-10-14 (CHR-020): wild shape sets the natural size and is not a size-increasing
+        // effect, so an Enlarge or Reduce Person in effect keeps its one-step change on top of the form's size.
+        int shift = (int)Stats.CurrentSizeCategory - (int)Stats.BaseSizeCategory;
+        int shifted = Mathf.Clamp((int)newBase + shift, (int)SizeCategory.Fine, (int)SizeCategory.Colossal);
+        return (SizeCategory)shifted;
+    }
+
+    /// <summary>
+    /// Whether this creature's footprint at natural size <paramref name="newBase"/> fits where it stands (wild shape).
+    /// A creature that is not on the grid has no footprint to check.
+    /// </summary>
+    public bool CanTakeNaturalSize(SizeCategory newBase)
+    {
+        if (Stats == null)
+            return false;
+        SquareGrid grid = CurrentGrid;
+        if (grid == null || !grid.IsValidPosition(GridPosition))
+            return true;
+        SizeCategory oldCurrent = Stats.CurrentSizeCategory;
+        Stats.CurrentSizeCategory = CurrentSizeForNaturalSize(newBase);
+        bool fits = CanOccupyAtCurrentSize(GridPosition);
+        Stats.CurrentSizeCategory = oldCurrent;
+        return fits;
+    }
+
+    /// <summary>
+    /// Sets the creature's natural size (a wild shape's form, or its own size when it changes back; WildShapeRules, PHB
+    /// p.197), keeping a temporary size shift on top, and refreshes its footprint, weapon dice and token. The caller checks
+    /// the room first (<see cref="CanTakeNaturalSize"/>); a change back always happens.
+    /// </summary>
+    public void SetNaturalSize(SizeCategory newBase)
+    {
+        if (Stats == null)
+            return;
+        SizeCategory current = CurrentSizeForNaturalSize(newBase);
+        Stats.BaseSizeCategory = newBase;
+        Stats.CurrentSizeCategory = current;
+        RecalculateInventoryStatsAfterSizeChange();
+        RefreshGridOccupancy();
+        UpdateVisualSize(false);
     }
 
     private void RecalculateInventoryStatsAfterSizeChange()
@@ -12496,6 +12555,10 @@ public class CharacterController : MonoBehaviour
         }
 
         _hasProcessedDeath = true;
+
+        // A slain druid in a wild shape reverts to her own form and stays dead (PHB p.263, p.37; CHR-020).
+        if (WildShapeRules.EndWithoutAction(this, slain: true))
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐾", $"{who} reverts to its own form as it dies."));
 
         if (_sr != null && DeadSprite != null)
             _sr.sprite = DeadSprite;

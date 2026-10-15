@@ -623,6 +623,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Run", "Track", "Weapon Focus" },
+            BonusFeats = new List<string> { "Track" }, // MM p.65: Track is a racial bonus feat (B)
             WeaponFocusChoice = "Bite",
             HasScent = true,
             HasTripAttack = true,
@@ -852,6 +853,7 @@ public static partial class NPCDatabase
             TripAttackCheckBonus = 1,
             TripTriggerAttackName = "Bite", // MM p.283: a bite hit trips (CMB-125)
             Feats = new List<string> { "Weapon Focus", "Track" },
+            BonusFeats = new List<string> { "Track" }, // MM p.283: Track is a racial bonus feat (B)
             WeaponFocusChoice = "Bite",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),

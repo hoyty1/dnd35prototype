@@ -24,7 +24,7 @@ public sealed class SaveContext
     public readonly bool IsSpiderPoison;
     /// <summary>A trap (trap sense on Reflex saves, PHB p.26 and p.51).</summary>
     public readonly bool IsTrap;
-    /// <summary>A spell-like ability of a fey (Resist Nature's Lure, PHB p.36).</summary>
+    /// <summary>A spell-like ability of a fey (Resist Nature's Lure, PHB p.37).</summary>
     public readonly bool IsFeySpellLike;
     /// <summary>A charm effect (enchantment, charm subschool: Inspire Courage's +1 morale bonus, PHB p.29).</summary>
     public readonly bool IsCharm;
@@ -198,7 +198,7 @@ public static class SaveRules
     /// stacked with the save's other effect modifiers by the PHB rules.</item>
     /// <item>Still Mind (monk 3, PHB p.41): +2 on every save against enchantments.</item>
     /// <item>Indomitable Will (barbarian 14, PHB p.26): +4 on Will saves against enchantment spells while raging.</item>
-    /// <item>Resist Nature's Lure (druid 4, PHB p.36): +4 against the spell-like abilities of fey.</item>
+    /// <item>Resist Nature's Lure (druid 4, PHB p.37): +4 against the spell-like abilities of fey.</item>
     /// <item>Trap sense (barbarian 3 and rogue 3, PHB p.26, p.51): on Reflex saves against traps; the classes' bonuses stack.</item>
     /// <item>Cloak of Arachnida (DMG p.253): +2 luck bonus on Fortitude saves against spider poison, beyond the luck bonus
     /// the creature already has on Fortitude saves (luck bonuses do not stack, PHB glossary p.310).</item>

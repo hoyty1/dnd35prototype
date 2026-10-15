@@ -105,6 +105,7 @@ public class CombatUI : MonoBehaviour
     public Button DomainPowerButton;    // Domain Power activation (Cleric only, various domains)
     public Button SmiteButton;          // Smite: declare a paladin or template smite for the next melee attack (no action)
     public Button LayOnHandsButton;     // Paladin Lay on Hands (Standard Action, PHB p.44)
+    public Button WildShapeButton;      // Druid Wild Shape or change back (Standard Action, PHB p.37)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
     public Button GrappleDamageButton;          // Grapple: deal damage (Standard Action)
     public Button GrappleLightWeaponAttackButton; // Grapple: attack with main-hand light weapon (Standard Action)
@@ -1690,6 +1691,25 @@ public class CombatUI : MonoBehaviour
         foreach (Button b in _specialStyleSelectionPanel.GetComponentsInChildren<Button>(true))
             if (b != null && b.name == "Cancel")
                 return b;
+        return null;
+    }
+
+    /// <summary>
+    /// Editor-only, read-only (scenario harness): the open selection list's option button (ShowPickUpItemSelection, used
+    /// by the Wild Shape form list) whose label starts with <paramref name="labelPrefix"/>, or null.
+    /// </summary>
+    internal Button Harness_FindSelectionOption(string labelPrefix)
+    {
+        if (_pickUpItemSelectionPanel == null || string.IsNullOrEmpty(labelPrefix))
+            return null;
+        foreach (Button b in _pickUpItemSelectionPanel.GetComponentsInChildren<Button>(true))
+        {
+            if (b == null || !b.name.StartsWith("PickUpOption_", System.StringComparison.Ordinal))
+                continue;
+            Text label = b.GetComponentInChildren<Text>(true);
+            if (label != null && label.text.StartsWith(labelPrefix, System.StringComparison.Ordinal))
+                return b;
+        }
         return null;
     }
 #endif

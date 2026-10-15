@@ -79,6 +79,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 4,
             CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
             Feats = new List<string> { "Improved Initiative", "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.280: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Poison (Fort DC 10; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -113,6 +114,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 9,
             CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
             Feats = new List<string> { "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.280: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Poison (Fort DC 11; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -147,6 +149,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
             Feats = new List<string> { "Improved Initiative", "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.280: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Poison (Fort DC 11; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

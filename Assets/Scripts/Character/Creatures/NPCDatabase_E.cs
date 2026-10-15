@@ -56,6 +56,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 5,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly", "SummonBase" },
             Feats = new List<string> { "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.272: Weapon Finesse is a racial bonus feat (B)
             SpecialAbilities = new List<string> { "Low-light vision", "Fly 80 ft (average)", "Size bonus +1 AC/+1 attack" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.78f, 0.73f, 0.64f, 1f),

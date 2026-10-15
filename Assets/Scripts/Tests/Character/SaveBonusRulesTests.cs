@@ -8,7 +8,7 @@ namespace Tests.Character
 /// CHR-018: the one saving throw modifier (CharacterStats.GetSaveTotal and SaveRules.Modifier) applies every save
 /// bonus source with the PHB p.171 stacking rules (luck bonuses do not stack, PHB glossary p.310), and the
 /// shared resolvers (SavingThrowResolver, SpellSaveResolver) use it. Rules: PHB p.44 Divine Grace; PHB p.15-20 racial
-/// save bonuses; PHB p.41 Still Mind; PHB p.26 and p.51 trap sense; PHB p.36 Resist Nature's Lure; PHB p.37 venom
+/// save bonuses; PHB p.41 Still Mind; PHB p.26 and p.51 trap sense; PHB p.37 Resist Nature's Lure; PHB p.37 venom
 /// immunity; PHB p.93-97 Great Fortitude, Iron Will, Lightning Reflexes; PHB p.272 Resistance; PHB p.238 Guidance;
 /// PHB p.271 Remove Fear; PHB p.205 Bless and p.196 Aid (morale against fear only); PHB p.278 Shield Other (resistance
 /// on saves); PHB p.44 Aura of Courage; PHB p.171 stacking (morale does not stack; racial does); DMG p.253 Cloak of Resistance and Cloak of Arachnida; DMG p.260 ioun stones (pale green and
@@ -262,7 +262,7 @@ public static class SaveBonusRulesTests
         fey.InvalidateClassLevelCache();
         CharacterStats human = Build("Wizard", 1);
         AssertEq(SaveRules.Modifier(d4, SavingThrowType.Will, SaveContext.ForSpellId(SpellNames.CHARM_PERSON, fey)), d4.WillSave + 4,
-            "Resist Nature's Lure: druid 4 +4 against a fey's spell-like ability (PHB p.36)");
+            "Resist Nature's Lure: druid 4 +4 against a fey's spell-like ability (PHB p.37)");
         AssertEq(SaveRules.Modifier(d4, SavingThrowType.Will, SaveContext.ForSpellId(SpellNames.CHARM_PERSON, human)), d4.WillSave,
             "Resist Nature's Lure: nothing against a human wizard's spell");
     }

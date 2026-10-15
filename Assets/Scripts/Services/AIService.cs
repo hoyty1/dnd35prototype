@@ -297,6 +297,21 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // Wild Shape (Su, PHB p.37): the druid takes an animal form with its standard action, through the rules the PC
+        // button calls (WildShapeRules, CHR-020), when AIProfile.ChooseWildShapeForm picks one; then it closes in with its
+        // move action. In animal form it fights in melee with the form's natural attacks, whatever its usual shell (it
+        // cannot cast without Natural Spell, and its gear is melded).
+        if (_gameManager.TryNPCWildShapeTurnForAI(npc))
+        {
+            yield return _gameManager.StartCoroutine(MoveTowardTargetAfterStandardAction(npc));
+            yield break;
+        }
+        if (WildShapeRules.IsWildShaped(npc.Stats))
+        {
+            yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
+            yield break;
+        }
+
         if (profile != null)
         {
             if (profile is HealerAIProfile healerProfile)
@@ -583,6 +598,34 @@ public class AIService : MonoBehaviour
 
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} is turned and cowers, unable to attack."));
         yield return new WaitForSeconds(0.35f);
+    }
+
+    /// <summary>
+    /// After a standard action that is not an attack (a wild shape), the move action: toward the best target when it
+    /// is out of reach, by the same movement choice as the aggressive melee turn. Nothing else this turn.
+    /// </summary>
+    private IEnumerator MoveTowardTargetAfterStandardAction(CharacterController npc)
+    {
+        if (CombatEnded() || npc == null || npc.Stats == null || npc.Stats.CurrentHP <= 0 || npc.Actions == null || !npc.Actions.HasMoveAction)
+            yield break;
+        if (npc.Stats.MovementBlockedByCondition)
+            yield break;
+
+        CharacterController target = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+        if (target == null || target.Stats == null || npc.IsTargetInCurrentWeaponRange(target))
+            yield break;
+
+        SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, GetProfile(npc));
+        if (bestCell == null)
+            yield break;
+
+        yield return _gameManager.StartCoroutine(
+            _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+        if (CombatEnded() || npc.Stats.CurrentHP <= 0)
+            yield break;
+        npc.Actions.UseMoveAction();
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
+        yield return new WaitForSeconds(0.5f);
     }
 
     private IEnumerator ExecuteAggressiveMeleeTurn(CharacterController npc, CharacterController target)

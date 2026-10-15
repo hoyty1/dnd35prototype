@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 56 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 57 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,7 +140,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 56 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
+There are 57 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Eight files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -185,10 +185,11 @@ There are 56 files, found with `grep -rlE '^\s*public partial class GameManager\
 | OverrunSystem.cs | 943 | Overrun destination selection and resolution. |
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and overrun's `TryPushTargetAway`; some trip/feint helpers. |
 | SupportActions.cs | 2,031 | Aid Another, Charge. |
-| **Combat/Special/** (3) | | |
+| **Combat/Special/** (4) | | |
 | TurnUndeadSystem.cs | 997 | Turn/rebuke undead and turned-state trackers. |
 | TemplateSmiteSystem.cs | 118 | The PC Smite button and the AI smite declaration over `SmiteRules` (paladin and template smites; CHR-020). |
 | LayOnHandsSystem.cs | 182 | The PC Lay on Hands button and the AI wrapper over `LayOnHandsRules` (CHR-020). |
+| WildShapeSystem.cs | 186 | The PC Wild Shape button (form list or change back) and the AI wrappers over `WildShapeRules` (CHR-020). |
 | **Encounters/** (1) | | |
 | GameManager.DungeonEncounters.cs | 237 | Bridge from DMG dungeon tables to combat. No external callers: `EncounterSelectionUI.OnDMGTablesPressed` uses its own path. |
 

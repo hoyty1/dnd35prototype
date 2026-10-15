@@ -286,6 +286,7 @@ public class Inventory
     /// </summary>
     public bool EquipFromInventory(int generalIndex, EquipSlot targetSlot)
     {
+        if (!WildShapeRules.CanManipulateItems(OwnerStats)) return false; // gear is melded in a wild shape (PHB p.197)
         if (generalIndex < 0 || generalIndex >= GeneralSlots.Length) return false;
         var item = GeneralSlots[generalIndex];
         if (item == null) return false;
@@ -475,6 +476,7 @@ public class Inventory
     /// </summary>
     public bool EquipSlotlessFromInventory(int generalIndex)
     {
+        if (!WildShapeRules.CanManipulateItems(OwnerStats)) return false; // gear is melded in a wild shape (PHB p.197)
         if (generalIndex < 0 || generalIndex >= GeneralSlots.Length) return false;
         var item = GeneralSlots[generalIndex];
         if (item == null) return false;
@@ -483,6 +485,47 @@ public class Inventory
 
         GeneralSlots[generalIndex] = null;
         return EquipSlotless(item);
+    }
+
+    /// <summary>
+    /// Wild shape (PHB p.37, p.197; CHR-020): every worn or held item melds into the animal form and stops working.
+    /// Empties each equipment slot (the ring hooks run as for any unequip) and returns the items by slot for
+    /// <see cref="RestoreMeldedEquipment"/>. Slotless items (ioun stones) are neither worn nor held and stay.
+    /// </summary>
+    public System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<EquipSlot, ItemData>> MeldAllEquipment()
+    {
+        var melded = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<EquipSlot, ItemData>>();
+        foreach (EquipSlot slot in AllEquipmentSlots)
+        {
+            ItemData item = GetEquipped(slot);
+            if (item == null)
+                continue;
+            melded.Add(new System.Collections.Generic.KeyValuePair<EquipSlot, ItemData>(slot, item));
+            SetEquipSlot(slot, null);
+            if (item.IsWondrous && OwnerCharacter != null)
+                WondrousItemActivation.OnWondrousUnequipped(OwnerCharacter, item);
+        }
+        RecalculateStats();
+        return melded;
+    }
+
+    /// <summary>Puts the items <see cref="MeldAllEquipment"/> melded back in their slots when the form ends (PHB p.197).</summary>
+    public void RestoreMeldedEquipment(System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<EquipSlot, ItemData>> melded)
+    {
+        if (melded != null)
+        {
+            for (int i = 0; i < melded.Count; i++)
+            {
+                ItemData item = melded[i].Value;
+                if (item == null)
+                    continue;
+                ItemData occupant = GetEquipped(melded[i].Key);
+                if (occupant != null && occupant != item)
+                    AddItem(occupant);
+                SetEquipSlot(melded[i].Key, item);
+            }
+        }
+        RecalculateStats();
     }
 
     /// <summary>Get all currently equipped slotless items.</summary>
@@ -765,6 +808,11 @@ public class Inventory
     public float GetTotalCarriedWeightLbs()
     {
         float total = 0f;
+
+        // In a wild shape the gear, pack included, is melded into the form (PHB p.197; delegated RAW reading 2026-10-14,
+        // CHR-020): it is carried by no one.
+        if (!WildShapeRules.CanManipulateItems(OwnerStats))
+            return total;
 
         foreach (EquipSlot slot in AllEquipmentSlots)
         {

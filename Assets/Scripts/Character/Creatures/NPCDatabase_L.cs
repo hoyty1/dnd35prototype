@@ -459,6 +459,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
             Feats = new List<string> { "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.280: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Poison (Fort DC 11, 1d6 Con/1d6 Con)", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

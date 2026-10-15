@@ -583,7 +583,7 @@ Every special attack, special quality and spell-like ability above, merged by sh
 | **Rebuke/command undead** `cleric_rebuke_command_undead` | missing; AI no | 5th-level troglodyte cleric NPC | standard; turning check | vs PC-summoned or allied undead |  | rare | P3 |
 | **Spontaneous inflict wounds** `cleric_spontaneous_inflict` | missing; AI no | 5th-level troglodyte cleric NPC | standard; Will half | in melee with no better spell |  | touchHit*avgDmg*(1-0.5*Psave) | P2 |
 | **Spontaneous summon nature's ally** `druid_spontaneous_summon` | missing; AI no | 5th-level lizardfolk druid NPC | full-round; none | outnumbered | dispel | summon EV*rounds | P3 |
-| **Wild shape 1/day** `druid_wild_shape` | data only; AI no | 5th-level lizardfolk druid NPC | standard; none | out of spells, low HP (heal on change) |  | heal value + form EV - lost casting | P3 |
+| **Wild shape 1/day** `druid_wild_shape` | working since 2026-10-14 (`WildShapeRules`, CHR-020); AI yes, once out of spells or with a foe adjacent (AI-066) | 5th-level lizardfolk druid NPC | standard; none | out of spells, low HP (heal on change) |  | heal value + form EV - lost casting | P3 |
 | **Cleave** `feat_cleave` | partial; AI no | Hill giant | free (trigger); attack | Several weak foes in reach |  | P(drop) * nextAttackEV | P2 |
 | **Deflect Arrows** `feat_deflect_arrows` | impl; AI yes | 5th-level human monk NPC | free (reaction); none | always | multiple ranged attackers; spells | enemy ranged EV vs this target -= one hit/round | P3 |
 | **Spring Attack (with Dodge, Mobility)** `feat_spring_attack` | missing; AI no | Greater shadow | full-round; none | Target can full-attack back | Readied actions | value = expected retaliation avoided = enemyFullAttackDPR * P(stays adjacent) | P2 |

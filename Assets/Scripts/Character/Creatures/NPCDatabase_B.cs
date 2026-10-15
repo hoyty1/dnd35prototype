@@ -58,6 +58,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "MM35", "Burrow" },
             Feats = new List<string> { "Track", "Multiattack" }, // MM p.268: Multiattack, Track (bonus)
+            BonusFeats = new List<string> { "Track" }, // MM p.268: Track is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Rage (as barbarian)", "Burrow 10 ft", "Skills: Escape Artist +7, Listen +3, Spot +3" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

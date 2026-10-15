@@ -653,6 +653,13 @@ public class NPCDefinition
     // Tags and feats
     public List<string> CreatureTags = new List<string>();
     public List<string> Feats = new List<string>();
+    /// <summary>
+    /// The racial bonus feats of the entry (the feats the MM marks with a superscript B), whether or not they are also in
+    /// <see cref="Feats"/>. A druid in this form gains them, and only them of its feats (alter self, PHB p.197: "racial
+    /// bonus feats" are physical qualities of the new form; WildShapeRules; CHR-020). Filled for the animals a druid of
+    /// 1st-8th level may become.
+    /// </summary>
+    public List<string> BonusFeats = new List<string>();
     public string WeaponFocusChoice;
 
     // Optional spellcasting loadout for NPC AI casters.
@@ -893,6 +900,9 @@ public class NPCDefinition
             : new List<string>();
         clone.Feats = Feats != null
             ? new List<string>(Feats)
+            : new List<string>();
+        clone.BonusFeats = BonusFeats != null
+            ? new List<string>(BonusFeats)
             : new List<string>();
         clone.KnownSpellIds = KnownSpellIds != null
             ? new List<string>(KnownSpellIds)

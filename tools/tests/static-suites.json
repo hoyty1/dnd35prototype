@@ -315,6 +315,17 @@
       "notes": "CHR-018: the shared save modifier (CharacterStats.GetSaveTotal, SaveRules) and its bonus sources, Aura of Courage and fear immunity; bare stats, an Inventory without a GameObject, a StatusEffectManager and CharacterControllers on plain GameObjects. 104/104 in edit and Play mode on 2026-10-09."
     },
     {
+      "type": "Tests.Classes.DruidClassRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 145,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-020 (2026-10-14): the druid's class features on one PC/NPC core (PHB p.35-37, p.263, p.197; WildShapeRules): wild shape uses by level (1/2/3 at 5th/6th/7th), sizes (Small or Medium, Large from 8th, Tiny from 11th), duration; form legality (bestiary animals, Hit Dice up to the druid level, no swarm, alias or humanoid); the black bear form (Str/Dex/Con, mental scores and BAB kept, natural armor, AC, natural attacks, size, speed, animal type, race set aside, no scent, the use and the standard action spent, hit points by Constitution plus the night's-rest healing, gear melded, no weight, no equipping, the sheet's form name); changing back (everything restored, no healing, standard action); refusals (druid 4, a Large form at 6th, no animal-to-animal change, uses per day) and the wolf's trip; no prepared spell castable in form without Natural Spell; the death revert; the rest; the dire wolf at 8th (Large, -1 size, its own 1d8 bite); a spell Strength bonus on top of the form's score; the AI form choice; Nature Sense and Resist Nature's Lure; a DMG lizardfolk druid 5 spawned through the encounter spawner. After the review fixes (2026-10-15): the form's racial bonus feats (viper Weapon Finesse, wolf Track); HP states after a change of form (dying at -2, dead at -11, a disabled druid healed) and the rest's revert of a dying druid; a melded amulet of health; rage and Death Knell on top of the form; silent, stilled spells in form; Disguise Self on the sheet; the form's poison DC figured for the druid; Woodland Stride; a dying foe in the AI choice. Play only (CharacterController.Init, TST-009; the NPC spawn uses the scene GameManager). 145/145 in a fresh Play session with the baseline seed on 2026-10-15 (20261015T041919Z-play)."
+    },
+    {
       "type": "Tests.Classes.MonkClassRulesTests",
       "needs": "play",
       "skip": "",

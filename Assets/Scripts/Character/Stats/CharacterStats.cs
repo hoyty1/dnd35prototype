@@ -762,8 +762,14 @@ public class CharacterStats
     // Druid Class Features (PHB p.33-37)
     // ─────────────────────────────────────────────
 
-    /// <summary>Druid's wild shape tracking data. Initialized when wild shape is gained at level 5.</summary>
-    public WildShapeData DruidWildShape;
+    /// <summary>
+    /// The wild shape in effect (what the creature was before it took the form), or null in its own form
+    /// (WildShapeRules, PHB p.37; CHR-020). A new spawn has a new CharacterStats, so it starts null.
+    /// </summary>
+    [NonSerialized] public WildShapeState ActiveWildShape;
+
+    /// <summary>Wild shapes taken today (WildShapeRules.UsesLeft); the post-combat rest resets it.</summary>
+    public int WildShapeUsesToday;
 
     /// <summary>Druid's animal companion data. Uses the full druid level (a ranger's is one-half his ranger level, PHB p.48).</summary>
     public AnimalCompanionData DruidAnimalCompanion;
@@ -780,10 +786,10 @@ public class CharacterStats
     /// <summary>Trackless Step at level 3 (PHB p.36): leaves no trail in natural surroundings.</summary>
     public bool HasTracklessStep => IsDruid && DruidClass.HasTracklessStep(GetClassLevel("Druid"));
 
-    /// <summary>Resist Nature's Lure at level 4 (PHB p.36): +4 on saves against the spell-like abilities of fey (SaveRules).</summary>
+    /// <summary>Resist Nature's Lure at level 4 (PHB p.37): +4 on saves against the spell-like abilities of fey (SaveRules).</summary>
     public bool HasResistNaturesLure => IsDruid && DruidClass.HasResistNaturesLure(GetClassLevel("Druid"));
 
-    /// <summary>Resist Nature's Lure save bonus (+4, PHB p.36).</summary>
+    /// <summary>Resist Nature's Lure save bonus (+4, PHB p.37).</summary>
     public int ResistNaturesLureBonus => HasResistNaturesLure ? DruidClass.ResistNaturesLureBonus : 0;
 
     /// <summary>Venom Immunity at level 9 (PHB p.37): immune to all poisons.</summary>
@@ -833,8 +839,11 @@ public class CharacterStats
         return total + RangerRules.FavoredEnemySkillBonus(this, creature, skillName);
     }
 
-    /// <summary>Ranger has Woodland Stride at level 7 (PHB p.48): move through natural terrain at normal speed.</summary>
-    public bool HasWoodlandStride => IsRanger && GetClassLevel("Ranger") >= 7;
+    /// <summary>
+    /// Woodland Stride: a druid from 2nd level (PHB p.36) or a ranger from 7th (PHB p.48) moves through natural
+    /// undergrowth at normal speed (CHR-020; no natural undergrowth terrain reads it yet).
+    /// </summary>
+    public bool HasWoodlandStride => DruidClass.HasWoodlandStride(GetClassLevel("Druid")) || GetClassLevel("Ranger") >= 7;
 
     /// <summary>Ranger has Swift Tracker at level 8 (PHB p.48): track at normal speed without penalty.</summary>
     public bool HasSwiftTracker => IsRanger && GetClassLevel("Ranger") >= 8;
@@ -3522,6 +3531,35 @@ public class CharacterStats
             case AbilityType.CHA: CHA += delta; break;
         }
         return delta;
+    }
+
+    /// <summary>
+    /// The score field of <paramref name="ability"/> without the temporary bonuses in it: the ledger bonuses
+    /// <see cref="SyncAbilityScoreWithBonuses"/> put there (spells, items), the barbarian's rage (<see cref="ActivateRage"/>
+    /// adds it to Str and Con directly) and Death Knell's +2 Strength (EffectService adds it directly). What remains is the
+    /// creature's own score (race, increases, inherent bonuses). A wild shape replaces this part with the form's score and
+    /// leaves the temporary bonuses on top, so their later end lowers the form's score by exactly what they added
+    /// (WildShapeRules; PHB p.263). Other direct writers (the rage spell's GameManager.ApplyStatBuff, StatusEffectManager.ApplyStatBonus, armor of
+    /// rage) still count as the creature's own score (CHR-020).
+    /// </summary>
+    public int NaturalAbilityScore(AbilityType ability)
+    {
+        int index = (int)ability;
+        int applied = _abilityBonusesApplied != null && index > 0 && index < _abilityBonusesApplied.Length ? _abilityBonusesApplied[index] : 0;
+        if (IsRaging && (ability == AbilityType.STR || ability == AbilityType.CON))
+            applied += RageAbilityBonus;
+        if (DeathKnellActive && ability == AbilityType.STR)
+            applied += DeathKnellStrBonus;
+        switch (ability)
+        {
+            case AbilityType.STR: return STR - applied;
+            case AbilityType.DEX: return DEX - applied;
+            case AbilityType.CON: return CON - applied;
+            case AbilityType.INT: return INT - applied;
+            case AbilityType.WIS: return WIS - applied;
+            case AbilityType.CHA: return CHA - applied;
+            default: return 0;
+        }
     }
 
     /// <summary>The <see cref="BonusTarget"/> of an ability score (Strength for STR, ...).</summary>
@@ -6950,7 +6988,24 @@ public class CharacterStats
         int familiarModifier = GetFamiliarSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
         int racialModifier = GetRacialSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus + racialModifier;
+        int classFeatureBonus = GetClassFeatureSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus + racialModifier
+            + classFeatureBonus;
+    }
+
+    /// <summary>
+    /// Class-feature bonuses on a skill that apply to every check: the druid's Nature Sense, +2 on Knowledge (nature) and
+    /// Survival (PHB p.35; CHR-020). Bonuses against one kind of creature (the ranger's favored enemy) are in
+    /// <see cref="GetSkillBonusAgainst"/>.
+    /// </summary>
+    public int GetClassFeatureSkillModifier(string skillName)
+    {
+        if (string.IsNullOrWhiteSpace(skillName) || DruidNatureSenseBonus == 0)
+            return 0;
+        if (string.Equals(skillName, "Survival", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(skillName, "Knowledge (Nature)", System.StringComparison.OrdinalIgnoreCase))
+            return DruidNatureSenseBonus;
+        return 0;
     }
 
     /// <summary>
@@ -7028,7 +7083,9 @@ public class CharacterStats
         int spellModifier = SpellAndEffectSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
         int racialModifier = GetRacialSkillModifier(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus + racialModifier;
+        int classFeatureBonus = GetClassFeatureSkillModifier(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus + racialModifier
+            + classFeatureBonus;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
         string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
@@ -7036,7 +7093,8 @@ public class CharacterStats
         string spellStr = spellModifier != 0 ? $" + {spellModifier}(spell)" : "";
         string wondrousStr = wondrousBonus != 0 ? $" + {wondrousBonus}(wondrous)" : "";
         string racialStr = racialModifier != 0 ? $" {FormatMod(racialModifier)}(racial/size)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr}{racialStr} = {total}");
+        string classFeatureStr = classFeatureBonus != 0 ? $" {FormatMod(classFeatureBonus)}(class feature)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr}{racialStr}{classFeatureStr} = {total}");
 
         return total;
     }

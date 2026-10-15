@@ -938,6 +938,10 @@ public partial class GameManager : MonoBehaviour
             if (stats.IsRaging)
                 stats.DeactivateRage();
 
+            // The rest outlasts a wild shape (1 hour per druid level): the druid is in her own form, her gear back on,
+            // before the effects, size and gear below are reset; the day's uses return (PHB p.37; CHR-020).
+            WildShapeRules.RefreshForRest(pc);
+
             StatusEffectManager statusMgr = pc.StatusEffectManager;
             statusMgr?.RemoveAllEffects();
             // Death Knell, Silence and Align Weapon flags with no tracked effect left (SPL-003).
@@ -4316,6 +4320,13 @@ public partial class GameManager : MonoBehaviour
         if (actor.HasCondition(CombatConditionType.Pinned))
         {
             reason = "Pinned creatures cannot manipulate items; only grapple escape actions are allowed.";
+            return false;
+        }
+
+        // In a wild shape the gear, pack included, is melded into the animal form (PHB p.197; CHR-020).
+        if (!WildShapeRules.CanManipulateItems(actor.Stats))
+        {
+            reason = "In animal form (Wild Shape): the gear is melded into the form.";
             return false;
         }
 

@@ -105,6 +105,7 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
 
         // Feats (zombie keeps Toughness)
         target.Feats = source.Feats;
+        target.BonusFeats = source.BonusFeats;
 
         // Ranger choices (CHR-020; CRE-023): the zombie has no class levels, so the template result clears them.
         target.RangerStyle = source.RangerStyle;

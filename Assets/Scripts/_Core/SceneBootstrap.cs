@@ -768,6 +768,8 @@ public class SceneBootstrap : MonoBehaviour
             "Smite", new Color(0.8f, 0.42f, 0.14f));
         combatUI.LayOnHandsButton = CreateGridButton(btnGrid.transform, "LayOnHandsBtn",
             "Lay on Hands", new Color(0.78f, 0.66f, 0.22f));
+        combatUI.WildShapeButton = CreateGridButton(btnGrid.transform, "WildShapeBtn",
+            "Wild Shape", new Color(0.3f, 0.55f, 0.25f));
         combatUI.GrappleActionsButton = CreateGridButton(btnGrid.transform, "GrappleActionsBtn",
             "Grapple Actions (Legacy)", new Color(0.45f, 0.24f, 0.6f));
         combatUI.GrappleDamageButton = CreateGridButton(btnGrid.transform, "GrappleDamageBtn",
@@ -1139,6 +1141,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.SmiteButton.onClick.AddListener(() => GameManager.Instance.OnSmiteButtonPressed());
         if (ui.LayOnHandsButton != null)
             ui.LayOnHandsButton.onClick.AddListener(() => GameManager.Instance.OnLayOnHandsButtonPressed());
+        if (ui.WildShapeButton != null)
+            ui.WildShapeButton.onClick.AddListener(() => GameManager.Instance.OnWildShapeButtonPressed());
         if (ui.GrappleActionsButton != null)
         {
             ui.GrappleActionsButton.onClick.RemoveAllListeners();

@@ -2576,12 +2576,27 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
+    /// True while the caster is in a wild shape without Natural Spell and <paramref name="spell"/> has a verbal or
+    /// somatic component left after its metamagic (a prepared slot's, or the spell's own MetamagicDataRef: Silent and
+    /// Still Spell remove them) (WildShapeRules.CanCastInCurrentForm; PHB p.37, p.98; CHR-020): one test for the PC menu, the
+    /// AI candidate list, the NPC executor and counterspelling.
+    /// </summary>
+    private bool IsBlockedByWildShape(SpellData spell, MetamagicData metamagic = null)
+    {
+        if (spell == null)
+            return false;
+        var owner = GetComponent<CharacterController>();
+        return owner != null && owner.Stats != null && !WildShapeRules.CanCastInCurrentForm(owner.Stats, spell, metamagic);
+    }
+
+    /// <summary>
     /// Check if a specific spell can be cast right now.
     /// Uses slot-based system for both Wizards and Clerics. A 0-level spell needs an unspent slot (SPL-138).
     /// </summary>
     public bool CanCastSpell(SpellData spell)
     {
         if (spell == null) return false;
+        if (IsBlockedByWildShape(spell)) return false;
 
         // ── Silence check (PHB p.279) ──
         // A silenced character cannot cast spells with verbal components.
@@ -2646,7 +2661,8 @@ public class SpellcastingComponent : MonoBehaviour
             {
                 if (!slot.HasSpell) continue;
 
-                if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId)) // 0-level slots too (SPL-138)
+                if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId) // 0-level slots too (SPL-138)
+                    && !IsBlockedByWildShape(slot.PreparedSpell, slot.AppliedMetamagic))
                 {
                     seen.Add(slot.PreparedSpell.SpellId);
                     castable.Add(slot.PreparedSpell);
@@ -2671,8 +2687,8 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
-            // Any slot, 0-level included, with a spell and not used (SPL-138)
-            return SpellSlots.Any(s => s.CanCast);
+            // Any slot, 0-level included, with a spell and not used (SPL-138), that the current form can cast
+            return SpellSlots.Any(s => s.CanCast && !IsBlockedByWildShape(s.PreparedSpell, s.AppliedMetamagic));
         }
         return GetCastablePreparedSpells().Count > 0;
     }
@@ -2690,6 +2706,7 @@ public class SpellcastingComponent : MonoBehaviour
     public bool CanCast(SpellData spell)
     {
         if (spell == null) return false;
+        if (IsBlockedByWildShape(spell)) return false;
 
         // A spontaneous caster (sorcerer, bard, a dragon casting as a sorcerer) casts any spell it knows
         // by spending a slot of that level (PHB p.54, p.28; MM p.69). Its known spells and slots live in

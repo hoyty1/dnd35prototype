@@ -263,6 +263,102 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// AI choice, not a rule: whether a druid takes a wild shape this turn, and which form (CHR-020). The rules
+        /// (WildShapeRules) are shared with the PC Wild Shape button. Null for no wild shape. <see cref="DefaultWildShapeForm"/>.
+        /// </summary>
+        public virtual NPCDefinition ChooseWildShapeForm(CharacterController self, System.Collections.Generic.IList<CharacterController> combatants)
+            => DefaultWildShapeForm(self, combatants);
+
+        /// <summary>
+        /// The default wild shape choice, also used for creatures without a profile: the available form with the best
+        /// expected melee damage per full attack against the nearest foe's AC (each natural attack at the druid's base
+        /// attack bonus with the form's Strength and size, a secondary attack at -5), taken when it beats the druid's
+        /// own weapon attacks, and only while the druid has no castable spell left or a foe already stands next to it (a
+        /// caster keeps casting while it can). Null otherwise, or when no foe is left.
+        /// </summary>
+        public static NPCDefinition DefaultWildShapeForm(CharacterController self, System.Collections.Generic.IList<CharacterController> combatants)
+        {
+            if (self == null || self.Stats == null || combatants == null)
+                return null;
+            if (!WildShapeRules.CanAssume(self, out _))
+                return null;
+
+            CharacterController nearest = null;
+            int nearestDistance = int.MaxValue;
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CharacterController c = combatants[i];
+                // A dying, unconscious or dead foe is no threat (CHR-031); distance is footprint to footprint, so a
+                // Large foe touching the druid counts as adjacent.
+                if (c == null || c == self || c.Stats == null || c.IsDead || c.IsUnconscious || !TeamUtility.IsEnemy(self, c))
+                    continue;
+                int d = self.GetMinimumDistanceToTarget(c, chebyshev: false);
+                if (d < nearestDistance)
+                {
+                    nearest = c;
+                    nearestDistance = d;
+                }
+            }
+            if (nearest == null)
+                return null;
+
+            SpellcastingComponent spells = self.Spellcasting;
+            bool canStillCast = spells != null && spells.CanCastSpells && spells.HasAnyCastablePreparedSpell();
+            if (canStillCast && nearestDistance > 1)
+                return null;
+
+            int targetAC = nearest.Stats.ArmorClass;
+            float own = ExpectedWeaponDamage(self.Stats, targetAC);
+            NPCDefinition best = null;
+            float bestScore = own;
+            System.Collections.Generic.List<NPCDefinition> forms = WildShapeRules.GetAvailableForms(self.Stats);
+            for (int i = 0; i < forms.Count; i++)
+            {
+                float score = ExpectedFormDamage(self.Stats, forms[i], targetAC);
+                if (score > bestScore)
+                {
+                    best = forms[i];
+                    bestScore = score;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Expected damage of a full attack in <paramref name="form"/> (AI estimate; see DefaultWildShapeForm).</summary>
+        public static float ExpectedFormDamage(CharacterStats stats, NPCDefinition form, int targetAC)
+        {
+            if (stats == null || form == null || form.NaturalAttacks == null)
+                return 0f;
+            int strMod = CharacterStats.GetAbilityModifier(form.STR);
+            int baseBonus = stats.BaseAttackBonus + strMod + form.SizeCategory.GetAttackAndAcModifier();
+            float total = 0f;
+            for (int i = 0; i < form.NaturalAttacks.Count; i++)
+            {
+                NaturalAttackDefinition a = form.NaturalAttacks[i];
+                if (a == null)
+                    continue;
+                int bonus = baseBonus + (a.IsPrimary ? 0 : -5);
+                float average = Mathf.Max(1f, Mathf.Max(1, a.DamageCount) * (a.DamageDice + 1) / 2f + a.GetDamageBonus(strMod));
+                total += Mathf.Max(1, a.Count) * HitChance(bonus, targetAC) * average;
+            }
+            return total;
+        }
+
+        /// <summary>Expected damage of the creature's own full attack with its current weapon (AI estimate).</summary>
+        public static float ExpectedWeaponDamage(CharacterStats stats, int targetAC)
+        {
+            if (stats == null)
+                return 0f;
+            int bab = stats.BaseAttackBonus;
+            int bonus = bab + stats.STRMod + stats.SizeModifier;
+            float average = Mathf.Max(1f, Mathf.Max(1, stats.BaseDamageCount) * (stats.BaseDamageDice + 1) / 2f + stats.STRMod + stats.BonusDamage);
+            float total = 0f;
+            for (int step = 0; step == 0 || bab - 5 * step >= 1; step++)
+                total += HitChance(bonus - 5 * step, targetAC) * average;
+            return total;
+        }
+
+        /// <summary>
         /// AI choice, not a rule: whether a monk declares a flurry of blows before its melee sequence (CHR-003). The rules
         /// (CharacterController.CanUseFlurryOfBlows) are shared with the PC Flurry button. <see cref="DefaultShouldUseFlurryOfBlows"/>.
         /// </summary>

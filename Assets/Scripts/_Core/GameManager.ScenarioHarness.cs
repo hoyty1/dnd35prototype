@@ -474,6 +474,22 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Clicks the open Wild Shape form list's option for the bestiary entry <paramref name="formId"/> (its label begins
+    /// with the entry's name, GameManager.DescribeWildShapeForm). False when the list is not open or lacks that form.
+    /// </summary>
+    internal bool Harness_ChooseWildShapeForm(string formId)
+    {
+        NPCDefinition form = NPCDatabase.Get(formId);
+        if (form == null || CombatUI == null)
+            return false;
+        UnityEngine.UI.Button option = CombatUI.Harness_FindSelectionOption(form.Name + " (");
+        if (option == null || !option.interactable)
+            return false;
+        option.onClick.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Presses Cast Now on the open touch-spell prompt (a melee touch spell's Cast Now / Discharge Later choice), as a
     /// player clicks it; false when no prompt or button is open. Writes no game state of its own.
     /// </summary>

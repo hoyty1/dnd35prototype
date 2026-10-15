@@ -61,6 +61,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Track" },
+            BonusFeats = new List<string> { "Track" }, // MM p.271: Track is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Skills: Jump +7, Listen +5, Spot +5, Survival +1" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -97,6 +98,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Track" },
+            BonusFeats = new List<string> { "Track" }, // MM p.272: Track is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string>
             {
@@ -143,6 +145,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 5,
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.64: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Low-light vision", "Disease (Filth Fever)", "Scent", "Climb 20 ft", "Skills: Climb +11, Hide +8, Listen +4, Move Silently +4, Spot +4, Swim +11" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -214,6 +217,7 @@ public static partial class NPCDatabase
             BaseSpeed = 6, // 30 ft., burrow 10 ft.
             BaseHitDieHP = 28,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
+            BonusFeats = new List<string> { "Track" }, // MM p.62: Track is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Rage (+4 Str, +4 Con, −2 AC when damaged)", "Low-light vision", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -250,6 +254,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
             Feats = new List<string> { "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.65: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Attach (auto bite damage while latched)", "Blood drain (1d4 Con/round)", "Low-light vision", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -937,6 +942,7 @@ public static partial class NPCDatabase
             },
             CreatureTags = new List<string> { "Animal", "SummonBase", "MM35" },
             Feats = new List<string> { "Alertness", "Toughness", "Track" },
+            BonusFeats = new List<string> { "Track" }, // MM p.66: Track is a racial bonus feat (B)
             SpecialAbilities = new List<string> { "Rage (Ex): +4 STR, +4 CON, -2 AC when below 50% HP", "Scent", "Low-light vision", "Climb 10 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.4f, 0.32f, 0.25f, 1f),

@@ -342,6 +342,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
             Feats = new List<string> { "Weapon Finesse" },
+            BonusFeats = new List<string> { "Weapon Finesse" }, // MM p.280: Weapon Finesse is a racial bonus feat (B)
             HasScent = true,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.45f, 0.72f, 0.34f, 1f),

@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Tracks wild shape transformation state for a Druid character (D&D 3.5e PHB p.37).
-/// Manages uses per day, duration, current form, and stat modifications.
-/// Wild Shape is gained at level 5 and improves as the druid levels.
+/// The wild shape tables (uses per day and duration by druid level, PHB p.37), which WildShapeRules reads. The instance
+/// members (a form from WildShapeFormDatabase, its own use counter) are an older model that only tests use; the rules
+/// keep their state in CharacterStats.ActiveWildShape and take their forms from the bestiary (WildShapeRules; CHR-020,
+/// CHR-048).
 /// </summary>
 public class WildShapeData
 {
@@ -38,16 +39,8 @@ public class WildShapeData
     }
 
     /// <summary>
-    /// Wild Shape uses per day by druid level (PHB p.37).
-    /// Gained at level 5 (1/day), +1 per 2 levels thereafter. Max 8 at level 19+.
-    /// Level 5: 1, Level 6: 1, Level 7: 2, Level 8: 2, Level 9: 3, ... Level 18: 7 (at-will for elemental at 20)
-    /// Actually: 1 at 5, then +1 at 6, 7, 8... = 1 + (level - 5) / 2 rounded down.
-    /// PHB: 1/day at 5th, 2/day at 6th, 3/day at 7th... so it's 1 + (level - 5).
-    /// Wait — PHB says "she can use this ability more often as she advances in level"
-    /// Table 3-8: Wild Shape 1/day at 5, 2/day at 6, 3/day at 7, 4/day at 8,
-    /// but that seems too generous. Let me use the standard: 1 at 5, +1 every 3 levels.
-    /// Actually per PHB Table 3-8: 1/day(5), 2/day(6), 3/day(7), 4/day(10), 5/day(14), 6/day(18).
-    /// The correct progression: 1/day at L5, 2/day at L6, 3/day at L7, then +1 at L10, L14, L18.
+    /// Wild Shape uses per day by druid level (PHB Table 3-8, p.36-37): 1 at 5th, 2 at 6th, 3 at 7th, 4 at 10th, 5 at
+    /// 14th, 6 at 18th (the elemental uses from 16th are separate and not modelled). WildShapeRules reads it.
     /// </summary>
     public static int GetUsesPerDay(int druidLevel)
     {
@@ -139,7 +132,7 @@ public class WildShapeData
     public int GetWildShapeSpeed() => IsWildShaped && CurrentForm != null ? CurrentForm.Speed : 0;
 
     /// <summary>
-    /// Revert to normal form. Can be done as a free action (PHB p.37).
+    /// Revert to normal form (legacy test model; changing back is a standard action, PHB p.37: WildShapeRules.Revert).
     /// Returns true if was wild shaped and successfully reverted.
     /// </summary>
     public bool RevertToNormal()

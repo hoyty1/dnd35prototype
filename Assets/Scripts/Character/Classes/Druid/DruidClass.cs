@@ -69,15 +69,16 @@ public class DruidClass : ICharacterClass
     // UI — earthy green/brown nature theme
     public Color TitleColor => new Color(0.2f, 0.6f, 0.2f);
     public Color ButtonColor => new Color(0.15f, 0.4f, 0.1f);
-    public string InfoText => "Hit Die: d8 | BAB: +2 (medium)\nGood Saves: Fortitude, Will\n• Full divine spellcasting (WIS)\n• Wild Shape (L5+)\n• Animal Companion (full level)\n• Nature Sense, Trackless Step";
+    public string InfoText => "Hit Die: d8 | BAB: +2 (medium)\nGood Saves: Fortitude, Will\n• Full divine spellcasting (WIS)\n• Wild Shape (L5+: Small or Medium animal, Large at L8)\n• Nature Sense; Resist Nature's Lure (L4)\n• Not yet implemented: animal companion, wild empathy, spontaneous summoning";
 
     // Class Features
     public void InitFeats(CharacterStats stats)
     {
         if (stats != null)
         {
-            // Druids are proficient with natural weapons (claws, bite, etc.)
-            // Nature Sense is a passive +2 bonus handled in CharacterStats
+            // Druids are proficient with natural weapons (claws, bite, etc.). Nature Sense is
+            // CharacterStats.GetClassFeatureSkillModifier, Resist Nature's Lure SaveRules.SituationalBonus, and Wild
+            // Shape WildShapeRules (uses from CharacterStats.WildShapeUsesToday): nothing to set up here (CHR-020).
             Debug.Log($"[Druid] {stats.CharacterName}: Druid class features initialized.");
         }
     }
@@ -125,7 +126,7 @@ public class DruidClass : ICharacterClass
     /// <summary>Trackless Step at level 3 (PHB p.36): leaves no trail in natural surroundings.</summary>
     public static bool HasTracklessStep(int level) => level >= 3;
 
-    /// <summary>Resist Nature's Lure at level 4 (PHB p.36): +4 vs spell-like abilities of fey and plant creatures.</summary>
+    /// <summary>Resist Nature's Lure at level 4 (PHB p.37): +4 on saves against the spell-like abilities of fey (SaveRules.SituationalBonus).</summary>
     public static bool HasResistNaturesLure(int level) => level >= 4;
 
     /// <summary>Wild Shape starts at level 5 (PHB p.37).</summary>
@@ -155,7 +156,7 @@ public class DruidClass : ICharacterClass
         return druidLevel >= 1 ? druidLevel : 0;
     }
 
-    /// <summary>Resist Nature's Lure save bonus (PHB p.36).</summary>
+    /// <summary>Resist Nature's Lure save bonus (PHB p.37).</summary>
     public static int ResistNaturesLureBonus => 4;
 
     /// <summary>

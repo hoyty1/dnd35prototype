@@ -33,6 +33,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button DomainPowerButton => _combatUI != null ? _combatUI.DomainPowerButton : null;
     private Button SmiteButton => _combatUI != null ? _combatUI.SmiteButton : null;
     private Button LayOnHandsButton => _combatUI != null ? _combatUI.LayOnHandsButton : null;
+    private Button WildShapeButton => _combatUI != null ? _combatUI.WildShapeButton : null;
     private Button GrappleActionsButton => _combatUI != null ? _combatUI.GrappleActionsButton : null;
     private Button GrappleDamageButton => _combatUI != null ? _combatUI.GrappleDamageButton : null;
     private Button GrappleLightWeaponAttackButton => _combatUI != null ? _combatUI.GrappleLightWeaponAttackButton : null;
@@ -804,6 +805,21 @@ public class ActionButtonPanel : MonoBehaviour
         }
         states.Set(LayOnHandsButton, new ActionButtonState(hasLayOnHands, canLayOnHands, layOnHandsLabel));
 
+        // Wild Shape (PHB p.37): shown from druid 5th level; a standard action into an animal form, or back (CHR-020).
+        bool hasWildShape = pc != null && pc.Stats != null && WildShapeRules.HasAbility(pc.Stats);
+        string wildShapeReason = string.Empty;
+        bool canWildShape = hasWildShape && context.Gm != null && context.Gm.CanUseWildShapeButton(pc, out wildShapeReason);
+        string wildShapeLabel = string.Empty;
+        if (hasWildShape)
+        {
+            string uses = $"{WildShapeRules.UsesLeft(pc.Stats)}/{WildShapeRules.UsesPerDay(pc.Stats)}";
+            if (WildShapeRules.IsWildShaped(pc.Stats))
+                wildShapeLabel = canWildShape ? "Change Back (Standard)" : $"Change Back ({wildShapeReason})";
+            else
+                wildShapeLabel = canWildShape ? $"Wild Shape (Standard, {uses} left)" : $"Wild Shape ({wildShapeReason}; {uses})";
+        }
+        states.Set(WildShapeButton, new ActionButtonState(hasWildShape, canWildShape, wildShapeLabel));
+
         bool standaloneDisarmWasVisible = _combatUI.HideStandaloneDisarmButtonsInMainActionsForActionPanel();
         Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} coupDeGraceAvailable={context.HasCoupDeGraceAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
 
@@ -1340,6 +1356,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
+        if (WildShapeButton != null) WildShapeButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
         if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
@@ -1386,6 +1403,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DomainPowerButton != null) DomainPowerButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
+        if (WildShapeButton != null) WildShapeButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (GrappleDamageButton != null) GrappleDamageButton.gameObject.SetActive(false);
         if (GrappleLightWeaponAttackButton != null) GrappleLightWeaponAttackButton.gameObject.SetActive(false);

@@ -85,6 +85,7 @@ public static partial class NPCDatabase
             BaseSpeed = 6, // 30 ft., burrow 10 ft., climb 10 ft.
             BaseHitDieHP = 28,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
+            BonusFeats = new List<string> { "Track" }, // MM p.283: Track is a racial bonus feat (B)
             HasScent = true,
             SpecialAbilities = new List<string> { "Rage (+4 Str, +4 Con, −2 AC when damaged)", "Low-light vision", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

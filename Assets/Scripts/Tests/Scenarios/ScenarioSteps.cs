@@ -13,7 +13,8 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
+        WildShape, RevertWildShape
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -44,6 +45,8 @@ namespace Tests.Scenarios
         public bool HasCell { get; private set; }
         /// <summary>The option label prefix an <see cref="AnswerImprovedGrab"/> or <see cref="GrappleDamage"/> step clicks.</summary>
         public string MenuChoice { get; private set; }
+        /// <summary>The bestiary id of the animal a <see cref="WildShape"/> step takes (NPCDatabase).</summary>
+        public string FormId { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
@@ -104,6 +107,13 @@ namespace Tests.Scenarios
         /// target's square.
         /// </summary>
         public static Step LayOnHands(string target) => new Step(StepKind.LayOnHands) { Target = target };
+        /// <summary>
+        /// Wild Shape into the bestiary animal <paramref name="formId"/> (WildShapeRules, CHR-020). Scripted:
+        /// GameManager.TryWildShapeForAI. Ui: the Wild Shape button, then the form's option in the list.
+        /// </summary>
+        public static Step WildShape(string formId) => new Step(StepKind.WildShape) { FormId = formId };
+        /// <summary>Changing back from a wild shape (a standard action). Scripted: TryWildShapeRevertForAI. Ui: the Wild Shape button.</summary>
+        public static Step RevertWildShape() => new Step(StepKind.RevertWildShape);
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -220,6 +230,8 @@ namespace Tests.Scenarios
                     return "AnswerAoO(" + Answer + ")";
                 case StepKind.Assert:
                     return "Assert(" + AssertName + ")";
+                case StepKind.WildShape:
+                    return "WildShape(" + FormId + ")";
                 case StepKind.Wait:
                     return "Wait(" + Frames + ")";
                 default:
@@ -244,6 +256,8 @@ namespace Tests.Scenarios
                 return Describe() + ": unknown grapple action (" + string.Join(", ", GrappleKinds) + ")";
             if (Kind == StepKind.Cast && string.IsNullOrEmpty(SpellId))
                 return "Cast without a spell id";
+            if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
+                return Describe() + ": no bestiary entry '" + FormId + "'";
             if (Kind == StepKind.Maneuver && ManeuverType == SpecialAttackType.BullRushCharge)
                 return Describe() + ": a bull rush on a charge is Charge(target, bullRush: true)";
             if (Kind == StepKind.Assert && Check == null)
@@ -485,6 +499,19 @@ namespace Tests.Scenarios
                         if (target == null) { ok = false; note = "no target"; break; }
                         if (!LayOnHandsRules.CanUse(a, out string lohRefusal)) { ok = false; note = lohRefusal; break; }
                         ok = gm.TryLayOnHandsForAI(a, target);
+                        yield return null;
+                        break;
+
+                    case StepKind.WildShape:
+                        if (!WildShapeRules.CanAssume(a, out string wildShapeRefusal)) { ok = false; note = wildShapeRefusal; break; }
+                        ok = gm.TryWildShapeForAI(a, s.FormId);
+                        if (ok == false) note = "refused (see the combat log)";
+                        yield return null;
+                        break;
+
+                    case StepKind.RevertWildShape:
+                        if (!WildShapeRules.CanRevert(a, out string revertRefusal)) { ok = false; note = revertRefusal; break; }
+                        ok = gm.TryWildShapeRevertForAI(a);
                         yield return null;
                         break;
 
@@ -861,6 +888,19 @@ namespace Tests.Scenarios
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnLayOnHandsButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.WildShape:
+                    if (WildShapeRules.IsWildShaped(_actor.Stats)) { _awaitNote = "already in animal form"; break; }
+                    gm.OnWildShapeButtonPressed();
+                    if (!gm.Harness_ChooseWildShapeForm(s.FormId))
+                    {
+                        _awaitNote = "the Wild Shape list did not offer " + s.FormId;
+                        gm.CombatUI?.HidePickUpItemSelection();
+                    }
+                    break;
+                case StepKind.RevertWildShape:
+                    if (!WildShapeRules.IsWildShaped(_actor.Stats)) { _awaitNote = "not in animal form"; break; }
+                    gm.OnWildShapeButtonPressed();
                     break;
                 case StepKind.NaturalAttack:
                 {
