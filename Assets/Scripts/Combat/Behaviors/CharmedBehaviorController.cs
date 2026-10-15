@@ -238,6 +238,12 @@ public sealed class CharmedBehaviorController
         if (item == null || !item.IsConsumable)
             return false;
 
+        // A potion only: reading a scroll or using a wand or staff is spell completion or spell trigger use (DMG p.213),
+        // subject to the casting checks of the cast core (Silence, deafness, arcane spell failure, entangled, Blink; batch
+        // 11 step 13), which this direct SpellCaster.Cast path does not make.
+        if (item.IsScroll || item.IsWand || item.IsStaff)
+            return false;
+
         if (item.ConsumableEffect == ConsumableEffectType.HealHP)
             return true;
 

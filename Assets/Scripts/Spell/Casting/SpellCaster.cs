@@ -83,23 +83,9 @@ public static class SpellCaster
         if (!string.IsNullOrEmpty(protection.SourceSpellName))
             result.ProtectionSourceName = protection.SourceSpellName;
 
-        // ========== DEAFENED VERBAL SPELL FAILURE ==========
-        if (casterStats != null
-            && spell != null
-            && spell.HasVerbalComponent
-            && HasCondition(casterStats, CombatConditionType.Deafened))
-        {
-            int failureRoll = DiceRoller.D100();
-            result.SaveRoll = 0;
-            if (failureRoll <= 20)
-            {
-                result.Success = false;
-                result.TargetHPBefore = targetStats != null ? targetStats.CurrentHP : 0;
-                result.TargetHPAfter = result.TargetHPBefore;
-                result.NoEffectReason = $"Spell fails due to deafness (20% verbal component failure, d%={failureRoll:00}).";
-                return result;
-            }
-        }
+        // A deafened caster's 20% verbal spell failure (PHB p.307) is one roll per casting, made in the cast core's Failure
+        // stage (CastComponentRules.TryDeafenedFailure; batch 11 step 13, SPL-150), not here: this runs once per target of
+        // an area spell and again for every later hit of a lasting effect (the Flaming Sphere).
 
         // ========== POSITIVE / NEGATIVE ENERGY (Cure and Inflict, SPL-005) ==========
         // On an undead a cure's positive energy is damage (a touch attack against an unwilling target, spell
@@ -1035,25 +1021,6 @@ public static class SpellCaster
     /// Get the appropriate saving throw modifier for a character,
     /// including conditional bonuses such as Still Mind (+2 vs enchantment effects).
     /// </summary>
-    private static bool HasCondition(CharacterStats stats, CombatConditionType condition)
-    {
-        if (stats == null || stats.ActiveConditions == null)
-            return false;
-
-        CombatConditionType normalized = ConditionRules.Normalize(condition);
-        for (int i = 0; i < stats.ActiveConditions.Count; i++)
-        {
-            StatusEffect active = stats.ActiveConditions[i];
-            if (active == null)
-                continue;
-
-            if (ConditionRules.Normalize(active.Type) == normalized)
-                return true;
-        }
-
-        return false;
-    }
-
     private static int GetSaveModifier(
         CharacterStats stats,
         SpellData spell,

@@ -179,21 +179,28 @@ public static class MediumConditionRulesTests
             bool sawFailure = false;
             bool sawSuccess = false;
 
+            // The 20% verbal failure is one roll per casting in the cast core's Failure stage (CastComponentRules,
+            // batch 11 step 13, SPL-150); SpellCaster.Cast, which runs once per target, rolls none.
+            bool castFailedForDeafness = false;
             for (int i = 0; i < 120; i++)
             {
                 Random.InitState(2000 + i);
-                SpellResult result = SpellCaster.Cast(magicMissile, caster.Stats, target.Stats, null, false, false, caster, target);
-                if (!result.Success && !string.IsNullOrEmpty(result.NoEffectReason) && result.NoEffectReason.ToLowerInvariant().Contains("deaf"))
+                if (CastComponentRules.TryDeafenedFailure(caster, magicMissile, null, null, out _, out int chance))
                     sawFailure = true;
-                if (result.Success)
+                else if (chance == 20)
                     sawSuccess = true;
 
-                if (sawFailure && sawSuccess)
+                SpellResult result = SpellCaster.Cast(magicMissile, caster.Stats, target.Stats, null, false, false, caster, target);
+                if (!result.Success && !string.IsNullOrEmpty(result.NoEffectReason) && result.NoEffectReason.ToLowerInvariant().Contains("deaf"))
+                    castFailedForDeafness = true;
+
+                if (sawFailure && sawSuccess && i >= 40)
                     break;
             }
 
             Assert(sawFailure, "Deafened verbal spell failure can trigger");
             Assert(sawSuccess, "Deafened verbal spell failure is not automatic (20% chance)");
+            Assert(!castFailedForDeafness, "SpellCaster.Cast rolls no deafness of its own (one roll per casting, SPL-150)");
         }
         finally
         {

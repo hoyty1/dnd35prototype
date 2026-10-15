@@ -8,7 +8,9 @@ public enum ConcentrationCheckType
     Grappled,
     ViolentMotion,
     OngoingConcentration,
-    HeldCharge
+    HeldCharge,
+    /// <summary>Casting while entangled: DC 15 + the spell's level (PHB p.308, p.70; SPL-145).</summary>
+    Entangled
 }
 /// <summary>
 /// Manages spell concentration mechanics per D&D 3.5e PHB rules.
@@ -59,20 +61,33 @@ public class ConcentrationManager : MonoBehaviour
     /// <summary>
     /// Shared concentration check utility for in-combat spellcasting interruption checks.
     /// D&D 3.5e flow used by spellcasting AoO handling:
-    ///   Roll = d20 + caster level + CON modifier (+4 Combat Casting when applicable).
+    ///   Roll = d20 + caster level + CON modifier (+4 Combat Casting when <see cref="CombatCastingApplies"/>).
+    /// <paramref name="diceContext"/> labels the d20 (a forced-dice scenario matches it); null leaves it unlabelled. The
+    /// draw is the same either way (DiceService.D20 and DiceRoller.D20 take one Random.Range(1, 21)).
     /// </summary>
+    /// <summary>
+    /// Whether Combat Casting's +4 counts on a casting Concentration check of <paramref name="checkType"/>: PHB p.92 gives
+    /// it on checks to cast on the defensive or while grappling or pinned, so never on the entangled check (batch 11
+    /// step 13). The damage, violent-motion, held-charge and ongoing checks still add it, against PHB p.92 (SPL-169).
+    /// </summary>
+    public static bool CombatCastingApplies(ConcentrationCheckType checkType)
+    {
+        return checkType != ConcentrationCheckType.Entangled;
+    }
+
     public static ConcentrationCheckResult MakeSpellcastingConcentrationCheck(
         CharacterController caster,
         int dc,
         ConcentrationCheckType checkType,
         SpellData spell,
-        int damageDealt = 0)
+        int damageDealt = 0,
+        string diceContext = null)
     {
-        int roll = DiceRoller.D20();
+        int roll = diceContext != null ? DiceService.D20(diceContext) : DiceRoller.D20();
         int bonus = 0;
 
         if (caster != null && caster.Stats != null)
-            bonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
+            bonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: CombatCastingApplies(checkType));
 
         int total = roll + bonus;
         bool success = total >= dc;

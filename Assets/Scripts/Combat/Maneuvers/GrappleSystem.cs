@@ -361,6 +361,40 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>
+    /// The grappled or pinned casting Concentration check itself (DC 20 + spell level, PHB p.156), with the pin lapse
+    /// before it, its log and trace mark and no spending: true when the caster is neither grappled nor pinned or passes.
+    /// Also used by a scroll read outside the cast core (ResolveDirectItemCastChecks).
+    /// </summary>
+    private bool RollGrappledOrPinnedCastingConcentration(CharacterController caster, SpellData spell, out int dc, out string conditionLabel)
+    {
+        dc = 0;
+        conditionLabel = null;
+        if (caster == null || spell == null)
+            return true;
+
+        // A pinner that casts on its renewal turn does not pin again, so the pin's 1 round ends before the spell
+        // (PHB p.156, CMB-120). Every PC and NPC cast pipeline passes through here once the cast is committed.
+        string pinLapse = caster.LetDuePinLapseIfDue();
+        if (!string.IsNullOrEmpty(pinLapse))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", pinLapse));
+
+        if (!TryGetGrappledOrPinnedState(caster, out conditionLabel))
+            return true;
+
+        dc = ConcentrationService.GetGrappledCastingDC(spell.SpellLevel);
+        ConcentrationCheckResult check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+            caster,
+            dc,
+            ConcentrationCheckType.Grappled,
+            spell);
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})"));
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, check.Success ? "grappled-passed" : "grappled-lost");
+        return check.Success;
+    }
+
     private bool ResolveGrappledOrPinnedCastingConcentration(
         CharacterController caster,
         SpellcastingComponent spellComp,
@@ -375,26 +409,7 @@ public partial class GameManager
         if (caster == null || spell == null)
             return false;
 
-        // A pinner that casts on its renewal turn does not pin again, so the pin's 1 round ends before the spell
-        // (PHB p.156, CMB-120). Every PC and NPC cast pipeline passes through here once the cast is committed.
-        string pinLapse = caster.LetDuePinLapseIfDue();
-        if (!string.IsNullOrEmpty(pinLapse))
-            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", pinLapse));
-
-        if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
-            return true;
-
-        int dc = ConcentrationService.GetGrappledCastingDC(spell.SpellLevel);
-        ConcentrationCheckResult check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
-            caster,
-            dc,
-            ConcentrationCheckType.Grappled,
-            spell);
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})"));
-
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, check.Success ? "grappled-passed" : "grappled-lost");
-        if (check.Success)
+        if (RollGrappledOrPinnedCastingConcentration(caster, spell, out int dc, out string conditionLabel))
             return true;
 
         bool consumed = ConsumePendingSpellSlot(

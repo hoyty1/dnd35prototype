@@ -5,10 +5,11 @@ using UnityEngine;
 // ============================================================================
 
 /// <summary>
-/// Centralized spell resolution service that unifies Blink spell failure,
-/// targeted spell failure, and spell resistance checks for both PC and NPC
-/// casting paths. Eliminates duplicated logic between PerformSpellCast()
-/// and TryNPCPerformSpellCast() in GameManager.
+/// Centralized spell resolution service: the Blink spell failure rolls (PHB p.206) that every cast path uses through the
+/// cast core (GameManager.CastCore.cs: the Failure stage's TryBlinkCasterFailure and the TargetBlink stage's
+/// TryBlinkTargetFailure, batch 11 step 13, the same for every caster), and a spell resistance helper. The dice labels
+/// are the cast core's: "Blink caster spell failure" and "Blink target spell failure" (forced-dice scenarios and tests
+/// match them). <see cref="RunPreCastChecks"/> combines the two Blink rolls for tests only; the core logs its own lines.
 /// </summary>
 public static class SpellResolutionService
 {
@@ -35,6 +36,12 @@ public static class SpellResolutionService
         public string LogMessage;
     }
 
+    /// <summary>The dice label of the blinking caster's 20% roll.</summary>
+    public const string BlinkCasterDiceContext = "Blink caster spell failure";
+
+    /// <summary>The dice label of the 50% roll of a spell aimed at a blinking creature.</summary>
+    public const string BlinkTargetDiceContext = "Blink target spell failure";
+
     // ========================================================================
     // BLINK CASTER SPELL FAILURE (20%)
     // ========================================================================
@@ -56,15 +63,15 @@ public static class SpellResolutionService
         if (caster == null || !caster.HasActiveBlinkEffect)
             return false;
 
-        roll = DiceService.Percentile($"Blink caster spell failure ({caster.Stats.CharacterName})");
+        roll = DiceService.Percentile(BlinkCasterDiceContext);
 
         if (roll <= 20)
         {
-            Debug.Log($"[SpellResolution] Blink caster failure: {caster.Stats.CharacterName}'s {spellName} fizzles (rolled {roll} ≤ 20%)");
+            Debug.Log($"[SpellResolution] Blink caster failure: {caster.Stats?.CharacterName}'s {spellName} fizzles (rolled {roll} ≤ 20%)");
             return true;
         }
 
-        Debug.Log($"[SpellResolution] Blink caster check passed: {caster.Stats.CharacterName} rolled {roll} > 20%");
+        Debug.Log($"[SpellResolution] Blink caster check passed: {caster.Stats?.CharacterName} rolled {roll} > 20%");
         return false;
     }
 
@@ -95,7 +102,7 @@ public static class SpellResolutionService
             return false;
 
         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-        roll = DiceService.Percentile($"Blink target spell failure ({targetName})");
+        roll = DiceService.Percentile(BlinkTargetDiceContext);
 
         if (roll <= 50)
         {

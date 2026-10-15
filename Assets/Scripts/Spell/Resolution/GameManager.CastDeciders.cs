@@ -99,8 +99,7 @@ public partial class GameManager
 
     /// <summary>
     /// The UI follow-up of a finished PC cast: a refusal, a cancel, a failed spend or an outcome that asks for it
-    /// (<see cref="CastOutcome.ShowsActionMenu"/>: a summon that spawned nothing, a summon or Grease lost before its
-    /// provocation) returns to the action menu; any
+    /// (<see cref="CastOutcome.ShowsActionMenu"/>: a summon that spawned nothing) returns to the action menu; any
     /// other cast refreshes the stat panels, clears the highlights and keeps its result log as the last combat log (a
     /// cast resolved at the CombatEnd stage did that before its combat-end check, UiBeforeCastCombatEndCheck) and,
     /// unless it ended the combat, pauses before the next action (AfterAttackDelay: 1.5 s after a resolved cast, 1 s

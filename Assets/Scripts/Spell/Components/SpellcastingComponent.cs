@@ -2602,16 +2602,13 @@ public class SpellcastingComponent : MonoBehaviour
         if (IsBlockedByWildShape(spell)) return false;
 
         // ── Silence check (PHB p.279) ──
-        // A silenced character cannot cast spells with verbal components.
-        // Silent Spell metamagic would bypass this, but that check is handled separately.
-        if (spell.HasVerbalComponent)
+        // The one Silence rule of every cast (CastComponentRules.SilenceBlocks, batch 11 step 13): a verbal component left
+        // after the spell's own prepared metamagic (a prepared Silent Spell has none).
+        var owner = GetComponent<CharacterController>();
+        if (CastComponentRules.SilenceBlocks(owner, spell, null, null))
         {
-            var owner = GetComponent<CharacterController>();
-            if (owner != null && owner.Stats != null && owner.Stats.SilenceActive)
-            {
-                UnityEngine.Debug.Log($"[Silence] {owner.Stats.CharacterName} cannot cast {spell.Name} — silenced and spell has verbal component");
-                return false;
-            }
+            UnityEngine.Debug.Log($"[Silence] {owner.Stats.CharacterName} cannot cast {spell.Name} — silenced and spell has verbal component");
+            return false;
         }
 
         // ── Spontaneous caster check (Sorcerer/Bard): the same rule as the NPC executor's CanCast (SPL-123) ──

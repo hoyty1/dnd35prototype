@@ -72,8 +72,7 @@ public sealed class CastOutcome
     /// <summary>
     /// True when the UI goes straight back to the action menu after this cast, with no stat-panel refresh and no pause,
     /// although the cast counts as cast (<see cref="WasCast"/> is unchanged): a summon whose creature could not be
-    /// spawned, and with <see cref="LegacyCastQuirk.LostCastShowsActionMenu"/> a summon or Grease lost to a distraction or
-    /// a spell failure.
+    /// spawned. A cast lost to a distraction or a spell failure pauses like any other (batch 11 step 13).
     /// </summary>
     public bool ShowsActionMenu;
 
@@ -203,10 +202,8 @@ public partial class GameManager
         if (finished == null)
         {
             ReportCastStackViolation("RunCastSync: the cast " + DescribeCast(req) + " did not finish synchronously (stopped in stage " + ctx.Stage + ")");
-            // Counts as cast only once the slot is spent: after the Spend stage, or in the Failure stage when the request
-            // spends before the failure checks (NpcSpendsBeforeFailureChecks).
-            bool slotSpent = ctx.Stage > CastStage.Spend
-                             || (ctx.Stage == CastStage.Failure && req.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks));
+            // Counts as cast only once the slot is spent: after the Spend stage.
+            bool slotSpent = ctx.Stage > CastStage.Spend;
             finished = new CastOutcome(slotSpent ? CastOutcomeKind.Failed : CastOutcomeKind.Refused, ctx.Stage, "not-synchronous");
         }
 
@@ -218,7 +215,8 @@ public partial class GameManager
     /// Whether <paramref name="req"/> may be cast as it stands: with <see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>
     /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
     /// target test (IsValidTargetForSpell), with the NPC bits the range at the caster level and the area refusal, and
-    /// the material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
+    /// the casting action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
+    /// material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
     /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>), and for a hold the grapple
     /// test (<see cref="CheckHoldChargeLegality"/>). No side effect, except that a hold request without
     /// <see cref="LegacyCastQuirk.HoldSkipsGrappleLegality"/> logs the grapple refusal (batch 11 step 15 must keep that
@@ -229,7 +227,8 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
-                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastComponentLegality(req);
+                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastSpeechLegality(req)
+                              ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
     }
 
@@ -333,6 +332,22 @@ public partial class GameManager
         return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, refusal);
     }
 
+    /// <summary>
+    /// Silence (PHB p.279; batch 11 step 13, SPL-092), the same for every caster and path: a caster under a Silence cannot
+    /// cast a spell with a verbal component, unless Silent Spell removed it (PHB p.100), nor use a wand, whose trigger word
+    /// must be spoken (DMG p.213; delegated RAW reading 2026-10-14). CastComponentRules.SilenceBlocks decides; a held-charge
+    /// delivery is no casting. With <see cref="LegacyCastQuirk.NpcNullMetamagic"/> the stage has already dropped the
+    /// metamagic, so only a prepared silent spell's own record counts. Null when the cast may go on.
+    /// </summary>
+    private static CastOutcome CheckCastSpeechLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+        return CastComponentRules.SilenceBlocks(req.Caster, req.Spell, req.Metamagic, req.Source)
+            ? new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "silenced")
+            : null;
+    }
+
     private static CastOutcome CheckCastComponentLegality(SpellCastRequest req)
     {
         // Spells with common material components (M with no GP cost) need a spell component pouch (PHB p.130). F12 test
@@ -430,6 +445,19 @@ public partial class GameManager
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
             if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name)));
+            FinishCast(ctx, refusal);
+            return;
+        }
+
+        // Silence (PHB p.279): no verbal component, and no wand's trigger word, inside one (SPL-092). The NPC path's
+        // refusals log nothing, as its others.
+        refusal = CheckCastSpeechLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", CastComponentRules.DescribeSilenceRefusal(
+                    caster.Stats?.CharacterName, spell.Name, CastComponentRules.IsSpellTrigger(req.Source))));
             FinishCast(ctx, refusal);
             return;
         }
@@ -588,29 +616,27 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Distraction: the entangled check, then grappled or pinned Concentration (not for a held-charge delivery). Then
-    /// the Failure stage, or with <see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/> the Spend stage first.
+    /// Distraction: the entangled Concentration check, then grappled or pinned Concentration, for every casting from a
+    /// slot or a scroll on every path (batch 11 step 13: an area cast and a hold make the entangled check too, SPL-006,
+    /// SPL-146), not for a held-charge delivery (no casting, PHB p.141) or a wand use (spell trigger, no casting;
+    /// CastComponentRules.CastingDistractionApplies, delegated RAW reading 2026-10-14). Then the Failure stage.
     /// </summary>
     private void CastStageDistraction(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Distraction);
-        if (!ctx.IsHeldChargeDelivery)
+        if (!ctx.IsHeldChargeDelivery && CastComponentRules.CastingDistractionApplies(ctx.Request.Source))
         {
             SpellCastRequest req = ctx.Request;
             CharacterController caster = req.Caster;
             SpellData spell = req.Spell;
 
-            // An area cast and a hold make no entangled check (AreaSkipsEntangled, SPL-006; HoldSkipsEntangled, SPL-146;
-            // step 13).
-            bool entangledCheck = !req.HasQuirk(LegacyCastQuirk.AreaSkipsEntangled) && !req.HasQuirk(LegacyCastQuirk.HoldSkipsEntangled);
-            if (entangledCheck && caster.HasCondition(CombatConditionType.Entangled))
-                RequireLegacyQuirk(ctx, LegacyCastQuirk.EntangledUsesCasterLevelFormula);
-            if (entangledCheck && !ResolveEntangledSomaticCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
+            // An entangled caster: Concentration DC 15 + the spell's level for any spell (PHB p.308, p.70; SPL-145).
+            if (!ResolveEntangledCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
                     ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
             {
                 CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
+                FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
                 return;
             }
 
@@ -619,97 +645,107 @@ public partial class GameManager
             {
                 CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
+                FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
                 return;
             }
         }
+        else if (!ctx.IsHeldChargeDelivery)
+        {
+            // A wand use makes no casting check, but a pinner who uses one on its renewal turn does not pin again, as
+            // for a cast (PHB p.156, CMB-120; ResolveGrappledOrPinnedCastingConcentration does this for a casting).
+            string pinLapse = ctx.Request.Caster.LetDuePinLapseIfDue();
+            if (!string.IsNullOrEmpty(pinLapse))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", pinLapse));
+        }
 
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks))
-            CastStageSpend(ctx);
-        else
-            CastStageFailure(ctx);
+        CastStageFailure(ctx);
     }
 
     /// <summary>
-    /// Failure: arcane spell failure, then the blinking caster's 20% (not for a held-charge delivery). A failed spell
-    /// spends its slot here, unless the Spend stage already ran (<see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/>).
+    /// Failure: one roll each per casting, for every cast but a held-charge delivery, on every path and for every caster
+    /// (batch 11 step 13): arcane spell failure (a somatic component, a slot or a scroll; TryRollArcaneSpellFailure,
+    /// SPL-096, SPL-116), the blinking caster's 20% (PHB p.206; SpellResolutionService.TryBlinkCasterFailure, SPL-006,
+    /// SPL-146) and the deafened caster's verbal failure (PHB p.307; CastComponentRules.TryDeafenedFailure, SPL-150). A
+    /// failed spell spends its slot here (<see cref="LoseCastAtFailure"/>); a cast that passes goes on to the Spend stage.
     /// </summary>
     private void CastStageFailure(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Failure);
-        bool spentAlready = ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks);
         if (!ctx.IsHeldChargeDelivery)
         {
             SpellCastRequest req = ctx.Request;
             CharacterController caster = req.Caster;
             SpellData spell = req.Spell;
 
-            if (req.Source.Kind == CastSourceKind.Scroll)
-                RequireLegacyQuirk(ctx, LegacyCastQuirk.ScrollSkipsArcaneFailure);
-            if (TryRollArcaneSpellFailure(caster, spell, false, out int asfRoll, out int asfChance))
+            if (TryRollArcaneSpellFailure(caster, spell, req.Metamagic, req.Source, out int asfRoll, out int asfChance))
             {
-                if (!spentAlready && !SpendCastSlot(ctx))
-                {
-                    DropSnapshotAfterFailedSpend(ctx);
-                    Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE ASF" : "ASF")} failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
-                    FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, CastOutcome.ReasonSlotNotSpent));
-                    return;
-                }
-
-                CheckConcentrationOnLostCast(ctx);
-                LogArcaneSpellFailure(caster, spell, asfRoll, asfChance);
-                ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Failed, CastStage.Failure, "arcane-spell-failure"));
+                LoseCastAtFailure(ctx, "arcane-spell-failure", IsAreaCast(ctx) ? "AoE ASF failure path" : "ASF failure path",
+                    () => LogArcaneSpellFailure(caster, spell, asfRoll, asfChance));
                 return;
             }
 
-            // PHB p.206: a blinking caster has a 20% spell failure chance (the caster may be on the Ethereal Plane when
-            // the spell is cast), checked separately from and in addition to arcane spell failure. The NPC path rolls
-            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160); an area cast, a
-            // summon, Grease and a hold make no Blink check (AreaSkipsBlink, SummonSkipsBlink, GreaseSkipsBlink,
-            // HoldSkipsBlink; SPL-006, SPL-146; step 13).
-            if (caster.HasActiveBlinkEffect && !SkipsCasterBlinkCheck(req))
+            // PHB p.206: a blinking caster's spell has a 20% chance to activate just as the caster goes ethereal, checked
+            // separately from and in addition to arcane spell failure.
+            if (SpellResolutionService.TryBlinkCasterFailure(caster, spell.Name, out int blinkSpellRoll))
             {
-                bool npcBlink = req.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
-                int blinkSpellRoll = DiceService.Percentile(npcBlink ? "Blink NPC caster spell failure" : "Blink caster spell failure");
-                CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, blinkSpellRoll <= 20 ? "blink-failed" : "blink-passed");
-                if (blinkSpellRoll <= 20)
-                {
-                    if (!spentAlready && !SpendCastSlot(ctx))
-                    {
-                        DropSnapshotAfterFailedSpend(ctx);
-                        Debug.LogError($"[GameManager] Blink spell failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
-                        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, CastOutcome.ReasonSlotNotSpent));
-                        return;
-                    }
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, "blink-failed");
+                LoseCastAtFailure(ctx, "blink-caster", "Blink spell failure path",
+                    () => CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{caster.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)")));
+                return;
+            }
+            if (blinkSpellRoll > 0)
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, "blink-passed");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds)."));
+            }
 
-                    CheckConcentrationOnLostCast(ctx);
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{caster.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)"));
-                    ClearSpellcastResourceSnapshot();
-                    FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Failed, CastStage.Failure, "blink-caster"));
-                    return;
-                }
-
-                if (!npcBlink)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds)."));
+            // PHB p.307: a deafened caster has a 20% chance of spell failure with a verbal component, once per casting.
+            if (CastComponentRules.TryDeafenedFailure(caster, spell, req.Metamagic, req.Source, out int deafRoll, out int deafChance))
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, "deafened-failed");
+                LoseCastAtFailure(ctx, "deafened", "Deafened spell failure path",
+                    () => CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", $"{caster.Stats.CharacterName}'s {spell.Name} fails: deafened, the verbal component goes wrong (rolled {deafRoll} ≤ {deafChance}%, PHB p.307). The spell is lost.")));
+                return;
+            }
+            if (deafRoll > 0)
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, "deafened-passed");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔇", $"Deafened spell check: {caster.Stats.CharacterName} rolled {deafRoll} > {deafChance}% (spell proceeds)."));
             }
         }
 
-        if (spentAlready)
-            CastStageAfterSpend(ctx);
-        else
-            CastStageSpend(ctx);
+        CastStageSpend(ctx);
     }
 
     /// <summary>
-    /// Spend: the slot (or the scroll, the wand charge, the converted spell), not for a held-charge delivery. Then the
-    /// concentration step and the provocation, or with <see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/> the
-    /// Failure stage (a slot that cannot be spent then ends the cast without an error log, as the NPC path did).
+    /// A spell lost at the Failure stage: its slot (or scroll, wand charge, converted spell) is spent, the
+    /// casting-while-concentrating step runs, <paramref name="log"/> shows why, and the cast ends Failed. A slot that
+    /// cannot be spent ends the cast with <see cref="CastOutcome.ReasonSlotNotSpent"/> instead.
+    /// </summary>
+    private void LoseCastAtFailure(CastContext ctx, string reason, string errorLabel, Action log)
+    {
+        if (!SpendCastSlot(ctx))
+        {
+            DropSnapshotAfterFailedSpend(ctx);
+            Debug.LogError($"[GameManager] {errorLabel}: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
+            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, CastOutcome.ReasonSlotNotSpent));
+            return;
+        }
+
+        CheckConcentrationOnLostCast(ctx);
+        log?.Invoke();
+        ClearSpellcastResourceSnapshot();
+        FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Failed, CastStage.Failure, reason));
+    }
+
+    /// <summary>
+    /// Spend: the slot (or the scroll, the wand charge, the converted spell), not for a held-charge delivery, after the
+    /// failure checks for every caster (batch 11 step 13 removed the NPC path's spend before them, SPL-160). Then the
+    /// provocation.
     /// </summary>
     private void CastStageSpend(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Spend);
-        bool beforeFailure = ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks);
         if (!ctx.IsHeldChargeDelivery)
         {
             CharacterController caster = ctx.Request.Caster;
@@ -717,8 +753,7 @@ public partial class GameManager
             if (!SpendCastSlot(ctx))
             {
                 DropSnapshotAfterFailedSpend(ctx);
-                if (!beforeFailure)
-                    Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE: " : "")}Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
+                Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE: " : "")}Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Spend, CastOutcome.ReasonSlotNotSpent));
                 return;
             }
@@ -729,10 +764,7 @@ public partial class GameManager
                 Debug.Log($"[GameManager] Spontaneous cast (level-based): {caster.Stats.CharacterName} converted a level {ctx.SpontaneousLevel} slot → {spell.Name}");
         }
 
-        if (beforeFailure)
-            CastStageFailure(ctx);
-        else
-            CastStageAfterSpend(ctx);
+        CastStageAfterSpend(ctx);
     }
 
     /// <summary>
@@ -991,7 +1023,8 @@ public partial class GameManager
 
     /// <summary>
     /// TargetBlink: an individually targeted spell has a 50% chance to fail against a blinking creature (PHB p.206); not
-    /// for area or self spells.
+    /// for area or self spells (SpellResolutionService.TryBlinkTargetFailure, one roll, label and log for every caster,
+    /// batch 11 step 13).
     /// </summary>
     private void CastStageTargetBlink(CastContext ctx)
     {
@@ -999,24 +1032,19 @@ public partial class GameManager
         CharacterController caster = ctx.Request.Caster;
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
-        if (target != null && target != caster && target.HasActiveBlinkEffect
-            && spell.TargetType != SpellTargetType.Self
-            && spell.TargetType != SpellTargetType.Area)
+        bool missed = SpellResolutionService.TryBlinkTargetFailure(caster, target, spell, out int blinkTargetRoll);
+        if (blinkTargetRoll > 0)
         {
-            // The NPC path rolls under its own dice label and logs no connecting spell (NpcBlinkLabelsAndSilentPass, SPL-160).
-            bool npcBlink = ctx.Request.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
-            int blinkTargetRoll = DiceService.Percentile(npcBlink ? "Blink NPC target spell failure" : "Blink target spell failure");
-            CastStageTrace.Mark(caster, spell, CastStageTrace.TargetBlink, blinkTargetRoll <= 50 ? "missed" : "connects");
+            CastStageTrace.Mark(caster, spell, CastStageTrace.TargetBlink, missed ? "missed" : "connects");
             string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-            if (blinkTargetRoll <= 50)
+            if (missed)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{spell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)"));
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.TargetBlink, "target-blinked"));
                 return;
             }
 
-            if (!npcBlink)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
         }
 
         CastStageGlobe(ctx);
@@ -1119,8 +1147,6 @@ public partial class GameManager
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
 
-        if (caster.HasCondition(CombatConditionType.Deafened))
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.DeafenedRolledInSpellCaster);
         SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.TargetForgoesSave, caster, target, ctx.GlobeAgainstTouch);
         ctx.Result = result;
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
@@ -1585,19 +1611,13 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The outcome of a cast lost to a distraction or a spell failure; with <see cref="LegacyCastQuirk.LostCastShowsActionMenu"/>
-    /// (a summon or Grease, SPL-006) the UI goes straight back to the action menu.
+    /// The outcome of a cast lost to a distraction or a spell failure: the slot is spent and the UI pauses as after any
+    /// lost cast, on every path (batch 11 step 13 removed the summon and Grease paths' straight return to the action
+    /// menu, SPL-006).
     /// </summary>
-    private static CastOutcome LostCastOutcome(CastContext ctx, CastOutcomeKind kind, CastStage at, string reason)
+    private static CastOutcome LostCastOutcome(CastOutcomeKind kind, CastStage at, string reason)
     {
-        return new CastOutcome(kind, at, reason) { ShowsActionMenu = ctx.Request.HasQuirk(LegacyCastQuirk.LostCastShowsActionMenu) };
-    }
-
-    /// <summary>True when the request makes no blinking-caster check (the area, summon, Grease and hold bits; step 13).</summary>
-    private static bool SkipsCasterBlinkCheck(SpellCastRequest req)
-    {
-        return req.HasQuirk(LegacyCastQuirk.AreaSkipsBlink) || req.HasQuirk(LegacyCastQuirk.SummonSkipsBlink)
-               || req.HasQuirk(LegacyCastQuirk.GreaseSkipsBlink) || req.HasQuirk(LegacyCastQuirk.HoldSkipsBlink);
+        return new CastOutcome(kind, at, reason);
     }
 
     /// <summary>

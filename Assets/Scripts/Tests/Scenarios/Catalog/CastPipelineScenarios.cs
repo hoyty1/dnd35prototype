@@ -62,6 +62,8 @@ namespace Tests.Scenarios
             yield return S("cast-empowered-fireball", EmpoweredFireball);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("cast-entangled", Entangled);
+            yield return S("cast-silenced", Silenced);
+            yield return S("cast-deafened-area", DeafenedArea);
             yield return S("cast-slot-failure-refund", SlotFailureRefund);
             yield return S("stale-cast-state-energy", StaleEnergyChoice);
             yield return S("stale-cast-state-fire-shield", FireShieldChoicePerCast);
@@ -718,9 +720,9 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// An entangled Ui wizard 3 loses Summon Monster I to its entangled check (the d20 forced to 1 under SPL-145's
-        /// "Dispel Magic check" label: 1 + caster level 3 + INT 3 against DC 16): the slot is spent and no creature appears
-        /// (PHB p.308).
+        /// An entangled Ui wizard 3 loses Summon Monster I to its entangled check (PHB p.308, p.70: Concentration against DC
+        /// 15 + 1, the d20 forced to 1 under GameManager.EntangledConcentrationDiceContext; batch 11 step 13, SPL-145): the
+        /// slot is spent and no creature appears. Since step 13 the lost summon pauses like any lost cast (SPL-006).
         /// </summary>
         private static ScenarioDef UiSummonEntangled()
         {
@@ -732,7 +734,7 @@ namespace Tests.Scenarios
                 .StartCondition("wizard", CombatConditionType.Entangled, 10)
                 .Tweak("wizard", c => Prepare(c, 1, SpellNames.SUMMON_MONSTER_1))
                 .Initiative("wizard", "gob")
-                .Force(20, 1, "Dispel Magic check", 1)
+                .Force(20, 1, GameManager.EntangledConcentrationDiceContext, 1)
                 .Turn("wizard", 1,
                     RecordCaster("wizard"),
                     Step.CastAt(SpellNames.SUMMON_MONSTER_1, 7, 10, "*"),
@@ -1902,14 +1904,17 @@ namespace Tests.Scenarios
         // ── rules/cast-entangled (SPL-145) ──────────────────────────────
 
         /// <summary>
-        /// SPL-145 (PHB p.70 Concentration, p.308 entangled; DC 15 + the spell's level, delegated RAW reading 2026-10-14). An
-        /// entangled Ui wizard 5 (INT 16) casts Magic Missile; the entangled check's d20 is forced to 10. Today the check
-        /// (ResolveEntangledSomaticCastingConcentration) adds caster level + INT (5 + 3 = 8) instead of the Concentration
-        /// modifier, so it logs "d20 10 + 8 = 18 vs DC 16" and the spell goes off.
+        /// SPL-145, fixed in batch 11 step 13 (PHB p.308 entangled, p.70 Concentration table and its footnote: DC 15 + the
+        /// spell's level, delegated RAW reading 2026-10-14). An entangled Ui wizard 5 casts Magic Missile; the entangled
+        /// check's d20 is forced to 10 under its own label (GameManager.EntangledConcentrationDiceContext). The check is
+        /// d20 + the wizard's Concentration bonus (CharacterStats.GetSpellcastingConcentrationBonus, recorded as the fact
+        /// "conc") against DC 16, logged as "d20 10 + conc X = 10+X vs DC 16"; the three missiles (every d4 at 4: 15) land
+        /// only when 10 + X reaches 16. Before step 13 the check added caster level + INT (5 + 3 = 8) under a "Dispel
+        /// Magic check" label and only for somatic spells.
         /// </summary>
         private static ScenarioDef Entangled()
         {
-            return Rules("rules/cast-entangled", "The entangled casting check adds caster level and the casting ability, not Concentration (SPL-145, pinned)")
+            return Rules("rules/cast-entangled", "The entangled casting check is Concentration against DC 15 + the spell's level (SPL-145)")
                 .Covers("SPL-145", "PHB p.70", "PHB p.308")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
@@ -1917,19 +1922,199 @@ namespace Tests.Scenarios
                 .StartCondition("wizard", CombatConditionType.Entangled, 10)
                 .Tweak("wizard", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
                 .Initiative("wizard", "dummy")
-                // The entangled casting check rolls its d20 under the context "Dispel Magic check", a mislabel that is part of
-                // SPL-145: the fix that relabels the roll must change this force with it.
-                .Force(20, 10, "Dispel Magic check", 1)
+                .Force(20, 10, GameManager.EntangledConcentrationDiceContext, 1)
                 .Force(4, 4, null, -1)
                 .Turn("wizard", 1,
-                    Step.Assert("record", ctx => { RecordHp(ctx, "dummy"); Fact(ctx, "entangled", ctx.Get("wizard").HasCondition(CombatConditionType.Entangled)); return true; }),
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordHp(ctx, "dummy");
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "entangled", w.HasCondition(CombatConditionType.Entangled));
+                        Fact(ctx, "conc", w.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: false));
+                        return true;
+                    }),
                     Step.Cast(SpellNames.MAGIC_MISSILE, "dummy"),
                     Step.Assert("after", ctx => { FactHpLost(ctx, "missile", "dummy"); return true; }))
                 .Expect("The wizard is entangled when it casts", FactIs("entangled", true))
-                .ExpectKnown("SPL-145", "Today the check is d20 + caster level 5 + INT 3 against DC 16, and the spell goes off (SPL-145)", Expect.All(
-                    v => v.Log(@"Entangled somatic concentration \(Pin Wizard, Magic Missile\): d20 10 \+ 8 = 18 vs DC 16").Count == 1
-                        ? ExpectResult.Pass("logged d20 10 + 8 = 18 vs DC 16") : ExpectResult.Fail("no entangled check logged as d20 10 + 8 = 18 vs DC 16"),
-                    FactIs("missile.lost.dummy", 15)))
+                .Expect("The check is d20 + Concentration against DC 15 + spell level 1 (PHB p.308, p.70), logged once", v =>
+                {
+                    string conc = FactOf(v, "conc");
+                    if (conc == null)
+                        return ExpectResult.Inconclusive("no fact conc");
+                    int bonus = int.Parse(conc, System.Globalization.CultureInfo.InvariantCulture);
+                    string line = @"Entangled casting concentration \(Pin Wizard, Magic Missile\): d20 10 \+ conc " + bonus + " = " + (10 + bonus) + @" vs DC 16 \(15 \+ spell level 1\)";
+                    return v.Log(line).Count == 1
+                        ? ExpectResult.Pass("logged d20 10 + conc " + bonus + " vs DC 16")
+                        : ExpectResult.Fail("no entangled Concentration check logged as d20 10 + conc " + bonus + " vs DC 16");
+                })
+                .Expect("The spell goes off only when the check reaches DC 16, else it is lost with its slot", v =>
+                {
+                    string conc = FactOf(v, "conc");
+                    string lost = FactOf(v, "missile.lost.dummy");
+                    if (conc == null || lost == null)
+                        return ExpectResult.Inconclusive("missing fact conc or missile.lost.dummy");
+                    int want = 10 + int.Parse(conc, System.Globalization.CultureInfo.InvariantCulture) >= 16 ? 15 : 0;
+                    return lost == want.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        ? ExpectResult.Pass("missile.lost.dummy=" + lost)
+                        : ExpectResult.Fail("missile.lost.dummy=" + lost + ", expected " + want);
+                })
+                .Build();
+        }
+
+        // ── rules/cast-silenced, rules/cast-deafened-area (SPL-092, SPL-150; batch 11 step 13) ──
+
+        /// <summary>
+        /// SPL-092 (PHB p.279: no spell with a verbal component can be cast in a Silence; PHB p.100: Silent Spell). Three
+        /// casters stand under a Silence (CharacterStats.SilenceActive, the creature a Silence is centred on). Round 1: the Ui
+        /// wizard 5 casts Magic Missile and is refused at the cast core's Legality stage (nothing spent, one log line), then
+        /// casts it with Silent Spell from a 2nd-level slot: the three missiles hit (every d4 at 4: 15). The Scripted wizard
+        /// is refused its plain Magic Missile (the AI path, no log line, as its other refusals), and the second Scripted
+        /// wizard casts its prepared Silent Spell Magic Missile (the prepared record counts; the NPC path drops only a cast's
+        /// own metamagic). A fourth, Ui wizard is not silenced at first: it holds a Shocking Grasp charge (Discharge Later),
+        /// is then put under the Silence and picks Magic Missile: the spell menu refuses it before the cast begins, so the
+        /// held charge, which a new spell would end, is kept and nothing is spent (batch 11 step 13 review).
+        /// </summary>
+        private static ScenarioDef Silenced()
+        {
+            MetamagicData silent = new MetamagicData();
+            silent.Toggle(MetamagicFeatId.SilentSpell);
+            return Scenario.Define("rules/cast-silenced", "A silenced caster cannot cast a verbal spell; Silent Spell can (SPL-092)")
+                .Tags("rules", "cast-pipeline").Covers("PC_NPC_PARITY", "batch 11 step 13", "SPL-092", "PHB p.279", "PHB p.100")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5, "Silent Spell")), 5, 10, Control.Ui)
+                .Pc("npc", ActorSource.Stats(() => Wizard("Pin Scripted", 5)), 5, 16, Control.Scripted)
+                .Pc("npcsilent", ActorSource.Stats(() => Wizard("Pin Silent Scripted", 5, "Silent Spell")), 5, 13, Control.Scripted)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Npc("dummy2", "target_dummy", 9, 16, Control.Idle)
+                .Npc("dummy3", "target_dummy", 9, 13, Control.Idle)
+                .Pc("holder", ActorSource.Stats(() => Wizard("Pin Holder", 5)), 5, 7, Control.Ui)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 2, SpellNames.MAGIC_MISSILE); Silence(c); })
+                .Tweak("holder", c => { Prepare(c, 1, SpellNames.SHOCKING_GRASP); AddWizardSlot(c, 1, SpellNames.MAGIC_MISSILE); })
+                .Tweak("npc", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); Silence(c); })
+                .Tweak("npcsilent", c => { AddSilentSlot(c, SpellNames.MAGIC_MISSILE); Silence(c); })
+                .Tweak("dummy", Sturdy).Tweak("dummy2", Sturdy).Tweak("dummy3", Sturdy)
+                .Initiative("wizard", "npc", "npcsilent", "holder", "dummy", "dummy2", "dummy3")
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "dummy"); RecordSlots(ctx, "wizard"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "dummy"),
+                    Step.Assert("refused", ctx => { FactHpLost(ctx, "plain", "dummy"); FactSlotsSpent(ctx, "plain.spent", "wizard"); Fact(ctx, "plain.actions", Actions(ctx.Get("wizard"))); RecordHp(ctx, "dummy"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "dummy", silent),
+                    Step.Assert("silent", ctx => { FactHpLost(ctx, "silent", "dummy"); FactSlotsSpent(ctx, "silent.spent", "wizard"); return true; }))
+                .Turn("npc", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "dummy2"); RecordSlots(ctx, "npc"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "dummy2"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "npc", "dummy2"); FactSlotsSpent(ctx, "npc.spent", "npc"); return true; }))
+                .Turn("npcsilent", 1,
+                    Step.Assert("cast the prepared Silent Spell Magic Missile", ctx =>
+                    {
+                        RecordHp(ctx, "dummy3");
+                        SpellData spell = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE).Clone();
+                        MetamagicData record = new MetamagicData();
+                        record.Toggle(MetamagicFeatId.SilentSpell);
+                        spell.MetamagicDataRef = record;
+                        Fact(ctx, "npcsilent.cast", ctx.Gm.TryNPCPerformSpellCastForAI(ctx.Get("npcsilent"), ctx.Get("dummy3"), spell));
+                        FactHpLost(ctx, "npcsilent", "dummy3");
+                        return true;
+                    }))
+                .Turn("holder", 1,
+                    Step.CastHeld(SpellNames.SHOCKING_GRASP),
+                    Step.Assert("silence the holder", ctx =>
+                    {
+                        CharacterController h = ctx.Get("holder");
+                        Fact(ctx, "holder.held.before", h.Spellcasting.HasHeldTouchCharge);
+                        Silence(h);
+                        RecordHp(ctx, "dummy");
+                        RecordSlots(ctx, "holder");
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "dummy"),
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController h = ctx.Get("holder");
+                        Fact(ctx, "holder.held.after", h.Spellcasting.HasHeldTouchCharge);
+                        FactHpLost(ctx, "holder", "dummy");
+                        FactSlotsSpent(ctx, "holder.spent", "holder");
+                        return true;
+                    }))
+                .Expect("The Ui wizard's plain Magic Missile is refused: nothing lands, nothing is spent (PHB p.279)",
+                    FactsAre(("plain.lost.dummy", 0), ("plain.spent", "none"), ("plain.actions", "smf")))
+                .Expect("The refusal is logged once, for the Ui caster only", v => v.Log(@"Pin Wizard cannot cast Magic Missile inside a Silence").Count == 1
+                    ? ExpectResult.Pass("one refusal line") : ExpectResult.Fail(v.Log(@"Pin Wizard cannot cast Magic Missile inside a Silence").Count + " refusal lines"))
+                .Expect("The Silent Spell Magic Missile is cast from a 2nd-level slot: 3 missiles of 1d4+1 = 15 (PHB p.100, p.251)",
+                    FactsAre(("silent.lost.dummy", 15), ("silent.spent", "L2+1")))
+                .Expect("The Scripted wizard's plain Magic Missile is refused the same way (the AI path)", Expect.All(
+                    Expect.StepStatus("npc", 1, "Cast", 0, "refused"), FactsAre(("npc.lost.dummy2", 0), ("npc.spent", "none"))))
+                .Expect("The Scripted wizard's prepared Silent Spell Magic Missile is cast", FactsAre(("npcsilent.cast", true), ("npcsilent.lost.dummy3", 15)))
+                .Expect("A silenced Ui caster holding a touch charge who picks a verbal spell is refused before the cast begins: the charge is kept, nothing lands or is spent",
+                    FactsAre(("holder.held.before", true), ("holder.held.after", true), ("holder.lost.dummy", 0), ("holder.spent", "none")))
+                .Expect("The holder's refusal is logged once", v => v.Log(@"Pin Holder cannot cast Magic Missile inside a Silence").Count == 1
+                    ? ExpectResult.Pass("one refusal line") : ExpectResult.Fail(v.Log(@"Pin Holder cannot cast Magic Missile inside a Silence").Count + " refusal lines"))
+                .Build();
+        }
+
+        /// <summary>Puts <paramref name="c"/> under a Silence centred on it for 100 rounds (CharacterStats.SilenceActive).</summary>
+        private static void Silence(CharacterController c)
+        {
+            c.Stats.SilenceActive = true;
+            c.Stats.SilenceRoundsRemaining = 100;
+        }
+
+        /// <summary>Adds a 2nd-level wizard slot holding <paramref name="spellId"/> prepared with Silent Spell (PHB p.100).</summary>
+        private static void AddSilentSlot(CharacterController c, string spellId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting to add a slot to");
+            var slot = new SpellSlot(2, false, "Wizard");
+            MetamagicData silent = new MetamagicData();
+            silent.Toggle(MetamagicFeatId.SilentSpell);
+            slot.PrepareWithMetamagic(SpellDatabase.GetSpell(spellId).Clone(), silent);
+            sc.SpellSlots.Add(slot);
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        /// <summary>
+        /// SPL-150 (PHB p.307: a deafened caster has a 20% chance of spell failure with a verbal component, once per
+        /// casting). A deafened Ui wizard 5 casts Burning Hands (PHB p.207: every d4 at 4, 5d4 = 20) at two dummies that
+        /// fail their saves; the deafened d% is forced to 50. Since batch 11 step 13 the roll is made once, in the cast core's
+        /// Failure stage (one "Deafened spell check" line), not once per target inside SpellCaster.Cast; both dummies take
+        /// 20. A deafened Scripted wizard 5 then casts Magic Missile (15): one roll for its cast too (the AI path).
+        /// </summary>
+        private static ScenarioDef DeafenedArea()
+        {
+            return Scenario.Define("rules/cast-deafened-area", "A deafened caster rolls the verbal failure once per casting, also for an area spell (SPL-150)")
+                .Tags("rules", "cast-pipeline").Covers("PC_NPC_PARITY", "batch 11 step 13", "SPL-150", "PHB p.307", "PHB p.207")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Pc("npc", ActorSource.Stats(() => Wizard("Pin Scripted", 5)), 5, 16, Control.Scripted)
+                .Npc("d1", "target_dummy", 7, 10, Control.Idle)
+                .Npc("d2", "target_dummy", 8, 11, Control.Idle)
+                .Npc("d3", "target_dummy", 9, 16, Control.Idle)
+                .StartCondition("wizard", CombatConditionType.Deafened, 10)
+                .StartCondition("npc", CombatConditionType.Deafened, 10)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.BURNING_HANDS))
+                .Tweak("npc", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
+                .Tweak("d1", Fails).Tweak("d2", Fails).Tweak("d3", Sturdy)
+                .Initiative("wizard", "npc", "d1", "d2", "d3")
+                .Force(100, 50, CastComponentRules.DeafenedFailureDiceContext, -1)
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d1", "d2"); return true; }),
+                    Step.Cast(SpellNames.BURNING_HANDS, "d1"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "cone", "d1", "d2"); return true; }))
+                .Turn("npc", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d3"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d3"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "missile", "d3"); return true; }))
+                .Expect("Both creatures in the cone take the full 20 (failed saves; PHB p.207)", FactsAre(("cone.lost.d1", 20), ("cone.lost.d2", 20)))
+                .Expect("The Ui wizard's Burning Hands rolls the deafened failure once (PHB p.307; SPL-150)",
+                    v => v.Log(@"Deafened spell check: Pin Wizard rolled 50 > 20%").Count == 1
+                        ? ExpectResult.Pass("one roll") : ExpectResult.Fail(v.Log(@"Deafened spell check: Pin Wizard rolled").Count + " rolls logged"))
+                .Expect("The Scripted wizard's Magic Missile rolls it once too and lands: 15",
+                    Expect.All(v => v.Log(@"Deafened spell check: Pin Scripted rolled 50 > 20%").Count == 1
+                        ? ExpectResult.Pass("one roll") : ExpectResult.Fail(v.Log(@"Deafened spell check: Pin Scripted rolled").Count + " rolls logged"),
+                        FactIs("missile.lost.d3", 15)))
                 .Build();
         }
 

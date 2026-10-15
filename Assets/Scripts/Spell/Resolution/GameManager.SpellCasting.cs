@@ -91,22 +91,20 @@ public partial class GameManager
             CastStageTrace.Mark(spellComp.GetComponent<CharacterController>(), spell, CastStageTrace.Spend, detail);
     }
 
-    private bool TryRollArcaneSpellFailure(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, out int roll, out int asfChance)
+    /// <summary>
+    /// Arcane spell failure for one casting, the same for every caster and path (batch 11 step 13): rolled only when
+    /// CastComponentRules.ArcaneFailureApplies (an arcane caster, a spell with a somatic component left after Still
+    /// Spell, PHB p.122 and p.101; a scroll too, DMG p.238; not a wand, a held-charge delivery or the F12 panel's
+    /// ArcaneFailure bypass; SPL-096, SPL-116), with the cast's own source (batch 11 step 4), against
+    /// CharacterStats.ArcaneSpellFailure.
+    /// </summary>
+    private bool TryRollArcaneSpellFailure(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource castSource,
+        out int roll, out int asfChance)
     {
         roll = 0;
         asfChance = 0;
 
-        if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
-            return false;
-
-        // No arcane spell failure for the F12 test panel's casts (its ArcaneFailure bypass) or for scroll and wand casts:
-        // the cast's own source decides (batch 11 step 4), so a flag of another or a cancelled cast never reaches an NPC
-        // (SPL-116). The scroll exemption contradicts DMG p.238 and stays until batch 11 step 13 (SPL-116).
-        CastSource castSource = CurrentCastSource;
-        if (castSource != null && (castSource.HasBypass(TestPanelBypass.ArcaneFailure) || castSource.IsItem))
-            return false;
-
-        if (!caster.Stats.IsAffectedByArcaneSpellFailure)
+        if (!CastComponentRules.ArcaneFailureApplies(caster, spell, metamagic, castSource))
             return false;
 
         asfChance = Mathf.Clamp(caster.Stats.ArcaneSpellFailure, 0, 100);
@@ -6092,7 +6090,63 @@ public partial class GameManager
         return threatening;
     }
 
-    private bool ResolveEntangledSomaticCastingConcentration(
+    /// <summary>The dice label of the entangled casting Concentration check's d20 (a forced-dice scenario matches it).</summary>
+    internal const string EntangledConcentrationDiceContext = "Entangled casting Concentration check";
+
+    /// <summary>
+    /// An entangled caster's Concentration check to cast (batch 11 step 13, SPL-145), the same for every caster and path
+    /// (the cast core's Distraction stage): any spell, somatic component or not, needs a Concentration check
+    /// (ConcentrationManager.MakeSpellcastingConcentrationCheck: d20 + the casting Concentration bonus, caster level + Con
+    /// in this game, CHR-085; no Combat Casting, PHB p.92) against DC 15 + the spell's level on the casting class's list
+    /// (<see cref="GetEntangledCastingSpellLevel"/>), the heightened level for a heightened spell (PHB p.95) but not the
+    /// metamagic slot's level (PHB p.88). PHB
+    /// p.308 (entangled) and the p.70 table with its footnote give DC 15 + the spell's level where PHB p.170 gives a flat
+    /// 15: delegated RAW reading 2026-10-14 (docs/systems/RULES_COVERAGE.md 4.1). A failed check loses the spell and
+    /// spends its slot. True when the caster is not entangled or passes.
+    /// </summary>
+    /// <summary>
+    /// The spell level of the entangled check's DC: the level on the casting class's list (PHB p.177, as the save DC
+    /// resolves it: the class of the slot spent, else the class lists), raised to the Heighten level of the cast's
+    /// metamagic or, when the cast carries none (an NPC cast, a prepared spell), of the spell's own prepared record
+    /// (PHB p.95).
+    /// </summary>
+    internal static int GetEntangledCastingSpellLevel(CharacterController caster, SpellData spell, MetamagicData metamagic)
+    {
+        if (spell == null)
+            return 0;
+        string castingClass = null;
+        if (caster != null)
+        {
+            SpellcastingComponent spellComp = caster.Spellcasting;
+            string slotClass = spellComp != null ? spellComp.GetCastingClassForSpellDC(spell) : null;
+            castingClass = !string.IsNullOrWhiteSpace(slotClass) ? slotClass : SpellSaveDCRules.ResolveCastingClass(caster.Stats, spell);
+        }
+        return SpellSaveDCRules.GetEffectiveSpellLevel(spell, castingClass, metamagic ?? spell.MetamagicDataRef);
+    }
+
+    /// <summary>
+    /// The entangled casting Concentration check itself (see <see cref="ResolveEntangledCastingConcentration"/>), with its
+    /// log and trace mark and no spending: true when the caster is not entangled or passes. <paramref name="dc"/> is 0
+    /// when no check is made. Also used by a scroll read outside the cast core (ResolveDirectItemCastChecks).
+    /// </summary>
+    private bool RollEntangledCastingConcentration(CharacterController caster, SpellData spell, MetamagicData metamagic, out int dc)
+    {
+        dc = 0;
+        if (caster == null || caster.Stats == null || spell == null || !caster.HasCondition(CombatConditionType.Entangled))
+            return true;
+
+        int spellLevel = Mathf.Max(0, GetEntangledCastingSpellLevel(caster, spell, metamagic));
+        dc = ConcentrationService.GetEntangledCastingDC(spellLevel);
+        ConcentrationCheckResult check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+            caster, dc, ConcentrationCheckType.Entangled, spell, diceContext: EntangledConcentrationDiceContext);
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Entangled casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (15 + spell level {spellLevel})"));
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, check.Success ? "entangled-passed" : "entangled-lost");
+        return check.Success;
+    }
+
+    private bool ResolveEntangledCastingConcentration(
         CharacterController caster,
         SpellcastingComponent spellComp,
         SpellData spell,
@@ -6106,19 +6160,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null)
             return false;
 
-        if (!caster.HasCondition(CombatConditionType.Entangled) || !spell.HasSomaticComponent)
-            return true;
-
-        int dc = 15 + Mathf.Max(0, spell.SpellLevel);
-        int roll = DiceService.D20("Dispel Magic check");
-        int bonus = Mathf.Max(0, caster.Stats.GetDomainBoostedCasterLevel(spell)) + GetSpellSaveAbilityModifier(caster, spell);
-        int total = roll + bonus;
-        bool success = total >= dc;
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Entangled somatic concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {roll} + {bonus} = {total} vs DC {dc}."));
-
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, success ? "entangled-passed" : "entangled-lost");
-        if (success)
+        if (RollEntangledCastingConcentration(caster, spell, metamagic, out int dc))
             return true;
 
         bool consumed = ConsumePendingSpellSlot(

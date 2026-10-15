@@ -31,11 +31,9 @@ public enum LegacyCastQuirk : long
     // Bit 1 is unused: GlobeAfterCast (SPL-141) was removed by batch 11 step 11 (raw-failed-cast-gating), which tests the
     // globe before SpellCaster.Cast on the single-target path and before any area handler on the area path.
 
-    /// <summary>
-    /// The entangled casting check rolls d20 + caster level + casting ability under the "Dispel Magic check" label, and
-    /// only for somatic spells (SPL-145; batch 11 step 13 makes it a Concentration check for any spell). Required.
-    /// </summary>
-    EntangledUsesCasterLevelFormula = 1 << 2,
+    // Bit 2 is unused: EntangledUsesCasterLevelFormula (SPL-145) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); an entangled caster makes a Concentration check, DC 15 + the spell's level, for
+    // any spell (PHB p.308, p.70; delegated RAW reading 2026-10-14).
 
     // Bit 3 is unused: QuickenedProvokes (SPL-143) was removed by batch 11 step 12 (raw-action-cost-provocation); a
     // quickened cast does not provoke (PHB p.98).
@@ -67,17 +65,13 @@ public enum LegacyCastQuirk : long
     /// </summary>
     AlliesForgoEverySave = 1 << 9,
 
-    /// <summary>
-    /// The deafened 20% verbal spell failure is rolled inside SpellCaster.Cast, after the slot is spent, not once in the
-    /// Failure stage (SPL-150; batch 11 step 13). Required for a deafened caster.
-    /// </summary>
-    DeafenedRolledInSpellCaster = 1 << 10,
+    // Bit 10 is unused: DeafenedRolledInSpellCaster (SPL-150) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); the deafened 20% verbal failure is rolled once per casting in the Failure stage
+    // (CastComponentRules.TryDeafenedFailure, PHB p.307).
 
-    /// <summary>
-    /// A scroll cast rolls no arcane spell failure (TryRollArcaneSpellFailure; SPL-116, DMG p.238; batch 11 step 13).
-    /// Required for a scroll cast.
-    /// </summary>
-    ScrollSkipsArcaneFailure = 1 << 11,
+    // Bit 11 is unused: ScrollSkipsArcaneFailure (SPL-116) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); a scroll cast rolls arcane spell failure for a spell with a somatic component (DMG
+    // p.238, PHB p.122).
 
     /// <summary>
     /// Delivering a held touch charge costs no action in any round (SPL-156). RAW: the touch in the round of casting
@@ -152,20 +146,13 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcInvisibilityBreakBeforeCounterspell = 1 << 22,
 
-    /// <summary>
-    /// The Spend stage runs right after the distraction checks, before the Failure stage, so the arcane spell failure
-    /// and the blinking caster's 20% are rolled with the slot already spent (and spend nothing more), and a slot that
-    /// cannot be spent ends the cast without an error log (SPL-160). Batch 11 step 13 (raw-distraction-failure-stages)
-    /// makes the failure checks one rule on every path and removes the bit.
-    /// </summary>
-    NpcSpendsBeforeFailureChecks = 1 << 23,
+    // Bit 23 is unused: NpcSpendsBeforeFailureChecks (SPL-160) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); every caster spends its slot after the failure checks (a failed spell spends it in
+    // the Failure stage).
 
-    /// <summary>
-    /// The blinking caster's and the blinking target's percentile rolls carry the NPC dice labels ("Blink NPC caster
-    /// spell failure", "Blink NPC target spell failure"), and a passed Blink check logs no line (SPL-160). Batch 11 step
-    /// 13 gives both one Blink rule and one label and removes the bit.
-    /// </summary>
-    NpcBlinkLabelsAndSilentPass = 1 << 24,
+    // Bit 24 is unused: NpcBlinkLabelsAndSilentPass (SPL-160) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); both Blink rolls carry one label and log for every caster
+    // (SpellResolutionService).
 
     /// <summary>
     /// The PostCast stage shows the cast's result log before the target's death (OnDeath and the summon cleanup) instead
@@ -190,17 +177,9 @@ public enum LegacyCastQuirk : long
     // The PC area path's own behaviours (batch 11 step 9): set only by SpellCastRequest.ForUiArea
     // (LegacyCastQuirkSets.UiAreaPath). Each names the issue of what an area cast skips or does differently today.
 
-    /// <summary>
-    /// An area cast makes no entangled casting check (SPL-006; the check itself is SPL-145): the Distraction stage skips
-    /// it. Batch 11 step 13 (raw-distraction-failure-stages) gives every cast one entangled rule and removes the bit.
-    /// </summary>
-    AreaSkipsEntangled = 1L << 28,
-
-    /// <summary>
-    /// A blinking caster's area spell has no 20% spell failure (PHB p.206; SPL-006): the Failure stage skips the roll.
-    /// Batch 11 step 13 removes the bit.
-    /// </summary>
-    AreaSkipsBlink = 1L << 29,
+    // Bits 28 and 29 are unused: AreaSkipsEntangled and AreaSkipsBlink (SPL-006) were removed by batch 11 step 13
+    // (raw-distraction-failure-stages); an area cast makes the entangled check and the blinking caster's 20% (PHB p.308,
+    // p.206).
 
     /// <summary>
     /// An area cast is never tested against a Ring of Counterspells (DMG p.230; SPL-006): the RingCounterspell stage is
@@ -239,11 +218,7 @@ public enum LegacyCastQuirk : long
     // ForUiGrease and ForUiHoldCharge (LegacyCastQuirkSets.UiSummonPath, UiGreasePath and UiHoldPath), and the held charge's
     // delivery (UiPath). Each names the issue of what that path skips or does differently today.
 
-    /// <summary>
-    /// A blinking caster's Summon Monster, Summon Nature's Ally or Summon Swarm has no 20% spell failure (PHB p.206;
-    /// SPL-006): the Failure stage skips the roll. Batch 11 step 13 (raw-distraction-failure-stages) removes the bit.
-    /// </summary>
-    SummonSkipsBlink = 1L << 34,
+    // Bit 34 is unused: SummonSkipsBlink (SPL-006) was removed by batch 11 step 13 (raw-distraction-failure-stages).
 
     /// <summary>
     /// A summon is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch
@@ -260,11 +235,7 @@ public enum LegacyCastQuirk : long
     // Bit 37 is unused: SummonItemCastCommitsCastAction (SPL-163) was removed by batch 11 step 12; a summon from a
     // scroll or wand charges only the item's action, as every item cast does.
 
-    /// <summary>
-    /// A blinking caster's Grease has no 20% spell failure (PHB p.206; SPL-006): the Failure stage skips the roll. Batch
-    /// 11 step 13 removes the bit.
-    /// </summary>
-    GreaseSkipsBlink = 1L << 38,
+    // Bit 38 is unused: GreaseSkipsBlink (SPL-006) was removed by batch 11 step 13 (raw-distraction-failure-stages).
 
     /// <summary>
     /// Grease is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch 11
@@ -299,17 +270,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     HoldSkipsGrappleLegality = 1L << 44,
 
-    /// <summary>
-    /// Holding a touch charge makes no entangled casting check (PHB p.308; SPL-146, SPL-145): the Distraction stage skips
-    /// it. Batch 11 step 13 removes the bit.
-    /// </summary>
-    HoldSkipsEntangled = 1L << 45,
-
-    /// <summary>
-    /// A blinking caster who holds a touch charge has no 20% spell failure (PHB p.206; SPL-146): the Failure stage skips
-    /// the roll. Batch 11 step 13 removes the bit.
-    /// </summary>
-    HoldSkipsBlink = 1L << 46,
+    // Bits 45 and 46 are unused: HoldSkipsEntangled and HoldSkipsBlink (SPL-146) were removed by batch 11 step 13
+    // (raw-distraction-failure-stages); holding a charge is casting the spell (PHB p.141), so it makes the entangled check
+    // and the blinking caster's 20%.
 
     /// <summary>
     /// Holding a touch charge makes no spell component pouch test (PHB p.174 and p.130; SPL-146, SPL-114): the Legality
@@ -347,13 +310,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     DeliverySkipsCounterspell = 1L << 51,
 
-    /// <summary>
-    /// A summon or Grease lost to the entangled or grappled check or to arcane spell failure (the casting lost, its slot
-    /// spent) goes straight back to the action menu, with no stat-panel refresh and no pause (CastOutcome.ShowsActionMenu;
-    /// SPL-006), where every other lost cast pauses (AfterAttackDelay). Batch 11 step 13 removes the bit with the one
-    /// distraction and failure rule.
-    /// </summary>
-    LostCastShowsActionMenu = 1L << 52,
+    // Bit 52 is unused: LostCastShowsActionMenu (SPL-006) was removed by batch 11 step 13
+    // (raw-distraction-failure-stages); a summon or Grease lost to a distraction or a spell failure pauses like any lost
+    // cast.
 
     /// <summary>
     /// A resolved summon, Grease or held charge runs no combat-end check (EvaluateCombatEnd), so an end it causes is
@@ -369,12 +328,9 @@ public static class LegacyCastQuirkSets
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-        | LegacyCastQuirk.EntangledUsesCasterLevelFormula
         | LegacyCastQuirk.SlotFailureClearsSnapshot
         | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
         | LegacyCastQuirk.AlliesForgoEverySave
-        | LegacyCastQuirk.DeafenedRolledInSpellCaster
-        | LegacyCastQuirk.ScrollSkipsArcaneFailure
         | LegacyCastQuirk.HeldChargeDeliveryIsFree
         | LegacyCastQuirk.DeliverySkipsCounterspell;
 
@@ -395,29 +351,22 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.NpcNoConcentrationOnCastCheck
         | LegacyCastQuirk.NpcNoConcentrationTracking
         | LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell
-        | LegacyCastQuirk.NpcSpendsBeforeFailureChecks
-        | LegacyCastQuirk.NpcBlinkLabelsAndSilentPass
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
-    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the snapshot cleared after a failed spend, the
-    /// scroll's spell failure, and the generic loop's
-    /// forgone saves and SpellCaster deafness roll), without the single-target ones (the combat-end check on a target's
-    /// death, the entangled formula, the targeting highlight's range, the held-charge delivery), plus the area path's own
-    /// bits. Tests.Magic.CastCoreStageOrderTests
-    /// checks the list.
+    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the snapshot cleared after a failed spend and the
+    /// generic loop's forgone saves), without the single-target ones (the combat-end check on a target's death, the
+    /// targeting highlight's range, the held-charge delivery), plus the area path's own bits.
+    /// Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
         (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-                    | LegacyCastQuirk.EntangledUsesCasterLevelFormula
                     | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
                     | LegacyCastQuirk.HeldChargeDeliveryIsFree
                     | LegacyCastQuirk.DeliverySkipsCounterspell))
-        | LegacyCastQuirk.AreaSkipsEntangled
-        | LegacyCastQuirk.AreaSkipsBlink
         | LegacyCastQuirk.AreaSkipsRing
         | LegacyCastQuirk.AreaSkipsPouch
         | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
@@ -433,44 +382,34 @@ public static class LegacyCastQuirkSets
 
     /// <summary>
     /// Today's PC summon path (PerformSummonMonsterCast and PerformSummonSwarmCast through the cast core's Summon resolve,
-    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits, the entangled formula, the targeting
-    /// highlight's range (the placement range is by character level too), a scroll's spell failure, plus the summon
-    /// path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits, the targeting highlight's range (the
+    /// placement range is by character level too), plus the summon path's own bits. Tests.Magic.CastCoreStageOrderTests
+    /// checks the list.
     /// </summary>
     public const LegacyCastQuirk UiSummonPath =
         UiEffectPathShared
-        | LegacyCastQuirk.EntangledUsesCasterLevelFormula
         | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
-        | LegacyCastQuirk.ScrollSkipsArcaneFailure
-        | LegacyCastQuirk.SummonSkipsBlink
         | LegacyCastQuirk.SummonSkipsCounterspell
-        | LegacyCastQuirk.SummonSkipsPouch
-        | LegacyCastQuirk.LostCastShowsActionMenu;
+        | LegacyCastQuirk.SummonSkipsPouch;
 
     /// <summary>
     /// Today's PC Grease path (the three Grease casts, now one request through the cast core's Grease resolve, batch 11
-    /// step 10): the shared bits, the entangled formula, plus the Grease path's own bits. Tests.Magic.CastCoreStageOrderTests
-    /// checks the list.
+    /// step 10): the shared bits plus the Grease path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiGreasePath =
         UiEffectPathShared
-        | LegacyCastQuirk.EntangledUsesCasterLevelFormula
-        | LegacyCastQuirk.GreaseSkipsBlink
         | LegacyCastQuirk.GreaseSkipsCounterspell
         | LegacyCastQuirk.GreaseSkipsPouch
-        | LegacyCastQuirk.GreaseSkipsInvisibilityBreak
-        | LegacyCastQuirk.LostCastShowsActionMenu;
+        | LegacyCastQuirk.GreaseSkipsInvisibilityBreak;
 
     /// <summary>
     /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10;
-    /// formerly HoldPendingMeleeTouchCharge): the shared bits plus the hold path's own (it makes no entangled check, so it
-    /// needs no entangled-formula bit). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// formerly HoldPendingMeleeTouchCharge): the shared bits plus the hold path's own. Tests.Magic.CastCoreStageOrderTests
+    /// checks the list.
     /// </summary>
     public const LegacyCastQuirk UiHoldPath =
         UiEffectPathShared
         | LegacyCastQuirk.HoldSkipsGrappleLegality
-        | LegacyCastQuirk.HoldSkipsEntangled
-        | LegacyCastQuirk.HoldSkipsBlink
         | LegacyCastQuirk.HoldSkipsPouch
         | LegacyCastQuirk.HoldSkipsCounterspell
         | LegacyCastQuirk.HoldSkipsChoices

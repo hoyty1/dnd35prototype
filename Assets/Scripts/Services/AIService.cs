@@ -2801,6 +2801,7 @@ public class AIService : MonoBehaviour
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell)) continue; // SPL-091
             if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null) continue; // batch 11 step 12
+            if (CastComponentRules.SilenceBlocks(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell))) continue; // batch 11 step 13, SPL-092
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
@@ -2918,6 +2919,11 @@ public class AIService : MonoBehaviour
             // second quickened or free-action spell this round (CastActionRules, the cast core's Legality rule; batch 11
             // step 12, PHB p.174, p.98, p.229).
             if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null)
+                continue;
+
+            // A verbal spell the caster cannot cast inside a Silence (PHB p.279; the cast core's Legality rule,
+            // CastComponentRules.SilenceBlocks; batch 11 step 13, SPL-092). The NPC path casts without metamagic.
+            if (CastComponentRules.SilenceBlocks(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)))
                 continue;
 
             // ── Buff-already-active check ──

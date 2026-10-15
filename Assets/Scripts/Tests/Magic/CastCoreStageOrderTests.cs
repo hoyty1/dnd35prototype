@@ -33,9 +33,14 @@ namespace Tests.Magic
 /// (listed in <see cref="DeriveAiSequence"/>); ForAI sets LegacyCastQuirkSets.AiPath, which differs from UiPath only by
 /// the listed parity bits; RunCastSync returns the old NPC executor's bool (true once the slot is spent, false for a
 /// refusal) and refuses a decider that is not synchronous, and a run that suspends anyway returns false (Refused) with one
-/// violation; an AI cast leaves an outer cast's cancel snapshot in place; the NPC Blink branches (the slot spent before
-/// the failure checks, the NPC dice labels, no log for a passed check, a miss on a blinking target) hold with forced
-/// dice; the AI's refusals log nothing; and the core's source names no decider type and never asks who controls the caster.
+/// violation; an AI cast leaves an outer cast's cancel snapshot in place; the AI's Blink rolls (the slot spent at Failure,
+/// the shared dice labels and log since batch 11 step 13, a miss on a blinking target) hold with forced dice; the AI's
+/// refusals log nothing; and the core's source names no decider type and never asks who controls the caster.
+///
+/// Batch 11 step 13 (raw-distraction-failure-stages): the component rules (CastComponentRules), the Silence refusal for
+/// a PC and an AI caster (Silent Spell and a prepared silent spell allowed), the deafened roll once in the Failure stage
+/// and never in SpellCaster.Cast, arcane spell failure only for a somatic spell and for a scroll, and the entangled
+/// Concentration check and the blinking caster's 20% on the area and hold paths.
 ///
 /// Batch 11 step 9 (cast-core-area): SpellCastRequest.ForUiArea sets CastResolveKind.Area, no single target and
 /// LegacyCastQuirkSets.UiAreaPath (an explicit list: the UI path's bits an area cast shows plus the Area* bits, which no
@@ -74,12 +79,9 @@ public static class CastCoreStageOrderTests
     private static readonly LegacyCastQuirk[] PcPathBits =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
-        LegacyCastQuirk.EntangledUsesCasterLevelFormula,
         LegacyCastQuirk.SlotFailureClearsSnapshot,
         LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
         LegacyCastQuirk.AlliesForgoEverySave,
-        LegacyCastQuirk.DeafenedRolledInSpellCaster,
-        LegacyCastQuirk.ScrollSkipsArcaneFailure,
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
         LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
     };
@@ -100,10 +102,6 @@ public static class CastCoreStageOrderTests
     {
         LegacyCastQuirk.SlotFailureClearsSnapshot,
         LegacyCastQuirk.AlliesForgoEverySave,
-        LegacyCastQuirk.DeafenedRolledInSpellCaster,
-        LegacyCastQuirk.ScrollSkipsArcaneFailure,
-        LegacyCastQuirk.AreaSkipsEntangled,                 // SPL-006
-        LegacyCastQuirk.AreaSkipsBlink,                     // SPL-006
         LegacyCastQuirk.AreaSkipsRing,                      // SPL-006
         LegacyCastQuirk.AreaSkipsPouch,                     // SPL-006, SPL-114
         LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers,    // CORE-039
@@ -126,8 +124,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.NpcNoConcentrationOnCastCheck,           // SPL-114
         LegacyCastQuirk.NpcNoConcentrationTracking,              // SPL-114
         LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell,  // SPL-118
-        LegacyCastQuirk.NpcSpendsBeforeFailureChecks,            // SPL-160
-        LegacyCastQuirk.NpcBlinkLabelsAndSilentPass,             // SPL-160
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
@@ -135,14 +131,14 @@ public static class CastCoreStageOrderTests
 
     /// <summary>
     /// The AI path's stage sequence from the PC path's, by the NPC quirk bits that move or skip a stage:
-    /// NpcSpendsBeforeFailureChecks (Spend before Failure), NpcNoConcentrationOnCastCheck (no ConcentrationOnCast) and
-    /// NpcInvisibilityBreakBeforeCounterspell (InvisibilityBreak before Counterspell). Every other stage is the same.
+    /// NpcNoConcentrationOnCastCheck (no ConcentrationOnCast) and NpcInvisibilityBreakBeforeCounterspell
+    /// (InvisibilityBreak before Counterspell). Every other stage is the same (batch 11 step 13 removed the NPC path's
+    /// Spend before Failure).
     /// </summary>
     private static List<string> DeriveAiSequence(IEnumerable<string> pcSequence)
     {
         var seq = new List<string>(pcSequence);
         seq.Remove("ConcentrationOnCast");
-        MoveBefore(seq, "Spend", "Failure");
         MoveBefore(seq, "InvisibilityBreak", "Counterspell");
         return seq;
     }
@@ -166,6 +162,7 @@ public static class CastCoreStageOrderTests
 
         TestQuirkSets();
         TestEffectQuirkSets();
+        TestComponentRules();
         TestCoreSourceTouchesNoUi();
 
         if (GameManager.Instance != null)
@@ -385,6 +382,10 @@ public static class CastCoreStageOrderTests
             TestAiBlink(gm, sc, caster, ally);
             Assert(violations.Count == 0, "No cast-core or cast-stack violation for the AI-path failure cases", string.Join("; ", violations));
 
+            // Batch 11 step 13: one entangled, deafened, Silence, ASF and Blink rule on every path.
+            TestDistractionAndFailureStages(gm, sc, caster, ally);
+            Assert(violations.Count == 0, "No cast-core or cast-stack violation for the step 13 cases", string.Join("; ", violations));
+
             TestReentryWhileAwaitingProvocation(gm, sc, caster, ally, violations);
             TestMissingQuirk(gm, sc, caster, violations);
 
@@ -518,7 +519,7 @@ public static class CastCoreStageOrderTests
 
         List<string> expected = DeriveAiSequence(ResolvedSequence);
         Assert(string.Join(",", events) == string.Join(",", expected),
-            label + ": the AI path runs the PC path's stages, moved or skipped only by the NPC quirk bits (Spend before Failure, no ConcentrationOnCast, InvisibilityBreak before Counterspell)",
+            label + ": the AI path runs the PC path's stages, moved or skipped only by the NPC quirk bits (no ConcentrationOnCast, InvisibilityBreak before Counterspell)",
             string.Join(",", events));
         Assert(cast && outcome != null && outcome.Kind == CastOutcomeKind.Resolved && outcome.At == CastStage.CombatEnd && outcome.WasCast && !outcome.CombatEnded,
             label + ": RunCastSync returns true with Resolved at CombatEnd (no combat-end check in the stage: the NPC wrapper runs it)", "" + outcome);
@@ -650,10 +651,11 @@ public static class CastCoreStageOrderTests
     }
 
     /// <summary>
-    /// The NPC Blink branches (NpcSpendsBeforeFailureChecks, NpcBlinkLabelsAndSilentPass): a blinking AI caster that fails
-    /// its 20% check has already spent its slot (Spend before Failure), fails at Failure under the NPC dice label and still
-    /// counts as cast; one that passes logs no "Blink spell check" line; an AI ray at a blinking target that misses fails at
-    /// TargetBlink under the NPC label and counts as cast. Percentile dice forced through ScenarioHooks.RollFilter.
+    /// The Blink rolls on the AI path (batch 11 step 13: one rule, label and log for every caster, through
+    /// SpellResolutionService): a blinking AI caster that fails its 20% check fails at Failure under the shared dice
+    /// label, its slot spent there, and still counts as cast (the Spend stage is not entered); one that passes logs the
+    /// "Blink spell check" line as a PC's does; an AI ray at a blinking target that misses fails at TargetBlink under the
+    /// shared label and counts as cast. Percentile dice forced through ScenarioHooks.RollFilter.
     /// </summary>
     private static void TestAiBlink(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
     {
@@ -677,26 +679,26 @@ public static class CastCoreStageOrderTests
         ActiveSpellEffect allyBlink = null;
         try
         {
-            // The caster fails its Blink check: the slot is already spent.
+            // The caster fails its Blink check: the slot is spent at Failure.
             var events = new List<string>();
             SpellCastRequest req = BeginAi(sc, caster, caster, SpellNames.SHIELD, events, out SpellSlot slot);
             bool cast = gm.RunCastSync(req, out CastOutcome o, s => events.Add(s.ToString()));
             Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.Failure && o.Reason == "blink-caster" && slot.IsUsed
-                   && string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Spend,Failure,decider:finished:Failed@Failure",
-                "AI: a blinking caster that fails its 20% has spent its slot first (Spend before Failure) and counts as cast",
+                   && string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Failure,decider:finished:Failed@Failure",
+                "AI: a blinking caster that fails its 20% loses the spell at Failure, its slot spent there, and counts as cast",
                 o + " " + string.Join(",", events));
-            Assert(labels.Count == 1 && labels[0] == "Blink NPC caster spell failure",
-                "AI: the caster's Blink check rolls under the NPC dice label", string.Join(",", labels));
+            Assert(labels.Count == 1 && labels[0] == SpellResolutionService.BlinkCasterDiceContext,
+                "AI: the caster's Blink check rolls under the shared dice label", string.Join(",", labels));
             sc.SpellSlots.Remove(slot);
 
-            // The caster passes: no "Blink spell check" line.
+            // The caster passes: the "Blink spell check" line, as for a PC.
             casterBlinkRoll = 90;
             labels.Clear();
             logs.Clear();
             req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
             cast = gm.RunCastSync(req, out o);
-            Assert(cast && o.Kind == CastOutcomeKind.Resolved && labels.Count == 1 && !logs.Exists(l => l != null && l.Contains("Blink spell check")),
-                "AI: a blinking caster that passes casts and logs no Blink check line (NpcBlinkLabelsAndSilentPass)", o + " " + string.Join(" | ", logs));
+            Assert(cast && o.Kind == CastOutcomeKind.Resolved && labels.Count == 1 && logs.Exists(l => l != null && l.Contains("Blink spell check")),
+                "AI: a blinking caster that passes casts and logs the Blink check line, as a PC does", o + " " + string.Join(" | ", logs));
             sc.SpellSlots.Remove(slot);
             RemoveBlink(caster, casterBlink);
             casterBlink = null;
@@ -708,8 +710,8 @@ public static class CastCoreStageOrderTests
             int allyHp = ally.Stats.CurrentHP;
             cast = gm.RunCastSync(req, out o);
             Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.TargetBlink && o.Reason == "target-blinked" && slot.IsUsed
-                   && ally.Stats.CurrentHP == allyHp && labels.Count == 1 && labels[0] == "Blink NPC target spell failure",
-                "AI: a ray at a blinking target that misses fails at TargetBlink under the NPC dice label and counts as cast",
+                   && ally.Stats.CurrentHP == allyHp && labels.Count == 1 && labels[0] == SpellResolutionService.BlinkTargetDiceContext,
+                "AI: a ray at a blinking target that misses fails at TargetBlink under the shared dice label and counts as cast",
                 o + " " + string.Join(",", labels));
             sc.SpellSlots.Remove(slot);
             Assert(gm.Harness_OpenCastCount == 0, "AI: every Blink case's cast is ended");
@@ -720,6 +722,407 @@ public static class CastCoreStageOrderTests
             ScenarioHooks.CombatLog = oldLog;
             RemoveBlink(caster, casterBlink);
             RemoveBlink(ally, allyBlink);
+        }
+    }
+
+    // ── Batch 11 step 13: one entangled, deafened, Silence, ASF and Blink rule on every path ─────────────────
+
+    /// <summary>
+    /// The pure component rules (CastComponentRules): Silent Spell and Still Spell remove their component, from the
+    /// cast's metamagic or a prepared spell's own record; no spell is null-safe.
+    /// </summary>
+    private static void TestComponentRules()
+    {
+        SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD).Clone();
+        MetamagicData silent = new MetamagicData();
+        silent.AppliedMetamagic.Add(MetamagicFeatId.SilentSpell);
+        MetamagicData still = new MetamagicData();
+        still.AppliedMetamagic.Add(MetamagicFeatId.StillSpell);
+        Assert(CastComponentRules.HasVerbalComponent(shield, null) && CastComponentRules.HasSomaticComponent(shield, null),
+            "Step 13: Shield has its verbal and somatic components (PHB p.278)");
+        Assert(!CastComponentRules.HasVerbalComponent(shield, silent) && CastComponentRules.HasSomaticComponent(shield, silent),
+            "Step 13: Silent Spell removes only the verbal component (PHB p.100)");
+        Assert(CastComponentRules.HasVerbalComponent(shield, still) && !CastComponentRules.HasSomaticComponent(shield, still),
+            "Step 13: Still Spell removes only the somatic component (PHB p.101)");
+        SpellData preparedSilent = shield.Clone();
+        preparedSilent.MetamagicDataRef = silent;
+        Assert(!CastComponentRules.HasVerbalComponent(preparedSilent, null),
+            "Step 13: a prepared silent spell's own metamagic record counts when the cast carries none");
+        Assert(!CastComponentRules.HasVerbalComponent(null, null) && !CastComponentRules.HasSomaticComponent(null, null)
+               && !CastComponentRules.SilenceBlocks(null, shield, null, null) && CastComponentRules.DeafenedFailureChance(null, shield, null, null) == 0
+               && !CastComponentRules.ArcaneFailureApplies(null, shield, null, null),
+            "Step 13: the component rules are null-safe");
+
+        // Review of step 13: Combat Casting only on the defensive and grapple checks (PHB p.92), never the entangled one.
+        Assert(!ConcentrationManager.CombatCastingApplies(ConcentrationCheckType.Entangled)
+               && ConcentrationManager.CombatCastingApplies(ConcentrationCheckType.CastingDefensively)
+               && ConcentrationManager.CombatCastingApplies(ConcentrationCheckType.Grappled),
+            "Step 13: Combat Casting's +4 counts on casting defensively and grappled, not on the entangled check (PHB p.92)");
+
+        // The casting distraction checks: a cast from a slot or a scroll (DMG p.238), not a wand use (spell trigger, no
+        // casting) or a held-charge delivery (delegated RAW reading 2026-10-14).
+        Assert(CastComponentRules.CastingDistractionApplies(null) && CastComponentRules.CastingDistractionApplies(new CastSource())
+               && CastComponentRules.CastingDistractionApplies(new CastSource { Kind = CastSourceKind.Scroll })
+               && !CastComponentRules.CastingDistractionApplies(new CastSource { Kind = CastSourceKind.Wand })
+               && !CastComponentRules.CastingDistractionApplies(new CastSource { Kind = CastSourceKind.HeldChargeDelivery }),
+            "Step 13: the entangled and grappled checks apply to a cast from a slot or a scroll, not to a wand use or a delivery");
+
+        // A scroll's tradition is the scroll's own (DMG p.238), from ScrollData or the legacy ScrollType.
+        Assert(CastComponentRules.IsArcaneScroll(new ItemData { IsScroll = true, ScrollType = "Arcane" })
+               && !CastComponentRules.IsArcaneScroll(new ItemData { IsScroll = true, ScrollType = "Divine" })
+               && CastComponentRules.IsArcaneScroll(new ItemData { IsScroll = true, ScrollType = "Divine", Scroll = new ScrollData { IsArcane = true } })
+               && !CastComponentRules.IsArcaneScroll(null),
+            "Step 13: a scroll is arcane by its ScrollData, else its ScrollType");
+
+        // The entangled DC's level: a prepared heightened spell's own record raises it (PHB p.95).
+        SpellData heightened = shield.Clone();
+        var heighten = new MetamagicData();
+        heighten.AppliedMetamagic.Add(MetamagicFeatId.HeightenSpell);
+        heighten.HeightenToLevel = 3;
+        heightened.MetamagicDataRef = heighten;
+        Assert(GameManager.GetEntangledCastingSpellLevel(null, heightened, null) == 3
+               && GameManager.GetEntangledCastingSpellLevel(null, shield, null) == 1,
+            "Step 13: the entangled check's spell level is the heightened level of a prepared heightened spell (PHB p.95)",
+            GameManager.GetEntangledCastingSpellLevel(null, heightened, null) + " / " + GameManager.GetEntangledCastingSpellLevel(null, shield, null));
+    }
+
+    /// <summary>
+    /// Batch 11 step 13 in Play mode: the Silence refusal (PC and AI; Silent Spell, or a prepared silent spell, allowed;
+    /// a wand refused; CheckLegality agrees), the deafened 20% once in the Failure stage on every path and never in
+    /// SpellCaster.Cast, arcane spell failure only for a somatic spell and for a scroll, and the entangled Concentration
+    /// check and the blinking caster's 20% on the area and hold paths.
+    /// </summary>
+    private static void TestDistractionAndFailureStages(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        var labels = new List<string>();
+        var logs = new List<string>();
+        var forced = new Dictionary<string, int>();
+        Func<int, string, int, int> oldFilter = ScenarioHooks.RollFilter;
+        Action<string> oldLog = ScenarioHooks.CombatLog;
+        ScenarioHooks.RollFilter = (sides, label, natural) =>
+        {
+            if (label != null)
+                labels.Add(label);
+            if (label != null && forced.TryGetValue(label, out int value))
+                return value;
+            if (label == null && forced.TryGetValue("d" + sides, out int any))
+                return any;
+            return natural;
+        };
+        ScenarioHooks.CombatLog = m => logs.Add(m);
+        int asfBefore = caster.Stats.ArcaneSpellFailure;
+        try
+        {
+            TestSilence(gm, sc, caster, logs);
+            TestDeafened(gm, sc, caster, ally, labels, forced);
+            TestArcaneFailureRule(gm, sc, caster, ally);
+            TestEntangledAndBlinkOnEveryPath(gm, sc, caster, logs, labels, forced);
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = oldFilter;
+            ScenarioHooks.CombatLog = oldLog;
+            caster.Stats.SilenceActive = false;
+            caster.Stats.ArcaneSpellFailure = asfBefore;
+            caster.RemoveCondition(CombatConditionType.Deafened);
+            caster.RemoveCondition(CombatConditionType.Entangled);
+            if (gm.Harness_OpenCastCount > 0)
+                gm.Harness_EndAllCasts("CastCoreStageOrderTests step 13 cleanup");
+        }
+    }
+
+    private static MetamagicData Metamagic(MetamagicFeatId feat)
+    {
+        var m = new MetamagicData();
+        m.AppliedMetamagic.Add(feat);
+        return m;
+    }
+
+    private static void TestSilence(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> logs)
+    {
+        caster.Stats.SilenceActive = true;
+        caster.Stats.SilenceRoundsRemaining = 10;
+        try
+        {
+            // PC: Shield (V, S) is refused at Legality, nothing spent, with a log line.
+            logs.Clear();
+            var events = new List<string>();
+            var decider = new RecordingDecider(events);
+            CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, decider, out SpellSlot slot);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Refused && ctx.Outcome.Reason == "silenced" && ctx.Outcome.BackToActionMenu
+                   && string.Join(",", events) == "Legality,decider:finished:Refused@Legality" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+                "Step 13: a silenced PC caster is refused a verbal spell at Legality, before any choice, with nothing spent (PHB p.279)",
+                ctx.Outcome + " " + string.Join(",", events));
+            Assert(logs.Exists(l => l != null && l.Contains("inside a Silence")), "Step 13: the PC refusal is logged", string.Join(" | ", logs));
+            sc.SpellSlots.Remove(slot);
+
+            // PC: Silent Shield (a 2nd-level slot) is cast.
+            SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
+            var silentSlot = new SpellSlot(2, shield.Clone(), false, "Wizard");
+            sc.SpellSlots.Add(silentSlot);
+            caster.Actions.Reset();
+            events = new List<string>();
+            decider = new RecordingDecider(events);
+            SpellCastRequest req = SpellCastRequest.ForUi(caster, shield, Metamagic(MetamagicFeatId.SilentSpell), new CastSource());
+            req.Spell.HasMaterialComponent = false;
+            req.Aim.Target = caster;
+            req.Decider = decider;
+            ctx = gm.BeginCast(req);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && silentSlot.IsUsed,
+                "Step 13: a silenced PC caster casts a Silent Spell Shield from a 2nd-level slot (PHB p.100)", "" + ctx.Outcome);
+            sc.SpellSlots.Remove(silentSlot);
+
+            // CheckLegality agrees, with no side effect.
+            caster.Actions.Reset();
+            SpellCastRequest probe = SpellCastRequest.ForUi(caster, shield, null, new CastSource());
+            probe.Aim.Target = caster;
+            CastOutcome legality = gm.CheckLegality(probe);
+            probe.Metamagic = Metamagic(MetamagicFeatId.SilentSpell);
+            CastOutcome silentLegality = gm.CheckLegality(probe);
+            Assert(legality.Reason == "silenced" && silentLegality.Kind == CastOutcomeKind.Resolved && !caster.Actions.StandardActionUsed,
+                "Step 13: CheckLegality refuses the verbal cast and passes the silent one", legality + " / " + silentLegality);
+
+            // A wand's command word cannot be spoken in a Silence; a scroll of a verbal spell cannot be read aloud either;
+            // a held-charge delivery is no casting.
+            Assert(CastComponentRules.SilenceBlocks(caster, shield, Metamagic(MetamagicFeatId.SilentSpell), new CastSource { Kind = CastSourceKind.Wand })
+                   && CastComponentRules.SilenceBlocks(caster, shield, null, new CastSource { Kind = CastSourceKind.Scroll })
+                   && !CastComponentRules.SilenceBlocks(caster, shield, null, new CastSource { Kind = CastSourceKind.HeldChargeDelivery }),
+                "Step 13: Silence stops a wand (spoken trigger word, DMG p.213) and a verbal scroll, not a held-charge delivery (delegated RAW reading 2026-10-14)");
+
+            // AI: refused silently, nothing spent.
+            logs.Clear();
+            SpellCastRequest ai = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
+            bool cast = gm.RunCastSync(ai, out CastOutcome o);
+            Assert(!cast && o.Reason == "silenced" && !slot.IsUsed && !caster.Actions.StandardActionUsed && logs.Count == 0,
+                "Step 13: a silenced AI caster is refused a verbal spell (false, nothing spent, no log as the NPC path's other refusals)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            // AI: a prepared Silent Spell Shield is cast (the NPC path drops a cast's metamagic, not the prepared record).
+            var preparedSilent = new SpellSlot(2, false, "Wizard");
+            preparedSilent.PrepareWithMetamagic(shield.Clone(), Metamagic(MetamagicFeatId.SilentSpell));
+            sc.SpellSlots.Add(preparedSilent);
+            caster.Actions.Reset();
+            SpellData silentSpell = shield.Clone();
+            silentSpell.MetamagicDataRef = Metamagic(MetamagicFeatId.SilentSpell);
+            cast = gm.RunCastSync(SpellCastRequest.ForAI(caster, caster, silentSpell), out o);
+            Assert(cast && o.Kind == CastOutcomeKind.Resolved && preparedSilent.IsUsed,
+                "Step 13: a silenced AI caster casts its prepared Silent Spell Shield", "" + o);
+            sc.SpellSlots.Remove(preparedSilent);
+        }
+        finally
+        {
+            caster.Stats.SilenceActive = false;
+            caster.Stats.SilenceRoundsRemaining = 0;
+        }
+    }
+
+    private static void TestDeafened(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally,
+        List<string> labels, Dictionary<string, int> forced)
+    {
+        caster.ApplyCondition(CombatConditionType.Deafened, 10, "UnitTest");
+        try
+        {
+            Assert(CastComponentRules.DeafenedFailureChance(caster, SpellDatabase.GetSpell(SpellNames.SHIELD), null, new CastSource()) == 20
+                   && CastComponentRules.DeafenedFailureChance(caster, SpellDatabase.GetSpell(SpellNames.SHIELD), Metamagic(MetamagicFeatId.SilentSpell), null) == 0
+                   && CastComponentRules.DeafenedFailureChance(caster, SpellDatabase.GetSpell(SpellNames.SHIELD), null, new CastSource { Kind = CastSourceKind.Scroll }) == 20
+                   && CastComponentRules.DeafenedFailureChance(caster, SpellDatabase.GetSpell(SpellNames.SHIELD), null, new CastSource { Kind = CastSourceKind.Wand }) == 0
+                   && CastComponentRules.DeafenedFailureChance(caster, SpellDatabase.GetSpell(SpellNames.SHIELD), null, new CastSource { Kind = CastSourceKind.HeldChargeDelivery }) == 0,
+                "Step 13: a deafened caster's verbal spell has a 20% failure chance (PHB p.307), also from a scroll; none with Silent Spell, from a wand or for a delivery");
+
+            // PC: the roll fails at Failure, once, the slot spent.
+            forced[CastComponentRules.DeafenedFailureDiceContext] = 20;
+            labels.Clear();
+            var events = new List<string>();
+            CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(events), out SpellSlot slot);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.Failure && ctx.Outcome.Reason == "deafened"
+                   && slot.IsUsed && labels.FindAll(l => l == CastComponentRules.DeafenedFailureDiceContext).Count == 1
+                   && string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Failure,decider:finished:Failed@Failure",
+                "Step 13: a deafened PC's verbal spell fails at the Failure stage on a d% of 20, one roll, the slot spent", ctx.Outcome + " " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+
+            // PC: a d% of 21 passes, and SpellCaster.Cast rolls nothing more (every unlabelled d% forced to 1).
+            forced[CastComponentRules.DeafenedFailureDiceContext] = 21;
+            forced["d100"] = 1;
+            labels.Clear();
+            ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.Result != null && ctx.Result.Success
+                   && labels.FindAll(l => l == CastComponentRules.DeafenedFailureDiceContext).Count == 1,
+                "Step 13: a deafened PC who passes the d% casts; SpellCaster.Cast no longer rolls deafness (SPL-150)", ctx.Outcome + " " + ctx.Result?.NoEffectReason);
+            sc.SpellSlots.Remove(slot);
+
+            // AI: the same roll, the same failure.
+            forced[CastComponentRules.DeafenedFailureDiceContext] = 5;
+            labels.Clear();
+            SpellCastRequest ai = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
+            bool cast = gm.RunCastSync(ai, out CastOutcome o);
+            Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.Failure && o.Reason == "deafened" && slot.IsUsed
+                   && labels.FindAll(l => l == CastComponentRules.DeafenedFailureDiceContext).Count == 1,
+                "Step 13: a deafened AI caster's verbal spell fails at the same Failure stage (one roll; counts as cast)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            // SpellCaster.Cast on its own never fails a deafened caster's spell (the Failure stage owns the roll).
+            SpellResult direct = SpellCaster.Cast(SpellDatabase.GetSpell(SpellNames.SHIELD).Clone(), caster.Stats, caster.Stats, null, true, false, caster, caster);
+            Assert(direct != null && (direct.NoEffectReason == null || !direct.NoEffectReason.ToLowerInvariant().Contains("deaf")),
+                "Step 13: SpellCaster.Cast has no deafness roll of its own", direct?.NoEffectReason);
+        }
+        finally
+        {
+            forced.Clear();
+            caster.RemoveCondition(CombatConditionType.Deafened);
+        }
+    }
+
+    private static void TestArcaneFailureRule(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController fighter)
+    {
+        SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
+        caster.Stats.ArcaneSpellFailure = 100;
+        Assert(caster.Stats.IsAffectedByArcaneSpellFailure, "Step 13: the test wizard is an arcane caster");
+        Assert(CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource())
+               && !CastComponentRules.ArcaneFailureApplies(caster, shield, Metamagic(MetamagicFeatId.StillSpell), new CastSource())
+               && CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.Scroll })
+               && !CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.Wand })
+               && !CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.HeldChargeDelivery })
+               && !CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.TestPanel, Bypass = TestPanelBypass.ArcaneFailure }),
+            "Step 13: arcane spell failure applies to a somatic spell from a slot or a scroll (PHB p.122, DMG p.238), not with Still Spell, from a wand, for a delivery or with the F12 bypass");
+
+        // A scroll's own tradition decides (DMG p.238), not the reader's class: a wizard reading a divine scroll rolls none,
+        // a fighter reading an arcane one (Use Magic Device) does.
+        var arcaneScroll = new ItemData { IsScroll = true, ScrollType = "Arcane" };
+        var divineScroll = new ItemData { IsScroll = true, ScrollType = "Divine" };
+        Assert(!CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.Scroll, Item = divineScroll })
+               && CastComponentRules.ArcaneFailureApplies(caster, shield, null, new CastSource { Kind = CastSourceKind.Scroll, Item = arcaneScroll })
+               && !fighter.Stats.IsAffectedByArcaneSpellFailure
+               && CastComponentRules.ArcaneFailureApplies(fighter, shield, null, new CastSource { Kind = CastSourceKind.Scroll, Item = arcaneScroll })
+               && !CastComponentRules.ArcaneFailureApplies(fighter, shield, null, new CastSource { Kind = CastSourceKind.Scroll, Item = divineScroll })
+               && !CastComponentRules.ArcaneFailureApplies(fighter, shield, null, new CastSource()),
+            "Step 13: scroll arcane spell failure follows the scroll's tradition: none for a wizard reading a divine scroll, rolled for a fighter reading an arcane one (DMG p.238)");
+
+        // A spell with no somatic component is cast at 100% arcane spell failure (SPL-096).
+        var events = new List<string>();
+        CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(events), out SpellSlot slot);
+        ctx.Request.Spell.HasSomaticComponent = false;
+        gm.ExecuteCast(ctx, null);
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && slot.IsUsed,
+            "Step 13: a spell with no somatic component rolls no arcane spell failure (PHB p.122; SPL-096)", "" + ctx.Outcome);
+        sc.SpellSlots.Remove(slot);
+
+        // The same spell with its somatic component fails at 100%.
+        ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+        gm.ExecuteCast(ctx, null);
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.Reason == "arcane-spell-failure" && slot.IsUsed,
+            "Step 13: the somatic spell fails at 100% arcane spell failure, its slot spent", "" + ctx.Outcome);
+        sc.SpellSlots.Remove(slot);
+        caster.Stats.ArcaneSpellFailure = 0;
+    }
+
+    /// <summary>A UI area request (Burning Hands at one empty square) by <paramref name="decider"/>, with a fresh slot.</summary>
+    private static CastContext BeginArea(GameManager gm, SpellcastingComponent sc, CharacterController caster, RecordingDecider decider, out SpellSlot slot)
+    {
+        SpellData template = SpellDatabase.GetSpell(SpellNames.BURNING_HANDS);
+        slot = new SpellSlot(template.SpellLevel, template.Clone(), false, "Wizard");
+        sc.SpellSlots.Add(slot);
+        caster.Actions.Reset();
+        sc.ResetQuickenedSpellTracking();
+        SpellCastRequest req = SpellCastRequest.ForUi(caster, template, null, new CastSource());
+        SpellCastRequest.ForUiArea(req, new List<CharacterController>(), new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) });
+        req.Decider = decider;
+        CastContext ctx = gm.BeginCast(req);
+        ctx.StageObserver = stage => decider.Events.Add(stage.ToString());
+        return ctx;
+    }
+
+    private static void TestEntangledAndBlinkOnEveryPath(GameManager gm, SpellcastingComponent sc, CharacterController caster,
+        List<string> logs, List<string> labels, Dictionary<string, int> forced)
+    {
+        caster.ApplyCondition(CombatConditionType.Entangled, 10, "UnitTest");
+        // The caster takes Combat Casting for these checks: its +4 must not count on the entangled check (PHB p.92).
+        bool addedCombatCasting = !caster.Stats.HasFeat("Combat Casting");
+        if (addedCombatCasting)
+            caster.Stats.Feats.Add("Combat Casting");
+        int bonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: false);
+        Assert(caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true) == bonus + 4,
+            "Step 13: the test caster has Combat Casting for the entangled checks");
+        try
+        {
+            // A Shield without its somatic component still needs the check: Concentration, DC 15 + 1 = 16.
+            forced[GameManager.EntangledConcentrationDiceContext] = 1;
+            logs.Clear();
+            labels.Clear();
+            var events = new List<string>();
+            CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(events), out SpellSlot slot);
+            ctx.Request.Spell.HasSomaticComponent = false;
+            gm.ExecuteCast(ctx, null);
+            bool lost = 1 + bonus < 16;
+            Assert(labels.Contains(GameManager.EntangledConcentrationDiceContext)
+                   && logs.Exists(l => l != null && l.Contains("d20 1 + conc " + bonus + " = " + (1 + bonus) + " vs DC 16")),
+                "Step 13: an entangled caster makes a Concentration check (d20 + Concentration " + bonus + ", no Combat Casting, PHB p.92) against DC 15 + spell level 1, for a spell with no somatic component too (PHB p.308, p.70; SPL-145)",
+                string.Join(" | ", logs));
+            Assert(ctx.Outcome != null && (lost
+                    ? ctx.Outcome.Kind == CastOutcomeKind.Interrupted && ctx.Outcome.At == CastStage.Distraction && ctx.Outcome.Reason == "entangled" && slot.IsUsed && !ctx.Outcome.ShowsActionMenu
+                    : ctx.Outcome.Kind == CastOutcomeKind.Resolved),
+                "Step 13: the entangled check's result decides the cast (a lost spell spends its slot)", "" + ctx.Outcome);
+            sc.SpellSlots.Remove(slot);
+
+            // The area path makes the check too (no AreaSkipsEntangled).
+            forced[GameManager.EntangledConcentrationDiceContext] = 1;
+            labels.Clear();
+            events = new List<string>();
+            ctx = BeginArea(gm, sc, caster, new RecordingDecider(events), out slot);
+            gm.ExecuteCast(ctx, null);
+            Assert(labels.Contains(GameManager.EntangledConcentrationDiceContext)
+                   && (!lost || (ctx.Outcome != null && ctx.Outcome.At == CastStage.Distraction && ctx.Outcome.Reason == "entangled" && slot.IsUsed)),
+                "Step 13: an entangled caster's area spell makes the entangled check (SPL-006)", ctx.Outcome + " " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+
+            // The hold makes it too (no HoldSkipsEntangled).
+            labels.Clear();
+            events = new List<string>();
+            ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, new RecordingDecider(events), out slot);
+            SpellCastRequest.ForUiHoldCharge(ctx.Request);
+            gm.ExecuteCast(ctx, null);
+            Assert(labels.Contains(GameManager.EntangledConcentrationDiceContext)
+                   && (!lost || (ctx.Outcome != null && ctx.Outcome.At == CastStage.Distraction && ctx.Outcome.Reason == "entangled" && slot.IsUsed && !sc.HasHeldTouchCharge)),
+                "Step 13: holding a touch charge makes the entangled check (SPL-146)", ctx.Outcome + " " + string.Join(",", events));
+            if (sc.HasHeldTouchCharge)
+                sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            forced.Clear();
+            caster.RemoveCondition(CombatConditionType.Entangled);
+            if (addedCombatCasting)
+                caster.Stats.Feats.Remove("Combat Casting");
+        }
+
+        // A blinking caster's area spell and hold have the 20% failure (no AreaSkipsBlink, HoldSkipsBlink).
+        ActiveSpellEffect blink = AddBlink(caster);
+        try
+        {
+            forced[SpellResolutionService.BlinkCasterDiceContext] = 10;
+            var events = new List<string>();
+            CastContext ctx = BeginArea(gm, sc, caster, new RecordingDecider(events), out SpellSlot slot);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.Failure && ctx.Outcome.Reason == "blink-caster"
+                   && slot.IsUsed && !ctx.Outcome.ShowsActionMenu,
+                "Step 13: a blinking caster's area spell can fail at the Failure stage (PHB p.206; SPL-006)", ctx.Outcome + " " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+
+            ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, new RecordingDecider(new List<string>()), out slot);
+            SpellCastRequest.ForUiHoldCharge(ctx.Request);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.Reason == "blink-caster" && slot.IsUsed && !sc.HasHeldTouchCharge,
+                "Step 13: a blinking caster's hold of a touch charge can fail (PHB p.206; SPL-146)", "" + ctx.Outcome);
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            forced.Clear();
+            RemoveBlink(caster, blink);
         }
     }
 
@@ -987,32 +1390,23 @@ public static class CastCoreStageOrderTests
     /// <summary>Today's PC summon path, beyond the shared bits (batch 11 step 10).</summary>
     private static readonly LegacyCastQuirk[] SummonPathBits =
     {
-        LegacyCastQuirk.EntangledUsesCasterLevelFormula,
         LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
-        LegacyCastQuirk.ScrollSkipsArcaneFailure,
-        LegacyCastQuirk.SummonSkipsBlink,                   // SPL-006
         LegacyCastQuirk.SummonSkipsCounterspell,            // SPL-006
         LegacyCastQuirk.SummonSkipsPouch,                   // SPL-006, SPL-114
-        LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
     };
 
     /// <summary>Today's PC Grease path, beyond the shared bits (batch 11 step 10).</summary>
     private static readonly LegacyCastQuirk[] GreasePathBits =
     {
-        LegacyCastQuirk.EntangledUsesCasterLevelFormula,
-        LegacyCastQuirk.GreaseSkipsBlink,                   // SPL-006
         LegacyCastQuirk.GreaseSkipsCounterspell,            // SPL-006
         LegacyCastQuirk.GreaseSkipsPouch,                   // SPL-006, SPL-114
         LegacyCastQuirk.GreaseSkipsInvisibilityBreak,       // SPL-006
-        LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
     };
 
     /// <summary>Today's PC hold path, beyond the shared bits (batch 11 step 10).</summary>
     private static readonly LegacyCastQuirk[] HoldPathBits =
     {
         LegacyCastQuirk.HoldSkipsGrappleLegality,           // SPL-146
-        LegacyCastQuirk.HoldSkipsEntangled,                 // SPL-146
-        LegacyCastQuirk.HoldSkipsBlink,                     // SPL-146
         LegacyCastQuirk.HoldSkipsPouch,                     // SPL-146, SPL-114
         LegacyCastQuirk.HoldSkipsCounterspell,              // SPL-146
         LegacyCastQuirk.HoldSkipsChoices,                   // SPL-146

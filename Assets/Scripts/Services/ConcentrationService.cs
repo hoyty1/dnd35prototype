@@ -126,8 +126,9 @@ public static class ConcentrationService
     }
 
     /// <summary>
-    /// Calculate the DC for casting while entangled.
-    /// D&D 3.5e PHB p.170: DC = 15 + spell level.
+    /// Calculate the DC for casting while entangled: 15 + spell level (PHB p.308 and the p.70 table's footnote; PHB p.170
+    /// gives a flat 15; delegated RAW reading 2026-10-14, SPL-145). The cast core's entangled check uses it for every
+    /// caster and path (GameManager.ResolveEntangledCastingConcentration).
     /// </summary>
     /// <param name="spellLevel">The level of the spell being cast.</param>
     /// <returns>The concentration DC.</returns>

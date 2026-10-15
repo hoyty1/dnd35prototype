@@ -5701,7 +5701,125 @@ public partial class GameManager : MonoBehaviour
         return false;
     }
 
+    // ==================== CASTING CHECKS FOR ITEM USES OUTSIDE THE CAST CORE ====================
+
+    /// <summary>
+    /// The Silence refusal of a scroll or wand use (PHB p.279; CastComponentRules.SilenceBlocks, as the cast core's
+    /// Legality stage applies it), made before the item's own activation checks (Use Magic Device, the scroll's caster
+    /// level check and its mishap), so a silenced user spends and risks nothing on a use that cannot be attempted
+    /// (batch 11 step 13, SPL-092). Null when the use may go on; else the refusal message, also logged.
+    /// </summary>
+    private string ItemUseSilenceRefusal(CharacterController actor, ItemData item, SpellData spell, CastSourceKind kind)
+    {
+        if (actor == null || actor.Stats == null || item == null || spell == null || !actor.Stats.SilenceActive)
+            return null;
+
+        MetamagicData metamagic;
+        if (kind == CastSourceKind.Scroll)
+            BuildScrollPipelineSpell(item, spell, out metamagic, out _);
+        else
+            BuildWandPipelineSpell(item, spell, out metamagic, out _);
+
+        if (!CastComponentRules.SilenceBlocks(actor, spell, metamagic, new CastSource { Kind = kind, Item = item }))
+            return null;
+
+        string message = kind == CastSourceKind.Wand
+            ? $"{actor.Stats.CharacterName} cannot use {item.Name} inside a Silence: its command word cannot be spoken (DMG p.213, PHB p.279)."
+            : $"{actor.Stats.CharacterName} cannot read {item.Name} inside a Silence: {spell.Name} has a verbal component (PHB p.279; DMG p.238).";
+        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", message));
+        return message;
+    }
+
+    /// <summary>
+    /// The cast core's Distraction and Failure checks for a scroll or wand use that resolves outside the core
+    /// (TryApplySpellConsumableEffect: a spell with no target to pick, or any use outside an encounter), the same rules in
+    /// the same order (batch 11 step 13): the entangled and grappled or pinned Concentration checks for a scroll (DMG
+    /// p.238; not a wand, CastComponentRules.CastingDistractionApplies), arcane spell failure
+    /// (CastComponentRules.ArcaneFailureApplies), the blinking user's 20% (SpellResolutionService.TryBlinkCasterFailure)
+    /// and the deafened 20% (CastComponentRules.TryDeafenedFailure). True when the spell goes on; false when it is lost,
+    /// with <paramref name="lostReason"/> saying why, and the caller spends the scroll or the charge. Silence is refused
+    /// earlier (<see cref="ItemUseSilenceRefusal"/>).
+    /// </summary>
+    private bool ResolveDirectItemCastChecks(CharacterController actor, ItemData item, SpellData baseSpell, CastSourceKind kind, int inventoryIndex,
+        out string lostReason)
+    {
+        lostReason = null;
+        if (actor == null || actor.Stats == null || item == null || baseSpell == null)
+            return true;
+
+        MetamagicData metamagic;
+        SpellData spell = kind == CastSourceKind.Scroll
+            ? BuildScrollPipelineSpell(item, baseSpell, out metamagic, out _)
+            : BuildWandPipelineSpell(item, baseSpell, out metamagic, out _);
+        var source = new CastSource { Kind = kind, Item = item, ItemIndex = inventoryIndex };
+        string name = actor.Stats.CharacterName;
+
+        if (CastComponentRules.CastingDistractionApplies(source))
+        {
+            if (!RollEntangledCastingConcentration(actor, spell, metamagic, out int entangledDc))
+            {
+                lostReason = $"{name} fails the DC {entangledDc} Concentration check while entangled (PHB p.308).";
+                return false;
+            }
+            if (!RollGrappledOrPinnedCastingConcentration(actor, spell, out int grappleDc, out string conditionLabel))
+            {
+                lostReason = $"{name} fails the DC {grappleDc} Concentration check while {conditionLabel} (PHB p.156).";
+                return false;
+            }
+        }
+
+        if (TryRollArcaneSpellFailure(actor, spell, metamagic, source, out int asfRoll, out int asfChance))
+        {
+            LogArcaneSpellFailure(actor, spell, asfRoll, asfChance);
+            lostReason = $"arcane spell failure (rolled {asfRoll} ≤ {asfChance}%, DMG p.238).";
+            return false;
+        }
+
+        if (SpellResolutionService.TryBlinkCasterFailure(actor, spell.Name, out int blinkRoll))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{name}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkRoll} ≤ 20%)"));
+            lostReason = $"Blink spell failure (rolled {blinkRoll} ≤ 20%, PHB p.206).";
+            return false;
+        }
+        if (blinkRoll > 0)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {name} rolled {blinkRoll} > 20% (spell proceeds)."));
+
+        if (CastComponentRules.TryDeafenedFailure(actor, spell, metamagic, source, out int deafRoll, out int deafChance))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", $"{name}'s {spell.Name} fails: deafened, the verbal component goes wrong (rolled {deafRoll} ≤ {deafChance}%, PHB p.307). The spell is lost."));
+            lostReason = $"deafened (rolled {deafRoll} ≤ {deafChance}%, PHB p.307).";
+            return false;
+        }
+        if (deafRoll > 0)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔇", $"Deafened spell check: {name} rolled {deafRoll} > {deafChance}% (spell proceeds)."));
+
+        return true;
+    }
+
     // ==================== SCROLL USAGE (D&D 3.5e DMG) ====================
+
+    /// <summary>The spell a scroll holds: its ScrollData's, else the legacy consumable spell name.</summary>
+    private static SpellData ResolveScrollSpell(ItemData scrollItem)
+    {
+        if (scrollItem == null)
+            return null;
+        SpellDatabase.Init();
+        return scrollItem.Scroll?.GetSpell()
+               ?? SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
+               ?? SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
+    }
+
+    /// <summary>The spell a wand holds: its WandData's, else the legacy wand spell id or consumable spell name.</summary>
+    private static SpellData ResolveWandSpell(ItemData wandItem)
+    {
+        if (wandItem == null)
+            return null;
+        SpellDatabase.Init();
+        return wandItem.Wand?.GetSpell()
+               ?? SpellDatabase.GetSpell(wandItem.WandSpellId)
+               ?? SpellDatabase.GetSpell(wandItem.ConsumableSpellName)
+               ?? SpellDatabase.GetSpellByName(wandItem.ConsumableSpellName);
+    }
 
     /// <summary>
     /// Attempts to use a spell scroll, applying full D&D 3.5e validation:
@@ -5723,6 +5841,15 @@ public partial class GameManager : MonoBehaviour
 
         string charName = actor.Stats.CharacterName;
         var inv = actor.InventoryComp?.CharacterInventory;
+
+        // Silence first (PHB p.279; SPL-092): no Use Magic Device, caster level check or mishap for a use that cannot be
+        // attempted.
+        string silenced = ItemUseSilenceRefusal(actor, scrollItem, ResolveScrollSpell(scrollItem), CastSourceKind.Scroll);
+        if (silenced != null)
+        {
+            resultMessage = $"📜 {silenced}";
+            return false;
+        }
 
         // Step 1: Validate eligibility
         var validation = ScrollValidator.Validate(actor, scrollItem);
@@ -5784,10 +5911,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Step 4: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
-        SpellDatabase.Init();
-        SpellData scrollSpell = scrollItem.Scroll?.GetSpell()
-                                ?? SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
-                                ?? SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
+        SpellData scrollSpell = ResolveScrollSpell(scrollItem);
         bool needsTargeting = scrollSpell != null && (
             scrollSpell.EffectType == SpellEffectType.Damage ||
             scrollSpell.EffectType == SpellEffectType.Summon ||
@@ -5824,7 +5948,16 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        // Self-target spells: apply immediately
+        // Self-target spells: apply immediately, after the casting checks the cast core makes (batch 11 step 13): a
+        // spell lost to them spends the scroll (DMG p.238).
+        if (!ResolveDirectItemCastChecks(actor, scrollItem, scrollSpell, CastSourceKind.Scroll, inventoryIndex, out string lostReason))
+        {
+            if (inv != null) ConsumeOneFromStack(inv, inventoryIndex, scrollItem);
+            UpdateAllStatsUI();
+            resultMessage = $"📜 {charName} reads {scrollItem.Name}, but the spell is lost: {lostReason} Scroll consumed.";
+            return true; // the scroll is spent, as after a mishap
+        }
+
         string spellSummary;
         if (!TryApplySpellConsumableEffect(actor, scrollItem, out spellSummary))
         {
@@ -6128,6 +6261,14 @@ public partial class GameManager : MonoBehaviour
 
         string charName = actor.Stats.CharacterName;
 
+        // Silence first (PHB p.279, DMG p.213; SPL-092): no Use Magic Device check for a use that cannot be attempted.
+        string silenced = ItemUseSilenceRefusal(actor, wandItem, ResolveWandSpell(wandItem), CastSourceKind.Wand);
+        if (silenced != null)
+        {
+            resultMessage = $"🪄 {silenced}";
+            return false;
+        }
+
         // Step 1: Validate eligibility (class list or UMD)
         var validation = WandValidator.Validate(actor, wandItem);
 
@@ -6158,11 +6299,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Step 3: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
-        SpellDatabase.Init();
-        SpellData wandSpell = wandItem.Wand?.GetSpell()
-                              ?? SpellDatabase.GetSpell(wandItem.WandSpellId)
-                              ?? SpellDatabase.GetSpell(wandItem.ConsumableSpellName)
-                              ?? SpellDatabase.GetSpellByName(wandItem.ConsumableSpellName);
+        SpellData wandSpell = ResolveWandSpell(wandItem);
 
         Debug.Log($"[TryUseWand] Spell lookup for '{wandItem.Name}': WandData.SpellId='{wandItem.Wand?.SpellId}', " +
                   $"WandSpellId='{wandItem.WandSpellId}', ConsumableSpellName='{wandItem.ConsumableSpellName}', " +
@@ -6204,7 +6341,17 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        // Self-target spells: apply immediately
+        // Self-target spells: apply immediately, after the checks the cast core makes for a wand use (batch 11 step 13:
+        // the blinking user's 20%); a spell lost to them spends the charge.
+        if (!ResolveDirectItemCastChecks(actor, wandItem, wandSpell, CastSourceKind.Wand, inventoryIndex, out string lostReason))
+        {
+            if (wandItem.Wand != null) wandItem.Wand.ConsumeCharge();
+            wandItem.CurrentCharges--;
+            UpdateAllStatsUI();
+            resultMessage = $"🪄 {charName} activates {wandItem.Name}, but the spell is lost: {lostReason} ({wandItem.CurrentCharges}/{wandItem.MaxCharges} charges)";
+            return true; // the charge is spent
+        }
+
         string spellSummary;
         if (!TryApplySpellConsumableEffect(actor, wandItem, out spellSummary))
         {
@@ -6255,6 +6402,15 @@ public partial class GameManager : MonoBehaviour
         }
 
         string charName = actor.Stats.CharacterName;
+
+        // A staff is a spell trigger item (DMG p.213): its word cannot be spoken inside a Silence (PHB p.279; delegated RAW
+        // reading 2026-10-14, as for a wand, CastComponentRules.SilenceBlocksSpellTrigger). Refused before Use Magic Device.
+        if (CastComponentRules.SilenceBlocksSpellTrigger(actor))
+        {
+            resultMessage = $"⚡ {charName} cannot use {staffItem.Name} inside a Silence: its command word cannot be spoken (DMG p.213, PHB p.279).";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", resultMessage));
+            return false;
+        }
 
         // Step 1: Validate eligibility (class list or UMD)
         var validation = StaffValidator.Validate(actor, staffItem);
@@ -9509,6 +9665,16 @@ public partial class GameManager : MonoBehaviour
         if (actionRefusal != null)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(actionRefusal, pc.Stats?.CharacterName, spell != null ? spell.Name : "the spell")));
+            ShowActionChoices();
+            return;
+        }
+
+        // Silence before any targeting or placement, and before a held touch charge is dropped for the new spell (the
+        // cast core's Legality stage tests it again; CastComponentRules.SilenceBlocks, PHB p.279, batch 11 step 13): a
+        // cast that cannot be attempted changes nothing.
+        if (CastComponentRules.SilenceBlocks(pc, spell, metamagic, menuSource))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", CastComponentRules.DescribeSilenceRefusal(pc.Stats?.CharacterName, spell.Name, false)));
             ShowActionChoices();
             return;
         }
