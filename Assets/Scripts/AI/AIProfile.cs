@@ -191,6 +191,78 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// AI choice, not a rule: whether a creature with an unused smite (a paladin's Smite Evil, a celestial or fiendish
+        /// template smite) declares it before attacking <paramref name="target"/> (CHR-020). The rules (SmiteRules) are
+        /// shared with the PC Smite button. <see cref="DefaultShouldDeclareSmite"/>.
+        /// </summary>
+        public virtual bool ShouldDeclareSmite(CharacterController self, CharacterController target)
+            => DefaultShouldDeclareSmite(self, target);
+
+        /// <summary>
+        /// The default smite choice, also used for creatures without a profile: smite the first target the creature
+        /// believes is of the smitten alignment (SmiteRules.AiBelievesSmiteFoe), never one it does not.
+        /// </summary>
+        public static bool DefaultShouldDeclareSmite(CharacterController self, CharacterController target)
+        {
+            if (!SmiteRules.CanDeclare(self, out _, out _))
+                return false;
+            return SmiteRules.AiBelievesSmiteFoe(self, target);
+        }
+
+        /// <summary>
+        /// AI choice, not a rule: whether a paladin lays on hands this turn, and on whom (CHR-020). The rules
+        /// (LayOnHandsRules) are shared with the PC Lay on Hands button. Null for no lay on hands.
+        /// <see cref="DefaultLayOnHandsTarget"/>.
+        /// </summary>
+        public virtual CharacterController ChooseLayOnHandsTarget(CharacterController self, System.Collections.Generic.IList<CharacterController> combatants)
+            => DefaultLayOnHandsTarget(self, combatants);
+
+        /// <summary>
+        /// The default lay on hands choice: heal the most hurt creature within touch, itself or an ally, once it is at half
+        /// its hit points or less (dying included); else, when no one needs healing, touch an undead foe within reach that
+        /// the remaining pool reduces to 0 hit points (destroyed once CRE-051 is fixed; until then it is disabled at 0).
+        /// Otherwise null (the creature fights as usual).
+        /// </summary>
+        public static CharacterController DefaultLayOnHandsTarget(CharacterController self, System.Collections.Generic.IList<CharacterController> combatants)
+        {
+            if (self == null || self.Stats == null || combatants == null)
+                return null;
+            if (!LayOnHandsRules.CanUse(self, out _))
+                return null;
+
+            int pool = LayOnHandsRules.RemainingPool(self.Stats);
+            CharacterController healPick = null;
+            float healPickFraction = float.MaxValue;
+            CharacterController harmPick = null;
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CharacterController c = combatants[i];
+                if (c == null || c.Stats == null || c.Stats.IsDead)
+                    continue;
+                if (!LayOnHandsRules.IsValidTarget(self, c, out bool harms, out _))
+                    continue;
+                if (harms)
+                {
+                    if (harmPick == null && TeamUtility.IsEnemy(self, c) && c.Stats.CurrentHP <= pool)
+                        harmPick = c;
+                    continue;
+                }
+                if (c != self && !TeamUtility.IsAlly(self, c))
+                    continue;
+                int max = Mathf.Max(1, c.Stats.TotalMaxHP);
+                float fraction = (float)c.Stats.CurrentHP / max;
+                if (fraction > 0.5f)
+                    continue;
+                if (fraction < healPickFraction)
+                {
+                    healPick = c;
+                    healPickFraction = fraction;
+                }
+            }
+            return healPick ?? harmPick;
+        }
+
+        /// <summary>
         /// AI choice, not a rule: whether a monk declares a flurry of blows before its melee sequence (CHR-003). The rules
         /// (CharacterController.CanUseFlurryOfBlows) are shared with the PC Flurry button. <see cref="DefaultShouldUseFlurryOfBlows"/>.
         /// </summary>

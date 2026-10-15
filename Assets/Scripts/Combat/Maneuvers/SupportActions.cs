@@ -1982,6 +1982,11 @@ public partial class GameManager
             && npc.Stats.HasNaturalAttacks
             && npc.GetEquippedMainWeapon() == null;
 
+        // The AI may smite with the charge's attack (or a pounce's first attack), as a PC may declare its smite before
+        // charging (SmiteRules, CHR-020). A bull rush on a charge makes no attack, so it declares nothing.
+        if (!bullRush)
+            TryNPCDeclareSmite(npc, target);
+
         if (bullRush)
         {
             // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).

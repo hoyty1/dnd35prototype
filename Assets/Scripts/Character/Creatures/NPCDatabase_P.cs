@@ -303,7 +303,7 @@ public static partial class NPCDatabase
     /// <summary>
     /// Human Paladin 7 (CR 7) — Medium humanoid (human).
     /// PHB 3.5e Paladin class level 7. Smite Evil 2/day. 1st and 2nd-level spells.
-    /// Remove Disease 2/week.
+    /// Remove Disease 1/week (PHB p.44: twice a week only from 9th).
     /// </summary>
     private static void RegisterHumanPaladin7()
     {
@@ -338,7 +338,7 @@ public static partial class NPCDatabase
                 "Aura of Courage (Su): immune to fear, allies +4 vs. fear",
                 "Divine Health (Ex): immune to all diseases",
                 "Turn Undead 5/day (as 4th-level cleric)",
-                "Remove Disease 2/week",
+                "Remove Disease 1/week", // PHB p.44: 1/week at 6th, 2/week from 9th
                 "Spells: 1st/2nd-level divine (bless, bull's strength, protection from evil)",
                 "Special Mount"
             },

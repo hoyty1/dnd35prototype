@@ -333,9 +333,8 @@ public partial class GameManager
             return false;
         }
 
-        bool isCleric = actor.Stats.IsCleric;
-        bool isEligiblePaladin = actor.Stats.IsPaladin && actor.Stats.Level >= 4;
-        if (!isCleric && !isEligiblePaladin)
+        // A cleric, or a paladin from 4th paladin level (PHB p.44), by class level, not total level (CHR-020).
+        if (!actor.Stats.CanEverTurnUndead)
         {
             reason = actor.Stats.IsPaladin ? "Paladin level 4 required" : "Cleric or Paladin (Lv4+) only";
             return false;
@@ -344,6 +343,14 @@ public partial class GameManager
         if (actor.Actions == null || !actor.Actions.HasStandardAction)
         {
             reason = "Standard action used";
+            return false;
+        }
+
+        // Turning is a supernatural standard action, which is not among the actions a grappler may take (PHB p.156); the
+        // same reading as Lay on Hands (LayOnHandsRules.CanUse; delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1).
+        if (actor.IsGrappling())
+        {
+            reason = "Grappling (not a grapple action, PHB p.156)";
             return false;
         }
 
@@ -420,12 +427,11 @@ public partial class GameManager
         if (turner == null || turner.Stats == null)
             return 0;
 
-        int effectiveLevel = 0;
-
-        if (turner.Stats.IsCleric)
-            effectiveLevel = Mathf.Max(1, turner.Stats.Level);
-        else if (turner.Stats.IsPaladin)
-            effectiveLevel = Mathf.Max(0, turner.Stats.Level - 3);  // D&D 3.5e: Paladin turns as cleric 3 levels lower
+        // Cleric level, plus paladin level - 3 from paladin 4th level; a cleric/paladin adds the two (PHB p.44, p.59;
+        // CharacterStats.TurnUndeadEffectiveLevel, CHR-020).
+        int effectiveLevel = turner.Stats.TurnUndeadEffectiveLevel;
+        if (effectiveLevel <= 0)
+            return 0;
 
         // Improved Turning feat (PHB p.96): +1 effective cleric level for turning
         effectiveLevel += FeatManager.GetImprovedTurningLevelBonus(turner.Stats);

@@ -158,12 +158,8 @@ public partial class GameManager
         if (!summon.IsTargetInCurrentWeaponRange(target) || target.Stats.IsDead)
             yield break;
 
-        if (TryExecuteSummonSmiteAttack(summon, target, data))
-        {
-            UpdateAllStatsUI();
-            yield return new WaitForSeconds(0.8f);
-            yield break;
-        }
+        // A templated summon's smite is declared by the shared NPC attack sequence below (NPCPerformAttack ->
+        // TryNPCDeclareSmite; SmiteRules, CHR-020, AI-056), as for every other creature with a smite.
 
         // A trip taken as an action (not the free trip after a bite) replaces one melee attack
         // (PHB p.141 Table 8-2 note 7, p.158). It runs as a step of the shared NPC melee sequence
@@ -185,54 +181,6 @@ public partial class GameManager
             : SummonCommandType.AttackNearest;
         CharacterController caster = summonData != null ? summonData.Caster : null;
         return AIService.SelectSummonTarget(summon, caster, cmd, GetAllCharacters());
-    }
-
-    private bool TryExecuteSummonSmiteAttack(CharacterController summon, CharacterController target, ActiveSummonInstance summonData)
-    {
-        if (summon == null || target == null || summonData == null)
-            return false;
-        if (summonData.SmiteUsed || (summon.Stats != null && summon.Stats.TemplateSmiteUsed))
-            return false;
-        if (!summon.Actions.HasStandardAction)
-            return false;
-
-        bool smiteEvil = summon.Stats.HasTemplateSmiteEvil && AlignmentHelper.IsEvil(target.Stats.CharacterAlignment);
-        bool smiteGood = summon.Stats.HasTemplateSmiteGood && AlignmentHelper.IsGood(target.Stats.CharacterAlignment);
-        if (!smiteEvil && !smiteGood)
-            return false;
-
-        // A smite is an attack, so a summon holding the target with one body part makes none on it (MM p.310; delegated
-        // RAW reading 2026-10-14, CMB-163); it falls through to the melee sequence, which retargets.
-        if (summon.IsBarredFromOrdinaryAttackOn(target, out _))
-            return false;
-
-        // Smite uses Charisma modifier "if any"; clamp to 0 so low CHA never creates a penalty.
-        int attackBonus = Mathf.Max(0, summon.Stats.CHAMod + 2);
-        // HD, not Level, as TemplateSmiteSystem reads them (CHR-071); the +2 and the attack bonus are AI-056.
-        int damageBonus = Mathf.Max(1, summon.Stats.GetHitDice() + 2);
-
-        // The smite's bonuses apply to this one attack (per-attack terms of the shared attack and damage modifiers,
-        // CMB-003), not to the morale fields.
-        CharacterController flankPartner;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(summon, target, GetAllCharacters(), out flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        CombatResult result = summon.Attack(target, isFlanking, flankBonus, flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
-            situationalAttackBonus: attackBonus, situationalDamageBonus: damageBonus, situationalLabel: "Smite");
-
-        summon.CommitStandardAction();
-        summonData.SmiteUsed = true;
-        summon.Stats.TemplateSmiteUsed = true;
-
-        string targetAxis = smiteEvil ? "Evil" : "Good";
-        CombatUI.ShowCombatLog(CombatLogHelper.Color($"✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}", "FFD280"));
-
-        // A smite is an ordinary melee attack with the bite, so a fiendish wolf's smite hit trips (MM p.283, CMB-125).
-        TryResolveFreeTripOnHit(summon, target, result, CalculateRangeInfo(summon, target));
-
-        if (result.TargetKilled)
-            HandleSummonDeathCleanup(target);
-
-        return true;
     }
 
     /// <summary>
@@ -947,7 +895,11 @@ public partial class GameManager
             // replaces the natural attack of this step and rolls at that attack's BAB (primary full,
             // secondary -5 or -2 with Multiattack, MM p.312; owner decision 2026-10-07); the other
             // natural attacks still follow, as in the PC flow (the shared budget is the natural-attack count).
-            if (tryStepManeuver != null && !(naturalSubstituteUsed && stepKind == AttackStepKind.NaturalSequence))
+            // A declared smite keeps this step an attack: the smite rides on the next melee attack
+            // (SmiteRules, CHR-020), so a maneuver substitute would waste it; a hit can still start a
+            // free trip (ResolveFreeTripAfterHit).
+            if (tryStepManeuver != null && !(naturalSubstituteUsed && stepKind == AttackStepKind.NaturalSequence)
+                && npc.Stats.DeclaredSmite == SmiteSource.None)
             {
                 if (tryStepManeuver(npc, currentTarget))
                 {
@@ -1725,6 +1677,9 @@ public partial class GameManager
         bool npcUsesRangedWeapon = npc.GetEquippedMainWeapon()?.WeaponCat == WeaponCategory.Ranged;
         if (!npcUsesRangedWeapon)
         {
+            // A smite rides on the sequence's first melee attack (SmiteRules, CHR-020); declared only with the target in reach.
+            if (npc.IsTargetInCurrentWeaponRange(target))
+                TryNPCDeclareSmite(npc, target);
             TryNPCDeclareFlurryOfBlows(npc, target);
             yield return StartCoroutine(NPCMeleeAttackSequence(npc, target, tryStepManeuver));
             yield break;

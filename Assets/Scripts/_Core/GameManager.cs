@@ -306,7 +306,7 @@ public partial class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    public enum PendingAttackMode { Single, FullAttack, DualWield, CastSpell, TemplateSmite }
+    public enum PendingAttackMode { Single, FullAttack, DualWield, CastSpell, LayOnHands }
 
     public enum AttackType
     {
@@ -480,7 +480,6 @@ public partial class GameManager : MonoBehaviour
         public int TotalDurationRounds;
         public string SourceSpellId;
         public bool IsAlliedToPCs;
-        public bool SmiteUsed;
         public SummonCommand CurrentCommand;
         public bool IsConcentrationSummon;
         public bool HasEnteredPostConcentrationDuration;
@@ -978,6 +977,8 @@ public partial class GameManager : MonoBehaviour
             stats.ActiveStoneskinEffect = null;
             stats.ActiveDimensionalAnchorEffect = null;
             stats.TemplateSmiteUsed = false;
+            // Paladin smites and Lay on Hands pool, and any declared smite (CHR-020).
+            stats.RefreshPaladinDailyUses();
             stats.RagesUsedToday = 0;
             stats.TurnUndeadAttemptsUsedToday = 0;
             // Reset Bardic Music uses and clear any active performance/linger
@@ -3808,6 +3809,9 @@ public partial class GameManager : MonoBehaviour
         trueStrike?.CheckExpirationAtTurnEnd(endingCharacter, CurrentRound);
 
         endingCharacter?.ProcessPinnedDurationAtTurnEnd();
+        // A smite declared this turn and not used by an attack lapses (SmiteRules; delegated RAW reading 2026-10-14).
+        if (endingCharacter != null && SmiteRules.LapseAtTurnEnd(endingCharacter.Stats))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{endingCharacter.Stats.CharacterName}'s declared smite lapses unused (no use spent)."));
         WarnFlamingSphereNotMovedAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
@@ -10427,7 +10431,6 @@ public partial class GameManager : MonoBehaviour
             TotalDurationRounds = clampedDuration,
             SourceSpellId = string.IsNullOrWhiteSpace(sourceSpellId) ? "scenario_setup" : sourceSpellId,
             IsAlliedToPCs = summon.Team == CharacterTeam.Player,
-            SmiteUsed = false,
             CurrentCommand = SummonCommand.AttackNearest()
         };
 

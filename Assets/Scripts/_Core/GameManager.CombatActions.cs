@@ -121,7 +121,7 @@ public partial class GameManager
         // Also highlight Wall of Ice cells within attack range as valid targets.
         // Walls can be attacked with melee or ranged weapons (Hardness 0).
         bool hasWallTarget = false;
-        if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.TemplateSmite)
+        if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.LayOnHands)
         {
             HashSet<Vector2Int> wallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
             if (wallCells.Count > 0)
@@ -184,7 +184,7 @@ public partial class GameManager
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
                 case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
-                case PendingAttackMode.TemplateSmite: modeStr = "SMITE"; break;
+                case PendingAttackMode.LayOnHands: modeStr = "LAY ON HANDS"; break;
             }
 
             if (_pendingAttackMode == PendingAttackMode.Single && _currentAttackType == AttackType.Thrown)
@@ -1404,24 +1404,9 @@ public partial class GameManager
             return;
         }
 
-        if (_pendingAttackMode == PendingAttackMode.TemplateSmite)
+        if (_pendingAttackMode == PendingAttackMode.LayOnHands)
         {
-            // The target ShowAttackTargets highlighted in this square (own square: the square-mate; an enemy first, CMB-131).
-            CharacterController smiteTarget = GetAttackTargetInCell(pc, cell);
-            if (smiteTarget == null || smiteTarget.Stats == null || smiteTarget.Stats.IsDead || !_highlightedCells.Contains(cell))
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Select a highlighted valid smite target."));
-                return;
-            }
-
-            // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
-            if (pc.IsBarredFromOrdinaryAttackOn(smiteTarget, out string smiteHoldReason))
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", smiteHoldReason));
-                return;
-            }
-
-            ExecuteTemplateSmiteAttack(pc, smiteTarget);
+            HandleLayOnHandsTargetClick(pc, cell);
             return;
         }
 
@@ -2505,6 +2490,9 @@ public partial class GameManager
         }
 
         _isSelectingBreakWallTarget = true;
+        // HandleAttackTargetClick tests the pending mode before the break-wall flag, so a mode left over from an
+        // earlier target selection (Lay on Hands) must not claim the wall click.
+        _pendingAttackMode = PendingAttackMode.Single;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"Select an adjacent Wall of Ice cell to attempt a Strength check, or right-click/ESC to cancel."));
         Debug.Log($"[BreakWall] {pc.Stats.CharacterName} entering break-wall target selection with {_highlightedCells.Count} adjacent wall cells.");

@@ -1,36 +1,28 @@
-using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// The PC Smite button and the AI's smite declaration: thin wrappers over the one smite rule, SmiteRules (CHR-020,
+/// CMB-021, AI-056). Both sides declare the smite (no action) and then attack through their ordinary attack paths, which
+/// apply and use up the declared smite on the next melee attack (CharacterController.PerformSingleAttackWithCritCore).
+/// Covers the paladin's Smite Evil (PHB p.44) and the celestial and fiendish templates' smites (MM p.31, p.107).
+/// </summary>
 public partial class GameManager
 {
-    public bool CanUseTemplateSmite(CharacterController actor, out string reason)
+    /// <summary>
+    /// Whether the Smite button does something now: declare a smite (an unused smite and an attack still to make this
+    /// turn), or withdraw one declared this turn. <paramref name="reason"/> says why not.
+    /// </summary>
+    public bool CanUseSmiteButton(CharacterController actor, out string reason)
     {
         reason = string.Empty;
-
         if (actor == null || actor.Stats == null || actor.Actions == null)
         {
             reason = "No active character";
             return false;
         }
 
-        bool hasSmite = actor.Stats.HasTemplateSmiteEvil || actor.Stats.HasTemplateSmiteGood;
-        if (!hasSmite)
-        {
-            reason = "No smite ability";
-            return false;
-        }
-
-        if (!actor.Actions.HasStandardAction)
-        {
-            reason = "Standard action used";
-            return false;
-        }
-
-        if (actor.Stats.TemplateSmiteUsed)
-        {
-            reason = "Already used";
-            return false;
-        }
+        if (actor.Stats.DeclaredSmite != SmiteSource.None)
+            return true;
 
         if (actor.HasCondition(CombatConditionType.Turned))
         {
@@ -38,19 +30,28 @@ public partial class GameManager
             return false;
         }
 
-        if (!HasAnyValidTemplateSmiteTarget(actor))
+        if (!SmiteRules.CanDeclare(actor, out _, out reason))
+            return false;
+
+        bool attackLeft = actor.Actions.HasStandardAction || actor.Actions.HasFullRoundAction
+            || actor.CanCommitAttack(AttackStepKind.MainHand, out _);
+        if (!attackLeft)
         {
-            reason = "No valid alignment target in range";
+            reason = "No attack left this turn";
             return false;
         }
 
         return true;
     }
 
+    /// <summary>
+    /// The PC Smite button: declares the smite for the PC's next melee attack this turn (the Attack, Full Attack or
+    /// Charge button then makes the attack), or withdraws a declaration no attack has used yet (no use spent).
+    /// </summary>
     public void OnSmiteButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null)
+        if (pc == null || pc.Stats == null)
             return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "smite"))
@@ -62,179 +63,56 @@ public partial class GameManager
             return;
         }
 
-        if (!CanUseTemplateSmite(pc, out string reason))
+        if (SmiteRules.CancelDeclaration(pc.Stats))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{pc.Stats.CharacterName} withdraws the declared smite (no use spent)."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        if (!CanUseSmiteButton(pc, out string reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot smite: {reason}."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
-        EndAttackSequence();
-        _pendingAttackMode = PendingAttackMode.TemplateSmite;
-        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-        ShowTemplateSmiteTargets(pc);
-
-        string axisLabel = GetTemplateSmiteAxisLabel(pc);
-        CombatUI?.SetTurnIndicator($"SMITE {axisLabel.ToUpperInvariant()}: Select a highlighted {axisLabel.ToLowerInvariant()} enemy in range");
+        string line = SmiteRules.TryDeclare(pc, out reason);
+        if (line == null)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot smite: {reason}."));
+        else
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {line}", "FFD280"));
+        CombatUI?.UpdateActionButtons(pc);
     }
 
-    private bool HasAnyValidTemplateSmiteTarget(CharacterController attacker)
+    /// <summary>
+    /// The AI declares its smite before its melee sequence or charge against <paramref name="target"/> when its profile
+    /// chooses it (AIProfile.ShouldDeclareSmite: only against a creature it believes is of the smitten alignment) and
+    /// the shared rules allow it (SmiteRules.CanDeclare, the core the PC Smite button calls). Not against a creature it
+    /// holds with one body part, which it may not attack (MM p.310; CMB-163).
+    /// </summary>
+    private bool TryNPCDeclareSmite(CharacterController npc, CharacterController target)
     {
-        List<CharacterController> all = GetAllCharacters();
-        for (int i = 0; i < all.Count; i++)
-        {
-            CharacterController candidate = all[i];
-            if (IsValidTemplateSmiteTarget(attacker, candidate))
-                return true;
-        }
-
-        return false;
-    }
-
-    private bool IsValidTemplateSmiteTarget(CharacterController attacker, CharacterController target)
-    {
-        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        if (npc == null || npc.Stats == null || target == null || target.Stats == null)
+            return false;
+        if (!SmiteRules.CanDeclare(npc, out _, out _))
+            return false;
+        if (npc.IsBarredFromOrdinaryAttackOn(target, out _))
             return false;
 
-        if (attacker == target || target.Stats.IsDead)
+        bool choose = npc.aiProfile != null
+            ? npc.aiProfile.ShouldDeclareSmite(npc, target)
+            : DND35.AI.AIProfile.DefaultShouldDeclareSmite(npc, target);
+        if (!choose)
             return false;
 
-        if (!TeamUtility.IsEnemy(attacker, target))
+        string line = SmiteRules.TryDeclare(npc, out _);
+        if (line == null)
             return false;
-
-        bool smitesEvil = attacker.Stats.HasTemplateSmiteEvil;
-        bool smitesGood = attacker.Stats.HasTemplateSmiteGood;
-
-        bool validAlignment = (smitesEvil && AlignmentHelper.IsEvil(target.Stats.CharacterAlignment))
-            || (smitesGood && AlignmentHelper.IsGood(target.Stats.CharacterAlignment));
-
-        if (!validAlignment)
-            return false;
-
-        // A smite is an attack, so a holder may not smite the creature it holds with one body part (MM p.310; delegated
-        // RAW reading 2026-10-14, CMB-163): the Smite button opens only when another target is valid.
-        if (attacker.IsBarredFromOrdinaryAttackOn(target, out _))
-            return false;
-
-        return attacker.IsTargetInCurrentWeaponRange(target);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {line}", "FFD280"));
+        return true;
     }
 
-    private string GetTemplateSmiteAxisLabel(CharacterController attacker)
-    {
-        if (attacker == null || attacker.Stats == null)
-            return "Evil";
-
-        if (attacker.Stats.HasTemplateSmiteGood && !attacker.Stats.HasTemplateSmiteEvil)
-            return "Good";
-
-        return "Evil";
-    }
-
-    private void ShowTemplateSmiteTargets(CharacterController attacker)
-    {
-        if (attacker == null || Grid == null)
-            return;
-
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-        HighlightCharacterFootprint(attacker, HighlightType.Selected);
-
-        List<CharacterController> all = GetAllCharacters();
-        for (int i = 0; i < all.Count; i++)
-        {
-            CharacterController target = all[i];
-            if (!IsValidTemplateSmiteTarget(attacker, target))
-                continue;
-
-            List<Vector2Int> occupied = target.GetOccupiedSquares();
-            for (int s = 0; s < occupied.Count; s++)
-            {
-                SquareCell cell = Grid.GetCell(occupied[s]);
-                if (cell == null)
-                    continue;
-
-                cell.SetHighlight(HighlightType.Attack);
-                if (!_highlightedCells.Contains(cell))
-                    _highlightedCells.Add(cell);
-            }
-        }
-
-        if (_highlightedCells.Count == 0)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no valid alignment target in weapon range for smite."));
-            ShowActionChoices();
-        }
-    }
-
-    private void ExecuteTemplateSmiteAttack(CharacterController attacker, CharacterController target)
-    {
-        if (attacker == null || target == null)
-            return;
-
-        if (!CanUseTemplateSmite(attacker, out string reason))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot smite: {reason}."));
-            ShowActionChoices();
-            return;
-        }
-
-        if (!IsValidTemplateSmiteTarget(attacker, target))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid smite target."));
-            ShowTemplateSmiteTargets(attacker);
-            return;
-        }
-
-        if (!attacker.CommitStandardAction())
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
-            ShowActionChoices();
-            return;
-        }
-
-        // Smite attack bonus uses Charisma modifier "if any" (minimum 0, never a penalty).
-        int attackBonus = Mathf.Max(0, attacker.Stats.CHAMod);
-        int hitDice = attacker.Stats.GetHitDice();
-        int damageBonus = hitDice;
-
-        // The smite's bonuses apply to this one attack (per-attack terms of the shared attack and damage modifiers,
-        // CMB-003), not to the morale fields.
-        RangeInfo rangeInfo = _combatFlowService != null ? _combatFlowService.CalculateRangeInfo(attacker, target) : null;
-        List<CharacterController> allCombatants = GetAllCharacters();
-        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string partnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : string.Empty;
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo,
-            situationalAttackBonus: attackBonus, situationalDamageBonus: damageBonus, situationalLabel: "Smite");
-
-        attacker.Stats.TemplateSmiteUsed = true;
-
-        string axisLabel = GetTemplateSmiteAxisLabel(attacker);
-        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {attacker.Stats.CharacterName} uses Smite {axisLabel}! (+{attackBonus} attack, +{damageBonus} damage)", "FFD280"));
-        if (result != null)
-            CombatUI?.ShowCombatLog(result.GetDetailedSummary());
-
-        if (result != null && result.Hit && result.TotalDamage > 0)
-            Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        // A smite is an ordinary melee attack with the bite, so a fiendish wolf's smite hit trips (MM p.283, CMB-125).
-        if (result != null)
-            TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
-
-        if (result != null && result.TargetKilled)
-        {
-            Combat_HandleSummonDeathCleanup(target);
-        }
-
-        // Victory or defeat when the smite dropped the last creature of a side (CORE-011).
-        Combat_CheckCombatVictory("TemplateSmite.Resolve", target);
-
-        Combat_SetLastCombatLog(result != null ? result.GetDetailedSummary() : string.Empty);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        if (CurrentPhase != TurnPhase.CombatOver)
-            Combat_StartAfterAttackDelay(attacker, 1.0f);
-    }
+    /// <summary>The AI's smite declaration for a scenario or caller outside the NPC attack sequence.</summary>
+    public bool TryNPCDeclareSmiteForAI(CharacterController npc, CharacterController target) => TryNPCDeclareSmite(npc, target);
 }

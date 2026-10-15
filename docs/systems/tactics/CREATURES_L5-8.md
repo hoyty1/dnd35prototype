@@ -536,7 +536,7 @@ Every special attack, special quality and spell-like ability above, merged by sh
 | **Water breathing (Sp) at will** `ability_sla_water_breathing` | missing; AI no | Green hag | standard; none |  |  | 0 | P3 |
 | **Grant up to three wishes (Sp, 1/day, nongenies only)** `ability_sla_wish` | missing; AI n/a | Efreeti (genie) | n/a; n/a |  |  | none | P3 |
 | **Slime (Ex)** `ability_slime_transform` | missing; AI no | Aboleth | on hit; Fort DC 19 | always on hit | remove disease | post-combat cost only | P3 |
-| **Smite evil 1/day (celestial)** `ability_smite_evil_template` | partial; AI partial | Celestial lion | free (declared with attack); attack roll | target known evil | n/a | if target evil: P(hit)*5 else 0 | P3 |
+| **Smite evil 1/day (celestial)** `ability_smite_evil_template` | impl (SmiteRules, 2026-10-14); AI yes | Celestial lion | free (declared with attack); attack roll | target known evil | n/a | if target evil: P(hit)*5 else 0 | P3 |
 | **Sneak Attack +1d6** `ability_sneak_attack` | missing; AI no | Derro | part of attack; none | flanking with another derro; target flat-footed in surprise round | avoid flanks; uncanny dodge; light sources | 3.5*P(hit)*P(target denied Dex or flanked) | P2 |
 | **Sneak attack +2d6** `ability_sneak_attack_racial` | missing; AI no | Babau (demon) | passive; none | flanking; target flat-footed | uncanny dodge, crit immunity | Pelig*attacks*Phit*7 | P1 |
 | **Spells as 1st-level sorcerer** `ability_sorcerer_spells` | partial; AI partial | Copper dragon, young | standard; per spell | pre-combat buff (mage armor/shield) | dispel; counterspell | spell EV vs breath EV; prefer breath when recharge ready | P2 |

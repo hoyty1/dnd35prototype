@@ -32,6 +32,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button TurnUndeadButton => _combatUI != null ? _combatUI.TurnUndeadButton : null;
     private Button DomainPowerButton => _combatUI != null ? _combatUI.DomainPowerButton : null;
     private Button SmiteButton => _combatUI != null ? _combatUI.SmiteButton : null;
+    private Button LayOnHandsButton => _combatUI != null ? _combatUI.LayOnHandsButton : null;
     private Button GrappleActionsButton => _combatUI != null ? _combatUI.GrappleActionsButton : null;
     private Button GrappleDamageButton => _combatUI != null ? _combatUI.GrappleDamageButton : null;
     private Button GrappleLightWeaponAttackButton => _combatUI != null ? _combatUI.GrappleLightWeaponAttackButton : null;
@@ -734,7 +735,7 @@ public class ActionButtonPanel : MonoBehaviour
 
         string turnUndeadReason = string.Empty;
         bool canUseTurnUndead = context.Gm != null && context.Gm.CanUseTurnUndead(pc, out turnUndeadReason);
-        bool canEverUseTurnUndead = pc != null && pc.Stats != null && (pc.Stats.IsCleric || (pc.Stats.IsPaladin && pc.Stats.Level >= 4));
+        bool canEverUseTurnUndead = pc != null && pc.Stats != null && pc.Stats.CanEverTurnUndead;
         int remaining = context.Gm != null ? context.Gm.GetRemainingTurnUndeadAttempts(pc) : 0;
         int maxAttempts = pc != null && pc.Stats != null ? pc.Stats.MaxTurnUndeadAttemptsPerDay : 0;
 
@@ -770,14 +771,38 @@ public class ActionButtonPanel : MonoBehaviour
         bool domainPowerInteractable = canUseDomainPower || luckArmed;
         states.Set(DomainPowerButton, new ActionButtonState(hasDomainPowers, domainPowerInteractable, domainPowerLabel));
 
+        // Smite (paladin Smite Evil, PHB p.44; celestial or fiendish template smite, MM p.31, p.107): shown only to a
+        // creature that has one; it declares the smite for the next melee attack, or withdraws a declaration (CHR-020).
+        bool hasSmite = pc != null && pc.Stats != null && SmiteRules.HasAnySmite(pc.Stats);
         string smiteReason = string.Empty;
-        bool canUseSmite = context.Gm != null && context.Gm.CanUseTemplateSmite(pc, out smiteReason);
-        bool hasTemplateSmite = pc != null && pc.Stats != null && (pc.Stats.HasTemplateSmiteEvil || pc.Stats.HasTemplateSmiteGood);
-        string smiteAxis = pc != null && pc.Stats != null && pc.Stats.HasTemplateSmiteGood ? "Good" : "Evil";
-        string smiteLabel = !hasTemplateSmite
-            ? "Smite (N/A)"
-            : (canUseSmite ? $"Smite {smiteAxis} (Standard, 1/day)" : $"Smite {smiteAxis} ({smiteReason})");
-        states.Set(SmiteButton, new ActionButtonState(hasTemplateSmite, canUseSmite, smiteLabel));
+        bool canUseSmite = hasSmite && context.Gm != null && context.Gm.CanUseSmiteButton(pc, out smiteReason);
+        string smiteLabel = string.Empty;
+        if (hasSmite)
+        {
+            string smiteAxis = SmiteRules.AxisLabel(pc.Stats);
+            string uses = $"{SmiteRules.UsesLeft(pc.Stats)}/{SmiteRules.UsesPerDay(pc.Stats)}";
+            if (pc.Stats.DeclaredSmite != SmiteSource.None)
+                smiteLabel = $"Smite {smiteAxis} declared (press to withdraw)";
+            else if (canUseSmite)
+                smiteLabel = $"Smite {smiteAxis} (next melee attack, {uses} left)";
+            else
+                smiteLabel = $"Smite {smiteAxis} ({smiteReason}; {uses})";
+        }
+        states.Set(SmiteButton, new ActionButtonState(hasSmite, canUseSmite, smiteLabel));
+
+        // Lay on Hands (PHB p.44): shown from paladin 2nd level; a standard action on a target within touch (CHR-020).
+        bool hasLayOnHands = pc != null && pc.Stats != null && LayOnHandsRules.HasAbility(pc.Stats);
+        string layOnHandsReason = string.Empty;
+        bool canLayOnHands = hasLayOnHands && context.Gm != null && context.Gm.CanUseLayOnHandsButton(pc, out layOnHandsReason);
+        string layOnHandsLabel = string.Empty;
+        if (hasLayOnHands)
+        {
+            string pool = $"{LayOnHandsRules.RemainingPool(pc.Stats)}/{LayOnHandsRules.MaxPool(pc.Stats)}";
+            layOnHandsLabel = canLayOnHands
+                ? $"Lay on Hands (Standard, {pool} hp)"
+                : $"Lay on Hands ({layOnHandsReason}; {pool})";
+        }
+        states.Set(LayOnHandsButton, new ActionButtonState(hasLayOnHands, canLayOnHands, layOnHandsLabel));
 
         bool standaloneDisarmWasVisible = _combatUI.HideStandaloneDisarmButtonsInMainActionsForActionPanel();
         Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} coupDeGraceAvailable={context.HasCoupDeGraceAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
@@ -1314,6 +1339,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
+        if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
         if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
@@ -1359,6 +1385,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (TurnUndeadButton != null) TurnUndeadButton.gameObject.SetActive(false);
         if (DomainPowerButton != null) DomainPowerButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
+        if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (GrappleDamageButton != null) GrappleDamageButton.gameObject.SetActive(false);
         if (GrappleLightWeaponAttackButton != null) GrappleLightWeaponAttackButton.gameObject.SetActive(false);

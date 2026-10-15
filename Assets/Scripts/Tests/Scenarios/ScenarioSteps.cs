@@ -13,7 +13,7 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -91,6 +91,19 @@ namespace Tests.Scenarios
         /// flurry step only; continue with AttackAgain or a Maneuver step.
         /// </summary>
         public static Step Flurry(string target) => new Step(StepKind.Flurry) { Target = target };
+        /// <summary>
+        /// A smite (a paladin's Smite Evil or a template smite; SmiteRules, CHR-020), then an attack on
+        /// <paramref name="target"/>. Scripted: SmiteRules.TryDeclare (whatever the target's alignment, so a wasted smite
+        /// can be scripted), then NPCPerformAttackForAI. Ui: the Smite button (it declares), then the Attack button and the
+        /// target: the first attack of the sequence.
+        /// </summary>
+        public static Step Smite(string target) => new Step(StepKind.Smite) { Target = target };
+        /// <summary>
+        /// Lay on Hands on <paramref name="target"/> (the actor itself, a creature within touch, or an undead creature;
+        /// LayOnHandsRules, CHR-020). Scripted: GameManager.TryLayOnHandsForAI. Ui: the Lay on Hands button, then the
+        /// target's square.
+        /// </summary>
+        public static Step LayOnHands(string target) => new Step(StepKind.LayOnHands) { Target = target };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -185,6 +198,8 @@ namespace Tests.Scenarios
                 case StepKind.Attack:
                 case StepKind.AttackAgain:
                 case StepKind.Flurry:
+                case StepKind.Smite:
+                case StepKind.LayOnHands:
                     return Kind + "(" + Target + ")";
                 case StepKind.FullAttack:
                     return "FullAttack(" + Target + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
@@ -218,6 +233,7 @@ namespace Tests.Scenarios
         internal string Problem(Control control, ScenarioDef def)
         {
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
+                || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
@@ -403,7 +419,7 @@ namespace Tests.Scenarios
                 // AI executors below bypass: refuse movement and ordinary attacks instead of breaking those rules.
                 if (a.IsGrappling() && (s.Kind == StepKind.Move || s.Kind == StepKind.Withdraw || s.Kind == StepKind.FiveFootStep
                     || s.Kind == StepKind.Attack || s.Kind == StepKind.AttackAgain || s.Kind == StepKind.FullAttack || s.Kind == StepKind.Flurry
-                    || s.Kind == StepKind.Charge))
+                    || s.Kind == StepKind.Smite || s.Kind == StepKind.Charge))
                 {
                     EmitStep(job, a, path, i, s, "refused", "grappling (no AI-path grapple executor; let the AI run this turn)");
                     continue;
@@ -457,6 +473,19 @@ namespace Tests.Scenarios
                         if (target == null || target.Stats == null || target.Stats.IsDead) { ok = false; note = "no live target"; break; }
                         if (!a.TryBeginFlurryOfBlows(out string flurryRefusal)) { ok = false; note = flurryRefusal; break; }
                         yield return gm.NPCPerformAttackForAI(a, target);
+                        break;
+
+                    case StepKind.Smite:
+                        if (target == null || target.Stats == null || target.Stats.IsDead) { ok = false; note = "no live target"; break; }
+                        if (SmiteRules.TryDeclare(a, out string smiteRefusal) == null) { ok = false; note = smiteRefusal; break; }
+                        yield return gm.NPCPerformAttackForAI(a, target);
+                        break;
+
+                    case StepKind.LayOnHands:
+                        if (target == null) { ok = false; note = "no target"; break; }
+                        if (!LayOnHandsRules.CanUse(a, out string lohRefusal)) { ok = false; note = lohRefusal; break; }
+                        ok = gm.TryLayOnHandsForAI(a, target);
+                        yield return null;
                         break;
 
                     case StepKind.Maneuver:
@@ -819,6 +848,18 @@ namespace Tests.Scenarios
                 case StepKind.Flurry:
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnFlurryOfBlowsButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.Smite:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnSmiteButtonPressed();
+                    if (_actor.Stats.DeclaredSmite == SmiteSource.None) { _awaitNote = "the Smite button declared nothing"; break; }
+                    gm.OnAttackButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.LayOnHands:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnLayOnHandsButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
                     break;
                 case StepKind.NaturalAttack:

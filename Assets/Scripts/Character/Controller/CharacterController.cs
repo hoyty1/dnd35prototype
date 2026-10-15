@@ -5721,9 +5721,9 @@ public class CharacterController : MonoBehaviour
     /// Weapon Specialization; pass default when the path has no feat terms), CharacterStats.EffectWeaponDamageBonus
     /// (Inspire Courage, Prayer, Divine Favor, Magic Fang and other effects, stacked by type), condition modifiers
     /// (Sickened -2, DMG p.301), Solid Fog's melee penalty, Bracers of Archery with a bow, and an optional
-    /// per-attack situational term (a template smite, a charge). The Destruction smite (melee only) and a bane
-    /// weapon's +2 against its foe (DMG p.224) are added by PerformSingleAttackWithCrit, which also uses up the
-    /// smite. Weapon damage dice already follow the wielder's size (GetScaledWeaponDamageDice, CMB-119),
+    /// per-attack situational term (a charge). The Destruction smite, a declared paladin or template smite (melee only;
+    /// SmiteRules) and a bane weapon's +2 against its foe (DMG p.224) are added by PerformSingleAttackWithCrit, which
+    /// also uses up the smite. Weapon damage dice already follow the wielder's size (GetScaledWeaponDamageDice, CMB-119),
     /// so size adds no flat term.
     /// </summary>
     /// <param name="weapon">The weapon (null: an unarmed strike or a natural attack).</param>
@@ -5878,7 +5878,8 @@ public class CharacterController : MonoBehaviour
     /// is ignored. Used by the Improved Trip attack when no held weapon can attack (CMB-136).
     /// <paramref name="isOffHandAttack"/> adds half the Strength bonus to damage (PHB p.134; CMB-008).
     /// <paramref name="situationalAttackBonus"/> and <paramref name="situationalDamageBonus"/> apply to this attack only
-    /// and are listed under <paramref name="situationalLabel"/> (a template smite; CMB-003).
+    /// and are listed under <paramref name="situationalLabel"/> (CMB-003). A declared smite is not passed here: the
+    /// attack core applies it (SmiteRules, CHR-020).
     /// </summary>
     public CombatResult Attack(
         CharacterController target,
@@ -7650,6 +7651,17 @@ public class CharacterController : MonoBehaviour
         int destructionSmiteAttackBonus = destructionSmiteEligible ? GameManager.GetDestructionSmiteAttackBonus(this) : 0;
         damageBonus.DestructionSmiteBonus = destructionSmiteEligible ? GameManager.GetDestructionSmiteDamageBonus(this) : 0;
 
+        // Paladin Smite Evil and the template smites (PHB p.44, MM p.31, p.107; SmiteRules, CHR-020): a declared smite is
+        // used up by this melee attack, hit or miss (delegated RAW reading 2026-10-14), and adds its bonuses only against
+        // a creature of the smitten alignment. A ranged attack leaves the declaration in place.
+        SmiteApplication smite = SmiteRules.ConsumeForMeleeAttack(this, target, damageBonus.IsRangedAttack);
+        int smiteAttackBonus = smite.Used ? smite.AttackBonus : 0;
+        if (smite.Used)
+        {
+            damageBonus.SmiteBonus = smite.DamageBonus;
+            damageBonus.SmiteLabel = smite.Label;
+        }
+
         // Enchantment attack bonus (e.g., Bane +2 vs matching creature type)
         int enchantmentAttackBonus = 0;
         if (weapon != null && weapon.IsEnchanted && target != null && target.Stats != null)
@@ -7696,7 +7708,7 @@ public class CharacterController : MonoBehaviour
             }
         }
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + enchantmentAttackBonus + specificItemAttackBonus;
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + smiteAttackBonus + enchantmentAttackBonus + specificItemAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -7903,6 +7915,17 @@ public class CharacterController : MonoBehaviour
         {
             result.AddAttackBuffDebuffModifier("Destruction Smite", destructionSmiteAttackBonus);
             GameManager.ConsumeDestructionSmite(this);
+        }
+
+        if (smite.Used)
+        {
+            if (smiteAttackBonus != 0)
+                result.AddAttackBuffDebuffModifier(smite.Label, smiteAttackBonus);
+            string smiteTargetName = target != null && target.Stats != null ? target.Stats.CharacterName : "the target";
+            string smiteNote = smite.TargetIsSmiteFoe
+                ? $"{smite.Label}: {CharacterStats.FormatMod(smite.AttackBonus)} attack, {CharacterStats.FormatMod(smite.DamageBonus)} damage."
+                : $"{smite.Label} used up with no effect: {smiteTargetName} is not {(smite.Source == SmiteSource.TemplateSmiteGood ? "good" : "evil")} (PHB p.44).";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? smiteNote : $"{result.SpecialAttackNote} {smiteNote}";
         }
 
         AttachAttackBuffDebuffBreakdown(result);

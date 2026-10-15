@@ -3,10 +3,10 @@ using UnityEngine;
 
 /// <summary>
 /// Tracks Paladin Lay on Hands healing pool (D&D 3.5e PHB p.44).
-/// 
-/// Total healing per day = Paladin level × Charisma modifier.
-/// Can heal living creatures or damage undead (Will save half).
-/// Requires at least 1 CHA modifier to use.
+///
+/// From 2nd level; healing per day = paladin level x Charisma bonus (Charisma 12 or higher).
+/// The pool heals creatures or, after a successful melee touch attack, damages undead (no saving throw).
+/// The rule itself (targets, touch attack, PCs and NPCs alike) is LayOnHandsRules; this class only counts the pool.
 /// </summary>
 [Serializable]
 public class LayOnHandsData
@@ -24,14 +24,13 @@ public class LayOnHandsData
     /// <summary>
     /// Maximum healing pool per day (PHB p.44).
     /// Equal to Paladin level × Charisma modifier.
-    /// Returns 0 if CHA modifier is 0 or negative.
+    /// Returns 0 below 2nd level or without a Charisma bonus (PaladinClass.LayOnHandsPool).
     /// </summary>
     public int MaxPool
     {
         get
         {
-            if (_paladinLevel <= 0 || _charismaModifier <= 0) return 0;
-            return _paladinLevel * _charismaModifier;
+            return PaladinClass.LayOnHandsPool(_paladinLevel, _charismaModifier);
         }
     }
 
@@ -67,9 +66,9 @@ public class LayOnHandsData
     }
 
     /// <summary>
-    /// Deal damage to an undead creature using lay on hands (melee touch attack).
-    /// PHB p.44: Deals damage equal to the amount that would be healed.
-    /// Returns damage dealt (before Will save).
+    /// Deal damage to an undead creature using lay on hands (after a successful melee touch attack).
+    /// PHB p.44: the paladin spends the points she chooses as damage; there is no saving throw.
+    /// Returns the points spent.
     /// </summary>
     public int HarmUndead(int amount)
     {

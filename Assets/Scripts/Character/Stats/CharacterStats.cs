@@ -830,11 +830,58 @@ public class CharacterStats
     // Paladin Class Features (PHB p.42-45)
     // ─────────────────────────────────────────────
 
-    /// <summary>Paladin's smite evil tracking data.</summary>
+    /// <summary>Paladin class level (0 for a creature without paladin levels).</summary>
+    public int PaladinLevel => IsPaladin ? GetClassLevel("Paladin") : 0;
+
+    /// <summary>
+    /// Paladin Smite Evil uses today (PHB p.44). Read it through <see cref="GetPaladinSmiteEvil"/>, which creates it and
+    /// keeps its paladin level and Charisma modifier current (a level-up, an ability change), for PCs and NPCs alike.
+    /// </summary>
     public SmiteEvilData PaladinSmiteEvil;
 
-    /// <summary>Paladin's lay on hands tracking data.</summary>
+    /// <summary>Paladin Lay on Hands pool spent today (PHB p.44); read it through <see cref="GetPaladinLayOnHands"/>.</summary>
     public LayOnHandsData PaladinLayOnHands;
+
+    /// <summary>
+    /// The smite this creature declared for its next melee attack this turn (SmiteRules; the paladin's Smite Evil and the
+    /// template smites). Cleared when an attack uses it, at the end of the creature's turn and on a full rest.
+    /// </summary>
+    public SmiteSource DeclaredSmite;
+
+    /// <summary>The paladin's smite tracker, synced to the current paladin level and Charisma modifier; null without paladin levels.</summary>
+    public SmiteEvilData GetPaladinSmiteEvil()
+    {
+        int level = PaladinLevel;
+        if (level <= 0)
+            return null;
+        if (PaladinSmiteEvil == null)
+            PaladinSmiteEvil = new SmiteEvilData();
+        PaladinSmiteEvil.Initialize(level, CHAMod);
+        return PaladinSmiteEvil;
+    }
+
+    /// <summary>
+    /// The paladin's Lay on Hands tracker, synced to the current paladin level and Charisma modifier; null below paladin
+    /// level 2 (PHB p.44: "Beginning at 2nd level"). Its pool is 0 with a Charisma score below 12 (no Charisma bonus).
+    /// </summary>
+    public LayOnHandsData GetPaladinLayOnHands()
+    {
+        int level = PaladinLevel;
+        if (level < 2)
+            return null;
+        if (PaladinLayOnHands == null)
+            PaladinLayOnHands = new LayOnHandsData();
+        PaladinLayOnHands.Initialize(level, CHAMod);
+        return PaladinLayOnHands;
+    }
+
+    /// <summary>Restores the paladin's daily smites and Lay on Hands pool (the full rest stand-in, CORE-015).</summary>
+    public void RefreshPaladinDailyUses()
+    {
+        PaladinSmiteEvil?.RefreshUses();
+        PaladinLayOnHands?.RefreshPool();
+        DeclaredSmite = SmiteSource.None;
+    }
 
     /// <summary>
     /// Divine Grace (L2, PHB p.44): CHA modifier (if positive) as a bonus on all saving throws; part of GetSaveTotal.
@@ -869,13 +916,16 @@ public class CharacterStats
             || normalized == CombatConditionType.Panicked;
     }
 
-    /// <summary>Divine Health (L3): Immune to all diseases.</summary>
+    /// <summary>
+    /// Divine Health (Ex, L3, PHB p.44): immune to all diseases, supernatural and magical ones included (mummy rot,
+    /// lycanthropy); read by <see cref="IsImmuneToDisease"/>, which every disease exposure checks.
+    /// </summary>
     public bool HasDivineHealth => IsPaladin && GetClassLevel("Paladin") >= 3;
 
     /// <summary>Smites per day at current paladin level (PHB p.44).</summary>
     public int SmitesPerDay => IsPaladin ? PaladinClass.SmitesPerDay(GetClassLevel("Paladin")) : 0;
 
-    /// <summary>Lay on Hands pool = paladin level × CHA modifier.</summary>
+    /// <summary>Lay on Hands pool per day = paladin level × Charisma bonus, from 2nd level (PHB p.44).</summary>
     public int LayOnHandsTotalPool => IsPaladin ? PaladinClass.LayOnHandsPool(GetClassLevel("Paladin"), CHAMod) : 0;
 
     /// <summary>Remove Disease uses per week (PHB p.44).</summary>
@@ -1355,23 +1405,39 @@ public class CharacterStats
     public int TemporarySTRBonus;
 
     /// <summary>
-    /// D&D 3.5e Turn Undead attempts per day:
-    /// - Cleric: 3 + CHA modifier (minimum 1)
-    /// - Paladin: 3 + CHA modifier (minimum 1), gained at class level 4+
+    /// Effective turning level (PHB p.159-160): cleric level, plus paladin level - 3 from paladin 4th level (PHB p.44:
+    /// "turns undead as a cleric of three levels lower"; PHB p.59: a cleric/paladin adds the two, so a paladin 5/cleric 4
+    /// turns as a 6th-level cleric). 0 when the creature cannot turn. Improved Turning is added by the turning code.
+    /// </summary>
+    public int TurnUndeadEffectiveLevel
+    {
+        get
+        {
+            int level = IsCleric ? Mathf.Max(0, GetClassLevel("Cleric")) : 0;
+            int paladin = PaladinLevel;
+            if (paladin >= 4)
+                level += paladin - 3;
+            return level;
+        }
+    }
+
+    /// <summary>True when the creature has the turn undead ability (a cleric, or a paladin of 4th level or higher).</summary>
+    public bool CanEverTurnUndead => TurnUndeadEffectiveLevel > 0;
+
+    /// <summary>
+    /// D&D 3.5e Turn Undead attempts per day: 3 + Charisma modifier (PHB p.159, p.44), plus Extra Turning. No minimum:
+    /// both texts give 3 + Charisma modifier with no floor, so a Charisma penalty of -3 or worse leaves none. A
+    /// cleric/paladin has one pool of 3 + Charisma modifier, not one per class (delegated RAW reading 2026-10-14: PHB p.59
+    /// calls it "the same ability" and merges only the turning level; RULES_COVERAGE 4.1).
     /// </summary>
     public int MaxTurnUndeadAttemptsPerDay
     {
         get
         {
-            int baseUses = 0;
-
-            if (IsCleric)
-                baseUses = Mathf.Max(1, 3 + CHAMod);
-            else if (IsPaladin && GetClassLevel("Paladin") >= 4)
-                baseUses = Mathf.Max(1, 3 + CHAMod);
-
-            if (baseUses <= 0)
+            if (!CanEverTurnUndead)
                 return 0;
+
+            int baseUses = Mathf.Max(0, 3 + CHAMod);
 
             // Extra Turning feat (PHB p.94): +4 turn undead uses per day
             if (FeatManager.HasExtraTurning(this))
@@ -4828,6 +4894,9 @@ public class CharacterStats
         if (Immunities != null && Immunities.immuneToDisease)
             return true;
         if (WondrousDiseaseImmunity)
+            return true;
+        // Divine Health (Ex): a paladin of 3rd level or higher (PHB p.44; CHR-020).
+        if (HasDivineHealth)
             return true;
 
         string creatureType = string.IsNullOrWhiteSpace(CreatureType)

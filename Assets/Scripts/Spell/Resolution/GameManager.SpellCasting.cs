@@ -581,7 +581,6 @@ public partial class GameManager
             TotalDurationRounds = durationRounds,
             SourceSpellId = sourceSpellId,
             IsAlliedToPCs = summon.Team == CharacterTeam.Player,
-            SmiteUsed = false,
             CurrentCommand = SummonCommand.AttackNearest(),
             IsConcentrationSummon = concentrationSummon,
             HasEnteredPostConcentrationDuration = startsInPostConcentrationMode

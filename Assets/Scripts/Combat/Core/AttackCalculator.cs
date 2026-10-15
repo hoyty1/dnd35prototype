@@ -187,6 +187,13 @@ public struct WeaponDamageBreakdown
     public int BracersOfArcheryBonus;
     /// <summary>Destruction domain smite (cleric level); set by PerformSingleAttackWithCrit for the smiting attack only.</summary>
     public int DestructionSmiteBonus;
+    /// <summary>
+    /// A paladin's Smite Evil (paladin level) or a template smite (Hit Dice, up to +20) against a smite foe; set by
+    /// PerformSingleAttackWithCrit for the smiting attack only (SmiteRules; PHB p.44, MM p.31, p.107; CHR-020).
+    /// </summary>
+    public int SmiteBonus;
+    /// <summary>"Smite Evil" or "Smite Good".</summary>
+    public string SmiteLabel;
     /// <summary>A bonus for this one attack only, such as a template smite's damage; listed under <see cref="SituationalLabel"/>.</summary>
     public int SituationalBonus;
     public string SituationalLabel;
@@ -199,7 +206,7 @@ public struct WeaponDamageBreakdown
     /// <summary>The whole static modifier added to the damage roll.</summary>
     public int Total =>
         StrengthBonus + WeaponBonus + EnhancementBonus + BaneBonus + MaterialModifier + FeatBonus + MoraleBonus
-        + ConditionModifier + SolidFogPenalty + BracersOfArcheryBonus + DestructionSmiteBonus + SituationalBonus;
+        + ConditionModifier + SolidFogPenalty + BracersOfArcheryBonus + DestructionSmiteBonus + SmiteBonus + SituationalBonus;
 
     /// <summary>
     /// The non-zero terms in a fixed order, labelled for the combat log; their values add up to <see cref="Total"/>
@@ -228,6 +235,7 @@ public struct WeaponDamageBreakdown
         AddTerm(terms, "Solid Fog", SolidFogPenalty);
         AddTerm(terms, "Bracers of Archery", BracersOfArcheryBonus);
         AddTerm(terms, "Destruction smite", DestructionSmiteBonus);
+        AddTerm(terms, string.IsNullOrWhiteSpace(SmiteLabel) ? "Smite" : SmiteLabel, SmiteBonus);
         AddTerm(terms, string.IsNullOrWhiteSpace(SituationalLabel) ? "situational" : SituationalLabel, SituationalBonus);
         return terms;
     }

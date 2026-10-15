@@ -282,6 +282,15 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // Lay on Hands (Su, PHB p.44): healing a hurt creature within touch, or destroying an undead foe the pool can
+        // finish, with the standard action, through the rules the PC button calls (LayOnHandsRules, CHR-020). The AI
+        // ends its turn after it (a simplification: it does not move afterwards).
+        if (!isSummon && _gameManager.TryNPCLayOnHandsTurnForAI(npc))
+        {
+            yield return new WaitForSeconds(0.5f);
+            yield break;
+        }
+
         if (isSummon)
         {
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteSummonedCreatureTurnForAI(npc));

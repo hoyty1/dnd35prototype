@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 55 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
+1. **GameManager**: singleton `partial class`, 56 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId string compare** in chained `TryResolve<Name>SpellEffect` handlers; unclaimed spells fall to `ApplySpellBuff`.

@@ -3976,27 +3976,28 @@ public static class GrappleDamageRulesTests
             CharacterController summonPick = AIService.SelectSummonTarget(holder, null, SummonCommandType.AttackNearest,
                 new System.Collections.Generic.List<CharacterController> { holder, held, other });
             Assert(summonPick == other, $"CMB-163: a holding summon targets another foe, not the held creature (picked {summonPick?.Stats?.CharacterName})");
+            // The smite is declared by the shared NPC attack sequence (SmiteRules, CHR-020): never against the creature the
+            // summon holds, though the other preconditions (smite evil, an evil target) hold, so only the bar refuses it.
             GameManager smiteGm = GameManager.Instance;
-            MethodInfo summonSmite = typeof(GameManager).GetMethod("TryExecuteSummonSmiteAttack", BindingFlags.Instance | BindingFlags.NonPublic);
-            System.Type summonDataType = typeof(GameManager).GetNestedType("ActiveSummonInstance", BindingFlags.NonPublic);
-            if (smiteGm != null && summonSmite != null && summonDataType != null)
+            if (smiteGm != null)
             {
                 Alignment heldAlignmentBefore = held.Stats.CharacterAlignment;
                 bool smiteEvilBefore = holder.Stats.HasTemplateSmiteEvil;
                 held.Stats.CharacterAlignment = Alignment.ChaoticEvil;
                 holder.Stats.HasTemplateSmiteEvil = true;
                 holder.Stats.TemplateSmiteUsed = false;
-                object summonData = System.Activator.CreateInstance(summonDataType, true);
-                bool smiteReady = holder.Actions != null && holder.Actions.HasStandardAction;
-                bool smote = (bool)summonSmite.Invoke(smiteGm, new object[] { holder, held, summonData });
+                holder.Stats.DeclaredSmite = SmiteSource.None;
+                bool smiteReady = SmiteRules.CanDeclare(holder, out _, out _);
+                bool smote = smiteGm.TryNPCDeclareSmiteForAI(holder, held);
+                SmiteSource declared = holder.Stats.DeclaredSmite;
                 held.Stats.CharacterAlignment = heldAlignmentBefore;
                 holder.Stats.HasTemplateSmiteEvil = smiteEvilBefore;
-                Assert(smiteReady && !smote && !holder.Stats.TemplateSmiteUsed,
-                    $"CMB-163: a holding summon makes no smite on the creature it holds (ready {smiteReady}, smote {smote})");
+                holder.Stats.DeclaredSmite = SmiteSource.None;
+                Assert(smiteReady && !smote && declared == SmiteSource.None && !holder.Stats.TemplateSmiteUsed,
+                    $"CMB-163: a holding summon declares no smite on the creature it holds (ready {smiteReady}, smote {smote})");
             }
             else
             {
-                Assert(summonSmite != null && summonDataType != null, "CMB-163: GameManager.TryExecuteSummonSmiteAttack and ActiveSummonInstance exist (renamed?)");
                 Debug.Log("  [SKIP] GameManager.Instance is null; the summon smite bar check needs Play mode");
             }
 
@@ -5687,18 +5688,17 @@ public static class GrappleDamageRulesTests
     }
 
     /// <summary>
-    /// A summon's Smite is an ordinary melee attack with its bite (a fiendish wolf, Summon Monster II), so a smite hit
-    /// starts the Trip (Ex) free trip through the shared path (GameManager.TryExecuteSummonSmiteAttack, MM p.283, CMB-125).
+    /// A template smite is an ordinary melee attack with the bite (a fiendish wolf, Summon Monster II), so a smite hit
+    /// starts the Trip (Ex) free trip through the shared path (MM p.283, CMB-125). The smite is declared through the
+    /// shared rule (SmiteRules, CHR-020) and used up by the bite: +HD damage, no attack bonus (MM p.107).
     /// Attack d20s forced to 19 (a hit, no natural-weapon threat), the trip check forced to land.
     /// </summary>
     private static void TestSummonSmiteBiteStartsFreeTrip()
     {
         GameManager gm = GameManager.Instance;
-        MethodInfo smite = typeof(GameManager).GetMethod("TryExecuteSummonSmiteAttack", BindingFlags.Instance | BindingFlags.NonPublic);
-        System.Type summonType = typeof(GameManager).GetNestedType("ActiveSummonInstance", BindingFlags.NonPublic);
-        if (gm == null || gm.CombatUI == null || smite == null || summonType == null)
+        if (gm == null || gm.CombatUI == null)
         {
-            Debug.Log("  [SKIP] GameManager, CombatUI, TryExecuteSummonSmiteAttack or ActiveSummonInstance is missing; the smite free-trip check needs Play mode");
+            Debug.Log("  [SKIP] GameManager or CombatUI is missing; the smite free-trip check needs Play mode");
             return;
         }
 
@@ -5719,10 +5719,38 @@ public static class GrappleDamageRulesTests
             target.Stats.AdjustMaxHP(200);
             target.Stats.CurrentHP += 200;
 
-            object summonData = System.Activator.CreateInstance(summonType, true);
-            bool used = (bool)smite.Invoke(gm, new object[] { wolf, target, summonData });
-            Assert(used && target.HasCondition(CombatConditionType.Prone),
-                $"Summon smite: the fiendish wolf's Smite Good bite hit trips (MM p.283, CMB-125) (used {used}, prone {target.HasCondition(CombatConditionType.Prone)})");
+            string declared = SmiteRules.TryDeclare(wolf, out string refusal);
+            CombatResult bite = wolf.Attack(target, false, 0, null, null);
+            SpecialAttackResult trip = gm.ResolveFreeTripAfterHit(wolf, target, bite, null);
+            int expectedSmite = Mathf.Min(wolf.Stats.GetHitDice(), 20);
+            Assert(declared != null && bite != null && bite.Hit && bite.WeaponDamageBonus.SmiteBonus == expectedSmite
+                && wolf.Stats.TemplateSmiteUsed && wolf.Stats.DeclaredSmite == SmiteSource.None
+                && trip != null && target.HasCondition(CombatConditionType.Prone),
+                $"Template smite: the fiendish wolf's Smite Good bite (+{expectedSmite} damage) is an ordinary attack whose hit trips (MM p.107, p.283, CMB-125) (declared '{declared ?? refusal}', hit {bite?.Hit}, smite {bite?.WeaponDamageBonus.SmiteBonus}, prone {target.HasCondition(CombatConditionType.Prone)})");
+
+            // The AI path: a summon's step evaluation offers a trip on every step, but a declared smite keeps the
+            // step an attack, so a one-bite wolf smites with its bite instead of trading it for a trip (CHR-020).
+            Cleanup(wolf, target);
+            wolf = CreateBiteClawsCreature("SmiteStepWolf", 4, false);
+            wolf.Stats.NaturalAttacks.RemoveAll(n => n.Name != "Bite");
+            wolf.Stats.HasTripAttack = true;
+            wolf.Stats.TripTriggerAttackName = "Bite";
+            wolf.Stats.HasTemplateSmiteGood = true;
+            target = CreateWeakDefender("SmiteStepTarget");
+            wolf.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(1, 0);
+            target.Stats.CharacterAlignment = Alignment.LawfulGood;
+            target.Stats.AdjustMaxHP(200);
+            target.Stats.CurrentHP += 200;
+            bool smiteDeclared = gm.TryNPCDeclareSmiteForAI(wolf, target);
+            FullAttackResult sequence = RunNpcMeleeSequence(gm, wolf, target,
+                (actor, stepTarget) => gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip),
+                out int stepManeuvers);
+            CombatResult smiteBite = sequence != null && sequence.Attacks.Count > 0 ? sequence.Attacks[0] : null;
+            Assert(smiteDeclared && stepManeuvers == 0 && smiteBite != null && smiteBite.WeaponName == "Bite"
+                && smiteBite.WeaponDamageBonus.SmiteBonus == expectedSmite && wolf.Stats.TemplateSmiteUsed
+                && wolf.Stats.DeclaredSmite == SmiteSource.None,
+                $"Template smite on the AI step path: the declared smite keeps the bite an attack instead of a trip substitute (CHR-020) (declared {smiteDeclared}, maneuvers {stepManeuvers}, attack {smiteBite?.WeaponName}, smite {smiteBite?.WeaponDamageBonus.SmiteBonus})");
         }
         catch (System.Exception ex)
         {

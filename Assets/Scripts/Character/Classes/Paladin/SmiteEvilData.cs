@@ -3,11 +3,11 @@ using UnityEngine;
 
 /// <summary>
 /// Tracks Paladin Smite Evil uses and calculates bonuses (D&D 3.5e PHB p.44).
-/// 
-/// Smite Evil: Once per day at 1st level, +1 per 5 levels thereafter.
-/// Attack roll: +CHA modifier
-/// Damage roll: +Paladin level (double vs Evil outsiders, evil dragons, undead)
-/// If target is not Evil, smite has no effect but is still expended.
+///
+/// Smite Evil: once per day at 1st level, one more at 5th and every five levels after.
+/// Attack roll: +Charisma bonus (if any). Damage roll: +1 per paladin level, against every evil creature alike.
+/// If the target is not evil the smite has no effect but is still used up.
+/// The rule itself (declaration, the smiting attack, PCs and NPCs alike) is SmiteRules; this class only counts uses.
 /// </summary>
 [Serializable]
 public class SmiteEvilData
@@ -68,7 +68,7 @@ public class SmiteEvilData
     /// Damage bonus when smiting an evil target.
     /// PHB p.44: "+1 point of damage per paladin level"
     /// </summary>
-    /// <param name="isSpecialEvil">True for Evil outsiders, evil dragons, undead — double damage.</param>
+    /// <param name="isSpecialEvil">Ignored: the 3.5e smite adds paladin level against every evil creature.</param>
     public int GetSmiteDamageBonus(bool isSpecialEvil = false)
     {
         int baseDamage = _paladinLevel;

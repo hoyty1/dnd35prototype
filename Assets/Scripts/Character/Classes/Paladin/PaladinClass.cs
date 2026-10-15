@@ -64,15 +64,20 @@ public class PaladinClass : ICharacterClass
     // UI — gold/white holy theme
     public Color TitleColor => new Color(0.95f, 0.85f, 0.35f);
     public Color ButtonColor => new Color(0.6f, 0.5f, 0.15f);
-    public string InfoText => "Hit Die: d10 | BAB: +3 (full)\nGood Saves: Fortitude\n• Smite Evil, Lay on Hands\n• Divine Grace, Aura of Courage\n• Turn Undead (L4), Spells (L4+)\n• Alignment: Lawful Good only";
+    // Class-selection text lists only what works (CHR-053): detect evil, remove disease and the special mount are not
+    // implemented (CHR-083), nor are paladin spells (SPL-039).
+    public string InfoText => "Hit Die: d10 | BAB: +3 (full)\nGood Saves: Fortitude\n• Smite Evil, Lay on Hands (L2)\n• Divine Grace (L2), Aura of Courage, Divine Health (L3)\n• Turn Undead (L4)\n• Not yet: detect evil, remove disease, mount, spells\n• Alignment: Lawful Good only";
 
     // Class Features
     // D&D 3.5e PHB p.44: Paladins do NOT receive any automatic feats.
     // Their abilities (Smite Evil, Divine Grace, etc.) are class features.
     public void InitFeats(CharacterStats stats)
     {
-        // No automatic feats for Paladin — all abilities are class features, not feats.
-        Debug.Log($"[Paladin] {stats.CharacterName}: Paladin has no automatic feats (Smite Evil, Lay on Hands, etc. are class features)");
+        // No automatic feats: Smite Evil, Lay on Hands and the rest are class features. Their trackers are created here
+        // and kept in step with the paladin level and Charisma by CharacterStats.GetPaladinSmiteEvil and
+        // GetPaladinLayOnHands, which every user calls, so a paladin NPC or a level-up gets them too (CHR-020).
+        stats.GetPaladinSmiteEvil();
+        stats.GetPaladinLayOnHands();
     }
 
     /// <summary>
@@ -154,11 +159,11 @@ public class PaladinClass : ICharacterClass
 
     /// <summary>
     /// Lay on Hands pool = paladin level × CHA modifier (PHB p.44).
-    /// Returns 0 if CHA modifier is 0 or negative.
+    /// From 2nd level only, and only with a Charisma score of 12 or higher (a Charisma bonus of at least +1); else 0.
     /// </summary>
     public static int LayOnHandsPool(int level, int chaModifier)
     {
-        if (level <= 0 || chaModifier <= 0) return 0;
+        if (level < 2 || chaModifier <= 0) return 0;
         return level * chaModifier;
     }
 }
