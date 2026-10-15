@@ -634,7 +634,7 @@ public static partial class SpellDatabase
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     BuffDurationRounds = 10, // legacy fallback; runtime uses duration system
-                    ActionType = SpellActionType.Standard,
+                    ActionType = SpellActionType.FullRound, // Casting time 1 round (PHB p.174; SPL-162)
                     ProvokesAoO = true,
                     IsPlaceholder = false
                 });

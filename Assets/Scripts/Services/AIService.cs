@@ -2800,6 +2800,7 @@ public class AIService : MonoBehaviour
             if (allow != null && !allow(spell)) continue; // AI-037
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell)) continue; // SPL-091
+            if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null) continue; // batch 11 step 12
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
@@ -2911,6 +2912,12 @@ public class AIService : MonoBehaviour
 
             // A handler that needs a choice the AI cannot give yet (Dimension Door's destination, Imbue's slot picker; SPL-091).
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell))
+                continue;
+
+            // A casting action the caster cannot take now: a 1-round casting time without a full-round action left, a
+            // second quickened or free-action spell this round (CastActionRules, the cast core's Legality rule; batch 11
+            // step 12, PHB p.174, p.98, p.229).
+            if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null)
                 continue;
 
             // ── Buff-already-active check ──

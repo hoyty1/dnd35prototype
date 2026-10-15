@@ -68,7 +68,8 @@ public static class MetamagicSystemTests
         TestPreparedCasterDetection();
         TestSpontaneousCasterFullRoundAction();
         TestPreparedCasterStandardAction();
-        TestQuickenOverridesSpontaneousPenalty();
+        TestQuickenRefusedOnSpontaneousCast();
+        TestCastingTimeFromSpellData();
 
         // Phase 7: Stacking & Validation
         TestMultipleMetamagicStackAdditively();
@@ -615,40 +616,100 @@ public static class MetamagicSystemTests
         Assert(!MetamagicSystem.IsPreparedCaster(sorcerer), "Sorcerer is NOT prepared caster");
     }
 
+    // The live action-cost rule is CastActionRules (batch 11 step 12): the cast's source decides the spontaneous
+    // full round (PHB p.88; delegated RAW reading 2026-10-14), not the caster's classes. The class-based
+    // MetamagicSystem.GetMetamagicCastingAction is dormant (step 21 makes MetamagicSystem the live legality rule).
+
+    private static CastSource Source(CastSourceKind kind) => new CastSource { Kind = kind };
+
     private static void TestSpontaneousCasterFullRoundAction()
     {
-        var sorcerer = CreateTestCasterStats("TestSorcerer", "Sorcerer");
         var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
         var mm = new MetamagicData();
         mm.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
 
-        var action = MetamagicSystem.GetMetamagicCastingAction(spell, mm, sorcerer);
-        Assert(action == SpellActionType.FullRound,
-            "Spontaneous caster with metamagic takes full-round action");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.FullRound,
+            "A spontaneous caster's metamagic cast takes a full-round action (PHB p.88)");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.SpontaneousConversion)) == CastActionCost.FullRound,
+            "A cleric's spontaneous metamagic conversion takes a full-round action (PHB p.88)");
+        Assert(CastActionRules.CastingAction(spell, mm, new CastSource { Kind = CastSourceKind.HeldChargeHold, HeldFromSpontaneousSlot = true }) == CastActionCost.FullRound,
+            "A held charge of a spontaneous metamagic spell is still cast spontaneously (full round)");
+        Assert(CastActionRules.CastingAction(spell, null, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.Standard,
+            "A spontaneous cast without metamagic keeps the standard action");
+
+        // Delegated RAW reading 2026-10-14 (PHB p.88, p.98): spontaneous metamagic on a free-action spell also makes it a
+        // full-round action, so it is no longer the round's free-action spell and provokes like any other casting.
+        SpellData featherFall = SpellDatabase.GetSpell(SpellNames.FEATHER_FALL);
+        var extend = new MetamagicData();
+        extend.AppliedMetamagic.Add(MetamagicFeatId.ExtendSpell);
+        Assert(featherFall != null
+               && CastActionRules.CastingAction(featherFall, extend, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.FullRound
+               && !CastActionRules.CountsAsQuickenedSpell(featherFall, extend, Source(CastSourceKind.SpontaneousSlot)),
+            "A spontaneous metamagic Feather Fall is a full-round action, not the round's free-action spell (PHB p.88, p.98)");
+        Assert(featherFall != null
+               && CastActionRules.CastingAction(featherFall, null, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.Free
+               && CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.SpontaneousSlot)),
+            "A spontaneous Feather Fall without metamagic stays a free action (PHB p.174)");
     }
 
     private static void TestPreparedCasterStandardAction()
     {
-        var wizard = CreateTestCasterStats("TestWizard", "Wizard");
         var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
         var mm = new MetamagicData();
         mm.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
 
-        var action = MetamagicSystem.GetMetamagicCastingAction(spell, mm, wizard);
-        Assert(action == SpellActionType.Standard,
-            "Prepared caster with metamagic keeps standard action");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Standard,
+            "A prepared metamagic spell keeps its standard action, whatever other classes the caster has (SPL-159)");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.HeldChargeHold)) == CastActionCost.Standard,
+            "A held charge of a prepared metamagic spell keeps its standard action");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Scroll)) == CastActionCost.ItemOrDelivery
+               && CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Wand)) == CastActionCost.ItemOrDelivery,
+            "A scroll or wand charges the item's own action, not a casting action of its own (SPL-163; the spell's casting time is ITM-086)");
+        Assert(CastSource.SlotKindFor(null, spell) == CastSourceKind.PreparedSlot,
+            "A caster with no spellcasting component casts from a prepared slot (CastSource.SlotKindFor)");
     }
 
-    private static void TestQuickenOverridesSpontaneousPenalty()
+    private static void TestQuickenRefusedOnSpontaneousCast()
     {
-        var sorcerer = CreateTestCasterStats("TestSorcerer", "Sorcerer");
         var spell = CreateTestDamageSpell("Magic Missile", 1, 1, 4);
         var mm = new MetamagicData();
         mm.AppliedMetamagic.Add(MetamagicFeatId.QuickenSpell);
 
-        var action = MetamagicSystem.GetMetamagicCastingAction(spell, mm, sorcerer);
-        Assert(action == SpellActionType.Free,
-            "Quicken overrides spontaneous caster full-round penalty (Free action)");
+        Assert(CastActionRules.Refusal(null, spell, mm, Source(CastSourceKind.SpontaneousSlot)) == CastActionRules.RefusalQuickenSpontaneous,
+            "Quicken Spell is refused on a spontaneous caster's spell (PHB p.98 Special)");
+        Assert(CastActionRules.Refusal(null, spell, mm, Source(CastSourceKind.SpontaneousConversion)) == CastActionRules.RefusalQuickenSpontaneous,
+            "Quicken Spell is refused on a cleric's spontaneous conversion (PHB p.98 Special)");
+        Assert(CastActionRules.Refusal(null, spell, mm, Source(CastSourceKind.PreparedSlot)) == null,
+            "Quicken Spell is allowed on a prepared spell");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Free
+               && CastActionRules.CountsAsQuickenedSpell(spell, mm, Source(CastSourceKind.PreparedSlot)),
+            "A quickened prepared spell is a free action and the round's quickened spell (PHB p.98)");
+        Assert(!CastActionRules.CountsAsQuickenedSpell(spell, mm, Source(CastSourceKind.HeldChargeDelivery)),
+            "Delivering a held charge is no casting, so it is not the round's quickened spell (PHB p.141)");
+    }
+
+    private static void TestCastingTimeFromSpellData()
+    {
+        foreach (string id in new[] { SpellNames.SLEEP, SpellNames.DEEP_SLUMBER, SpellNames.HYPNOTISM, SpellNames.CALL_LIGHTNING,
+                     SpellNames.SUMMON_MONSTER_1, SpellNames.SUMMON_NATURES_ALLY_1, SpellNames.ENLARGE_PERSON })
+        {
+            SpellData spell = SpellDatabase.GetSpell(id);
+            Assert(spell != null && spell.ActionType == SpellActionType.FullRound
+                   && CastActionRules.CastingAction(spell, null, Source(CastSourceKind.PreparedSlot)) == CastActionCost.FullRound,
+                id + ": a 1-round casting time is a full-round action (PHB p.174; SPL-162)");
+        }
+
+        SpellData featherFall = SpellDatabase.GetSpell(SpellNames.FEATHER_FALL);
+        Assert(featherFall != null && CastActionRules.CastingAction(featherFall, null, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Free
+               && CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.PreparedSlot)),
+            "Feather Fall is a free action that counts toward the one quickened spell per round (PHB p.174, p.229)");
+        Assert(featherFall != null && !CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.Scroll)),
+            "A scroll of Feather Fall costs the item's action and provokes today (ITM-086)");
+
+        SpellData missile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
+        Assert(missile != null && CastActionRules.CastingAction(missile, null, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Standard
+               && !CastActionRules.CountsAsQuickenedSpell(missile, null, Source(CastSourceKind.PreparedSlot)),
+            "Magic Missile is a standard action (PHB p.251)");
     }
 
     // ========================================================================

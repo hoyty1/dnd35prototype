@@ -17,8 +17,7 @@ namespace Tests.Magic
 /// finish) casts four spells of a wizard 5 with the UI path's legacy quirks: a self buff (Shield), a melee touch spell
 /// on an ally (Shocking Grasp), a ray (Ray of Frost) and a buff on another creature (Bull's Strength). Each must run
 /// the stages in today's order (the Globe stage before Resolve since batch 11 step 11, on the area path before the
-/// invisibility break, with
-/// ConcentrationGateBeforeProvocation ConcentrationOnCast before Provocation), ask the decider for the choices after the
+/// invisibility break; ConcentrationOnCast after the provocation answer since batch 11 step 12), ask the decider for the choices after the
 /// target test and for the provocation in the Provocation stage, and finish once, Resolved at CombatEnd, with the cast
 /// ended. A Self spell aimed at another creature is refused at Legality with nothing spent; a decider that refuses a
 /// choice ends the cast at Legality with nothing spent; a decider that suspends at a choice leaves the cast open with no
@@ -62,8 +61,8 @@ public static class CastCoreStageOrderTests
     /// <summary>The stages of a fully resolved single-target cast with the UI path's quirks, with the decider's calls.</summary>
     private static readonly string[] ResolvedSequence =
     {
-        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
-        "decider:provocation", "Counterspell", "RingCounterspell", "InvisibilityBreak", "MirrorImage", "TargetBlink",
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "MirrorImage", "TargetBlink",
         "Globe", "Resolve", "Handlers", "Buff", "PostCast", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
@@ -76,16 +75,12 @@ public static class CastCoreStageOrderTests
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
         LegacyCastQuirk.EntangledUsesCasterLevelFormula,
-        LegacyCastQuirk.QuickenedProvokes,
         LegacyCastQuirk.SlotFailureClearsSnapshot,
-        LegacyCastQuirk.ConcentrationGateBeforeProvocation,
         LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.DeafenedRolledInSpellCaster,
         LegacyCastQuirk.ScrollSkipsArcaneFailure,
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
-        LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
-        LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
         LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
     };
 
@@ -95,22 +90,18 @@ public static class CastCoreStageOrderTests
     /// </summary>
     private static readonly string[] AreaResolvedSequence =
     {
-        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
-        "decider:provocation", "Counterspell", "Globe", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "Globe", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
 
     /// <summary>Today's PC area path, bit by bit (batch 11 step 9).</summary>
     private static readonly LegacyCastQuirk[] AreaPathBits =
     {
-        LegacyCastQuirk.QuickenedProvokes,
         LegacyCastQuirk.SlotFailureClearsSnapshot,
-        LegacyCastQuirk.ConcentrationGateBeforeProvocation,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.DeafenedRolledInSpellCaster,
         LegacyCastQuirk.ScrollSkipsArcaneFailure,
-        LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
-        LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
         LegacyCastQuirk.AreaSkipsEntangled,                 // SPL-006
         LegacyCastQuirk.AreaSkipsBlink,                     // SPL-006
         LegacyCastQuirk.AreaSkipsRing,                      // SPL-006
@@ -243,7 +234,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.QuickenedProvokes) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.SlotFailureClearsSnapshot) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -876,7 +867,7 @@ public static class CastCoreStageOrderTests
         CastContext ctx = Begin(gm, sc, caster, ally, SpellNames.RAY_OF_FROST, decider, out SpellSlot slot);
         gm.ExecuteCast(ctx, null);
 
-        Assert(string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Failure,Spend,ConcentrationOnCast,Provocation,decider:provocation,decider:finished:Cancelled@Provocation",
+        Assert(string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Failure,Spend,Provocation,decider:provocation,decider:finished:Cancelled@Provocation",
             "A cast cancelled at the provocation stops there", string.Join(",", events));
         Assert(ctx.Ended && !slot.IsUsed && !caster.Actions.StandardActionUsed, "The cancel gives back the slot and the action (the snapshot)",
             "slot used " + slot.IsUsed + ", standard used " + caster.Actions.StandardActionUsed);
@@ -925,6 +916,7 @@ public static class CastCoreStageOrderTests
         var slot = new SpellSlot(slotLevel, template.Clone(), false, "Wizard");
         sc.SpellSlots.Add(slot);
         caster.Actions.Reset();
+        sc.ResetQuickenedSpellTracking();
 
         var events = new List<string>();
         var decider = new RecordingDecider(events);
@@ -939,8 +931,12 @@ public static class CastCoreStageOrderTests
         int doneCalls = 0;
         gm.ExecuteCast(ctx, o => { done = o; doneCalls++; });
 
-        Assert(string.Join(",", events) == string.Join(",", AreaResolvedSequence),
-            label + ": the area cast runs the shared stages (no Ring of Counterspells), then the area Resolve and CombatEnd stages",
+        // A quickened cast does not provoke (PHB p.98, batch 11 step 12): the decider is not asked.
+        var expected = new List<string>(AreaResolvedSequence);
+        if (quickened)
+            expected.Remove("decider:provocation");
+        Assert(string.Join(",", events) == string.Join(",", expected),
+            label + ": the area cast runs the shared stages (no Ring of Counterspells; no provocation question when quickened), then the area Resolve and CombatEnd stages",
             string.Join(",", events));
         Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.CombatEnd,
             label + ": FinishAreaCast and FinishCast give Resolved at CombatEnd once", "" + done);
@@ -969,26 +965,22 @@ public static class CastCoreStageOrderTests
     /// <summary>The stages of a hold (Discharge Later) with the hold path's quirks: no choices asked, Resolve ends the cast.</summary>
     private static readonly string[] HoldResolvedSequence =
     {
-        "Legality", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation", "decider:provocation",
-        "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "decider:finished:Resolved@Resolve"
+        "Legality", "Cost", "Distraction", "Failure", "Spend", "Provocation", "decider:provocation",
+        "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "decider:finished:Resolved@Resolve"
     };
 
     /// <summary>The stages of a Grease cast with the Grease path's quirks: the shared stages, Resolve, then CombatEnd.</summary>
     private static readonly string[] GreaseResolvedSequence =
     {
-        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
-        "decider:provocation", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "CombatEnd",
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "CombatEnd",
         "decider:before-combat-end", "decider:finished:Resolved@CombatEnd"
     };
 
     /// <summary>The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared).</summary>
     private static readonly LegacyCastQuirk[] EffectSharedBits =
     {
-        LegacyCastQuirk.QuickenedProvokes,
         LegacyCastQuirk.SlotFailureClearsSnapshot,
-        LegacyCastQuirk.ConcentrationGateBeforeProvocation,
-        LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
-        LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
         LegacyCastQuirk.EffectResolveSkipsCombatEndCheck,   // CORE-039
     };
 
@@ -1001,7 +993,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.SummonSkipsBlink,                   // SPL-006
         LegacyCastQuirk.SummonSkipsCounterspell,            // SPL-006
         LegacyCastQuirk.SummonSkipsPouch,                   // SPL-006, SPL-114
-        LegacyCastQuirk.SummonItemCastCommitsCastAction,    // SPL-163
         LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
     };
 
@@ -1013,7 +1004,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.GreaseSkipsCounterspell,            // SPL-006
         LegacyCastQuirk.GreaseSkipsPouch,                   // SPL-006, SPL-114
         LegacyCastQuirk.GreaseSkipsInvisibilityBreak,       // SPL-006
-        LegacyCastQuirk.GreaseConcentrationCheckedTwice,    // SPL-152
         LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
     };
 

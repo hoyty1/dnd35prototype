@@ -37,11 +37,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     EntangledUsesCasterLevelFormula = 1 << 2,
 
-    /// <summary>
-    /// A threatened quickened cast goes through the provocation prompt and provokes (SPL-143; PHB p.98; batch 11
-    /// step 12). Without the bit the core skips the provocation stage for a quickened cast.
-    /// </summary>
-    QuickenedProvokes = 1 << 3,
+    // Bit 3 is unused: QuickenedProvokes (SPL-143) was removed by batch 11 step 12 (raw-action-cost-provocation); a
+    // quickened cast does not provoke (PHB p.98).
 
     /// <summary>
     /// A cast whose slot spend fails (or whose caster has no SpellcastingComponent) after the action was spent clears
@@ -49,12 +46,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     SlotFailureClearsSnapshot = 1 << 4,
 
-    /// <summary>
-    /// The casting-while-concentrating step (HandleConcentrationOnCasting) runs before the provocation prompt, so a cast
-    /// cancelled there has already rolled it (SPL-152; batch 11 step 12). Without the bit it runs once the provocation
-    /// resolves to proceed.
-    /// </summary>
-    ConcentrationGateBeforeProvocation = 1 << 5,
+    // Bit 5 is unused: ConcentrationGateBeforeProvocation (SPL-152) was removed by batch 11 step 12; the
+    // casting-while-concentrating step runs once the provocation lets the cast proceed.
 
     /// <summary>
     /// The PC range highlight (ShowSpellTargets) measures range by character level, not caster level (SPL-017; batch 11
@@ -95,21 +88,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     HeldChargeDeliveryIsFree = 1 << 12,
 
-    /// <summary>
-    /// The Cost stage honours Quicken before the spontaneous full-round rule, so a quickened spontaneous cast would cost
-    /// no action, where Quicken Spell cannot be applied to a spontaneous cast at all (SPL-144, PHB p.98 Special; batch 11
-    /// steps 12 and 21). Required for a quickened cast.
-    /// </summary>
-    QuickenBeforeSpontaneousFullRound = 1 << 13,
-
-    /// <summary>
-    /// The Cost stage decides the full-round cost of a metamagic cast by the caster's class
-    /// (MetamagicSystem.IsSpontaneousCaster: any Sorcerer or Bard level), not by the cast's source, so a Wizard/Sorcerer
-    /// pays a full round for a prepared metamagic spell and a cleric's metamagic conversion would cost a standard action
-    /// (SPL-159, PHB p.88; batch 11 step 12, raw-action-cost-provocation). Required for a metamagic cast that is not
-    /// quickened.
-    /// </summary>
-    SpontaneousFullRoundByCasterClass = 1 << 14,
+    // Bits 13 and 14 are unused: QuickenBeforeSpontaneousFullRound (SPL-144) and SpontaneousFullRoundByCasterClass
+    // (SPL-159) were removed by batch 11 step 12; the Legality stage refuses Quicken Spell on a spontaneous cast (PHB
+    // p.98) and the Cost stage decides the full round of a metamagic cast by the cast's source (PHB p.88; CastActionRules).
 
     // The NPC path's own behaviours (batch 11 step 8): set only by SpellCastRequest.ForAI (LegacyCastQuirkSets.AiPath).
     // Each names a PC/NPC parity issue; the RAW-fix step that removes it applies one rule to both sides.
@@ -276,13 +257,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     SummonSkipsPouch = 1L << 36,
 
-    /// <summary>
-    /// A summon cast from a scroll or a wand spends the casting's action (the standard action, or a full round for a
-    /// spontaneous caster's metamagic) in the Cost stage as well as the item's own action when the item is spent
-    /// (ConsumeScrollAfterCast, ConsumeWandChargeAfterCast; SPL-163), where the other paths charge only the item's.
-    /// Batch 11 step 12 (raw-action-cost-provocation) gives every cast one action cost and removes the bit.
-    /// </summary>
-    SummonItemCastCommitsCastAction = 1L << 37,
+    // Bit 37 is unused: SummonItemCastCommitsCastAction (SPL-163) was removed by batch 11 step 12; a summon from a
+    // scroll or wand charges only the item's action, as every item cast does.
 
     /// <summary>
     /// A blinking caster's Grease has no 20% spell failure (PHB p.206; SPL-006): the Failure stage skips the roll. Batch
@@ -310,12 +286,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     GreaseSkipsInvisibilityBreak = 1L << 41,
 
-    /// <summary>
-    /// Grease runs the casting-while-concentrating step (HandleConcentrationOnCasting) twice before the provocation, so a
-    /// caster who passes the first check rolls again (SPL-152). Batch 11 step 12 (raw-action-cost-provocation) removes the
-    /// bit with ConcentrationGateBeforeProvocation.
-    /// </summary>
-    GreaseConcentrationCheckedTwice = 1L << 42,
+    // Bit 42 is unused: GreaseConcentrationCheckedTwice (SPL-152) was removed by batch 11 step 12; Grease runs the
+    // casting-while-concentrating step once, as every cast.
 
     // Bit 43 is unused. A hold needs no Resilient Sphere bit: holding a charge inside a sphere is legal (PHB p.258:
     // nothing crosses the sphere until the charge is delivered; delegated RAW reading 2026-10-14), and the delivery's
@@ -398,16 +370,12 @@ public static class LegacyCastQuirkSets
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
         | LegacyCastQuirk.EntangledUsesCasterLevelFormula
-        | LegacyCastQuirk.QuickenedProvokes
         | LegacyCastQuirk.SlotFailureClearsSnapshot
-        | LegacyCastQuirk.ConcentrationGateBeforeProvocation
         | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
         | LegacyCastQuirk.AlliesForgoEverySave
         | LegacyCastQuirk.DeafenedRolledInSpellCaster
         | LegacyCastQuirk.ScrollSkipsArcaneFailure
         | LegacyCastQuirk.HeldChargeDeliveryIsFree
-        | LegacyCastQuirk.QuickenBeforeSpontaneousFullRound
-        | LegacyCastQuirk.SpontaneousFullRoundByCasterClass
         | LegacyCastQuirk.DeliverySkipsCounterspell;
 
     /// <summary>
@@ -435,8 +403,8 @@ public static class LegacyCastQuirkSets
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
-    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the cost and provocation bits, the
-    /// casting-while-concentrating step before the provocation, the scroll's spell failure, and the generic loop's
+    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the snapshot cleared after a failed spend, the
+    /// scroll's spell failure, and the generic loop's
     /// forgone saves and SpellCaster deafness roll), without the single-target ones (the combat-end check on a target's
     /// death, the entangled formula, the targeting highlight's range, the held-charge delivery), plus the area path's own
     /// bits. Tests.Magic.CastCoreStageOrderTests
@@ -456,16 +424,11 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
 
     /// <summary>
-    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the cost bits, the provocation of a
-    /// quickened cast, the snapshot cleared after a failed spend, and the casting-while-concentrating step before the
-    /// provocation.
+    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the snapshot cleared after a failed
+    /// spend and the missing combat-end check (the cost, provocation and concentration-order bits went in batch 11 step 12).
     /// </summary>
     private const LegacyCastQuirk UiEffectPathShared =
-        LegacyCastQuirk.QuickenedProvokes
-        | LegacyCastQuirk.SlotFailureClearsSnapshot
-        | LegacyCastQuirk.ConcentrationGateBeforeProvocation
-        | LegacyCastQuirk.QuickenBeforeSpontaneousFullRound
-        | LegacyCastQuirk.SpontaneousFullRoundByCasterClass
+        LegacyCastQuirk.SlotFailureClearsSnapshot
         | LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
 
     /// <summary>
@@ -482,7 +445,6 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.SummonSkipsBlink
         | LegacyCastQuirk.SummonSkipsCounterspell
         | LegacyCastQuirk.SummonSkipsPouch
-        | LegacyCastQuirk.SummonItemCastCommitsCastAction
         | LegacyCastQuirk.LostCastShowsActionMenu;
 
     /// <summary>
@@ -497,7 +459,6 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.GreaseSkipsCounterspell
         | LegacyCastQuirk.GreaseSkipsPouch
         | LegacyCastQuirk.GreaseSkipsInvisibilityBreak
-        | LegacyCastQuirk.GreaseConcentrationCheckedTwice
         | LegacyCastQuirk.LostCastShowsActionMenu;
 
     /// <summary>

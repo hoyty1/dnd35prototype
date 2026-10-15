@@ -58,6 +58,8 @@ public sealed class CastContext
 
     internal bool IsHeldChargeDelivery;
     internal bool IsQuickened;
+    /// <summary>A quickened cast or a free-action spell (Feather Fall): the round's quickened spell, no provocation (CastActionRules).</summary>
+    internal bool CountsAsQuickenedSpell;
     internal bool IsSpontaneousConversion;
     internal int SpontaneousLevel = -1;
     internal string SpontaneousSacrificedSpellId;
@@ -120,6 +122,7 @@ public sealed class CastContext
         Done = null;
         IsHeldChargeDelivery = false;
         IsQuickened = false;
+        CountsAsQuickenedSpell = false;
         IsSpontaneousConversion = false;
         SpontaneousLevel = -1;
         SpontaneousSacrificedSpellId = null;

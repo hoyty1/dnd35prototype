@@ -64,7 +64,37 @@ public sealed class CastSource
     /// <summary>The F12 test panel's privileges (TestPanel kind only).</summary>
     public TestPanelBypass Bypass = TestPanelBypass.None;
 
+    /// <summary>
+    /// True for a hold (<see cref="CastSourceKind.HeldChargeHold"/>) whose spell comes from a spontaneous caster's spell
+    /// per day: SpellCastRequest.ForUiHoldCharge records it when it turns a SpontaneousSlot source into a hold, so the
+    /// hold's casting stays spontaneous for the metamagic rules (<see cref="IsSpontaneous"/>; batch 11 step 12).
+    /// </summary>
+    public bool HeldFromSpontaneousSlot;
+
     public bool IsItem => Kind == CastSourceKind.Scroll || Kind == CastSourceKind.Wand;
 
+    /// <summary>
+    /// True when the spell is cast spontaneously (PHB p.88 and p.98): a spontaneous caster's spell per day, a cleric's
+    /// cure or inflict conversion, or a hold of a spontaneous caster's spell. The source decides, not the caster's
+    /// classes (delegated RAW reading 2026-10-14): CastActionRules makes such a metamagic cast a full-round action and
+    /// refuses Quicken Spell on it. The slot kind itself is still picked per caster (<see cref="SlotKindFor"/>, SPL-159).
+    /// </summary>
+    public bool IsSpontaneous => Kind == CastSourceKind.SpontaneousSlot || Kind == CastSourceKind.SpontaneousConversion
+                                 || (Kind == CastSourceKind.HeldChargeHold && HeldFromSpontaneousSlot);
+
     public bool HasBypass(TestPanelBypass bypass) => (Bypass & bypass) == bypass && bypass != TestPanelBypass.None;
+
+    /// <summary>
+    /// The slot kind a cast of <paramref name="spell"/> by the caster of <paramref name="spellComp"/> spends: the one
+    /// helper the PC spell menu (GameManager.BuildSpellMenuCastSource), the metamagic panel (CombatUI) and the NPC path
+    /// (SpellCastRequest.AiSourceFor) share, so all three agree on whether a cast is spontaneous (PHB p.88, p.98).
+    /// Today a caster with a spontaneous class casts every spell from its spells per day: the spell menu lists only
+    /// those and SpellcastingComponent spends there (SPL-011), so the answer is per caster and
+    /// <paramref name="spell"/> is not read yet. When SPL-011 dispatches on the chosen spell's casting class, this is the
+    /// place to return PreparedSlot for a prepared class's spell of a multiclass caster (SPL-159).
+    /// </summary>
+    public static CastSourceKind SlotKindFor(SpellcastingComponent spellComp, SpellData spell)
+    {
+        return spellComp != null && spellComp.IsSpontaneousCaster ? CastSourceKind.SpontaneousSlot : CastSourceKind.PreparedSlot;
+    }
 }

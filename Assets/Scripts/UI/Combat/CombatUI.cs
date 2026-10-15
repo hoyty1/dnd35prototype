@@ -2905,6 +2905,12 @@ public class CombatUI : MonoBehaviour
 
         foreach (var mmId in knownMM)
         {
+            // PHB p.98 (Quicken Spell, Special): the feat cannot be applied to a spell cast spontaneously, so the panel
+            // does not offer it for a spontaneous caster's spell or a cleric's conversion (the cast core's Legality stage
+            // refuses it too; CastActionRules, batch 11 step 12).
+            if (mmId == MetamagicFeatId.QuickenSpell && MetamagicPanelCastIsSpontaneous(spellComp, spell))
+                continue;
+
             bool applicable = MetamagicData.IsApplicable(mmId, spell);
 
             // D&D 3.5e: Only one quickened spell per round
@@ -3092,6 +3098,16 @@ public class CombatUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// True when the spell the metamagic panel is open for would be cast spontaneously (PHB p.88, p.98): a cleric's
+    /// conversion chosen with the Convert button, or a spell the shared slot rule gives a spontaneous slot
+    /// (CastSource.SlotKindFor); the same source GameManager.BuildSpellMenuCastSource gives the cast (CastSource.IsSpontaneous).
+    /// </summary>
+    private bool MetamagicPanelCastIsSpontaneous(SpellcastingComponent spellComp, SpellData spell)
+    {
+        return _isSpontaneousCast || CastSource.SlotKindFor(spellComp, spell) == CastSourceKind.SpontaneousSlot;
+    }
+
     private void UpdateMetamagicInfoText(SpellData spell, SpellcastingComponent spellComp)
     {
         if (_metamagicInfoText == null) return;
@@ -3105,14 +3121,12 @@ public class CombatUI : MonoBehaviour
             ? $"<color=#80ff80>Slot Available (Lv{effectiveLvl})</color>"
             : $"<color=#ff6060>No Lv{effectiveLvl} Slot! (Max: Lv{maxSlot})</color>";
 
-        // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
-        bool isSpontaneous = spellComp != null && spellComp.IsSpontaneousCaster;
+        // D&D 3.5e PHB p.88: a spontaneous cast with metamagic takes a full-round action (decided by the cast's source,
+        // CastActionRules; Quicken is never offered for one, PHB p.98)
+        bool isSpontaneous = MetamagicPanelCastIsSpontaneous(spellComp, spell);
         string castTimeWarning = "";
         if (isSpontaneous && _tempMetamagic.HasAnyMetamagic)
-        {
-            bool isQuickened = _tempMetamagic.Has(MetamagicFeatId.QuickenSpell);
-            castTimeWarning = isQuickened ? "" : "\n<color=#ffaa44>⚠ Full-round action (metamagic slows spontaneous casting)</color>";
-        }
+            castTimeWarning = "\n<color=#ffaa44>⚠ Full-round action (metamagic slows spontaneous casting)</color>";
 
         if (!_tempMetamagic.HasAnyMetamagic)
         {

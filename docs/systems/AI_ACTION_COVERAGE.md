@@ -77,7 +77,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Direct a Flaming Sphere | Never | `TryControlFlamingSphereForAI` has no callers | Yes | AI-053 |
 | Cast an imbued spell (Imbue with Spell Ability) | Never | | Yes | |
 | Summon, dispel, escape spells | Summon and escape never effective (the AI no longer picks Dimension Door, batch 11 step 6); Dispel Magic, Break Enchantment and Remove Fear work since SPL-037, Remove Curse and Remove Blindness/Deafness since batch 11 step 6 | summon and escape: slot spent, no effect | Yes | SPL-091 |
-| Full-round casting time | Ignored | always a standard action | Yes | |
+| Full-round casting time | Used | charged by the shared cast core since batch 11 step 12 (`CastActionRules`, PHB p.174); `AIService.SelectSpell` skips a 1-round spell when the full-round action is gone (after a move); the effect still comes in the casting turn | Yes | SPL-162, SPL-164 |
 | Counterspell, ready, delay | Never | | No | SPL-047, CMB-029 |
 | Potions, wands, scrolls | Never | charmed-heals-charmer exception | Yes | AI-009, ITM-005, AI-054; 11.8.3 |
 | Rods, staves, activated rings and wondrous items | Never | | No (unreachable for PCs too) | ITM-018, ITM-019, ITM-024 |

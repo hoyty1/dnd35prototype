@@ -55,6 +55,10 @@ namespace Tests.Scenarios
             yield return S("prayer-globe", PrayerGlobe);
             yield return S("area-globe-invisible", AreaGlobeInvisible);
             yield return S("cast-quickened-threatened", QuickenedThreatened);
+            yield return S("quicken-once-per-round", QuickenOncePerRound);
+            yield return S("cast-free-action-threatened", FreeActionThreatened);
+            yield return S("cast-full-round-after-move", FullRoundAfterMove);
+            yield return S("cast-aoo-cancel-keeps-concentration", AoOCancelKeepsConcentration);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("cast-entangled", Entangled);
@@ -362,13 +366,13 @@ namespace Tests.Scenarios
         /// centred on g1; g1 and g2, goblins of 1 HD, are in the burst. Every d4 is 4 (a 16 HD pool); g1 fails its Will
         /// save and falls asleep, g2 makes it. The cast spends the 1st-level slot, logs one Sleep result, and the turn goes
         /// on (the step settles at the action menu); the fight is not over (g2 is awake). Sleep's casting time is 1 round
-        /// (PHB p.280), a full-round action (PHB p.174), but the data stores it as a standard action and the cast core's
-        /// Cost stage never reads SpellData.ActionType, so today the move action is left (SPL-162, pinned).
+        /// (PHB p.280), a full-round action (PHB p.174): since batch 11 step 12 the data says so and the cast core's Cost
+        /// stage charges it, so no action is left (SPL-162; the effect still comes in the casting turn, SPL-164).
         /// </summary>
         private static ScenarioDef UiSleep()
         {
-            return Rules("rules/cast-ui-sleep", "A Ui Sleep: an area handler resolves it and the cast core finishes it (PHB p.280; SPL-162 pinned)")
-                .Covers("PHB p.280", "PHB p.174", "SPL-162", "batch 11 step 9")
+            return Rules("rules/cast-ui-sleep", "A Ui Sleep: an area handler resolves it and the cast core finishes it (PHB p.280, p.174)")
+                .Covers("PHB p.280", "PHB p.174", "SPL-162", "batch 11 step 9", "batch 11 step 12")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 1)), 2, 10, Control.Ui)
                 .Npc("g1", "goblin", 8, 10, Control.Idle)
@@ -391,8 +395,8 @@ namespace Tests.Scenarios
                 .Expect("The Ui cast ran and the turn went on", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
                 .Expect("g1 failed its Will save and sleeps, g2 made it (PHB p.280)", FactsAre(("asleep.g1", true), ("asleep.g2", false)))
                 .Expect("One 1st-level slot is spent", FactIs("spent", "L1+1"))
-                .ExpectKnown("SPL-162", "Today Sleep costs only the standard action and the move action is left; RAW its 1-round casting time is a full-round action (PHB p.280, p.174; SPL-162)",
-                    FactIs("actions", "-m-"))
+                .Expect("Sleep's 1-round casting time is a full-round action: no action is left (PHB p.280, p.174)",
+                    FactIs("actions", "---"))
                 .Expect("One Sleep result is logged", Expect.Count("log", e => (e.Str("text") ?? "").Contains("casts Sleep!"), 1, 1))
                 .Expect("The PC area cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SLEEP, 1))
                 .Build();
@@ -666,8 +670,8 @@ namespace Tests.Scenarios
         /// A Ui Summon Monster I (PHB p.285-286): a wizard 3 casts it at an empty square 2 squares away and takes the first
         /// creature of list I (one creature, PHB p.286). The cast runs PerformSummonMonsterCast (since batch 11 step 10 a
         /// request builder for the cast core's Summon resolve): one 1st-level slot is spent and one creature appears and joins
-        /// the initiative after the caster. Summon Monster's 1-round casting time costs only the standard action today
-        /// (SPL-162, pinned).
+        /// the initiative after the caster. Summon Monster's 1-round casting time is a full-round action (PHB p.174; since
+        /// batch 11 step 12), so no action is left; the creature still appears in the casting turn (SPL-164).
         /// </summary>
         private static ScenarioDef UiSummonMonster()
         {
@@ -684,7 +688,7 @@ namespace Tests.Scenarios
                     FactCaster("cast", "wizard"))
                 .Expect("The summon spends one 1st-level slot and brings one creature (PHB p.286)", FactsAre(("summons.before", 0), ("cast.spent", "L1+1"), ("cast.summons", 1)))
                 .Expect("The summon cast is in the trace once (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SUMMON_MONSTER_1, 1))
-                .ExpectKnown("SPL-162", "Today Summon Monster's 1-round casting time costs only the standard action (SPL-162)", FactIs("cast.actions", "-m-"))
+                .Expect("Summon Monster's 1-round casting time is a full-round action: no action is left (PHB p.285, p.174)", FactIs("cast.actions", "---"))
                 .Build();
         }
 
@@ -1572,24 +1576,24 @@ namespace Tests.Scenarios
                 .Build();
         }
 
-        // ── rules/cast-quickened-threatened (SPL-143) ───────────────────
+        // ── rules/cast-quickened-threatened (SPL-143, closed) ──────────
 
         /// <summary>
-        /// SPL-143 (PHB p.98, Quicken Spell: casting a quickened spell does not provoke attacks of opportunity). A Ui wizard 9
-        /// with Quicken Spell, a goblin beside it (-30 on attacks, 100 more hit points; first in initiative, so it is no
-        /// longer flat-footed and threatens, PHB p.137), casts a quickened Magic Missile (an added 5th-level slot, SPL-041;
-        /// every d4 is 4) at the goblin. Magic Missile makes no attack roll, so the only possible provocation is the casting
+        /// PHB p.98 (Quicken Spell: casting a quickened spell does not provoke attacks of opportunity). A Ui wizard 9 with
+        /// Quicken Spell, a goblin beside it (-30 on attacks, 100 more hit points; first in initiative, so it is no longer
+        /// flat-footed and threatens, PHB p.137), casts a quickened Magic Missile (an added 5th-level slot, SPL-041; every
+        /// d4 is 4) at the goblin. Magic Missile makes no attack roll, so the only possible provocation is the casting
         /// itself (a ray's ranged touch attack would mix in a second question). The quickened cast is a free action and
-        /// leaves the turn's other actions (PHB p.98). Today the pipeline still runs the
-        /// provocation step: the AoO confirmation opens (answered Proceed), the cast is a threatened cast and the goblin
-        /// makes its attack of opportunity.
+        /// leaves the turn's other actions (PHB p.98). Since batch 11 step 12 the cast core's Provocation stage lets a
+        /// quickened cast through: no AoO confirmation, no threatened cast, no attack of opportunity (SPL-143, which this
+        /// scenario pinned from batch 11 step 3).
         /// </summary>
         private static ScenarioDef QuickenedThreatened()
         {
             var quicken = new MetamagicData();
             quicken.Toggle(MetamagicFeatId.QuickenSpell);
-            return Rules("rules/cast-quickened-threatened", "A quickened spell cast while threatened provokes (SPL-143, pinned)")
-                .Covers("SPL-143", "PHB p.98")
+            return Rules("rules/cast-quickened-threatened", "A quickened spell cast while threatened does not provoke (PHB p.98)")
+                .Covers("SPL-143", "PHB p.98", "batch 11 step 12")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Quicken Spell")), 5, 10, Control.Ui)
                 .Npc("gob", "goblin", 6, 10, Control.Idle)
@@ -1600,14 +1604,239 @@ namespace Tests.Scenarios
                 .Turn("wizard", 1,
                     Step.Assert("record", ctx => { RecordSlots(ctx, "wizard"); return true; }),
                     Step.Cast(SpellNames.MAGIC_MISSILE, "gob", quicken),
-                    Step.AnswerAoO(AoOAnswer.Proceed),
                     Step.Assert("after", ctx => { Fact(ctx, "actions", Actions(ctx.Get("wizard"))); FactSlotsSpent(ctx, "spent", "wizard"); return true; }))
                 .Expect("The quickened cast spends a 5th-level slot and keeps the turn's other actions (PHB p.98)",
                     FactsAre(("spent", "L5+1"), ("actions", "smf")))
-                .ExpectKnown("SPL-143", "Today the quickened cast opens the AoO confirmation and the goblin's attack of opportunity follows (SPL-143)", Expect.All(
+                .Expect("The quickened cast opens no AoO confirmation, is no threatened cast and draws no attack of opportunity (PHB p.98)", Expect.All(
+                    Expect.None("threatened_cast", e => e.Str("by") == "wizard"),
+                    Expect.None("aoo", e => e.Str("by") == "gob" && e.Str("target") == "wizard")))
+                .Build();
+        }
+
+        // ── rules/quicken-once-per-round (batch 11 step 12) ─────────────
+
+        /// <summary>
+        /// PHB p.98 (Quicken Spell: only one quickened spell per round) and PHB p.229 (Feather Fall: a free action, like a
+        /// quickened spell, that counts toward that limit), one rule for a Ui and a Scripted caster (CastActionRules, the
+        /// cast core's Legality stage; batch 11 step 12). The Ui wizard 9 (Quicken Spell; two added 5th-level slots with
+        /// Magic Missile, SPL-041; a Feather Fall) casts a quickened Magic Missile at a distant goblin in round 1: a free
+        /// action, so every other action is left. A second quickened Magic Missile and a Feather Fall the same round are
+        /// refused at the spell menu with a log line and spend nothing. The Scripted wizard 3 casts Feather Fall (two
+        /// prepared) on the Ui wizard: a free action through the NPC cast path; the second the same round is refused (the
+        /// NPC path takes no metamagic yet, AI-001, so Feather Fall is how a Scripted caster meets the limit). In round 2 the
+        /// limit is reset and each casts again.
+        /// </summary>
+        private static ScenarioDef QuickenOncePerRound()
+        {
+            var quicken = new MetamagicData();
+            quicken.Toggle(MetamagicFeatId.QuickenSpell);
+            const string refusedLog = "already cast a quickened spell this round";
+            return Rules("rules/quicken-once-per-round", "One quickened spell per round, Feather Fall included, for a Ui and a Scripted caster (PHB p.98, p.229)")
+                .Covers("PHB p.98", "PHB p.229", "SPL-143", "batch 11 step 12")
+                .MaxRounds(2)
+                .Pc("ui", ActorSource.Stats(() => Wizard("Quicken Ui Wizard", 9, "Quicken Spell")), 3, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Quicken Scripted Wizard", 3)), 5, 10, Control.Scripted)
+                .Npc("gob", "goblin", 14, 10, Control.Idle)
+                .Tweak("ui", c => { AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE); Prepare(c, 1, SpellNames.FEATHER_FALL); })
+                .Tweak("scripted", c => Prepare(c, 1, SpellNames.FEATHER_FALL, 2))
+                .Tweak("gob", Sturdy)
+                .Initiative("ui", "scripted", "gob")
+                .Force(4, 4, null, -1)
+                .Turn("ui", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "ui"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob", quicken),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob", quicken),
+                    Step.Cast(SpellNames.FEATHER_FALL, "scripted"),
+                    Step.Assert("after", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "ui1.spent", "ui");
+                        Fact(ctx, "ui1.actions", Actions(ctx.Get("ui")));
+                        return true;
+                    }))
+                .Turn("scripted", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "scripted"); return true; }),
+                    Step.Cast(SpellNames.FEATHER_FALL, "ui"),
+                    Step.Cast(SpellNames.FEATHER_FALL, "ui"),
+                    Step.Assert("after", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "sc1.spent", "scripted");
+                        Fact(ctx, "sc1.actions", Actions(ctx.Get("scripted")));
+                        return true;
+                    }))
+                .Turn("ui", 2,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "ui"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob", quicken),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "ui2.spent", "ui"); return true; }))
+                .Turn("scripted", 2,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "scripted"); return true; }),
+                    Step.Cast(SpellNames.FEATHER_FALL, "ui"),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "sc2.spent", "scripted"); return true; }))
+                .Expect("Round 1, Ui: one quickened Magic Missile spends one 5th-level slot and no action; the second quickened spell and Feather Fall spend nothing (PHB p.98, p.229)",
+                    FactsAre(("ui1.spent", "L5+1"), ("ui1.actions", "smf")))
+                .Expect("Round 1, Ui: the second quickened spell and the Feather Fall are refused with a log line", Expect.Count("log", e => (e.Str("text") ?? "").Contains(refusedLog), 2, 2))
+                .Expect("Round 1, Scripted: the first Feather Fall is cast as a free action, the second is refused (PHB p.229)", Expect.All(
+                    Expect.StepStatus("scripted", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("scripted", 1, "Cast", 1, "refused"),
+                    FactsAre(("sc1.spent", "L1+1"), ("sc1.actions", "smf"))))
+                .Expect("Round 2: the limit is reset, each casts its quickened or free-action spell again", Expect.All(
+                    FactIs("ui2.spent", "L5+1"),
+                    Expect.StepStatus("scripted", 2, "Cast", 0, "done"),
+                    FactIs("sc2.spent", "L1+1")))
+                .Expect("Two quickened Magic Missiles and two Feather Falls are cast in all (ScenarioHooks.SpellCast)", Expect.All(
+                    CastEvents("ui", SpellNames.MAGIC_MISSILE, 2), CastEvents("ui", SpellNames.FEATHER_FALL, 0),
+                    CastEvents("scripted", SpellNames.FEATHER_FALL, 2)))
+                .Expect("No cast is a threatened cast (the goblin is out of reach here; a threatened free-action cast is rules/cast-free-action-threatened)",
+                    Expect.None("threatened_cast", e => true))
+                .Build();
+        }
+
+        // ── rules/cast-free-action-threatened (batch 11 step 12) ────────
+
+        /// <summary>
+        /// PHB p.174 (Casting Time: casting a spell whose casting time is 1 free action does not provoke attacks of
+        /// opportunity) for a Ui and a Scripted caster (CastActionRules.CountsAsQuickenedSpell, the cast core's Provocation
+        /// stage; batch 11 step 12). A Ui wizard 3 and a Scripted wizard 3 stand on either side of a goblin that is first in
+        /// initiative (so it threatens, PHB p.137; -30 on attacks, 100 more hit points); each casts Feather Fall (PHB p.229)
+        /// on the other. Neither cast opens the AoO prompt, is a threatened cast or draws an attack of opportunity; each
+        /// spends its 1st-level slot and no action.
+        /// </summary>
+        private static ScenarioDef FreeActionThreatened()
+        {
+            return Rules("rules/cast-free-action-threatened", "A free-action spell cast while threatened does not provoke, for a Ui and a Scripted caster (PHB p.174)")
+                .Covers("PHB p.174", "PHB p.229", "batch 11 step 12")
+                .MaxRounds(1)
+                .Pc("ui", ActorSource.Stats(() => Wizard("Free Ui Wizard", 3)), 5, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Free Scripted Wizard", 3)), 7, 10, Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("ui", c => { Prepare(c, 1, SpellNames.FEATHER_FALL); Sturdy(c); })
+                .Tweak("scripted", c => { Prepare(c, 1, SpellNames.FEATHER_FALL); Sturdy(c); })
+                .Tweak("gob", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("gob", "ui", "scripted")
+                .Turn("ui", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "ui"); return true; }),
+                    Step.Cast(SpellNames.FEATHER_FALL, "scripted"),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "ui.spent", "ui"); Fact(ctx, "ui.actions", Actions(ctx.Get("ui"))); return true; }))
+                .Turn("scripted", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "scripted"); return true; }),
+                    Step.Cast(SpellNames.FEATHER_FALL, "ui"),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "sc.spent", "scripted"); Fact(ctx, "sc.actions", Actions(ctx.Get("scripted"))); return true; }))
+                .Expect("Both Feather Falls are cast, each a free action from a 1st-level slot (PHB p.174, p.229)", Expect.All(
+                    CastEvents("ui", SpellNames.FEATHER_FALL, 1), CastEvents("scripted", SpellNames.FEATHER_FALL, 1),
+                    Expect.StepStatus("scripted", 1, "Cast", 0, "done"),
+                    FactsAre(("ui.spent", "L1+1"), ("ui.actions", "smf"), ("sc.spent", "L1+1"), ("sc.actions", "smf"))))
+                .Expect("Neither cast is a threatened cast or draws an attack of opportunity (PHB p.174)", Expect.All(
+                    Expect.None("threatened_cast", e => true),
+                    Expect.None("aoo", e => e.Str("by") == "gob")))
+                .Build();
+        }
+
+        // ── rules/cast-full-round-after-move (batch 11 step 12) ─────────
+
+        /// <summary>
+        /// PHB p.174 (a 1-round casting time is a full-round action) and PHB p.138 (a full-round action takes the whole
+        /// round, so not after a move action), for a Ui and a Scripted caster (CastActionRules.Refusal, read by the PC spell
+        /// menu, the cast core's Legality stage and the AI's spell choice; batch 11 step 12). A Ui wizard 1 and a Scripted
+        /// wizard 1, Sleep prepared (casting time 1 round, PHB p.280), each move one square and then try Sleep at a distant
+        /// goblin: the Ui menu refuses it with a log line, the Scripted cast is refused by the Legality stage (silently, as
+        /// the NPC path's refusals are); neither spends the slot and each keeps its standard action.
+        /// </summary>
+        private static ScenarioDef FullRoundAfterMove()
+        {
+            const string refusedLog = "casting it takes a full-round action";
+            return Rules("rules/cast-full-round-after-move", "A 1-round casting time is refused after a move, for a Ui and a Scripted caster (PHB p.174, p.138)")
+                .Covers("PHB p.174", "PHB p.138", "PHB p.280", "SPL-162", "batch 11 step 12")
+                .MaxRounds(1)
+                .Pc("ui", ActorSource.Stats(() => Wizard("Move Ui Wizard", 1)), 2, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Move Scripted Wizard", 1)), 2, 14, Control.Scripted)
+                .Npc("g1", "goblin", 12, 10, Control.Idle)
+                .Npc("g2", "goblin", 12, 14, Control.Idle)
+                .Tweak("ui", c => Prepare(c, 1, SpellNames.SLEEP))
+                .Tweak("scripted", c => Prepare(c, 1, SpellNames.SLEEP))
+                .Initiative("ui", "scripted", "g1", "g2")
+                .Turn("ui", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "ui"); return true; }),
+                    Step.Move(3, 10),
+                    Step.Cast(SpellNames.SLEEP, "g1"),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "ui.spent", "ui"); Fact(ctx, "ui.actions", Actions(ctx.Get("ui"))); return true; }))
+                .Turn("scripted", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordSlots(ctx, "scripted");
+                        CharacterController c = ctx.Get("scripted");
+                        SpellData sleep = SpellDatabase.GetSpell(SpellNames.SLEEP);
+                        Fact(ctx, "sc.rule.before", CastActionRules.Refusal(c, sleep, null, SpellCastRequest.AiSourceFor(c, sleep)) ?? "none");
+                        return true;
+                    }),
+                    Step.Move(3, 14),
+                    Step.Assert("rule", ctx =>
+                    {
+                        CharacterController c = ctx.Get("scripted");
+                        SpellData sleep = SpellDatabase.GetSpell(SpellNames.SLEEP);
+                        Fact(ctx, "sc.rule.after", CastActionRules.Refusal(c, sleep, null, SpellCastRequest.AiSourceFor(c, sleep)) ?? "none");
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.SLEEP, "g2"),
+                    Step.Assert("after", ctx => { FactSlotsSpent(ctx, "sc.spent", "scripted"); Fact(ctx, "sc.actions", Actions(ctx.Get("scripted"))); return true; }))
+                .Expect("Both casters moved", Expect.All(Expect.StepStatus("ui", 1, "Move", 0, "done"), Expect.StepStatus("scripted", 1, "Move", 0, "done")))
+                .Expect("Ui: the spell menu refuses Sleep after the move with a log line; nothing is spent and the standard action is left (PHB p.174)", Expect.All(
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(refusedLog), 1, 1),
+                    FactsAre(("ui.spent", "none"), ("ui.actions", "s--"))))
+                .Expect("Scripted: the rule allows Sleep before the move and refuses it after; the cast is refused, nothing is spent and the standard action is left (PHB p.174)", Expect.All(
+                    FactsAre(("sc.rule.before", "none"), ("sc.rule.after", CastActionRules.RefusalNoFullRoundAction)),
+                    Expect.StepStatus("scripted", 1, "Cast", 0, "refused"),
+                    FactsAre(("sc.spent", "none"), ("sc.actions", "s--"))))
+                .Expect("No Sleep is cast", Expect.All(CastEvents("ui", SpellNames.SLEEP, 0), CastEvents("scripted", SpellNames.SLEEP, 0)))
+                .Build();
+        }
+
+        // ── rules/cast-aoo-cancel-keeps-concentration (SPL-152, batch 11 step 12) ──
+
+        /// <summary>
+        /// SPL-152, fixed in batch 11 step 12: the casting-while-concentrating step runs only once the AoO prompt lets the
+        /// cast proceed. A Ui wizard 3 concentrating on Silent Image (a concentration spell, PHB p.279; set up directly) casts
+        /// Magic Missile while threatened by a goblin first in initiative (-30 on attacks; both 100 more hit points) and
+        /// answers Cancel: the cast spends nothing, the wizard still concentrates on Silent Image, and no concentration check
+        /// is rolled. It then casts Magic Missile again and answers Proceed: that cast runs the step, so exactly one
+        /// casting-while-concentrating check is logged in the turn (decision D1 removes that check later, step 16).
+        /// </summary>
+        private static ScenarioDef AoOCancelKeepsConcentration()
+        {
+            const string castingCheck = "(casting a spell)";
+            return Rules("rules/cast-aoo-cancel-keeps-concentration", "A cast cancelled at the AoO prompt rolls no concentration check and keeps the maintained spell (SPL-152)")
+                .Covers("SPL-152", "PHB p.140", "batch 11 step 12")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Conc Ui Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE, 2); Sturdy(c); })
+                .Tweak("gob", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("gob", "wizard")
+                .Turn("wizard", 1,
+                    Step.Assert("concentrate", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        SpellData image = SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone();
+                        w.Concentration.BeginConcentration(new ActiveSpellEffect(image, w.Stats.CharacterName, 3, w.Stats.CharacterName));
+                        RecordSlots(ctx, "wizard");
+                        return w.Concentration.IsConcentrating;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("after the cancel", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        FactSlotsSpent(ctx, "cancel.spent", "wizard");
+                        Fact(ctx, "cancel.actions", Actions(w));
+                        Fact(ctx, "cancel.concentrating", w.Concentration.ConcentrationSpellName);
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
+                    Step.AnswerAoO(AoOAnswer.Proceed))
+                .Expect("The first cast reached the AoO prompt and was cancelled", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("The cancelled cast spends nothing and the wizard still concentrates on Silent Image (SPL-152)",
+                    FactsAre(("cancel.spent", "none"), ("cancel.actions", "smf"), ("cancel.concentrating", "Silent Image")))
+                .Expect("Only the cast that went on rolled a casting-while-concentrating check (SPL-152)", Expect.All(
                     Expect.StepStatus("wizard", 1, "AnswerAoO(Proceed)", 0, "done"),
-                    Expect.Count("threatened_cast", e => e.Str("by") == "wizard", 1, 1),
-                    Expect.Count("aoo", e => e.Str("by") == "gob" && e.Str("target") == "wizard", 1, 1)))
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(castingCheck), 1, 1)))
                 .Build();
         }
 

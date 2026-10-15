@@ -187,12 +187,25 @@ public sealed class SpellCastRequest
         if (request.Source == null)
             request.Source = new CastSource();
         if (request.Source.Kind == CastSourceKind.PreparedSlot || request.Source.Kind == CastSourceKind.SpontaneousSlot)
+        {
+            request.Source.HeldFromSpontaneousSlot = request.Source.Kind == CastSourceKind.SpontaneousSlot;
             request.Source.Kind = CastSourceKind.HeldChargeHold;
+        }
         if (request.Aim == null)
             request.Aim = new CastAim();
         request.Aim.Target = null;
         request.Quirks = LegacyCastQuirkSets.UiHoldPath;
         return request;
+    }
+
+    /// <summary>
+    /// The source of an NPC (AI-run) cast of <paramref name="spell"/>: the slot kind the PC spell menu would give the same
+    /// cast (<see cref="CastSource.SlotKindFor"/>). The AI's spell choice reads it to skip what the casting-action rules
+    /// refuse (CastActionRules, AIService.SelectSpell).
+    /// </summary>
+    public static CastSource AiSourceFor(CharacterController caster, SpellData spell)
+    {
+        return new CastSource { Kind = CastSource.SlotKindFor(caster != null ? caster.Spellcasting : null, spell) };
     }
 
     /// <summary>
@@ -203,16 +216,12 @@ public sealed class SpellCastRequest
     /// </summary>
     public static SpellCastRequest ForAI(CharacterController caster, CharacterController target, SpellData spell)
     {
-        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
         var request = new SpellCastRequest
         {
             Caster = caster,
             Spell = CloneForCast(spell),
             Metamagic = null,
-            Source = new CastSource
-            {
-                Kind = spellComp != null && spellComp.IsSpontaneousCaster ? CastSourceKind.SpontaneousSlot : CastSourceKind.PreparedSlot
-            },
+            Source = AiSourceFor(caster, spell),
             Decider = AiCastDecider.Instance,
             Quirks = LegacyCastQuirkSets.AiPath
         };

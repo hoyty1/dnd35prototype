@@ -283,6 +283,9 @@ public static class MetamagicSystem
     /// Get the casting action type for a metamagic spell, considering caster type.
     /// D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
     /// (instead of standard action). Exception: Quicken Spell still results in a free action.
+    /// Dormant, and not the live rule: no cast path calls it. The cast core charges the action by
+    /// CastActionRules.CastingAction, which decides the spontaneous full round by the cast's source, not the caster's
+    /// classes, and refuses Quicken on a spontaneous cast (PHB p.88, p.98; batch 11 step 12, SPL-159).
     /// </summary>
     public static SpellActionType GetMetamagicCastingAction(
         SpellData spell,

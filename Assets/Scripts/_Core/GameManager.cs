@@ -9500,7 +9500,20 @@ public partial class GameManager : MonoBehaviour
         // The cast's own request and context (batch 11 step 4): a clone of the menu's spell with the metamagic's
         // pre-cast changes, the slot or cleric conversion it spends and fresh choices. Opening it ends any Ui cast the UI
         // left open, as the old reset list here overwrote its fields.
-        BeginCast(SpellCastRequest.ForUi(pc, spell, metamagic, BuildSpellMenuCastSource(pc)));
+        CastSource menuSource = BuildSpellMenuCastSource(pc, spell);
+
+        // The casting action's rules before any targeting or placement (the cast core's Legality stage tests them again;
+        // CastActionRules, batch 11 step 12): no Quicken on a spontaneous cast, one quickened spell per round, a
+        // 1-round casting time needs the full-round action.
+        string actionRefusal = CastActionRules.Refusal(pc, spell, metamagic, menuSource);
+        if (actionRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(actionRefusal, pc.Stats?.CharacterName, spell != null ? spell.Name : "the spell")));
+            ShowActionChoices();
+            return;
+        }
+
+        BeginCast(SpellCastRequest.ForUi(pc, spell, metamagic, menuSource));
         if (metamagic != null && metamagic.HasAnyMetamagic)
             Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
 
@@ -9559,9 +9572,10 @@ public partial class GameManager : MonoBehaviour
     /// <summary>
     /// The source of a spell-menu cast: a cleric's spontaneous conversion when the menu's Convert button was used (its
     /// level and sacrificed spell are copied from CombatUI once, here, and the menu's state is cleared, so it cannot
-    /// reach a later scroll, wand or spell cast), else the caster's spontaneous or prepared slot.
+    /// reach a later scroll, wand or spell cast), else the slot kind the shared rule gives the spell
+    /// (<see cref="CastSource.SlotKindFor"/>, also read by the metamagic panel and the NPC path).
     /// </summary>
-    private CastSource BuildSpellMenuCastSource(CharacterController caster)
+    private CastSource BuildSpellMenuCastSource(CharacterController caster, SpellData spell)
     {
         var source = new CastSource();
         if (CombatUI != null && CombatUI.IsSpontaneousCast)
@@ -9571,9 +9585,9 @@ public partial class GameManager : MonoBehaviour
             source.SacrificedSpellId = CombatUI.SpontaneousSacrificedSpellId;
             CombatUI.ClearSpontaneousCastState();
         }
-        else if (caster != null && caster.Spellcasting != null && caster.Spellcasting.IsSpontaneousCaster)
+        else
         {
-            source.Kind = CastSourceKind.SpontaneousSlot;
+            source.Kind = CastSource.SlotKindFor(caster != null ? caster.Spellcasting : null, spell);
         }
         return source;
     }

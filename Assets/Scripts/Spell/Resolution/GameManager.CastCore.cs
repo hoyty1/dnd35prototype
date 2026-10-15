@@ -6,8 +6,9 @@ using UnityEngine;
 
 /// <summary>
 /// The stages of the cast core (batch 11 step 7, docs/designs/cast_core_batch11.md), in the order a cast runs them
-/// today. With <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> ConcentrationOnCast runs before
-/// Provocation. The Globe stage runs before Resolve on the single-target and area paths (batch 11 step 11, SPL-141).
+/// today, except that ConcentrationOnCast runs after Provocation, once the provocation lets the cast proceed (batch 11
+/// step 12, SPL-152). The Globe stage runs before Resolve on the single-target and area paths (batch 11 step 11,
+/// SPL-141).
 /// </summary>
 public enum CastStage
 {
@@ -228,7 +229,7 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
-                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastComponentLegality(req);
+                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
     }
 
@@ -316,6 +317,20 @@ public partial class GameManager
         if (!IsValidTargetForSpell(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "invalid-target");
         return null;
+    }
+
+    /// <summary>
+    /// The casting action's rules (CastActionRules.Refusal, batch 11 step 12), the same for every caster and path: no
+    /// Quicken Spell on a spontaneous cast (PHB p.98 Special), one quickened spell per round (PHB p.98; Feather Fall
+    /// counts, PHB p.174, p.229), and a full-round or swift casting action the caster still has (PHB p.174, p.88). Null when the
+    /// cast may go on. With <see cref="LegacyCastQuirk.NpcNullMetamagic"/> the stage has already dropped the metamagic.
+    /// </summary>
+    private static CastOutcome CheckCastActionLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+        string refusal = CastActionRules.Refusal(req.Caster, req.Spell, req.Metamagic, req.Source);
+        return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, refusal);
     }
 
     private static CastOutcome CheckCastComponentLegality(SpellCastRequest req)
@@ -407,6 +422,18 @@ public partial class GameManager
             return;
         }
 
+        // The casting action (batch 11 step 12): Quicken on a spontaneous cast, a second quickened spell this round, a
+        // full-round or swift action the caster no longer has. The NPC path's refusals log nothing, as its others.
+        refusal = CheckCastActionLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name)));
+            FinishCast(ctx, refusal);
+            return;
+        }
+
         // A hold asks none of the caster's choices (HoldSkipsChoices, SPL-146): its delivery's cast does.
         CastChoiceFill fill = req.HasQuirk(LegacyCastQuirk.HoldSkipsChoices) ? CastChoiceFill.Filled : req.Decider.FillChoices(this, ctx);
         if (fill == CastChoiceFill.Suspended)
@@ -452,11 +479,20 @@ public partial class GameManager
         bool isWandCast = sourceKind == CastSourceKind.Wand;
         ctx.IsHeldChargeDelivery = isDeliveringHeldCharge;
 
-        // Quickened applies when CASTING the spell, not when delivering a previously held charge.
-        bool isQuickened = !isDeliveringHeldCharge && metamagic != null && metamagic.Has(MetamagicFeatId.QuickenSpell);
+        // Quickened applies when CASTING the spell, not when delivering a previously held charge. A quickened cast and a
+        // spell whose casting time is a free action (Feather Fall) are the caster's one quickened spell of the round and
+        // provoke no attack of opportunity (PHB p.98, p.174, p.229; CastActionRules).
+        bool isQuickened = CastActionRules.IsQuickened(metamagic, req.Source);
         ctx.IsQuickened = isQuickened;
-        // A summon from a scroll or wand also spends the casting's action here (SummonItemCastCommitsCastAction, SPL-163).
-        if ((isScrollCast || isWandCast) && !req.HasQuirk(LegacyCastQuirk.SummonItemCastCommitsCastAction))
+        ctx.CountsAsQuickenedSpell = CastActionRules.CountsAsQuickenedSpell(spell, metamagic, req.Source);
+
+        // One action cost from the cast's source and the spell's casting time (CastActionRules.CastingAction, batch 11
+        // step 12): the item's own action for a scroll or wand (SPL-163), a free action for a quickened spell or a
+        // free-action spell, a full round for a 1-round casting time (PHB p.174, SPL-162) or a spontaneous metamagic
+        // cast (PHB p.88, by the source, SPL-159), else a standard action. Legality has already refused a full-round or
+        // swift cost the caster cannot pay.
+        CastActionCost actionCost = CastActionRules.CastingAction(spell, metamagic, req.Source);
+        if (isScrollCast || isWandCast)
         {
             // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
             Debug.Log($"[{(isWandCast ? "WandCast" : "ScrollCast")}] {caster.Stats.CharacterName} casting from {(isWandCast ? "wand" : "scroll")} — action consumed via post-cast handler.");
@@ -469,18 +505,27 @@ public partial class GameManager
             Debug.Log($"[GameManager] {caster.Stats.CharacterName} discharging held touch spell as a free action.");
             CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "held-charge-delivery");
         }
-        else if (!isQuickened)
+        else if (actionCost == CastActionCost.Free)
         {
-            // PHB p.88: spontaneous casters using metamagic take a full-round action (decided by the caster's class, SPL-159).
-            bool hasAnyMetamagic = metamagic != null && metamagic.HasAnyMetamagic;
-            if (hasAnyMetamagic)
-                RequireLegacyQuirk(ctx, LegacyCastQuirk.SpontaneousFullRoundByCasterClass);
-            bool isSpontaneousMetamagic = hasAnyMetamagic && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
-            if (isSpontaneousMetamagic)
-            {
-                caster.Actions.UseFullRoundAction();
-            }
-            else if (!caster.CommitStandardAction() && req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+            // The caster's one quickened spell of the round (PHB p.98; Feather Fall counts toward it, PHB p.229).
+            var casterSpellComp = caster.Spellcasting;
+            if (casterSpellComp != null)
+                casterSpellComp.MarkQuickenedSpellCast();
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, isQuickened ? "quickened" : "free");
+        }
+        else if (actionCost == CastActionCost.FullRound)
+        {
+            caster.Actions.UseFullRoundAction();
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "full-round");
+        }
+        else if (actionCost == CastActionCost.Swift)
+        {
+            caster.Actions.UseSwiftAction();
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "swift");
+        }
+        else
+        {
+            if (!caster.CommitStandardAction() && req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
             {
                 // The NPC path refuses a cast whose standard action cannot be committed (SPL-160); nothing was spent.
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "commit-failed");
@@ -488,17 +533,7 @@ public partial class GameManager
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Refused, CastStage.Cost, "commit-failed"));
                 return;
             }
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
-        }
-        else
-        {
-            // Quicken is honoured before the spontaneous full-round rule (SPL-144). Mark that this character has used
-            // their one quickened spell for this round.
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.QuickenBeforeSpontaneousFullRound);
-            var casterSpellComp = caster.Spellcasting;
-            if (casterSpellComp != null)
-                casterSpellComp.MarkQuickenedSpellCast();
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "quickened");
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "standard");
         }
         // Test instrumentation (inert outside the scenario harness): a cast begins. Delivering a held charge is not a
         // cast (the hold raised it when the spell was cast). A summon, Grease or hold has no target creature here.
@@ -701,23 +736,19 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// After the spend and the failure checks: the concentration step, then the provocation with
-    /// <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> (SPL-152), else the provocation alone (the
-    /// concentration step follows once it lets the cast proceed).
+    /// After the spend and the failure checks: the provocation. The concentration step follows once the provocation lets
+    /// the cast proceed (batch 11 step 12, SPL-152), so a cast cancelled at the AoO prompt has rolled nothing and ended
+    /// no maintained spell.
     /// </summary>
     private void CastStageAfterSpend(CastContext ctx)
     {
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.ConcentrationGateBeforeProvocation))
-            CastStageConcentrationOnCast(ctx, CastStageProvocation);
-        else
-            CastStageProvocation(ctx);
+        CastStageProvocation(ctx);
     }
 
     /// <summary>
     /// ConcentrationOnCast: a caster concentrating on another spell checks it as it casts (HandleConcentrationOnCasting;
-    /// decision D1 replaces it in step 16). Before the provocation stage with
-    /// <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> (SPL-152), else once the provocation lets the cast
-    /// proceed. Skipped with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
+    /// decision D1 replaces it in step 16), once, after the provocation stage lets the cast proceed (batch 11 step 12,
+    /// SPL-152). Skipped with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
     /// </summary>
     private void CastStageConcentrationOnCast(CastContext ctx, Action<CastContext> next)
     {
@@ -725,23 +756,21 @@ public partial class GameManager
         {
             EnterCastStage(ctx, CastStage.ConcentrationOnCast);
             HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
-            // Grease runs the step a second time (GreaseConcentrationCheckedTwice, SPL-152; step 12).
-            if (ctx.Request.HasQuirk(LegacyCastQuirk.GreaseConcentrationCheckedTwice))
-                HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
         }
         next(ctx);
     }
 
     /// <summary>
     /// Provocation: a threatened cast provokes attacks of opportunity (PHB p.140); the decider chooses to cast
-    /// defensively, cast normally or cancel and resolves the rolls. No provocation for a held-charge delivery, nor (without
-    /// <see cref="LegacyCastQuirk.QuickenedProvokes"/>, SPL-143) for a quickened cast.
+    /// defensively, cast normally or cancel and resolves the rolls. No provocation for a held-charge delivery, nor for a
+    /// quickened cast (PHB p.98: casting a quickened spell does not provoke; SPL-143) or a spell whose casting time is a
+    /// free action (Feather Fall; PHB p.174: such a casting does not provoke), unless spontaneous metamagic made it a
+    /// full-round action (CastActionRules.CountsAsQuickenedSpell).
     /// </summary>
     private void CastStageProvocation(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Provocation);
-        bool provokes = !ctx.IsHeldChargeDelivery
-                        && (!ctx.IsQuickened || ctx.Request.HasQuirk(LegacyCastQuirk.QuickenedProvokes));
+        bool provokes = !ctx.IsHeldChargeDelivery && !ctx.CountsAsQuickenedSpell;
         if (!provokes)
         {
             _spellcastProvocationCancelled = false;
@@ -773,14 +802,13 @@ public partial class GameManager
         ClearSpellcastResourceSnapshot();
         if (answer == CastProvocationAnswer.Lost)
         {
+            // A spell lost to the attacks of opportunity runs the concentration step as every other lost cast does.
+            CheckConcentrationOnLostCast(ctx);
             FinishCast(ctx, new CastOutcome(CastOutcomeKind.Interrupted, CastStage.Provocation, "lost"));
             return;
         }
 
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.ConcentrationGateBeforeProvocation))
-            CastStageBeforeResolution(ctx);
-        else
-            CastStageConcentrationOnCast(ctx, CastStageBeforeResolution);
+        CastStageConcentrationOnCast(ctx, CastStageBeforeResolution);
     }
 
     /// <summary>

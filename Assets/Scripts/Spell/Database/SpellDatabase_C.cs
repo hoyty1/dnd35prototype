@@ -707,7 +707,7 @@ public static partial class SpellDatabase
                     SaveHalves = true,
                     SpellResistanceApplies = true,
                     DurationType = DurationType.Instantaneous, // Simplified for prototype
-                    ActionType = SpellActionType.Standard,
+                    ActionType = SpellActionType.FullRound, // Casting time 1 round (PHB p.174; SPL-162)
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,

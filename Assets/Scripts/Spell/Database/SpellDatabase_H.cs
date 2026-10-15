@@ -328,7 +328,7 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     IsMindAffecting = true,
                     BlockedByProtectionFromAlignment = true,
-                    ActionType = SpellActionType.Standard,
+                    ActionType = SpellActionType.FullRound, // Casting time 1 round (PHB p.174; SPL-162)
                     ProvokesAoO = true,
                     DurationType = DurationType.Rounds,
                     DurationValue = 0, // resolved at runtime (2d4 rounds)
