@@ -12,7 +12,7 @@ namespace Tests.Scenarios
     /// Per-job and per-run statistics for AI-vs-AI soak scenarios (tag "soak"): outcome, rounds, turns and, per team,
     /// how often each kind of action was taken. summary.json carries the per-run aggregate as "soak", the AI-depth
     /// baseline of docs/TESTING.md 3.5. Counts come from the trace: "attack" (every weapon attack roll, AoOs included),
-    /// "aoo", "maneuver", "cast" (NPC-path casts begun; ScenarioHooks.SpellCast) and own "move"/"path-move" events.
+    /// "aoo", "maneuver", "cast" (casts begun; ScenarioHooks.SpellCast: every NPC-path cast, and PC-pipeline casts of Ui actors, which a soak has none of) and own "move"/"path-move" events.
     /// Each run with soak jobs also writes Logs/Scenarios/&lt;runId&gt;/soak-rows.tsv (one line per job), which
     /// <see cref="MergeRuns"/> reads back to aggregate a soak split over several fresh Play sessions.
     /// </summary>

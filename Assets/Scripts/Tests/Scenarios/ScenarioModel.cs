@@ -191,12 +191,18 @@ namespace Tests.Scenarios
         public override string ToString() => IssueId + ":" + Invariant + (string.IsNullOrEmpty(DetailRegex) ? "" : "/" + DetailRegex);
     }
 
-    /// <summary>A named check over the finished trace. A non-null XFailIssue marks it as expected to fail until that issue is fixed.</summary>
+    /// <summary>
+    /// A named check over the finished trace. A non-null XFailIssue marks it as expected to fail until that issue is fixed.
+    /// A non-null KnownIssue marks a known-behaviour pin: the check passes on today's behaviour, which that filed issue says
+    /// is not (or not yet shown to be) the rule; a pass makes the job Known, a fail makes it Fail (the behaviour changed:
+    /// a fix rewrites the pin as a plain expectation of the rule, anything else is a regression). A pin is not a ruling.
+    /// </summary>
     public sealed class Expectation
     {
         public string Name;
         public Func<TraceView, ExpectResult> Check;
         public string XFailIssue;
+        public string KnownIssue;
     }
 
     /// <summary>
@@ -560,6 +566,19 @@ namespace Tests.Scenarios
         public ScenarioBuilder ExpectXFail(string issue, string name, Func<TraceView, ExpectResult> check)
         {
             _def.Expectations.Add(new Expectation { Name = name, Check = check, XFailIssue = issue });
+            return this;
+        }
+
+        /// <summary>
+        /// A known-behaviour pin (<see cref="Expectation.KnownIssue"/>): <paramref name="check"/> passes on today's
+        /// behaviour, which <paramref name="issue"/> describes. Its pass makes the job Known; its fail makes the job Fail.
+        /// Name it after today's behaviour and the issue, never as a ruling.
+        /// </summary>
+        public ScenarioBuilder ExpectKnown(string issue, string name, Func<TraceView, ExpectResult> check)
+        {
+            if (string.IsNullOrEmpty(issue))
+                throw new ArgumentException("Scenario '" + _def.Id + "': a known-behaviour pin needs an issue id");
+            _def.Expectations.Add(new Expectation { Name = name, Check = check, KnownIssue = issue });
             return this;
         }
 

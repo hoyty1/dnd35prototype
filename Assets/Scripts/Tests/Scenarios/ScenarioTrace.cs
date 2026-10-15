@@ -696,7 +696,10 @@ namespace Tests.Scenarios
             _job.Checks.OnActed(caster, ev, "cast");
         }
 
-        /// <summary>An NPC-path cast begins (the standard action is committed; whether the spell goes off comes later).</summary>
+        /// <summary>
+        /// A cast begins (NPC path, and the PC pipelines since batch 11 step 3): its action is spent; whether the spell
+        /// goes off comes later.
+        /// </summary>
         private void OnSpellCast(CharacterController caster, CharacterController target, SpellData spell)
         {
             if (Closed)

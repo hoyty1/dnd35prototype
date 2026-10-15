@@ -1329,9 +1329,14 @@ namespace Tests.Scenarios
                 if (r.Status == null)
                     r = ExpectResult.Inconclusive("check returned no status");
                 job.ExpectationResults.Add(new KeyValuePair<Expectation, ExpectResult>(e, r));
-                trace.Emit("expectation").Set("name", e.Name).Set("status", r.Status).Set("detail", r.Detail)
+                TraceEvent expectation = trace.Emit("expectation").Set("name", e.Name).Set("status", r.Status).Set("detail", r.Detail)
                      .Set("xfail", e.XFailIssue).Set("seqs", r.Seqs ?? new int[0]);
-                result.Expectations.Add((string.IsNullOrEmpty(e.XFailIssue) ? "" : "[xfail " + e.XFailIssue + "] ") + r.Status.ToUpperInvariant() + " " + e.Name + ": " + r.Detail);
+                // Set only for a pin, so the expectation events (and hashes) of every other scenario stay as they were.
+                if (!string.IsNullOrEmpty(e.KnownIssue))
+                    expectation.Set("known", e.KnownIssue);
+                result.Expectations.Add((string.IsNullOrEmpty(e.XFailIssue) ? "" : "[xfail " + e.XFailIssue + "] ")
+                    + (string.IsNullOrEmpty(e.KnownIssue) ? "" : "[known " + e.KnownIssue + "] ")
+                    + r.Status.ToUpperInvariant() + " " + e.Name + ": " + r.Detail);
             }
 
             result.Verdict = VerdictRules.Compute(job.Outcome, job.ExpectationResults, job.Unwaived, job.Waived, job.HookErrorViolations);

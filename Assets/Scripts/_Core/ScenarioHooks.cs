@@ -41,9 +41,11 @@ public static class ScenarioHooks
     public static Action<CharacterController, SpellData, bool, bool, int> ThreatenedCast;
 
     /// <summary>
-    /// An NPC-path cast begins (GameManager.TryNPCPerformSpellCast, right after the standard action is committed,
-    /// before Concentration, spell failure, AoOs or counterspells decide whether it goes off): caster, target, spell.
-    /// The PC cast pipelines do not raise it.
+    /// A cast begins, right after its action is spent and before Concentration, spell failure, AoOs or counterspells
+    /// decide whether it goes off: caster, target (null for an area, summon or Grease cast and a held charge), spell.
+    /// Raised for every caster by the NPC path (GameManager.TryNPCPerformSpellCast) and, since batch 11 step 3, by the
+    /// PC pipelines at their cost point (PerformSpellCast, PerformAoESpellCast, HoldPendingMeleeTouchCharge and
+    /// TryConsumePendingSpellCast; scroll and wand casts included, the delivery of a held charge not).
     /// </summary>
     public static Action<CharacterController, CharacterController, SpellData> SpellCast;
 

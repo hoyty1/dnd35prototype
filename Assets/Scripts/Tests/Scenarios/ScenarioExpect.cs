@@ -285,7 +285,7 @@ namespace Tests.Scenarios
             if (IsErrorOutcome(outcome) || hookErrors > 0)
                 return Verdict.Error;
 
-            bool fail = unwaived > 0, xpass = false, xfail = false, inconclusive = false;
+            bool fail = unwaived > 0, xpass = false, xfail = false, inconclusive = false, knownPin = false;
             foreach (KeyValuePair<Expectation, ExpectResult> kv in results)
             {
                 bool isX = !string.IsNullOrEmpty(kv.Key.XFailIssue);
@@ -296,6 +296,8 @@ namespace Tests.Scenarios
                 else if (kv.Value.IsPass)
                 {
                     if (isX) xpass = true;
+                    // A known-behaviour pin that holds counts like a waived violation (ScenarioBuilder.ExpectKnown).
+                    if (!string.IsNullOrEmpty(kv.Key.KnownIssue)) knownPin = true;
                 }
                 else
                 {
@@ -308,7 +310,7 @@ namespace Tests.Scenarios
             if (xfail) return Verdict.XFail;
             // An aborted (Halted) job never counts as a pass: the fight did not run to its end.
             if (inconclusive || outcome == Outcome.Halted) return Verdict.Inconclusive;
-            if (waived > 0) return Verdict.Known;
+            if (waived > 0 || knownPin) return Verdict.Known;
             return Verdict.Pass;
         }
 

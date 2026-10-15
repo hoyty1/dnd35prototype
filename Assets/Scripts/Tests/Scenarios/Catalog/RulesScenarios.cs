@@ -6711,7 +6711,7 @@ namespace Tests.Scenarios
         /// SPL-138; a caster level 1 dragon still has 5 per day), in place of its breath weapon or full attack. The young red (caster level 1) knows
         /// cantrips only; the juvenile (caster level 3) also knows 1st- and 2nd-level spells. Each must breathe within
         /// <paramref name="rounds"/> rounds and must never cast a 0-level spell. Not a rules test (this is AI choice), so
-        /// the expectations read the trace only: "cast" events (the NPC cast executor) and the breath weapon's log line.
+        /// the expectations read the trace only: the dragon's "cast" events (filtered by its actor key) and the breath weapon's log line.
         /// </summary>
         private static ScenarioDef DragonAiBreathNotCantrip(string id, string npcId, int rounds)
         {
@@ -6824,7 +6824,7 @@ namespace Tests.Scenarios
         /// faces the idle Quick Start party (3 HD humanoids, Daze-eligible, PHB p.217) for 6 rounds. It casts Daze
         /// exactly four times, once per prepared slot (one per round in every seed run), and casts nothing after the
         /// fourth, because the candidate list is then empty; before SPL-138 it could cast Daze every round, so the
-        /// scenario fails on the old code. AI choice, so the expectation reads the trace's NPC-path "cast" events only.
+        /// scenario fails on the old code. AI choice, so the expectation reads only the AI caster's "cast" events (filtered by its actor key).
         /// </summary>
         private static ScenarioDef ZeroLevelSpellsAi()
         {

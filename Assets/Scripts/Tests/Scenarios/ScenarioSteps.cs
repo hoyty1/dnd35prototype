@@ -14,7 +14,8 @@ namespace Tests.Scenarios
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
-        WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop
+        WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
+        UseItem, CastHeld, DeliverHeld
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -53,6 +54,13 @@ namespace Tests.Scenarios
         public string[] Targets { get; private set; }
         /// <summary>The skill an Inspire Competence step helps.</summary>
         public string Skill { get; private set; }
+        /// <summary>The ItemDatabase id of the scroll or wand a <see cref="UseItem"/> step uses.</summary>
+        public string ItemId { get; private set; }
+        /// <summary>
+        /// The selection-list answers of a <see cref="CastChoosing"/> step, in order: an option label prefix, or "*" for
+        /// the first option (the Resist Energy type, the Magic Weapon weapon). Null for every other step.
+        /// </summary>
+        public string[] Choices { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
@@ -201,6 +209,28 @@ namespace Tests.Scenarios
         public static Step Cast(string spellId, string target, MetamagicData metamagic = null)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Metamagic = metamagic };
         /// <summary>
+        /// Ui only: <see cref="Cast"/>, answering each selection list the cast opens (the Resist Energy type after the spell
+        /// is picked, the Magic Weapon weapon after the target is clicked) with <paramref name="choices"/> in order: an
+        /// option label prefix, or "*" for the first option.
+        /// </summary>
+        public static Step CastChoosing(string spellId, string target, params string[] choices)
+            => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Choices = choices ?? new string[0] };
+        /// <summary>
+        /// Ui only: casts a prepared melee touch spell and answers its touch-spell prompt Discharge Later
+        /// (GameManager.HoldPendingMeleeTouchCharge), so the caster holds the charge.
+        /// </summary>
+        public static Step CastHeld(string spellId) => new Step(StepKind.CastHeld) { SpellId = spellId };
+        /// <summary>Ui only: the Discharge button (GameManager.OnDischargeHeldTouchButtonPressed), then the target's square.</summary>
+        public static Step DeliverHeld(string target) => new Step(StepKind.DeliverHeld) { Target = target };
+        /// <summary>
+        /// Ui only: uses the first scroll or wand with ItemDatabase id <paramref name="itemId"/> in the actor's pack through
+        /// GameManager.TryUseConsumableFromInventory (the Use Item panel's call), so a targeted spell enters the cast
+        /// pipeline (InitiateScrollCastThroughPipeline, InitiateWandCastThroughPipeline). The target's square is clicked as
+        /// soon as the target selection opens, after any AoO confirmation the item use raises (answer those with
+        /// <see cref="AnswerAoO"/> steps).
+        /// </summary>
+        public static Step UseItem(string itemId, string target) => new Step(StepKind.UseItem) { ItemId = itemId, Target = target };
+        /// <summary>
         /// A charge (with <paramref name="bullRush"/>, a bull rush on a charge). Ui: the Charge button (or the menu's Bull
         /// Rush (Charge) button), the target and the path confirmation; a pounce's Haste natural-attack chooser (CMB-124) is
         /// answered as in <see cref="FullAttack"/> with <paramref name="hasteAttack"/> (Ui only).
@@ -245,7 +275,14 @@ namespace Tests.Scenarios
                 case StepKind.AnswerImprovedGrab:
                     return "AnswerImprovedGrab(" + MenuChoice + ")";
                 case StepKind.Cast:
-                    return "Cast(" + SpellId + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "") + ")";
+                    return "Cast(" + SpellId + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "")
+                        + (Choices != null ? ",choose=" + string.Join("|", Choices) : "") + ")";
+                case StepKind.CastHeld:
+                    return "CastHeld(" + SpellId + ")";
+                case StepKind.DeliverHeld:
+                    return "DeliverHeld(" + Target + ")";
+                case StepKind.UseItem:
+                    return "UseItem(" + ItemId + "," + Target + ")";
                 case StepKind.Charge:
                     return "Charge(" + Target + (BullRush ? ",bullrush" : "") + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
                 case StepKind.AnswerAoO:
@@ -273,7 +310,8 @@ namespace Tests.Scenarios
         {
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
-                || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack;
+                || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
+                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
@@ -281,8 +319,10 @@ namespace Tests.Scenarios
                 return Describe() + ": square off the grid";
             if (Kind == StepKind.GrappleAction && Array.IndexOf(GrappleKinds, GrappleKind) < 0)
                 return Describe() + ": unknown grapple action (" + string.Join(", ", GrappleKinds) + ")";
-            if (Kind == StepKind.Cast && string.IsNullOrEmpty(SpellId))
-                return "Cast without a spell id";
+            if ((Kind == StepKind.Cast || Kind == StepKind.CastHeld) && string.IsNullOrEmpty(SpellId))
+                return Kind + " without a spell id";
+            if (Kind == StepKind.UseItem && string.IsNullOrEmpty(ItemId))
+                return "UseItem without an item id";
             if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
                 return Describe() + ": no bestiary entry '" + FormId + "'";
             if (Kind == StepKind.BardicSuggestion && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
@@ -301,8 +341,11 @@ namespace Tests.Scenarios
                 return Describe() + ": no natural attack name";
             if (control != Control.Ui)
             {
-                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack)
+                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
+                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
+                if (Kind == StepKind.Cast && Choices != null)
+                    return Describe() + ": selection-list choices are Ui only (the NPC path makes its own)";
                 if (Kind == StepKind.Cast && Metamagic != null && Metamagic.HasAnyMetamagic)
                     return Describe() + ": the NPC cast path takes no metamagic";
                 if ((Kind == StepKind.FullAttack || Kind == StepKind.Charge) && !string.IsNullOrEmpty(NaturalAttackName))
@@ -680,6 +723,8 @@ namespace Tests.Scenarios
         private float _readySinceTime;
         private bool _endPressed;
         private readonly bool _scripted;
+        /// <summary>The actor whose square a UseItem step clicks once the target selection opens (null: none pending).</summary>
+        private CharacterController _pendingClick;
 
         public bool Done { get; private set; }
 
@@ -798,6 +843,14 @@ namespace Tests.Scenarios
                 return;
             }
 
+            // A UseItem step's target selection opens only after the item use (and any AoO it provoked) resolved.
+            if (_awaiting && _pendingClick != null && prompt == null && ClickPendingTarget(gm))
+            {
+                _actionFrame = frame;
+                _actionTime = Time.time;
+                return;
+            }
+
             bool ready = gm.IsPlayerTurn && gm.ActivePC == _actor && gm.CurrentSubPhase == GameManager.PlayerSubPhase.ChoosingAction && prompt == null;
             if (_awaiting)
             {
@@ -851,6 +904,11 @@ namespace Tests.Scenarios
                 return;
             _awaiting = false;
             bool changed = ScriptedSteps.Fingerprint(_job, _actor) != _before;
+            if (_pendingClick != null)
+            {
+                _awaitNote = (_awaitNote == null ? "" : _awaitNote + "; ") + "the target selection never opened";
+                _pendingClick = null;
+            }
             string note = _awaitNote;
             if (why != null)
                 note = note == null ? why : note + "; " + why;
@@ -1055,12 +1113,52 @@ namespace Tests.Scenarios
                         _awaitNote = gm.Harness_AnswerTouchSpellPromptCastNow()
                             ? "touch-spell prompt answered Cast Now"
                             : "the touch-spell prompt had no Cast Now button";
+                    int choice = 0;
+                    if (s.Choices != null)
+                        AnswerChoices(gm, s, ref choice);
                     GameManager.PlayerSubPhase sub = gm.CurrentSubPhase;
                     if (sub == GameManager.PlayerSubPhase.SelectingAttackTarget || sub == GameManager.PlayerSubPhase.SelectingAoETarget)
                         ClickIf(gm, sub, target.GridPosition);
                     // A self-centered burst (Bless, Prayer) opens a preview that a left click confirms; the step confirms it.
                     else if (sub == GameManager.PlayerSubPhase.ConfirmingSelfAoE && !gm.Harness_ConfirmSelfAoE())
                         _awaitNote = "the self-centered area preview could not be confirmed";
+                    if (s.Choices != null)
+                    {
+                        AnswerChoices(gm, s, ref choice);
+                        if (choice < s.Choices.Length)
+                            _awaitNote = (_awaitNote == null ? "" : _awaitNote + "; ") + "no selection list offered '" + s.Choices[choice] + "'";
+                    }
+                    break;
+                }
+                case StepKind.CastHeld:
+                {
+                    SpellData spell = FindPreparedSpell(_actor, s.SpellId);
+                    if (spell == null) { _awaitNote = "no unused prepared slot holds " + s.SpellId; break; }
+                    gm.OnCastSpellButtonPressed();
+                    gm.Harness_SelectSpell(spell, s.Metamagic);
+                    if (gm.Harness_PendingPrompt() != "touch-spell") { _awaitNote = "no touch-spell prompt opened"; break; }
+                    if (!gm.Harness_AnswerTouchSpellPromptDischargeLater())
+                        _awaitNote = "the touch-spell prompt had no Discharge Later button";
+                    break;
+                }
+                case StepKind.DeliverHeld:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnDischargeHeldTouchButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.UseItem:
+                {
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    int packSlot = FindPackItem(_actor, s.ItemId);
+                    if (packSlot < 0) { _awaitNote = "no " + s.ItemId + " in the pack"; break; }
+                    if (!gm.TryUseConsumableFromInventory(_actor, packSlot, out string feedback))
+                    {
+                        _awaitNote = "the item use was refused: " + feedback;
+                        break;
+                    }
+                    _pendingClick = target;
+                    if (gm.Harness_PendingPrompt() == null)
+                        ClickPendingTarget(gm);
                     break;
                 }
                 case StepKind.Charge:
@@ -1312,6 +1410,54 @@ namespace Tests.Scenarios
                     : "Haste chooser has no option named " + attackName + "; cancelled (default)";
             }
             _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
+        }
+
+        /// <summary>Answers open selection lists with the step's choices from <paramref name="next"/> on, while one is offered.</summary>
+        private static void AnswerChoices(GameManager gm, Step s, ref int next)
+        {
+            while (next < s.Choices.Length)
+            {
+                string c = s.Choices[next];
+                bool ok = c == "*" ? gm.Harness_ChooseFirstSelectionOption() : gm.Harness_ChooseSelectionOption(c);
+                if (!ok)
+                    return;
+                next++;
+            }
+        }
+
+        /// <summary>
+        /// Clicks the pending UseItem target's square when a target selection is open; true when it clicked. A click that
+        /// picks nothing leaves the selection, as <see cref="ClickIf"/> does.
+        /// </summary>
+        private bool ClickPendingTarget(GameManager gm)
+        {
+            GameManager.PlayerSubPhase sub = gm.CurrentSubPhase;
+            if (sub != GameManager.PlayerSubPhase.SelectingAttackTarget && sub != GameManager.PlayerSubPhase.SelectingAoETarget)
+                return false;
+            CharacterController target = _pendingClick;
+            _pendingClick = null;
+            SquareCell c = gm.Grid != null && target != null ? gm.Grid.GetCell(target.GridPosition) : null;
+            if (c == null)
+            {
+                _awaitNote = "no square for the item's target";
+                gm.Harness_CancelToActionChoices();
+                return true;
+            }
+            gm.OnCellClicked(c);
+            CancelIfStillSelecting(gm, sub);
+            return true;
+        }
+
+        /// <summary>The pack slot of the first item with ItemDatabase id <paramref name="itemId"/>, or -1.</summary>
+        private static int FindPackItem(CharacterController a, string itemId)
+        {
+            global::Inventory inv = a.InventoryComp != null ? a.InventoryComp.CharacterInventory : null;
+            if (inv == null || inv.GeneralSlots == null)
+                return -1;
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                if (inv.GeneralSlots[i] != null && inv.GeneralSlots[i].Id == itemId)
+                    return i;
+            return -1;
         }
 
         private static SpellData FindPreparedSpell(CharacterController a, string spellId)

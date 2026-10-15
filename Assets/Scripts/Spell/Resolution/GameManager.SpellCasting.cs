@@ -61,6 +61,8 @@ public partial class GameManager
             spellComp.MarkQuickenedSpellCast();
             CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
+        // Test instrumentation (inert outside the scenario harness): a PC-pipeline cast begins, as on the NPC path.
+        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
 
         int slotLevelToConsume = _pendingSpell.SpellLevel;
         bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
@@ -1548,6 +1550,8 @@ public partial class GameManager
             spellComp.MarkQuickenedSpellCast();
             CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
+        // Test instrumentation (inert outside the scenario harness): the held charge's cast begins (its delivery is no cast).
+        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
 
         bool consumed = true;
         if (!_pendingSpellFromHeldCharge)
@@ -1796,6 +1800,10 @@ public partial class GameManager
             }
             CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
+        // Test instrumentation (inert outside the scenario harness): a PC-pipeline cast begins, as on the NPC path.
+        // Delivering a held charge is not a cast (HoldPendingMeleeTouchCharge raised it when the spell was cast).
+        if (!isDeliveringHeldCharge)
+            ScenarioHooks.SpellCast?.Invoke(caster, target, _pendingSpell);
 
         // Get spellcasting component
         var spellComp = caster.Spellcasting;
@@ -3650,6 +3658,8 @@ public partial class GameManager
                 casterSpellComp.MarkQuickenedSpellCast();
             CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
+        // Test instrumentation (inert outside the scenario harness): a PC-pipeline area cast begins (no single target).
+        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
 
         // Get spellcasting component
         var spellComp = caster.Spellcasting;

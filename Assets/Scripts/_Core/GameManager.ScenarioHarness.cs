@@ -521,6 +521,34 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Clicks the open selection list's first option (the Ui CastChoosing step's "*" answer, for example the only weapon
+    /// Magic Weapon offers). False when no list is open or its first option is not interactable.
+    /// </summary>
+    internal bool Harness_ChooseFirstSelectionOption()
+    {
+        UnityEngine.UI.Button option = CombatUI != null ? CombatUI.Harness_FindFirstSelectionOption() : null;
+        if (option == null || !option.interactable)
+            return false;
+        option.onClick.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Presses Discharge Later on the open touch-spell prompt, as a player clicks it (the caster then holds the charge,
+    /// HoldPendingMeleeTouchCharge); false when no prompt or button is open. Writes no game state of its own.
+    /// </summary>
+    internal bool Harness_AnswerTouchSpellPromptDischargeLater()
+    {
+        UnityEngine.UI.Button later = CombatUI != null ? CombatUI.Harness_FindTouchSpellPromptButton("DischargeLater") : null;
+        if (later == null && CombatUI != null)
+            later = CombatUI.Harness_FindTouchSpellPromptButton("Discharge Later");
+        if (later == null || !later.interactable)
+            return false;
+        later.onClick.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Presses Cast Now on the open touch-spell prompt (a melee touch spell's Cast Now / Discharge Later choice), as a
     /// player clicks it; false when no prompt or button is open. Writes no game state of its own.
     /// </summary>

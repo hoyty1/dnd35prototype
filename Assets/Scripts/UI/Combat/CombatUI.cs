@@ -1712,6 +1712,17 @@ public class CombatUI : MonoBehaviour
         }
         return null;
     }
+
+    /// <summary>Editor-only, read-only (scenario harness): the open selection list's first option button, or null.</summary>
+    internal Button Harness_FindFirstSelectionOption()
+    {
+        if (_pickUpItemSelectionPanel == null)
+            return null;
+        foreach (Button b in _pickUpItemSelectionPanel.GetComponentsInChildren<Button>(true))
+            if (b != null && b.name.StartsWith("PickUpOption_", System.StringComparison.Ordinal))
+                return b;
+        return null;
+    }
 #endif
 
     private void WireSpecialAttackMenu(System.Action<SpecialAttackType, bool> onSelect, System.Action onCancel)
