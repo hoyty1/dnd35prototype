@@ -113,7 +113,7 @@ AIService.TryExecuteSpellcastAction (2340)       requires a standard action and 
   AISpellcastingStrategist.EvaluateDefensiveCasting  0 = try SelectLowerLevelAlternative else abort,
                                                      1 = "cast defensively" (logged; rolled at cast time)
   AISpellcastingStrategist.SelectBestSpellTarget     self / ally (lowest HP, frontliner) / enemy
-  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs:779)
+  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs:1265)
     ResolveNPCSpellcastProvocation                 if threatened: ShouldCastDefensively -> defensive roll or AoOs
 ```
 

@@ -232,7 +232,7 @@ Reading chosen: the requirement is plainly written for every caster. Who carries
 
 **Change needed.** Yes, behaviour changes. Today NPCs and monsters cast every M, F and DF spell freely. PCs are checked only for a pouch, and only on single-target casts. Nobody ever needs a focus or a divine focus.
 
-1. **One shared component check, before the spell slot is spent.** It is actor-agnostic and called by all four cast pipelines, including `TryNPCPerformSpellCast`, AoE, summon and held charge. This fixes SPL-114 and folds in SPL-020. The check:
+1. **One shared component check, before the spell slot is spent.** It is actor-agnostic and called by every cast pipeline, including `TryNPCPerformSpellCast`, AoE, summon and held charge. This fixes SPL-114 and folds in SPL-020. The check:
    - takes the arcane or divine side of an M/DF or F/DF spell from how the caster casts; innate cleric lists count as arcane;
    - needs a pouch for no-cost M (or Eschew Materials, for M of 1 gp or less);
    - needs a pouch for no-cost F (Eschew Materials does not help);
@@ -476,7 +476,7 @@ Change:
   - an image count of 1d4 + floor(CL/3), maximum 8;
   - the set of enemies that know which figure is real.
 - Clear this state in ResetForNewCreature and ResetCharacterSlotForSpawn (CRE-046).
-- Add one actor-agnostic resolver, called from the shared weapon-attack path (PerformSingleAttackWithCrit, AoOs) and from all four cast pipelines' target selection.
+- Add one actor-agnostic resolver, called from the shared weapon-attack path (PerformSingleAttackWithCrit, AoOs) and from every cast pipeline's target selection.
   - It skips everything for an invisible caster, an attacker that cannot see, true seeing, a knowing enemy, or an allied caster.
   - Otherwise it rolls 1d(N+1).
   - On an image: an attack roll goes against 10 + size + current Dex, and a hit destroys one image with no damage. A no-roll spell is spent and destroys the image.
@@ -655,6 +655,8 @@ Commit subject: 'File cast-pipeline defects found mapping batch 11'. The commit 
 - `git diff --stat` shows only docs/.
 
 **Risk.** Low. Filing a finding that does not hold: mitigated by re-verifying each finding in code and in the PDF. Do not phrase owner-pending items (l) as rulings.
+
+**Filed (2026-10-15).** The IDs that later steps cite as "step-1 issue (x)": (a) SPL-141, (b) SPL-142, (c) SPL-143, (d) SPL-144, (e) SPL-145, (f) SPL-146, (g) SPL-147, (h) SPL-148, (i) SPL-149, (j) SPL-150, (k) SPL-151, (l) SPL-152; the separate gap from decision D1 item 5 (maintaining costs a standard action, decision D2) is SPL-153. Every finding held on re-verification; three details were corrected: both globes are on PHB p.236 (not p.246); Wish rolling no arcane spell failure is correct (no somatic component, PHB p.122); and a held charge does meet the Ring of Counterspells, at delivery, since `PerformSpellCast` checks the Ring for a delivered charge too. Review of the filing added SPL-154 (holding the charge of a cleric's converted cure or inflict spell ignores the conversion; closed in step 14), widened SPL-142 to Sound Burst's save negating its damage, and raised SPL-147 to Med. The entangled DC (step 13) is a delegated RAW reading of 2026-10-14 recorded in `docs/systems/RULES_COVERAGE.md` 4.1: PHB p.170 gives a flat DC 15, the glossary (p.308) and the p.70 table with its casting footnote give DC 15 + the spell's level, and the latter is applied.
 
 ### 2. Add the inert cast-stage side channel, trace-diff tool and spell routing golden suite (`cast-stage-trace-tooling`)
 
@@ -1045,7 +1047,7 @@ Rules changes. All of them live in the core's Cost, Legality, Provocation and Co
 
 All of these are in the core's Legality, Distraction and Failure stages. Remove every related quirk bit on all paths: AreaSkipsEntangled, AreaSkipsBlink, Summon*, Grease*, Hold* for Blink and entangled, EntangledUsesCasterLevelFormula, DeafenedRolledInSpellCaster and ScrollSkipsArcaneFailure.
 
-1. Entangled. Any spell needs a Concentration check through ConcentrationManager.MakeSpellcastingConcentrationCheck, DC 15 + spell level (PHB p.70; verify). Replace the formula in ResolveEntangledSomaticCastingConcentration (GameManager.SpellCasting.cs ~:8216-8262). Keep the name if tests reflect it.
+1. Entangled. Any spell needs a Concentration check through ConcentrationManager.MakeSpellcastingConcentrationCheck, DC 15 + spell level (PHB p.308 and p.70 with its footnote 1, against the flat DC 15 of p.170: delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1; SPL-145). Replace the formula in ResolveEntangledSomaticCastingConcentration (GameManager.SpellCasting.cs ~:8216-8262). Keep the name if tests reflect it.
 2. Deafened. Roll the 20% verbal failure once per cast in the Failure stage. Remove the roll from SpellCaster.Cast (Assets/Scripts/Spell/Casting/SpellCaster.cs ~:89). First grep every other caller of SpellCaster.Cast; any caller outside the core must get the roll from the shared helper.
 3. Silence (SPL-092). Legality refuses verbal spells for a caster inside a Silence effect, unless the cast has Silent Spell. Use the same silence query the condition code uses (grep SilenceActive and the Silence area effect).
 4. ASF only for somatic spells (SPL-096). TryRollArcaneSpellFailure rolls only when the spell, after metamagic (Still Spell), has a somatic component.
@@ -1070,6 +1072,7 @@ All of these are in the core's Legality, Distraction and Failure stages. Remove 
 
 1. Resource snapshot (ITM-084). CastResourceSnapshot also records the scroll stack (count) and both wand charge stores (ITM-034: update both). A Cancel at the provocation prompt restores the item, the slot and the deferred item action.
 2. Slot-consume failure (step-1 issue (g)). Every 'failed to consume' exit restores the snapshot instead of clearing it, so the action is refunded. Remove the SlotFailureClearsSnapshot quirk.
+   - Held charge of a spontaneous conversion (SPL-154). The hold spends the source on the request (Kind SpontaneousConversion, SacrificedSpellId) instead of passing `isSpontaneous = false, -1, null`, so a cleric who holds a converted cure or inflict spell gives up the sacrificed spell.
 3. CasterLevelRules (SPL-017). Add Assets/Scripts/Spell/Casting/Core/CasterLevelRules.cs:
    - `For(SpellCastRequest)`: the item caster level if set; otherwise the casting class's caster level, with paladin and ranger at one-half class level (PHB p.44 and p.48; verify), plus the domain boost where GetDomainBoostedCasterLevel applies it, minus negative levels, minimum 1.
    - `RangeSquares(SpellCastRequest)`.
@@ -1079,7 +1082,7 @@ All of these are in the core's Legality, Distraction and Failure stages. Remove 
    - the summon and swarm range helpers;
    - ApplySpellBuff's Stats.Level reads;
    - the NPC range check (removes NpcRangeUsesCasterLevel; both now use the same rule).
-5. Close ITM-084, SPL-017 and step-1 issue (g). rules/cast-scroll-aoo-cancel, cast-wand-aoo-cancel and cast-slot-failure-refund become Pass.
+5. Close ITM-084, SPL-017, SPL-154 and step-1 issue (g). rules/cast-scroll-aoo-cancel, cast-wand-aoo-cancel and cast-slot-failure-refund become Pass.
 
 **Verification.** 1. Compile: errors=0, warnings=508.
 2. Static suites OK. Add a CasterLevelRules static suite covering a wizard, a cleric with a domain, a paladin and ranger at level 4 and 8, a scroll, a wand and negative levels.

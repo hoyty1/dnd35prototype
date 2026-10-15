@@ -11,7 +11,7 @@ This file covers the runtime loop, composition, services and cross-cutting conve
 | Part | Covers |
 |---|---|
 | [Combat & grid](architecture/combat-and-grid.md) | Grid, movement, turns, attack resolution, damage, AoO, conditions, maneuvers, reactions, combat log |
-| [Spells](architecture/spells.md) | Spell data and IDs, casting resources, the four cast pipelines, handlers, saves/DC/CL, durations, areas, metamagic, domains, summoning |
+| [Spells](architecture/spells.md) | Spell data and IDs, casting resources, the cast pipelines, handlers, saves/DC/CL, durations, areas, metamagic, domains, summoning |
 | [Characters & creatures](architecture/characters-and-creatures.md) | CharacterController vs CharacterStats, derived stats, feats, skills, classes, XP, NPC database, templates, dragons |
 | [Items & economy](architecture/items-and-economy.md) | ItemData/ItemDatabase, inventory, consumables, enchantments, rings/rods/wondrous/staves, store, crafting, treasure |
 | [AI, encounters & UI](architecture/ai-encounters-ui.md) | NPC AI pipeline and profiles, encounter sources and spawning, UI construction, debug tools |
