@@ -5580,6 +5580,15 @@ public partial class GameManager
             return true;
         }
 
+        // A cast that failed after the touch landed has no effect: spell resistance won (PHB p.235, SR yes), a globe
+        // blocked it (PHB p.236, p.246) or the caster's deafness spoiled the verbal component (PHB p.307). The registry
+        // runs this handler with gate None, so it tests the result itself, as Cause Fear and Scare do.
+        if (result != null && !result.Success)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{casterName}'s Ghoul Touch fails to take hold on {targetName}."));
+            return true;
+        }
+
         // Fort save negates
         if (result != null && result.RequiredSave && result.SaveSucceeded)
         {

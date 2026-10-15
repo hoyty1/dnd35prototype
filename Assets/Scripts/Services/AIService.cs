@@ -2799,6 +2799,7 @@ public class AIService : MonoBehaviour
             if (spell == null || spell.SpellLevel >= maxLevel) continue;
             if (allow != null && !allow(spell)) continue; // AI-037
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
+            if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell)) continue; // SPL-091
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
@@ -2906,6 +2907,10 @@ public class AIService : MonoBehaviour
 
             // A cast with no modelled effect wastes the action (Alter Self, SPL-135).
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell))
+                continue;
+
+            // A handler that needs a choice the AI cannot give yet (Dimension Door's destination, Imbue's slot picker; SPL-091).
+            if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell))
                 continue;
 
             // ── Buff-already-active check ──

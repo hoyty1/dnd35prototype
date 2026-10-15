@@ -56,6 +56,7 @@ public static partial class SpellDatabase
                     DamageDice = 6,
                     DamageCount = 1,
                     DamageType = "fire",
+                    DamageResolvedByHandler = true, // TryResolveProduceFlameSpellEffect rolls the touch attack and damage (SPL-124)
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,

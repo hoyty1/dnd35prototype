@@ -1408,11 +1408,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 484,
+      "passed": 522,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 11 step 5 (docs/designs/cast_core_batch11.md, handler-registry-pc): GameManager's single-target handler registry (GameManager.SpellHandlerRegistry.cs) that PerformSpellCast runs in place of its old cascade of handled flags. Every private GameManager method named TryResolve*SpellEffect, plus TryResolveSoundBurstStunEffect, found by reflection, is registered exactly once with the (caster, target, spell, result) -> bool signature; no spell id is claimed by two entries; every registered spell id exists in SpellDatabase; the order, gates (None, Success, SuccessNotNegated), ContinueToBuff flags and spell ids equal the manifest re-derived from the old chain's guards and each method's own id check; the gate evaluation and the pure claim and continuing-handler predictions of the NPC shadow ledger. Added 2026-10-15."
+      "notes": "Batch 11 step 5 (docs/designs/cast_core_batch11.md, handler-registry-pc): GameManager's single-target handler registry (GameManager.SpellHandlerRegistry.cs) that PerformSpellCast runs in place of its old cascade of handled flags. Every private GameManager method named TryResolve*SpellEffect, plus TryResolveSoundBurstStunEffect, found by reflection, is registered exactly once with the (caster, target, spell, result) -> bool signature; no spell id is claimed by two entries; every registered spell id exists in SpellDatabase; the order, gates (None, Success, SuccessNotNegated), ContinueToBuff flags and spell ids equal the manifest re-derived from the old chain's guards and each method's own id check; the gate evaluation. Batch 11 step 6 (npc-handler-registry, 2026-10-15) runs the registry on the NPC cast path too and removed the shadow-ledger predictions and their 14 checks; it added 52 checks that the AI leaves out of its candidates exactly the registered spells whose handler needs a caster choice it cannot give (Dimension Door, Imbue with Spell Ability; AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive, SPL-091). Added 2026-10-15."
     },
     {
       "type": "Tests.Magic.SpellDiceRulesTests",

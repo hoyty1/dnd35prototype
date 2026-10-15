@@ -507,6 +507,10 @@ public partial class GameManager
         CharacterController caster, Vector2Int casterPos, int maxRange,
         int casterSize, SquareGrid grid)
     {
+        // Known PC/NPC fork (SPL-091, docs/systems/PC_NPC_PARITY.md): RAW the caster picks the destination (PHB p.221),
+        // which should come with the cast as a caster choice; until then the control picks escape or aggression. The AI
+        // never selects Dimension Door (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive), so only a Ui, Scripted
+        // or charmed cast reaches this.
         bool isPC = caster.Stats != null && !!caster.IsPlayerControlled;
 
         if (isPC)
@@ -539,7 +543,7 @@ public partial class GameManager
             foreach (var ch in allChars)
             {
                 if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue; // same side
+                if (!TeamUtility.IsEnemy(caster, ch)) continue; // not a foe (team allegiance, not control)
 
                 int dist = SquareGridUtils.ChebyshevDistance(casterPos, ch.GridPosition);
                 if (dist < nearestDist)
@@ -583,7 +587,7 @@ public partial class GameManager
                     foreach (var ch in allChars)
                     {
                         if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                        if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue;
+                        if (!TeamUtility.IsEnemy(caster, ch)) continue;
                         if (SquareGridUtils.ChebyshevDistance(candidate, ch.GridPosition) <= 1)
                         {
                             adjacentToEnemy = true;
@@ -621,7 +625,7 @@ public partial class GameManager
             foreach (var ch in allChars)
             {
                 if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue; // same side
+                if (!TeamUtility.IsEnemy(caster, ch)) continue; // not a foe (team allegiance, not control)
 
                 if (ch.Stats.CurrentHP < lowestHP)
                 {

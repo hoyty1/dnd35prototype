@@ -17,8 +17,9 @@ namespace Tests.Magic
 /// reflection, is registered exactly once with the handler signature, and the table names no other method; no spell id
 /// is claimed by two entries (the condition under which the registry equals the old flag groups); every spell id exists
 /// in SpellDatabase; and the order, gates, ContinueToBuff flags and spell ids equal the manifest below, re-derived on 2026-10-15
-/// from the old chain's guard expressions. Also the gate evaluation and the pure claim prediction the NPC shadow ledger
-/// uses, claiming and continuing. Runs in edit or Play mode.
+/// from the old chain's guard expressions. Also the gate evaluation, and (batch 11 step 6, which runs the registry on the
+/// NPC cast path too) that the AI keeps out of its candidates exactly the registered spells whose handler needs a caster
+/// choice it cannot give (SPL-091). Runs in edit or Play mode.
 /// </summary>
 public static class SpellHandlerRegistryTests
 {
@@ -95,7 +96,7 @@ public static class SpellHandlerRegistryTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("====== SPELL HANDLER REGISTRY TESTS (batch 11 step 5) ======");
+        Debug.Log("====== SPELL HANDLER REGISTRY TESTS (batch 11 steps 5-6) ======");
 
         TestHelpers.EnsureCoreDatabasesInitialized();
         SpellDatabase.Init();
@@ -112,7 +113,7 @@ public static class SpellHandlerRegistryTests
         TestSpellIdsDisjointAndKnown(entries);
         TestManifest(entries);
         TestGates();
-        TestPrediction();
+        TestAiCandidateExclusions(entries);
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
     }
@@ -217,39 +218,27 @@ public static class SpellHandlerRegistryTests
         Assert(!GameManager.HandlerGatePasses(HandlerGate.SuccessNotNegated, failure, false), "gate SuccessNotNegated fails a failed cast");
     }
 
-    private static void TestPrediction()
+    /// <summary>
+    /// Batch 11 step 6: the NPC cast path runs the registry too, so the AI keeps out of its candidates exactly the spells
+    /// whose handler needs a caster choice it cannot give yet (Dimension Door, Imbue with Spell Ability; SPL-091), and
+    /// no other registered spell.
+    /// </summary>
+    private static void TestAiCandidateExclusions(IReadOnlyList<SpellHandlerEntry> entries)
     {
-        var success = new SpellResult { Success = true };
-        var failure = new SpellResult { Success = false };
-
-        Assert(GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR), failure, true),
-            "prediction: Cause Fear (gate None) claims even a failed, negated cast");
-        Assert(!GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.RAY_OF_ENFEEBLEMENT), failure, false),
-            "prediction: a missed Ray of Enfeeblement is not claimed");
-        Assert(!GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.HOLD_ANIMAL), success, true),
-            "prediction: a negated Hold Animal is not claimed");
-        Assert(GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.SEARING_LIGHT), success, true),
-            "prediction: Searing Light (gate Success) is claimed even when a save negated");
-        Assert(!GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.SHIELD_OTHER), success, false),
-            "prediction: Shield Other continues to the buff step");
-        Assert(!GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.SOUND_BURST), success, false),
-            "prediction: the Sound Burst stun continues");
-        Assert(!GameManager.PredictSingleTargetClaim(SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE), success, false),
-            "prediction: Magic Missile has no handler");
-        Assert(!GameManager.PredictSingleTargetClaim(null, success, false), "prediction: a null spell is not claimed");
-        SpellHandlerEntry dk = GameManager.PredictSingleTargetClaimEntry(SpellDatabase.GetSpell(SpellNames.DEATH_KNELL), success, false);
-        Assert(dk != null && dk.Name == "TryResolveDeathKnellSpellEffect", "prediction names the claiming entry (Death Knell)", dk != null ? dk.Name : "null");
-
-        // The continuing entries never claim; the shadow ledger reports them separately (registryWouldRun).
-        SpellHandlerEntry sb = GameManager.PredictSingleTargetContinuingEntry(SpellDatabase.GetSpell(SpellNames.SOUND_BURST), failure, true);
-        Assert(sb != null && sb.Name == "TryResolveSoundBurstStunEffect", "continuing prediction: the Sound Burst stun runs even on a failed, negated cast (gate None)", sb != null ? sb.Name : "null");
-        SpellHandlerEntry so = GameManager.PredictSingleTargetContinuingEntry(SpellDatabase.GetSpell(SpellNames.SHIELD_OTHER), success, false);
-        Assert(so != null && so.Name == "TryResolveShieldOtherSpellEffect", "continuing prediction: Shield Other's link runs on a successful cast", so != null ? so.Name : "null");
-        Assert(GameManager.PredictSingleTargetContinuingEntry(SpellDatabase.GetSpell(SpellNames.SHIELD_OTHER), success, true) == null,
-            "continuing prediction: a negated Shield Other runs no handler");
-        Assert(GameManager.PredictSingleTargetContinuingEntry(SpellDatabase.GetSpell(SpellNames.DEATH_KNELL), success, false) == null,
-            "continuing prediction: a claiming entry (Death Knell) is not a continuing one");
-        Assert(GameManager.PredictSingleTargetContinuingEntry(null, success, false) == null, "continuing prediction: a null spell runs nothing");
+        var excluded = new HashSet<string>(StringComparer.Ordinal) { SpellNames.DIMENSION_DOOR, SpellNames.IMBUE_WITH_SPELL_ABILITY };
+        foreach (SpellHandlerEntry e in entries)
+        {
+            if (e == null || e.SpellIds == null)
+                continue;
+            foreach (string id in e.SpellIds)
+            {
+                bool expected = excluded.Contains(id);
+                bool actual = AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(SpellDatabase.GetSpell(id));
+                Assert(actual == expected, (expected ? "the AI leaves out " : "the AI may pick ") + id + " (" + e.Name + ")",
+                    "NeedsCasterChoiceAiCannotGive=" + actual);
+            }
+        }
+        Assert(!AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(null), "a null spell is not excluded");
     }
 
     private static void Assert(bool condition, string testName, string detail = "")

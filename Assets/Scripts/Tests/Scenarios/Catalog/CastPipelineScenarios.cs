@@ -37,6 +37,8 @@ namespace Tests.Scenarios
                 PairSpec p = pair;
                 yield return S("cast-pair-" + p.Family, () => PairScenario(p));
             }
+            yield return S("cast-ai-spiritual-weapon", AiSpiritualWeapon);
+            yield return S("cast-ai-skips-dimension-door", AiSkipsDimensionDoor);
             yield return S("cast-globe-damage", GlobeDamage);
             yield return S("cast-quickened-threatened", QuickenedThreatened);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
@@ -565,6 +567,12 @@ namespace Tests.Scenarios
             public Func<TraceView, ExpectResult> KnownCheck;
             /// <summary>Further known-behaviour pins for a defect both sides share (the end states match, so the pair cannot see it).</summary>
             public Func<ScenarioBuilder, ScenarioBuilder> SharedPins;
+            /// <summary>A setup both casters get (a condition the spell removes), checked present before each cast.</summary>
+            public Action<CharacterController> CasterTweak;
+            /// <summary>With <see cref="CasterTweak"/>: the condition each caster must have when its turn starts.</summary>
+            public string CasterHasBefore;
+            /// <summary>A setup both targets get after the save tweak (spell resistance, for example).</summary>
+            public Action<CharacterController> TargetTweak;
         }
 
         private static IEnumerable<PairSpec> Pairs()
@@ -579,33 +587,49 @@ namespace Tests.Scenarios
             yield return new PairSpec { Family = "death-knell", SpellId = SpellNames.DEATH_KNELL, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy", Adjacent = true, TargetHp = -3,
                 Title = "Death Knell on a dying creature (PHB p.217)", Covers = new[] { "PHB p.217", "SPL-155" },
                 // Both sides share the defect, so the pair matches: the spell's generic 10 damage kills the dying target in
-                // SpellCaster.Cast before the PC handler runs (it then fizzles), and the NPC chain has no handler (SPL-054).
+                // SpellCaster.Cast before the shared handler runs, which then fizzles on both paths (SPL-155).
                 SharedPins = b => b.ExpectKnown("SPL-155",
                     "Today both casts kill the dying target and neither caster gains Death Knell's 1d8 temporary hit points, +2 Str or +1 caster level (SPL-155)",
                     FactsAre(("ui.target.dead", true), ("ui.caster.thp", 0), ("ui.caster.dk", "0"),
                         ("scripted.target.dead", true), ("scripted.caster.thp", 0), ("scripted.caster.dk", "0"))) };
             yield return new PairSpec { Family = "silence", SpellId = SpellNames.SILENCE, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Silence on a creature (PHB p.279)", Covers = new[] { "PHB p.279" },
-                // The Silence handler (flag and tracked effect) is on the PC chain only; the NPC path keeps the tracked effect.
-                KnownIssue = "SPL-054",
-                KnownUi = "caster[L0:0/6 L1:0/5 L2:1/4 L3:0/3 L4:0/1 hp=49 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=150 nl=0 thp=0 conds=FlatFooted effects=silence:70 silence=70 dk=0 resist= items=]",
-                KnownScripted = "caster[L0:0/6 L1:0/5 L2:1/4 L3:0/3 L4:0/1 hp=49 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=150 nl=0 thp=0 conds=FlatFooted effects=silence:70 silence=0 dk=0 resist= items=]" };
+                Title = "Silence on a creature (PHB p.279)", Covers = new[] { "PHB p.279" } };
             yield return new PairSpec { Family = "sound-burst", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst (PHB p.281)", Covers = new[] { "PHB p.281" },
-                // The stun handler is on the PC chain only: the NPC path deals the damage and never stuns.
-                KnownIssue = "SPL-054",
-                KnownUi = "caster[L0:0/6 L1:0/5 L2:1/4 L3:0/3 L4:0/1 hp=49 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=142 nl=0 thp=0 conds=FlatFooted,Stunned effects= silence=0 dk=0 resist= items=]",
-                KnownScripted = "caster[L0:0/6 L1:0/5 L2:1/4 L3:0/3 L4:0/1 hp=49 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=142 nl=0 thp=0 conds=FlatFooted effects= silence=0 dk=0 resist= items=]" };
+                Title = "Sound Burst (PHB p.281)", Covers = new[] { "PHB p.281" } };
             yield return new PairSpec { Family = "searing-light", SpellId = SpellNames.SEARING_LIGHT, Caster = cleric, SlotLevel = 3, TargetNpc = "target_dummy",
                 Title = "Searing Light (PHB p.275)", Covers = new[] { "PHB p.275" } };
             yield return new PairSpec { Family = "death-ward", SpellId = SpellNames.DEATH_WARD, Caster = cleric, SlotLevel = 4,
                 Title = "Death Ward on the caster (PHB p.217)", Covers = new[] { "PHB p.217" } };
             yield return new PairSpec { Family = "hold-animal", SpellId = SpellNames.HOLD_ANIMAL, Caster = druid, SlotLevel = 2, TargetNpc = "wolf",
-                Title = "Hold Animal on a wolf (PHB p.241)", Covers = new[] { "PHB p.241" },
-                // TryResolveHoldAnimalSpellEffect is on the PC chain only: the NPC path adds a tracked effect and no paralysis.
-                KnownIssue = "SPL-054",
-                KnownUi = "caster[L0:0/4 L1:0/3 L2:1/2 hp=27 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=113 nl=0 thp=0 conds=FlatFooted,Helpless,Paralyzed effects= silence=0 dk=0 resist= items=]",
-                KnownScripted = "caster[L0:0/4 L1:0/3 L2:1/2 hp=27 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=113 nl=0 thp=0 conds=FlatFooted effects=hold_animal:3 silence=0 dk=0 resist= items=]" };
+                Title = "Hold Animal on a wolf (PHB p.241)", Covers = new[] { "PHB p.241" } };
+            // Batch 11 step 6: handlers the NPC path reaches since it runs the shared registry (SPL-054, SPL-091).
+            yield return new PairSpec { Family = "ghoul-touch", SpellId = SpellNames.GHOUL_TOUCH, Caster = wizard, SlotLevel = 2, TargetNpc = "goblin", Adjacent = true,
+                Title = "Ghoul Touch on a goblin (PHB p.235)", Covers = new[] { "PHB p.235" } };
+            yield return new PairSpec { Family = "remove-curse", SpellId = SpellNames.REMOVE_CURSE, Caster = cleric, SlotLevel = 3,
+                Title = "Remove Curse on the cursed caster (PHB p.270)", Covers = new[] { "PHB p.270", "SPL-091" },
+                CasterTweak = c => c.ApplyCondition(CombatConditionType.BestowCurseGeneralPenalty, 100, "Bestow Curse"),
+                CasterHasBefore = nameof(CombatConditionType.BestowCurseGeneralPenalty) };
+            yield return new PairSpec { Family = "remove-blindness", SpellId = SpellNames.REMOVE_BLINDNESS_DEAFNESS, Caster = cleric, SlotLevel = 3,
+                Title = "Remove Blindness/Deafness on the blinded caster (PHB p.270)", Covers = new[] { "PHB p.270", "SPL-091" },
+                CasterTweak = c => c.ApplyCondition(CombatConditionType.Blinded, 100, "Blindness"),
+                CasterHasBefore = nameof(CombatConditionType.Blinded) };
+            // Step 6 review: a Ghoul Touch that spell resistance stops has no effect (PHB p.235, SR yes). The handler runs
+            // with gate None, so it must test the failed result itself: no paralysis, no stench, the slot spent.
+            yield return new PairSpec { Family = "ghoul-touch-sr", SpellId = SpellNames.GHOUL_TOUCH, Caster = wizard, SlotLevel = 2, TargetNpc = "goblin", Adjacent = true,
+                Title = "Ghoul Touch stopped by spell resistance (PHB p.235)", Covers = new[] { "PHB p.235", "PHB p.177" },
+                // SR 100: the caster level check (d20 19 + CL 5 = 24) fails.
+                TargetTweak = c => c.Stats.SpellResistance = 100,
+                SharedPins = b => b.Expect("Spell resistance stops the spell: no paralysis and no Ghoul Touch effect on either target, the slot spent (PHB p.235, p.177)",
+                    PairTargets(t => !t.Contains("Paralyzed") && !t.Contains(SpellNames.GHOUL_TOUCH) ? null : "the target is paralyzed or carries the ghoul touch effect", "L2:1/")) };
+            // SPL-124: the handler rolls the damage; SpellCaster.Cast must not deal the generic dice too.
+            yield return new PairSpec { Family = "spiritual-weapon", SpellId = SpellNames.SPIRITUAL_WEAPON, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Spiritual Weapon's first strike (PHB p.283)", Covers = new[] { "PHB p.283", "SPL-124" },
+                // The weapon's attack (d20 19 + BAB 5 + Wis 3) hits; 1d8 (8) + CL 7 / 3 (2) = 10 force damage, once.
+                SharedPins = b => b.Expect("The target takes only the weapon's strike, 10 force damage (PHB p.283; SPL-124)", PairTargets(t => t.StartsWith("hp=140 ", StringComparison.Ordinal) ? null : "expected hp=140", null)) };
+            yield return new PairSpec { Family = "produce-flame", SpellId = SpellNames.PRODUCE_FLAME, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Produce Flame thrown at a creature (PHB p.265)", Covers = new[] { "PHB p.265", "SPL-124" },
+                // The ranged touch attack (d20 19) hits; 1d6 (6) + min(CL 7, 5) = 11 fire damage, once.
+                SharedPins = b => b.Expect("The target takes only the flame's 11 fire damage (PHB p.265; SPL-124)", PairTargets(t => t.StartsWith("hp=139 ", StringComparison.Ordinal) ? null : "expected hp=139", null)) };
             yield return new PairSpec { Family = "resist-energy", SpellId = SpellNames.RESIST_ENERGY, Caster = wizard, SlotLevel = 2, Choices = new[] { "Cold" },
                 Title = "Resist Energy on the caster (PHB p.272)", Covers = new[] { "PHB p.272", "SPL-112" },
                 // The caster picks the energy (PHB p.272): the Ui caster picks cold, the NPC path forces fire.
@@ -636,8 +660,10 @@ namespace Tests.Scenarios
         /// and the target fails its saves (-30). After both casts the Scripted caster's Assert step records each side's end
         /// state: the caster's slots, and the target's hit points, conditions, spell effects with rounds left, Silence flag,
         /// Resist Energy entries and weapon spell effects. RAW the two must match (PC_NPC_PARITY, owner 2026-10-07); a
-        /// family where they differ today is pinned as Known with the issue that explains it (SPL-054: handlers missing from
-        /// the NPC chain; SPL-112: caster choices; SPL-113: the Magic Weapon pick).
+        /// family where they differ today is pinned as Known with the issue that explains it (SPL-112: caster choices;
+        /// SPL-113: the Magic Weapon pick). The handler families (Silence, Sound Burst, Hold Animal, and Ghoul Touch,
+        /// Remove Curse and Remove Blindness/Deafness added with it) pass since batch 11 step 6 runs the shared handler
+        /// registry on the NPC path (SPL-054).
         /// </summary>
         private static ScenarioDef PairScenario(PairSpec p)
         {
@@ -650,12 +676,17 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("ui", ActorSource.Stats(() => p.Caster("Pair Ui")), 3, 4, Control.Ui)
                 .Pc("scripted", ActorSource.Stats(() => p.Caster("Pair Scripted")), 3, 14, Control.Scripted)
-                .Tweak("ui", c => Prepare(c, p.SlotLevel, p.SpellId))
-                .Tweak("scripted", c => Prepare(c, p.SlotLevel, p.SpellId));
+                .Tweak("ui", c => { Prepare(c, p.SlotLevel, p.SpellId); p.CasterTweak?.Invoke(c); })
+                .Tweak("scripted", c => { Prepare(c, p.SlotLevel, p.SpellId); p.CasterTweak?.Invoke(c); });
             var order = new List<string> { "ui", "scripted" };
             if (!self)
             {
                 Action<CharacterController> tweak = p.TargetHp.HasValue ? (Action<CharacterController>)(c => SaveTweak(c, -30)) : Fails;
+                if (p.TargetTweak != null)
+                {
+                    Action<CharacterController> saveTweak = tweak;
+                    tweak = c => { saveTweak(c); p.TargetTweak(c); };
+                }
                 b = b.Npc("uiTarget", p.TargetNpc, 3 + dx, 4, Control.Idle)
                      .Npc("scriptedTarget", p.TargetNpc, 3 + dx, 14, Control.Idle)
                      .Tweak("uiTarget", tweak).Tweak("scriptedTarget", tweak);
@@ -666,15 +697,20 @@ namespace Tests.Scenarios
             }
             b = b.Npc("anchor", "target_dummy", 18, 9, Control.Idle);
             order.Add("anchor");
-            b = b.Initiative(order.ToArray())
-                .Force(20, 19, null, -1)
-                .Force(4, 4, null, -1)
-                .Force(6, 6, null, -1)
-                .Force(8, 8, null, -1)
-                .Turn("ui", 1, p.Choices != null ? Step.CastChoosing(p.SpellId, uiTarget, p.Choices) : Step.Cast(p.SpellId, uiTarget))
-                .Turn("scripted", 1,
-                    Step.Cast(p.SpellId, aiTarget),
-                    Step.Assert("record both end states", ctx =>
+            // A family with a caster setup records each caster's conditions just before its cast (only those families,
+            // so the other pairs keep their step 3 traces).
+            Step BeforeCast(string side)
+                => Step.Assert("record the " + side + " caster before its cast", ctx => { Fact(ctx, side + ".before", string.Join(",", ScenarioTrace.ConditionNames(ctx.Get(side)))); return true; });
+            var uiSteps = new List<Step>();
+            var aiSteps = new List<Step>();
+            if (p.CasterHasBefore != null)
+            {
+                uiSteps.Add(BeforeCast("ui"));
+                aiSteps.Add(BeforeCast("scripted"));
+            }
+            uiSteps.Add(p.Choices != null ? Step.CastChoosing(p.SpellId, uiTarget, p.Choices) : Step.Cast(p.SpellId, uiTarget));
+            aiSteps.Add(Step.Cast(p.SpellId, aiTarget));
+            aiSteps.Add(Step.Assert("record both end states", ctx =>
                     {
                         Fact(ctx, "ui", PairState(ctx.Get("ui"), ctx.Get(uiTarget)));
                         Fact(ctx, "scripted", PairState(ctx.Get("scripted"), ctx.Get(aiTarget)));
@@ -686,11 +722,33 @@ namespace Tests.Scenarios
                             Fact(ctx, side + ".target.dead", target.IsDead);
                         }
                         return true;
-                    }))
+                    }));
+            b = b.Initiative(order.ToArray())
+                .Force(20, 19, null, -1)
+                .Force(4, 4, null, -1)
+                .Force(6, 6, null, -1)
+                .Force(8, 8, null, -1)
+                .Turn("ui", 1, uiSteps.ToArray())
+                .Turn("scripted", 1, aiSteps.ToArray())
                 // Both casts must have run: equal end states after two refused casts would prove nothing.
                 .Expect("The Ui cast ran", Expect.StepStatus("ui", 1, "Cast", 0, "done"))
                 .Expect("The Scripted cast ran", Expect.StepStatus("scripted", 1, "Cast", 0, "done"))
                 .Expect("One cast event per caster (ScenarioHooks.SpellCast)", Expect.All(CastEvents("ui", p.SpellId, 1), CastEvents("scripted", p.SpellId, 1)));
+            if (p.CasterHasBefore != null)
+                b = b.Expect("Each caster has " + p.CasterHasBefore + " before its cast and not after it", v =>
+                {
+                    foreach (string side in new[] { "ui", "scripted" })
+                    {
+                        string before = FactOf(v, side + ".before"), after = FactOf(v, side);
+                        if (before == null || after == null)
+                            return ExpectResult.Inconclusive("missing fact " + side + (before == null ? ".before" : ""));
+                        if (!before.Split(',').Contains(p.CasterHasBefore))
+                            return ExpectResult.Fail(side + " caster before its cast: " + before + ", expected " + p.CasterHasBefore);
+                        if (after.Contains(p.CasterHasBefore))
+                            return ExpectResult.Fail(side + " after its cast: " + after + ", expected " + p.CasterHasBefore + " removed");
+                    }
+                    return ExpectResult.Pass("both casters had " + p.CasterHasBefore + " and lost it");
+                });
             if (p.KnownIssue == null)
                 b = b.Expect("The Ui and Scripted casts end in the same state", FactsEqual("ui", "scripted"));
             else if (p.KnownCheck != null)
@@ -702,6 +760,35 @@ namespace Tests.Scenarios
                 b = p.SharedPins(b);
             return b.Build();
         }
+
+        /// <summary>
+        /// Checks the target part of both pair facts ("ui", "scripted") with <paramref name="targetProblem"/> (null when the
+        /// target's end state is right, else what is wrong), and, when <paramref name="casterHas"/> is set, that the caster
+        /// part contains it (a spent slot such as "L2:1/").
+        /// </summary>
+        private static Func<TraceView, ExpectResult> PairTargets(Func<string, string> targetProblem, string casterHas)
+            => v =>
+            {
+                var seen = new List<string>();
+                foreach (string side in new[] { "ui", "scripted" })
+                {
+                    string fact = FactOf(v, side);
+                    if (fact == null)
+                        return ExpectResult.Inconclusive("missing fact " + side);
+                    int at = fact.IndexOf("] target[", StringComparison.Ordinal);
+                    if (at < 0)
+                        return ExpectResult.Fail(side + ": no target part in " + fact);
+                    string caster = fact.Substring(0, at);
+                    string target = fact.Substring(at + "] target[".Length).TrimEnd(']');
+                    string problem = targetProblem(target);
+                    if (problem != null)
+                        return ExpectResult.Fail(side + " target " + target + ": " + problem);
+                    if (casterHas != null && !caster.Contains(casterHas))
+                        return ExpectResult.Fail(side + " caster " + caster + ": expected " + casterHas);
+                    seen.Add(side + " target " + target);
+                }
+                return ExpectResult.Pass(string.Join("; ", seen));
+            };
 
         /// <summary>The caster's slots and state and the target's state, as one comparable string (no names, no positions).</summary>
         private static string PairState(CharacterController caster, CharacterController target)
@@ -743,6 +830,88 @@ namespace Tests.Scenarios
             }
             sb.Append(" items=").Append(string.Join(",", weaponEffects));
             return sb.ToString();
+        }
+
+        // ── rules/cast-ai-* (batch 11 step 6) ───────────────────────────
+
+        /// <summary>Spends every prepared slot of <paramref name="c"/> except one holding <paramref name="keepSpellId"/>.</summary>
+        private static void SpendAllBut(CharacterController c, string keepSpellId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spell slots");
+            bool kept = false;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (slot == null || slot.IsUsed)
+                    continue;
+                if (!kept && slot.PreparedSpell != null && slot.PreparedSpell.SpellId == keepSpellId)
+                {
+                    kept = true;
+                    continue;
+                }
+                slot.IsUsed = true;
+            }
+            if (!kept)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no unspent slot holding " + keepSpellId);
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        private static int FinalHp(TraceView v, string key)
+        {
+            JsonObj snap = v.Final(key);
+            object hp = snap != null ? snap.Get("hp") : null;
+            return hp != null ? Convert.ToInt32(hp, System.Globalization.CultureInfo.InvariantCulture) : int.MinValue;
+        }
+
+        /// <summary>
+        /// An AI-chosen cast of a handler the NPC path gained in step 6 (SPL-054): an AI-run cleric 7 (the NPC turn path)
+        /// whose only unspent slot holds Spiritual Weapon, a target dummy 30 ft away (-30 on saves, 100 more hit points)
+        /// and one round. The cleric casts it on its own choice, and the dummy takes only the weapon's first strike
+        /// (d20 19 + BAB 5 + Wis 3 hits; 1d8 = 8 + CL 7 / 3 = 2: 10 force damage, PHB p.283), not the generic dice too
+        /// (SPL-124).
+        /// </summary>
+        private static ScenarioDef AiSpiritualWeapon()
+        {
+            return Rules("rules/cast-ai-spiritual-weapon", "An AI-chosen Spiritual Weapon runs the shared handler and strikes once (PHB p.283)")
+                .Covers("SPL-054", "SPL-124", "PHB p.283", "batch 11 step 6")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => Cleric("AI Cleric", 7)), 3, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("cleric", c => { Prepare(c, 2, SpellNames.SPIRITUAL_WEAPON); SpendAllBut(c, SpellNames.SPIRITUAL_WEAPON); })
+                .Tweak("dummy", Fails)
+                .Initiative("cleric", "dummy")
+                .Force(20, 19, null, -1)
+                .Force(8, 8, null, -1)
+                .Expect("The AI cleric casts Spiritual Weapon once", CastEvents("cleric", SpellNames.SPIRITUAL_WEAPON, 1))
+                .Expect("The dummy takes only the weapon's strike: 150 -> 140 (PHB p.283; SPL-124)", v =>
+                {
+                    int hp = FinalHp(v, "dummy");
+                    if (hp == int.MinValue)
+                        return ExpectResult.Inconclusive("no final hit points for the dummy");
+                    return hp == 140 ? ExpectResult.Pass("dummy hp 140") : ExpectResult.Fail("dummy hp " + hp + ", expected 140");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The selection exclusion of step 6 (SPL-091): an AI-run wizard 7 whose only unspent slot holds Dimension Door, a
+        /// goblin beside it (-30 on attacks, 100 more hit points), two rounds. Dimension Door's destination is the caster's
+        /// choice (PHB p.221), which the AI cannot give yet, so AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive keeps
+        /// it out of AIService.SelectSpell and SelectLowerLevelAlternative: the wizard never casts it.
+        /// </summary>
+        private static ScenarioDef AiSkipsDimensionDoor()
+        {
+            return Rules("rules/cast-ai-skips-dimension-door", "The AI does not select Dimension Door, whose destination it cannot choose yet (SPL-091)")
+                .Covers("SPL-091", "PHB p.221", "batch 11 step 6")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 7)), 3, 10, Control.Ai)
+                .Npc("goblin", "goblin", 4, 10, Control.Idle)
+                .Tweak("wizard", c => { AddWizardSlot(c, 4, SpellNames.DIMENSION_DOOR); SpendAllBut(c, SpellNames.DIMENSION_DOOR); })
+                .Tweak("goblin", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("goblin", "wizard")
+                .Expect("The AI wizard never casts Dimension Door", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.DIMENSION_DOOR, 0, 0))
+                .Build();
         }
 
         // ── rules/cast-globe-damage (SPL-141) ───────────────────────────

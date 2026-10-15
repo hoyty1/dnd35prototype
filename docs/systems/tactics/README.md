@@ -232,7 +232,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 2 | Executor split plus `ActionRegistry` skeleton (attack, full attack, charge, maneuvers, single-target spell, consumable, aid another, turn undead) | all | High: the precondition for everything below | High | AI-054, SPL-054, ITM-005 |
 | 3 | Enemy spell carriers: DMG class casters get spells; slot and known-spell caps; mis-slotting; vampire as Fighter; stale placeholder flag on SM I/II | every caster spawn (max NPC CL in tables is 5) | High | High | ENC-021, SPL-041, SPL-015, CRE-030, SPL-021, CRE-015 |
 | 4 | NPC area casting through the shared AoE core; true burst resolution | 77 in-scope entries cite AI-001 (62 Area spells in the DB) | High: sleep, color spray, web, fireball | High | AI-001, SPL-046, SPL-042 |
-| 5 | NPC-path effect parity: summon, dispel and escape do nothing; Magic Vestment and Magic Weapon have no NPC handler (Prayer's added 2026-10-09); Hold Person/Monster have no per-round save (new); SR flags missing | about 30 P1/P2 spells | High | Med | SPL-091, SPL-057, new SPL (hold) |
+| 5 | NPC-path effect parity: summon, dispel and escape do nothing; Magic Weapon needs an AI weapon choice (SPL-113; Magic Vestment and every other single-target handler run on the NPC path since batch 11 step 6, 2026-10-15); Hold Person/Monster have no per-round save (new); SR flags missing | about 30 P1/P2 spells | High | Med | SPL-091, SPL-057, new SPL (hold) |
 | 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CRE-031, CMB-075 |
 | 7 | Movement modes: fly 42 (+ fly variants), climb 10+2, swim 3+2+1, burrow 4, earth glide 6. Prerequisite for flyby, ink-cloud escape and burrow-ambush AI | 60+ | High (positioning) | High (no fly/swim/climb speed exists on `NPCDefinition`) | file new GRID/CRE issue; AI-019 |
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
@@ -316,7 +316,7 @@ PC usability before correction is 129 yes, 94 partial and 186 no. 29 Cleric- or 
 **Biggest gaps:**
 
 1. **AI-001 Area refusal** (77 entries). P1 spells the AI selects but cannot cast: bless, burning hands, color spray, entangle, obscuring mist, sleep, flaming sphere, glitterdust, web, fireball, lightning bolt, stinking cloud, flame strike.
-2. **Empty NPC effects:** summon (SM III, SNA III), dispel and escape (SPL-091); prayer, magic vestment and magic weapon have no NPC handler.
+2. **Empty NPC effects:** summon (SM III, SNA III), dispel and escape (SPL-091); magic weapon (SPL-113). Prayer and magic vestment resolve on the NPC path (2026-10-09 and batch 11 step 6, 2026-10-15).
 3. **P1 placeholders or missing:** command and hypnotic pattern (placeholders), suggestion (missing). Missing at 1-2: charm animal, faerie fire, goodberry, shillelagh, speak with animals, animal trance, flame blade, spike growth, chill metal, misdirection, tongues and more. Druid and ranger 1st-2nd lists are about half missing.
 4. **3rd-5th combat gaps:** animate dead, fly, deeper darkness, polymorph, cloudkill, SM V, SNA V, mass cure light wounds, dispel chaos/evil/good/law, teleport, wall of stone, raise dead.
 5. **Data errors already filed:** SPL-099 (Flame Strike at 2nd), SPL-100 to SPL-102 and SPL-105 (class lists, domain-only spells), SPL-046 (bursts resolve as single target).

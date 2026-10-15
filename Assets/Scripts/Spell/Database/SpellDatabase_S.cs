@@ -682,6 +682,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 8, DamageCount = 1, BonusDamage = 1,
                     DamageType = "force",
+                    DamageResolvedByHandler = true, // TryResolveSpiritualWeaponSpellEffect rolls the weapon's attack and damage (SPL-124)
                     AutoHit = false, // Uses caster's BAB + WIS mod for attack
                     BuffDurationRounds = 3,
                     DurationType = DurationType.Rounds,

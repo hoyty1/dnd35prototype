@@ -52,10 +52,13 @@ internal sealed class SpellHandlerEntry
 /// (Shield Other and the Sound Burst stun excepted: they continue to the buff step). The table keeps the old chain
 /// order so a later overlap would still resolve in that order.
 ///
-/// <see cref="RunSingleTargetHandlers"/> is the PC path's handler step. The NPC path (TryNPCPerformSpellCast) still
-/// runs its own 19-handler chain (SPL-054) and only records, in the scenario harness's cast-stage side channel, what
-/// the registry would have claimed (<see cref="PredictSingleTargetClaim"/>) and which continuing handler it would have
-/// run (<see cref="PredictSingleTargetContinuingEntry"/>; the NPC chain has neither); step 6 switches it to the registry.
+/// <see cref="RunSingleTargetHandlers"/> is the handler step of both single-target cast paths: PerformSpellCast (PC, since
+/// step 5) and TryNPCPerformSpellCast (NPC, since step 6, which replaced the NPC path's own 19-handler chain; SPL-054),
+/// with the same gates, so a handler resolves the same for every caster. A handler must read the caster it is given,
+/// never ActivePC, IsControllable or a <c>_pending*</c> choice (Dimension Door's destination search still forks on
+/// IsPlayerControlled, a known divergence filed in SPL-091); a spell whose handler needs a choice the AI cannot give
+/// yet (Dimension Door's destination, Imbue with Spell Ability's slot picker) is kept out of the AI's candidates by
+/// <c>AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive</c> (SPL-091), not forked here.
 /// To add a single-target handler: write the method and add one line to <see cref="BuildSingleTargetHandlers"/>.
 /// </summary>
 public partial class GameManager
@@ -64,7 +67,6 @@ public partial class GameManager
     private Dictionary<string, List<SpellHandlerEntry>> _singleTargetHandlersBySpellId;
 
     private static List<SpellHandlerEntry> _singleTargetHandlerManifest;
-    private static Dictionary<string, List<SpellHandlerEntry>> _singleTargetHandlerManifestBySpellId;
 
     /// <summary>
     /// The registry in the old PC chain order. <paramref name="gm"/> is the instance whose methods the entries call;
@@ -163,22 +165,14 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The registry's table (names, spell ids, gates, ContinueToBuff) without an instance behind it, for
-    /// <see cref="PredictSingleTargetClaim"/> and the static suite. Its <see cref="SpellHandlerEntry.Resolve"/>
-    /// delegates must not be called.
+    /// The registry's table (names, spell ids, gates, ContinueToBuff) without an instance behind it, for the static
+    /// suite. Its <see cref="SpellHandlerEntry.Resolve"/> delegates must not be called.
     /// </summary>
     internal static IReadOnlyList<SpellHandlerEntry> DescribeSingleTargetHandlers()
     {
-        EnsureSingleTargetHandlerManifest();
+        if (_singleTargetHandlerManifest == null)
+            _singleTargetHandlerManifest = BuildSingleTargetHandlers(null);
         return _singleTargetHandlerManifest;
-    }
-
-    private static void EnsureSingleTargetHandlerManifest()
-    {
-        if (_singleTargetHandlerManifest != null)
-            return;
-        _singleTargetHandlerManifest = BuildSingleTargetHandlers(null);
-        _singleTargetHandlerManifestBySpellId = IndexBySpellId(_singleTargetHandlerManifest);
     }
 
     private void EnsureSingleTargetHandlers()
@@ -237,57 +231,5 @@ public partial class GameManager
                 return true;
         }
         return false;
-    }
-
-    /// <summary>
-    /// Pure prediction of <see cref="RunSingleTargetHandlers"/>'s claim, running no handler: a non-ContinueToBuff entry
-    /// for the spell's id whose gate passes. It cannot see a handler's own late refusals; those are null checks of the
-    /// caster or target, and Ray of Enfeeblement's and Touch of Idiocy's attack-miss check, which the gate already
-    /// covers (SpellCaster.Cast sets Success to false on a miss). Used for the NPC shadow ledger of batch 11 step 5.
-    /// </summary>
-    internal static bool PredictSingleTargetClaim(SpellData spell, SpellResult result, bool negated)
-    {
-        return PredictSingleTargetClaimEntry(spell, result, negated) != null;
-    }
-
-    /// <summary>The entry <see cref="PredictSingleTargetClaim"/> predicts would claim the cast, or null.</summary>
-    internal static SpellHandlerEntry PredictSingleTargetClaimEntry(SpellData spell, SpellResult result, bool negated)
-    {
-        if (spell == null || string.IsNullOrEmpty(spell.SpellId))
-            return null;
-
-        EnsureSingleTargetHandlerManifest();
-        if (!_singleTargetHandlerManifestBySpellId.TryGetValue(spell.SpellId, out List<SpellHandlerEntry> entries))
-            return null;
-
-        foreach (SpellHandlerEntry entry in entries)
-        {
-            if (!entry.ContinueToBuff && HandlerGatePasses(entry.Gate, result, negated))
-                return entry;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// The ContinueToBuff entry (Shield Other's empathic link, the Sound Burst stun) that <see cref="RunSingleTargetHandlers"/>
-    /// would run for this cast without claiming it, or null; pure, runs no handler. The NPC shadow ledger reports it as
-    /// <c>registryWouldRun</c>: the NPC chain runs neither of these handlers, so a non-null result is an NPC cast whose
-    /// effects step 6 changes even though the claim agrees.
-    /// </summary>
-    internal static SpellHandlerEntry PredictSingleTargetContinuingEntry(SpellData spell, SpellResult result, bool negated)
-    {
-        if (spell == null || string.IsNullOrEmpty(spell.SpellId))
-            return null;
-
-        EnsureSingleTargetHandlerManifest();
-        if (!_singleTargetHandlerManifestBySpellId.TryGetValue(spell.SpellId, out List<SpellHandlerEntry> entries))
-            return null;
-
-        foreach (SpellHandlerEntry entry in entries)
-        {
-            if (entry.ContinueToBuff && HandlerGatePasses(entry.Gate, result, negated))
-                return entry;
-        }
-        return null;
     }
 }

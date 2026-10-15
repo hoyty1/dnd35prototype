@@ -7170,7 +7170,7 @@ namespace Tests.Scenarios
         /// at 0 rounds and ended at the first round tick; before SPL-003 nothing ever ended the Silence flag, and the first
         /// version of the fix let a recast clear the flag it had just set. A scripted fighter's Assert step checks both every
         /// round: Guidance has 10 - (round - 1) rounds left (none from round 11), and Silence is on, flag and tracked effect together, for its
-        /// duration from the round-2 recast and off after. The Silence flag and handler run on the PC pipeline only (SPL-054).
+        /// duration from the round-2 recast and off after. The Silence handler (flag and tracked effect) runs on both single-target paths since batch 11 step 6 (the shared registry, SPL-054); this scenario casts it through the Ui path.
         /// </summary>
         private static ScenarioDef SpellDurations()
         {

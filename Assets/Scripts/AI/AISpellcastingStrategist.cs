@@ -217,6 +217,19 @@ public static class AISpellcastingStrategist
         return spell != null && spell.SpellId == SpellNames.ALTER_SELF;
     }
 
+    /// <summary>
+    /// A spell whose shared handler needs a caster choice the AI cannot give yet, so the AI leaves it out of its
+    /// candidates (a selection exclusion, not a rule fork: the handler resolves the same for every caster; batch 11
+    /// step 6, SPL-091): Dimension Door (PHB p.221; the caster picks the destination, which
+    /// <c>TryResolveDimensionDoorSpellEffect</c> fills only from the caster's control) and Imbue with Spell Ability
+    /// (PHB p.243; the caster picks the prepared spells to transfer in a UI panel that only a player can answer).
+    /// </summary>
+    public static bool NeedsCasterChoiceAiCannotGive(SpellData spell)
+    {
+        return spell != null
+            && (spell.SpellId == SpellNames.DIMENSION_DOOR || spell.SpellId == SpellNames.IMBUE_WITH_SPELL_ABILITY);
+    }
+
     /// <summary>Is this a spell that should target allies?</summary>
     public static bool IsAllyTargetedSpell(SpellData spell)
     {

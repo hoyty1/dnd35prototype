@@ -1466,108 +1466,12 @@ public partial class GameManager
             }
         }
 
-        // Batch 11 step 5 shadow ledger (inert outside the scenario harness): what the shared single-target registry
-        // (GameManager.SpellHandlerRegistry.cs) would claim for this cast, predicted from the result as it stands before
-        // any handler runs, without running one. Compared below with this chain's claim and written to the cast-stage
-        // side channel only; step 6 replaces this chain with the registry (SPL-054).
-        bool shadowLedger = ScenarioHooks.CastStage != null;
-        SpellHandlerEntry registryWouldClaim = shadowLedger ? PredictSingleTargetClaimEntry(spell, result, effectNegatedBySave) : null;
-        // The continuing handlers (Sound Burst stun, Shield Other's link) never claim, so the claim comparison cannot show
-        // them; this chain runs neither, so any one the registry would run is a step 6 difference too.
-        SpellHandlerEntry registryWouldRun = shadowLedger ? PredictSingleTargetContinuingEntry(spell, result, effectNegatedBySave) : null;
+        // Single-target handler step, shared with PerformSpellCast: the SpellId registry (GameManager.SpellHandlerRegistry.cs)
+        // runs the handler registered for this spell when its gate passes, with the same gates as the PC path (batch 11
+        // step 6, SPL-054). A claimed cast skips ApplySpellBuff; Shield Other and the Sound Burst stun continue to it.
+        bool claimedByHandler = RunSingleTargetHandlers(npc, target, spell, result, effectNegatedBySave, out _);
 
-        bool handledCauseFear = TryResolveCauseFearSpellEffect(npc, target, spell, result);
-
-        // Scare (Will partial: shaken 1 round on a save) resolves in its own handler, as on the PC path.
-        bool handledScare = false;
-        if (!handledCauseFear)
-            handledScare = TryResolveScareSpellEffect(npc, target, spell, result);
-
-        bool handledRayOfEnfeeblement = false;
-        if (!handledCauseFear && !handledScare && result.Success && !effectNegatedBySave)
-            handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(npc, target, spell, result);
-
-        bool handledTouchOfIdiocy = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
-            handledTouchOfIdiocy = TryResolveTouchOfIdiocySpellEffect(npc, target, spell, result);
-
-        bool handledMelfsAcidArrow = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && result.Success && !effectNegatedBySave)
-            handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(npc, target, spell, result);
-
-        bool handledRayOfExhaustion = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && result.Success)
-            handledRayOfExhaustion = TryResolveRayOfExhaustionSpellEffect(npc, target, spell, result);
-
-        bool handledVampiricTouch = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && result.Success)
-            handledVampiricTouch = TryResolveVampiricTouchSpellEffect(npc, target, spell, result);
-
-        bool handledEnervation = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && result.Success)
-            handledEnervation = TryResolveEnervationSpellEffect(npc, target, spell, result);
-
-        bool handledContagion = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && result.Success)
-            handledContagion = TryResolveContagionSpellEffect(npc, target, spell, result);
-
-        bool handledBestowCurse = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && result.Success)
-            handledBestowCurse = TryResolveBestowCurseSpellEffect(npc, target, spell, result);
-
-        bool handledGreaterInvisibility = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && result.Success)
-            handledGreaterInvisibility = TryResolveGreaterInvisibilitySpellEffect(npc, target, spell, result);
-
-        bool handledPhantasmalKiller = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && result.Success)
-            handledPhantasmalKiller = TryResolvePhantasmalKillerSpellEffect(npc, target, spell, result);
-
-        bool handledFireShield = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && result.Success)
-            handledFireShield = TryResolveFireShieldSpellEffect(npc, target, spell, result);
-
-        bool handledResilientSphere = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && result.Success && !effectNegatedBySave)
-            handledResilientSphere = TryResolveResilientSphereSpellEffect(npc, target, spell, result);
-
-        bool handledAnimateRope = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere)
-            handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
-
-        bool handledMirrorImage = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && result.Success && !effectNegatedBySave)
-            handledMirrorImage = TryResolveMirrorImageSpellEffect(npc, target, spell, result);
-
-        bool handledLesserGlobe = false;
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success)
-            handledLesserGlobe = TryResolveLesserGlobeSpellEffect(npc, target, spell, result);
-
-        // Searing Light's damage by creature type comes from its handler on both sides (SPL-054, SPL-124).
-        bool handledSearingLight = false;
-        if (!handledCauseFear && !handledLesserGlobe && result.Success)
-            handledSearingLight = TryResolveSearingLightSpellEffect(npc, target, spell, result);
-
-        // Prayer's burst around the caster (PHB p.264): allies +1 luck, foes -1, from the same resolver as the PC side
-        // (SPL-042, SPL-054).
-        bool handledPrayer = false;
-        if (!handledCauseFear && !handledSearingLight && result.Success)
-            handledPrayer = TryResolvePrayerSpellEffect(npc, target, spell, result);
-
-        if (shadowLedger)
-        {
-            bool npcClaimed = handledCauseFear || handledScare || handledRayOfEnfeeblement || handledTouchOfIdiocy || handledMelfsAcidArrow
-                || handledRayOfExhaustion || handledVampiricTouch || handledEnervation || handledContagion || handledBestowCurse
-                || handledGreaterInvisibility || handledPhantasmalKiller || handledFireShield || handledResilientSphere || handledAnimateRope
-                || handledMirrorImage || handledLesserGlobe || handledSearingLight || handledPrayer;
-            CastStageTrace.Mark(npc, spell, CastStageTrace.Shadow,
-                "npcClaimed=" + (npcClaimed ? "true" : "false")
-                + " registryWouldClaim=" + (registryWouldClaim != null ? "true" : "false")
-                + (registryWouldClaim != null ? " entry=" + registryWouldClaim.Name : "")
-                + (registryWouldRun != null ? " registryWouldRun=" + registryWouldRun.Name + " npcRan=false" : ""));
-        }
-
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && !handledPrayer && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!claimedByHandler && result.Success && appliesTrackedEffect && !effectNegatedBySave)
         {
             ActiveSpellEffect npcAppliedEffect = ApplySpellBuff(npc, target, spell, spellComp, result);
             CastStageTrace.Mark(npc, spell, CastStageTrace.Buff, npcAppliedEffect != null ? "applied" : "no-effect");
