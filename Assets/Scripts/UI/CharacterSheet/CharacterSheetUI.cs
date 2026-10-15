@@ -1155,6 +1155,18 @@ public class CharacterSheetUI : MonoBehaviour
             AddSeparator(content);
         }
 
+        if (stats.RangerLevel > 0)
+        {
+            // Ranger class features (PHB p.47-48; CHR-020): the combat style's feats are not in the feat list.
+            string favored = stats.RangerFavoredEnemies != null ? stats.RangerFavoredEnemies.GetSummary() : "None";
+            AddLine(content, $"Favored enemies: {favored}", 10, new Color(0.6f, 0.95f, 0.6f), FontStyle.Normal, 13);
+            if (stats.RangerLevel >= 2)
+                AddLine(content, $"Combat style: {RangerRules.CombatStyleSummary(stats)}", 10, new Color(0.6f, 0.95f, 0.6f), FontStyle.Normal, 13);
+            if (RangerRules.HasPendingChoices(stats))
+                AddLine(content, "Ranger choices pending: made at the next level-up.", 10, DimText, FontStyle.Normal, 13);
+            AddSeparator(content);
+        }
+
         if (stats.Feats.Count == 0)
         {
             AddLine(content, "No feats.", 12, DimText);

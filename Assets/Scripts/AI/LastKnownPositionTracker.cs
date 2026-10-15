@@ -182,14 +182,28 @@ public class LastKnownPositionTracker : MonoBehaviour
         // - Listen is resolved as a single check for the situation/round.
         // - You do not roll separately per concealed creature.
         // - DC 20 is used here to pinpoint concealed creature locations.
-        // - Success pinpoints all concealed targets in this set.
-        // - Failure pinpoints none of them.
+        // - The one roll pinpoints every concealed target it beats. A ranger adds his favored enemy bonus against
+        //   creatures of a favored type (PHB p.47), so the same roll can pinpoint those and miss the others
+        //   (delegated RAW reading 2026-10-14, CHR-020). Without that bonus it is all or nothing.
         // ═══════════════════════════════════════════════════════════════
         int listenDC = 20;
         int listenBonus = GetListenBonus();
         int d20Roll = DiceRoller.D20();
         int listenTotal = d20Roll + listenBonus;
-        bool success = listenTotal >= listenDC;
+
+        var located = new List<CharacterController>(validConcealedTargets.Count);
+        var favoredNotes = new List<string>();
+        for (int i = 0; i < validConcealedTargets.Count; i++)
+        {
+            CharacterController target = validConcealedTargets[i];
+            int favoredBonus = _owner.Stats != null && target.Stats != null
+                ? RangerRules.FavoredEnemySkillBonus(_owner.Stats, target.Stats, "Listen")
+                : 0;
+            if (favoredBonus != 0)
+                favoredNotes.Add($"{(target.Stats != null ? target.Stats.CharacterName : target.name)} {listenTotal + favoredBonus} (favored enemy +{favoredBonus})");
+            if (listenTotal + favoredBonus >= listenDC)
+                located.Add(target);
+        }
 
         string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
 
@@ -217,23 +231,26 @@ public class LastKnownPositionTracker : MonoBehaviour
             }
 
             gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Listen: d20({d20Roll}) + {listenBonus} = {listenTotal} vs DC {listenDC}"));
+            if (favoredNotes.Count > 0)
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Against favored enemies: {string.Join(", ", favoredNotes)}"));
         }
 
-        if (success)
+        for (int i = 0; i < located.Count; i++)
         {
-            for (int i = 0; i < validConcealedTargets.Count; i++)
-            {
-                CharacterController target = validConcealedTargets[i];
-                _pinpointedThisRound.Add(target);
-                _consecutiveLastKnownAutoMisses[target] = 0;
-            }
+            _pinpointedThisRound.Add(located[i]);
+            _consecutiveLastKnownAutoMisses[located[i]] = 0;
+        }
 
+        if (located.Count > 0)
+        {
             if (gameManager != null && gameManager.CombatUI != null)
             {
-                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  ✓ SUCCESS - All targets pinpointed!"));
-                for (int i = 0; i < validConcealedTargets.Count; i++)
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", located.Count == validConcealedTargets.Count
+                    ? "  ✓ SUCCESS - All targets pinpointed!"
+                    : "  ✓ PARTIAL - Some targets pinpointed"));
+                for (int i = 0; i < located.Count; i++)
                 {
-                    CharacterController target = validConcealedTargets[i];
+                    CharacterController target = located[i];
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
                     gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"    • {targetName} location pinpointed"));
                 }
@@ -286,7 +303,8 @@ public class LastKnownPositionTracker : MonoBehaviour
         if (_owner == null || _owner.Stats == null || target == null || target.Stats == null)
             return false;
 
-        int spotBonus = _owner.Stats.GetSkillBonus("Spot");
+        // A ranger's favored enemy bonus applies to Spot against a creature of a favored type (PHB p.47; CHR-020).
+        int spotBonus = _owner.Stats.GetSkillBonusAgainst("Spot", target.Stats);
         int hideBonus = target.Stats.GetHideSkillBonusAgainstObserver(_owner);
 
         spotRoll = DiceRoller.D20();

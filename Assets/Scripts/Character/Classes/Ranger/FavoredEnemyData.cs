@@ -1,9 +1,9 @@
 // ============================================================================
-// D&D 3.5e Favored Enemy System (PHB p.47)
-// Rangers select favored enemies at levels 1, 5, 10, 15, 20.
-// +2 bonus to Bluff, Listen, Sense Motive, Spot, Survival vs favored enemy.
-// +2 bonus to weapon damage vs favored enemy.
-// When gaining a new favored enemy, can increase existing bonus by +2 instead.
+// D&D 3.5e Favored Enemy (PHB p.47, Table 3-14)
+// A ranger selects a favored enemy at levels 1, 5, 10, 15 and 20. Each new one gives +2; at 5th level and every five
+// levels after, the bonus against one favored enemy (the new one included) also rises by 2. The bonus applies to
+// Bluff, Listen, Sense Motive, Spot and Survival checks against those creatures and to weapon damage rolls against
+// them. The rules are in RangerRules (CHR-020).
 // ============================================================================
 
 using System;
@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// All creature types available as favored enemies (D&D 3.5e PHB p.47).
+/// The favored enemy choices of PHB Table 3-14: a type, or for humanoids and outsiders a type and one subtype.
 /// </summary>
 public static class FavoredEnemyTypes
 {
@@ -93,111 +93,86 @@ public class FavoredEnemyEntry
 }
 
 /// <summary>
-/// Manages all favored enemy data for a Ranger (D&D 3.5e PHB p.47).
-/// Pure data class — no MonoBehaviour dependency.
+/// A ranger's favored enemy choices (PHB p.47; Table 3-14) and the bonus against each. Pure data: the rules (which
+/// selections are due, which choices are legal, which creatures match an entry, the bonus on damage and skills) are in
+/// <see cref="RangerRules"/>, for PCs and NPCs alike (CHR-020).
 /// </summary>
 public class FavoredEnemyData
 {
-    /// <summary>All active favored enemies with their current bonuses.</summary>
+    /// <summary>The favored enemies in the order chosen, each with its current bonus.</summary>
     public List<FavoredEnemyEntry> Enemies = new List<FavoredEnemyEntry>();
 
-    /// <summary>Number of favored enemy selections that have been made.</summary>
+    /// <summary>Number of favored enemy selections made (one entry per selection; PHB p.47).</summary>
     public int SelectionsMade => Enemies.Count;
-
-    /// <summary>
-    /// Add a new favored enemy or increase an existing enemy's bonus by +2.
-    /// </summary>
-    /// <param name="creatureType">Creature type to add/increase</param>
-    /// <returns>True if successful</returns>
-    public bool AddOrIncreaseFavoredEnemy(string creatureType)
-    {
-        if (string.IsNullOrEmpty(creatureType)) return false;
-
-        // Check if already a favored enemy — increase bonus
-        for (int i = 0; i < Enemies.Count; i++)
-        {
-            if (string.Equals(Enemies[i].CreatureType, creatureType, StringComparison.OrdinalIgnoreCase))
-            {
-                Enemies[i].Bonus += 2;
-                Debug.Log($"[FavoredEnemy] Increased bonus vs {creatureType} to +{Enemies[i].Bonus}");
-                return true;
-            }
-        }
-
-        // Add as new favored enemy
-        Enemies.Add(new FavoredEnemyEntry(creatureType, 2));
-        Debug.Log($"[FavoredEnemy] Added new favored enemy: {creatureType} (+2)");
-        return true;
-    }
-
-    /// <summary>
-    /// Get the favored enemy bonus against a specific creature type.
-    /// Returns 0 if the creature type is not a favored enemy.
-    /// </summary>
-    public int GetBonusVs(string creatureType)
-    {
-        if (string.IsNullOrEmpty(creatureType)) return 0;
-
-        for (int i = 0; i < Enemies.Count; i++)
-        {
-            if (MatchesCreatureType(Enemies[i].CreatureType, creatureType))
-                return Enemies[i].Bonus;
-        }
-        return 0;
-    }
-
-    /// <summary>
-    /// Get weapon damage bonus vs a creature type (same as skill bonus).
-    /// D&D 3.5e PHB p.47: "The ranger gains a +2 bonus on... weapon damage rolls."
-    /// </summary>
-    public int GetDamageBonusVs(string creatureType) => GetBonusVs(creatureType);
-
-    /// <summary>
-    /// Get skill bonus vs a creature type.
-    /// D&D 3.5e PHB p.47: "+2 bonus on Bluff, Listen, Sense Motive, Spot, and Survival checks"
-    /// </summary>
-    public int GetSkillBonusVs(string creatureType) => GetBonusVs(creatureType);
-
-    /// <summary>Check if a creature type matches a favored enemy entry.</summary>
-    private bool MatchesCreatureType(string favoredType, string targetType)
-    {
-        if (string.IsNullOrEmpty(favoredType) || string.IsNullOrEmpty(targetType))
-            return false;
-
-        // Exact match (case-insensitive)
-        if (string.Equals(favoredType, targetType, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // "Humanoid (Human)" matches "Humanoid" tag on creature
-        // "Outsider (Evil)" matches creatures tagged as both "Outsider" and "Evil"
-        string favoredLower = favoredType.Trim().ToLowerInvariant();
-        string targetLower = targetType.Trim().ToLowerInvariant();
-
-        // Handle subtype matching: "humanoid (human)" matches "humanoid"
-        if (favoredLower.Contains("("))
-        {
-            string baseType = favoredLower.Substring(0, favoredLower.IndexOf('(')).Trim();
-            if (string.Equals(baseType, targetLower, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
 
     /// <summary>Whether any favored enemies have been selected.</summary>
     public bool HasFavoredEnemies => Enemies.Count > 0;
 
-    /// <summary>Get a summary string for display.</summary>
+    /// <summary>Sum of every entry's bonus: 2 per selection plus 2 per increase (PHB p.47).</summary>
+    public int TotalBonus
+    {
+        get
+        {
+            int total = 0;
+            for (int i = 0; i < Enemies.Count; i++)
+                total += Enemies[i] != null ? Enemies[i].Bonus : 0;
+            return total;
+        }
+    }
+
+    /// <summary>The entry for <paramref name="creatureType"/> (a Table 3-14 name, case-insensitive), or null.</summary>
+    public FavoredEnemyEntry Find(string creatureType)
+    {
+        if (string.IsNullOrWhiteSpace(creatureType))
+            return null;
+        for (int i = 0; i < Enemies.Count; i++)
+        {
+            if (Enemies[i] != null && string.Equals(Enemies[i].CreatureType, creatureType.Trim(), StringComparison.OrdinalIgnoreCase))
+                return Enemies[i];
+        }
+        return null;
+    }
+
+    /// <summary>Whether <paramref name="creatureType"/> is already a favored enemy.</summary>
+    public bool Has(string creatureType) => Find(creatureType) != null;
+
+    /// <summary>Adds a new favored enemy at +2. Validation is <see cref="RangerRules.TryApplyFavoredEnemySelection"/>'s.</summary>
+    internal void AddNew(string creatureType)
+    {
+        Enemies.Add(new FavoredEnemyEntry(creatureType.Trim(), 2));
+    }
+
+    /// <summary>Raises an existing favored enemy's bonus by 2 (PHB p.47).</summary>
+    internal void IncreaseBonus(string creatureType)
+    {
+        FavoredEnemyEntry entry = Find(creatureType);
+        if (entry != null)
+            entry.Bonus += 2;
+    }
+
+    /// <summary>A deep copy (NPC definitions and creation records hand theirs to a new creature).</summary>
+    public FavoredEnemyData Clone()
+    {
+        var copy = new FavoredEnemyData();
+        for (int i = 0; i < Enemies.Count; i++)
+        {
+            if (Enemies[i] != null)
+                copy.Enemies.Add(new FavoredEnemyEntry(Enemies[i].CreatureType, Enemies[i].Bonus));
+        }
+        return copy;
+    }
+
+    /// <summary>"Humanoid (Elf) +4, Humanoid (Human) +2", or "None".</summary>
     public string GetSummary()
     {
         if (Enemies.Count == 0) return "None";
         var parts = new string[Enemies.Count];
         for (int i = 0; i < Enemies.Count; i++)
-            parts[i] = $"{Enemies[i].CreatureType} (+{Enemies[i].Bonus})";
+            parts[i] = $"{Enemies[i].CreatureType} +{Enemies[i].Bonus}";
         return string.Join(", ", parts);
     }
 
-    /// <summary>Get list of creature types that are currently favored enemies.</summary>
+    /// <summary>The favored enemy types in the order chosen.</summary>
     public List<string> GetFavoredEnemyTypes()
     {
         var types = new List<string>();

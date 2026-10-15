@@ -376,14 +376,18 @@ public static class LycanthropeTemplate
         lycan.ChallengeRating = CalculateLycanthropeCR(baseCreature.ChallengeRating, animal.AnimalHD);
 
         // ── Tags ──
-        lycan.CreatureTags = new List<string>
-        {
-            baseCreature.CreatureType ?? "Humanoid",
-            "Shapechanger",
-            "Lycanthrope",
-            GetLycanthropeTypeName(animalType),
-            isNatural ? "NaturalLycanthrope" : "AfflictedLycanthrope"
-        };
+        // The base creature keeps its type and subtypes and gains the shapechanger subtype (MM p.175: a werewolf is
+        // Humanoid (Human, Shapechanger)), so the base's tags are kept: favored enemy matching reads the Human subtype
+        // from them (CHR-020).
+        lycan.CreatureTags = new List<string>();
+        AddTagOnce(lycan.CreatureTags, baseCreature.CreatureType ?? "Humanoid");
+        if (baseCreature.CreatureTags != null)
+            for (int i = 0; i < baseCreature.CreatureTags.Count; i++)
+                AddTagOnce(lycan.CreatureTags, baseCreature.CreatureTags[i]);
+        AddTagOnce(lycan.CreatureTags, "Shapechanger");
+        AddTagOnce(lycan.CreatureTags, "Lycanthrope");
+        AddTagOnce(lycan.CreatureTags, GetLycanthropeTypeName(animalType));
+        AddTagOnce(lycan.CreatureTags, isNatural ? "NaturalLycanthrope" : "AfflictedLycanthrope");
 
         // ── Special Abilities display ──
         lycan.SpecialAbilities = BuildLycanthropeAbilities(
@@ -424,6 +428,16 @@ public static class LycanthropeTemplate
     /// <summary>
     /// Claw damage die by hybrid size (follows standard natural attack progression).
     /// </summary>
+    private static void AddTagOnce(List<string> tags, string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+            return;
+        for (int i = 0; i < tags.Count; i++)
+            if (string.Equals(tags[i], tag, System.StringComparison.OrdinalIgnoreCase))
+                return;
+        tags.Add(tag);
+    }
+
     public static int GetHybridClawDamageDice(SizeCategory size)
     {
         switch (size)
@@ -708,6 +722,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6, // 30 ft
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 5, // 1d8+1
             // MM p.175: the werewolf has Improved Initiative, Iron Will (template), Stealthy, Track and
             // Weapon Focus (bite); the attack-math feats follow the MM (CRE-045), the rest is the custom build.
@@ -769,6 +784,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6,
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 75, // 10d10+20
             Feats = new List<string>
             {
@@ -838,6 +854,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6,
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 7, // 1d6+1
             Feats = new List<string> { "Dodge", "Weapon Finesse" },
             EquipmentIds = new List<EquipmentSlotPair>(),
@@ -897,6 +914,7 @@ public static class LycanthropeFactory
             BaseSpeed = 8, // 40 ft (barbarian fast movement)
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 9, // 1d12+2
             Feats = new List<string> { "Power Attack" },
             EquipmentIds = new List<EquipmentSlotPair>(),
@@ -954,6 +972,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6,
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 28, // 4d10+4
             // MM p.174: the weretiger has Improved Natural Attack (bite, claw) and neither Power Attack nor
             // Weapon Focus (CRE-045); its other feats are the custom build's.
@@ -1010,6 +1029,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6,
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 6, // 1d4+2
             // MM p.171: the werebear has Multiattack and Power Attack from its bear Hit Dice (CRE-045).
             Feats = new List<string> { "Endurance", "Multiattack", "Power Attack" },
@@ -1068,6 +1088,7 @@ public static class LycanthropeFactory
             BaseSpeed = 8, // 40 ft
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 9,
             Feats = new List<string> { "Power Attack", "Cleave" },
             EquipmentIds = new List<EquipmentSlotPair>(),
@@ -1125,6 +1146,7 @@ public static class LycanthropeFactory
             BaseSpeed = 6,
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
+            CreatureTags = new List<string> { "Humanoid", "Human" }, // MM p.171-177: Humanoid (Human); favored enemy (CHR-020)
             BaseHitDieHP = 4, // 1d4
             Feats = new List<string>(),
             EquipmentIds = new List<EquipmentSlotPair>(),

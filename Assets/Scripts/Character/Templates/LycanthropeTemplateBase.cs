@@ -122,6 +122,10 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
 
         // Feats
         target.Feats = source.Feats;
+
+        // Ranger choices (CHR-020; CRE-023): a lycanthrope keeps its class levels.
+        target.RangerStyle = source.RangerStyle;
+        target.RangerFavoredEnemies = NPCDefinition.CloneFavoredEnemies(source.RangerFavoredEnemies);
     }
 }
 

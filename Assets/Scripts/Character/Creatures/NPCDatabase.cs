@@ -667,6 +667,19 @@ public class NPCDefinition
     /// </summary>
     public List<string> ClericDomains = new List<string>();
 
+    /// <summary>
+    /// A ranger's combat style (PHB p.48), copied to the creature at spawn by <see cref="RangerRules.ApplyNpcChoices"/>.
+    /// None: the DMG p.122 sample NPC ranger's choice (archery). Read only for a creature with ranger levels (CHR-020).
+    /// </summary>
+    public RangerCombatStyle RangerStyle = RangerCombatStyle.None;
+
+    /// <summary>
+    /// A ranger's favored enemies with their bonuses (PHB p.47, Table 3-14 names), copied at spawn by
+    /// <see cref="RangerRules.ApplyNpcChoices"/>. Empty: the DMG p.122 sample NPC ranger's choices (elves, then humans
+    /// with +2 more on elves). Read only for a creature with ranger levels (CHR-020).
+    /// </summary>
+    public List<FavoredEnemyEntry> RangerFavoredEnemies = new List<FavoredEnemyEntry>();
+
     // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
     public List<string> SpecialAbilities = new List<string>();
 
@@ -890,6 +903,8 @@ public class NPCDefinition
         clone.ClericDomains = ClericDomains != null
             ? new List<string>(ClericDomains)
             : new List<string>();
+        clone.RangerStyle = RangerStyle;
+        clone.RangerFavoredEnemies = CloneFavoredEnemies(RangerFavoredEnemies);
         clone.SpecialAbilities = SpecialAbilities != null
             ? new List<string>(SpecialAbilities)
             : new List<string>();
@@ -933,6 +948,20 @@ public class NPCDefinition
         clone.AuraAbility = AuraAbility?.Clone();
 
         return clone;
+    }
+
+    /// <summary>A deep copy of a favored enemy list (entries are mutable; CRE-023).</summary>
+    public static List<FavoredEnemyEntry> CloneFavoredEnemies(List<FavoredEnemyEntry> source)
+    {
+        var copy = new List<FavoredEnemyEntry>();
+        if (source == null)
+            return copy;
+        for (int i = 0; i < source.Count; i++)
+        {
+            if (source[i] != null)
+                copy.Add(new FavoredEnemyEntry(source[i].CreatureType, source[i].Bonus));
+        }
+        return copy;
     }
 }
 

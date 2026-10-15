@@ -80,6 +80,8 @@ public static class ZombieTemplate
         zombie.HitDice = doubledHD;
         zombie.Level = 0;
         zombie.CharacterClass = null;
+        zombie.RangerStyle = RangerCombatStyle.None; // no class levels, so no ranger choices (CHR-020)
+        zombie.RangerFavoredEnemies = new List<FavoredEnemyEntry>();
         // The template drops the class levels, so no class grants proficiency (CHR-072).
         zombie.ClassLevelsAreRacialHitDice = true;
 

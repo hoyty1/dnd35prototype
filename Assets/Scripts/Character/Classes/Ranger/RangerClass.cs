@@ -71,35 +71,18 @@ public class RangerClass : ICharacterClass
     // UI — nature-themed green/brown
     public Color TitleColor => new Color(0.35f, 0.7f, 0.3f);
     public Color ButtonColor => new Color(0.2f, 0.45f, 0.15f);
-    public string InfoText => "Hit Die: d8 | BAB: +3 (full)\nGood Saves: Fortitude, Reflex\n• Favored Enemy, Combat Style\n• Animal Companion (L4)\n• Spells at L4+ (WIS-based)";
+    public string InfoText => "Hit Die: d8 | BAB: full\nGood Saves: Fortitude, Reflex\n• Favored Enemy (+2 damage, skills)\n• Combat Style: archery or two-weapon (light armor)\n• Track, Endurance (L3), Evasion (L9)\n• Not yet implemented: animal companion, spells, wild empathy";
 
-    // Class Features
-    // D&D 3.5e PHB p.48: Rangers receive Track as a FREE bonus feat at 1st level.
-    // Endurance at 3rd level is also automatic.
+    // Class Features: Track (1st) and Endurance (3rd ranger level) are bonus feats (PHB p.47-48). Favored enemy and
+    // combat style are choices (RangerRules; the creation and level-up flows for PCs, the definition for NPCs).
     public void InitFeats(CharacterStats stats)
     {
-        if (stats != null)
-        {
-            // Track is granted free at level 1 (PHB p.48)
-            if (!stats.HasFeat("Track"))
-            {
-                stats.Feats.Add("Track");
-                Debug.Log($"[Ranger] {stats.CharacterName}: Granted Track as free Ranger class feature (PHB p.48).");
-            }
-
-            // Endurance at level 3 (PHB p.48)
-            if (stats.Level >= 3 && !stats.HasFeat("Endurance"))
-            {
-                stats.Feats.Add("Endurance");
-                Debug.Log($"[Ranger] {stats.CharacterName}: Granted Endurance at level 3 (PHB p.48).");
-            }
-        }
+        RangerRules.GrantAutomaticFeats(stats);
     }
 
     /// <summary>
-    /// Returns a pre-built Quick Start character: Kael the Human Ranger.
-    /// Archery combat style, favored enemy: Undead, wolf companion.
-    /// Level 3 Ranger with WIS 14 (spells not yet available at L3).
+    /// Returns a pre-built Quick Start character: Kael the Human Ranger 3: archery combat style (Rapid Shot in his
+    /// studded leather), favored enemy undead. WIS 14 for spells from 4th level.
     /// </summary>
     public static CharacterCreationData GetQuickStartCharacter()
     {
@@ -114,8 +97,10 @@ public class RangerClass : ICharacterClass
             INT = 10, WIS = 14, CHA = 10,
             SelectedFeats = new List<string> { "Point Blank Shot", "Precise Shot" },
             SelectedSpellIds = new List<string>(), // No spells at level 3
-            ChosenAlignment = Alignment.NeutralGood
+            ChosenAlignment = Alignment.NeutralGood,
+            RangerCombatStyleChoice = RangerCombatStyle.Archery
         };
+        RangerRules.TryApplyFavoredEnemySelection(data.RangerFavoredEnemies, 3, "Undead", null, out _);
         data.ComputeFinalStats();
         data.SkillRanks["Hide"] = 6;
         data.SkillRanks["Move Silently"] = 6;
@@ -156,10 +141,13 @@ public class RangerClass : ICharacterClass
     /// <summary>Hide in Plain Sight at level 17 (PHB p.48).</summary>
     public static bool HasHideInPlainSight(int level) => level >= 17;
 
-    /// <summary>Animal companion effective druid level = ranger level - 3 (PHB p.48).</summary>
+    /// <summary>
+    /// Animal companion effective druid level: half the ranger level, from 4th (PHB p.48; the book's example gives a
+    /// 4th-level ranger a 2nd-level druid's companion). Rounded down.
+    /// </summary>
     public static int GetEffectiveDruidLevel(int rangerLevel)
     {
         if (rangerLevel < 4) return 0;
-        return rangerLevel - 3; // Ranger's companion is as a druid of level ranger-3
+        return rangerLevel / 2;
     }
 }

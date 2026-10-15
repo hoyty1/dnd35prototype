@@ -609,7 +609,7 @@ public class FeatSelectionUI : MonoBehaviour
         // Other modes evaluate against current character feats + currently selected feats
         // so chained picks (e.g., Power Attack -> Improved Overrun) unlock correctly.
         bool meetsPrereqs = _isMonkBonus ? true : MeetsPrerequisitesWithSelectedFeats(feat);
-        bool alreadyHas = !feat.CanTakeMultiple && _stats.HasFeat(feat.FeatName);
+        bool alreadyHas = !feat.CanTakeMultiple && _stats.HasOwnFeat(feat.FeatName);
         bool isSelected = _selectedFeats.Contains(feat.FeatName);
 
         // For CanTakeMultiple weapon-choice feats (Weapon Focus, etc.):

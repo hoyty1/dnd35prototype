@@ -51,7 +51,7 @@ public static class FeatDefinitions
         foreach (var feat in _feats.Values)
         {
             if (fighterBonusOnly && !feat.IsFighterBonus) continue;
-            if (!feat.CanTakeMultiple && stats.HasFeat(feat.FeatName)) continue;
+            if (!feat.CanTakeMultiple && stats.HasOwnFeat(feat.FeatName)) continue;
             if (feat.MeetsPrerequisites(stats))
                 available.Add(feat);
         }
@@ -73,7 +73,7 @@ public static class FeatDefinitions
         {
             if (!feat.IsMonkBonus) continue;
             if (feat.MonkBonusLevel > monkLevel) continue;
-            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasOwnFeat(feat.FeatName)) continue;
             available.Add(feat);
         }
         return available;
@@ -91,7 +91,7 @@ public static class FeatDefinitions
         {
             if (!feat.IsMonkBonus) continue;
             if (feat.MonkBonusLevel != monkBonusLevel) continue;
-            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasOwnFeat(feat.FeatName)) continue;
             available.Add(feat);
         }
         return available;
@@ -1190,7 +1190,7 @@ public static class FeatDefinitions
         foreach (var feat in _feats.Values)
         {
             if (!feat.IsWizardBonus) continue;
-            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasOwnFeat(feat.FeatName)) continue;
             // Wizard bonus feats still require meeting prerequisites
             if (stats != null && !feat.MeetsPrerequisites(stats)) continue;
             available.Add(feat);

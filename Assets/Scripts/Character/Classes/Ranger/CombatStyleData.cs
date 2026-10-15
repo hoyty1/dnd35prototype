@@ -1,11 +1,11 @@
 // ============================================================================
-// D&D 3.5e Ranger Combat Style System (PHB p.48)
-// At level 2, Ranger selects Archery or Two-Weapon Fighting style.
-// Bonus feats granted WITHOUT prerequisites at L2, L6, L11.
+// D&D 3.5e Ranger Combat Style (PHB p.48)
+// At 2nd level a ranger selects archery or two-weapon combat. He is treated as having Rapid Shot or Two-Weapon
+// Fighting (2nd), Manyshot or Improved Two-Weapon Fighting (Improved Combat Style, 6th) and Improved Precise Shot or
+// Greater Two-Weapon Fighting (Combat Style Mastery, 11th), without their prerequisites, but only while he wears light
+// or no armor. The rules are in RangerRules (CHR-020).
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>Ranger combat style choice (permanent, selected at level 2).</summary>
@@ -17,21 +17,25 @@ public enum RangerCombatStyle
 }
 
 /// <summary>
-/// Tracks the Ranger's combat style and grants appropriate bonus feats.
-/// D&D 3.5e PHB p.48: These feats are granted without meeting prerequisites,
-/// but only function while wearing light or no armor.
+/// The ranger's combat style choice. Pure data: the style's feats are never added to <see cref="CharacterStats.Feats"/>;
+/// <see cref="CharacterStats.HasFeat"/> treats the ranger as having them while the style applies
+/// (<see cref="RangerRules.CombatStyleTreatsAsHavingFeat"/>), for PCs and NPCs alike.
 /// </summary>
 public class CombatStyleData
 {
     public RangerCombatStyle Style { get; private set; } = RangerCombatStyle.None;
     public bool HasStyleSelected => Style != RangerCombatStyle.None;
 
-    /// <summary>Feats already granted by the combat style.</summary>
-    public List<string> GrantedFeats { get; private set; } = new List<string>();
+    /// <summary>A style data object with <paramref name="style"/> already chosen (None leaves it unchosen).</summary>
+    public static CombatStyleData Create(RangerCombatStyle style)
+    {
+        var data = new CombatStyleData();
+        if (style != RangerCombatStyle.None)
+            data.SelectStyle(style);
+        return data;
+    }
 
-    /// <summary>
-    /// Select a combat style. Can only be done once (permanent choice at level 2).
-    /// </summary>
+    /// <summary>Select a combat style. It can be chosen only once (PHB p.48: a choice made at 2nd level).</summary>
     public bool SelectStyle(RangerCombatStyle style)
     {
         if (HasStyleSelected)
@@ -47,33 +51,7 @@ public class CombatStyleData
         return true;
     }
 
-    /// <summary>
-    /// Grant the appropriate combat style feat for the given ranger level.
-    /// Called during level-up. Feats are granted without prerequisites.
-    /// </summary>
-    /// <param name="rangerLevel">Current Ranger class level</param>
-    /// <returns>Feat name granted, or null if no feat at this level</returns>
-    public string GrantStyleFeat(int rangerLevel)
-    {
-        if (!HasStyleSelected) return null;
-
-        string feat = GetFeatForLevel(rangerLevel);
-        if (feat == null) return null;
-
-        if (GrantedFeats.Contains(feat))
-        {
-            Debug.Log($"[CombatStyle] Already has {feat}, skipping.");
-            return null;
-        }
-
-        GrantedFeats.Add(feat);
-        Debug.Log($"[CombatStyle] Granted {feat} at Ranger level {rangerLevel}");
-        return feat;
-    }
-
-    /// <summary>
-    /// Get the feat that should be granted at a specific ranger level for the selected style.
-    /// </summary>
+    /// <summary>The feat the style gives at exactly <paramref name="rangerLevel"/> (2nd, 6th, 11th), or null.</summary>
     public string GetFeatForLevel(int rangerLevel)
     {
         if (Style == RangerCombatStyle.Archery)
@@ -99,16 +77,16 @@ public class CombatStyleData
         return null;
     }
 
-    /// <summary>Whether a given ranger level grants a combat style feat.</summary>
+    /// <summary>Whether a given ranger level gives a combat style feat.</summary>
     public static bool IsStyleFeatLevel(int rangerLevel)
     {
         return rangerLevel == 2 || rangerLevel == 6 || rangerLevel == 11;
     }
 
-    /// <summary>Get all feats that should be granted up to and including the given ranger level.</summary>
-    public List<string> GetAllFeatsUpToLevel(int rangerLevel)
+    /// <summary>Every feat the style gives up to and including <paramref name="rangerLevel"/>.</summary>
+    public System.Collections.Generic.List<string> GetAllFeatsUpToLevel(int rangerLevel)
     {
-        var feats = new List<string>();
+        var feats = new System.Collections.Generic.List<string>();
         if (!HasStyleSelected) return feats;
 
         int[] levels = { 2, 6, 11 };
@@ -123,12 +101,17 @@ public class CombatStyleData
         return feats;
     }
 
-    /// <summary>Get a display summary of the combat style.</summary>
-    public string GetSummary()
+    /// <summary>"Archery", "Two-Weapon Combat" or "None selected".</summary>
+    public string GetStyleName()
     {
-        if (!HasStyleSelected) return "None selected";
-        string styleName = Style == RangerCombatStyle.Archery ? "Archery" : "Two-Weapon Fighting";
-        string feats = GrantedFeats.Count > 0 ? string.Join(", ", GrantedFeats) : "none yet";
-        return $"{styleName} ({feats})";
+        switch (Style)
+        {
+            case RangerCombatStyle.Archery: return "Archery";
+            case RangerCombatStyle.TwoWeaponFighting: return "Two-Weapon Combat";
+            default: return "None selected";
+        }
     }
+
+    /// <summary>A copy of the choice.</summary>
+    public CombatStyleData Clone() => Create(Style);
 }

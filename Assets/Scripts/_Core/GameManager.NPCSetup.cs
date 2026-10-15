@@ -743,9 +743,11 @@ public partial class GameManager
 
         foreach (string featName in def.Feats)
         {
-            if (!stats.HasFeat(featName))
+            if (!stats.HasOwnFeat(featName))
                 stats.Feats.Add(featName);
         }
+        // A ranger's combat style and favored enemies: the definition's, or the DMG p.122 sample ranger's (CHR-020).
+        RangerRules.ApplyNpcChoices(stats, def);
         if (!string.IsNullOrEmpty(def.WeaponFocusChoice))
             stats.WeaponFocusChoice = def.WeaponFocusChoice;
 

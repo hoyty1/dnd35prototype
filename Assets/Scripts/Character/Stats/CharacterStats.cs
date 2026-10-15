@@ -765,7 +765,7 @@ public class CharacterStats
     /// <summary>Druid's wild shape tracking data. Initialized when wild shape is gained at level 5.</summary>
     public WildShapeData DruidWildShape;
 
-    /// <summary>Druid's animal companion data. Uses FULL druid level (not level - 3 like Ranger).</summary>
+    /// <summary>Druid's animal companion data. Uses the full druid level (a ranger's is one-half his ranger level, PHB p.48).</summary>
     public AnimalCompanionData DruidAnimalCompanion;
 
     /// <summary>Nature Sense (L1): +2 Knowledge (Nature) and Survival (PHB p.35).</summary>
@@ -802,14 +802,36 @@ public class CharacterStats
     // Ranger Class Features (PHB p.46-48)
     // ─────────────────────────────────────────────
 
-    /// <summary>Ranger's favored enemy tracking data. Initialized during character creation/level-up.</summary>
+    /// <summary>Ranger class level (0 for a creature without ranger levels).</summary>
+    public int RangerLevel => GetClassLevel("Ranger");
+
+    /// <summary>
+    /// The ranger's favored enemies and their bonuses (PHB p.47; RangerRules, CHR-020): set from the creation record
+    /// (RangerRules.ApplyCreationChoices), the level-up choice (RangerFeatureSelectionUI) or the NPC definition
+    /// (RangerRules.ApplyNpcChoices). Null for a creature that never had ranger levels.
+    /// </summary>
     public FavoredEnemyData RangerFavoredEnemies;
 
-    /// <summary>Ranger's chosen combat style data (Archery or Two-Weapon Fighting).</summary>
+    /// <summary>
+    /// The ranger's combat style (PHB p.48). Its feats are never added to <see cref="Feats"/>: <see cref="HasFeat"/>
+    /// treats the ranger as having them while he wears light or no armor (RangerRules.CombatStyleTreatsAsHavingFeat).
+    /// </summary>
     public CombatStyleData RangerCombatStyle;
 
-    /// <summary>Ranger's animal companion data. Initialized when companion is gained at level 4.</summary>
+    /// <summary>Ranger's animal companion data. No companion exists in play yet (CHR-020).</summary>
     public AnimalCompanionData RangerAnimalCompanion;
+
+    /// <summary>
+    /// A skill check modifier against <paramref name="creature"/>: <see cref="GetSkillBonus"/> plus the ranger's favored
+    /// enemy bonus on Bluff, Listen, Sense Motive, Spot and Survival against a creature of a favored type (PHB p.47).
+    /// </summary>
+    public int GetSkillBonusAgainst(string skillName, CharacterStats creature)
+    {
+        int total = GetSkillBonus(skillName);
+        if (IsSkillBlockedByMindless(skillName))
+            return total;
+        return total + RangerRules.FavoredEnemySkillBonus(this, creature, skillName);
+    }
 
     /// <summary>Ranger has Woodland Stride at level 7 (PHB p.48): move through natural terrain at normal speed.</summary>
     public bool HasWoodlandStride => IsRanger && GetClassLevel("Ranger") >= 7;
@@ -823,7 +845,7 @@ public class CharacterStats
     /// <summary>Ranger has Hide in Plain Sight at level 17 (PHB p.48): Hide even while observed in natural terrain.</summary>
     public bool HasHideInPlainSight => IsRanger && GetClassLevel("Ranger") >= 17;
 
-    /// <summary>Ranger's effective druid level for animal companion = ranger level - 3.</summary>
+    /// <summary>Ranger's effective druid level for the animal companion: one-half the ranger level, from 4th (PHB p.48).</summary>
     public int RangerEffectiveDruidLevel => IsRanger ? RangerClass.GetEffectiveDruidLevel(GetClassLevel("Ranger")) : 0;
 
     // ─────────────────────────────────────────────
@@ -2346,8 +2368,22 @@ public class CharacterStats
     /// <summary>Set of feats this character has.</summary>
     public HashSet<string> Feats = new HashSet<string>();
 
-    /// <summary>Check if this character has a specific feat.</summary>
-    public bool HasFeat(string featName) => Feats.Contains(featName);
+    /// <summary>
+    /// Whether this creature has a feat or is treated as having it: a feat it took (<see cref="Feats"/>), or a ranger's
+    /// combat style feat while he wears light or no armor (PHB p.48; RangerRules.CombatStyleTreatsAsHavingFeat, CHR-020).
+    /// Use <see cref="HasOwnFeat"/> to ask whether the feat was taken (feat selection, adding a feat). A feat taken on
+    /// the strength of a combat style feat is unusable while the style does not apply (PHB p.87;
+    /// RangerRules.LosesFeatToMissingStylePrerequisite).
+    /// </summary>
+    public bool HasFeat(string featName)
+    {
+        if (Feats.Contains(featName))
+            return !RangerRules.LosesFeatToMissingStylePrerequisite(this, featName);
+        return RangerRules.CombatStyleTreatsAsHavingFeat(this, featName);
+    }
+
+    /// <summary>Whether this creature took <paramref name="featName"/> (it is in <see cref="Feats"/>), ignoring feats a class only treats it as having.</summary>
+    public bool HasOwnFeat(string featName) => Feats.Contains(featName);
 
 
     /// <summary>
@@ -4512,6 +4548,8 @@ public class CharacterStats
 
         RefreshSkillClassFlags();
         RecalculateXPPenaltyStatus();
+        // Class bonus feats by class level (PHB p.47-48: a ranger's Track at 1st and Endurance at 3rd ranger level).
+        RangerRules.GrantAutomaticFeats(this);
         Debug.Log($"[LevelUp] Applied level-up for {CharacterName}: +1 {selectedClass} (class level now {classEntry.Level}), HP +{hpGain}, pending {PendingLevelUps}");
 
         if (OwnerCharacter != null)

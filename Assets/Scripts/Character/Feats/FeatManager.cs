@@ -668,6 +668,9 @@ public static class FeatManager
     public static bool CanUseManyshot(CharacterStats stats)
     {
         if (!HasManyshot(stats)) return false;
+        // An archery ranger 6+ in light or no armor is treated as having Manyshot "even if he does not have the normal
+        // prerequisites" (PHB p.48; CHR-020), so the prerequisite checks below apply only to a Manyshot taken as a feat.
+        if (RangerRules.CombatStyleTreatsAsHavingFeat(stats, "Manyshot")) return true;
         if (!stats.HasFeat("Point Blank Shot")) return false;
         if (!stats.HasFeat("Rapid Shot")) return false;
         if (stats.DEXMod < 3) return false; // DEX 17 means modifier >= +3

@@ -50,6 +50,11 @@ public class CharacterCreationData
     // Step 4g: Wizard familiar (wizard level 1 only)
     public WizardFamiliar WizardFamiliar = WizardFamiliar.CreateNone();
 
+    // Step 4h: Ranger choices (PHB p.47-48): favored enemies by ranger level and the combat style from 2nd level
+    // (RangerFeatureSelectionUI; copied to the character by RangerRules.ApplyCreationChoices, CHR-020).
+    public FavoredEnemyData RangerFavoredEnemies = new FavoredEnemyData();
+    public RangerCombatStyle RangerCombatStyleChoice = RangerCombatStyle.None;
+
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
     /// <summary>Unspent skill points remaining after character creation allocation.

@@ -2008,6 +2008,10 @@ public partial class GameManager : MonoBehaviour
 
             stats.ApplyWizardFamiliar(data.WizardFamiliar ?? WizardFamiliar.CreateNone());
 
+            // Ranger favored enemies and combat style from creation (PHB p.47-48; CHR-020). A choice not made yet stays
+            // pending for the level-up flow.
+            RangerRules.ApplyCreationChoices(stats, data.RangerFavoredEnemies, data.RangerCombatStyleChoice);
+
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);

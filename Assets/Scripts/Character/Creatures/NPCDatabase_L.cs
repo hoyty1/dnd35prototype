@@ -496,7 +496,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
-            CreatureTags = new List<string> { "Humanoid", "Reptilian", "Aquatic", "MM35" },
+            CreatureTags = new List<string> { "Humanoid", "Reptilian", "MM35" }, // MM p.169: Humanoid (Reptilian); it swims but has no aquatic subtype
             Feats = new List<string> { "Multiattack" },
             SpecialAbilities = new List<string> { "Hold Breath (4× Con rounds)", "Swim 30 ft." },
             EquipmentIds = new List<EquipmentSlotPair>

@@ -88,6 +88,8 @@ public static class SkeletonTemplate
         skel.HitDice = racialHD;
         skel.Level = 0;
         skel.CharacterClass = null;
+        skel.RangerStyle = RangerCombatStyle.None; // no class levels, so no ranger choices (CHR-020)
+        skel.RangerFavoredEnemies = new List<FavoredEnemyEntry>();
         // The template drops the class levels, so no class grants proficiency (CHR-072).
         skel.ClassLevelsAreRacialHitDice = true;
 

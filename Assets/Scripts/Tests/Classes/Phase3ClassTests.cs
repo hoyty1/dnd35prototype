@@ -589,8 +589,8 @@ public static class Phase3ClassTests
         Assert(DruidClass.GetEffectiveDruidLevel(10) == 10, "Druid effective level 10 at L10");
         Assert(DruidClass.GetEffectiveDruidLevel(20) == 20, "Druid effective level 20 at L20");
 
-        // Compare with Ranger's level - 3
-        Assert(RangerClass.GetEffectiveDruidLevel(10) == 7, "Ranger effective druid level 7 at L10");
+        // Compare with the ranger's one-half ranger level (PHB p.48)
+        Assert(RangerClass.GetEffectiveDruidLevel(10) == 5, "Ranger effective druid level 5 at L10");
         Assert(DruidClass.GetEffectiveDruidLevel(10) > RangerClass.GetEffectiveDruidLevel(10),
             "Druid companion level > Ranger companion level at same character level");
     }

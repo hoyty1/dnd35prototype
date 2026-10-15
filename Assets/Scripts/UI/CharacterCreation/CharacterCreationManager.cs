@@ -67,8 +67,10 @@ public class CharacterCreationManager : MonoBehaviour
     private void StartLevelUpSequence()
     {
         // Class selection and ability score are currently handled outside this manager.
-        // This manager focuses on reusing existing feat/skill/spell panels.
-        ShowFeatSelection();
+        // This manager focuses on reusing existing feat/skill/spell panels. The ranger's choices come first: his combat
+        // style feats count as prerequisites while the style applies, and PHB p.87 lets a character take a feat at the
+        // level he gains its prerequisite (CHR-020).
+        ShowRangerChoices(ShowFeatSelection);
     }
 
     private void ShowFeatSelection()
@@ -283,6 +285,50 @@ public class CharacterCreationManager : MonoBehaviour
         }
 
         ShowWizardSpecializationSelection();
+    }
+
+    /// <summary>
+    /// A ranger's choices due at his new ranger level (PHB p.47-48; CHR-020): the combat style at 2nd and a favored enemy
+    /// at 1st, 5th, 10th... with its +2 increase. Any choice still pending from creation is asked here too. Asked
+    /// before feat selection, then continues with <paramref name="next"/>.
+    /// </summary>
+    private void ShowRangerChoices(Action next)
+    {
+        CharacterStats stats = _levelingCharacter != null ? _levelingCharacter.Stats : null;
+        if (stats == null || !RangerRules.HasPendingChoices(stats))
+        {
+            next?.Invoke();
+            return;
+        }
+
+        RangerFeatureSelectionUI rangerUI = FindOrCreateRangerFeatureSelectionUI();
+        if (rangerUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] RangerFeatureSelectionUI unavailable. The ranger choices stay pending.");
+            next?.Invoke();
+            return;
+        }
+
+        stats.RangerFavoredEnemies ??= new FavoredEnemyData();
+        stats.RangerCombatStyle ??= new CombatStyleData();
+        rangerUI.Show(stats.CharacterName, stats.RangerLevel, stats.RangerFavoredEnemies, stats.RangerCombatStyle, next);
+    }
+
+    private RangerFeatureSelectionUI FindOrCreateRangerFeatureSelectionUI()
+    {
+        RangerFeatureSelectionUI existing = FindAnyObjectByType<RangerFeatureSelectionUI>();
+        if (existing != null)
+            return existing;
+
+        Canvas canvas = FindAnyObjectByType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("RangerFeatureSelectionUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        RangerFeatureSelectionUI ui = uiObj.AddComponent<RangerFeatureSelectionUI>();
+        ui.BuildUI(canvas);
+        return ui;
     }
 
     private void ShowWizardSpecializationSelection()

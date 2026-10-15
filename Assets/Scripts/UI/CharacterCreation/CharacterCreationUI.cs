@@ -13,7 +13,7 @@ using Random = UnityEngine.Random;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, ChooseSpontaneousCasting, AllocateSkills, SelectFeats, SelectWizardSpecialization, SelectWizardFamiliar, SelectSpells, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, ChooseSpontaneousCasting, AllocateSkills, SelectFeats, SelectWizardSpecialization, SelectWizardFamiliar, SelectSpells, Review, SelectRangerFeatures }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -43,6 +43,7 @@ public class CharacterCreationUI : MonoBehaviour
     public SpellPreparationUI SpellPrepUI;
     public WizardSpecializationUI WizardSpecializationUI;
     public FamiliarSelectionUI FamiliarSelectionUI;
+    public RangerFeatureSelectionUI RangerFeatureUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -1481,8 +1482,12 @@ public class CharacterCreationUI : MonoBehaviour
         Debug.Log($"[CharCreation] Skill allocation complete: {totalSpent}/{_tempStatsForSkills.TotalSkillPoints} points spent, {data.SkillRanks.Count} skills with ranks, {data.UnspentSkillPoints} unspent (saved for level-up pool).");
 
         _tempStatsForSkills = null;
-        ShowStep(Step.SelectFeats);
+        ShowStep(IsRangerRecord(data) ? Step.SelectRangerFeatures : Step.SelectFeats);
     }
+
+    /// <summary>Whether the creation record is a ranger, whose favored enemy and combat style step comes before feats.</summary>
+    private static bool IsRangerRecord(CharacterCreationData data)
+        => data != null && string.Equals(data.ClassName, "Ranger", StringComparison.OrdinalIgnoreCase);
 
     // ========== STEP 5b: SELECT FEATS ==========
 
@@ -1509,6 +1514,14 @@ public class CharacterCreationUI : MonoBehaviour
             baseHitDieHP: data.BaseHitDieHP,
             raceName: data.RaceName
         );
+
+        // A ranger's Track and Endurance are already his (so not offered as picks), and his combat style feats count as
+        // prerequisites while the style applies, as at level-up (PHB p.48, p.87; delegated RAW reading 2026-10-14, CHR-020).
+        if (IsRangerRecord(data))
+        {
+            RangerRules.ApplyCreationChoices(tempStats, data.RangerFavoredEnemies, data.RangerCombatStyleChoice);
+            RangerRules.GrantAutomaticFeats(tempStats);
+        }
 
         // Characters at level 3 get 2 general feats (level 1 + level 3)
         // Fighters also get 2 bonus feats (level 1 + level 2)
@@ -1740,6 +1753,50 @@ public class CharacterCreationUI : MonoBehaviour
             ShowStep(Step.SelectWizardSpecialization);
         else
             ShowStep(Step.SelectSpells);
+    }
+
+    /// <summary>
+    /// The ranger's favored enemies due at the creation level and, from 2nd level, the combat style (PHB p.47-48;
+    /// CHR-020), chosen afresh on the creation record each time the step opens. It comes before feat selection, where
+    /// the style's feats count as prerequisites (PHB p.87: a feat may be taken at the level its prerequisite is gained).
+    /// </summary>
+    private void StartRangerFeatureSelection()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        if (!IsRangerRecord(data))
+        {
+            ShowStep(Step.SelectFeats);
+            return;
+        }
+
+        if (RangerFeatureUI == null)
+        {
+            Canvas canvas = _rootPanel != null ? _rootPanel.GetComponentInParent<Canvas>() : FindAnyObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject uiObj = new GameObject("RangerFeatureSelectionUI", typeof(RectTransform));
+                uiObj.transform.SetParent(canvas.transform, false);
+                RangerFeatureUI = uiObj.AddComponent<RangerFeatureSelectionUI>();
+                RangerFeatureUI.BuildUI(canvas);
+            }
+        }
+
+        data.RangerFavoredEnemies = new FavoredEnemyData();
+        data.RangerCombatStyleChoice = RangerCombatStyle.None;
+        if (RangerFeatureUI == null)
+        {
+            Debug.LogWarning("[CharCreation] RangerFeatureSelectionUI unavailable; the ranger choices stay pending for the level-up flow.");
+            ShowStep(Step.SelectFeats);
+            return;
+        }
+
+        var style = new CombatStyleData();
+        int rangerLevel = Mathf.Max(1, data.CharacterLevel);
+        RangerFeatureUI.Show(data.CharacterName, rangerLevel, data.RangerFavoredEnemies, style, () =>
+        {
+            data.RangerCombatStyleChoice = style.Style;
+            ShowStep(Step.SelectFeats);
+        });
     }
 
     private void StartWizardSpecializationSelection()
@@ -2463,6 +2520,11 @@ public class CharacterCreationUI : MonoBehaviour
                 StartWizardFamiliarSelection();
                 break;
 
+            case Step.SelectRangerFeatures:
+                _stepText.text = "Step 10 of 14: Ranger Favored Enemy and Combat Style";
+                StartRangerFeatureSelection();
+                break;
+
             case Step.SelectSpells:
                 _stepText.text = "Step 13 of 14: Select Spells / Spellbook";
                 StartSpellSelection();
@@ -2509,7 +2571,7 @@ public class CharacterCreationUI : MonoBehaviour
                 // Close feat UI if open
                 if (FeatUI != null && FeatUI.IsOpen)
                     FeatUI.Close();
-                ShowStep(Step.AllocateSkills);
+                ShowStep(IsRangerRecord(CreatedCharacters[CurrentCharacterIndex]) ? Step.SelectRangerFeatures : Step.AllocateSkills);
                 break;
             case Step.SelectWizardSpecialization:
                 if (WizardSpecializationUI != null && WizardSpecializationUI.IsOpen)
@@ -2520,6 +2582,11 @@ public class CharacterCreationUI : MonoBehaviour
                 if (FamiliarSelectionUI != null && FamiliarSelectionUI.IsOpen)
                     FamiliarSelectionUI.Close();
                 ShowStep(Step.SelectWizardSpecialization);
+                break;
+            case Step.SelectRangerFeatures:
+                if (RangerFeatureUI != null && RangerFeatureUI.IsOpen)
+                    RangerFeatureUI.Close();
+                ShowStep(Step.AllocateSkills);
                 break;
             case Step.SelectSpells:
                 // Close spell UI and preparation UI if open

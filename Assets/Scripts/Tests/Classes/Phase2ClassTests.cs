@@ -161,30 +161,45 @@ public static class Phase2ClassTests
     private static void TestFavoredEnemyAdd()
     {
         var fed = new FavoredEnemyData();
-        fed.AddOrIncreaseFavoredEnemy("Undead");
-        Assert(fed.GetBonusVs("Undead") == 2, "Favored Enemy: Initial bonus vs Undead is +2");
+        bool ok = RangerRules.TryApplyFavoredEnemySelection(fed, 1, "Undead", null, out _);
+        Assert(ok, "Favored Enemy: first selection at ranger level 1");
+        Assert(fed.Find("Undead") != null && fed.Find("Undead").Bonus == 2, "Favored Enemy: Initial bonus vs Undead is +2");
         Assert(fed.Enemies.Count == 1, "Favored Enemy: One enemy added");
     }
 
     private static void TestFavoredEnemyIncrease()
     {
+        // PHB p.47: at 5th a new favored enemy, and +2 on any one of them (the example: +4 and +2).
         var fed = new FavoredEnemyData();
-        fed.AddOrIncreaseFavoredEnemy("Undead");
-        fed.AddOrIncreaseFavoredEnemy("Undead"); // Increase existing
-        Assert(fed.GetBonusVs("Undead") == 4, "Favored Enemy: Increased bonus vs Undead is +4");
-        Assert(fed.Enemies.Count == 1, "Favored Enemy: Still one enemy after increase");
+        RangerRules.TryApplyFavoredEnemySelection(fed, 5, "Undead", null, out _);
+        bool sameAgain = RangerRules.TryApplyFavoredEnemySelection(fed, 5, "Undead", "Undead", out _);
+        Assert(!sameAgain, "Favored Enemy: the 5th-level selection must be a new type");
+        bool ok = RangerRules.TryApplyFavoredEnemySelection(fed, 5, "Aberration", "Undead", out _);
+        Assert(ok, "Favored Enemy: 5th-level selection with the +2 increase");
+        Assert(fed.Find("Undead").Bonus == 4, "Favored Enemy: Increased bonus vs Undead is +4");
+        Assert(fed.Find("Aberration").Bonus == 2, "Favored Enemy: new Aberration at +2");
+        Assert(fed.Enemies.Count == 2, "Favored Enemy: two enemies at 5th");
     }
 
     private static void TestFavoredEnemyBonusVs()
     {
         var fed = new FavoredEnemyData();
-        fed.AddOrIncreaseFavoredEnemy("Undead");
-        fed.AddOrIncreaseFavoredEnemy("Aberration");
-        Assert(fed.GetBonusVs("Undead") == 2, "Favored Enemy: +2 vs Undead");
-        Assert(fed.GetBonusVs("Aberration") == 2, "Favored Enemy: +2 vs Aberration");
-        Assert(fed.GetBonusVs("Dragon") == 0, "Favored Enemy: +0 vs non-favored Dragon");
-        Assert(fed.GetDamageBonusVs("Undead") == 2, "Favored Enemy: +2 damage vs Undead");
-        Assert(fed.GetSkillBonusVs("Undead") == 2, "Favored Enemy: +2 skill bonus vs Undead");
+        RangerRules.TryApplyFavoredEnemySelection(fed, 5, "Undead", null, out _);
+        RangerRules.TryApplyFavoredEnemySelection(fed, 5, "Aberration", "Aberration", out _);
+        var ranger = BuildStats("RangerFE", "Ranger", 5);
+        ranger.RangerFavoredEnemies = fed;
+        var undead = BuildStats("Zombie", "Fighter", 2);
+        undead.CreatureType = "Undead";
+        var aberration = BuildStats("Grick", "Fighter", 2);
+        aberration.CreatureType = "Aberration";
+        var dragon = BuildStats("Wyrmling", "Fighter", 2);
+        dragon.CreatureType = "Dragon";
+        Assert(RangerRules.FavoredEnemyBonus(ranger, undead) == 2, "Favored Enemy: +2 vs Undead");
+        Assert(RangerRules.FavoredEnemyBonus(ranger, aberration) == 4, "Favored Enemy: +4 vs Aberration");
+        Assert(RangerRules.FavoredEnemyBonus(ranger, dragon) == 0, "Favored Enemy: +0 vs non-favored Dragon");
+        Assert(RangerRules.FavoredEnemyDamageBonus(ranger, undead) == 2, "Favored Enemy: +2 damage vs Undead");
+        Assert(RangerRules.FavoredEnemySkillBonus(ranger, undead, "Spot") == 2, "Favored Enemy: +2 Spot vs Undead");
+        Assert(RangerRules.FavoredEnemySkillBonus(ranger, undead, "Hide") == 0, "Favored Enemy: no bonus on Hide");
     }
 
     private static void TestFavoredEnemyLevelProgression()
@@ -205,10 +220,11 @@ public static class Phase2ClassTests
 
     private static void TestFavoredEnemySubtypeMatching()
     {
-        var fed = new FavoredEnemyData();
-        fed.AddOrIncreaseFavoredEnemy("Humanoid (Orc)");
-        Assert(fed.GetBonusVs("Humanoid (Orc)") == 2, "Favored Enemy: Exact Humanoid subtype match");
-        Assert(fed.GetBonusVs("Humanoid (Elf)") == 0, "Favored Enemy: Different Humanoid subtype = 0");
+        var orc = BuildStats("Orc", "Fighter", 1);
+        orc.CreatureType = "Humanoid";
+        orc.CreatureTags.Add("Orc");
+        Assert(RangerRules.MatchesFavoredEnemy("Humanoid (Orc)", orc), "Favored Enemy: Humanoid (Orc) matches an orc");
+        Assert(!RangerRules.MatchesFavoredEnemy("Humanoid (Elf)", orc), "Favored Enemy: Different Humanoid subtype = no match");
     }
 
     // ==================== COMBAT STYLE TESTS ====================
@@ -218,16 +234,14 @@ public static class Phase2ClassTests
         var csd = new CombatStyleData();
         csd.SelectStyle(RangerCombatStyle.Archery);
         Assert(csd.Style == RangerCombatStyle.Archery, "Combat Style: Archery selected");
-        csd.GrantStyleFeat(2);
-        Assert(csd.GrantedFeats.Contains("Rapid Shot"), "Combat Style L2: Rapid Shot granted");
+        Assert(csd.GetFeatForLevel(2) == "Rapid Shot", "Combat Style L2: Rapid Shot granted");
     }
 
     private static void TestCombatStyleTWF()
     {
         var csd = new CombatStyleData();
         csd.SelectStyle(RangerCombatStyle.TwoWeaponFighting);
-        csd.GrantStyleFeat(2);
-        Assert(csd.GrantedFeats.Contains("Two-Weapon Fighting"), "Combat Style TWF L2: Two-Weapon Fighting granted");
+        Assert(csd.GetFeatForLevel(2) == "Two-Weapon Fighting", "Combat Style TWF L2: Two-Weapon Fighting granted");
     }
 
     private static void TestCombatStyleFeatProgression()
@@ -235,24 +249,20 @@ public static class Phase2ClassTests
         var csd = new CombatStyleData();
         csd.SelectStyle(RangerCombatStyle.Archery);
 
-        // Test all three archery levels
-        csd.GrantStyleFeat(2);
-        csd.GrantStyleFeat(6);
-        csd.GrantStyleFeat(11);
-        Assert(csd.GrantedFeats.Contains("Rapid Shot"), "Archery L2: Rapid Shot");
-        Assert(csd.GrantedFeats.Contains("Manyshot"), "Archery L6: Manyshot");
-        Assert(csd.GrantedFeats.Contains("Improved Precise Shot"), "Archery L11: Improved Precise Shot");
-        Assert(csd.GrantedFeats.Count == 3, "Archery: Exactly 3 style feats at L11");
+        List<string> archery = csd.GetAllFeatsUpToLevel(11);
+        Assert(archery.Contains("Rapid Shot"), "Archery L2: Rapid Shot");
+        Assert(archery.Contains("Manyshot"), "Archery L6: Manyshot");
+        Assert(archery.Contains("Improved Precise Shot"), "Archery L11: Improved Precise Shot");
+        Assert(archery.Count == 3, "Archery: Exactly 3 style feats at L11");
+        Assert(csd.GetAllFeatsUpToLevel(5).Count == 1, "Archery: 1 style feat at L5");
 
         // TWF full progression
         var twf = new CombatStyleData();
         twf.SelectStyle(RangerCombatStyle.TwoWeaponFighting);
-        twf.GrantStyleFeat(2);
-        twf.GrantStyleFeat(6);
-        twf.GrantStyleFeat(11);
-        Assert(twf.GrantedFeats.Contains("Two-Weapon Fighting"), "TWF L2");
-        Assert(twf.GrantedFeats.Contains("Improved Two-Weapon Fighting"), "TWF L6");
-        Assert(twf.GrantedFeats.Contains("Greater Two-Weapon Fighting"), "TWF L11");
+        List<string> twfFeats = twf.GetAllFeatsUpToLevel(11);
+        Assert(twfFeats.Contains("Two-Weapon Fighting"), "TWF L2");
+        Assert(twfFeats.Contains("Improved Two-Weapon Fighting"), "TWF L6");
+        Assert(twfFeats.Contains("Greater Two-Weapon Fighting"), "TWF L11");
 
         // Non-style-feat levels should not grant
         Assert(!CombatStyleData.IsStyleFeatLevel(3), "Level 3 is not a style feat level");
@@ -313,10 +323,11 @@ public static class Phase2ClassTests
 
     private static void TestRangerEffectiveDruidLevel()
     {
+        // PHB p.48: one-half the ranger level (a 4th-level ranger's companion is a 2nd-level druid's).
         Assert(RangerClass.GetEffectiveDruidLevel(3) == 0, "Ranger L3: No companion (EDL 0)");
-        Assert(RangerClass.GetEffectiveDruidLevel(4) == 1, "Ranger L4: EDL 1 (companion gained)");
-        Assert(RangerClass.GetEffectiveDruidLevel(10) == 7, "Ranger L10: EDL 7");
-        Assert(RangerClass.GetEffectiveDruidLevel(20) == 17, "Ranger L20: EDL 17");
+        Assert(RangerClass.GetEffectiveDruidLevel(4) == 2, "Ranger L4: EDL 2 (companion gained)");
+        Assert(RangerClass.GetEffectiveDruidLevel(10) == 5, "Ranger L10: EDL 5");
+        Assert(RangerClass.GetEffectiveDruidLevel(20) == 10, "Ranger L20: EDL 10");
     }
 
     // ==================== RANGER FEATURE LEVEL TESTS ====================

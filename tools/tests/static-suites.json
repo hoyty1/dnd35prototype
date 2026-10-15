@@ -337,6 +337,17 @@
       "notes": "CHR-020 (2026-10-14): the paladin's class features on one PC/NPC core (PHB p.42-45): Smite Evil through SmiteRules (declared, used up by the next melee attack hit or miss, +Cha attack and +level damage only against an evil creature, kept by a ranged attack, lapsing at turn end, daily uses, full rest), the template smites on the same core (+HD up to +20, no attack bonus; MM p.31, p.107; CMB-021, AI-056), the AI smite choice, Lay on Hands through LayOnHandsRules (from 2nd level, level x Cha bonus, standard action, touch, heals itself or a creature within touch, not a construct, damages undead after a melee touch attack, refusals, the AI target choice), Divine Health and turning by class level (paladin level - 3, added to cleric levels, 3 + Cha uses with no minimum). Play only (CharacterController.Init, TST-009; GameManager for the AI declaration and DealDamage). 68/68 in a fresh Play session with the baseline seed on 2026-10-14."
     },
     {
+      "type": "Tests.Classes.RangerClassRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 132,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-020 (2026-10-14): the ranger's class features on one PC/NPC core (PHB p.46-48, RangerRules): favored enemy selections (1st, 5th; the +2 increase from the second selection; Table 3-14 choices; the book's 5th- and 10th-level examples), matching by real type and subtypes (tags, race, counts-as race; an orc zombie is no orc; MagicalBeast spacing), the best of several entries, the weapon damage term on the attack core (multiplied on a critical), the five skills; the combat style's feats only in light or no armor (mithral one step lighter), as prerequisites too, never in the feat list, and a feat taken on a style feat unusable in heavier armor (PHB p.87, down the chain); Rapid Shot and Manyshot at use without their prerequisites; the favored enemy bonus on a feint (Bluff, Sense Motive) and a coup de grace; the lycanthropes' Human subtype; Track and Endurance by ranger level, also after a level-up; companion effective druid level half the ranger level; creation and NPC choices (definition, DMG p.122 sample default, the NPC spawn), NPC data legality. Play only (CharacterController.Init; the NPC spawn uses the scene GameManager). 132/132 in a fresh Play session with the baseline seed on 2026-10-14 (20261015T031256Z-play)."
+    },
+    {
       "type": "Tests.Classes.NPCTemplateSystemTests",
       "needs": "either",
       "skip": "",
@@ -428,7 +439,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 170,
+      "passed": 176,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],

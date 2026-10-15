@@ -7662,6 +7662,10 @@ public class CharacterController : MonoBehaviour
             damageBonus.SmiteLabel = smite.Label;
         }
 
+        // Favored enemy (PHB p.47; RangerRules, CHR-020): the ranger's bonus on every weapon damage roll against a creature
+        // of a favored type, melee or ranged, for PCs and NPCs alike.
+        damageBonus.FavoredEnemyBonus = target != null ? RangerRules.FavoredEnemyDamageBonus(Stats, target.Stats) : 0;
+
         // Enchantment attack bonus (e.g., Bane +2 vs matching creature type)
         int enchantmentAttackBonus = 0;
         if (weapon != null && weapon.IsEnchanted && target != null && target.Stats != null)
@@ -10937,6 +10941,8 @@ public class CharacterController : MonoBehaviour
             damageTags = DamageBypassTag.Bludgeoning;
             damageSourceName = "Grapple damage (unarmed strike)";
         }
+        // A ranger's favored enemy bonus applies to this weapon damage roll too (PHB p.47; CHR-020).
+        roll.Bonus.FavoredEnemyBonus = RangerRules.FavoredEnemyDamageBonus(Stats, opponent.Stats);
 
         for (int i = 0; i < roll.DiceCount; i++)
         {
@@ -14617,7 +14623,9 @@ public class CharacterController : MonoBehaviour
         int bluffRoll = DiceService.D20("Feint Bluff check");
         int opposedRoll = DiceService.D20("Feint opposed check");
 
-        int bluffBonus = Stats.GetSkillBonus("Bluff");
+        // A ranger's favored enemy bonus applies to his Bluff against a favored foe, and to the defender's Sense Motive
+        // (or its stand-in below) against a feinting favored foe (PHB p.47; CHR-020).
+        int bluffBonus = Stats.GetSkillBonusAgainst("Bluff", target.Stats);
 
         bool targetIsHumanoid = false;
         if (target.Stats != null && !string.IsNullOrEmpty(target.Stats.CreatureType))
@@ -14625,8 +14633,8 @@ public class CharacterController : MonoBehaviour
 
         bool useBabWisDefense = !targetIsHumanoid || (target.Stats != null && target.Stats.IsMindless);
         int opposedBonus = useBabWisDefense
-            ? (target.Stats.BaseAttackBonus + target.Stats.WISMod)
-            : target.Stats.GetSkillBonus("Sense Motive");
+            ? (target.Stats.BaseAttackBonus + target.Stats.WISMod + RangerRules.FavoredEnemySkillBonus(target.Stats, Stats, "Sense Motive"))
+            : target.Stats.GetSkillBonusAgainst("Sense Motive", Stats);
 
         int bluffTotal = bluffRoll + bluffBonus;
         int opposedTotal = opposedRoll + opposedBonus;
@@ -14712,6 +14720,8 @@ public class CharacterController : MonoBehaviour
         // Bane: against its foe the weapon's enhancement bonus is +2 better on damage too (DMG p.224), as on any hit.
         if (weapon != null && weapon.IsEnchanted)
             cdgDamage.BaneBonus = EnchantmentEffects.GetBaneEnhancementBonus(weapon, target.Stats.CreatureType ?? "");
+        // A ranger's favored enemy bonus, as on any weapon damage roll against the creature (PHB p.47; CHR-020).
+        cdgDamage.FavoredEnemyBonus = RangerRules.FavoredEnemyDamageBonus(Stats, target.Stats);
         // A coup de grace is an automatic critical hit (PHB p.153): the weapon damage, static modifier included, is
         // rolled the weapon's multiplier number of times (PHB p.134, p.140), the same roll as a confirmed critical on
         // any attack path (WeaponDamageRoll, CMB-004). Unarmed and natural attacks are x2 (ResolveWeaponCritProfile).

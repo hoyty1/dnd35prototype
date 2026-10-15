@@ -147,7 +147,7 @@ public struct AttackBonusBreakdown
 /// natural attack's Strength share, with the same penalty rule),
 /// PHB p.98 (Power Attack, Point Blank Shot), p.102 (Weapon Specialization), p.29 (Inspire Courage),
 /// p.264 (Prayer), p.224 (Divine Favor), p.250 (Magic Fang), p.186 (Destruction domain smite, melee
-/// only), DMG p.224 (bane: +2 enhancement against its foe), DMG p.301 (Sickened: -2 weapon damage),
+/// only), p.47 (a ranger's favored enemy bonus), DMG p.224 (bane: +2 enhancement against its foe), DMG p.301 (Sickened: -2 weapon damage),
 /// DMG p.250 (Bracers of Archery), PHB p.281 (Solid Fog), DMG p.283 (alchemical silver -1).
 /// Effect bonuses of every type are in MoraleBonus, already stacked by type (CharacterStats.EffectWeaponDamageBonus).
 /// </summary>
@@ -194,6 +194,12 @@ public struct WeaponDamageBreakdown
     public int SmiteBonus;
     /// <summary>"Smite Evil" or "Smite Good".</summary>
     public string SmiteLabel;
+    /// <summary>
+    /// A ranger's favored enemy bonus against this target (PHB p.47; RangerRules.FavoredEnemyDamageBonus, CHR-020): set
+    /// by PerformSingleAttackWithCrit, coup de grace and grapple damage, which know the target. A flat bonus, so a
+    /// critical hit multiplies it.
+    /// </summary>
+    public int FavoredEnemyBonus;
     /// <summary>A bonus for this one attack only, such as a template smite's damage; listed under <see cref="SituationalLabel"/>.</summary>
     public int SituationalBonus;
     public string SituationalLabel;
@@ -206,7 +212,8 @@ public struct WeaponDamageBreakdown
     /// <summary>The whole static modifier added to the damage roll.</summary>
     public int Total =>
         StrengthBonus + WeaponBonus + EnhancementBonus + BaneBonus + MaterialModifier + FeatBonus + MoraleBonus
-        + ConditionModifier + SolidFogPenalty + BracersOfArcheryBonus + DestructionSmiteBonus + SmiteBonus + SituationalBonus;
+        + ConditionModifier + SolidFogPenalty + BracersOfArcheryBonus + DestructionSmiteBonus + SmiteBonus + FavoredEnemyBonus
+        + SituationalBonus;
 
     /// <summary>
     /// The non-zero terms in a fixed order, labelled for the combat log; their values add up to <see cref="Total"/>
@@ -236,6 +243,7 @@ public struct WeaponDamageBreakdown
         AddTerm(terms, "Bracers of Archery", BracersOfArcheryBonus);
         AddTerm(terms, "Destruction smite", DestructionSmiteBonus);
         AddTerm(terms, string.IsNullOrWhiteSpace(SmiteLabel) ? "Smite" : SmiteLabel, SmiteBonus);
+        AddTerm(terms, RangerRules.FavoredEnemyDamageLabel, FavoredEnemyBonus);
         AddTerm(terms, string.IsNullOrWhiteSpace(SituationalLabel) ? "situational" : SituationalLabel, SituationalBonus);
         return terms;
     }

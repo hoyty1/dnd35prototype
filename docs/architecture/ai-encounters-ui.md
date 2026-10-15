@@ -201,7 +201,7 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 |---|---|---|---|
 | Character creation wizard (4 PCs, Quick Start, premades) | UI/CharacterCreation/CharacterCreationUI.cs | Eager | At boot; `GameManager.Start` assigns `OnCreationComplete4 = OnCharacterCreationComplete4` (GameManager.cs:657) |
 | Feats, skills, spells, preparation | UI/Spells/FeatSelectionUI.cs, UI/CharacterSheet/SkillsUIPanel.cs, UI/Spells/SpellSelectionUI.cs, UI/Spells/SpellPreparationUI.cs | Eager | Creation steps; level-up through `CharacterCreationManager.StartLevelUpFlow` |
-| Domains, wizard school, familiar | UI/CharacterCreation/DomainSelectionUI.cs, WizardSpecializationUI.cs, FamiliarSelectionUI.cs | Lazy | CharacterCreationUI and CharacterCreationManager |
+| Domains, wizard school, familiar, ranger favored enemy and combat style | UI/CharacterCreation/DomainSelectionUI.cs, WizardSpecializationUI.cs, FamiliarSelectionUI.cs, RangerFeatureSelectionUI.cs (CHR-020, 2026-10-14: the choices due by ranger level, validated by `RangerRules`) | Lazy | CharacterCreationUI (the `SelectRangerFeatures` step, after skills and before feats) and CharacterCreationManager (`ShowRangerChoices`, first in the level-up flow, before feats) |
 | Encounter selection | UI/Encounter/EncounterSelectionUI.cs | Lazy (GameManager object) | `GameManager.PromptEncounterSelection` |
 | Random / DMG / custom generators | RandomEncounterGeneratorUI, DungeonEncounterGeneratorUI, CustomEncounterBuilderUI | Lazy (EncounterSelectionUI object) | Footer buttons "Random Encounter", "DMG Tables", "Custom Encounter" |
 | Pre-combat hub | UI/Encounter/PreCombatHubUI.cs | Lazy | `GameManager.OpenPreCombatHubPhase` (GameManager.cs:1403) |

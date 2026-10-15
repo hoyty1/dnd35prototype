@@ -108,5 +108,9 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
 
         // Feats (skeleton clears these)
         target.Feats = source.Feats;
+
+        // Ranger choices (CHR-020; CRE-023): the skeleton has no class levels, so the template result clears them.
+        target.RangerStyle = source.RangerStyle;
+        target.RangerFavoredEnemies = NPCDefinition.CloneFavoredEnemies(source.RangerFavoredEnemies);
     }
 }
