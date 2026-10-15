@@ -190,6 +190,47 @@ namespace DND35.AI
             return false;
         }
 
+        /// <summary>
+        /// AI choice, not a rule: whether a monk declares a flurry of blows before its melee sequence (CHR-003). The rules
+        /// (CharacterController.CanUseFlurryOfBlows) are shared with the PC Flurry button. <see cref="DefaultShouldUseFlurryOfBlows"/>.
+        /// </summary>
+        public virtual bool ShouldUseFlurryOfBlows(CharacterController self, CharacterController target)
+            => DefaultShouldUseFlurryOfBlows(self, target);
+
+        /// <summary>
+        /// The default flurry choice, also used for creatures without a profile: flurry when the flurry's expected hits
+        /// against the target's AC (each step at the flurry penalty, PHB p.40) beat those of the plain iterative attacks,
+        /// which is nearly always while a hit needs less than a natural 20. Damage per hit is taken as equal.
+        /// </summary>
+        public static bool DefaultShouldUseFlurryOfBlows(CharacterController self, CharacterController target)
+        {
+            if (self == null || self.Stats == null || target == null || target.Stats == null)
+                return false;
+            if (!self.CanUseFlurryOfBlows(out _))
+                return false;
+
+            ItemData weapon = self.GetEquippedMainWeapon();
+            // Every per-attack term except the BAB step (ability, size, feats, effects, conditions).
+            int otherTerms = self.BuildAttackBonus(target, weapon, false, null, false, 0, 0,
+                CharacterController.IsWeaponTwoHanded(weapon)).Total;
+            int targetAC = target.Stats.ArmorClass;
+            int penalty = self.Stats.FlurryOfBlowsAttackPenalty;
+
+            float flurryHits = 0f;
+            foreach (int bab in self.Stats.GetFlurryOfBlowsBaseAttackBonuses())
+                flurryHits += HitChance(bab + penalty + otherTerms, targetAC);
+
+            float plainHits = 0f;
+            foreach (int bab in self.Stats.GetIterativeBaseAttackBonuses())
+                plainHits += HitChance(bab + otherTerms, targetAC);
+
+            return flurryHits > plainHits;
+        }
+
+        // d20 + modifier against AC: a natural 1 misses and a natural 20 hits (PHB p.134).
+        private static float HitChance(int attackModifier, int targetAC)
+            => Mathf.Clamp((21 + attackModifier - targetAC) / 20f, 0.05f, 0.95f);
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

@@ -315,6 +315,17 @@
       "notes": "CHR-018: the shared save modifier (CharacterStats.GetSaveTotal, SaveRules) and its bonus sources, Aura of Courage and fear immunity; bare stats, an Inventory without a GameObject, a StatusEffectManager and CharacterControllers on plain GameObjects. 104/104 in edit and Play mode on 2026-10-09."
     },
     {
+      "type": "Tests.Classes.MonkClassRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 117,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-003, CRE-042 (2026-10-14): the monk by monk level (PHB p.39-42, Tables 3-10 and 3-11, p.101): flurry penalty and steps (total BAB plus the extra attack, two from 11th), declared as a full attack through the shared attack sequence, the penalty on attacks until the next turn, full Strength, no off-hand, refusals; unarmed damage by level and size; AC bonus (Wisdom plus level, touch AC, lost by armor, shield, load, helpless or pinned); fast movement; bracers of armor are not armor; the NPC monk entries and spawns; a maneuver touch attack in the flurry; the AI flurry choice; a grapple started mid-flurry (the extra attack ends, the penalty stays on grapple attack rolls; delegated RAW reading 2026-10-14). Play only (CharacterController.Init, TST-009; NPC spawns need the scene GameManager). 117/117 in a fresh Play session with the baseline seed on 2026-10-14 (20261015T012509Z-play)"
+    },
+    {
       "type": "Tests.Classes.NPCTemplateSystemTests",
       "needs": "either",
       "skip": "",
@@ -1254,11 +1265,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 49,
+      "passed": 51,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Stunning Fist uses per day follow PHB p.101 since CHR-003 (2026-10-14): one per monk level plus one per four other levels, one per four character levels otherwise; 51/51 in the Play pass of 2026-10-14"
     },
     {
       "type": "Tests.Feats.Phase2SpecializedTacticsTests",

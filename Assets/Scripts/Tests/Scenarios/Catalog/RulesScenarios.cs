@@ -2113,13 +2113,14 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// Owner interpretation 2026-10-11 (CMB-141): an NPC monk whose data lists "Unarmed Strike" as a natural attack
-        /// (human_monk_3: BAB +2, STR 14) sunders a dummy's longsword with it, on the NPC path, at the light-weapon -4: +2 +2 -4
-        /// = 0. The dummy makes no AoO; the roll is forced to fail.
+        /// Owner interpretation 2026-10-11 (CMB-141): an NPC monk (human_monk_3: BAB +2, STR 14) sunders a dummy's longsword
+        /// with its unarmed strike, on the NPC path, at the light-weapon -4: +2 +2 -4 = 0. Since CRE-042 (2026-10-14) the entry
+        /// lists no natural "Unarmed Strike"; the monk strikes unarmed through the shared monk code, with the same result.
+        /// The dummy makes no AoO; the roll is forced to fail.
         /// </summary>
         private static ScenarioDef UnarmedSunderMonk()
         {
-            return Rules("rules/unarmed-sunder-monk", "An NPC monk sunders with its listed unarmed strike at the light-weapon -4 (PHB p.158; CMB-141)")
+            return Rules("rules/unarmed-sunder-monk", "An NPC monk sunders with its unarmed strike at the light-weapon -4 (PHB p.158; CMB-141, CRE-042)")
                 .Covers("CMB-141", "PHB p.158", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Pc("dummy", ActorSource.Stats(() => FighterOfRace("Dummy", "Human")), 10, 10, Control.Scripted)

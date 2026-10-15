@@ -100,15 +100,15 @@ public class NaturalAttackDefinition
     /// <summary>
     /// Sunder needs a slashing or bludgeoning weapon (PHB p.158). A natural attack may sunder when it deals
     /// either (owner ruling 2026-10-08, CMB-102): bites, claws, talons, slams, slaps and tentacles can; gores
-    /// and stings, which deal only piercing damage, cannot. An unarmed strike listed as a natural attack (the
-    /// NPC monks) is bludgeoning (PHB p.116 Table 7-5), so it may sunder as a light weapon, as a PC's unarmed
+    /// and stings, which deal only piercing damage, cannot. An unarmed strike listed as a natural attack (no shipped
+    /// entry since CRE-042: the NPC monks use the monk code) is bludgeoning (PHB p.116 Table 7-5), so it may sunder as a light weapon, as a PC's unarmed
     /// strike may (owner interpretation 2026-10-11, CMB-141).
     /// </summary>
     public bool CanSunder
         => (GetPhysicalDamageTypes() & (DamageBypassTag.Bludgeoning | DamageBypassTag.Slashing)) != DamageBypassTag.None;
 
     /// <summary>
-    /// True for an entry named "Unarmed Strike" (the NPC monks list their unarmed strike as a natural attack).
+    /// True for an entry named "Unarmed Strike" (data may list an unarmed strike as a natural attack; the NPC monks no longer do, CRE-042).
     /// It is bludgeoning (PHB p.116 Table 7-5) but not a natural weapon: disarm and sunder treat it as a light
     /// weapon (PHB p.155, p.158; owner interpretation 2026-10-11 for sunder, CMB-141), as for a PC's unarmed strike.
     /// </summary>
@@ -1027,42 +1027,116 @@ public class CharacterStats
     /// <summary>True when this character's spells are subject to Arcane Spell Failure from armor/shields.</summary>
     public bool IsAffectedByArcaneSpellFailure => SpellcastingKind == SpellcastingType.Arcane;
 
-    // ========== MONK CLASS FEATURES (D&D 3.5) ==========
+    // ========== MONK CLASS FEATURES (PHB p.39-42, Table 3-10) ==========
+    // One actor-agnostic set of monk rules: PC monks and the NPC monk entries read the same members (CHR-003, CRE-042).
+
+    /// <summary>Monk class level (0 for a creature without monk levels).</summary>
+    public int MonkLevel => GetClassLevel("Monk");
 
     /// <summary>
-    /// Monk AC Bonus: Add WIS modifier to AC when unarmored and unencumbered.
-    /// D&D 3.5: Monk adds WIS mod (if positive) to AC when wearing no armor and carrying no shield.
+    /// Wearing armor: an item of the armor type in the armor slot. Bracers of armor (DMG p.250), mage armor (PHB p.249)
+    /// and a robe are not armor, so they never count, although bracers and mage armor give an armor bonus
+    /// (<see cref="ArmorBonus"/>, <see cref="SpellACBonus"/>).
+    /// </summary>
+    public bool IsWearingArmor => EquippedArmorItem != null && EquippedArmorItem.IsArmor;
+
+    /// <summary>Carrying a shield: a shield item in hand (the shield spell is not a shield).</summary>
+    public bool IsCarryingShield => EquippedShieldItem != null;
+
+    /// <summary>Carrying a medium or heavy load (or more), PHB p.161-162.</summary>
+    public bool CarriesMediumOrHeavyLoad => CurrentEncumbrance != EncumbranceLevel.Light;
+
+    /// <summary>
+    /// PHB p.40: a monk wearing armor, using a shield, or carrying a medium or heavy load loses her AC bonus, fast
+    /// movement and flurry of blows. The fast movement text (p.41) names only armor and load; the shield removes it too,
+    /// since p.40 names all three abilities (delegated RAW reading 2026-10-14, CHR-003).
+    /// </summary>
+    public bool MonkUnfettered => !IsWearingArmor && !IsCarryingShield && !CarriesMediumOrHeavyLoad;
+
+    /// <summary>Why the monk's AC bonus, fast movement and flurry are lost (armor, shield or load), or null.</summary>
+    public string GetMonkFetterReason()
+    {
+        if (IsWearingArmor) return "wearing armor";
+        if (IsCarryingShield) return "carrying a shield";
+        if (CarriesMediumOrHeavyLoad) return "carrying a medium or heavy load";
+        return null;
+    }
+
+    /// <summary>
+    /// Monk AC bonus (PHB p.40): her Wisdom bonus (if any) plus +1 at 5th level and +1 more per five monk levels
+    /// (+2 at 10th, +4 at 20th). It applies to touch AC and when flat-footed (both AC formulas add it), and is lost in
+    /// armor, with a shield or a medium or heavy load (<see cref="MonkUnfettered"/>), and while immobilized or helpless.
+    /// Bracers of armor and mage armor do not switch it off: they are not armor (CHR-003).
     /// </summary>
     public int MonkACBonus
     {
         get
         {
-            if (!IsMonk) return 0;
-            // Only applies when unarmored, no shield, and light or lower encumbrance.
-            if (ArmorBonus > 0 || ShieldBonus > 0) return 0;
-            if (CurrentEncumbrance != EncumbranceLevel.Light) return 0;
-            return Mathf.Max(0, WISMod);
+            int monkLevel = MonkLevel;
+            if (monkLevel <= 0 || !MonkUnfettered || IsImmobilizedOrHelplessForMonkAC())
+                return 0;
+            return Mathf.Max(0, WISMod) + monkLevel / 5;
         }
     }
 
     /// <summary>
-    /// Monk unarmed damage die at current level.
-    /// Level 1-3: 1d6, Level 4-7: 1d8, Level 8-11: 1d10, etc.
-    /// For our level 3 prototype: always 1d6.
+    /// Helpless (a helpless-like condition: paralyzed, unconscious, asleep, helpless) or immobilized. A pinned creature is
+    /// held immobile (PHB p.157), so pinned counts as immobilized (delegated RAW reading 2026-10-14, CHR-003).
     /// </summary>
-    public int MonkUnarmedDamageDie => IsMonk ? 6 : 0;
+    private bool IsImmobilizedOrHelplessForMonkAC()
+    {
+        if (ActiveConditions == null)
+            return false;
+
+        for (int i = 0; i < ActiveConditions.Count; i++)
+        {
+            StatusEffect active = ActiveConditions[i];
+            if (active == null)
+                continue;
+            if (ConditionRules.IsHelplessLike(active.Type) || ConditionRules.Normalize(active.Type) == CombatConditionType.Pinned)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
-    /// Monk Fast Movement: +10 ft speed when unarmored.
-    /// At level 3: +10 ft (2 squares). Requires no armor.
+    /// A Medium monk's unarmed damage by monk level (PHB Table 3-10): 1d6 at 1st-3rd, 1d8 at 4th-7th, 1d10 at 8th-11th,
+    /// 2d6 at 12th-15th, 2d8 at 16th-19th, 2d10 at 20th. False for a non-monk (1d3 unarmed). Other sizes resize this
+    /// with the weapon size table (CharacterController.GetUnarmedDamage, DMG p.28), which gives PHB Table 3-11 exactly
+    /// for Small and Large monks; Tiny and Huge monks follow the same table (delegated RAW reading 2026-10-14, CHR-003).
+    /// Armor does not change it.
     /// </summary>
-    public int MonkFastMovementBonus
+    public bool TryGetMonkUnarmedMediumDamage(out int damageCount, out int damageDice)
+    {
+        int monkLevel = MonkLevel;
+        damageCount = 1;
+        damageDice = 3;
+        if (monkLevel <= 0)
+            return false;
+
+        if (monkLevel >= 20) { damageCount = 2; damageDice = 10; }
+        else if (monkLevel >= 16) { damageCount = 2; damageDice = 8; }
+        else if (monkLevel >= 12) { damageCount = 2; damageDice = 6; }
+        else if (monkLevel >= 8) { damageCount = 1; damageDice = 10; }
+        else if (monkLevel >= 4) { damageCount = 1; damageDice = 8; }
+        else { damageCount = 1; damageDice = 6; }
+        return true;
+    }
+
+    /// <summary>
+    /// Monk fast movement (PHB p.41, Table 3-10 Unarmored Speed Bonus): an enhancement bonus to speed of +10 ft at 3rd
+    /// level and +10 ft more every three monk levels (+20 at 6th, +30 at 9th, up to +60 at 18th). Lost in any armor, with
+    /// a shield or a medium or heavy load (<see cref="MonkUnfettered"/>); bracers of armor do not remove it.
+    /// </summary>
+    public int MonkFastMovementBonusFeet
     {
         get
         {
-            if (!IsMonk || GetClassLevel("Monk") < 1) return 0;
-            if (ArmorBonus > 0) return 0; // Must be unarmored
-            return 2; // +10 ft = 2 squares
+            int monkLevel = MonkLevel;
+            if (monkLevel < 3 || !MonkUnfettered)
+                return 0;
+            return Mathf.Min(60, monkLevel / 3 * 10);
         }
     }
 
@@ -1091,30 +1165,97 @@ public class CharacterStats
     public int CasterLevel => GetCasterLevel();
 
     /// <summary>
-    /// Flurry of Blows attack bonuses at current level.
-    /// Level 1: -2/-2, Level 2: -1/-1, Level 3: +0/+0, etc.
-    /// Returns array of total attack modifiers (BAB + STR + flurry penalty + size).
-    /// </summary>
-    public int[] GetFlurryOfBlowsBonuses()
-    {
-        if (!IsMonk) return new int[0];
-        int bonus = BaseAttackBonus + STRMod + SizeModifier + FlurryOfBlowsAttackPenalty;
-        return new int[] { bonus, bonus }; // Two attacks at same bonus
-    }
-
-    /// <summary>
-    /// Flurry of Blows penalty on every flurry attack, as coded: -2 at monk level 1, -1 at 2, 0 from 3.
-    /// Not RAW (CHR-003): PHB Table 3-10 implies -2 through level 4, -1 at 5-8 and 0 from 9.
-    /// FlurryOfBlows adds it on top of the shared attack modifier (CMB-043).
+    /// Flurry of Blows penalty on every attack of the round the monk flurries, her attacks of opportunity before her next
+    /// turn included (PHB p.40): -2 through 4th level, -1 at 5th-8th, none from 9th. Added by
+    /// CharacterController.BuildAttackBonus while <see cref="AttackPool.IsFlurryOfBlows"/> is set (CHR-003).
     /// </summary>
     public int FlurryOfBlowsAttackPenalty
     {
         get
         {
-            if (!IsMonk) return 0;
-            int monkLevel = GetClassLevel("Monk");
-            return monkLevel >= 3 ? 0 : (monkLevel >= 2 ? -1 : -2);
+            int monkLevel = MonkLevel;
+            if (monkLevel <= 0) return 0;
+            return monkLevel >= 9 ? 0 : (monkLevel >= 5 ? -1 : -2);
         }
+    }
+
+    /// <summary>Extra attacks a flurry adds at the highest base attack bonus: one, and a second from 11th level (PHB p.41).</summary>
+    public int FlurryOfBlowsExtraAttacks
+    {
+        get
+        {
+            int monkLevel = MonkLevel;
+            if (monkLevel <= 0) return 0;
+            return monkLevel >= 11 ? 2 : 1;
+        }
+    }
+
+    /// <summary>
+    /// The base attack bonus of each attack of a flurry (PHB p.40-41): the character's iterative attacks from her base
+    /// attack bonus, with the extra attack (two from 11th level) at the highest. The base attack bonus is the character's
+    /// total from every class: the flurry text gives the extra attack at "her highest base attack bonus" (delegated RAW
+    /// reading 2026-10-14, CHR-003). For a single-classed monk these plus the penalty are Table 3-10's Flurry of Blows
+    /// column (8th level: +6/+6/+1, -1 each: +5/+5/+0). The shared attack sequence (CharacterCombatStats.GetAttackBonuses,
+    /// CharacterController.FullAttack) uses these steps while the monk flurries; Haste adds its attack after them.
+    /// </summary>
+    public int[] GetFlurryOfBlowsBaseAttackBonuses()
+    {
+        if (!IsMonk)
+            return new int[0];
+
+        int[] iterative = GetIterativeBaseAttackBonuses();
+        var steps = new List<int>(iterative.Length + 2) { iterative[0] };
+        for (int i = 0; i < FlurryOfBlowsExtraAttacks; i++)
+            steps.Add(iterative[0]);
+        for (int i = 1; i < iterative.Length; i++)
+            steps.Add(iterative[i]);
+        return steps.ToArray();
+    }
+
+    /// <summary>
+    /// The modified base attack bonuses of a flurry (for a single-classed monk, Table 3-10's Flurry of Blows Attack Bonus
+    /// column): each step of <see cref="GetFlurryOfBlowsBaseAttackBonuses"/> plus the flurry penalty. For labels and
+    /// tests; the attack roll adds ability, size and the other terms through BuildAttackBonus.
+    /// </summary>
+    public int[] GetFlurryOfBlowsModifiedBaseAttackBonuses()
+    {
+        int[] steps = GetFlurryOfBlowsBaseAttackBonuses();
+        int penalty = FlurryOfBlowsAttackPenalty;
+        for (int i = 0; i < steps.Length; i++)
+            steps[i] += penalty;
+        return steps;
+    }
+
+    /// <summary>
+    /// The special monk weapons a monk may flurry with (PHB p.40): kama, nunchaku, quarterstaff, sai, shuriken and
+    /// siangham, matched by a whole word of the item's id or name ("+1 Quarterstaff", "Masterwork Kama").
+    /// </summary>
+    public static bool IsSpecialMonkWeapon(ItemData weapon)
+    {
+        if (weapon == null)
+            return false;
+
+        return NameHasMonkWeaponWord(weapon.Id) || NameHasMonkWeaponWord(weapon.Name);
+    }
+
+    private static readonly string[] MonkWeaponWords = { "kama", "nunchaku", "quarterstaff", "sai", "shuriken", "siangham" };
+
+    private static bool NameHasMonkWeaponWord(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        string[] words = text.ToLowerInvariant().Split(new[] { ' ', '_', '-', '+', '(', ')', ',', '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+        {
+            for (int j = 0; j < MonkWeaponWords.Length; j++)
+            {
+                if (words[i] == MonkWeaponWords[j])
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     // ========== BARBARIAN CLASS FEATURES (D&D 3.5) ==========
@@ -2610,14 +2751,21 @@ public class CharacterStats
     public bool HasImprovedGrab;
 
     // ── Stunning Fist tracking ──
-    /// <summary>Uses per day = max(1, characterLevel / 4). Monks use monk level.</summary>
+    /// <summary>
+    /// Stunning Fist attempts per day (PHB p.101): one per four character levels; a monk with the feat gets one per monk
+    /// level plus one per four levels in other classes (CHR-003). Character level is Hit Dice, so racial Hit Dice count as
+    /// levels in other classes (MM p.290; delegated RAW reading 2026-10-14).
+    /// </summary>
     public int StunningFistUsesPerDay
     {
         get
         {
             if (!HasFeat("Stunning Fist")) return 0;
-            int lvl = Level;
-            return Mathf.Max(1, lvl / 4);
+            int hitDice = GetHitDice();
+            int monkLevel = MonkLevel;
+            if (monkLevel > 0)
+                return monkLevel + Mathf.Max(0, hitDice - monkLevel) / 4;
+            return hitDice / 4;
         }
     }
     public int StunningFistUsesRemaining = -1; // -1 means not yet initialized
@@ -2940,7 +3088,7 @@ public class CharacterStats
             // movement and AI loops read the speed often.
             int effectsTotal = Bonuses.Total(BonusTarget.LandSpeedFeet);
             int effectsBestEnhancement = Bonuses.BestOfType(BonusTarget.LandSpeedFeet, BonusType.Enhancement);
-            int bestEnhancement = Mathf.Max(effectsBestEnhancement, Mathf.Max(0, WondrousSpeedBonus), MonkFastMovementBonus * 5);
+            int bestEnhancement = Mathf.Max(effectsBestEnhancement, Mathf.Max(0, WondrousSpeedBonus), MonkFastMovementBonusFeet);
             return effectsTotal - effectsBestEnhancement + bestEnhancement;
         }
     }

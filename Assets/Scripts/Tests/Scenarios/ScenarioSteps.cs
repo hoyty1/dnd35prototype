@@ -13,7 +13,7 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -84,6 +84,13 @@ namespace Tests.Scenarios
         /// </summary>
         public static Step FullAttack(string target, string hasteAttack = null)
             => new Step(StepKind.FullAttack) { Target = target, NaturalAttackName = hasteAttack };
+        /// <summary>
+        /// A monk's flurry of blows (PHB p.40-41; CHR-003); refused when the shared rules refuse it. Scripted:
+        /// CharacterController.TryBeginFlurryOfBlows, then NPCPerformAttackForAI, which steps the flurry. Ui: the Flurry of
+        /// Blows button (it declares the flurry and starts the progressive attack sequence), then the target: the first
+        /// flurry step only; continue with AttackAgain or a Maneuver step.
+        /// </summary>
+        public static Step Flurry(string target) => new Step(StepKind.Flurry) { Target = target };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -177,6 +184,7 @@ namespace Tests.Scenarios
                     return Kind + "(" + Cell.x + "," + Cell.y + ")";
                 case StepKind.Attack:
                 case StepKind.AttackAgain:
+                case StepKind.Flurry:
                     return Kind + "(" + Target + ")";
                 case StepKind.FullAttack:
                     return "FullAttack(" + Target + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
@@ -209,7 +217,7 @@ namespace Tests.Scenarios
         /// <summary>Null when an actor with <paramref name="control"/> can run this step, else the problem.</summary>
         internal string Problem(Control control, ScenarioDef def)
         {
-            bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack
+            bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
@@ -394,7 +402,8 @@ namespace Tests.Scenarios
                 // A grappling creature's turn belongs to the grapple rules (AIService.RunGrappleTurnForAI), which the
                 // AI executors below bypass: refuse movement and ordinary attacks instead of breaking those rules.
                 if (a.IsGrappling() && (s.Kind == StepKind.Move || s.Kind == StepKind.Withdraw || s.Kind == StepKind.FiveFootStep
-                    || s.Kind == StepKind.Attack || s.Kind == StepKind.AttackAgain || s.Kind == StepKind.FullAttack || s.Kind == StepKind.Charge))
+                    || s.Kind == StepKind.Attack || s.Kind == StepKind.AttackAgain || s.Kind == StepKind.FullAttack || s.Kind == StepKind.Flurry
+                    || s.Kind == StepKind.Charge))
                 {
                     EmitStep(job, a, path, i, s, "refused", "grappling (no AI-path grapple executor; let the AI run this turn)");
                     continue;
@@ -441,6 +450,12 @@ namespace Tests.Scenarios
                     case StepKind.FullAttack:
                         if (target == null || target.Stats == null || target.Stats.IsDead) { ok = false; note = "no live target"; break; }
                         if (s.Kind == StepKind.FullAttack && !act.HasFullRoundAction) { ok = false; note = "no full-round action"; break; }
+                        yield return gm.NPCPerformAttackForAI(a, target);
+                        break;
+
+                    case StepKind.Flurry:
+                        if (target == null || target.Stats == null || target.Stats.IsDead) { ok = false; note = "no live target"; break; }
+                        if (!a.TryBeginFlurryOfBlows(out string flurryRefusal)) { ok = false; note = flurryRefusal; break; }
                         yield return gm.NPCPerformAttackForAI(a, target);
                         break;
 
@@ -799,6 +814,11 @@ namespace Tests.Scenarios
                 case StepKind.FullAttack:
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnFullAttackButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.Flurry:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnFlurryOfBlowsButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
                     break;
                 case StepKind.NaturalAttack:

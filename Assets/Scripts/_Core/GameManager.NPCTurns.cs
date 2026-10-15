@@ -1109,6 +1109,31 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// A monk NPC declares a flurry of blows before its melee sequence when its profile chooses it
+    /// (AIProfile.ShouldUseFlurryOfBlows) and the shared rules allow it (CharacterController.TryBeginFlurryOfBlows, the
+    /// core the PC Flurry button calls; PHB p.40-41, CHR-003). The sequence then steps the flurry's attacks, each through
+    /// ResolveAttackSequenceStep, so maneuvers may replace them as in any full attack. Only with the target in reach.
+    /// </summary>
+    private bool TryNPCDeclareFlurryOfBlows(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || npc.Stats == null || !npc.Stats.IsMonk || target == null || npc.IsUsingFlurryOfBlows)
+            return false;
+        if (!npc.IsTargetInCurrentWeaponRange(target) || !npc.CanUseFlurryOfBlows(out _))
+            return false;
+
+        bool choose = npc.aiProfile != null
+            ? npc.aiProfile.ShouldUseFlurryOfBlows(npc, target)
+            : DND35.AI.AIProfile.DefaultShouldUseFlurryOfBlows(npc, target);
+        if (!choose || !npc.TryBeginFlurryOfBlows(out _))
+            return false;
+
+        int[] bonuses = npc.GetFlurryOfBlowsAttackBonusPreview(target);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🥋",
+            $"{npc.Stats.CharacterName} strikes with a flurry of blows ({string.Join("/", System.Array.ConvertAll(bonuses, CharacterStats.FormatMod))}; {CharacterStats.FormatMod(npc.Stats.FlurryOfBlowsAttackPenalty)} on every attack until its next turn)."));
+        return true;
+    }
+
+    /// <summary>
     /// Coroutine wrapper for <see cref="PerformNPCMeleeAttackSequence"/>: summary log, last-known
     /// position search, and the grapple handoff after a grapple started by a substitute. When the
     /// sequence stops for a controllable defender's counter-trip prompt (PHB p.158, CMB-079) it waits
@@ -1700,6 +1725,7 @@ public partial class GameManager
         bool npcUsesRangedWeapon = npc.GetEquippedMainWeapon()?.WeaponCat == WeaponCategory.Ranged;
         if (!npcUsesRangedWeapon)
         {
+            TryNPCDeclareFlurryOfBlows(npc, target);
             yield return StartCoroutine(NPCMeleeAttackSequence(npc, target, tryStepManeuver));
             yield break;
         }

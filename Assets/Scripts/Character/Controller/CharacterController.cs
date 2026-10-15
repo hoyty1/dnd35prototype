@@ -738,6 +738,140 @@ public class CharacterController : MonoBehaviour
         return Mathf.Max(1, GetIterativeAttackCount());
     }
 
+    // ----- Flurry of blows (PHB p.40-41; CHR-003) -----
+    // One rule for PC and NPC monks. The flurry is declared before the first attack and makes the turn a full attack
+    // (TryBeginFlurryOfBlows spends the full-round action). Its steps then run through this attack sequence like any
+    // full attack: CharacterCombatStats.GetAttackBonuses / GetIterativeAttackBAB and FullAttack read the flurry steps
+    // (CharacterStats.GetFlurryOfBlowsBaseAttackBonuses: the iterative steps plus the extra attack at the highest
+    // bonus, two from 11th level; Haste adds its attack after them), BuildAttackBonus adds the flurry penalty to every
+    // attack until the monk's next turn (her attacks of opportunity included), and BuildWeaponDamageBonus adds the full
+    // Strength bonus to a flurry attack's damage. The PC Flurry button declares it and starts the PC progressive attack
+    // sequence (one ResolveAttackSequenceStep per target click); the AI declares it before its melee sequence when
+    // AIProfile.ShouldUseFlurryOfBlows says so. On both sides a maneuver may replace any flurry step, the extra attack
+    // included, at that step's bonus (TryCommitManeuverSubstituteStep; PHB p.40 lets the flurry's attacks be any mix of
+    // its attack forms and says nothing against a trip or disarm in place of one, PHB p.143 lets a maneuver replace a
+    // melee attack in a full attack: delegated RAW reading 2026-10-14). Once she is grappling, the flurry's extra attack
+    // ends (CharacterCombatStats.GetAttackBonuses) but its penalty stays on her attack rolls.
+
+    /// <summary>True while this creature's flurry of blows lasts (from its declaration to the start of its next turn).</summary>
+    public bool IsUsingFlurryOfBlows => ProgressiveAttackPool.IsFlurryOfBlows;
+
+    /// <summary>
+    /// The flurry penalty on an attack roll this creature makes while its flurry lasts (PHB p.40: every attack that round
+    /// and its attacks of opportunity before its next turn; CHR-003), for the attack rolls not built by
+    /// <see cref="BuildAttackBonus"/>: a trip or grapple touch attack and the disarm and sunder opposed attack rolls.
+    /// </summary>
+    public int FlurryAttackRollPenalty => IsUsingFlurryOfBlows && Stats != null ? Stats.FlurryOfBlowsAttackPenalty : 0;
+
+    // Set while a flurry attack (not an attack of opportunity) resolves, for its Strength rule (PHB p.41).
+    private bool _resolvingFlurryOfBlowsAttack;
+
+    /// <summary>
+    /// A weapon a flurry may use (PHB p.40): an unarmed strike (null) or a special monk weapon
+    /// (<see cref="CharacterStats.IsSpecialMonkWeapon"/>), in melee. A thrown shuriken flurry is not modelled.
+    /// </summary>
+    public bool IsFlurryOfBlowsWeapon(ItemData weapon)
+    {
+        if (weapon == null)
+            return !ShouldUseInnateNaturalAttackProfile(null);
+
+        return CharacterStats.IsSpecialMonkWeapon(weapon) && weapon.WeaponCat != WeaponCategory.Ranged;
+    }
+
+    /// <summary>
+    /// Whether this creature may declare a flurry of blows now (PHB p.40): a monk who is not wearing armor, carrying a
+    /// shield or a medium or heavy load, attacking with an unarmed strike or a special monk weapon, before any attack
+    /// this turn, with its full-round action available (a full attack, PHB p.143; not while slowed, PHB p.280, or
+    /// grappling, PHB p.156). Declared before the first attack, and never while grappling: delegated RAW readings
+    /// 2026-10-14 (RULES_COVERAGE 4.1).
+    /// </summary>
+    public bool CanUseFlurryOfBlows(out string reason)
+    {
+        reason = string.Empty;
+        if (Stats == null || !Stats.IsMonk)
+        {
+            reason = "only a monk can strike with a flurry of blows";
+            return false;
+        }
+
+        string fetter = Stats.GetMonkFetterReason();
+        if (fetter != null)
+        {
+            reason = $"a monk {fetter} loses her flurry of blows (PHB p.40)";
+            return false;
+        }
+
+        ItemData weapon = GetEquippedMainWeapon();
+        if (!IsFlurryOfBlowsWeapon(weapon))
+        {
+            reason = weapon != null
+                ? $"a flurry uses only unarmed strikes or special monk weapons, not {weapon.Name} (PHB p.40)"
+                : "a flurry uses unarmed strikes or special monk weapons, not natural attacks";
+            return false;
+        }
+
+        if (IsGrappling())
+        {
+            reason = "a grappling creature attacks only through grapple actions (PHB p.156)";
+            return false;
+        }
+
+        if (ProgressiveAttackPool.HasStartedAttacking)
+        {
+            reason = "a flurry is declared before the first attack of the turn (PHB p.40)";
+            return false;
+        }
+
+        if (Actions == null || !Actions.HasFullRoundAction || HasActiveSlowEffect)
+        {
+            reason = "a flurry of blows is a full attack and needs the full-round action (PHB p.40, p.143)";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Declare a flurry of blows (PHB p.40): spends the full-round action and makes this turn's attack sequence a flurry
+    /// (<see cref="AttackPool.MarkFlurryOfBlows"/>). True when the flurry is (already) declared.
+    /// </summary>
+    public bool TryBeginFlurryOfBlows(out string reason)
+    {
+        reason = string.Empty;
+        if (IsUsingFlurryOfBlows)
+            return true;
+
+        if (!CanUseFlurryOfBlows(out reason))
+            return false;
+
+        Actions.UseFullRoundAction();
+        ProgressiveAttackPool.MarkFlurryOfBlows();
+        Debug.Log($"[Monk] {Stats.CharacterName} declares a flurry of blows: steps {string.Join("/", Stats.GetFlurryOfBlowsModifiedBaseAttackBonuses())} (penalty {Stats.FlurryOfBlowsAttackPenalty})");
+        return true;
+    }
+
+    /// <summary>
+    /// The attack bonus of each attack a flurry would make now (each flurry step with the shared per-attack terms and the
+    /// flurry penalty), for button labels and the AI. Haste's extra attack is included at the end.
+    /// </summary>
+    public int[] GetFlurryOfBlowsAttackBonusPreview(CharacterController target = null)
+    {
+        if (Stats == null || !Stats.IsMonk)
+            return new int[0];
+
+        ItemData weapon = GetEquippedMainWeapon();
+        AttackBonusBreakdown terms = BuildAttackBonus(target, weapon, false, null, false, 0, 0, IsWeaponTwoHanded(weapon));
+        terms.FlurryPenalty = Stats.FlurryOfBlowsAttackPenalty;
+        int[] steps = Stats.GetFlurryOfBlowsBaseAttackBonuses();
+        bool haste = HasActiveHasteEffect && ActiveHasteEffect.GrantsExtraAttack && steps.Length > 0;
+        var bonuses = new int[steps.Length + (haste ? 1 : 0)];
+        for (int i = 0; i < steps.Length; i++)
+            bonuses[i] = steps[i] + terms.Total;
+        if (haste)
+            bonuses[steps.Length] = steps[0] + terms.Total;
+        return bonuses;
+    }
+
     // ----- Haste's extra attack with a natural weapon (PHB p.239; owner decision 2026-10-07, CMB-106) -----
     // PHB p.239: on a full attack a hasted creature makes one extra attack at its full bonus. The owner
     // ruled that this covers natural weapons: a hasted creature fighting with its innate natural attacks
@@ -932,6 +1066,14 @@ public class CharacterController : MonoBehaviour
                 return false;
             }
         }
+        else if (kind == AttackStepKind.OffHand && IsUsingFlurryOfBlows)
+        {
+            // A flurry's attacks are its own steps, with unarmed strikes and monk weapons interchangeably; there is no
+            // off-hand attack in it: every flurry attack adds the full Strength bonus, never x1/2 (PHB p.40-41;
+            // delegated RAW reading 2026-10-14).
+            reason = "a flurry of blows has no off-hand attacks (PHB p.40)";
+            return false;
+        }
 
         reason = string.Empty;
         return true;
@@ -1065,7 +1207,7 @@ public class CharacterController : MonoBehaviour
     ///   which must deal slashing or bludgeoning damage (owner ruling 2026-10-08, CMB-102; MM p.312: a bite,
     ///   claw, talon, slam or tentacle can, a gore or sting cannot; <see cref="NaturalAttackDefinition.CanSunder"/>);
     /// - a creature with neither sunders with an unarmed strike, a bludgeoning light weapon (PHB p.116 Table 7-5),
-    ///   and so does an NPC that lists "Unarmed Strike" as a natural attack (the monks): owner interpretation 2026-10-11
+    ///   and so does an NPC that lists "Unarmed Strike" as a natural attack (no shipped entry since CRE-042): owner interpretation 2026-10-11
     ///   (CMB-141); <see cref="ResolveSunder"/> gives it the light-weapon -4.
     /// <paramref name="naturalAttackIndex"/> names the natural attack given up; a negative value means the
     /// one at the current step, the order the NPC sequence resolves them in
@@ -1110,7 +1252,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// True when this creature fights with natural weapons (MM p.312: armed): it uses its innate natural
     /// sequence and at least one of its natural attacks is not an unarmed strike. An NPC that lists only
-    /// unarmed strikes as natural attacks (the monks) is unarmed, as a PC monk is: its disarm takes the
+    /// unarmed strikes as natural attacks (no shipped entry since CRE-042) is unarmed, as a PC monk is: its disarm takes the
     /// light-weapon -4 and catches the weapon (PHB p.155), and its sunder takes the light-weapon -4 (PHB p.158;
     /// owner interpretation 2026-10-11, CMB-141).
     /// </summary>
@@ -1364,8 +1506,30 @@ public class CharacterController : MonoBehaviour
         }
 
         int stepBab = GetMainHandAttackStepBAB(stepIndex) + babAdjustment;
-        stepLabel = $"Attack {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
-        return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, stepBab, weapon);
+        if (!IsUsingFlurryOfBlows)
+        {
+            stepLabel = $"Attack {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
+            return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, stepBab, weapon);
+        }
+
+        // A flurry step (PHB p.40-41, CHR-003): the flurry's own BAB step (GetIterativeAttackBAB reads the flurry steps),
+        // the flurry penalty from BuildAttackBonus, the full Strength bonus on damage, and only flurry weapons.
+        if (!IsFlurryOfBlowsWeapon(weapon ?? GetEquippedMainWeapon()))
+        {
+            Debug.LogWarning($"[Monk] {Stats.CharacterName}: {(weapon ?? GetEquippedMainWeapon())?.Name ?? "this attack"} cannot be part of a flurry of blows (PHB p.40)");
+            return null;
+        }
+
+        stepLabel = $"Flurry {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
+        _resolvingFlurryOfBlowsAttack = true;
+        try
+        {
+            return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, stepBab, weapon);
+        }
+        finally
+        {
+            _resolvingFlurryOfBlowsAttack = false;
+        }
     }
 
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
@@ -1514,15 +1678,19 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Resolve base unarmed strike damage for this character.
-    /// D&D 3.5 baseline is 1d3 at Medium and scales by size; monks use their class progression as Medium baseline.
+    /// D&D 3.5 baseline is 1d3 at Medium and scales by size; a monk's Medium baseline is her Table 3-10 damage by monk
+    /// level (CharacterStats.TryGetMonkUnarmedMediumDamage, 1d6 to 2d10), resized the same way (Table 3-11; CHR-003).
     /// </summary>
     public (int damageCount, int damageDice, int bonusDamage) GetUnarmedDamage()
     {
         int mediumBaseCount = 1;
         int mediumBaseDice = 3;
 
-        if (Stats != null && Stats.MonkUnarmedDamageDie > 0)
-            mediumBaseDice = Stats.MonkUnarmedDamageDie;
+        if (Stats != null && Stats.TryGetMonkUnarmedMediumDamage(out int monkCount, out int monkDice))
+        {
+            mediumBaseCount = monkCount;
+            mediumBaseDice = monkDice;
+        }
 
         SizeCategory currentSize = Stats != null ? Stats.CurrentSizeCategory : SizeCategory.Medium;
         if (!WeaponDamageScaler.TryScaleDamageDice(mediumBaseCount, mediumBaseDice, SizeCategory.Medium, currentSize, out int scaledCount, out int scaledDice))
@@ -5478,8 +5646,9 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The one place a weapon attack roll's modifier is assembled (CMB-043). Attack, FullAttack
-    /// (iterative and natural), DualWieldAttack and FlurryOfBlows all call this, then set the
-    /// per-attack terms (BaseAttackBonus step, SequenceModifier, AidAnotherBonus, MagicStoneBonus).
+    /// (iterative, natural and flurry) and DualWieldAttack all call this, then set the
+    /// per-attack terms (BaseAttackBonus step, SequenceModifier, AidAnotherBonus, MagicStoneBonus). The flurry of blows
+    /// penalty (FlurryPenalty) is set here for every attack while the creature flurries (PHB p.40; CHR-003).
     /// Rules applied: ability is DEX for ranged attacks and Weapon Finesse, else STR (PHB p.134, p.102);
     /// size (p.134); shooting into melee (p.140); prone (p.151); flanking (p.153); range increments (p.134);
     /// mounted ranged (applied whenever mounted; RAW p.157 only while the mount double-moves or runs, CMB-031);
@@ -5506,6 +5675,8 @@ public class CharacterController : MonoBehaviour
             BaseAttackBonus = baseAttackBonus,
             SequenceModifier = 0,
             SequenceLabel = string.Empty,
+            // Every attack of the round a monk flurries, and her attacks of opportunity until her next turn (PHB p.40; CHR-003).
+            FlurryPenalty = IsUsingFlurryOfBlows ? Stats.FlurryOfBlowsAttackPenalty : 0,
             AbilityMod = feats.AbilityMod,
             AbilityName = feats.AbilityName,
             SizeModifier = Stats.SizeModifier,
@@ -5586,6 +5757,12 @@ public class CharacterController : MonoBehaviour
         {
             d.StrengthSuppressed = true;
             d.StrengthLabel = "no STR modifier";
+        }
+        else if (_resolvingFlurryOfBlowsAttack && !isOffHand)
+        {
+            // A flurry attack adds the full Strength bonus, not 1-1/2 or 1/2 times it, in one hand or both (PHB p.41; CHR-003).
+            d.StrengthBonus = Stats.STRMod;
+            d.StrengthLabel = "STR (flurry)";
         }
         else
         {
@@ -5934,6 +6111,10 @@ public class CharacterController : MonoBehaviour
         if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
             return Mathf.Max(0, GetNaturalAttackStepBudget()); // with Haste's extra natural attack (CMB-106)
 
+        // A flurry's steps, with Haste's extra attack: the same list FullAttack resolves (CHR-003).
+        if (IsUsingFlurryOfBlows)
+            return Mathf.Max(0, GetIterativeAttackCount());
+
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
         int count = attackBonuses != null ? attackBonuses.Length : 0;
 
@@ -6103,8 +6284,20 @@ public class CharacterController : MonoBehaviour
         Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}, effect damage={CharacterStats.FormatMod(Stats.EffectWeaponDamageBonus)}");
         if (rapidShotActive) Debug.Log($"[FullAttack] Rapid Shot active: -2 penalty, +1 extra attack");
 
+        // A flurry of blows (PHB p.40-41, CHR-003): its own BAB steps (the iterative steps plus the extra attack, two from
+        // 11th level, at the highest), with unarmed strikes or special monk weapons in melee only. The penalty is in
+        // sequenceBonus (BuildAttackBonus) and the full Strength bonus in the step damage below.
+        bool flurry = IsUsingFlurryOfBlows;
+        if (flurry && (isRanged || !IsFlurryOfBlowsWeapon(equippedWeapon)))
+        {
+            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: {(equippedWeapon != null ? equippedWeapon.Name : "this attack")} cannot be part of a flurry of blows (PHB p.40)");
+            result.DefenderHPAfter = target.Stats.CurrentHP;
+            result.TargetKilled = target.Stats.IsDead;
+            return result;
+        }
+
         // Build the list of BAB steps, inserting the Rapid Shot extra attack
-        int[] babSteps = Stats.GetIterativeBaseAttackBonuses();
+        int[] babSteps = flurry ? Stats.GetFlurryOfBlowsBaseAttackBonuses() : Stats.GetIterativeBaseAttackBonuses();
         var allBabSteps = new List<int>(babSteps);
         int baseAttackCount = allBabSteps.Count;
 
@@ -6150,6 +6343,8 @@ public class CharacterController : MonoBehaviour
             string label;
             if (rapidShotActive && i == 0)
                 label = $"Attack 1 (Rapid Shot, {CharacterStats.FormatMod(atkBonus.LabelBonus)})";
+            else if (flurry)
+                label = $"Flurry {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})";
             else
                 label = $"Attack {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})";
 
@@ -6167,8 +6362,17 @@ public class CharacterController : MonoBehaviour
                 atkBonusDamage = 1;
             }
 
-            WeaponDamageBreakdown stepDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged, isOffHand: false, atkBonus.Feats,
-                atkBonusDamage, fullAtkMagicStoneUsed ? "Magic Stone" : null);
+            WeaponDamageBreakdown stepDamage;
+            _resolvingFlurryOfBlowsAttack = flurry;
+            try
+            {
+                stepDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged, isOffHand: false, atkBonus.Feats,
+                    atkBonusDamage, fullAtkMagicStoneUsed ? "Magic Stone" : null);
+            }
+            finally
+            {
+                _resolvingFlurryOfBlowsAttack = false;
+            }
             CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
                 atkDamageDice, atkDamageCount, stepDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
                 equippedWeapon, aidAnotherTargetAcBonus,
@@ -11471,7 +11675,9 @@ public class CharacterController : MonoBehaviour
                             + GetProneAttackModifier(isMeleeAttack: true)
                             + weaponNonProfPenalty
                             + armorNonProfPenalty
-                            + useOpponentWeaponAttackPenalty;
+                            + useOpponentWeaponAttackPenalty
+                            // An attack roll in a flurry round takes the flurry penalty (PHB p.40; delegated RAW reading 2026-10-14).
+                            + FlurryAttackRollPenalty;
 
             GetScaledWeaponDamageDice(opponentWeapon, out int scaledOpponentDamageCount, out int scaledOpponentDamageDice);
             int damageDice = Mathf.Max(1, scaledOpponentDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
@@ -11518,6 +11724,8 @@ public class CharacterController : MonoBehaviour
 
             logLines.Add($"{Stats.CharacterName} uses {opponent.Stats.CharacterName}'s {opponentWeapon.Name} against them ({selectedHandSlot}).");
             logLines.Add("-4 penalty for using opponent's weapon.");
+            if (FlurryAttackRollPenalty != 0)
+                logLines.Add($"Flurry of blows penalty applied: {CharacterStats.FormatMod(FlurryAttackRollPenalty)}.");
             logLines.Add(BuildD20Formula("Attack roll", attackResult.DieRoll, attackMod, attackResult.TotalRoll)
                 + $" vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}");
             if (attackResult.Hit)
@@ -11706,7 +11914,9 @@ public class CharacterController : MonoBehaviour
                         + weaponNonProfPenalty
                         + armorNonProfPenalty
                         + grappleAttackPenalty
-                        + damageMode.AttackPenalty;
+                        + damageMode.AttackPenalty
+                        // An attack roll in a flurry round takes the flurry penalty (PHB p.40; delegated RAW reading 2026-10-14).
+                        + FlurryAttackRollPenalty;
 
         int damageDice;
         int damageCount;
@@ -11781,6 +11991,9 @@ public class CharacterController : MonoBehaviour
             BuildD20Formula("Attack roll", attackResult.DieRoll, attackMod, attackResult.TotalRoll)
                 + $" vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}",
             "Includes -4 grapple attack penalty.",
+            FlurryAttackRollPenalty != 0
+                ? $"Flurry of blows penalty applied: {CharacterStats.FormatMod(FlurryAttackRollPenalty)}."
+                : string.Empty,
             damageMode.AttackPenalty != 0
                 ? $"Damage-mode penalty applied: {damageMode.AttackPenalty:+#;-#;0} ({damageMode.PenaltySource})."
                 : string.Empty,
@@ -12613,7 +12826,7 @@ public class CharacterController : MonoBehaviour
             return 0;
 
         int bab = baseAttackBonusOverride ?? Stats.BaseAttackBonus;
-        return bab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
+        return bab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + FlurryAttackRollPenalty;
     }
 
     /// <summary>A natural 20 always hits and a natural 1 always misses (PHB p.134).</summary>
@@ -13867,7 +14080,7 @@ public class CharacterController : MonoBehaviour
         }
 
         // An unarmed strike (owner interpretation 2026-10-11, CMB-141): no weapon in hand and no natural sequence, or
-        // an "Unarmed Strike" the creature lists as a natural attack (the NPC monks). A light weapon on the opposed
+        // an "Unarmed Strike" the creature lists as a natural attack (no shipped entry since CRE-042). A light weapon on the opposed
         // roll (PHB p.158; PHB p.116 Table 7-5).
         bool unarmedSunder = attackerWeapon == null && (sunderNatural == null || sunderNatural.IsUnarmedStrike);
         // The attack's damage mode, the same one an attack with this weapon or unarmed strike would use: a plain
@@ -13875,8 +14088,7 @@ public class CharacterController : MonoBehaviour
         // takes -4 for lethal damage (PHB p.139); a nonlethal weapon (sap, whip) takes -4 for lethal damage and a
         // lethal weapon -4 for nonlethal (PHB p.146). The opposed roll is an attack roll (PHB p.158), so that -4
         // applies to it, and objects are immune to nonlethal damage (PHB p.165), so a nonlethal sunder that wins
-        // deals the item nothing. A natural attack, a natural "Unarmed Strike" included, is always lethal (the NPC
-        // monks have Improved Unarmed Strike).
+        // deals the item nothing. A natural attack, a natural "Unarmed Strike" included, is always lethal.
         DamageModeAttackProfile sunderDamageMode = GetSunderDamageModeProfile(attackerWeapon, sunderNatural);
 
         targetItem.EnsureDurabilityInitialized();
@@ -13907,8 +14119,11 @@ public class CharacterController : MonoBehaviour
         // applies (PHB p.15, p.17; CHR-019).
         int racialBonus = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
         int defenderRacialBonus = RacialTraitRules.AttackBonusAgainst(target.Stats, Stats);
+        // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
+        int flurryPenalty = FlurryAttackRollPenalty;
+        int defenderFlurryPenalty = target.FlurryAttackRollPenalty;
 
-        int attackTotal = attackRoll
+        int attackTotal = attackRoll + flurryPenalty
             + attackBab
             + Stats.STRMod
             + Stats.SizeModifier
@@ -13919,7 +14134,7 @@ public class CharacterController : MonoBehaviour
             + sizeBonus
             + racialBonus;
 
-        int defenseTotal = defenseRoll
+        int defenseTotal = defenseRoll + defenderFlurryPenalty
             + target.Stats.BaseAttackBonus
             + target.Stats.STRMod
             + target.Stats.SizeModifier
@@ -13947,6 +14162,7 @@ public class CharacterController : MonoBehaviour
                 : string.Empty)
             + (sizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(sizeBonus)}" : string.Empty)
             + (racialBonus != 0 ? $" + racial {CharacterStats.FormatMod(racialBonus)}" : string.Empty)
+            + (flurryPenalty != 0 ? $" + flurry of blows {CharacterStats.FormatMod(flurryPenalty)}" : string.Empty)
             + (attackerDualWieldPenaltyForLog != 0 ? $" [includes dual-wield penalty {CharacterStats.FormatMod(attackerDualWieldPenaltyForLog)} in BAB]" : string.Empty)
             + $" = {attackTotal}");
         logLines.Add($"Defender check: d20 {defenseRoll} + BAB {CharacterStats.FormatMod(target.Stats.BaseAttackBonus)} + STR {CharacterStats.FormatMod(target.Stats.STRMod)} + size {CharacterStats.FormatMod(target.Stats.SizeModifier)}"
@@ -13954,6 +14170,7 @@ public class CharacterController : MonoBehaviour
             + (defenderHandednessBonus != 0 ? $" + {defenderHandednessLabel} {CharacterStats.FormatMod(defenderHandednessBonus)}" : string.Empty)
             + (defenderSizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(defenderSizeBonus)}" : string.Empty)
             + (defenderRacialBonus != 0 ? $" + racial {CharacterStats.FormatMod(defenderRacialBonus)}" : string.Empty)
+            + (defenderFlurryPenalty != 0 ? $" + flurry of blows {CharacterStats.FormatMod(defenderFlurryPenalty)}" : string.Empty)
             + $" = {defenseTotal}");
 
         if (attackTotal < defenseTotal)
@@ -14681,7 +14898,7 @@ public class CharacterController : MonoBehaviour
     /// PHB p.155: a disarmer that attempted the disarm unarmed now has the weapon; an armed one knocks
     /// it to the ground in the defender's square. A creature attacking with its natural weapons is
     /// armed (MM p.312), so it does not catch the weapon, and its natural sequence goes on (CMB-102).
-    /// An unarmed strike listed as a natural attack (the NPC monks) is unarmed (<see cref="FightsWithNaturalWeapons"/>).
+    /// An unarmed strike listed as a natural attack (no shipped entry since CRE-042) is unarmed (<see cref="FightsWithNaturalWeapons"/>).
     /// </summary>
     private static bool DisarmerCatchesWeapon(CharacterController disarmer, ItemData disarmerHeldWeapon)
         => disarmerHeldWeapon == null && (disarmer == null || !disarmer.FightsWithNaturalWeapons());
@@ -14730,10 +14947,15 @@ public class CharacterController : MonoBehaviour
         int atkRacialMod = RacialTraitRules.AttackBonusAgainst(attacker.Stats, defender.Stats);
         int defRacialMod = RacialTraitRules.AttackBonusAgainst(defender.Stats, attacker.Stats);
 
+        // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
+        int atkFlurryMod = attacker.FlurryAttackRollPenalty;
+        int defFlurryMod = defender.FlurryAttackRollPenalty;
+
         int atkTotal = atkRoll + attackerBaseAttackBonusUsed + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
-                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod + atkRacialMod;
+                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod + atkRacialMod + atkFlurryMod;
         int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
-                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus + defRacialMod;
+                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus + defRacialMod
+                       + defFlurryMod;
 
         string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : attackerUsesNaturalWeapon ? "Natural weapon" : "Unarmed Strike";
         string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
@@ -14752,8 +14974,8 @@ public class CharacterController : MonoBehaviour
             nonMeleePenalty: 0,
             improvedDisarmModifier: atkImprovedDisarmMod,
             racialModifier: atkRacialMod,
-            specialModifier: 0,
-            specialModifierLabel: string.Empty,
+            specialModifier: atkFlurryMod,
+            specialModifierLabel: atkFlurryMod != 0 ? "Flurry of Blows" : string.Empty,
             heldItemLabel: attackerHeldLabel,
             total: atkTotal);
 
@@ -14771,8 +14993,9 @@ public class CharacterController : MonoBehaviour
             nonMeleePenalty: defNonMeleeHeldItemPenalty,
             improvedDisarmModifier: defImprovedDisarmMod,
             racialModifier: defRacialMod,
-            specialModifier: defenderSpecialResistBonus,
-            specialModifierLabel: lockedGauntletReason,
+            specialModifier: defenderSpecialResistBonus + defFlurryMod,
+            specialModifierLabel: defFlurryMod == 0 ? lockedGauntletReason
+                : string.IsNullOrEmpty(lockedGauntletReason) ? "Flurry of Blows" : lockedGauntletReason + ", Flurry of Blows",
             heldItemLabel: defenderHeldLabel,
             total: defTotal);
 
@@ -15020,7 +15243,7 @@ public class CharacterController : MonoBehaviour
     /// a held weapon; with none, a true natural weapon (claw, bite, slam) is a one-handed weapon of its size (0,
     /// <see cref="NaturalWeaponDisarmHandednessModifier"/>), and otherwise it rolls with its unarmed strike, always a
     /// light weapon (-4, <see cref="UnarmedStrikeSunderHandednessModifier"/>; PHB p.113, p.139), an "Unarmed Strike"
-    /// listed as a natural attack included (the NPC monks). No damage-mode -4: only the attacker deals damage (PHB p.158
+    /// listed as a natural attack included (no shipped entry since CRE-042). No damage-mode -4: only the attacker deals damage (PHB p.158
     /// Step 3) (delegated RAW reading 2026-10-14, CMB-165). The same for PCs and NPCs.
     /// </summary>
     public static int GetSunderDefenderHandednessModifier(CharacterController defender, ItemData defenderWeapon, out string label)
@@ -15214,116 +15437,28 @@ public class CharacterController : MonoBehaviour
     // ========== MONK: FLURRY OF BLOWS (Full-Round Action) ==========
 
     /// <summary>
-    /// Perform a Flurry of Blows attack (Monk only).
-    /// D&D 3.5: Two attacks at reduced BAB. At level 3: +0/+0.
-    /// Must use unarmed strike or special monk weapon.
+    /// Declare a flurry of blows (<see cref="TryBeginFlurryOfBlows"/>, unless already declared this turn) and resolve all
+    /// its remaining attacks against <paramref name="target"/> through <see cref="FullAttack"/>, the shared full attack
+    /// (PHB p.40-41; CHR-003). The PC Flurry button and the AI step the same sequence one attack at a time instead
+    /// (GameManager full attack sequence, PerformNPCMeleeAttackSequence); this one-call form is for tests and scripts.
+    /// Returns an empty result when the flurry cannot be declared.
     /// </summary>
     public FullAttackResult FlurryOfBlows(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
-        var result = new FullAttackResult();
-        result.Type = FullAttackResult.AttackType.FullAttack;
-        result.Attacker = this;
-        result.Defender = target;
-        result.DefenderHPBefore = target.Stats.CurrentHP;
-
-        if (!Stats.IsMonk)
+        if (!TryBeginFlurryOfBlows(out string reason))
         {
-            Debug.LogWarning($"[Monk] {Stats.CharacterName}: Cannot use Flurry of Blows - not a Monk!");
-            return result;
-        }
-
-        // Flurry: two attacks at full BAB with the flurry penalty (PHB p.40-41).
-        // GetFlurryOfBlowsBonuses gives the count; the modifier itself comes from the shared builder.
-        int[] flurryBonuses = Stats.GetFlurryOfBlowsBonuses();
-        int flurryPenalty = Stats.FlurryOfBlowsAttackPenalty;
-
-        // Use monk/unarmed fallback profile unless a monk weapon is equipped.
-        var unarmedProfile = GetUnarmedDamage();
-        int damageDice = unarmedProfile.damageDice;
-        int damageCount = unarmedProfile.damageCount;
-        int bonusDamage = unarmedProfile.bonusDamage;
-
-        // Check for equipped weapon (quarterstaff is a monk weapon)
-        ItemData equippedWeapon = EnsureInventory().GetRightHandEquippedWeapon();
-
-        if (equippedWeapon != null)
-        {
-            // Use weapon stats if equipped
-            GetScaledWeaponDamageDice(equippedWeapon, out damageCount, out damageDice);
-            bonusDamage = equippedWeapon.BonusDamage;
-            Debug.Log($"[Monk] Using weapon: {equippedWeapon.Name} ({damageCount}d{damageDice})");
-        }
-        else
-        {
-            Debug.Log($"[Monk] Using unarmed strike: {damageCount}d{damageDice}");
-        }
-
-        // Shared per-attack modifier (CMB-043): flurry is a melee full attack, so it adds the same
-        // terms as any other attack (ability incl. Weapon Finesse, feats, morale, conditions) plus the flurry penalty.
-        AttackBonusBreakdown flurryBonus = BuildAttackBonus(target, equippedWeapon, false, null,
-            isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon));
-        flurryBonus.SequenceModifier = flurryPenalty;
-        flurryBonus.SequenceLabel = "Flurry of Blows";
-        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
-        WeaponDamageBreakdown flurryDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged: false, isOffHand: false,
-            flurryBonus.Feats, bonusDamage);
-        // A flurry adds the full Strength modifier, not 1-1/2 or 1/2 times it, even with a weapon in both hands (PHB p.41).
-        if (!flurryDamage.StrengthSuppressed && flurryDamage.StrengthBonus != Stats.STRMod)
-        {
-            flurryDamage.StrengthBonus = Stats.STRMod;
-            flurryDamage.StrengthLabel = "STR (flurry)";
-        }
-
-        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
-                  $"{CharacterStats.FormatMod(flurryBonus.LabelBonus)} each (total modifier {CharacterStats.FormatMod(flurryBonus.Total)})");
-
-        for (int i = 0; i < flurryBonuses.Length; i++)
-        {
-            if (target.Stats.IsDead)
+            Debug.LogWarning($"[Monk] {Stats?.CharacterName ?? name}: cannot use Flurry of Blows: {reason}");
+            return new FullAttackResult
             {
-                Debug.Log($"[Monk] Target is dead, stopping at attack {i + 1}");
-                break;
-            }
-
-            AttackBonusBreakdown atkBonus = flurryBonus;
-            atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
-            int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-
-            string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})";
-            int hpBefore = target.Stats.CurrentHP;
-
-            CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                damageDice, damageCount, flurryDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-                equippedWeapon, aidAnotherTargetAcBonus,
-                damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
-
-            atkBonus.ApplyToResult(atk, null);
-            atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
-            atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-            if (equippedWeapon != null)
-            {
-                atk.WeaponName = equippedWeapon.Name;
-                atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
-            }
-            else
-            {
-                atk.WeaponName = "Unarmed Strike";
-                atk.BaseDamageDiceStr = $"1d{damageDice}";
-            }
-            atk.DefenderHPBefore = hpBefore;
-            atk.DefenderHPAfter = target.Stats.CurrentHP;
-
-            result.Attacks.Add(atk);
-            result.AttackLabels.Add(label);
+                Type = FullAttackResult.AttackType.FullAttack,
+                Attacker = this,
+                Defender = target,
+                DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0,
+                DefenderHPAfter = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
+            };
         }
 
-        result.DefenderHPAfter = target.Stats.CurrentHP;
-        result.TargetKilled = target.Stats.IsDead;
-        HasAttackedThisTurn = true;
-
-        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows complete - " +
-                  $"{result.Attacks.Count} attacks, target HP: {result.DefenderHPAfter}");
-        return result;
+        return FullAttack(target, isFlanking, flankingBonus, flankingPartnerName, rangeInfo);
     }
 
     // ========== BARBARIAN: RAGE (Free Action) ==========

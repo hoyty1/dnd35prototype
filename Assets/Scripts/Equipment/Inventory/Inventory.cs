@@ -697,13 +697,13 @@ public class Inventory
                 }
                 else
                 {
-                    // Unarmed: 1d3 at Medium (a monk's die), resized like CharacterController.GetUnarmedDamage
-                    // (PHB Table 7-5, DMG Tables 2-2 and 2-3); 20/×2, bludgeoning
-                    int unarmedMediumDie = OwnerStats.MonkUnarmedDamageDie > 0 ? OwnerStats.MonkUnarmedDamageDie : 3;
-                    if (!WeaponDamageScaler.TryScaleDamageDice(1, unarmedMediumDie, SizeCategory.Medium, OwnerStats.CurrentSizeCategory,
+                    // Unarmed: 1d3 at Medium (a monk's damage by monk level, PHB Table 3-10, CHR-003), resized like
+                    // CharacterController.GetUnarmedDamage (PHB Table 7-5 and 3-11, DMG Tables 2-2 and 2-3); 20/×2, bludgeoning
+                    OwnerStats.TryGetMonkUnarmedMediumDamage(out int unarmedMediumCount, out int unarmedMediumDie);
+                    if (!WeaponDamageScaler.TryScaleDamageDice(unarmedMediumCount, unarmedMediumDie, SizeCategory.Medium, OwnerStats.CurrentSizeCategory,
                             out int unarmedCount, out int unarmedDie))
                     {
-                        unarmedCount = 1;
+                        unarmedCount = unarmedMediumCount;
                         unarmedDie = unarmedMediumDie;
                     }
                     OwnerStats.BaseDamageDice = unarmedDie;
@@ -1224,7 +1224,9 @@ public class Inventory
         }
 
         // Apply highest-wins stacking for Bracers of Armor vs physical armor
-        // Bracers provide an armor bonus that doesn't stack with physical armor
+        // Bracers provide an armor bonus that doesn't stack with physical armor. The bracers' own bonus stays in
+        // WondrousBracersArmorBonus; they are not armor (DMG p.250), so "wearing armor" reads the armor item
+        // (CharacterStats.IsWearingArmor), never ArmorBonus, and a monk keeps her AC bonus and fast movement (CHR-003).
         if (OwnerStats.WondrousBracersArmorBonus > 0)
         {
             // Only apply if it's higher than current armor bonus (doesn't stack)

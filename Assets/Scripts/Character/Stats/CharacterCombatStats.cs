@@ -18,18 +18,28 @@ public class CharacterCombatStats : MonoBehaviour
     /// </summary>
     public int GetNumberOfAttacks()
     {
-        int bab = _character != null && _character.Stats != null ? _character.Stats.BaseAttackBonus : 0;
-        if (bab >= 16) return 4;
-        if (bab >= 11) return 3;
-        if (bab >= 6) return 2;
-        return 1;
+        return GetAttackBonuses().Count;
     }
 
     /// <summary>
-    /// Iterative attack BAB values (BAB, BAB-5, BAB-10, BAB-15).
+    /// Iterative attack BAB values (BAB, BAB-5, BAB-10, BAB-15). While the creature flurries, the flurry's steps instead
+    /// (CharacterStats.GetFlurryOfBlowsBaseAttackBonuses: the extra attack, two from 11th level, at the highest BAB;
+    /// PHB p.40-41, CHR-003), so the shared attack sequence (budget, step BAB, maneuver substitutes) follows the flurry.
+    /// Once the monk is grappling (a flurry step replaced by a grapple that succeeded), her remaining actions are grapple
+    /// actions, one in place of each attack her base attack bonus gives (PHB p.156), so the plain ladder applies again
+    /// and the flurry's extra attack ends; the flurry penalty still applies to her attack rolls that round
+    /// (CharacterController.FlurryAttackRollPenalty, PHB p.40). Delegated RAW reading 2026-10-14, the same reading that
+    /// bars declaring a flurry while grappling (CharacterController.CanUseFlurryOfBlows).
     /// </summary>
     public List<int> GetAttackBonuses()
     {
+        if (_character != null && _character.Stats != null && _character.IsUsingFlurryOfBlows && !_character.IsGrappling())
+        {
+            int[] flurry = _character.Stats.GetFlurryOfBlowsBaseAttackBonuses();
+            if (flurry.Length > 0)
+                return new List<int>(flurry);
+        }
+
         int bab = _character != null && _character.Stats != null ? _character.Stats.BaseAttackBonus : 0;
         var bonuses = new List<int> { bab };
 

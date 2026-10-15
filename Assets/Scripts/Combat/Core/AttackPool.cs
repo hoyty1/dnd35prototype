@@ -99,6 +99,15 @@ public sealed class AttackPool
     /// </summary>
     public bool BeganTurnGrappling { get; private set; }
 
+    /// <summary>
+    /// The monk declared a flurry of blows this turn (PHB p.40; CHR-003): a full attack from the first attack, whose
+    /// main-hand steps follow CharacterStats.GetFlurryOfBlowsBaseAttackBonuses and whose attacks, with every attack of
+    /// opportunity the monk makes before her next turn, take CharacterStats.FlurryOfBlowsAttackPenalty
+    /// (CharacterController.BuildAttackBonus). It lasts until <see cref="Clear"/> at the start of her next turn.
+    /// Set by <see cref="CharacterController.TryBeginFlurryOfBlows"/>.
+    /// </summary>
+    public bool IsFlurryOfBlows { get; private set; }
+
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
     public bool NextAttackNeedsMoveAction => Mode == ProgressiveAttackMode.StandardAttackCommitted && !PendingStepPaid;
@@ -116,6 +125,14 @@ public sealed class AttackPool
         _usedNaturalAttackIndices.Clear();
         RakeUsedThisTurn = false;
         BeganTurnGrappling = false;
+        IsFlurryOfBlows = false;
+    }
+
+    /// <summary>Starts a flurry of blows: the turn is a full attack (its actions are spent by the caller) with the flurry steps.</summary>
+    internal void MarkFlurryOfBlows()
+    {
+        IsFlurryOfBlows = true;
+        Mode = ProgressiveAttackMode.FullAttackCommitted;
     }
 
     internal void MarkTurnStartedGrappling(bool grappling)

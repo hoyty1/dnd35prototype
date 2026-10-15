@@ -266,7 +266,7 @@ public static class UnarmedDamageModeTests
 
         var unarmed = controller.GetUnarmedDamage();
         Assert(stats.IsMonk, "Monk test character recognized as monk");
-        Assert(unarmed.damageDice == stats.MonkUnarmedDamageDie, "Monk unarmed strike uses monk progression damage die");
+        Assert(unarmed.damageCount == 1 && unarmed.damageDice == 6, "Monk 3 unarmed strike uses the monk progression's 1d6 (PHB Table 3-10)");
 
         Cleanup(controller);
     }

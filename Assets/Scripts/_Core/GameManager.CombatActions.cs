@@ -183,13 +183,14 @@ public partial class GameManager
                 case PendingAttackMode.Single: modeStr = "ATTACK"; break;
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
-                case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
                 case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
                 case PendingAttackMode.TemplateSmite: modeStr = "SMITE"; break;
             }
 
             if (_pendingAttackMode == PendingAttackMode.Single && _currentAttackType == AttackType.Thrown)
                 modeStr = "THROWN ATTACK";
+            else if (_pendingAttackMode == PendingAttackMode.Single && pc.IsUsingFlurryOfBlows)
+                modeStr = "FLURRY OF BLOWS";
 
             string rangeMsg = "";
             if (isRangedWeapon && rangeIncrement > 0)
@@ -2852,16 +2853,6 @@ public partial class GameManager
         if (_combatFlowService != null)
         {
             _combatFlowService.PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-            return;
-        }
-    }
-
-    private void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_combatFlowService != null)
-        {
-            _combatFlowService.PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
             return;
         }
     }

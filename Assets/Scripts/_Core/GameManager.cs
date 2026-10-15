@@ -306,7 +306,7 @@ public partial class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    public enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell, TemplateSmite }
+    public enum PendingAttackMode { Single, FullAttack, DualWield, CastSpell, TemplateSmite }
 
     public enum AttackType
     {
@@ -7819,6 +7819,10 @@ public partial class GameManager : MonoBehaviour
         ItemData mainHandWeapon = attacker.GetEquippedMainWeapon();
         ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
 
+        // A flurry of blows has no off-hand attacks (PHB p.40; CharacterController.CanCommitAttack refuses them).
+        if (attacker.IsUsingFlurryOfBlows)
+            return false;
+
         bool isTwoHanding = attacker.IsTwoHanding();
         bool hasMainHandWeapon = mainHandWeapon != null;
         bool hasOffHandWeapon = offHandWeapon != null;
@@ -9171,7 +9175,7 @@ public partial class GameManager : MonoBehaviour
     public void OnFlurryOfBlowsButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Stats.IsMonk || !pc.Actions.HasFullRoundAction) return;
+        if (pc == null || pc.Stats == null || !pc.Stats.IsMonk || !pc.Actions.HasFullRoundAction) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "flurry of blows"))
             return;
@@ -9182,16 +9186,37 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        // The shared flurry rules (armor, shield, load, weapon, full-round action; PHB p.40; CHR-003), as for the AI.
+        if (!pc.CanUseFlurryOfBlows(out string flurryReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot strike with a flurry of blows: {flurryReason}."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        // Declaring the flurry spends the full-round action and makes this turn's attack sequence the flurry
+        // (CharacterController.TryBeginFlurryOfBlows, the core the AI calls). Its attacks are then the PC's ordinary
+        // progressive attack sequence, one step per target click, so the Attack button continues it and the Special
+        // Attack menu can replace any flurry step with a trip, disarm, sunder or grapple at that step's bonus
+        // (TryCommitManeuverSubstituteStep), exactly as the NPC sequence does (PHB p.40-41, p.143; CHR-003).
         EndAttackSequence();
-        _pendingAttackMode = PendingAttackMode.FlurryOfBlows;
-        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        if (!pc.TryBeginFlurryOfBlows(out string declareReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot strike with a flurry of blows: {declareReason}."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
-        int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
+        int[] bonuses = pc.GetFlurryOfBlowsAttackBonusPreview();
         string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
-        Debug.Log($"[Monk] {pc.Stats.CharacterName}: Flurry of Blows selected - {bonuses.Length} attacks at {bonusStr}");
+        Debug.Log($"[Monk] {pc.Stats.CharacterName}: Flurry of Blows declared - {bonuses.Length} attacks at {bonusStr}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🥋",
+            $"{pc.Stats.CharacterName} strikes with a flurry of blows ({bonusStr}; {CharacterStats.FormatMod(pc.Stats.FlurryOfBlowsAttackPenalty)} on every attack until her next turn)."));
 
-        ShowAttackTargets(pc);
-        CombatUI.SetTurnIndicator($"FLURRY OF BLOWS: Select target ({bonusStr})");
+        ClearPendingNaturalAttackSelection();
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+        StartAttackSequence(pc, AttackType.Melee);
     }
 
     public void OnRageButtonPressed()

@@ -348,7 +348,7 @@ public static class RacialTraitRulesTests
     private static void TestNpcRaceKeepsScoresAndSpeed()
     {
         Debug.Log("--- Attaching a race keeps the MM scores, size and speed ---");
-        foreach (string id in new[] { "dwarf_warrior", "elf_warrior", "halfling_warrior", "human_warrior", "svirfneblin" }) // not the monks: CRE-042
+        foreach (string id in new[] { "dwarf_warrior", "elf_warrior", "halfling_warrior", "human_warrior", "svirfneblin" }) // not the monks: fast movement adds to their entry speed (PHB p.41; MonkClassRulesTests checks it)
         {
             NPCDefinition def = NPCDatabase.Get(id);
             CharacterStats s = FromDef(def);

@@ -147,9 +147,6 @@ public class CombatFlowService : MonoBehaviour
     public void ExecuteDualWieldAttacks(CharacterController attacker, CharacterController target, bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo)
         => PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
 
-    public void ExecuteFlurryOfBlows(CharacterController attacker, CharacterController target, bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo)
-        => PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-
     // ===== Delegated GameManager combat flow =====
     public void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
@@ -222,10 +219,6 @@ public class CombatFlowService : MonoBehaviour
 
             case GameManager.PendingAttackMode.DualWield:
                 PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                break;
-
-            case GameManager.PendingAttackMode.FlurryOfBlows:
-                PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
         }
     }
@@ -1132,62 +1125,6 @@ public class CombatFlowService : MonoBehaviour
         {
             _gameManager.Combat_UpdateAllStatsUI();
             if (TryHandleVictoryAfterEnemyDeath("PerformDualWieldAttack", attacker, target))
-                return;
-        }
-
-        _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
-    }
-
-    public void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_gameManager == null || attacker == null || target == null)
-            return;
-
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreak = _gameManager.Combat_IsMeleeFearBreakAttack(attacker, attacker.GetEquippedMainWeapon(), rangeInfo, false);
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
-
-        FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-
-        string log = flankPrefix + result.GetFullSummary();
-        _gameManager.Combat_SetLastCombatLog(log);
-
-        if (GameManager.LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        _gameManager.CombatUI?.ShowCombatLog(log);
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-
-        if (result.TotalDamageDealt > 0)
-            _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-        if (result.Attacks != null)
-        {
-            foreach (var attack in result.Attacks)
-            {
-                if (attack.Hit && !attack.IsRangedAttack)
-                    MeleeReactionService.TriggerReactions(attacker, target, attack);
-            }
-        }
-
-        if (result.TargetKilled)
-        {
-            LogDeathPoint("PerformFlurryOfBlows:TargetKilled", attacker, target);
-            _gameManager.Combat_HandleSummonDeathCleanup(target);
-        }
-
-        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-        if (CombatEndRules.IsOutOfFight(target))
-        {
-            _gameManager.Combat_UpdateAllStatsUI();
-            if (TryHandleVictoryAfterEnemyDeath("PerformFlurryOfBlows", attacker, target))
                 return;
         }
 

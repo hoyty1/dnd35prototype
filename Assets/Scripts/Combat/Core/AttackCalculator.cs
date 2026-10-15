@@ -8,7 +8,7 @@ using UnityEngine;
 /// <summary>
 /// Every term of one weapon attack roll's modifier, built by
 /// CharacterController.BuildAttackBonus and used by Attack, FullAttack (iterative and
-/// natural), DualWieldAttack and FlurryOfBlows so all of them add the same terms.
+/// natural; a flurry of blows is a FullAttack with the flurry steps) and DualWieldAttack so all of them add the same terms.
 /// Terms resolved inside PerformSingleAttackWithCrit (weapon enhancement or masterwork,
 /// True Strike, invisible attacker, helpless or blinded target, bane, Destruction smite)
 /// are not part of this struct. The damage roll's terms are <see cref="WeaponDamageBreakdown"/> (CMB-003).
@@ -17,10 +17,15 @@ public struct AttackBonusBreakdown
 {
     /// <summary>Base attack bonus step for this attack (BAB, an iterative step or a progressive-pool override).</summary>
     public int BaseAttackBonus;
-    /// <summary>Penalty tied to the attack's place in a sequence: two-weapon fighting, flurry, secondary natural attack, Manyshot, Mobility AoO.</summary>
+    /// <summary>Penalty tied to the attack's place in a sequence: two-weapon fighting, secondary natural attack, Manyshot, Mobility AoO (the flurry penalty is <see cref="FlurryPenalty"/>).</summary>
     public int SequenceModifier;
     /// <summary>Combat-log label for SequenceModifier (empty when the caller shows it another way).</summary>
     public string SequenceLabel;
+    /// <summary>
+    /// The flurry of blows penalty (PHB p.40): on every attack of the round the monk flurries, and on her attacks of
+    /// opportunity until her next turn (CharacterStats.FlurryOfBlowsAttackPenalty while AttackPool.IsFlurryOfBlows; CHR-003).
+    /// </summary>
+    public int FlurryPenalty;
     /// <summary>Ability modifier on the attack roll: DEX for ranged attacks and Weapon Finesse, otherwise STR (PHB p.134, p.102).</summary>
     public int AbilityMod;
     public string AbilityName;
@@ -58,15 +63,15 @@ public struct AttackBonusBreakdown
 
     /// <summary>The modifier passed to the attack roll.</summary>
     public int Total =>
-        BaseAttackBonus + SequenceModifier + AbilityMod + SizeModifier + FlankingBonus + RacialBonus
+        BaseAttackBonus + SequenceModifier + FlurryPenalty + AbilityMod + SizeModifier + FlankingBonus + RacialBonus
         + RangePenalty + MountedRangedPenalty + Feats.TotalFeatAttackModifier
         + PronePenalty + FightingDefensivelyPenalty + ShootingIntoMeleePenalty
         + WeaponNonProficiencyPenalty + ArmorNonProficiencyPenalty + MoraleBonus + ConditionModifier
         + AidAnotherBonus + DamageModePenalty + SolidFogPenalty + WondrousBowAttackBonus + MagicStoneBonus
         + SituationalBonus;
 
-    /// <summary>BAB step + ability + size + sequence penalty: the figure shown in attack labels such as "Attack 2 (+6)".</summary>
-    public int LabelBonus => BaseAttackBonus + SequenceModifier + AbilityMod + SizeModifier;
+    /// <summary>BAB step + ability + size + sequence and flurry penalties: the figure shown in attack labels such as "Attack 2 (+6)".</summary>
+    public int LabelBonus => BaseAttackBonus + SequenceModifier + FlurryPenalty + AbilityMod + SizeModifier;
 
     /// <summary>
     /// Copies the terms onto a CombatResult so its attack breakdown lists exactly what was added.
@@ -110,6 +115,7 @@ public struct AttackBonusBreakdown
         // Terms CombatResult has no dedicated field for.
         if (SequenceModifier != 0 && !string.IsNullOrEmpty(SequenceLabel))
             result.AddAttackBuffDebuffModifier(SequenceLabel, SequenceModifier);
+        result.AddAttackBuffDebuffModifier("Flurry of Blows", FlurryPenalty);
         result.AddAttackBuffDebuffModifier("prone", PronePenalty);
         result.AddAttackBuffDebuffModifier("mounted ranged", MountedRangedPenalty);
         result.AddAttackBuffDebuffModifier("Solid Fog", SolidFogPenalty);

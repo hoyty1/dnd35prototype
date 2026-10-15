@@ -791,18 +791,45 @@ public class ActionButtonPanel : MonoBehaviour
         Debug.Log($"[CombatUI][Actions] Hiding main-menu Overrun button for {pc.Stats.CharacterName}; use Special Attack submenu instead.");
     }
 
+    /// <summary>A short button-label form of a CharacterController.CanUseFlurryOfBlows refusal.</summary>
+    private static string ShortenFlurryReason(string reason)
+    {
+        if (string.IsNullOrEmpty(reason))
+            return "N/A";
+        if (reason.IndexOf("special monk weapons", System.StringComparison.Ordinal) >= 0)
+            return "not a monk weapon";
+        if (reason.IndexOf("grappl", System.StringComparison.Ordinal) >= 0)
+            return "grappling";
+        if (reason.IndexOf("before the first attack", System.StringComparison.Ordinal) >= 0)
+            return "already attacked";
+        if (reason.IndexOf("full-round action", System.StringComparison.Ordinal) >= 0)
+            return "no full-round action";
+        int cite = reason.IndexOf(" (PHB", System.StringComparison.Ordinal);
+        return cite > 0 ? reason.Substring(0, cite) : reason;
+    }
+
     private void ComputeClassAndSpellActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
     {
         bool isMonk = pc.Stats.IsMonk;
-        bool canFlurry = isMonk && context.Actions.HasFullRoundAction && !context.IsPinned && !context.IsTurned;
+        // The shared flurry rules (CharacterController.CanUseFlurryOfBlows: armor, shield, load, weapon, full-round
+        // action; PHB p.40; CHR-003), the same check the AI makes.
+        string flurryReason = string.Empty;
+        bool flurryAllowed = isMonk && pc.CanUseFlurryOfBlows(out flurryReason);
+        bool canFlurry = flurryAllowed && context.Actions.HasFullRoundAction && !context.IsPinned && !context.IsTurned;
         string flurryLabel = "Flurry of Blows (N/A)";
         if (context.IsPinned)
             flurryLabel = "Flurry of Blows (Pinned: no)";
         else if (context.IsTurned)
             flurryLabel = "Flurry of Blows (Turned: no)";
+        else if (isMonk && pc.IsUsingFlurryOfBlows)
+            flurryLabel = "Flurry of Blows (declared: Attack / Special Attack)";
+        else if (isMonk && !flurryAllowed && pc.Stats.GetMonkFetterReason() != null)
+            flurryLabel = $"Flurry of Blows (no: {pc.Stats.GetMonkFetterReason()})";
+        else if (isMonk && !flurryAllowed && !string.IsNullOrEmpty(flurryReason))
+            flurryLabel = $"Flurry of Blows (no: {ShortenFlurryReason(flurryReason)})";
         else if (canFlurry)
         {
-            int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
+            int[] bonuses = pc.GetFlurryOfBlowsAttackBonusPreview();
             string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
             flurryLabel = $"Flurry of Blows x{bonuses.Length} ({bonusStr})";
         }

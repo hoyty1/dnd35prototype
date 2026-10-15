@@ -131,15 +131,26 @@ public static class Phase1CombatFeatTests
     private static void TestStunningFistUsesPerDay()
     {
         Debug.Log("--- Stunning Fist Uses Per Day ---");
-        // Uses per day = max(1, level / 4)
+        // PHB p.101: one attempt per four character levels; a monk gets one per monk level plus one per four levels in
+        // other classes (CHR-003).
         var lvl4 = MakeStats("Monk4", 4, "Monk", bab: 3, feats: new[] { "Stunning Fist" });
-        Assert(lvl4.StunningFistUsesPerDay == 1, $"Level 4: 1 use/day (got {lvl4.StunningFistUsesPerDay})");
+        Assert(lvl4.StunningFistUsesPerDay == 4, $"Monk 4: 4 uses/day, one per monk level (got {lvl4.StunningFistUsesPerDay})");
 
         var lvl8 = MakeStats("Monk8", 8, "Monk", bab: 6, feats: new[] { "Stunning Fist" });
-        Assert(lvl8.StunningFistUsesPerDay == 2, $"Level 8: 2 uses/day (got {lvl8.StunningFistUsesPerDay})");
+        Assert(lvl8.StunningFistUsesPerDay == 8, $"Monk 8: 8 uses/day (got {lvl8.StunningFistUsesPerDay})");
 
         var lvl16 = MakeStats("Monk16", 16, "Monk", bab: 12, feats: new[] { "Stunning Fist" });
-        Assert(lvl16.StunningFistUsesPerDay == 4, $"Level 16: 4 uses/day (got {lvl16.StunningFistUsesPerDay})");
+        Assert(lvl16.StunningFistUsesPerDay == 16, $"Monk 16: 16 uses/day (got {lvl16.StunningFistUsesPerDay})");
+
+        var fighter8 = MakeStats("Fighter8", 8, "Fighter", bab: 8, feats: new[] { "Stunning Fist" });
+        Assert(fighter8.StunningFistUsesPerDay == 2, $"Fighter 8: 2 uses/day, one per four character levels (got {fighter8.StunningFistUsesPerDay})");
+
+        var multi = MakeStats("Monk4Fighter8", 4, "Monk", bab: 3, feats: new[] { "Stunning Fist" });
+        multi.EnsureMulticlassDataInitialized();
+        multi.ClassLevels.Add(new ClassLevelEntry("Fighter", 8));
+        multi.HitDice = 0;
+        multi.InvalidateClassLevelCache();
+        Assert(multi.StunningFistUsesPerDay == 6, $"Monk 4 / fighter 8: 4 + 8/4 = 6 uses/day (got {multi.StunningFistUsesPerDay}, HD {multi.GetHitDice()})");
     }
 
     private static void TestStunningFistToggle()

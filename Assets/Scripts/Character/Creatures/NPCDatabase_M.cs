@@ -795,6 +795,9 @@ public static partial class NPCDatabase
     /// Human Monk 3 (CR 3) — Medium humanoid (human).
     /// PHB 3.5e Monk class level 3. Unarmored combatant with Flurry of Blows and Evasion.
     /// Unarmed strike 1d6. Still Mind. AC bonus from WIS.
+    /// Like every classed NPC monk, the entry stores the race's speed and no unarmed natural attack or monk AC: the shared
+    /// monk code supplies fast movement, unarmed damage, flurry of blows and the AC bonus by monk level, as for a PC
+    /// (CharacterStats monk members, CharacterController.TryBeginFlurryOfBlows; PHB p.40-41; CHR-003, CRE-042).
     /// </summary>
     private static void RegisterHumanMonk3()
     {
@@ -813,24 +816,16 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             // PHB Monk: high DEX/WIS, decent STR. 25 point buy equivalent.
             STR = 14, DEX = 16, CON = 12, WIS = 16, INT = 10, CHA = 8,
-            NaturalArmorBonus = 0, // Unarmored — AC from WIS + class bonus
-            BaseSpeed = 8, // 40 ft (Monk speed bonus at 3rd level)
+            NaturalArmorBonus = 0, // the monk AC bonus is CharacterStats.MonkACBonus (CRE-042)
+            BaseSpeed = 6, // 30 ft, human; fast movement (+10 ft at 3rd) is CharacterStats.MonkFastMovementBonusFeet (CRE-042)
             BaseHitDieHP = 20, // 3d8+3 average
             BAB = 2, // Monk 3: +2
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition
-                {
-                    Name = "Unarmed Strike", DamageDice = 6, DamageCount = 1, Count = 1,
-                    BonusDamageSource = DamageBonusSource.Strength,
-                    Range = 1, IsPrimary = true
-                }
-            },
+            // No natural attacks: the unarmed strike (1d6 at 3rd, Table 3-10) and the flurry come from the monk code (CRE-042).
             CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "MM35" },
             Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows" },
             SpecialAbilities = new List<string>
             {
-                "Flurry of Blows: extra attack at -2 penalty",
+                "Flurry of Blows: one extra attack, -2 on every attack (+0/+0 at BAB +2)",
                 "Evasion: no damage on successful Ref save",
                 "Still Mind: +2 vs. enchantment",
                 "AC Bonus (Ex): +3 WIS mod to AC when unarmored",
@@ -875,25 +870,17 @@ public static partial class NPCDatabase
             // "5th-level human monk NPC" row, CRE-058, delegated RAW reading 2026-10-14): starting Str 14, Dex 13, Con 12,
             // Int 10, Wis 15, Cha 8, Dex 14 at 4th; humans have no adjustments.
             STR = 14, DEX = 14, CON = 12, WIS = 15, INT = 10, CHA = 8,
-            NaturalArmorBonus = 1, // +1 AC class bonus at 5th
-            BaseSpeed = 8, // 40 ft
+            NaturalArmorBonus = 0, // the +1 monk AC bonus at 5th is CharacterStats.MonkACBonus, in touch AC too (CRE-042)
+            BaseSpeed = 6, // 30 ft, human; fast movement +10 ft is CharacterStats.MonkFastMovementBonusFeet (CRE-042)
             BaseHitDieHP = 31, // DMG p.118 sample: 8 (maximum first die) + 4d8 averaged 18 + CON 5
             FirstHitDieMaximized = true,
             BAB = 3, // Monk 5: +3
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition
-                {
-                    Name = "Unarmed Strike", DamageDice = 8, DamageCount = 1, Count = 1,
-                    BonusDamageSource = DamageBonusSource.Strength,
-                    Range = 1, IsPrimary = true
-                }
-            },
+            // No natural attacks: the unarmed strike (1d8 at 5th, Table 3-10) and the flurry come from the monk code (CRE-042).
             CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "KiStrikeMagic", "MM35" },
             Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows", "Improved Trip" },
             SpecialAbilities = new List<string>
             {
-                "Flurry of Blows: extra attack at -1 penalty",
+                "Flurry of Blows: one extra attack, -1 on every attack (+2/+2 at BAB +3)",
                 "Evasion: no damage on successful Ref save",
                 "Still Mind: +2 vs. enchantment",
                 "Ki Strike (magic): unarmed strikes count as magic weapons",
@@ -919,7 +906,7 @@ public static partial class NPCDatabase
     /// <summary>
     /// Human Monk 7 (CR 7) — Medium humanoid (human).
     /// PHB 3.5e Monk class level 7. Unarmed strike 1d8. Wholeness of Body, Ki Strike (magic).
-    /// Improved Evasion (7th level Monk ability).
+    /// Evasion (improved evasion comes at 9th, PHB p.42).
     /// </summary>
     private static void RegisterHumanMonk7()
     {
@@ -938,32 +925,24 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             // Level 7: +1 DEX from level 4 ability increase
             STR = 14, DEX = 17, CON = 12, WIS = 16, INT = 10, CHA = 8,
-            NaturalArmorBonus = 1, // +1 AC class bonus
-            BaseSpeed = 10, // 50 ft (Monk speed at 6th+)
+            NaturalArmorBonus = 0, // the +1 monk AC bonus at 5th is CharacterStats.MonkACBonus, in touch AC too (CRE-042)
+            BaseSpeed = 6, // 30 ft, human; fast movement +20 ft at 6th is CharacterStats.MonkFastMovementBonusFeet (CRE-042)
             BaseHitDieHP = 44, // 7d8+7 average
             BAB = 5, // Monk 7: +5
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition
-                {
-                    Name = "Unarmed Strike", DamageDice = 8, DamageCount = 1, Count = 2,
-                    BonusDamageSource = DamageBonusSource.Strength,
-                    Range = 1, IsPrimary = true
-                }
-            },
+            // No natural attacks: the unarmed strike (1d8 at 7th, Table 3-10) and the flurry come from the monk code (CRE-042).
             CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "KiStrikeMagic", "MM35" },
             Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows", "Improved Trip", "Spring Attack" },
             SpecialAbilities = new List<string>
             {
-                "Flurry of Blows: two extra attacks at full BAB -2",
-                "Improved Evasion: half damage even on failed Ref save",
+                "Flurry of Blows: one extra attack, -1 on every attack (+4/+4 at BAB +5)",
+                "Evasion: no damage on successful Ref save",
                 "Still Mind: +2 vs. enchantment",
                 "Ki Strike (magic): unarmed strikes count as magic weapons",
                 "Purity of Body: immune to all diseases",
                 "Wholeness of Body: heal 14 HP/day as standard action",
                 "Slow Fall 30 ft.",
                 "AC Bonus (Ex): +3 WIS mod + 1 class to AC when unarmored",
-                "Unarmed Strike 1d8 (×2 attacks)",
+                "Unarmed Strike 1d8",
                 "Speed 50 ft."
             },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -975,7 +954,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.65f, 0.55f, 0.35f, 1f),
             PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
             NameColor = new Color(0.9f, 0.8f, 0.5f),
-            Description = "Human Monk 7 (CR 7). Master martial artist with Improved Evasion and Wholeness of Body. 2× unarmed 1d8. Speed 50 ft. PHB 3.5e."
+            Description = "Human Monk 7 (CR 7). Master martial artist with Evasion and Wholeness of Body. Unarmed 1d8, flurry +4/+4. Speed 50 ft. PHB 3.5e."
         });
     }
 
