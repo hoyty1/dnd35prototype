@@ -79,7 +79,7 @@ public class ClericClass : ICharacterClass
     /// Used by CharacterCreationUI for the Quick Start button.
     ///
     /// D&D 3.5e Level 3 Cleric with WIS 16 (+3) spell slots:
-    ///   Level 0 (Orisons): 4 slots (unlimited use)
+    ///   Level 0 (Orisons): 4 slots (spent when cast, SPL-138)
     ///   Level 1: 2 base + 1 domain + 1 WIS bonus = 4 slots
     ///   Level 2: 1 base + 1 domain + 1 WIS bonus = 3 slots
     ///
@@ -107,7 +107,7 @@ public class ClericClass : ICharacterClass
             // Curated for a combat-ready healer/support cleric
             PreparedSpellSlotIds = new List<string>
             {
-                // Level 0 orisons (4 slots — unlimited use)
+                // Level 0 orisons (4 slots, each spent when cast)
                 SpellNames.CURE_MINOR_WOUNDS, "detect_magic_clr", SpellNames.GUIDANCE, "light_clr",
                 // Level 1 spells (4 slots: 2 base + 1 domain + 1 WIS bonus)
                 SpellNames.CURE_LIGHT_WOUNDS, SpellNames.CURE_LIGHT_WOUNDS, SpellNames.BLESS, SpellNames.SHIELD_OF_FAITH,

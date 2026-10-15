@@ -1104,7 +1104,18 @@ namespace Tests.Scenarios
         private static SpellData FindPreparedSpell(CharacterController a, string spellId)
         {
             SpellcastingComponent sc = a.Spellcasting;
-            if (sc == null || sc.SpellSlots == null)
+            if (sc == null)
+                return null;
+            // A spontaneous caster has no prepared slots: the PC menu offers its known spells with a slot left
+            // (GetCastablePreparedSpells, SPL-123), so the step picks from the same list.
+            if (sc.IsSpontaneousCaster)
+            {
+                foreach (SpellData known in sc.GetCastablePreparedSpells())
+                    if (known != null && known.SpellId == spellId)
+                        return known;
+                return null;
+            }
+            if (sc.SpellSlots == null)
                 return null;
             foreach (SpellSlot slot in sc.SpellSlots)
                 if (slot != null && !slot.IsUsed && slot.PreparedSpell != null && slot.PreparedSpell.SpellId == spellId)

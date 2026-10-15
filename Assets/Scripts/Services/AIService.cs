@@ -786,8 +786,9 @@ public class AIService : MonoBehaviour
 
         // ── Priority 1 & 2: Cast buff/attack spells if not in melee ──
         // AI-037 (partial, 2026-10-14): since SPL-123 the NPC cast executor accepts a dragon's known spells, so this
-        // step used to win every turn with a cantrip (0-level spells never run out, SPL-138) in place of the breath or
-        // a full attack. Only a spell of 1st level or higher with a positive score is considered; while the breath is
+        // step used to win every turn with a cantrip in place of the breath or a full attack (0-level spells were free
+        // until SPL-138; they now spend the dragon's 0-level spells per day, but a CL 1 dragon still has 5 of them, and
+        // no expected-value comparison exists yet). Only a spell of 1st level or higher with a positive score is considered; while the breath is
         // ready or an enemy is adjacent (a full attack is on), only a buff not yet active (SelectSpell skips active ones).
         if (!dragonProfile.IsTooCloseForCasting(npc, allCombatants, _gameManager))
         {

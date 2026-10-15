@@ -1248,7 +1248,7 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddLine(content, $"SPELLS \u2014 {stats.CharacterName} ({stats.ClassSummary})", 12, GoldText, FontStyle.Bold, 16);
 
-        // Spell slot summary (now includes ∞ for cantrips)
+        // Spell slot summary (remaining/max per level, 0-level included, SPL-138)
         if (spellComp.SlotsMax != null)
         {
             string slotSummary = spellComp.GetSlotSummary();
@@ -1273,7 +1273,7 @@ public class CharacterSheetUI : MonoBehaviour
 
     /// <summary>
     /// Refresh the spells tab for slot-based casters (Wizards and Clerics).
-    /// Shows: Prepared Spells (with slot counts and ∞ for cantrips), then spell list.
+    /// Shows: Prepared Spells (with slot counts, 0-level spells included, SPL-138), then spell list.
     /// </summary>
     private void RefreshSlotSpellsTab(Transform content, SpellcastingComponent spellComp)
     {
@@ -1286,22 +1286,12 @@ public class CharacterSheetUI : MonoBehaviour
             var slotsAtLevel = spellComp.GetSlotsForLevel(lvl);
             if (slotsAtLevel.Count == 0) continue;
 
-            string levelLabel;
-            string slotCountStr;
-
-            if (lvl == 0)
-            {
-                // Cantrips are unlimited
-                string cantripName = spellComp.Stats.IsCleric ? "Orisons" : "Cantrips";
-                levelLabel = $"{cantripName} (Level 0)";
-                slotCountStr = $"  (\u221e unlimited)";
-            }
-            else
-            {
-                var availableSlots = spellComp.GetAvailableSlotsForLevel(lvl);
-                levelLabel = $"Level {lvl} Spells";
-                slotCountStr = $"  ({availableSlots.Count}/{slotsAtLevel.Count} available)";
-            }
+            // 0-level spells are spent like any other level (SPL-138).
+            string levelLabel = lvl == 0
+                ? $"{(spellComp.Stats.IsCleric ? "Orisons" : "Cantrips")} (Level 0)"
+                : $"Level {lvl} Spells";
+            var availableSlots = spellComp.GetAvailableSlotsForLevel(lvl);
+            string slotCountStr = $"  ({availableSlots.Count}/{slotsAtLevel.Count} available)";
 
             AddLine(content, levelLabel + slotCountStr, 11, GoldText, FontStyle.Bold, 16);
 
@@ -1318,13 +1308,6 @@ public class CharacterSheetUI : MonoBehaviour
                     status = "\u25cb"; // ○
                     spellName = "(empty)";
                     slotColor = DimText;
-                }
-                else if (lvl == 0)
-                {
-                    // Cantrips are unlimited — always show as available
-                    status = "\u221e"; // ∞
-                    spellName = slot.PreparedSpell.Name;
-                    slotColor = new Color(0.5f, 0.9f, 0.5f); // green
                 }
                 else if (slot.IsUsed)
                 {
@@ -1459,22 +1442,13 @@ public class CharacterSheetUI : MonoBehaviour
             var spellsAtLevel = allSpells.Where(s => s.SpellLevel == lvl).OrderBy(s => s.Name).ToList();
 
             // Build level header with slot info for spontaneous casters
-            string levelLabel;
-            if (lvl == 0)
+            // 0-level spells have spells per day like any other level (SPL-138).
+            string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
+            if (isSpontaneous)
             {
-                levelLabel = "Cantrips (Level 0)";
-                if (isSpontaneous)
-                    levelLabel += $"  — {spellsAtLevel.Count} known, ∞/day";
-            }
-            else
-            {
-                levelLabel = $"Level {lvl} Spells";
-                if (isSpontaneous)
-                {
-                    int remaining = spellComp.SpontaneousData.SlotsRemaining[lvl];
-                    int max = spellComp.SpontaneousData.SlotsMax[lvl];
-                    levelLabel += $"  — {spellsAtLevel.Count} known, {remaining}/{max} slots/day";
-                }
+                int remaining = spellComp.SpontaneousData.SlotsRemaining[lvl];
+                int max = spellComp.SpontaneousData.SlotsMax[lvl];
+                levelLabel += $"  — {spellsAtLevel.Count} known, {remaining}/{max} slots/day";
             }
 
             if (spellsAtLevel.Count == 0 && !(isSpontaneous && spellComp.SpontaneousData.SlotsMax[lvl] > 0))

@@ -2346,23 +2346,12 @@ public class CombatUI : MonoBehaviour
             if (spellsAtLevel.Count == 0 && !(isSpontaneous && slotsMax > 0)) continue;
 
             // Build section header with slot counts
-            string levelName;
-            string slotInfo;
-            if (level == 0)
-            {
-                // Cantrips are unlimited
-                levelName = "Cantrips";
-                slotInfo = "\u221e unlimited";
-            }
-            else
-            {
-                string ordinal = level == 1 ? "1st" : level == 2 ? "2nd" : level == 3 ? "3rd" : $"{level}th";
-                levelName = $"{ordinal} Level";
-                slotInfo = $"{slotsRemaining}/{slotsMax} slots";
-            }
+            // 0-level spells (cantrips, orisons) are spells per day like any other level (SPL-138).
+            string ordinal = level == 0 ? "0" : level == 1 ? "1st" : level == 2 ? "2nd" : level == 3 ? "3rd" : $"{level}th";
+            string levelName = level == 0 ? "0-Level (cantrips/orisons)" : $"{ordinal} Level";
+            string slotInfo = $"{slotsRemaining}/{slotsMax} slots";
 
-            // Cantrips never depleted (unlimited); other levels check slots
-            bool isDepleted = (level > 0) && !hasSlotsAvailable;
+            bool isDepleted = !hasSlotsAvailable;
             string depletedTag = isDepleted ? " [DEPLETED]" : "";
             Color headerColor = !isDepleted ? new Color(0.7f, 0.7f, 0.9f) : new Color(0.6f, 0.3f, 0.3f);
 
@@ -2437,7 +2426,7 @@ public class CombatUI : MonoBehaviour
 
     /// <summary>
     /// Creates a spell button inside the scrollable content area at a given pixel offset from top.
-    /// Shows prepared count for slot-based casters (e.g., "Magic Missile ×2" or "∞" for cantrips).
+    /// Shows prepared count for slot-based casters (e.g., "Magic Missile ×2"), 0-level spells included (SPL-138).
     /// </summary>
     private void CreateSpellButton(GameObject parent, SpellData spell, float yOffset,
         float height, SpellcastingComponent spellComp, bool hasMetamagic,
@@ -2475,15 +2464,10 @@ public class CombatUI : MonoBehaviour
         else if (spell.EffectType == SpellEffectType.Buff)
             effectStr = $" | +{spell.BuffACBonus} AC";
 
-        // Show count: ∞ for cantrips, ×N for level 1+ spells with multiple prepared
+        // Show count: ×N for spells with several unspent prepared slots, 0-level included (SPL-138)
         string countStr = "";
-        if (usesSlotSystem)
-        {
-            if (spell.SpellLevel == 0)
-                countStr = " \u221e"; // ∞ for cantrips
-            else if (preparedCount > 1)
-                countStr = $" \u00d7{preparedCount}"; // ×N for multiple
-        }
+        if (usesSlotSystem && preparedCount > 1)
+            countStr = $" \u00d7{preparedCount}";
         int asfChance = (spellComp != null && spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
             ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
             : 0;
@@ -2622,13 +2606,8 @@ public class CombatUI : MonoBehaviour
             effectStr = $" | +{spell.BuffACBonus} AC";
 
         string countStr = "";
-        if (usesSlotSystem)
-        {
-            if (spell.SpellLevel == 0)
-                countStr = " \u221e";
-            else if (preparedCount > 1)
-                countStr = $" \u00d7{preparedCount}";
-        }
+        if (usesSlotSystem && preparedCount > 1)
+            countStr = $" \u00d7{preparedCount}"; // 0-level spells too (SPL-138)
         int asfChance = (spellComp != null && spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
             ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
             : 0;

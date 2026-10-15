@@ -1200,6 +1200,17 @@ public class SpellTestingPanel : MonoBehaviour
             }
         }
 
+        // ── Spontaneous caster: keep a slot of the spell's level, 0-level included (dev bypass; SPL-138) ──
+        if (spellComp.IsSpontaneousCaster)
+        {
+            int lvl = spell.SpellLevel;
+            SpontaneousCastingData sd = spellComp.SpontaneousData;
+            if (lvl >= 0 && lvl < sd.SlotsRemaining.Length && sd.SlotsRemaining[lvl] < 1)
+            {
+                sd.SlotsRemaining[lvl] = Mathf.Max(1, sd.SlotsMax[lvl]); // the next rest resets it to SlotsMax
+            }
+        }
+
         // ── Infinite slots: max-out remaining counts ──
         if (spellComp.SlotsRemaining != null)
         {

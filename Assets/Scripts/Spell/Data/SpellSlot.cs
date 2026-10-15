@@ -13,9 +13,9 @@ using UnityEngine;
 /// - Casting consumes a specific slot (marks it as used).
 /// - After rest, all slots are restored (IsUsed = false) but prepared spells remain.
 /// - Wizard can optionally re-prepare different spells after rest.
-/// - Cantrips (level 0) use slots for preparation but are UNLIMITED use.
-///   Casting a cantrip does not consume (mark as used) the slot.
-///   This applies to both Wizards and Clerics.
+/// - 0-level spells (cantrips, orisons) are spells per day like any other level: casting one marks
+///   its slot used until the next rest (PHB p.31, p.35, p.55 tables; p.177 example; SPL-138).
+///   This applies to Wizards, Clerics and Druids alike.
 /// </summary>
 [System.Serializable]
 public class SpellSlot

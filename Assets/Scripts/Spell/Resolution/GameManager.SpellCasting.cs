@@ -1782,8 +1782,7 @@ public partial class GameManager
         if (CombatUI != null)
             CombatUI.ClearSpontaneousCastState();
 
-        // Consume spell slot using D&D 3.5e slot-based system
-        // Cantrips (level 0) are UNLIMITED — no slot consumed
+        // Consume spell slot using D&D 3.5e slot-based system; 0-level spells spend a slot too (SPL-138)
         int slotLevelToConsume = _pendingSpell.SpellLevel;
         bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
 
@@ -1938,8 +1937,7 @@ public partial class GameManager
                 }
             }
 
-            // Consume spell slot
-            // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
+            // Consume spell slot, 0-level spells included (SPL-138)
             // Both Wizards and Clerics use slot-based system
             bool consumed = ConsumePendingSpellSlot(
                 spellComp,
@@ -8493,6 +8491,17 @@ public partial class GameManager
                 foreach (var slot in spellComp.SpellSlots)
                     snapshot.SlotUsedStates.Add(slot != null && slot.IsUsed);
             }
+
+            // Spontaneous and partial casters spend a per-level counter, not a slot's IsUsed flag.
+            snapshot.SpontaneousSlotsRemaining = spellComp.SpontaneousData?.SlotsRemaining != null
+                ? (int[])spellComp.SpontaneousData.SlotsRemaining.Clone()
+                : null;
+            snapshot.LegacySlotsRemaining = spellComp.SlotsRemaining != null
+                ? (int[])spellComp.SlotsRemaining.Clone()
+                : null;
+            snapshot.PartialSlotsRemaining = spellComp.PartialData?.SlotsRemaining != null
+                ? (int[])spellComp.PartialData.SlotsRemaining.Clone()
+                : null;
         }
 
         _pendingSpellcastSnapshot = snapshot;
@@ -8530,9 +8539,20 @@ public partial class GameManager
 
                 spellComp.SyncPreparedSpellsFromSlots();
             }
+
+            RestoreSlotCounters(_pendingSpellcastSnapshot.SpontaneousSlotsRemaining, spellComp.SpontaneousData?.SlotsRemaining);
+            RestoreSlotCounters(_pendingSpellcastSnapshot.LegacySlotsRemaining, spellComp.SlotsRemaining);
+            RestoreSlotCounters(_pendingSpellcastSnapshot.PartialSlotsRemaining, spellComp.PartialData?.SlotsRemaining);
         }
 
         _pendingSpellcastSnapshot = null;
+    }
+
+    private static void RestoreSlotCounters(int[] saved, int[] live)
+    {
+        if (saved == null || live == null)
+            return;
+        Array.Copy(saved, live, Mathf.Min(saved.Length, live.Length));
     }
 
     private void HandleSpellcastCancelledFromAoOPrompt(CharacterController caster)

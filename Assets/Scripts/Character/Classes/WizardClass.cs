@@ -147,7 +147,7 @@ public class WizardClass : ICharacterClass
         // Includes Summon Monster I/II for quick summon-system testing.
         data.PreparedSpellSlotIds = new List<string>
         {
-            // 4 cantrip slots (unlimited use)
+            // 4 cantrip slots (each spent when cast)
             SpellNames.RAY_OF_FROST, SpellNames.DETECT_MAGIC, SpellNames.ACID_SPLASH, SpellNames.PRESTIDIGITATION,
             // 3 1st-level slots (2 base + 1 INT bonus)
             SpellNames.MAGIC_MISSILE, SpellNames.ENLARGE_PERSON, SpellNames.REDUCE_PERSON,

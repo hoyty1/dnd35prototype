@@ -10810,6 +10810,12 @@ public partial class GameManager : MonoBehaviour
         public bool StandardConvertedToMove;
         public bool QuickenedSpellUsed;
         public List<bool> SlotUsedStates;
+        // Spells-per-day counters spent before the AoO prompt (spontaneous casters,
+        // the legacy per-level array and paladin/ranger partial casters), so a
+        // cancelled cast refunds every kind of caster alike (SPL-138 review).
+        public int[] SpontaneousSlotsRemaining;
+        public int[] LegacySlotsRemaining;
+        public int[] PartialSlotsRemaining;
     }
 
     private void ShowMovementRange(CharacterController pc, int maxRangeOverride = -1)

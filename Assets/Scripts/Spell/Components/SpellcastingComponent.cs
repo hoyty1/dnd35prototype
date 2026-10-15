@@ -12,7 +12,8 @@ using DND35e.Identifiers;
 ///   Each slot holds ONE specific spell. The same spell can fill multiple slots.
 ///   Example: Level 3 wizard with 3 level-1 slots: [Magic Missile, Magic Missile, Shield]
 ///   Casting consumes a specific prepared slot. After rest, slots are restored.
-///   Cantrips (level 0) are UNLIMITED — they never consume slots when cast.
+///   0-level spells (cantrips, orisons) are spells per day like any other level: casting one spends its slot
+///   (PHB p.31, p.35, p.55 tables; p.177 example; SPL-138).
 ///
 ///   Wizards prepare from their spellbook (limited selection).
 ///   Clerics prepare from the FULL list of cleric spells at each level.
@@ -46,7 +47,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// Each slot holds a specific spell and tracks whether it's been cast.
     /// Wizards fill slots from their spellbook. Clerics fill from the full cleric spell list.
     /// The same spell can be prepared in multiple slots.
-    /// Cantrip (level 0) slots are never marked as used — cantrips are unlimited.
+    /// Casting a spell marks its slot used, 0-level slots included (SPL-138).
     /// </summary>
     public List<SpellSlot> SpellSlots { get; private set; } = new List<SpellSlot>();
 
@@ -1123,8 +1124,10 @@ public class SpellcastingComponent : MonoBehaviour
                 baseSecond = 0;
                 break;
             default:
-                // Preserve existing prototype behavior at level 3+.
-                baseCantrips = 4;
+                // 1st and 2nd level preserve the prototype's level 3 counts at level 3+ (SPL-041).
+                // Orisons follow PHB p.35 Table 3-8 (4 at level 3, 5 at 4-6, 6 at 7-20): since SPL-138
+                // they are the druid's 0-level spells per day, not only how many it may prepare.
+                baseCantrips = safeLevel >= 7 ? 6 : safeLevel >= 4 ? 5 : 4;
                 baseFirst = 2;
                 baseSecond = 1;
                 break;
@@ -1988,20 +1991,11 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Count how many times a specific spell is prepared and available (not used) in spell slots.
-    /// For cantrips (level 0): returns a special value (999) to indicate unlimited use.
+    /// 0-level spells count their unused slots like any other level (SPL-138).
     /// </summary>
     public int CountAvailablePreparedSpell(SpellData spell)
     {
         if (spell == null) return 0;
-
-        // Cantrips are unlimited — if prepared, always available
-        if (spell.SpellLevel == 0)
-        {
-            bool isPrepared = SpellSlots.Any(s => s.PreparedSpell != null &&
-                                                   s.PreparedSpell.SpellId == spell.SpellId &&
-                                                   !s.DisabledByNegativeLevel);
-            return isPrepared ? 999 : 0; // 999 = unlimited
-        }
 
         // D&D 3.5e: If the spell has MetamagicDataRef, count only slots with matching metamagic
         if (spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
@@ -2031,7 +2025,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Get unique spells that are prepared and available for casting (slot-based system).
     /// Each spell appears once with its available count tracked separately.
-    /// For cantrips: includes all prepared cantrips regardless of IsUsed (they're unlimited).
+    /// Only unused slots count, 0-level slots included (SPL-138).
     /// Works for both Wizards and Clerics.
     /// </summary>
     public List<SpellData> GetUniqueAvailableSpells(int level)
@@ -2043,9 +2037,7 @@ public class SpellcastingComponent : MonoBehaviour
         {
             if (slot.Level != level || !slot.HasSpell) continue;
 
-            // Cantrips are available if prepared and not disabled by negative levels.
-            bool isAvailable = (level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
-            if (!isAvailable) continue;
+            if (!slot.CanCast) continue; // 0-level slots too (SPL-138)
 
             // D&D 3.5e: Metamagic-enhanced prepared spells are distinct from their base versions.
             // Use SpellId + metamagic display name as the unique key to differentiate them.
@@ -2088,7 +2080,7 @@ public class SpellcastingComponent : MonoBehaviour
         return GetUniqueAvailableSpells(level);
     }
 
-    /// <summary>The spell id of the most recent cast this component spent a slot (or cast a cantrip) for (SPL-001).</summary>
+    /// <summary>The spell id of the most recent cast this component spent a slot for (SPL-001).</summary>
     public string LastCastSpellId { get; private set; }
 
     /// <summary>The casting class of that slot, or of the spontaneous caster; empty when unknown (SPL-001).</summary>
@@ -2131,7 +2123,7 @@ public class SpellcastingComponent : MonoBehaviour
                 string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
                 s.PreparedSpell != null &&
                 s.PreparedSpell.SpellId == spell.SpellId &&
-                ((spell.SpellLevel == 0 && !s.DisabledByNegativeLevel) || (spell.SpellLevel > 0 && !s.IsUsed && !s.DisabledByNegativeLevel)));
+                !s.IsUsed && !s.DisabledByNegativeLevel);
 
             if (classHasPrepared)
                 candidates.Add(className);
@@ -2154,7 +2146,8 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Cast a spell by consuming the first available slot with that spell.
-    /// Cantrips (level 0) are unlimited — the slot is NOT consumed.
+    /// The one spend path for PCs and NPCs, prepared and spontaneous casters: a 0-level spell spends a slot like
+    /// any other level (PHB p.27, p.31, p.35, p.52, p.55 spells-per-day tables; SPL-138).
     /// Works for both Wizards and Clerics.
     /// Returns true if successful.
     /// </summary>
@@ -2171,14 +2164,8 @@ public class SpellcastingComponent : MonoBehaviour
                 return false;
             }
 
-            // Cantrips are unlimited for spontaneous casters too
+            // 0-level spells spend a spell per day like any other level (PHB p.52, p.27; SPL-138).
             RecordCastClass(spell.SpellId, SpontaneousData.CasterClassName);
-            if (spell.SpellLevel == 0)
-            {
-                Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} (spontaneous, unlimited)");
-                return true;
-            }
-
             SpontaneousData.SpendSlot(spell.SpellLevel);
             // Sync legacy arrays
             SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
@@ -2191,31 +2178,12 @@ public class SpellcastingComponent : MonoBehaviour
         // ── Prepared caster: original slot-based logic ──
         string preferredClass = GetPreferredCastingClassForSpell(spell);
 
-        // Cantrips are unlimited — just check if prepared, don't consume
-        if (spell.SpellLevel == 0)
-        {
-            var cantripSlot = SpellSlots.FirstOrDefault(s =>
-                s.PreparedSpell != null &&
-                s.PreparedSpell.SpellId == spell.SpellId &&
-                !s.DisabledByNegativeLevel &&
-                (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
-
-            if (cantripSlot == null)
-            {
-                Debug.LogWarning($"[Spellcasting] {spell.Name} is not prepared!");
-                return false;
-            }
-
-            RecordCastClass(spell.SpellId, cantripSlot.CasterClassName);
-
-            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} ({preferredClass}) (unlimited, no slot consumed)");
-            return true;
-        }
-
-        // Level 1+ spells consume a slot
+        // Every spell, 0-level included, consumes a prepared slot (SPL-138). A 0-level slot disabled by negative
+        // levels is skipped as before; for level 1+ that check is still missing (SPL-012).
         var slot = SpellSlots.FirstOrDefault(s =>
             s.PreparedSpell != null &&
             s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed &&
+            (s.Level > 0 || !s.DisabledByNegativeLevel) &&
             (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
 
         if (slot == null)
@@ -2242,7 +2210,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// Whether this cleric can spontaneously cast at the given spell level.
     /// Requires: is a cleric, has spontaneous casting type set, has an unused slot at that level,
     /// and a valid spontaneous spell exists at that level.
-    /// Cantrips (level 0) can always be spontaneously cast if prepared (unlimited use).
+    /// At 0 level an unused orison slot is spent for Cure or Inflict Minor Wounds (PHB p.32; SPL-138).
     /// </summary>
     public bool CanSpontaneousCast(int spellLevel)
     {
@@ -2255,14 +2223,8 @@ public class SpellcastingComponent : MonoBehaviour
         SpellData spontSpell = SpellDatabase.GetSpell(spontSpellId);
         if (spontSpell == null) return false;
 
-        // For cantrips: always available if there are any cantrip slots (cantrips are unlimited)
-        if (spellLevel == 0)
-        {
-            return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
-        }
-
-        // For level 1+: need at least one unused non-domain slot at this level.
-        return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
+        // Need at least one unused non-domain slot at this level, 0-level included (SPL-138).
+        return SpellSlots.Any(s => IsConvertibleClericSlot(s) && s.Level == spellLevel);
     }
 
     /// <summary>
@@ -2293,16 +2255,8 @@ public class SpellcastingComponent : MonoBehaviour
             return false;
         }
 
-        // Cantrips are unlimited — just verify a slot exists, don't consume
-        if (spellLevel == 0)
-        {
-            SpellData spontSpell = GetSpontaneousSpell(spellLevel);
-            Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously cast cantrip {spontSpell?.Name} (unlimited, no slot consumed)");
-            return true;
-        }
-
-        // Level 1+: consume an unused non-domain slot at this level.
-        var slot = SpellSlots.FirstOrDefault(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
+        // Consume an unused non-domain slot at this level, an orison slot included (SPL-138).
+        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.Level == spellLevel);
         if (slot == null)
         {
             Debug.LogWarning($"[Spellcasting] No available slot at level {spellLevel} for spontaneous casting!");
@@ -2337,10 +2291,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (string.IsNullOrEmpty(sacrificedSpellId)) return false;
 
         // Find the specific slot with this spell that is unused
-        var slot = SpellSlots.FirstOrDefault(s =>
-            string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
-            s.HasSpell && !s.IsUsed && !s.IsDomainSlot &&
-            s.PreparedSpell.SpellId == sacrificedSpellId);
+        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.PreparedSpell.SpellId == sacrificedSpellId);
 
         if (slot == null)
         {
@@ -2350,15 +2301,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         int spellLevel = slot.Level;
 
-        // Cantrips are unlimited — just verify, don't consume
-        if (spellLevel == 0)
-        {
-            SpellData spontSpell = GetSpontaneousSpell(spellLevel);
-            Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously cast cantrip {spontSpell?.Name} " +
-                      $"(unlimited, no slot consumed, sacrificed {slot.PreparedSpell.Name})");
-            return true;
-        }
-
+        // The sacrificed slot is spent at every level, 0 included (SPL-138).
         SpellData spontSpell2 = GetSpontaneousSpell(spellLevel);
         string replacedSpell = slot.PreparedSpell?.Name ?? "empty";
         slot.Cast();
@@ -2388,19 +2331,25 @@ public class SpellcastingComponent : MonoBehaviour
         SpellData spontSpell = GetSpontaneousSpell(spell.SpellLevel);
         if (spontSpell == null) return false;
 
-        // For cantrips: always available if prepared (unlimited)
-        if (spell.SpellLevel == 0)
-        {
-            return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId && !s.DisabledByNegativeLevel);
-        }
-
         // Domain slots cannot be converted (D&D 3.5e rule).
         // If the same spell appears in both regular and domain slots, conversion is allowed only when
-        // at least one regular prepared slot exists and is unused.
+        // at least one regular prepared slot exists and is unused; 0-level slots too (SPL-138).
         return SpellSlots.Any(s =>
-            string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
-            s.Level == spell.SpellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot &&
+            IsConvertibleClericSlot(s) && s.Level == spell.SpellLevel &&
             s.PreparedSpell.SpellId == spell.SpellId);
+    }
+
+    /// <summary>
+    /// An unused, non-domain cleric slot holding a spell, which spontaneous casting may spend (PHB p.32). A 0-level
+    /// slot disabled by negative levels is excluded as before SPL-138; for level 1+ that check is still missing
+    /// (SPL-012).
+    /// </summary>
+    private static bool IsConvertibleClericSlot(SpellSlot s)
+    {
+        return s != null &&
+               string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
+               s.HasSpell && !s.IsUsed && !s.IsDomainSlot &&
+               (s.Level > 0 || !s.DisabledByNegativeLevel);
     }
 
     /// <summary>Backward compat alias — calls CastSpellFromSlot.</summary>
@@ -2464,7 +2413,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Sync the SlotsRemaining array from actual SpellSlot states.
-    /// Cantrip slots are always counted as "remaining" (unlimited use).
+    /// A slot counts as remaining while it can be cast, 0-level slots included (SPL-138).
     /// Called after any slot state change.
     /// </summary>
     private void SyncSlotsRemainingFromSpellSlots()
@@ -2477,20 +2426,10 @@ public class SpellcastingComponent : MonoBehaviour
             int[] remaining = new int[classSlotsMax.Length];
             for (int level = 0; level < classSlotsMax.Length; level++)
             {
-                if (level == 0)
-                {
-                    remaining[level] = SpellSlots.Count(s =>
-                        s != null &&
-                        string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
-                        s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
-                }
-                else
-                {
-                    remaining[level] = SpellSlots.Count(s =>
-                        s != null &&
-                        string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
-                        s.Level == level && s.CanCast);
-                }
+                remaining[level] = SpellSlots.Count(s =>
+                    s != null &&
+                    string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
+                    s.Level == level && s.CanCast);
             }
 
             _slotsRemainingByClass[className] = remaining;
@@ -2522,10 +2461,7 @@ public class SpellcastingComponent : MonoBehaviour
         {
             if (!slot.HasSpell) continue;
 
-            // Cantrips are always available if not disabled by negative levels.
-            bool isAvailable = (slot.Level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
-
-            if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
+            if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId)) // 0-level slots too (SPL-138)
             {
                 seen.Add(slot.PreparedSpell.SpellId);
                 PreparedSpells.Add(slot.PreparedSpell);
@@ -2575,11 +2511,7 @@ public class SpellcastingComponent : MonoBehaviour
         int slotNum = 1;
         foreach (var slot in SpellSlots)
         {
-            string status;
-            if (slot.Level == 0)
-                status = "∞"; // Cantrips are unlimited
-            else
-                status = slot.IsUsed ? "✗" : "✓";
+            string status = slot.IsUsed ? "✗" : "✓"; // 0-level slots are spent too (SPL-138)
 
             string spellName = slot.HasSpell ? slot.PreparedSpell.Name : "(empty)";
             string slotLabel = slot.IsDomainSlot
@@ -2632,8 +2564,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Get prepared spells filtered by spell level.
     /// Uses slot-based system for both Wizards and Clerics.
-    /// Returns unique spells that have available slots at that level.
-    /// Cantrips are always included if prepared (unlimited use).
+    /// Returns unique spells that have available slots at that level, 0-level included (SPL-138).
     /// </summary>
     public List<SpellData> GetPreparedSpellsByLevel(int level)
     {
@@ -2646,8 +2577,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Check if a specific spell can be cast right now.
-    /// Uses slot-based system for both Wizards and Clerics.
-    /// Cantrips are always castable if prepared (unlimited use).
+    /// Uses slot-based system for both Wizards and Clerics. A 0-level spell needs an unspent slot (SPL-138).
     /// </summary>
     public bool CanCastSpell(SpellData spell)
     {
@@ -2687,8 +2617,8 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Get list of prepared spells that can currently be cast (have slots available).
-    /// This is the primary method used by the spell casting UI during combat.
-    /// Cantrips are always included if prepared (unlimited use).
+    /// This is the primary method used by the spell casting UI during combat and the AI candidate list.
+    /// A 0-level spell is included only while one of its slots is unspent (SPL-138).
     /// </summary>
     public List<SpellData> GetCastablePreparedSpells()
     {
@@ -2716,10 +2646,7 @@ public class SpellcastingComponent : MonoBehaviour
             {
                 if (!slot.HasSpell) continue;
 
-                // Cantrips available if prepared and not disabled by negative levels.
-                bool available = (slot.Level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
-
-                if (available && !seen.Contains(slot.PreparedSpell.SpellId))
+                if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId)) // 0-level slots too (SPL-138)
                 {
                     seen.Add(slot.PreparedSpell.SpellId);
                     castable.Add(slot.PreparedSpell);
@@ -2744,8 +2671,8 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
-            // Any cantrip prepared OR any level 1+ slot with spell and not used
-            return SpellSlots.Any(s => s.HasSpell && ((s.Level == 0 && !s.DisabledByNegativeLevel) || s.CanCast));
+            // Any slot, 0-level included, with a spell and not used (SPL-138)
+            return SpellSlots.Any(s => s.CanCast);
         }
         return GetCastablePreparedSpells().Count > 0;
     }
@@ -2753,8 +2680,7 @@ public class SpellcastingComponent : MonoBehaviour
     // ========== SLOT MANAGEMENT ==========
 
     /// <summary>
-    /// Check if the character can cast a specific spell (has slots remaining).
-    /// Cantrips are always castable if prepared (unlimited use).
+    /// Check if the character can cast a specific spell (has slots remaining), 0-level spells included (SPL-138).
     /// One availability predicate for PCs and NPCs (SPL-123): the NPC cast executor and the counterspell
     /// availability check (CharacterController.HasSpellAvailableForCounter) ask it directly; the PC combat menu's
     /// Cast Spell button (ActionButtonPanel, through HasAnyCastablePreparedSpell) and the AI candidate list
@@ -2828,7 +2754,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (level < 0)
             return false;
 
-        return SpellSlots.Any(s => s != null && s.Level == level && (level == 0 ? s.HasSpell && !s.DisabledByNegativeLevel : s.CanCast));
+        return SpellSlots.Any(s => s != null && s.Level == level && s.CanCast);
     }
 
     /// <summary>
@@ -2887,16 +2813,13 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Consume a spell slot for the given spell level.
-    /// Cantrips (level 0) are unlimited — this is a no-op that returns true.
+    /// Consume a spell slot for the given spell level, 0-level included (SPL-138).
     /// For both Wizards and Clerics: uses slot-based system.
     /// Returns true if successful.
     /// </summary>
     public bool ConsumeSlot(int spellLevel)
     {
-        // Cantrips are unlimited — always succeed without consuming
-        if (spellLevel == 0) return true;
-
+        if (spellLevel < 0 || SlotsRemaining == null) return false;
         if (spellLevel >= SlotsRemaining.Length || SlotsRemaining[spellLevel] <= 0)
             return false;
 
@@ -3120,13 +3043,7 @@ public class SpellcastingComponent : MonoBehaviour
             var parts = new List<string>();
             int highest = SpontaneousData.GetHighestKnownSpellLevel();
             for (int i = 0; i <= Mathf.Max(0, highest); i++)
-            {
-                string label = $"L{i}";
-                if (i == 0)
-                    parts.Add($"{label}:∞");
-                else
-                    parts.Add($"{label}:{SpontaneousData.SlotsRemaining[i]}/{SpontaneousData.SlotsMax[i]}");
-            }
+                parts.Add($"L{i}:{SpontaneousData.SlotsRemaining[i]}/{SpontaneousData.SlotsMax[i]}"); // 0-level too (SPL-138)
             classParts.Add($"{SpontaneousData.CasterClassName}[{string.Join(", ", parts)}]");
         }
 
@@ -3156,13 +3073,7 @@ public class SpellcastingComponent : MonoBehaviour
 
             var parts = new List<string>();
             for (int i = 0; i < classMax.Length; i++)
-            {
-                string label = $"L{i}";
-                if (i == 0)
-                    parts.Add($"{label}:∞");
-                else
-                    parts.Add($"{label}:{classRemaining[i]}/{classMax[i]}");
-            }
+                parts.Add($"L{i}:{classRemaining[i]}/{classMax[i]}"); // 0-level too (SPL-138)
 
             classParts.Add($"{className}[{string.Join(", ", parts)}]");
         }

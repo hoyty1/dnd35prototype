@@ -15,7 +15,7 @@ using UnityEngine.UI;
 ///   - Clerics prepare from the FULL list of cleric spells at each level.
 ///   - Each slot holds exactly one spell of that slot's level.
 ///   - The same spell can fill multiple slots.
-///   - Cantrips use slots for preparation but are UNLIMITED use (never consumed).
+///   - 0-level spells (cantrips, orisons) are spent when cast like any other slot (SPL-138).
 ///   - Prepared spells persist between rests unless re-prepared.
 ///
 /// Usage: Called from GameManager when caster chooses to re-prepare spells after rest,
@@ -920,7 +920,7 @@ public class SpellPreparationUI : MonoBehaviour
             Debug.Log($"[SpellPrep] Level {spellLevel}: {regularSlots} regular + {domainSlots} domain + {specialistSlots} specialist = {totalSlots} total");
 
             string levelLabel = spellLevel == 0
-                ? $"═══ {cantripName} (Level 0 — Unlimited) ═══"
+                ? $"═══ {cantripName} (Level 0) ═══"
                 : $"═══ LEVEL {spellLevel} SPELLS ═══";
             levelLabel += $"  ({totalSlots} slots)";
 
@@ -1359,7 +1359,7 @@ public class SpellPreparationUI : MonoBehaviour
                 int slotsAtLevel = _creationSlotsMax[slot.Level];
                 string l0Label = _isClericCreationMode ? "ORISONS" : "CANTRIPS";
                 string levelLabel = slot.Level == 0
-                    ? $"═══ {l0Label} (Level 0 — Unlimited) ═══  ({slotsAtLevel} slots)"
+                    ? $"═══ {l0Label} (Level 0) ═══  ({slotsAtLevel} slots)"
                     : $"═══ LEVEL {slot.Level} SPELLS ═══  ({slotsAtLevel} slots)";
 
                 var headerGO = new GameObject("Header" + slot.Level);
@@ -1697,7 +1697,7 @@ public class SpellPreparationUI : MonoBehaviour
             {
                 string l0Name = _isClericCreationMode ? "Orisons" : "Cantrips";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
-                parts.Add($"<color={color}>{l0Name}: {filled}/{total} (∞)</color>");
+                parts.Add($"<color={color}>{l0Name}: {filled}/{total}</color>");
             }
             else
             {
@@ -1898,7 +1898,7 @@ public class SpellPreparationUI : MonoBehaviour
             {
                 string cantripLabel = string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase) ? "Orisons" : "Cantrips";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
-                parts.Add($"<color={color}>{cantripLabel}: {filled}/{total} (\u221e)</color>");
+                parts.Add($"<color={color}>{cantripLabel}: {filled}/{total}</color>");
             }
             else
             {

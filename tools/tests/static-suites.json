@@ -1364,11 +1364,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 59,
+      "passed": 126,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "SPL-123: a sorcerer's and a bard's known spells are available on every path (SpellcastingComponent.CanCast for the NPC cast executor, CanCastSpell, the PC menu list GetCastablePreparedSpells, CharacterController.HasSpellAvailableForCounter), unknown spells on none, and none once the 1st-level slots are spent (PHB p.52-54, p.28, p.170-171); a wizard's prepared-slot check is unchanged (a known but unprepared 1st-level spell refused on every path); AI-037: the dragon cast-first filter (AIService.IsDragonCastFirstCandidate) never takes a cantrip and takes only buffs while the breath is ready"
+      "notes": "SPL-123: a sorcerer's and a bard's known spells are available on every path (SpellcastingComponent.CanCast for the NPC cast executor, CanCastSpell, the PC menu list GetCastablePreparedSpells, CharacterController.HasSpellAvailableForCounter), unknown spells on none, and none once the 1st-level slots are spent (PHB p.52-54, p.28, p.170-171); a wizard's prepared-slot check is unchanged (a known but unprepared 1st-level spell refused on every path); AI-037: the dragon cast-first filter (AIService.IsDragonCastFirstCandidate) never takes a cantrip and takes only buffs while the breath is ready; SPL-138 (PHB p.27, p.31, p.52, p.55 tables, p.177 example, p.32 spontaneous conversion): 0-level spells are spells per day: a sorcerer 1 (5/day) and a bard 3 (3/day) spend one per Daze and are refused on every path once spent, a wizard 3 spends its prepared cantrip slot (CountAvailablePreparedSpell counts unused slots, no 999 marker; the 0-level remaining count, GetUniqueAvailableSpells and HasAnyCastablePreparedSpell follow the used slots), a cleric 3 spends an orison slot for each conversion into Cure Minor Wounds, and RestoreAllSlots restores them; the combat menu's conversion path (CanConvertSpellToSpontaneous, SpontaneousCastFromSpecificSpell) spends exactly one slot holding the chosen orison and is refused once they are spent; a druid's orisons per day follow PHB p.35 Table 3-8 (3, 4, 4, then 5 at levels 4-6, 6 from 7); 126 assertions since the SPL-138 review (112 at SPL-138, 59 before)"
     },
     {
       "type": "Tests.Magic.SummonMonster3CreaturesTests",

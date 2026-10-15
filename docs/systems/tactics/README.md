@@ -307,7 +307,7 @@ PC usability before correction is 129 yes, 94 partial and 186 no. 29 Cleric- or 
 | Class | Cap | Evidence |
 |---|---|---|
 | Wizard | {4,3,2} from level 4: never above 2nd | :919-950 |
-| Druid | {4,2,1} from level 3 | :1094+ |
+| Druid | 1st/2nd {2,1} from level 3 (orisons follow PHB p.35 since SPL-138) | `GetDruidSlotsForLevel` |
 | Cleric | Slots reach 5th at level 9; since 2026-10-14 (CRE-062) the whole cleric list of levels 1-5 is known (`InitCleric`) and domains cover levels 1-4 where the spell exists, so 3rd- to 5th-level slots fill | `GetClericSlotsForLevel`, `InitCleric` |
 | Sorcerer | Full table (`SpontaneousCastingData`), so Wizard-list 3rd+ spells are reachable by sorcerers only | |
 

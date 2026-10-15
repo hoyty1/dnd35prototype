@@ -135,7 +135,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 154;
+        public const int Count = 157;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -283,6 +283,9 @@ namespace Tests.Scenarios
             yield return S("npc-cast-spontaneous", NpcCastSpontaneous);
             yield return S("dragon-ai-breath-young", () => DragonAiBreathNotCantrip("rules/dragon-ai-breath-young", "dragon_red_young", 2));
             yield return S("dragon-ai-breath-juvenile", () => DragonAiBreathNotCantrip("rules/dragon-ai-breath-juvenile", "dragon_red_juvenile", 4));
+            yield return S("zero-level-spells-per-day", ZeroLevelSpellsPerDay);
+            yield return S("zero-level-spells-ai", ZeroLevelSpellsAi);
+            yield return S("zero-level-spells-aoo-cancel", ZeroLevelSpellsAoOCancel);
             yield return S("save-bonuses", SaveBonuses);
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
@@ -6703,16 +6706,16 @@ namespace Tests.Scenarios
         /// <summary>
         /// AI-037 since SPL-123: an AI-run (Control.Ai) red dragon of a spellcasting age (MM p.69) faces the idle Quick
         /// Start party from 8 squares away. Once SPL-123 let the NPC cast executor accept a dragon's known spells, the
-        /// dragon turn's cast-first step (AIService.ExecuteDragonTurn) could spend every turn on a cantrip, which never
-        /// runs out (SPL-138), in place of its breath weapon or full attack. The young red (caster level 1) knows
+        /// dragon turn's cast-first step (AIService.ExecuteDragonTurn) could spend every turn on a cantrip (free until
+        /// SPL-138; a caster level 1 dragon still has 5 per day), in place of its breath weapon or full attack. The young red (caster level 1) knows
         /// cantrips only; the juvenile (caster level 3) also knows 1st- and 2nd-level spells. Each must breathe within
         /// <paramref name="rounds"/> rounds and must never cast a 0-level spell. Not a rules test (this is AI choice), so
         /// the expectations read the trace only: "cast" events (the NPC cast executor) and the breath weapon's log line.
         /// </summary>
         private static ScenarioDef DragonAiBreathNotCantrip(string id, string npcId, int rounds)
         {
-            return Rules(id, "An AI-run spellcasting dragon at range breathes and never spends its turn on a cantrip (AI-037, SPL-123, SPL-138)")
-                .Covers("AI-037", "SPL-123", "SPL-138", "MM p.69")
+            return Rules(id, "An AI-run spellcasting dragon at range breathes and never spends its turn on a cantrip (AI-037, SPL-123)")
+                .Covers("AI-037", "SPL-123", "MM p.69")
                 .MaxRounds(rounds)
                 .Pc("fighter", ActorSource.QuickStart("Fighter"), 4, 8, Control.Idle)
                 .Pc("rogue", ActorSource.QuickStart("Rogue"), 4, 10, Control.Idle)
@@ -6733,6 +6736,256 @@ namespace Tests.Scenarios
                     return ExpectResult.Fail("no breath in " + rounds + " rounds; " + casts + " cast(s)");
                 })
                 .Build();
+        }
+
+        // ── 0-level spells per day (SPL-138) ─────────────────────────────
+
+        /// <summary>
+        /// SPL-138: 0-level spells are spells per day like any other level (PHB p.52 Table 3-16 sorcerer, p.55 Table 3-18
+        /// wizard; PHB p.177's example wizard prepares detect magic twice and casts it once). One cast spends one, on
+        /// every path: the Quick Start wizard (Ui, the PC pipeline) has Daze in one of its four cantrip slots; the Quick
+        /// Start sorcerer (Scripted, the NPC cast executor, spontaneous) has one 0-level spell left today; the
+        /// neutral_mage_test (Scripted NPC wizard, Daze prepared in its four cantrip slots) has three of them already
+        /// spent. Each casts Daze in round 1, which spends its last Daze, and tries again in round 2, which must be
+        /// refused. Before SPL-138 the round-2 casts went off and no 0-level slot was ever spent.
+        /// </summary>
+        private static ScenarioDef ZeroLevelSpellsPerDay()
+        {
+            return Rules("rules/zero-level-spells-per-day", "0-level spells are spent like any other spell per day, on the PC and NPC paths (PHB p.52, p.55, p.177; SPL-138)")
+                .Covers("SPL-138", "PHB p.52", "PHB p.55", "PHB p.177", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 5, 10, Control.Ui)
+                .Pc("sorc", ActorSource.QuickStart("Sorcerer"), 5, 12, Control.Scripted)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 3)), 5, 14, Control.Idle)
+                .Npc("gob1", "goblin", 9, 10, Control.Idle)
+                .Npc("gob2", "goblin", 9, 12, Control.Idle)
+                .Npc("mage", "neutral_mage_test", 10, 15, Control.Scripted)
+                .Tweak("wizard", PrepareOneDaze)
+                .Tweak("sorc", c =>
+                {
+                    // One 0-level spell left today.
+                    SpellcastingComponent sc = c.Spellcasting;
+                    if (sc != null && sc.IsSpontaneousCaster)
+                        sc.SpontaneousData.SlotsRemaining[0] = 1;
+                })
+                .Tweak("mage", c =>
+                {
+                    // Three of its four prepared Dazes already cast today.
+                    SpellcastingComponent sc = c.Spellcasting;
+                    if (sc == null || sc.SpellSlots == null)
+                        return;
+                    int spent = 0;
+                    foreach (SpellSlot slot in sc.SpellSlots)
+                        if (spent < 3 && slot != null && slot.Level == 0 && slot.PreparedSpell != null && !slot.IsUsed)
+                        {
+                            slot.IsUsed = true;
+                            spent++;
+                        }
+                    sc.SyncPreparedSpellsFromSlots();
+                })
+                .Initiative("wizard", "sorc", "mage", "fighter", "gob1", "gob2")
+                .Turn("wizard", 1,
+                    Step.Assert("The wizard's four cantrip slots are unspent", ctx => ZeroLevelLeft(ctx, "wizard", 4)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob1"),
+                    Step.Assert("Daze on the PC path spent one cantrip slot", ctx => ZeroLevelLeft(ctx, "wizard", 3)))
+                .Turn("wizard", 2,
+                    Step.Assert("The PC combat menu no longer offers the spent Daze", ctx => DazeOffered(ctx, "wizard") == false),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob1"))
+                .Turn("sorc", 1,
+                    Step.Assert("The sorcerer has one 0-level spell left", ctx => ZeroLevelLeft(ctx, "sorc", 1)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob2"),
+                    Step.Assert("Daze on the NPC executor spent the sorcerer's last 0-level spell", ctx => ZeroLevelLeft(ctx, "sorc", 0)))
+                .Turn("sorc", 2,
+                    Step.Assert("No list offers the sorcerer's Daze with its 0-level spells spent", ctx => DazeOffered(ctx, "sorc") == false),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob2"))
+                .Turn("mage", 1,
+                    Step.Assert("The NPC wizard has one unspent Daze slot", ctx => ZeroLevelLeft(ctx, "mage", 1)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "fighter"),
+                    Step.Assert("Daze on the NPC executor spent the NPC wizard's last cantrip slot", ctx => ZeroLevelLeft(ctx, "mage", 0)))
+                .Turn("mage", 2,
+                    Step.Assert("The AI candidate list no longer offers the NPC wizard's spent Daze", ctx => DazeOffered(ctx, "mage") == false),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "fighter"))
+                .Expect("Each caster's round-1 Daze is cast", Expect.All(
+                    Expect.StepStatus("wizard", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("sorc", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("mage", 1, "Cast", 0, "done")))
+                .Expect("With its last Daze spent, each caster's round-2 Daze is refused (SPL-138)", Expect.All(
+                    Expect.StepStatus("wizard", 2, "Cast", 0, "refused"),
+                    Expect.StepStatus("sorc", 2, "Cast", 0, "refused"),
+                    Expect.StepStatus("mage", 2, "Cast", 0, "refused")))
+                .Expect("Each cast spent one 0-level spell per day", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-138, AI candidate list (AIService.SelectSpell reads SpellcastingComponent.GetCastablePreparedSpells): an
+        /// AI-run neutral_mage_test (Wizard 3 whose only prepared spells are Daze in its four cantrip slots, PHB p.55)
+        /// faces the idle Quick Start party (3 HD humanoids, Daze-eligible, PHB p.217) for 6 rounds. It casts Daze
+        /// exactly four times, once per prepared slot (one per round in every seed run), and casts nothing after the
+        /// fourth, because the candidate list is then empty; before SPL-138 it could cast Daze every round, so the
+        /// scenario fails on the old code. AI choice, so the expectation reads the trace's NPC-path "cast" events only.
+        /// </summary>
+        private static ScenarioDef ZeroLevelSpellsAi()
+        {
+            return Rules("rules/zero-level-spells-ai", "An AI-run caster's candidate list drops a 0-level spell once its slots are spent (SPL-138)")
+                .Covers("SPL-138", "PHB p.55", "AI.md 7.3")
+                .MaxRounds(6)
+                .Pc("fighter", ActorSource.QuickStart("Fighter"), 4, 8, Control.Idle)
+                .Pc("rogue", ActorSource.QuickStart("Rogue"), 4, 10, Control.Idle)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 4, 12, Control.Idle)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 4, 14, Control.Idle)
+                .Npc("mage", "neutral_mage_test", 9, 11, Control.Ai)
+                .Initiative("mage", "fighter", "rogue", "cleric", "wizard")
+                .Expect("The mage's turns are AI turns", Expect.Controller("mage", "ai"))
+                .Expect("The mage casts Daze exactly four times, once per prepared slot, and nothing after the fourth (SPL-138)", v =>
+                {
+                    List<TraceEvent> casts = v.Of("cast").Where(e => e.Str("by") == "mage").ToList();
+                    List<TraceEvent> dazes = casts.Where(e => e.Str("spell") == DND35e.Identifiers.SpellNames.DAZE).ToList();
+                    if (dazes.Count > 4)
+                        return ExpectResult.Fail(dazes.Count + " Daze casts from four prepared slots", dazes[4].Seq);
+                    if (dazes.Count < 4)
+                        return ExpectResult.Fail("only " + dazes.Count + " Daze cast(s) from four prepared slots in 6 rounds", dazes.Select(e => e.Seq).ToArray());
+                    TraceEvent after = casts.FirstOrDefault(e => e.Seq > dazes[3].Seq);
+                    if (after != null)
+                        return ExpectResult.Fail("the mage cast " + after.Str("spell") + " after its last Daze slot was spent", after.Seq);
+                    return ExpectResult.Pass("4 Daze casts, the last in round " + dazes[3].Round + "; no cast after it", dazes[3].Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-138 review: backing out of a threatened cast at the AoO prompt refunds the spell it spent, for a prepared
+        /// and a spontaneous caster alike (the PC pipeline's Cancel answer: the cast never happens). The PC pipeline
+        /// spends the spell before the prompt (ConsumePendingSpellSlot, then ResolveSpellcastProvocation), and
+        /// RestoreSpellcastResourceSnapshot gives it back: a prepared slot's IsUsed flag for the Quick Start wizard, the
+        /// spells-per-day counter for the Quick Start sorcerer (both Ui). Each casts Daze while a goblin threatens it,
+        /// cancels and keeps its 0-level count, then casts defensively, which spends one whether or not the
+        /// Concentration check succeeds (PHB p.170: a failed defensive casting loses the spell). Before the fix the
+        /// sorcerer lost a 0-level spell on Cancel. The goblins act first so they are not flat-footed and threaten
+        /// (PHB p.137).
+        /// </summary>
+        private static ScenarioDef ZeroLevelSpellsAoOCancel()
+        {
+            return Rules("rules/zero-level-spells-aoo-cancel", "Cancelling a threatened cast at the AoO prompt refunds the 0-level spell for prepared and spontaneous casters (SPL-138)")
+                .Covers("SPL-138", "PHB p.52", "PHB p.55", "PHB p.170", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 5, 10, Control.Ui)
+                .Pc("sorc", ActorSource.QuickStart("Sorcerer"), 5, 13, Control.Ui)
+                .Npc("gob1", "goblin", 6, 10, Control.Idle)
+                .Npc("gob2", "goblin", 6, 13, Control.Idle)
+                .Tweak("wizard", PrepareOneDaze)
+                .Tweak("sorc", c =>
+                {
+                    // Two 0-level spells left today.
+                    SpellcastingComponent sc = c.Spellcasting;
+                    if (sc != null && sc.IsSpontaneousCaster)
+                        sc.SpontaneousData.SlotsRemaining[0] = 2;
+                })
+                .Initiative("gob1", "gob2", "wizard", "sorc")
+                .Turn("wizard", 1,
+                    Step.Assert("The wizard's four cantrip slots are unspent", ctx => ZeroLevelLeft(ctx, "wizard", 4)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob1"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("Cancelling at the AoO prompt refunded the wizard's cantrip slot", ctx => ZeroLevelLeft(ctx, "wizard", 4) && DazeOffered(ctx, "wizard")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob1"),
+                    Step.AnswerAoO(AoOAnswer.Defensive),
+                    Step.Assert("Casting defensively spent the wizard's cantrip slot", ctx => ZeroLevelLeft(ctx, "wizard", 3)))
+                .Turn("sorc", 1,
+                    Step.Assert("The sorcerer has two 0-level spells left", ctx => ZeroLevelLeft(ctx, "sorc", 2)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob2"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("Cancelling at the AoO prompt refunded the sorcerer's 0-level spell", ctx => ZeroLevelLeft(ctx, "sorc", 2) && DazeOffered(ctx, "sorc")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob2"),
+                    Step.AnswerAoO(AoOAnswer.Defensive),
+                    Step.Assert("Casting defensively spent one of the sorcerer's 0-level spells", ctx => ZeroLevelLeft(ctx, "sorc", 1)))
+                .Expect("The wizard's and the sorcerer's turns are Ui turns", Expect.All(
+                    Expect.Controller("wizard", "ui"),
+                    Expect.Controller("sorc", "ui")))
+                .Expect("Each caster answered Cancel, then Cast Defensively, at the AoO prompt", Expect.All(
+                    Expect.StepStatus("wizard", 1, "AnswerAoO", 0, "done"),
+                    Expect.StepStatus("wizard", 1, "AnswerAoO", 1, "done"),
+                    Expect.StepStatus("sorc", 1, "AnswerAoO", 0, "done"),
+                    Expect.StepStatus("sorc", 1, "AnswerAoO", 1, "done")))
+                .Expect("Every check ran", Expect.All(
+                    Expect.StepStatus("wizard", 1, "Assert", 2, "done"),
+                    Expect.StepStatus("sorc", 1, "Assert", 2, "done")))
+                .Expect("Only the defensive cast was resolved: one threatened cast per caster, cast defensively", v =>
+                {
+                    foreach (string k in new[] { "wizard", "sorc" })
+                    {
+                        List<TraceEvent> tc = v.Of("threatened_cast").Where(e => e.Str("by") == k).ToList();
+                        if (tc.Count != 1)
+                            return ExpectResult.Fail(k + " has " + tc.Count + " threatened casts, expected 1", tc.Select(e => e.Seq).ToArray());
+                        if (!tc[0].Bool("defensive"))
+                            return ExpectResult.Fail(k + "'s threatened cast was not defensive", tc[0].Seq);
+                    }
+                    return ExpectResult.Pass("one defensive threatened cast each");
+                })
+                .Expect("A cancelled cast spent nothing and a defensive one spent one 0-level spell, for both casters", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>Puts Daze in <paramref name="c"/>'s first cantrip slot only (the Quick Start wizard does not prepare it).</summary>
+        private static void PrepareOneDaze(CharacterController c)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                return;
+            bool placed = false;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (slot == null || slot.Level != 0)
+                    continue;
+                if (!placed)
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DAZE).Clone();
+                    placed = true;
+                }
+                else if (slot.PreparedSpell != null && slot.PreparedSpell.SpellId == DND35e.Identifiers.SpellNames.DAZE)
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DETECT_MAGIC).Clone();
+                }
+            }
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        /// <summary>
+        /// Whether any availability path still offers <paramref name="key"/>'s Daze: the PC combat menu's 0-level list
+        /// (GetPreparedSpellsByLevel, prepared casters), the PC menu and AI candidate list (GetCastablePreparedSpells),
+        /// the NPC executor's check (CanCast) or the character sheet's (CanCastSpell); notes each (SPL-138).
+        /// </summary>
+        private static bool DazeOffered(ScenarioContext ctx, string key)
+        {
+            CharacterController c = ctx.Get(key);
+            SpellcastingComponent sc = c != null ? c.Spellcasting : null;
+            SpellData daze = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DAZE);
+            if (sc == null || daze == null)
+                return true;
+            bool menu0 = !sc.IsSpontaneousCaster && sc.GetPreparedSpellsByLevel(0).Any(s => s != null && s.SpellId == daze.SpellId);
+            bool castable = sc.GetCastablePreparedSpells().Any(s => s != null && s.SpellId == daze.SpellId);
+            bool canCast = sc.CanCast(daze);
+            bool sheet = sc.CanCastSpell(daze);
+            ctx.Note("zero-level " + key + " Daze offered: level-0 menu " + menu0 + ", castable list " + castable + ", CanCast " + canCast + ", CanCastSpell " + sheet);
+            return menu0 || castable || canCast || sheet;
+        }
+
+        /// <summary>
+        /// True when <paramref name="key"/> has <paramref name="expected"/> 0-level spells left today (spontaneous:
+        /// SpontaneousData; prepared: unspent 0-level slots); notes the counts (SPL-138).
+        /// </summary>
+        private static bool ZeroLevelLeft(ScenarioContext ctx, string key, int expected)
+        {
+            CharacterController c = ctx.Get(key);
+            SpellcastingComponent sc = c != null ? c.Spellcasting : null;
+            if (sc == null)
+            {
+                ctx.Note("zero-level " + key + " has no SpellcastingComponent");
+                return false;
+            }
+            int left = sc.IsSpontaneousCaster ? sc.SpontaneousData.GetSlotsRemaining(0) : sc.GetSlotsRemaining(0);
+            int max = sc.IsSpontaneousCaster ? sc.SpontaneousData.GetMaxSlots(0) : sc.GetMaxSlots(0);
+            ctx.Note("zero-level " + key + " 0-level spells left " + left + "/" + max + ", expected " + expected);
+            return left == expected;
         }
 
         /// <summary>

@@ -35,7 +35,10 @@ public class SpontaneousCastingData
     /// <summary>Max spells known per level (from class progression table).</summary>
     public int[] MaxSpellsKnownByLevel = new int[10];
 
-    /// <summary>Spell slots remaining per level (0-9). Cantrips (0) are unlimited.</summary>
+    /// <summary>
+    /// Spell slots remaining per level (0-9). 0-level spells (cantrips) are counted and spent like any other level:
+    /// PHB p.52 Table 3-16 and p.27 Table 3-4 give them a number per day (SPL-138).
+    /// </summary>
     public int[] SlotsRemaining = new int[10];
 
     /// <summary>Max spell slots per level (base from table + ability bonus).</summary>
@@ -114,15 +117,13 @@ public class SpontaneousCastingData
         // Must know the spell
         if (!IsSpellKnown(spellId, spellLevel)) return false;
 
-        // Must have a slot available (cantrips are unlimited in 3.5e)
-        if (spellLevel == 0) return true;
+        // Must have a spell per day of that level left; 0-level spells included (PHB p.52, p.27; SPL-138).
         return SlotsRemaining[spellLevel] > 0;
     }
 
-    /// <summary>Spend a slot to cast a spell. Returns true if successful.</summary>
+    /// <summary>Spend a slot to cast a spell, 0-level spells included (SPL-138). Returns true if successful.</summary>
     public bool SpendSlot(int spellLevel)
     {
-        if (spellLevel == 0) return true; // Cantrips unlimited
         if (spellLevel < 0 || spellLevel > 9) return false;
         if (SlotsRemaining[spellLevel] <= 0) return false;
 
@@ -210,7 +211,7 @@ public class SpontaneousCastingData
 
     // ============================== SLOT MANAGEMENT ==============================
 
-    /// <summary>Refresh all spell slots (on rest). Cantrips stay unlimited.</summary>
+    /// <summary>Refresh all spell slots (on rest), 0-level spells included.</summary>
     public void RefreshAllSlots()
     {
         for (int i = 0; i < 10; i++)
