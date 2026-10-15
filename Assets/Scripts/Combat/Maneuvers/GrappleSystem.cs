@@ -393,6 +393,7 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})"));
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, check.Success ? "grappled-passed" : "grappled-lost");
         if (check.Success)
             return true;
 

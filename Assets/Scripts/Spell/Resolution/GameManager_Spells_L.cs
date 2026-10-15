@@ -38,6 +38,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveLesserGlobeSpellEffect));
+
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 

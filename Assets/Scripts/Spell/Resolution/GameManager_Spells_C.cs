@@ -53,6 +53,8 @@ public partial class GameManager
         if (!IsContagionSpell(spell) || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveContagionSpellEffect));
+
         if (result == null)
             return true;
 

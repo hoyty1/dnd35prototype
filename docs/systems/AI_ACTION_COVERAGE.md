@@ -71,7 +71,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |
 | Heal, buff | Partial | adjacent or self only; no cure for an undead or construct ally, no cure on an unhurt caster; when its one spell pick fails a Healer paces 4 squares from an enemy instead of reaching the hurt ally or attacking | Yes | AI-047, AI-063; 11.8.6 |
 | Inflict to heal an undead ally, cure to hurt an undead enemy | Never | the AI only avoids the wrong use (SPL-005) | Yes | AI-062; 11.8.6 |
-| Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:193) | Yes | 11.8.6 |
+| Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:199) | Yes | 11.8.6 |
 | Hold the charge, discharge a held touch spell | Never | NPC touch spells resolve at once against an adjacent target | Yes | |
 | Dismiss a spell | Never | | Yes (Invisibility, See Invisibility, Expeditious Retreat, Disguise Self, Jump) | |
 | Direct a Flaming Sphere | Never | `TryControlFlamingSphereForAI` has no callers | Yes | AI-053 |

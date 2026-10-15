@@ -3215,6 +3215,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         caster.BreakInvisibility("hostile spell", hostileTarget);
+        CastStageTrace.Mark(caster, spell, CastStageTrace.InvisibilityBreak, "broken");
     }
 
     private void UpdateEnemyLastKnownPositionForInvisibility(CharacterController invisibleCharacter)
@@ -9941,6 +9942,8 @@ public partial class GameManager : MonoBehaviour
         if (!IsAnimateRopeSpell(spell) || caster == null || target == null || result == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveAnimateRopeSpellEffect));
+
         ItemData ropeItem = ConsumePendingAnimateRopeItem(caster);
         if (ropeItem == null)
         {
@@ -11034,8 +11037,8 @@ public partial class GameManager : MonoBehaviour
     {
         bool cast = TryNPCPerformSpellCast(npc, target, spell);
         // A spell that drops the last creature of a side ends the combat now, as the PC cast sites do (CORE-011).
-        if (cast)
-            EvaluateCombatEnd("TryNPCPerformSpellCast");
+        if (cast && EvaluateCombatEnd("TryNPCPerformSpellCast"))
+            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSpellCast");
         return cast;
     }
 

@@ -18,7 +18,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 
 | Family | PC entry | NPC entry | Shared core reached |
 |---|---|---|---|
-| Turn start | `OnTurnStarted` -> `IsPC = IsControllable` -> `StartPCTurn` (GameManager.cs:3976): effects, then skip gate, then the rage tick, then Confused and Suggested only | `SingleNPCTurnFromInitiative` (NPCTurns.cs:35): skip gate first -> `AIService.ExecuteNPCTurn` -> `BeginNPCTurnForAI` (GameManager.cs:11005; effects plus perception) -> HP<=0 gate -> Charmed/Fascinated/Frightened controllers | `ShouldSkipTurnDueToHPState`, `StartNewTurn`, `NextInitiativeTurn`, `OnNewRound`; before either path, `TurnService.OnInitiativeCountReached` ticks the durations anchored to that count, then `GameManager.OnTurnStarted` runs `ConditionService.OnTurnStart` once for PCs and NPCs alike (CMB-006) |
+| Turn start | `OnTurnStarted` -> `IsPC = IsControllable` -> `StartPCTurn` (GameManager.cs:3977): effects, then skip gate, then the rage tick, then Confused and Suggested only | `SingleNPCTurnFromInitiative` (NPCTurns.cs:35): skip gate first -> `AIService.ExecuteNPCTurn` -> `BeginNPCTurnForAI` (GameManager.cs:11008; effects plus perception) -> HP<=0 gate -> Charmed/Fascinated/Frightened controllers | `ShouldSkipTurnDueToHPState`, `StartNewTurn`, `NextInitiativeTurn`, `OnNewRound`; before either path, `TurnService.OnInitiativeCountReached` ticks the durations anchored to that count, then `GameManager.OnTurnStarted` runs `ConditionService.OnTurnStart` once for PCs and NPCs alike (CMB-006) |
 | Weapon attacks | buttons -> `CombatFlowService.PerformPlayerAttack` -> iterative sequence (one step per click through `CharacterController.ResolveAttackSequenceStep`), single, natural full attack coroutine, dual wield, off-hand; the Flurry button declares the flurry, then runs the iterative sequence | `NPCPerformAttack` (NPCTurns.cs): melee -> `NPCMeleeAttackSequence` (one step at a time through the creature's attack sequence and `ResolveAttackSequenceStep`, optional per-step maneuver, adaptive retargeting); ranged and thrown -> one `FullAttack` or `Attack` (CMB-091) | `ResolveAttackSequenceStep` (melee steps of both sides; with Haste a natural sequence has one more step, `CharacterController.GetNaturalAttackStepBudget`, made with the natural attack the PC picks on a natural-attack button (or its chooser), in the Haste chooser of the Full Attack button and the pounce (`GameManager.PromptHasteNaturalAttackChoice`, CMB-124; Cancel keeps the default), or the AI picks through `AIProfile.ChooseHasteNaturalAttackIndex`) -> `Attack`/`FullAttack` -> `BuildAttackBonus` -> `PerformSingleAttackWithCrit`. Post-attack hooks (ammo, thrown, Cleave, Improved Grab, charm breaks, concentration, victory) differ per orchestrator |
 | Charge | `SupportActions.ExecuteCharge` | `NPCExecuteCharge` | legality, path, step AoOs, +2/-2, pounce/rake |
 | Movement | `HandleMovementClick` -> `MovementService.FindPath(avoidThreats: true)` (the same range, pass-through and withdraw rules as the AI's calls; it prefers routes around threatened squares and takes the direct route when a detour would stop short, GRID-001 fixed 2026-10-14) -> `ExecuteMovement` (one square per step, Grease hooks; a square passed through, such as an ally's, is not checked as the destination, as on the AI path) | `MoveCharacterAlongComputedPath[Withdraw]` -> `ExecutePathWithMovementAoOs` | `SquareGrid.FindPathAoOAware` (a start square shared after a pin release is accepted for both sides, CMB-122), `GameManager.GetCurrentMoveRangeSquares` (0 while prone or grappling, for the PC buttons, the AI and the compulsion controllers alike), `ResolveMovementAoOsBeforeStep`, `MoveAlongPath`, 5-ft step, stand up |
@@ -76,10 +76,10 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 
 | ID | Mechanic | What differs | Favours | Impact | Evidence |
 |---|---|---|---|---|---|
-| SPL-054 | Spell handlers | NPC path runs 19 of 51 handlers (Ghoul Touch, Sound Burst...; Searing Light and Prayer added 2026-10-09) | depends | High | GameManager.SpellCasting.cs:2129-2346 vs NPCTurns.cs:938-1006 |
+| SPL-054 | Spell handlers | NPC path runs 19 of 51 handlers (Ghoul Touch, Sound Burst...; Searing Light and Prayer added 2026-10-09) | depends | High | GameManager.SpellCasting.cs:2172-2389 vs NPCTurns.cs:938-1006 |
 | AI-001 | Area spells, metamagic | NPCs cannot cast any Area spell or apply metamagic | PC | High | NPCTurns.cs:820, 835, 911 |
 | CHR-067 | Skills | NPC skill totals are 0 (not the ability modifier); `RollSkillCheck` returns an automatic fail | PC | High | CharacterStats.cs:5970-6029 |
-| CMB-100 (new) | Frightened, Charmed | Enforced only by AI controllers; a frightened or charmed PC acts freely | PC | Med | GameManager.cs:4086; AIService.cs:84-133 |
+| CMB-100 (new) | Frightened, Charmed | Enforced only by AI controllers; a frightened or charmed PC acts freely | PC | Med | GameManager.cs:4087; AIService.cs:84-133 |
 | CMB-091 (new, melee fixed) | Ranged full attack | Melee steps of both sides use `ResolveAttackSequenceStep` (2026-10-07); NPC ranged attacks still use one `FullAttack`: PC Rapid Shot is inert, NPC crossbow fires every iterative from one load, ranged AoO and concentration counts differ | depends | Med | CombatFlowService.cs (`PerformIterativeSequenceAttack`); NPCTurns.cs (`NPCPerformAttack` ranged remainder) |
 | CMB-090 | Charm, fascination, command undead breaks | Every weapon swing on both sides since 2026-10-15 (`GameManager.NotifyWeaponAttackAgainst` from `PerformSingleAttackWithCrit`); maneuvers break fascination for both (`CharacterController.ExecuteSpecialAttack`); still open: charm by the charmer's allies, maneuver charm and command breaks, the turned-undead fear break on full attacks and NPC maneuvers | depends | Med | GameManager.cs (`NotifyWeaponAttackAgainst`); TurnUndeadSystem.cs:244 |
 | CMB-097 (new) | Improved Grab | Never triggers on PC full-attack or iterative steps (PC summons) | NPC | Med | CombatFlowService.cs:963, 1004-1017 |
@@ -87,46 +87,46 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CMB-092 (new) | Resilient Sphere | Blocks only PC attacks; an enclosed NPC loses its whole turn while an enclosed PC can self-cast | NPC/PC | Med | CombatFlowService.cs:164-177; AIService.cs:196-202 |
 | CMB-094 (new) | Unseen creatures | Only AI-run creatures get Listen pinpointing; PCs auto-miss and cannot shoot into a square | NPC | Med | AIService.cs:887, 1524, 2978; CombatActions.cs:95 |
 | CMB-095 (new) | Slow | No-full-round check in the shared attack-sequence executor (PC iteratives, NPC melee), the NPC ranged full attack and the natural Full Attack button; PC dual wield unchecked (the flurry checks it since CHR-003); a slowed creature still gets move + standard | PC | Med | CharacterController.cs (`CanPayForNextAttack`); NPCTurns.cs:1175 |
-| CMB-096 (new) | Thrown mode | PC UI global; NPCs cannot throw melee weapons and NPC range math reads it | depends | Med | GameManager.cs:11561-11589; CombatFlowService.cs:228-254 |
+| CMB-096 (new) | Thrown mode | PC UI global; NPCs cannot throw melee weapons and NPC range math reads it | depends | Med | GameManager.cs:11564-11592; CombatFlowService.cs:228-254 |
 | GRID-018 (new) | Grease movement | Entry save and extra cost only on PC voluntary moves | NPC | Med | CombatActions.cs:1019, 1058 |
-| SPL-112 (new) | Caster choices | NPC energy type forced to Fire, Fire Shield warm, Disguise Self own race, or a stale PC choice is inherited | PC | Med | GameManager.SpellCasting.cs:7008, 7061; Spells_F.cs:174 |
-| SPL-114 (new) | Components, concentration | NPC cast path skips pouch check, concentration tracking and casting-while-concentrating | NPC | Med | SpellCasting.cs:1691-1712, 1956, 2350-2356 |
+| SPL-112 (new) | Caster choices | NPC energy type forced to Fire, Fire Shield warm, Disguise Self own race, or a stale PC choice is inherited | PC | Med | GameManager.SpellCasting.cs:7132, 7061; Spells_F.cs:177 |
+| SPL-114 (new) | Components, concentration | NPC cast path skips pouch check, concentration tracking and casting-while-concentrating | NPC | Med | SpellCasting.cs:1720-1742, 1956, 2350-2356 |
 | CHR-070 (new) | Class choices | NPC clerics have domains (slots, caster-level bonuses, the shared War feat grant) and alignment-chosen spontaneous casting since 2026-10-14 (CRE-062), but the AI cannot execute the conversion or activate a domain power (Strength, Destruction, Death, Sun, Travel, Luck, elemental turning run only through the PC Domain Power button) and a neutral cleric has no choice; NPC wizards cannot specialize or have familiars | PC | Med | NPCSetup.cs:681-988; SpellcastingComponent.cs:1048-1058 |
 | CRE-039 (new) | Monster specials | Breath, auras, spittle, engulf, acid spray, frightful presence only on the AI turn | NPC | Med | AIService.cs:170-192, 735, 780 |
 | CRE-041 (fixed 2026-10-14) | NPC max HP | Toughness was re-added to MM hp totals and class levels on a monster got a maximum first die; now the spawn leaves the counted feat HP out of `MaxHP` (`ClassProgression.ExcludeCountedFeatHitPoints`) and every averaged die, PC or NPC, uses the MM pooled average (owner ruling 2026-10-11; `ClassProgression.PooledAverageHitDice`) | both | Med | ClassProgression.cs, CreatureClassEngine.cs (CalculateClassHP) |
 | ITM-069 (new) | Equipment changes | Free for PCs via the sheet; only mindless undead NPCs can re-equip (free) | PC | Med | InventoryUI.cs:576-606; UndeadMindlessAIProfile.cs:93-126 |
-| CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3980-3991 vs NPCTurns.cs:46-49 |
+| CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3981-3992 vs NPCTurns.cs:46-49 |
 | CMB-017 | Cleave | NPCs never cleave; PCs only on defensive or natural single attacks | PC | Med | CombatFlowService.cs:887-947 |
 | CMB-018 | Charge end | Flanking only on NPC charge; bull-rush charge and Spirited Charge PC only | NPC | Med | SupportActions.cs:1674 vs 1968 |
 | CMB-015 | Overrun | Separate PC and NPC paths (AoO, prone, push, defender choice); the opposed check is shared since 2026-10-07 | depends | Med | OverrunSystem.cs (move-through, `ResolveOverrunOpposedCheck`); CharacterController.cs (`ResolveOverrun`) |
 | CMB-019 | Ammunition | Only PC attacks check and spend ammo | NPC | Med | CombatFlowService.cs:565-847 |
 | AI-055 | TWF, off-hand (flurry shared since CHR-003, 2026-10-14) | No NPC executor | PC | Med | NPCTurns.cs:1213, 1286 |
 | SPL-091 | Summons | NPC summon spends the slot and does nothing | PC | Med | NPCTurns.cs:913-915 |
-| AI-009, AI-054 | Items, class abilities, pick up | PC-only executors | PC | Med | GameManager.cs:4372-4378, 9240-9313 |
+| AI-009, AI-054 | Items, class abilities, pick up | PC-only executors | PC | Med | GameManager.cs:4373-4379, 9240-9313 |
 | SPL-018 | Saves | The character's bonuses are shared (`SaveRules`, CHR-018); the spell-and-caster bonuses (Charm Person, Hideous Laughter, the ward, Lullaby) only on the SpellCaster.Cast path | depends | Med | SpellCaster.cs (GetSaveModifier); SpellSaveResolver.cs (RollSave) |
 | CORE-015 | Death | Post-victory rest revives dead PCs | PC | Med | GameManager.cs:1018 |
 | ITM-010 | Armor speed | Baked into 9 NPC entries; never applied to PCs | PC | Med | NPCDatabase_P.cs:207 |
-| SPL-113 (new) | Weapon buff spells | Fizzle on the NPC path; stale PC weapon pick can leak | PC | Low | SpellCasting.cs:7216-7246 |
+| SPL-113 (new) | Weapon buff spells | Fizzle on the NPC path; stale PC weapon pick can leak | PC | Low | SpellCasting.cs:7340-7370 |
 | CHR-069 (new) | Rage ticks (the bardic half fixed 2026-10-15, CHR-026) | Rage ticks only in StartPCTurn | depends | Low | GameManager.cs (`StartPCTurn`) |
 | GRID-019 (new) | Movement legality | NPC executors skip "5-ft step taken" and "grappling" checks | NPC | Low | CombatActions.cs:1108-1191 |
 | CMB-093 (new) | Sanctuary | Attacker save exists only in AI target selection | PC | Low | AIService.cs:1721-1790 |
-| CMB-098 (new, bull rush done) | RAW choices | Forced for non-controllable actors (grab, escape, overrun avoid, disarm item). The bull rush push and follow is one decision for both sides since 2026-10-07: CombatUI prompt or `AIService.ChooseBullRushPush` -> `AIProfile.ChooseBullRushPush` | depends | Low | GrappleSystem.cs:413, 1433; OverrunSystem.cs; NPCTurns.cs (disarm item) |
+| CMB-098 (new, bull rush done) | RAW choices | Forced for non-controllable actors (grab, escape, overrun avoid, disarm item). The bull rush push and follow is one decision for both sides since 2026-10-07: CombatUI prompt or `AIService.ChooseBullRushPush` -> `AIProfile.ChooseBullRushPush` | depends | Low | GrappleSystem.cs:414, 1433; OverrunSystem.cs; NPCTurns.cs (disarm item) |
 | CMB-099 (fixed 2026-10-09) | Coup de grace | NPC paid the cost against a crit-immune target; `GetAdjacentHelplessEnemiesForCoupDeGrace` now skips such targets for the button and the AI | both | Low | StandardManeuvers.cs |
 | CMB-101 (new) | Casting while grappled | NPC has no path; NPC core lacks legality check | PC | Low | AIService.cs:161-165 |
-| CMB-103 (new) | Grapple Move | NPC spends action, never moves | PC | Low | GrappleSystem.cs:1551-1555, 1696 |
+| CMB-103 (new) | Grapple Move | NPC spends action, never moves | PC | Low | GrappleSystem.cs:1552-1556, 1696 |
 | CMB-104 (new) | Maneuver reach | Kiter AI can trip or disarm at range | NPC | Low | AIService.cs:1010-1019 |
 | CRE-040 (new) | Bombardier acid spray | Made-up save and damage | NPC | Low | NPCTurns.cs:1070-1111 |
-| SPL-115 (new) | Held charge | PC only | PC | Low | SpellCasting.cs:1483-1630 |
-| SPL-116 (new) | Cast-source flags | PC wand/scroll flags skip NPC ASF | NPC | Low | SpellCasting.cs:217-219 |
-| SPL-117 (new) | Mirror Image swap | Controllable casters only | PC | Low | GameManager_MirrorImage.cs:413 |
+| SPL-115 (new) | Held charge | PC only | PC | Low | SpellCasting.cs:1504-1656 |
+| SPL-116 (new) | Cast-source flags | PC wand/scroll flags skip NPC ASF | NPC | Low | SpellCasting.cs:233-235 |
+| SPL-117 (new) | Mirror Image swap | Controllable casters only | PC | Low | GameManager_MirrorImage.cs:415 |
 | SPL-118 (new) | Invisibility break order | Before counterspell for NPC, after for PC | PC | Low | NPCTurns.cs:867-879 |
 | SPL-119 (new) | AoE ally/enemy filter | Inverted for non-Player-team casters (latent) | depends | Low | AoESystem.cs:615-625 |
 | ITM-070 (new) | Charmed potion | Separate potion resolution | NPC | Low | CharmedBehaviorController.cs:178-215 |
 | CHR-076 (new) | Commoner weapon | An NPC commoner is proficient with the first simple weapon it carries (DMG p.109); a PC who takes commoner levels never chooses one | NPC | Low | CreatureProficiency.cs (`FirstCarriedSimpleWeapon`); CharacterStats.cs (`IsProficientWithWeapon`) |
 | AI-057 (new) | Reload then fire | NPC stops after reload | PC | Low | NPCTurns.cs:1142-1150 |
 | AI-053 | Disabled at 0 HP | NPC loses the turn | PC | Low | AIService.cs:66 |
-| CMB-074 | Crawl, drop prone | PC only | PC | Low | GameManager.cs:7053-7387 |
-| SPL-017 | Spell range | Stats.Level vs GetCasterLevel; footprint vs anchor | depends | Low | SpellCasting.cs:1400; NPCTurns.cs:812 |
+| CMB-074 | Crawl, drop prone | PC only | PC | Low | GameManager.cs:7054-7388 |
+| SPL-017 | Spell range | Stats.Level vs GetCasterLevel; footprint vs anchor | depends | Low | SpellCasting.cs:1421; NPCTurns.cs:812 |
 
 Dropped after spot-check:
 - ITEM-3 / SIDE-12 ("PC ranged full attack provokes no AoO") is refuted. The Full Attack button is shown only when `UsingInnateNaturalAttacks && HasMultipleNaturalAttackTypes` (ActionButtonPanel.cs:594-613), and the defensive full-attack button is always hidden (:614). So no ranged attack reaches that coroutine. The same applies to the "PC Full Attack button skips ammo" clause of ITEM-2.

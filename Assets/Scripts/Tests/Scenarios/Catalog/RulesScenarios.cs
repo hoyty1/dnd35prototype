@@ -7389,20 +7389,18 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// The handler DC helper (private GameManager.GetSpellSaveDC, called by every GameManager spell handler) adds the
-        /// pending cast's Heighten (PHB p.95) for the pending spell only. Sets and restores _pendingSpell and
-        /// _pendingMetamagic by reflection.
+        /// pending cast's Heighten (PHB p.95) for the pending spell only. Sets and restores the pending spell and metamagic
+        /// through GameManager.Harness_SetPendingCast (TST-006); the helper itself is still reached by reflection.
         /// </summary>
         private static bool HandlerHeightenCheck(ScenarioContext ctx, SpellData hold)
         {
             GameManager gm = GameManager.Instance;
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-            System.Reflection.FieldInfo spellField = typeof(GameManager).GetField("_pendingSpell", flags);
-            System.Reflection.FieldInfo mmField = typeof(GameManager).GetField("_pendingMetamagic", flags);
             System.Reflection.MethodInfo helper = typeof(GameManager).GetMethod("GetSpellSaveDC", flags, null,
                 new[] { typeof(CharacterController), typeof(SpellData) }, null);
-            if (gm == null || spellField == null || mmField == null || helper == null)
+            if (gm == null || helper == null)
             {
-                ctx.Note("spell-dc mismatch: GameManager, _pendingSpell, _pendingMetamagic or GetSpellSaveDC not found");
+                ctx.Note("spell-dc mismatch: GameManager or GetSpellSaveDC not found");
                 return false;
             }
 
@@ -7415,20 +7413,18 @@ namespace Tests.Scenarios
             heighten.Toggle(MetamagicFeatId.HeightenSpell);
             heighten.HeightenToLevel = 5;
 
-            object oldSpell = spellField.GetValue(gm);
-            object oldMm = mmField.GetValue(gm);
+            SpellData oldSpell = gm.Harness_GetPendingSpell();
+            MetamagicData oldMm = gm.Harness_GetPendingMetamagic();
             int heightened, plain;
             try
             {
-                spellField.SetValue(gm, pending);
-                mmField.SetValue(gm, heighten);
+                gm.Harness_SetPendingCast(pending, heighten);
                 heightened = (int)helper.Invoke(gm, new object[] { wizard, pending });
                 plain = (int)helper.Invoke(gm, new object[] { wizard, other });
             }
             finally
             {
-                spellField.SetValue(gm, oldSpell);
-                mmField.SetValue(gm, oldMm);
+                gm.Harness_SetPendingCast(oldSpell, oldMm);
             }
 
             int expectedHeightened = 10 + 5 + s.INTMod + focus;

@@ -25,6 +25,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.DEATH_WARD) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDeathWardSpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -63,6 +64,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.DIVINE_POWER) return false;
         if (caster == null || caster.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDivinePowerSpellEffect));
         if (!result.Success) return true;
 
         // Personal spell — target is always caster
@@ -125,6 +127,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.DISMISSAL) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDismissalSpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -331,6 +334,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDeathKnellSpellEffect));
+
         // Per PHB: target must be a living creature with -1 or fewer HP
         // In combat prototype, we check if target is dying (HP <= -1 and not dead)
         int targetHP = target.Stats.CurrentHP;
@@ -397,6 +402,8 @@ public partial class GameManager
     {
         if (!IsDimensionDoorSpell(spell) || caster == null || caster.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDimensionDoorSpellEffect));
 
         if (result == null)
             return true;
@@ -664,6 +671,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDimensionalAnchorSpellEffect));
 
         // Ranged touch attack must have hit
         if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))

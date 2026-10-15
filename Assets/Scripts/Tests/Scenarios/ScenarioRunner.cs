@@ -661,6 +661,7 @@ namespace Tests.Scenarios
                     string path = Path.Combine(RunDir, Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "") + ".jsonl");
                     job.Trace.WriteJsonl(path);
                     r.Path = path.Replace('\\', '/');
+                    WriteCastStages(job, Path.GetFileNameWithoutExtension(path));
                     r.Events = job.Trace.Events.Count;
                 }
                 catch (Exception ex)
@@ -1365,6 +1366,7 @@ namespace Tests.Scenarios
             string path = Path.Combine(RunDir, slug + ".jsonl");
             trace.WriteJsonl(path);
             result.Path = path.Replace('\\', '/');
+            WriteCastStages(job, slug);
 
             string repKey = job.Def.Id + "|" + job.Seed;
             if (job.Options.Repeat > 1)
@@ -1474,6 +1476,28 @@ namespace Tests.Scenarios
             try { ScenarioFastMode.Restore(); }
             catch (Exception ex) { job.Notes.Add("restore fast mode: " + ex.Message); }
         }
+
+        /// <summary>
+        /// Writes the job's cast stages (CastStageTrace, batch 11) to &lt;RunDir&gt;/&lt;jobId&gt;/caststages.jsonl, where the
+        /// job id is the trace file's name without .jsonl. Only jobs that marked a stage get the file; it is not hashed,
+        /// and a failed write is a job note, never a verdict change.
+        /// </summary>
+        private void WriteCastStages(ScenarioJob job, string jobId)
+        {
+            if (job.Trace == null || job.Trace.CastStageCount == 0)
+                return;
+            try
+            {
+                job.Trace.WriteCastStages(Path.Combine(RunDir, jobId, CastStagesFileName));
+            }
+            catch (Exception ex)
+            {
+                job.Notes.Add("caststages write: " + ex.Message);
+            }
+        }
+
+        /// <summary>The per-job cast-stage side file (Logs/Scenarios/&lt;runId&gt;/&lt;jobId&gt;/caststages.jsonl).</summary>
+        public const string CastStagesFileName = "caststages.jsonl";
 
         private static string Slug(string id)
         {

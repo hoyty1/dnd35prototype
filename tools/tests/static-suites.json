@@ -1382,6 +1382,17 @@
       "notes": "SPL-037: the ApplySpellBuff branches that sat below the generic branch, applied through GameManager.Harness_ApplySpellBuff (editor-only suite): the SpellEffectRouting table, the generic branch adding a missing StatusEffectManager, Barkskin (enhancement bonus to natural armor by caster level, stacking with armor and natural armor, not with an amulet, ending with the spell), Magic Fang once, Levitate, Continual Flame, Dancing Lights, Shrink Item, Alter Self (no Strength bonus, owner ruling 2026-10-11; the AI skips it, SPL-135), the duration cantrips and instantaneous ones, Lullaby and its -2 against sleep, True Seeing, Mislead, Protection from Spells, Spell Turning, Globe of Invulnerability (its tracked effect; blocking 4th level is checked by rules/spell-buff-dispatch), Heal on the living, undead (harm; the 1 hp floor only on a successful save, a failed save destroys, owner interpretation 2026-10-11) and constructs and SpellCaster.Cast no longer healing, Disintegrate dice and disintegration, Plane Shift reading the cast's save, Resurrection, Dispel Magic checking every spell (targeted) or stopping at the first success (area), Break Enchantment against the victimizing enchantments and transmutations, Barkskin scaled in StatusEffectManager.AddEffect (staff CL 13: +5), Disintegrate with Maximize and Empower, the globe ending with its tracked effect, Restoration and Greater Restoration dispelling ability penalties, and the branches SpellCategoryClassifier's reclassification had kept out: Dispel Magic, Break Enchantment, Remove Fear, See Invisibility, detection, Restoration, Greater Restoration, Stone to Flesh (PHB p.223, p.271, p.275, p.285, p.203, p.250, p.248, p.213, p.216, p.279, p.197, p.235, p.253, p.264, p.249, p.296, p.254, p.266, p.282, p.236, p.239, p.222, p.262, p.272, p.207, p.93, p.97)"
     },
     {
+      "type": "Tests.Magic.SpellRoutingGoldenTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 294,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 2 (docs/designs/cast_core_batch11.md): for every SpellDatabase spell, the EffectType after SpellCategoryClassifier.ReclassifyAll, TargetType, AoEShapeType, SpellEffectRouting.ReachesApplySpellBuff, the GameManager.BeginPendingSpellTargeting branch of a PC cast (aoe, summon, swarm, wish, self, single, grease) and the TryNPCPerformSpellCast data refusal (Area target type), computed from data without casting and compared with tools/tests/spell-routing-golden.json (292 spells, generated 2026-10-15); a changed, added or removed spell is one failure naming it. Regenerate with WriteGolden() only for a deliberate routing change and list the changed spells in the commit body. Added 2026-10-15."
+    },
+    {
       "type": "Tests.Magic.SpellDiceRulesTests",
       "needs": "either",
       "skip": "",

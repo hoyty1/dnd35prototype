@@ -228,7 +228,7 @@ encounter:  SetupEnemyEncounter (NPCSetup.cs:128) -> NPCDatabase.Get -> BuildEnc
             -> ApplyScenarioSpawnOverrides
 dungeon:    DungeonEncounterSpawner.BuildSpawnDefinition (clone, class levels, templates)
             -> NPCDatabase.RegisterExternal("spawn_...") -> ApplyRandomEncounter -> SetupEnemyEncounter (as above)
-summon:     GameManager.SpawnSummonedCreature (Spell/Resolution/GameManager.SpellCasting.cs:250)
+summon:     GameManager.SpawnSummonedCreature (Spell/Resolution/GameManager.SpellCasting.cs:267)
             -> Clone, clear AppliedTemplateIds, add option template, ApplyTemplatesClone -> InitializeNPCFromDefinition
 ```
 

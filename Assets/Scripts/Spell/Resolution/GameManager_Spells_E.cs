@@ -39,6 +39,8 @@ public partial class GameManager
         if (!IsEnervationSpell(spell) || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveEnervationSpellEffect));
+
         if (result == null)
             return true;
 

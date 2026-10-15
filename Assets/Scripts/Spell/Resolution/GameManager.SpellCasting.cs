@@ -35,6 +35,8 @@ public partial class GameManager
     {
         if (caster == null || _pendingSpell == null) return false;
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(TryConsumePendingSpellCast));
+
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         var spellComp = caster.Spellcasting;
         if (spellComp == null)
@@ -52,10 +54,12 @@ public partial class GameManager
                 caster.Actions.UseFullRoundAction();
             else
                 caster.CommitStandardAction();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
         }
         else
         {
             spellComp.MarkQuickenedSpellCast();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
 
         int slotLevelToConsume = _pendingSpell.SpellLevel;
@@ -181,6 +185,7 @@ public partial class GameManager
         {
             Debug.Log($"[ScrollCast] Skipping spell slot consumption — casting from scroll.");
             ConsumeScrollAfterCast(ActivePC);
+            MarkCastSpend(spellComp, spell, "scroll");
             return true;
         }
 
@@ -189,21 +194,32 @@ public partial class GameManager
         {
             Debug.Log($"[WandCast] Skipping spell slot consumption — casting from wand.");
             ConsumeWandChargeAfterCast(ActivePC);
+            MarkCastSpend(spellComp, spell, "wand");
             return true;
         }
 
         if (isSpontaneous)
         {
-            if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
-                return spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
-
-            return spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+            bool spentSpontaneous = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                ? spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId)
+                : spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+            MarkCastSpend(spellComp, spell, spentSpontaneous ? "spontaneous-slot" : "not-spent");
+            return spentSpontaneous;
         }
 
-        if (hasMetamagicApplied && slotLevelToConsume > 0)
-            return spellComp.CastWizardSpellWithMetamagic(spell, metamagic);
+        bool withMetamagic = hasMetamagicApplied && slotLevelToConsume > 0;
+        bool spent = withMetamagic
+            ? spellComp.CastWizardSpellWithMetamagic(spell, metamagic)
+            : spellComp.CastSpellFromSlot(spell);
+        MarkCastSpend(spellComp, spell, !spent ? "not-spent" : withMetamagic ? "metamagic-slot" : "slot");
+        return spent;
+    }
 
-        return spellComp.CastSpellFromSlot(spell);
+    /// <summary>The spend stage of <see cref="CastStageTrace"/> for the caster owning <paramref name="spellComp"/>; inert outside the harness.</summary>
+    private static void MarkCastSpend(SpellcastingComponent spellComp, SpellData spell, string detail)
+    {
+        if (ScenarioHooks.CastStage != null && spellComp != null)
+            CastStageTrace.Mark(spellComp.GetComponent<CharacterController>(), spell, CastStageTrace.Spend, detail);
     }
 
     private bool TryRollArcaneSpellFailure(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, out int roll, out int asfChance)
@@ -228,6 +244,7 @@ public partial class GameManager
         roll = DiceService.Percentile("Arcane spell failure");
 
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%"));
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, roll <= asfChance ? "asf-failed" : "asf-passed");
         return roll <= asfChance;
     }
 
@@ -634,6 +651,7 @@ public partial class GameManager
             }
 
             ClearSpellcastResourceSnapshot();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(PerformSummonSwarmCast));
 
             SummonMonsterOption option = new SummonMonsterOption
             {
@@ -743,6 +761,7 @@ public partial class GameManager
             }
 
             ClearSpellcastResourceSnapshot();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(PerformSummonMonsterCast));
 
             int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(_pendingSpell.SpellId);
             int selectedListLevel = _pendingSummonListLevel > 0 ? _pendingSummonListLevel : spellLevel;
@@ -861,6 +880,8 @@ public partial class GameManager
             return;
         }
 
+        // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests.PcRoutingBranch) mirrors the decision order from
+        // here down (Grease, Disguise Self, AoE shape, summon, swarm, Wish, self or single): keep them in step.
         if (IsPendingGreaseAreaCast())
         {
             EnterGreaseAreaTargetingMode(caster, _pendingSpell);
@@ -1495,6 +1516,8 @@ public partial class GameManager
     {
         if (caster == null || _pendingSpell == null) { ShowActionChoices(); return; }
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(HoldPendingMeleeTouchCharge));
+
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         CaptureSpellcastResourceSnapshot(caster);
@@ -1518,10 +1541,12 @@ public partial class GameManager
                 caster.Actions.UseFullRoundAction();
             else
                 caster.CommitStandardAction();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
         }
         else
         {
             spellComp.MarkQuickenedSpellCast();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
 
         bool consumed = true;
@@ -1627,6 +1652,7 @@ public partial class GameManager
 
             ClearSpellcastResourceSnapshot();
             spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "hold-charge");
 
             CombatUI.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}."));
             UpdateAllStatsUI();
@@ -1646,6 +1672,8 @@ public partial class GameManager
     {
         Debug.Log($"[SpellCasting] PerformSpellCast  caster={caster?.Stats?.CharacterName}  target={target?.Stats?.CharacterName}  spell={_pendingSpell?.Name}  testPanel={_testPanelCastActive}  scrollCast={_pendingScrollCastActive}");
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformSpellCast));
+
         // Clean up test-panel override now that the spell is resolving
         CleanupTestPanelCast();
 
@@ -1654,6 +1682,7 @@ public partial class GameManager
 
         if (!IsValidTargetForSpell(caster, target, _pendingSpell))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Legality, "invalid-target");
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{_pendingSpell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
             _pendingSpell = null;
             _pendingMetamagic = null;
@@ -1706,6 +1735,7 @@ public partial class GameManager
         {
             if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Legality, "no-component-pouch");
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{caster.Stats?.CharacterName} cannot cast {_pendingSpell.Name} — requires a {pouchFailure} for material components! Purchase one from the store (5 gp)."));
                 _pendingSpell = null;
                 _pendingMetamagic = null;
@@ -1722,6 +1752,7 @@ public partial class GameManager
             }
         }
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Legality, "ok");
         CaptureSpellcastResourceSnapshot(caster);
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
@@ -1735,12 +1766,14 @@ public partial class GameManager
             // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
             // Do NOT consume another action here.
             Debug.Log($"[{(isWandCast ? "WandCast" : "ScrollCast")}] {caster.Stats.CharacterName} casting from {(isWandCast ? "wand" : "scroll")} — action consumed via post-cast handler.");
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isWandCast ? "wand" : "scroll");
         }
         else if (isDeliveringHeldCharge)
         {
             // D&D 3.5e: discharging a held touch spell is a free action.
             // Do not consume standard/move actions here.
             Debug.Log($"[GameManager] {caster.Stats.CharacterName} discharging held touch spell as a free action.");
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "held-charge-delivery");
         }
         else if (!isQuickened)
         {
@@ -1751,6 +1784,7 @@ public partial class GameManager
                 caster.Actions.UseFullRoundAction();
             else
                 caster.CommitStandardAction();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
         }
         else
         {
@@ -1760,6 +1794,7 @@ public partial class GameManager
             {
                 casterSpellComp.MarkQuickenedSpellCast();
             }
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
 
         // Get spellcasting component
@@ -1893,6 +1928,7 @@ public partial class GameManager
             if (caster.HasActiveBlinkEffect)
             {
                 int blinkSpellRoll = DiceService.Percentile("Blink caster spell failure");
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Failure, blinkSpellRoll <= 20 ? "blink-failed" : "blink-passed");
                 if (blinkSpellRoll <= 20)
                 {
                     bool consumedOnBlink = ConsumePendingSpellSlot(
@@ -1987,6 +2023,8 @@ public partial class GameManager
             if (!isDeliveringHeldCharge)
             {
                 CounterspellResult counterspellResult = TryResolveCounterspell(caster, _pendingSpell);
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Counterspell,
+                    counterspellResult == null ? "none" : counterspellResult.Success ? "countered" : "not-countered");
                 if (counterspellResult != null && counterspellResult.Success)
                 {
                     // Spell was successfully countered — it has no effect
@@ -2015,6 +2053,7 @@ public partial class GameManager
             // the ring counters it with no action required. Ring becomes empty after use.
             if (target != null && _pendingSpell != null && CounterspellManager.TryRingCounterspell(target, _pendingSpell))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Ring, "countered");
                 Debug.Log($"[RingCounterspell] {_pendingSpell.Name} countered by Ring of Counterspells on {target.Stats?.CharacterName}!");
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
@@ -2041,6 +2080,7 @@ public partial class GameManager
 
             if (TryHandleMirrorImageSpellTargetAttack(caster, target, _pendingSpell, out string mirrorSpellLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.MirrorImage, "struck-image");
                 _lastCombatLog = mirrorSpellLog;
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
@@ -2069,6 +2109,7 @@ public partial class GameManager
                 && _pendingSpell.TargetType != SpellTargetType.Area)
             {
                 int blinkTargetRoll = DiceService.Percentile("Blink target spell failure");
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.TargetBlink, blinkTargetRoll <= 50 ? "missed" : "connects");
                 if (blinkTargetRoll <= 50)
                 {
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
@@ -2097,6 +2138,7 @@ public partial class GameManager
             }
 
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
 
             // The landed cast's effect step (ApplySpellBuff): every Buff, Debuff, Control, Illusion and Wall spell, and
             // the other spells ApplySpellBuff has a branch for. Shared with TryNPCPerformSpellCast (SPL-037).
@@ -2125,6 +2167,7 @@ public partial class GameManager
                 {
                     blockedByGlobe = true;
                     result.Success = false;
+                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Globe, "blocked");
                     CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName}."));
                 }
             }
@@ -2351,6 +2394,7 @@ public partial class GameManager
             if (!anyPriorHandled && !anyClericHandled && !anyCleric4Handled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp, result);
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Buff, appliedEffect != null ? "applied" : "no-effect");
 
                 // If this is a concentration spell, begin tracking concentration on the caster
                 if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration)
@@ -2379,6 +2423,7 @@ public partial class GameManager
                 else
                 {
                     retainedHeldChargeOnMiss = true;
+                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "held-charge-kept");
                 }
             }
 
@@ -2426,6 +2471,7 @@ public partial class GameManager
             {
                 if (EvaluateCombatEnd("ResolveSingleTargetSpell"))
                 {
+                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveSingleTargetSpell");
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
@@ -3542,6 +3588,8 @@ public partial class GameManager
     /// </summary>
     private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformAoESpellCast));
+
         // ── WALL OF ICE LINE-OF-EFFECT FILTERING (centralized) ──
         // Determine AoE origin for LoE checks based on spell shape:
         //   Burst spells: use centroid of AoE cells as origin (burst center)
@@ -3577,10 +3625,12 @@ public partial class GameManager
         if (_pendingScrollCastActive)
         {
             Debug.Log($"[ScrollCast] AoE scroll cast — action consumed via ConsumeScrollAfterCast.");
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "scroll");
         }
         else if (_pendingWandCastActive)
         {
             Debug.Log($"[WandCast] AoE wand cast — action consumed via ConsumeWandChargeAfterCast.");
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "wand");
         }
         else if (!isQuickened)
         {
@@ -3591,12 +3641,14 @@ public partial class GameManager
                 caster.Actions.UseFullRoundAction();
             else
                 caster.CommitStandardAction();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
         }
         else
         {
             var casterSpellComp = caster.Spellcasting;
             if (casterSpellComp != null)
                 casterSpellComp.MarkQuickenedSpellCast();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
         }
 
         // Get spellcasting component
@@ -3722,6 +3774,8 @@ public partial class GameManager
             // ── COUNTERSPELL CHECK (AoE spell cast path) ──
             {
                 CounterspellResult aoeCounterspellResult = TryResolveCounterspell(caster, _pendingSpell);
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Counterspell,
+                    aoeCounterspellResult == null ? "none" : aoeCounterspellResult.Success ? "countered" : "not-countered");
                 if (aoeCounterspellResult != null && aoeCounterspellResult.Success)
                 {
                     Debug.Log($"[Counterspell] AoE spell {_pendingSpell.Name} was countered! No effect.");
@@ -3747,6 +3801,7 @@ public partial class GameManager
 
             if (TryHandleConcealmentAreaSpellCast(caster, _pendingSpell, aoeCells, targets, out string concealmentAreaLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryHandleConcealmentAreaSpellCast));
                 _lastCombatLog = concealmentAreaLog;
 
                 if (isSpontaneous)
@@ -3773,6 +3828,7 @@ public partial class GameManager
             // ── Consecrate / Desecrate area effects (GameManager_HolyAreas.cs) ──
             if (TryResolveConsecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string consecrateLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveConsecrateAreaEffect));
                 _lastCombatLog = consecrateLog;
 
                 if (isSpontaneous)
@@ -3798,6 +3854,7 @@ public partial class GameManager
 
             if (TryResolveDesecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string desecrateLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveDesecrateAreaEffect));
                 _lastCombatLog = desecrateLog;
 
                 if (isSpontaneous)
@@ -3824,6 +3881,7 @@ public partial class GameManager
             // Lightning Bolt & Fireball — scalable AoE damage (1d6/CL, max 10d6)
             if (TryResolveScaledAoEDamageSpell(caster, _pendingSpell, targets, aoeCells, out string scaledDamagLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveScaledAoEDamageSpell));
                 _lastCombatLog = scaledDamagLog;
 
                 if (isSpontaneous)
@@ -3844,6 +3902,7 @@ public partial class GameManager
                 // Check for victory/defeat
                 if (EvaluateCombatEnd("ResolveScaledAoEDamageSpell"))
                 {
+                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveScaledAoEDamageSpell");
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     return;
@@ -3858,6 +3917,7 @@ public partial class GameManager
             // Daylight — persistent light area effect that counters/dispels darkness
             if (TryResolveDaylightSpell(caster, _pendingSpell, targets, aoeCells, out string daylightLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveDaylightSpell));
                 _lastCombatLog = daylightLog;
 
                 if (isSpontaneous)
@@ -3884,6 +3944,7 @@ public partial class GameManager
             // Wind Wall — persistent line area effect that deflects ranged attacks and disperses fog/smoke
             if (TryResolveWindWallSpell(caster, _pendingSpell, targets, aoeCells, out string windWallLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWindWallSpell));
                 _lastCombatLog = windWallLog;
 
                 if (isSpontaneous)
@@ -3910,6 +3971,7 @@ public partial class GameManager
             // Halt Undead — paralyzes up to 3 undead within 30 ft of each other (Will save for intelligent only)
             if (TryResolveHaltUndeadSpell(caster, _pendingSpell, targets, aoeCells, out string haltUndeadLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveHaltUndeadSpell));
                 _lastCombatLog = haltUndeadLog;
 
                 if (isSpontaneous)
@@ -3930,6 +3992,7 @@ public partial class GameManager
                 // Check for victory/defeat (paralyzed enemies don't typically end combat, but check anyway)
                 if (EvaluateCombatEnd("ResolveHaltUndeadSpell"))
                 {
+                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveHaltUndeadSpell");
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     return;
@@ -3943,36 +4006,42 @@ public partial class GameManager
 
             if (string.Equals(_pendingSpell.SpellId, SpellNames.HYPNOTISM, StringComparison.Ordinal))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveHypnotismSpell));
                 ResolveHypnotismSpell(caster, targets, aoeCells);
                 return;
             }
 
             if (string.Equals(_pendingSpell.SpellId, SpellNames.SLEEP, StringComparison.Ordinal))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveSleepSpell));
                 ResolveSleepSpell(caster, targets, aoeCells);
                 return;
             }
 
             if (string.Equals(_pendingSpell.SpellId, SpellNames.DEEP_SLUMBER, StringComparison.Ordinal))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveDeepSlumberSpell));
                 ResolveDeepSlumberSpell(caster, targets, aoeCells);
                 return;
             }
 
             if (string.Equals(_pendingSpell.SpellId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveColorSpraySpell));
                 ResolveColorSpraySpell(caster, targets, aoeCells);
                 return;
             }
 
             if (string.Equals(_pendingSpell.SpellId, SpellNames.FEAR, StringComparison.Ordinal))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveFearSpell));
                 ResolveFearSpell(caster, targets, aoeCells);
                 return;
             }
 
             if (TryResolveGlitterdustSpell(caster, _pendingSpell, targets, aoeCells, out string glitterdustLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveGlitterdustSpell));
                 _lastCombatLog = glitterdustLog;
 
                 if (isSpontaneous)
@@ -3998,6 +4067,7 @@ public partial class GameManager
 
             if (TryResolveWebSpell(caster, _pendingSpell, targets, aoeCells, out string webLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWebSpell));
                 _lastCombatLog = webLog;
 
                 if (isSpontaneous)
@@ -4024,6 +4094,7 @@ public partial class GameManager
             // Rainbow Pattern — AoE fascination (mind-affecting, up to 24 HD)
             if (TryResolveRainbowPatternAoE(caster, _pendingSpell, targets, aoeCells, out string rainbowLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveRainbowPatternAoE));
                 _lastCombatLog = rainbowLog;
 
                 if (isSpontaneous)
@@ -4056,6 +4127,7 @@ public partial class GameManager
             // ── Ice Storm (AoE, no save, 3d6 bludgeoning + 2d6 cold) ──
             if (TryResolveIceStormAoE(caster, _pendingSpell, targets, aoeCells, out string iceStormLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveIceStormAoE));
                 _lastCombatLog = iceStormLog;
 
                 if (isSpontaneous)
@@ -4073,7 +4145,7 @@ public partial class GameManager
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
 
-                if (EvaluateCombatEnd("IceStorm")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("IceStorm")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "IceStorm"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
@@ -4083,6 +4155,7 @@ public partial class GameManager
             // ── Shout (Cone AoE, 5d6 sonic, Fort half, deafen on fail) ──
             if (TryResolveShoutAoE(caster, _pendingSpell, targets, aoeCells, out string shoutLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveShoutAoE));
                 _lastCombatLog = shoutLog;
 
                 if (isSpontaneous)
@@ -4100,7 +4173,7 @@ public partial class GameManager
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
 
-                if (EvaluateCombatEnd("Shout")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("Shout")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Shout"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
@@ -4110,6 +4183,7 @@ public partial class GameManager
             // ── Wall of Fire (line wall, persistent area effect) ──
             if (TryResolveWallOfFireSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfFireLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWallOfFireSpell));
                 _lastCombatLog = wallOfFireLog;
 
                 if (isSpontaneous)
@@ -4145,6 +4219,7 @@ public partial class GameManager
                 List<CharacterController> wallTargets = targets;
                 HashSet<Vector2Int> wallAoeCells = aoeCells;
 
+                CastStageTrace.Mark(caster, wallSpell, CastStageTrace.Handler, nameof(ResolveWallOfIceWithReflexSaves));
                 ResolveWallOfIceWithReflexSaves(caster, wallSpell, wallTargets, wallAoeCells, wallLog =>
                 {
                     _lastCombatLog = wallLog;
@@ -4183,6 +4258,7 @@ public partial class GameManager
                 List<CharacterController> forceTargets = targets;
                 HashSet<Vector2Int> forceAoeCells = aoeCells;
 
+                CastStageTrace.Mark(caster, forceSpell, CastStageTrace.Handler, nameof(ResolveWallOfForce));
                 ResolveWallOfForce(caster, forceSpell, forceTargets, forceAoeCells, forceLog =>
                 {
                     _lastCombatLog = forceLog;
@@ -4211,6 +4287,7 @@ public partial class GameManager
 
             if (TryResolveFlamingSphereAoECast(caster, _pendingSpell, aoeCells, out string flamingSphereLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveFlamingSphereAoECast));
                 _lastCombatLog = flamingSphereLog;
 
                 if (isSpontaneous)
@@ -4237,6 +4314,7 @@ public partial class GameManager
             // ── Entangle (persistent entangling area effect) ──
             if (TryResolveEntangleSpell(caster, _pendingSpell, targets, aoeCells, out string entangleLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveEntangleSpell));
                 _lastCombatLog = entangleLog;
 
                 if (isSpontaneous)
@@ -4263,6 +4341,7 @@ public partial class GameManager
             // ── Soften Earth and Stone (instantaneous difficult terrain) ──
             if (TryResolveSoftenEarthSpell(caster, _pendingSpell, targets, aoeCells, out string softenEarthLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSoftenEarthSpell));
                 _lastCombatLog = softenEarthLog;
 
                 if (isSpontaneous)
@@ -4289,6 +4368,7 @@ public partial class GameManager
             // ── Spike Stones (persistent movement-damage area) ──
             if (TryResolveSpikeStoneSpell(caster, _pendingSpell, targets, aoeCells, out string spikeStonesLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSpikeStoneSpell));
                 _lastCombatLog = spikeStonesLog;
 
                 if (isSpontaneous)
@@ -4315,6 +4395,7 @@ public partial class GameManager
             // ── Plant Growth (instantaneous overgrowth) ──
             if (TryResolvePlantGrowthSpell(caster, _pendingSpell, targets, aoeCells, out string plantGrowthLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolvePlantGrowthSpell));
                 _lastCombatLog = plantGrowthLog;
 
                 if (isSpontaneous)
@@ -4341,6 +4422,7 @@ public partial class GameManager
             // ── Calm Animals (AoE HD-budget animal calming) ──
             if (TryResolveCalmAnimalsSpell(caster, _pendingSpell, targets, aoeCells, out string calmAnimalsLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCalmAnimalsSpell));
                 _lastCombatLog = calmAnimalsLog;
 
                 if (isSpontaneous)
@@ -4367,6 +4449,7 @@ public partial class GameManager
             // ── Calm Emotions (AoE morale/emotion suppression) ──
             if (TryResolveCalmEmotionsSpell(caster, _pendingSpell, targets, aoeCells, out string calmEmotionsLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCalmEmotionsSpell));
                 _lastCombatLog = calmEmotionsLog;
 
                 if (isSpontaneous)
@@ -4395,6 +4478,7 @@ public partial class GameManager
             // Cone of Cold — 60-ft cone, 1d6/CL cold (max 15d6), Reflex half
             if (TryResolveConeOfColdSpell(caster, _pendingSpell, targets, aoeCells, out string coneOfColdLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveConeOfColdSpell));
                 _lastCombatLog = coneOfColdLog;
                 if (isSpontaneous)
                 {
@@ -4405,7 +4489,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("ConeOfCold")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("ConeOfCold")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ConeOfCold"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4414,6 +4498,7 @@ public partial class GameManager
             // Chain Lightning — 1d6/CL (max 20d6) primary, half secondary
             if (TryResolveChainLightningSpell(caster, _pendingSpell, targets, aoeCells, out string chainLightningLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveChainLightningSpell));
                 _lastCombatLog = chainLightningLog;
                 if (isSpontaneous)
                 {
@@ -4424,7 +4509,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("ChainLightning")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("ChainLightning")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ChainLightning"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4433,6 +4518,7 @@ public partial class GameManager
             // Circle of Death — [Death] 40-ft burst, kills 1d4 HD/CL, Fort negates
             if (TryResolveCircleOfDeathSpell(caster, _pendingSpell, targets, aoeCells, out string circleOfDeathLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCircleOfDeathSpell));
                 _lastCombatLog = circleOfDeathLog;
                 if (isSpontaneous)
                 {
@@ -4443,7 +4529,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("CircleOfDeath")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("CircleOfDeath")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "CircleOfDeath"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4452,6 +4538,7 @@ public partial class GameManager
             // Crushing Despair — 30-ft cone, -2 attacks/saves/checks, Will negates
             if (TryResolveCrushingDespairSpell(caster, _pendingSpell, targets, aoeCells, out string crushingDespairLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCrushingDespairSpell));
                 _lastCombatLog = crushingDespairLog;
                 if (isSpontaneous)
                 {
@@ -4470,6 +4557,7 @@ public partial class GameManager
             // Mind Fog — 20-ft radius, -10 Wis checks & Will saves, Will negates
             if (TryResolveMindFogSpell(caster, _pendingSpell, targets, aoeCells, out string mindFogLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveMindFogSpell));
                 _lastCombatLog = mindFogLog;
                 if (isSpontaneous)
                 {
@@ -4488,6 +4576,7 @@ public partial class GameManager
             // Mass Suggestion — multi-target charm, Will negates
             if (TryResolveMassSuggestionSpell(caster, _pendingSpell, targets, aoeCells, out string massSuggestionLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveMassSuggestionSpell));
                 _lastCombatLog = massSuggestionLog;
                 if (isSpontaneous)
                 {
@@ -4506,6 +4595,7 @@ public partial class GameManager
             // Insect Plague — swarm damage + nausea
             if (TryResolveInsectPlagueSpell(caster, _pendingSpell, targets, aoeCells, out string insectPlagueLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveInsectPlagueSpell));
                 _lastCombatLog = insectPlagueLog;
                 if (isSpontaneous)
                 {
@@ -4516,7 +4606,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("InsectPlague")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("InsectPlague")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "InsectPlague"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4525,6 +4615,7 @@ public partial class GameManager
             // Wall of Thorns — wall dealing 25 - AC damage to creatures passing through
             if (TryResolveWallOfThornsSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfThornsLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWallOfThornsSpell));
                 _lastCombatLog = wallOfThornsLog;
                 if (isSpontaneous)
                 {
@@ -4535,7 +4626,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("WallOfThorns")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("WallOfThorns")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "WallOfThorns"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4544,6 +4635,7 @@ public partial class GameManager
             // Persistent Image — illusion creation (no combat effect)
             if (TryResolvePersistentImageSpell(caster, _pendingSpell, targets, aoeCells, out string persistentImageLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolvePersistentImageSpell));
                 _lastCombatLog = persistentImageLog;
                 if (isSpontaneous)
                 {
@@ -4564,6 +4656,7 @@ public partial class GameManager
             // Sunburst — 80-ft burst, 6d6 damage + blindness
             if (TryResolveSunburstSpell(caster, _pendingSpell, targets, aoeCells, out string sunburstLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSunburstSpell));
                 _lastCombatLog = sunburstLog;
                 if (isSpontaneous)
                 {
@@ -4574,7 +4667,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("Sunburst")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("Sunburst")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Sunburst"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4583,6 +4676,7 @@ public partial class GameManager
             // Earthquake — 80-ft spread, knocks prone + debris damage
             if (TryResolveEarthquakeSpell(caster, _pendingSpell, targets, aoeCells, out string earthquakeLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveEarthquakeSpell));
                 _lastCombatLog = earthquakeLog;
                 if (isSpontaneous)
                 {
@@ -4593,7 +4687,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("Earthquake")) { _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("Earthquake")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Earthquake"); _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4602,6 +4696,7 @@ public partial class GameManager
             // Shield of Law — AoE buff, +4 deflection AC + +4 saves
             if (TryResolveShieldOfLawSpell(caster, _pendingSpell, targets, aoeCells, out string shieldOfLawLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveShieldOfLawSpell));
                 _lastCombatLog = shieldOfLawLog;
                 if (isSpontaneous)
                 {
@@ -4620,6 +4715,7 @@ public partial class GameManager
             // ── Evard's Black Tentacles (persistent grappling area effect) ──
             if (TryResolveBlackTentaclesAoECast(caster, _pendingSpell, aoeCells, out string blackTentaclesLog))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveBlackTentaclesAoECast));
                 _lastCombatLog = blackTentaclesLog;
 
                 if (isSpontaneous)
@@ -4649,6 +4745,8 @@ public partial class GameManager
                 foreach (Vector2Int cell in aoeCells)
                     NotifyFireDamageAtPosition(cell, _pendingSpell.Name);
             }
+
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "generic-area-loop");
 
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
@@ -4680,6 +4778,8 @@ public partial class GameManager
                     if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect aoeBlockingGlobe))
                     {
                         logBuilder.AppendLine($"  🛡 Blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(aoeBlockingGlobe)} (spell level {_pendingSpell.SpellLevel})!");
+                        if (ScenarioHooks.CastStage != null)
+                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Globe, "blocked " + target.Stats.CharacterName);
                         continue;
                     }
 
@@ -4688,6 +4788,8 @@ public partial class GameManager
                     if (SpellEffectRouting.IsTrackedEffectType(_pendingSpell.EffectType))
                     {
                         var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+                        if (ScenarioHooks.CastStage != null)
+                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Buff, (appliedEffect != null ? "applied " : "no-effect ") + target.Stats.CharacterName);
 
                         // Track concentration for the first target of a concentration AoE effect
                         if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
@@ -4706,6 +4808,8 @@ public partial class GameManager
                         // VOLUNTARY SAVE FAILURE: AoE damage spells also respect voluntary save failure for allies.
                         bool aoeForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
                         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
+                        if (ScenarioHooks.CastStage != null)
+                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
                         if (result.RequiredSave)
                         {
@@ -4742,6 +4846,8 @@ public partial class GameManager
                         // VOLUNTARY SAVE FAILURE: AoE healing spells also respect voluntary save failure for allies.
                         bool aoeHealForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
                         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
+                        if (ScenarioHooks.CastStage != null)
+                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
                         logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
                         if (result.EmpowerBonus > 0)
@@ -4783,6 +4889,7 @@ public partial class GameManager
             // Check for victory/defeat
             if (EvaluateCombatEnd("ResolveAOESpell"))
             {
+                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveAOESpell");
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 return;
@@ -4943,6 +5050,7 @@ public partial class GameManager
 
         if (EvaluateCombatEnd("ResolveHypnotismSpell"))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveHypnotismSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5058,6 +5166,7 @@ public partial class GameManager
 
         if (EvaluateCombatEnd("ResolveSleepSpell"))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveSleepSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5169,6 +5278,7 @@ public partial class GameManager
 
         if (EvaluateCombatEnd("ResolveDeepSlumberSpell"))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveDeepSlumberSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5254,6 +5364,7 @@ public partial class GameManager
 
         if (EvaluateCombatEnd("ResolveColorSpraySpell"))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveColorSpraySpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5515,6 +5626,8 @@ public partial class GameManager
         if (!IsCauseFearSpell(spell) || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveCauseFearSpellEffect));
+
         if (result != null && result.MindAffectingImmunityBlocked)
             return true;
 
@@ -5626,6 +5739,8 @@ public partial class GameManager
     {
         if (!IsGhoulTouchSpell(spell) || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveGhoulTouchSpellEffect));
 
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
@@ -5782,6 +5897,8 @@ public partial class GameManager
     {
         if (!IsScareSpell(spell) || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveScareSpellEffect));
 
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
@@ -6054,6 +6171,7 @@ public partial class GameManager
 
         if (EvaluateCombatEnd("ResolveFearSpell"))
         {
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveFearSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -6084,6 +6202,8 @@ public partial class GameManager
 
         if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRayOfEnfeeblementSpellEffect));
 
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1));
         int penalty = CalculateRayOfEnfeeblementPenalty(caster);
@@ -6129,6 +6249,8 @@ public partial class GameManager
 
         if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveTouchOfIdiocySpellEffect));
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
@@ -6192,6 +6314,8 @@ public partial class GameManager
     {
         if (!IsMelfsAcidArrowSpell(spell) || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveMelfsAcidArrowSpellEffect));
 
         if (result == null)
             return true;
@@ -8238,6 +8362,7 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Entangled somatic concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {roll} + {bonus} = {total} vs DC {dc}."));
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, success ? "entangled-passed" : "entangled-lost");
         if (success)
             return true;
 
@@ -8290,6 +8415,7 @@ public partial class GameManager
 
         if (caster == null || spell == null || isDeliveringHeldCharge)
         {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Provocation, "no-provocation");
             onResolved?.Invoke(true);
             return;
         }
@@ -8297,6 +8423,7 @@ public partial class GameManager
         var threateningEnemies = GetThreateningEnemiesForSpellcasting(caster);
         if (threateningEnemies == null || threateningEnemies.Count == 0)
         {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Provocation, "not-threatened");
             onResolved?.Invoke(true);
             return;
         }
@@ -8323,6 +8450,7 @@ public partial class GameManager
             OnCancel = () =>
             {
                 _spellcastProvocationCancelled = true;
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Provocation, "cancelled");
                 onResolved?.Invoke(false);
             }
         });
@@ -8342,7 +8470,10 @@ public partial class GameManager
 
         List<CharacterController> threateningEnemies = GetThreateningEnemiesForSpellcasting(caster);
         if (threateningEnemies == null || threateningEnemies.Count == 0)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Provocation, "not-threatened");
             return true;
+        }
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)."));
 
@@ -8378,6 +8509,8 @@ public partial class GameManager
         }
 
         ScenarioHooks.ThreatenedCast?.Invoke(caster, spell, castDefensively, proceeds, threateningEnemies.Count);
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Provocation,
+            castDefensively ? (proceeds ? "defensive-passed" : "defensive-lost") : (proceeds ? "aoo-proceeds" : "aoo-lost"));
         return proceeds;
     }
 
@@ -8752,11 +8885,16 @@ public partial class GameManager
         if (caster == null || newSpell == null) return true;
 
         var concMgr = caster.Concentration;
-        if (concMgr == null || !concMgr.IsConcentrating) return true;
+        if (concMgr == null || !concMgr.IsConcentrating)
+        {
+            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "not-concentrating");
+            return true;
+        }
 
         if (ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM)
             && !string.Equals(newSpell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
+            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "swarm-tail");
             string endLog = concMgr.EndConcentration();
             if (!string.IsNullOrEmpty(endLog))
                 CombatUI?.ShowCombatLog(CombatLogHelper.Color(endLog, CombatLogHelper.ColorOrange));
@@ -8770,6 +8908,7 @@ public partial class GameManager
         // without a tracked effect and never reach BeginConcentration; without this the caster would keep both going.
         if (newSpell.DurationType == DurationType.Concentration)
         {
+            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "switched");
             string switchLog = concMgr.EndConcentration();
             if (!string.IsNullOrEmpty(switchLog))
                 CombatUI?.ShowCombatLog(CombatLogHelper.Color(switchLog, CombatLogHelper.ColorOrange));
@@ -8781,6 +8920,7 @@ public partial class GameManager
         // DC = 15 + spell level of the NEW spell
         bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM);
         var result = concMgr.CheckConcentrationOnCasting(newSpell.SpellLevel);
+        CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, result.Success ? "kept" : "lost");
         if (!string.IsNullOrEmpty(result.LogMessage))
         {
             string color = result.Success ? "#88CCFF" : "#FF6644";

@@ -153,6 +153,8 @@ public partial class GameManager
         if (!IsGreaterInvisibilitySpell(spell) || caster == null || caster.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveGreaterInvisibilitySpellEffect));
+
         if (result == null)
             return true;
 

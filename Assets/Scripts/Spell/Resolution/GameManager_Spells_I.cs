@@ -37,6 +37,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveImbueWithSpellAbilitySpellEffect));
+
         if (!result.Success)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", "Imbue with Spell Ability failed (spell did not succeed)."));
@@ -520,6 +522,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveInvisibilityPurgeSpellEffect));
 
         if (!result.Success)
             return true;

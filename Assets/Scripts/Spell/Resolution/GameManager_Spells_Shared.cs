@@ -37,6 +37,7 @@ public partial class GameManager
         SpellData spell, SpellResult result)
     {
         if (spell == null || spell.SpellId != SpellNames.CHAOS_HAMMER) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveChaosHammerSpellEffect));
         return ResolveAlignmentBurstSpell(caster, target, spell, result,
             "Chaos Hammer", "chaotic", "⚡🌀",
             a => AlignmentHelper.IsLawful(a),
@@ -51,6 +52,7 @@ public partial class GameManager
         SpellData spell, SpellResult result)
     {
         if (spell == null || spell.SpellId != SpellNames.HOLY_SMITE) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveHolySmiteSpellEffect));
         return ResolveAlignmentBurstSpell(caster, target, spell, result,
             "Holy Smite", "good", "⚡✨",
             a => AlignmentHelper.IsEvil(a),
@@ -65,6 +67,7 @@ public partial class GameManager
         SpellData spell, SpellResult result)
     {
         if (spell == null || spell.SpellId != SpellNames.ORDERS_WRATH) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveOrdersWrathSpellEffect));
         return ResolveAlignmentBurstSpell(caster, target, spell, result,
             "Order's Wrath", "lawful", "⚡⚖",
             a => AlignmentHelper.IsChaotic(a),
@@ -79,6 +82,7 @@ public partial class GameManager
         SpellData spell, SpellResult result)
     {
         if (spell == null || spell.SpellId != SpellNames.UNHOLY_BLIGHT) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveUnholyBlightSpellEffect));
         return ResolveAlignmentBurstSpell(caster, target, spell, result,
             "Unholy Blight", "evil", "⚡💀",
             a => AlignmentHelper.IsGood(a),

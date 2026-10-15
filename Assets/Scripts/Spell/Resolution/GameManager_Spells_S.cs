@@ -32,6 +32,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSearingLightSpellEffect));
+
         if (!result.Success)
             return true; // Spell was cast but missed ranged touch
 
@@ -105,6 +107,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.SPELL_IMMUNITY) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSpellImmunitySpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -420,6 +423,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSilenceSpellEffect));
+
         if (!result.Success)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔇", $"{target.Stats.CharacterName} resists {caster.Stats.CharacterName}'s Silence!"));
@@ -459,6 +464,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSoundBurstStunEffect) + " (continues)");
 
         // Sound Burst damage is handled by normal spell damage resolution.
         // Here we check for the stun: Fort save or stunned for 1 round.
@@ -522,6 +529,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSpiritualWeaponSpellEffect));
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.283: 1 round/level, no cap (SPL-002)
@@ -695,6 +704,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveShieldOtherSpellEffect) + " (continues)");
 
         if (!result.Success)
             return true; // Spell was cast but failed (shouldn't happen for harmless)

@@ -224,6 +224,7 @@ namespace Tests.Scenarios
         private readonly Dictionary<CharacterController, Action<int, int>> _hpHandlers = new Dictionary<CharacterController, Action<int, int>>();
         private readonly Dictionary<CharacterController, Action<int, int>> _nlHandlers = new Dictionary<CharacterController, Action<int, int>>();
         private readonly Dictionary<CharacterController, JsonObj> _turnStartSnap = new Dictionary<CharacterController, JsonObj>();
+        private readonly List<string> _castStages = new List<string>();
         private static readonly Regex TagRegex = new Regex("<[^>]*>", RegexOptions.CultureInvariant);
 
         private Action<TurnStartedEvent> _onTurnStarted;
@@ -241,6 +242,9 @@ namespace Tests.Scenarios
         public IReadOnlyList<TraceEvent> Events => _events;
         public int TurnIndex => _turn;
         public IEnumerable<CharacterController> KnownActors => _order;
+
+        /// <summary>The cast-stage lines recorded so far (<see cref="ScenarioHooks.CastStage"/>; not part of the hashed trace).</summary>
+        public int CastStageCount => _castStages.Count;
 
         public ScenarioTrace(ScenarioJob job, GameManager gm)
         {
@@ -430,6 +434,7 @@ namespace Tests.Scenarios
             ScenarioHooks.ManeuverResolved = ScenarioHooks.Safe<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult>("Trace.Maneuver", OnManeuver);
             ScenarioHooks.ThreatenedCast = ScenarioHooks.Safe<CharacterController, SpellData, bool, bool, int>("Trace.ThreatenedCast", OnThreatenedCast);
             ScenarioHooks.SpellCast = ScenarioHooks.Safe<CharacterController, CharacterController, SpellData>("Trace.SpellCast", OnSpellCast);
+            ScenarioHooks.CastStage = ScenarioHooks.Safe<CharacterController, SpellData, string, string>("Trace.CastStage", OnCastStage);
             ScenarioHooks.Moved = ScenarioHooks.Safe<CharacterController, Vector2Int, Vector2Int, string>("Trace.Moved", OnMoved);
             ScenarioHooks.ConditionChanged = ScenarioHooks.Safe<CharacterController, CombatConditionType, bool, int, string>("Trace.Condition", OnCondition);
             ScenarioHooks.CombatLog = ScenarioHooks.Safe<string>("Trace.Log", OnLog);
@@ -705,6 +710,28 @@ namespace Tests.Scenarios
             _job.Checks.OnActed(caster, ev, "cast");
         }
 
+        /// <summary>
+        /// A cast stage (CastStageTrace.Mark). Written to the side file caststages.jsonl, never to the trace: it emits no
+        /// event, never registers an actor (an unknown caster is named, not keyed) and leaves the progress clock alone, so
+        /// the trace and its hash are the same with or without it. <c>afterSeq</c> is the seq of the last trace event
+        /// before the stage, which ties the line to the trace (ScenarioTraceDiff).
+        /// </summary>
+        private void OnCastStage(CharacterController caster, SpellData spell, string stage, string detail)
+        {
+            if (Closed)
+                return;
+            var o = new JsonObj();
+            o.Set("i", _castStages.Count + 1)
+             .Set("afterSeq", _events.Count)
+             .Set("r", _gm != null ? _gm.CurrentRound : 0)
+             .Set("t", _turn)
+             .Set("by", TryKeyOf(caster) ?? (caster != null && caster.Stats != null ? "name:" + caster.Stats.CharacterName : null))
+             .Set("spell", spell != null ? spell.SpellId : null)
+             .Set("stage", stage)
+             .Set("detail", detail);
+            _castStages.Add(Json.Serialize(o));
+        }
+
         private void OnMoved(CharacterController mover, Vector2Int from, Vector2Int to, string type)
         {
             if (Closed)
@@ -827,6 +854,21 @@ namespace Tests.Scenarios
             foreach (TraceEvent e in _events)
                 sb.Append(e.ToJson(false)).Append('\n');
             Json.WriteFileAtomic(path, sb.ToString());
+        }
+
+        /// <summary>
+        /// Writes the cast-stage lines to <paramref name="path"/> (JSONL, one stage per line) when there are any; returns
+        /// whether it wrote. The file is outside the hashed trace (<see cref="HashLines"/>).
+        /// </summary>
+        public bool WriteCastStages(string path)
+        {
+            if (_castStages.Count == 0)
+                return false;
+            var sb = new StringBuilder();
+            foreach (string line in _castStages)
+                sb.Append(line).Append('\n');
+            Json.WriteFileAtomic(path, sb.ToString());
+            return true;
         }
 
         public List<string> LastLines(int n)

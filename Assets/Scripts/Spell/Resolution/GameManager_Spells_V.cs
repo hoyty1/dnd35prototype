@@ -40,6 +40,8 @@ public partial class GameManager
         if (!IsVampiricTouchSpell(spell) || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveVampiricTouchSpellEffect));
+
         if (result == null)
             return true;
 

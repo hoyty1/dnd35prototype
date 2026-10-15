@@ -25,6 +25,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.FREEDOM_OF_MOVEMENT) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveFreedomOfMovementSpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -166,6 +167,8 @@ public partial class GameManager
         CharacterController recipient = target ?? caster;
         if (recipient == null || recipient.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveFireShieldSpellEffect));
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);

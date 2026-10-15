@@ -1267,21 +1267,38 @@ public partial class GameManager
         if (npc == null || target == null || spell == null || npc.Stats == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSpellCast));
+
         if (!npc.Actions.HasStandardAction)
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "no-standard-action");
             return false;
+        }
 
         if (target.Stats.IsDead)
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "target-dead");
             return false;
+        }
 
         SpellcastingComponent spellComp = npc.Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells)
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "no-spellcasting");
             return false;
+        }
 
         if (!spellComp.CanCast(spell))
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "cannot-cast");
             return false;
+        }
 
         if (!IsValidTargetForSpell(npc, target, spell))
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "invalid-target");
             return false;
+        }
 
         int rangeSquares = spell.GetRangeSquaresForCasterLevel(npc.Stats.GetCasterLevel());
         if (rangeSquares <= 0)
@@ -1289,14 +1306,25 @@ public partial class GameManager
 
         int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
         if (distance > rangeSquares)
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "out-of-range");
             return false;
+        }
 
+        // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests) mirrors this data refusal: keep them in step.
         if (spell.TargetType == SpellTargetType.Area)
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Legality, "area-refused");
             return false;
+        }
 
         if (!npc.CommitStandardAction())
+        {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Cost, "commit-failed");
             return false;
+        }
 
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Cost, "standard");
         ScenarioHooks.SpellCast?.Invoke(npc, target, spell);
 
         // Entangled (DC 15 + level) and grappled/pinned (DC 20 + level) casting Concentration,
@@ -1309,6 +1337,7 @@ public partial class GameManager
         }
 
         bool consumed = spellComp.CastSpellFromSlot(spell);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Spend, consumed ? "slot" : "not-spent");
         if (!consumed)
             return false;
 
@@ -1323,6 +1352,7 @@ public partial class GameManager
         if (npc.HasActiveBlinkEffect)
         {
             int blinkNpcRoll = DiceService.Percentile("Blink NPC caster spell failure");
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Failure, blinkNpcRoll <= 20 ? "blink-failed" : "blink-passed");
             if (blinkNpcRoll <= 20)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{npc.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkNpcRoll} ≤ 20%)"));
@@ -1344,6 +1374,8 @@ public partial class GameManager
 
         // ── COUNTERSPELL CHECK (NPC spell cast path) ──
         CounterspellResult npcCounterspellResult = TryResolveCounterspell(npc, spell);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Counterspell,
+            npcCounterspellResult == null ? "none" : npcCounterspellResult.Success ? "countered" : "not-countered");
         if (npcCounterspellResult != null && npcCounterspellResult.Success)
         {
             Debug.Log($"[Counterspell] NPC {npc.Stats.CharacterName}'s {spell.Name} was countered! No effect.");
@@ -1354,6 +1386,7 @@ public partial class GameManager
         // Ring of Counterspells (DMG p.230) on the target, as on the PC path (SPL-006).
         if (CounterspellManager.TryRingCounterspell(target, spell))
         {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Ring, "countered");
             UpdateAllStatsUI();
             return true;
         }
@@ -1363,6 +1396,7 @@ public partial class GameManager
 
         if (TryHandleMirrorImageSpellTargetAttack(npc, target, spell, out string mirrorSpellLog))
         {
+            CastStageTrace.Mark(npc, spell, CastStageTrace.MirrorImage, "struck-image");
             _lastCombatLog = mirrorSpellLog;
             CombatUI?.ShowCombatLog(_lastCombatLog);
             UpdateAllStatsUI();
@@ -1375,6 +1409,7 @@ public partial class GameManager
             && spell.TargetType != SpellTargetType.Area)
         {
             int blinkTargetRoll = DiceService.Percentile("Blink NPC target spell failure");
+            CastStageTrace.Mark(npc, spell, CastStageTrace.TargetBlink, blinkTargetRoll <= 50 ? "missed" : "connects");
             if (blinkTargetRoll <= 50)
             {
                 string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
@@ -1385,6 +1420,7 @@ public partial class GameManager
         }
 
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
 
         // Same routing as PerformSpellCast (SPL-037): tracked effect types, plus the spells ApplySpellBuff has a branch for.
         bool appliesTrackedEffect = SpellEffectRouting.ReachesApplySpellBuff(spell);
@@ -1406,6 +1442,7 @@ public partial class GameManager
             if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
             {
                 result.Success = false;
+                CastStageTrace.Mark(npc, spell, CastStageTrace.Globe, "blocked");
                 CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{spell.Name} (level {spell.SpellLevel}) is blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName}."));
             }
         }
@@ -1489,7 +1526,10 @@ public partial class GameManager
             handledPrayer = TryResolvePrayerSpellEffect(npc, target, spell, result);
 
         if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && !handledPrayer && result.Success && appliesTrackedEffect && !effectNegatedBySave)
-            ApplySpellBuff(npc, target, spell, spellComp, result);
+        {
+            ActiveSpellEffect npcAppliedEffect = ApplySpellBuff(npc, target, spell, spellComp, result);
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Buff, npcAppliedEffect != null ? "applied" : "no-effect");
+        }
 
         if (result.DamageDealt > 0)
             CheckConcentrationOnDamage(target, result.DamageDealt);

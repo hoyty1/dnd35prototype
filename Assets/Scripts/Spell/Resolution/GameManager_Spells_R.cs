@@ -31,6 +31,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRemoveDiseaseSpellEffect));
+
         if (!result.Success)
             return true;
 
@@ -108,6 +110,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRemoveBlindnessDeafnessSpellEffect));
+
         if (!result.Success)
             return true;
 
@@ -161,6 +165,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.REPEL_VERMIN) return false;
         if (caster == null || caster.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRepelVerminSpellEffect));
         if (!result.Success) return true;
 
         // Personal spell
@@ -257,6 +262,8 @@ public partial class GameManager
     {
         if (!IsRayOfExhaustionSpell(spell) || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRayOfExhaustionSpellEffect));
 
         if (result == null)
             return true;
@@ -488,6 +495,8 @@ public partial class GameManager
 
         if (caster == null || caster.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRemoveCurseSpellEffect));
 
         if (result == null)
             return true;

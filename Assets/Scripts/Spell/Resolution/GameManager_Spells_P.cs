@@ -82,6 +82,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolvePrayerSpellEffect));
+
         if (!result.Success)
             return true;
 
@@ -127,6 +129,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.POISON) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolvePoisonSpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -195,6 +198,8 @@ public partial class GameManager
     {
         if (!IsPhantasmalKillerSpell(spell) || target == null || target.Stats == null)
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolvePhantasmalKillerSpellEffect));
 
         if (result == null)
             return true;

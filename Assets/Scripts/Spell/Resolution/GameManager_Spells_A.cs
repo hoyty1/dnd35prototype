@@ -33,6 +33,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveAlignWeaponSpellEffect));
+
         if (!result.Success)
             return true;
 

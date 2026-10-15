@@ -280,6 +280,7 @@ public partial class GameManager
             return;
         }
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseAreaCast));
         CurrentSubPhase = PlayerSubPhase.Animating;
         CaptureSpellcastResourceSnapshot(caster);
 
@@ -308,6 +309,7 @@ public partial class GameManager
             }
 
             ClearSpellcastResourceSnapshot();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(CreateGreaseArea));
 
             int saveDC = GetSpellSaveDC(caster, _pendingSpell);
             int durationRounds = GetGreaseDurationRounds(caster);
@@ -411,6 +413,7 @@ public partial class GameManager
             return;
         }
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseObjectCast));
         CurrentSubPhase = PlayerSubPhase.Animating;
         CaptureSpellcastResourceSnapshot(caster);
 
@@ -439,6 +442,7 @@ public partial class GameManager
             }
 
             ClearSpellcastResourceSnapshot();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveGreaseObjectCast));
 
             _lastCombatLog = ResolveGreaseObjectCast(caster, target);
             CombatUI?.ShowCombatLog(_lastCombatLog);
@@ -462,6 +466,7 @@ public partial class GameManager
             return;
         }
 
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseArmorCast));
         CurrentSubPhase = PlayerSubPhase.Animating;
         CaptureSpellcastResourceSnapshot(caster);
 
@@ -490,6 +495,7 @@ public partial class GameManager
             }
 
             ClearSpellcastResourceSnapshot();
+            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "grease-armor");
 
             int durationRounds = GetGreaseDurationRounds(caster);
             StatusEffectManager statusMgr = target.StatusEffectManager;

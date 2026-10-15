@@ -41,6 +41,8 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.HOLD_ANIMAL, StringComparison.Ordinal))
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveHoldAnimalSpellEffect));
+
         if (target == null || target.Stats == null)
             return true;
 
@@ -305,6 +307,8 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.PRODUCE_FLAME, StringComparison.Ordinal))
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveProduceFlameSpellEffect));
+
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
@@ -363,6 +367,8 @@ public partial class GameManager
     {
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.HEAT_METAL, StringComparison.Ordinal))
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveHeatMetalSpellEffect));
 
         if (target == null || target.Stats == null)
             return true;
@@ -456,6 +462,8 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMINATE_ANIMAL, StringComparison.Ordinal))
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveDominateAnimalSpellEffect));
+
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
@@ -509,6 +517,8 @@ public partial class GameManager
     {
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.COMMAND_PLANTS, StringComparison.Ordinal))
             return false;
+
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveCommandPlantsSpellEffect));
 
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;

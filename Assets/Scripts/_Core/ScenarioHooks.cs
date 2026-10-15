@@ -7,7 +7,7 @@ using UnityEngine;
 /// Test instrumentation. Every member is null or false in normal play; rules code must never read these values.
 /// The scenario harness (editor only) sets them to observe or steer a fight: force dice through
 /// <see cref="RollFilter"/>, record attacks, maneuvers, NPC casts, moves, conditions and phase changes, script
-/// turns, and force the initiative head. Raise sites are single null-conditional calls, so the game
+/// turns, trace the stages of every spell cast (<see cref="CastStage"/>), and force the initiative head. Raise sites are single null-conditional calls, so the game
 /// behaves identically while the hooks are null.
 ///
 /// Handlers run inline inside rules code. Install every observer through <c>Safe</c> (any arity)
@@ -46,6 +46,15 @@ public static class ScenarioHooks
     /// The PC cast pipelines do not raise it.
     /// </summary>
     public static Action<CharacterController, CharacterController, SpellData> SpellCast;
+
+    /// <summary>
+    /// A stage point of a spell cast was reached (CastStageTrace.Mark): caster, spell, stage, detail (may be null).
+    /// Raised by every cast pipeline (PerformSpellCast, PerformAoESpellCast, HoldPendingMeleeTouchCharge,
+    /// TryConsumePendingSpellCast, TryNPCPerformSpellCast, the Grease casts, HandleConcentrationOnCasting) and by
+    /// the spell effect handlers when they claim a cast. The scenario harness writes it to a side file
+    /// (caststages.jsonl) that is not part of the hashed trace; handlers must not register actors or emit trace events.
+    /// </summary>
+    public static Action<CharacterController, SpellData, string, string> CastStage;
 
     /// <summary>A position change: mover, from, to, movement type ("move", "path-move", "teleport", ...).</summary>
     public static Action<CharacterController, Vector2Int, Vector2Int, string> Moved;
@@ -210,6 +219,7 @@ public static class ScenarioHooks
         if (ManeuverResolved != null) set.Add(nameof(ManeuverResolved));
         if (ThreatenedCast != null) set.Add(nameof(ThreatenedCast));
         if (SpellCast != null) set.Add(nameof(SpellCast));
+        if (CastStage != null) set.Add(nameof(CastStage));
         if (Moved != null) set.Add(nameof(Moved));
         if (ConditionChanged != null) set.Add(nameof(ConditionChanged));
         if (CombatLog != null) set.Add(nameof(CombatLog));
@@ -230,6 +240,7 @@ public static class ScenarioHooks
         ManeuverResolved = null;
         ThreatenedCast = null;
         SpellCast = null;
+        CastStage = null;
         Moved = null;
         ConditionChanged = null;
         CombatLog = null;

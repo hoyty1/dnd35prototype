@@ -462,6 +462,24 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Sets the pending cast's spell and metamagic directly, with no menu, targeting or other side effect (TST-006: replaces
+    /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which batch 11 turns into properties). Pass a clone,
+    /// never a database template. Read the old values first with <see cref="Harness_GetPendingSpell"/> and
+    /// <see cref="Harness_GetPendingMetamagic"/> and put them back afterwards.
+    /// </summary>
+    internal void Harness_SetPendingCast(SpellData spell, MetamagicData metamagic)
+    {
+        _pendingSpell = spell;
+        _pendingMetamagic = metamagic;
+    }
+
+    /// <summary>The pending cast's spell, or null.</summary>
+    internal SpellData Harness_GetPendingSpell() => _pendingSpell;
+
+    /// <summary>The pending cast's metamagic, or null.</summary>
+    internal MetamagicData Harness_GetPendingMetamagic() => _pendingMetamagic;
+
+    /// <summary>
     /// Confirms an open self-centered area preview (Bless, Prayer: "Left-click to confirm"), as the player's left click
     /// does (HandleInputModeLeftClick); false when no such preview is open. Writes no game state of its own.
     /// </summary>

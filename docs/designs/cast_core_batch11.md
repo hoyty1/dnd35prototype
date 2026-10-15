@@ -1,6 +1,6 @@
 # Batch 11: one spell-cast core for PCs and NPCs
 
-> Status (2026-10-15): design approved for building; nothing built yet. Produced by a read-only design workflow (three mappers, three independent designs, three judges who all chose the strangler design, one synthesis), then amended with seven rules decisions made the same day under the owner's delegation (three-judge panels). PC_NPC_PARITY step 9. Line numbers in step tasks are approximate: anchor on code. **Where any step text below still calls something "pending the owner's ruling" or an "owner question", decisions D1-D7 supersede it: apply the decision in the step named in the decisions table.**
+> Status (2026-10-15): design approved for building; steps 1 and 2 built (see below). Produced by a read-only design workflow (three mappers, three independent designs, three judges who all chose the strangler design, one synthesis), then amended with seven rules decisions made the same day under the owner's delegation (three-judge panels). PC_NPC_PARITY step 9. Built so far: step 1 (filing, 34b7f2e) and step 2 (the cast-stage side channel, `ScenarioTraceDiff` and the spell routing golden suite, 2026-10-15; its scenario runs are the batch 11 reference, docs/TESTING.md 3.2). Line numbers in step tasks are approximate: anchor on code. **Where any step text below still calls something "pending the owner's ruling" or an "owner question", decisions D1-D7 supersede it: apply the decision in the step named in the decisions table.**
 
 ## Summary
 
@@ -68,7 +68,7 @@ The DC 15 + spell level check in the code has no source in the rules. PCs and NP
 
 **Change needed.** Yes, behaviour changes.
 
-1. **`GameManager.HandleConcentrationOnCasting`** (`F:\DNDPrototype\Assets\Scripts\Spell\Resolution\GameManager.SpellCasting.cs:8750`, called about 18 times there and 3 times in `GameManager_Grease.cs`). Today it does three things:
+1. **`GameManager.HandleConcentrationOnCasting`** (`F:\DNDPrototype\Assets\Scripts\Spell\Resolution\GameManager.SpellCasting.cs:8883`, called about 18 times there and 3 times in `GameManager_Grease.cs`). Today it does three things:
    - Summon Swarm goes into its tail. This is correct.
    - A new concentration spell ends the old one. This is correct.
    - Otherwise it rolls `ConcentrationManager.CheckConcentrationOnCasting` (`ConcentrationManager.cs:221`) against `ConcentrationService.GetCastingWhileConcentratingDC` (`ConcentrationService.cs:146`, 15 + the new spell's level). On a success the old spell is kept. This third branch is not in the rules.
@@ -218,7 +218,7 @@ Cited by the readings:
 Reading chosen: the requirement is plainly written for every caster. Who carries what is a gap. I filled it with the DMG rule that the DM outfits NPCs, the PHB starting kits and the sample holy symbols. Every text keeps an effect, and the reading is consistent with RULES_COVERAGE 4.1 (gear melds in wild shape unless Natural Spell applies).
 
 **What the code does today** (unanimous across the readings, cross-checked):
-- `SpellComponentRegistry.ValidatePouchRequirement` (`Assets/Scripts/Spell/Casting/SpellComponentSystem.cs:276`) is called only from PC `PerformSpellCast` (`Spell/Resolution/GameManager.SpellCasting.cs:1702-1723`), gated on `HasMaterialComponent`, which is set on about 36-38 spells.
+- `SpellComponentRegistry.ValidatePouchRequirement` (`Assets/Scripts/Spell/Casting/SpellComponentSystem.cs:276`) is called only from PC `PerformSpellCast` (`Spell/Resolution/GameManager.SpellCasting.cs:1731-1753`), gated on `HasMaterialComponent`, which is set on about 36-38 spells.
 - `PerformAoESpellCast`, the summon and Grease paths through `TryConsumePendingSpellCast`, and `TryNPCPerformSpellCast` skip it (SPL-114).
 - No focus check exists; `SpellData.HasDivineFocus` is never read and is set on only 2 spells.
 - No holy symbol or holly item exists in `ItemDatabase`.
@@ -393,11 +393,11 @@ Not verified in Play mode.
 The books do make SR (PHB p.177), the save ("Half", PHB p.177) and Evasion (PHB p.50) explicitly per creature, and that stays per creature under this reading. So every text has an effect. DMG p.36 (a multiple-target spell damages its creatures simultaneously) fits this reading but does not decide it. The DMG p.36 Spell Roll variant (the save DC is rolled once for many creatures) is optional and only an analogy, so it carries no weight. The alternative reading is that "XdY to every creature" means a fresh roll for each creature, perhaps citing PHB p.176's "Creatures" areas acting like targeted spells. But that sentence covers the Creatures area subtype, not spreads or lines, and the per-creature reading leaves Chain Lightning's "half as much" and the golem's "damage total" without a referent. Nothing in RULES_COVERAGE.md 4.1 conflicts with this. Printed pages are cited; the pdf page is the printed page + 1.
 
 **Change needed.** Yes, this changes behaviour. Average damage stays the same, but all creatures in one area now take the same pre-save number, so their results move together, and the log shows one damage roll per cast. What the code does today, checked by grep and by reading the source, not verified in Play mode:
-- `GameManager.TryResolveScaledAoEDamageSpell` (Assets/Scripts/Spell/Resolution/GameManager_Spells_Shared.cs, lines 250-253), which handles Fireball, Lightning Bolt and Call Lightning and is called from GameManager.SpellCasting.cs:3825, rolls the d6s inside the per-target loop, after the SR check. Wall of Ice sections get a separate roll (about lines 305-308). Fix: roll once before the loop, halve per creature on a save, and give objects the same total.
+- `GameManager.TryResolveScaledAoEDamageSpell` (Assets/Scripts/Spell/Resolution/GameManager_Spells_Shared.cs, lines 250-253), which handles Fireball, Lightning Bolt and Call Lightning and is called from GameManager.SpellCasting.cs:3882, rolls the d6s inside the per-target loop, after the SR check. Wall of Ice sections get a separate roll (about lines 305-308). Fix: roll once before the loop, halve per creature on a save, and give objects the same total.
 - The Cone of Cold handler (GameManager_Spells_Phase1.cs, around line 73) also rolls inside its target loop. Fix: the same as above.
 - The generic area branch of `PerformAoESpellCast` (GameManager.SpellCasting.cs, about lines 4672-4737) calls `SpellCaster.Cast` once per target. `Cast` rolls `SpellDiceRules.Roll` (SpellCaster.cs:509) and applies Empower on every call. Fix: roll the dice once per cast, with Maximize and Empower, and pass the pre-rolled total into `Cast` (for example as an optional parameter) so that `Cast` only resolves SR, the save, Evasion and mitigation for each target.
 - `TryNPCUseBombardierAcidSpray` (Assets/Scripts/_Core/GameManager.NPCTurns.cs, about lines 1553-1556) rolls 6d4 for each victim. Fix: roll once outside the loop. Separately, its dice labels are mislabelled "Fireball damage die" and "Fireball Reflex save", and its save DC is hard-coded at 12; check that against the MM.
-- Already correct: `NPCExecuteBreathWeaponForAI` (NPCTurns.cs:2020-2022) rolls `totalDamage` once. Chain Lightning (Phase1.cs:127-131) rolls the primary once and halves it for each secondary. Magic Missile rolls each missile separately.
+- Already correct: `NPCExecuteBreathWeaponForAI` (NPCTurns.cs:2060-2062) rolls `totalDamage` once. Chain Lightning (Phase1.cs:127-131) rolls the primary once and halves it for each secondary. Magic Missile rolls each missile separately.
 - `TryNPCPerformSpellCast` refuses area spells (AI-001), so the future shared NPC area-cast path must use the same roll-once code.
 Also: audit the other bespoke area handlers (Sunburst in Phase2 and others) with a grep for `DiceRoller`/`DiceService`/`SpellCaster.Cast` inside per-target loops. Add a static test showing that two creatures in one Fireball that both fail the save take identical damage, and that a creature that saves takes half of that same roll. Review the scenario assertions in Tests/Scenarios/Catalog/RulesScenarios.cs near line 7456, which reflects on `TryResolveScaledAoEDamageSpell` (line 7561), and any tests that count damage-die draws per target. Record this as a delegated RAW reading, dated, in docs/systems/RULES_COVERAGE.md 4.1, file it under the next free SPL ID, and label it in code comments.
 
@@ -528,7 +528,7 @@ These live in `Assets/Scripts/Spell/Casting/Core/`; partials are in `Spell/Resol
 - `CastContext`, one per cast:
   - `Request`, `Result`, `EffectNegatedBySave`, `Snapshot`, `CasterLevel`, `SaveDC` and a `LogPrefix` built once.
   - Helpers `IsBlockedByGlobe(t)` (effective, heightened level), `TargetForgoesSave(t)`, `RollSpellDice(dice)` (metamagic-aware), `RollSave(t, save)` (SaveRules plus the spell situational bonus) and `RollSpellResistance(t)` (one rule with Spell Penetration).
-  - `SpellcastResourceSnapshot` is today a private nested class (GameManager.cs:10761). It moves to an `internal sealed class CastResourceSnapshot` so the context can hold it, and it gains the scroll stack and both wand charge stores (ITM-034, ITM-084).
+  - `SpellcastResourceSnapshot` is today a private nested class (GameManager.cs:10764). It moves to an `internal sealed class CastResourceSnapshot` so the context can hold it, and it gains the scroll stack and both wand charge stores (ITM-034, ITM-084).
 - `ICastDecider`, the only PC/NPC difference:
   - `FillChoices`, `CanFill(choice)`, `ChooseProvocation` (Defensive, Proceed or Cancel), `ChooseTouchDelivery`, `ForgoSave(ctx, self)`, `ChooseMirrorImageSwap` and `IsSynchronous`.
   - `UiCastDecider` wraps the existing dialogs and the AoO prompt.
@@ -604,13 +604,13 @@ Format: follow the entry format in docs/issues/SPL.md ('- **SPL-NNN** · **Sev**
 
 Findings to file:
 (a) Globe of Invulnerability timing:
-  - PerformSpellCast (Assets/Scripts/Spell/Resolution/GameManager.SpellCasting.cs) tests LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell (~:2121-2130) only after SpellCaster.Cast (~:2099) has already applied damage and healing. The NPC path has the same order (Assets/Scripts/_Core/GameManager.NPCTurns.cs ~:1403-1411).
+  - PerformSpellCast (Assets/Scripts/Spell/Resolution/GameManager.SpellCasting.cs) tests LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell (~:2163-2173) only after SpellCaster.Cast (~:2140) has already applied damage and healing. The NPC path has the same order (Assets/Scripts/_Core/GameManager.NPCTurns.cs ~:1439-1448).
   - The custom AoE handlers in PerformAoESpellCast never check the Globe. The only call sites are ~:2124, ~:4680 and NPCTurns ~:1406.
   - DoesAnyGlobeBlockSpell compares the base SpellLevel, not the heightened level.
   - Rules: PHB p.246 (lesser globe) and p.236 (globe); Heighten, PHB p.95.
 (b) Failed casts still land effects:
   - The Sound Burst stun guard (~:2230) and TryResolveSoundBurstStunEffect ignore result.Success.
-  - TryResolveAnimateRopeSpellEffect (_Core/GameManager.cs ~:9939-9965) entangles when Success=false and no attack roll was made (deafened failure, Globe).
+  - TryResolveAnimateRopeSpellEffect (_Core/GameManager.cs ~:9940-9968) entangles when Success=false and no attack roll was made (deafened failure, Globe).
 (c) Quickened casts go through ResolveSpellcastProvocation (~:1967 and ~:3705). PHB p.98: a quickened spell does not provoke.
 (d) Quicken is offered for spontaneous casts and is honoured before the spontaneous full-round rule. CombatUI.cs ~:3078 hides the warning. PHB p.98 Special forbids it. The defect is latent behind SPL-040.
 (e) The entangled casting check, ResolveEntangledSomaticCastingConcentration (~:8216-8262):
@@ -630,9 +630,9 @@ Findings to file:
   - the generic AoE loop rolls it once per target;
   - custom area handlers never roll it.
   RAW: one roll per casting.
-(k) Wish spends nothing: HandleWishSpellCast (GameManager_Spells_W.cs ~:1041) spends no slot or action, provokes nothing and rolls no ASF. Mark it 9th level, outside the 1-8 scope.
+(k) Wish spends nothing: HandleWishSpellCast (GameManager_Spells_W.cs ~:1043) spends no slot or action, provokes nothing and rolls no ASF. Mark it 9th level, outside the 1-8 scope.
 (l) HandleConcentrationOnCasting order:
-  - It runs before ResolveSpellcastProvocation on every pipeline (~:1965/1967, ~:1611/1613, ~:3703/3705, GameManager_Grease.cs ~:293/295).
+  - It runs before ResolveSpellcastProvocation on every pipeline (~:1965/1967, ~:1611/1613, ~:3703/3705, GameManager_Grease.cs ~:294/295).
   - So a cast cancelled at the AoO prompt still has rolled and possibly ended the old concentration spell.
   - Also note that the check itself is not in the PHB (decided 2026-10-15 as decision D1: it is removed in step raw-concentration-rules).
 
@@ -683,7 +683,7 @@ Tooling only. Runtime behaviour and every scenario trace hash must stay unchange
    - Compare the result with tools/tests/spell-routing-golden.json, generated in this commit. A diff fails with the changed spells listed.
    - Register the suite with the StaticSuiteRunner like the others.
 
-7. Harness accessors (TST-006). Add Harness_SetPendingCast(spell, metamagic) and Harness_GetPendingSpell to _Core/GameManager.ScenarioHarness.cs. Switch the reflection on `_pendingSpell` and `_pendingMetamagic` in Assets/Scripts/Tests/Scenarios RulesScenarios.cs (~:7399-7577; grep the whole Tests folder for both names) to these accessors. Step 4 makes those fields properties, which would break GetField.
+7. Harness accessors (TST-006). Add Harness_SetPendingCast(spell, metamagic) and Harness_GetPendingSpell to _Core/GameManager.ScenarioHarness.cs. Switch the reflection on `_pendingSpell` and `_pendingMetamagic` in Assets/Scripts/Tests/Scenarios RulesScenarios.cs (~:7398-7573; grep the whole Tests folder for both names) to these accessors. Step 4 makes those fields properties, which would break GetField.
 
 8. Files and docs. New .cs files need the Unity-generated .meta: refresh through the Unity MCP and commit the metas; never hand-write them. Update docs/TESTING.md (side channel, diff tool, golden file).
 
@@ -695,6 +695,8 @@ Tooling only. Runtime behaviour and every scenario trace hash must stay unchange
 4. Record this run ID in the commit body as the batch 11 reference run.
 
 **Risk.** Low. An allocating or logging Mark would perturb hashes; the hash check catches it. Reflection pin changes must keep the scenario assertions identical.
+
+**Built (2026-10-15).** As planned, with these choices: the stage names are constants on `CastStageTrace` (`begin` with the pipeline's method name, then `legality`, `cost`, `distraction`, `failure`, `spend`, `concentration-on-cast`, `provocation`, `counterspell`, `ring`, `invisibility-break`, `mirror-image`, `target-blink`, `globe`, `spellcaster-cast`, `handler`, `buff`, `combat-end`); the shared helpers mark their own outcome (entangled and grappled concentration, ASF, `ConsumePendingSpellSlot`, `HandleConcentrationOnCasting`, the three provocation helpers, `BreakInvisibilityOnHostileSpellCast`), so every pipeline that calls them is covered once; the 51 single-target handlers mark `handler` once past every check that can still decline the cast (a missed ray writes no line; the Sound Burst stun and Shield Other, which act and then let the generic path go on, mark `<name> (continues)`), the summon and swarm placements mark `handler` after the provocation, the NPC combat end is marked in `TryNPCPerformSpellCastForAI`, while an area handler is marked as the first statement of its dispatch block in `PerformAoESpellCast` (the area handlers are called only there, and several have multi-step guards, so the dispatch block is the exact claim point); a job's id is its trace file name, and `caststages.jsonl` is written only for jobs that marked a stage; the harness also got `Harness_GetPendingMetamagic`, to restore the pending metamagic without reflection; the golden suite reports Grease as its own branch (`grease`, the caster's mode choice). Reference runs: edit pass 20261015T130539Z-edit, Play pass 20261015T130553Z-play, `QueueFresh` batch 20261015-090608 (rules 20261015-090614, smoke -090753, soak -090802, -090827, -090842, -090911, -090931): all 605 trace hashes equal batch 10's. Rerun after the review fixes (batch 20261015-092800: rules 20261015-092805, smoke -092944, soak -092953, -093017, -093032, -093059, -093120; static passes 20261015T132722Z-edit and 20261015T132744Z-play): all 605 hashes again equal batch 10's; these are the batch 11 reference runs.
 
 ### 3. Pin today's cast behaviour with Ui, Scripted and item scenarios (`cast-pipeline-pin-scenarios`)
 
@@ -746,7 +748,7 @@ New types, in Assets/Scripts/Spell/Casting/Core/ (C# 9, sealed classes, no init 
 - `SpellCastRequest`: Caster, Spell (always a clone), Metamagic, Source, Choices, Aim, ICastDecider Decider.
 - `CastContext`: Request, plus the fields the later executor needs.
 - `ICastDecider`, with two stubs: UiCastDecider and AiCastDecider (AI/Spellcasting/). Each has only `IsSynchronous` for now.
-- Move GameManager's private nested `SpellcastResourceSnapshot` (_Core/GameManager.cs ~:10761) to `internal sealed class CastResourceSnapshot`. A public type cannot expose a private nested class (CS0052).
+- Move GameManager's private nested `SpellcastResourceSnapshot` (_Core/GameManager.cs ~:10764) to `internal sealed class CastResourceSnapshot`. A public type cannot expose a private nested class (CS0052).
 
 GameManager changes:
 1. Cast stack. Add `Stack<CastContext> _castStack`, `CastContext BeginCast(SpellCastRequest req)` and `void EndCast(CastContext ctx)`. In the editor, a pop that does not match the top raises a ScenarioHarness violation.
@@ -755,7 +757,7 @@ GameManager changes:
    - Wall ring and line sub-phase sequencing fields stay as plain fields: they are UI sequencing.
    - If no cast is open, a getter returns the default and a setter opens a Ui context, so the UI scratch flow is unchanged.
 3. Entry points call BeginCast instead of their hand-written reset lists:
-   - OnSpellSelectedWithMetamagic (_Core/GameManager.cs ~:9547);
+   - OnSpellSelectedWithMetamagic (_Core/GameManager.cs ~:9548);
    - InitiateScrollCastThroughPipeline and InitiateWandCastThroughPipeline;
    - the F12 path (_Core/GameManager.TestPanel.cs ~:67-94). It must clone the template instead of assigning the database instance;
    - the touch prompt and OnDischargeHeldTouchButtonPressed;
@@ -768,7 +770,7 @@ GameManager changes:
    - TryRollArcaneSpellFailure and the Stoneskin component bypass read `Source` (Bypass and Kind).
    - ConsumeScrollAfterCast and ConsumeWandChargeAfterCast spend for `req.Caster`, not ActivePC.
    - The scroll or wand branch of ConsumePendingSpellSlot keys on Source, not ReferenceEquals(spell, _pendingSpell).
-8. NPC defaults. Move the NPC defaults out of ApplySpellBuff's `!caster.IsControllable` branches (GameManager.SpellCasting.cs ~:6944 and ~:6997; Fire, warm shield) into the NPC request build through AiCastDecider, with identical values. After this, rules code no longer reads IsControllable there.
+8. NPC defaults. Move the NPC defaults out of ApplySpellBuff's `!caster.IsControllable` branches (GameManager.SpellCasting.cs ~:7068 and ~:7121; Fire, warm shield) into the NPC request build through AiCastDecider, with identical values. After this, rules code no longer reads IsControllable there.
 
 Keep, do not change:
 - the scroll ASF exemption (decided in step 13);
@@ -800,7 +802,7 @@ Issues and docs:
 Pure move on the PC side.
 
 1. Create the registry. Add the partial Assets/Scripts/Spell/Resolution/GameManager.SpellHandlerRegistry.cs with `HandlerGate { None, Success, SuccessNotNegated }` and `SpellHandlerEntry { string Name; HashSet<string> SpellIds; HandlerGate Gate; bool ContinueToBuff; Func<CharacterController, CharacterController, SpellData, SpellResult, bool> Resolve; }`.
-   - Build a list in today's PC chain order (GameManager.SpellCasting.cs ~:2132-2342). It has 51 entries: the 50 methods named TryResolve*SpellEffect plus TryResolveSoundBurstStunEffect.
+   - Build a list in today's PC chain order (GameManager.SpellCasting.cs ~:2175-2385). It has 51 entries: the 50 methods named TryResolve*SpellEffect plus TryResolveSoundBurstStunEffect.
    - Each entry wraps the existing method unchanged; keep the method names for the TST-006 pins.
    - SpellIds come from what each method actually claims. TryResolveLesserGlobeSpellEffect claims two IDs through IsLesserGlobeOfInvulnerabilitySpell; Fire Shield and Dimension Door use predicates. Read each method.
 2. Gates must be exactly today's guards:
@@ -833,7 +835,7 @@ Pure move on the PC side.
 
 Behaviour change, one cause: NPC single-target casts run the same 51-entry registry as PCs.
 
-1. Switch the NPC chain. In TryNPCPerformSpellCast (Assets/Scripts/_Core/GameManager.NPCTurns.cs, the chain at ~:1413-1489), replace the 19-term chain with RunSingleTargetHandlers from step 5, using the PC gates. Remove the shadow prediction.
+1. Switch the NPC chain. In TryNPCPerformSpellCast (Assets/Scripts/_Core/GameManager.NPCTurns.cs, the chain at ~:1450-1526), replace the 19-term chain with RunSingleTargetHandlers from step 5, using the PC gates. Remove the shadow prediction.
 2. Audit the 32 handlers newly reachable for NPCs. For each, check for:
    - UI prompts or CombatUI dialogs;
    - reads of ActivePC, IsControllable or `_pending*` choices;
@@ -863,7 +865,7 @@ Pure move. Every PC trace hash must stay identical.
    - `CastOutcome CheckLegality(SpellCastRequest req)`: no side effects;
    - `void FinishCast(CastContext ctx, CastOutcome o)`: the single exit. It logs once, with the spontaneous and quickened prefixes built once in ctx.LogPrefix (SPL-063, single-target part); calls EndCast; then calls the decider's finish continuation.
 2. UI-only code. The Ui finish continuation does the UI work: CurrentSubPhase, ShowActionChoices, AfterAttackDelay, highlight clearing and _lastCombatLog. Stage methods must not touch CombatUI except through CombatLogHelper logging.
-3. Move the body of PerformSpellCast (GameManager.SpellCasting.cs ~:1645-2454) into the stages, in exactly today's order:
+3. Move the body of PerformSpellCast (GameManager.SpellCasting.cs ~:1671-2500) into the stages, in exactly today's order:
    - test-panel cleanup (now a no-op);
    - IsValidTargetForSpell;
    - the choice re-prompts (now UiCastDecider.FillChoices);
@@ -950,7 +952,7 @@ Pure move. NPC behaviour is preserved by LegacyCastQuirk bits.
 Pure move. Hashes stay identical.
 
 1. Area registry. In GameManager.SpellHandlerRegistry.cs add `AreaHandlerEntry { Name; HashSet<string> SpellIds; bool Async; Func<CastContext, AreaHandlerResult> Resolve }`.
-   - Register the handler blocks of PerformAoESpellCast (GameManager.SpellCasting.cs ~:3543-4796) in today's first-match order. That is the ~40 TryResolve*/TryHandle* area methods plus ResolveHypnotismSpell, ResolveSleepSpell, ResolveDeepSlumberSpell, ResolveColorSpraySpell and ResolveFearSpell.
+   - Register the handler blocks of PerformAoESpellCast (GameManager.SpellCasting.cs ~:3589-4903) in today's first-match order. That is the ~40 TryResolve*/TryHandle* area methods plus ResolveHypnotismSpell, ResolveSleepSpell, ResolveDeepSlumberSpell, ResolveColorSpraySpell and ResolveFearSpell.
    - Each entry is a lambda over the existing method, which keeps its signature and its `_pendingSpell` reads (they still work through the forwarding properties).
    - Wall of Ice and Wall of Force are Async; the core resumes on their callback.
    - The generic per-target loop is the fallback entry.
@@ -975,11 +977,11 @@ Pure move. Hashes stay identical.
 
 Pure move. Hashes stay identical.
 
-1. ResolveSummon variant. PerformSummonMonsterCast (GameManager.SpellCasting.cs ~:694) and PerformSummonSwarmCast (~:595) become request builders. The summon and swarm choices live in CastChoices, and the core gets a ResolveSummon variant.
-2. Grease. The three Grease casts (Spell/Special/GameManager_Grease.cs ~:286, ~:417, ~:468) become one request with Choices.GreaseMode.
+1. ResolveSummon variant. PerformSummonMonsterCast (GameManager.SpellCasting.cs ~:712) and PerformSummonSwarmCast (~:612) become request builders. The summon and swarm choices live in CastChoices, and the core gets a ResolveSummon variant.
+2. Grease. The three Grease casts (Spell/Special/GameManager_Grease.cs ~:287, ~:420, ~:473) become one request with Choices.GreaseMode.
 3. Delete TryConsumePendingSpellCast (~:34). Its spend is the core's Spend stage.
 4. Held charges:
-   - The touch prompt (Cast Now or Discharge Later, _Core/GameManager.cs ~:9596) becomes UiCastDecider.ChooseTouchDelivery.
+   - The touch prompt (Cast Now or Discharge Later, _Core/GameManager.cs ~:9597) becomes UiCastDecider.ChooseTouchDelivery.
    - Holding is a request with Source.Kind=HeldChargeHold that runs the core's stages through Spend and Provocation, then stores the charge with SetHeldTouchCharge (ResolveHoldCharge).
    - Delete HoldPendingMeleeTouchCharge (~:1494-1641).
    - Delivery (OnDischargeHeldTouchButtonPressed) is a request with Source.Kind=HeldChargeDelivery.
@@ -1047,7 +1049,7 @@ Rules changes. All of them live in the core's Cost, Legality, Provocation and Co
 
 All of these are in the core's Legality, Distraction and Failure stages. Remove every related quirk bit on all paths: AreaSkipsEntangled, AreaSkipsBlink, Summon*, Grease*, Hold* for Blink and entangled, EntangledUsesCasterLevelFormula, DeafenedRolledInSpellCaster and ScrollSkipsArcaneFailure.
 
-1. Entangled. Any spell needs a Concentration check through ConcentrationManager.MakeSpellcastingConcentrationCheck, DC 15 + spell level (PHB p.308 and p.70 with its footnote 1, against the flat DC 15 of p.170: delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1; SPL-145). Replace the formula in ResolveEntangledSomaticCastingConcentration (GameManager.SpellCasting.cs ~:8216-8262). Keep the name if tests reflect it.
+1. Entangled. Any spell needs a Concentration check through ConcentrationManager.MakeSpellcastingConcentrationCheck, DC 15 + spell level (PHB p.308 and p.70 with its footnote 1, against the flat DC 15 of p.170: delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1; SPL-145). Replace the formula in ResolveEntangledSomaticCastingConcentration (GameManager.SpellCasting.cs ~:8340-8387). Keep the name if tests reflect it.
 2. Deafened. Roll the 20% verbal failure once per cast in the Failure stage. Remove the roll from SpellCaster.Cast (Assets/Scripts/Spell/Casting/SpellCaster.cs ~:89). First grep every other caller of SpellCaster.Cast; any caller outside the core must get the roll from the shared helper.
 3. Silence (SPL-092). Legality refuses verbal spells for a caster inside a Silence effect, unless the cast has Silent Spell. Use the same silence query the condition code uses (grep SilenceActive and the Silence area effect).
 4. ASF only for somatic spells (SPL-096). TryRollArcaneSpellFailure rolls only when the spell, after metamagic (Still Spell), has a somatic component.
@@ -1078,7 +1080,7 @@ All of these are in the core's Legality, Distraction and Failure stages. Remove 
    - `RangeSquares(SpellCastRequest)`.
    - Reuse GetCasterLevel and SpellDurationRules.CasterLevelFor where they are already correct; do not duplicate them.
 4. Use it in:
-   - the PC range highlight in ShowSpellTargets (GameManager.SpellCasting.cs ~:1403-1411, today Stats.Level; removes RangeHighlightUsesCharacterLevel);
+   - the PC range highlight in ShowSpellTargets (GameManager.SpellCasting.cs ~:1424-1432, today Stats.Level; removes RangeHighlightUsesCharacterLevel);
    - the summon and swarm range helpers;
    - ApplySpellBuff's Stats.Level reads;
    - the NPC range check (removes NpcRangeUsesCasterLevel; both now use the same rule).
@@ -1140,7 +1142,7 @@ Apply decision D3 of the design doc (judge panel 2026-10-15): PCs, class-level N
 
 ### 18. Voluntary saves, one spell-resistance roll and spell save bonuses on every spell save (`raw-saves-and-sr`)
 
-1. Voluntary save (step-1 issue (i)). Replace ShouldForceTargetToAcceptSave (GameManager.SpellCasting.cs ~:1325; uses at ~:2040, ~:4707, ~:4743 and the old NPC site) with ctx.TargetForgoesSave(target), which asks the target's own decider (ICastDecider.ForgoSave).
+1. Voluntary save (step-1 issue (i)). Replace ShouldForceTargetToAcceptSave (GameManager.SpellCasting.cs ~:1346; uses at ~:2079, ~:4809, ~:4847 and the old NPC site) with ctx.TargetForgoesSave(target), which asks the target's own decider (ICastDecider.ForgoSave).
    - Both deciders forgo the save only against a spell that is harmless or beneficial to that target: runtime EffectType Buff, or Healing on a living target. They do not forgo it against Damage, Debuff or Control.
    - A charmed or confused ally keeps today's Buff-only rule.
    - Call it in the generic loop and in every custom area handler that rolls saves.

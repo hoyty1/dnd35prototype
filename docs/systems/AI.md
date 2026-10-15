@@ -146,7 +146,7 @@ Writers of the AI fields besides the database files:
 | Skeleton, Zombie templates (`Apply`) | AggressiveMelee + UndeadMindless; `SkeletonFactory.HumanArcherSkeleton` sets behaviour `Ranged` |
 | Lycanthrope template | AggressiveMelee + Berserk; wererat Humanoid |
 | `DungeonEncounterSpawner.UpdateAIForClass` (Encounters/DungeonEncounterSpawner.cs:224) | class map for DMG spawns with class levels (table in 6.5) |
-| Summon Swarm / Summon Monster swarm options (Spell/Resolution/GameManager.SpellCasting.cs:641, 778) | `IndiscriminateSwarmAI` / `SwarmAI` |
+| Summon Swarm / Summon Monster swarm options (Spell/Resolution/GameManager.SpellCasting.cs:659, 778) | `IndiscriminateSwarmAI` / `SwarmAI` |
 | Test overrides (NPCSetup.cs:311-324) | armor-targeting test: `RangedAIProfile` + tag; shield-bash test: `UndeadMindlessAIProfile` |
 | `NPCTemplateAIConfigurator`, `QuickSpawnSystem.GetDefaultAI` | test-only paths with a different class map |
 
@@ -156,16 +156,16 @@ The `SkeletonCreatureTemplate` and `ZombieCreatureTemplate` registry adapters do
 
 ### 3.1 From initiative to the AI
 
-1. `TurnService.StartCombat` rolls initiative (d20 + modifier; ties by modifier, then random) and fires `OnTurnStarted` for each actor. `AISpellcastingStrategist.ResetCombatState` runs right after (GameManager.cs:3734).
+1. `TurnService.StartCombat` rolls initiative (d20 + modifier; ties by modifier, then random) and fires `OnTurnStarted` for each actor. `AISpellcastingStrategist.ResetCombatState` runs right after (GameManager.cs:3735).
 2. `GameManager.OnTurnStarted` (3764) sends controllable characters to `StartPCTurn` and everything else to `SingleNPCTurnFromInitiative` (3800). `IsPC` means controllable (CORE-014).
 3. `SingleNPCTurnFromInitiative` (NPCTurns.cs:35) sets the phase and UI, expires Aid Another bonuses, handles Flaming Sphere, then calls **`ShouldSkipTurnDueToHPState`**. If that is true it logs "X is <reason> and cannot act" and calls `NextInitiativeTurn` (CORE-012: synchronous).
 4. Otherwise it reads the behaviour (`GetNPCBehaviorForAI`, default AggressiveMelee), runs `AIService.ExecuteNPCTurn`, and then runs the shared combat-end check `EvaluateCombatEnd` for both sides (`_Core/GameManager.CombatEnd.cs`). It also runs that check right after the turn-start Flaming Sphere tick, and returns at once when the phase is already `CombatOver`. The NPC attack paths (melee sequence, full and single ranged attack, grapple actions, charge) check after each attack whose target went out, so an AI-run killer of either side ends the fight at once (CORE-011, fixed 2026-10-08); so do an NPC cast (`TryNPCPerformSpellCastForAI`), an aura and a free-action ranged special. Once the phase is `CombatOver`, `ExecuteNPCTurn` and its routines stop at their next step (`AIService.CombatEnded`), so an AI turn neither moves nor acts after the fight has ended.
 
 ### 3.2 The turn-skip gate
 
-`ShouldSkipTurnDueToHPState` (GameManager.cs:3911) skips the turn when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or when `CharacterConditions.CanTakeActions()` is false. The latter is false for any active condition whose `ConditionDefinition` sets both `PreventsStandardActions` and `PreventsFullRoundActions` (Combat/StatusEffects/StatusEffect.cs). Those conditions are: BlownAway, Cowering, Dazed, HideousLaughter, Dead, Dying, Fascinated, Asleep, Helpless, Nauseated, Panicked, Paralyzed, Petrified, Pinned, Stable, Stunned, Turned, Unconscious.
+`ShouldSkipTurnDueToHPState` (GameManager.cs:3912) skips the turn when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or when `CharacterConditions.CanTakeActions()` is false. The latter is false for any active condition whose `ConditionDefinition` sets both `PreventsStandardActions` and `PreventsFullRoundActions` (Combat/StatusEffects/StatusEffect.cs). Those conditions are: BlownAway, Cowering, Dazed, HideousLaughter, Dead, Dying, Fascinated, Asleep, Helpless, Nauseated, Panicked, Paralyzed, Petrified, Pinned, Stable, Stunned, Turned, Unconscious.
 
-Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3991):
+Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3992):
 
 - **Panicked** creatures never flee (PHB ch.8 / DMG ch.8 Condition Summary: a panicked creature drops what it holds and flees). The Panicked branch of `FrightenedBehaviorController` is unreachable, so frightful presence that panics a creature just freezes it.
 - **Turned** undead never flee; `AIService.ExecuteTurnedUndeadTurn` (443) is unreachable. `TurnUndeadSystem` logs "continues fleeing" without moving anything.
@@ -179,7 +179,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3991):
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10932) | acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10935) | acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 66 | `CurrentHP <= 0` | end. A Disabled (0 HP) NPC never takes its single action (AI-053) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
@@ -359,7 +359,7 @@ Reached only by non-controllable summons (PC-cast summons are controllable and g
 
 - `ExecuteSearchTurnWhenNoTargets` (322): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
 - `ExecuteTurnedUndeadTurn` (443): flee one move from the turner; unreachable (3.2).
-- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1636): see 8.8.
+- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1637): see 8.8.
 
 ### 5.9 How attacks resolve: `GameManager.NPCPerformAttack` (NPCTurns.cs)
 
@@ -435,7 +435,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 | `ShouldUseCoupDeGrace` | AIService.cs:2360; NPCTurns.cs:293 (data override wins) |
 | `ShouldIgnoreAoO` | AIService.cs:2109 |
 | `GetRangedAoORiskToleranceMultiplier` | AIService.cs:1088 (kiter with ranged weapon only) |
-| `TryEnsureWeaponFallback` | NPCTurns.cs:1298 |
+| `TryEnsureWeaponFallback` | NPCTurns.cs:1324 |
 | `ShouldInitiateGrapple`, `GetPreferredManeuver` | AIService.cs:2279, 2263, 2333 |
 | `ScoreSpell` (Spellcaster family) | `SelectSpell` |
 | `ShouldEscapeGrapple` | none (AI-029) |
@@ -561,7 +561,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 ### 8.2 Dragons
 
 - 60 generated dragons (10 types × Wyrmling-Adult) plus hell_hound use `DragonAIProfile`. Turn order: cast (≤2 adjacent enemies), breath with positioning, melee (5.2).
-- **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:1641): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The cooldown is set but `TickBreathWeaponCooldown` has no callers, so each creature breathes at most once per spawn (AI-032).
+- **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:2027): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The cooldown is set but `TickBreathWeaponCooldown` has no callers, so each creature breathes at most once per spawn (AI-032).
 - **Frightful presence** (`ResolveFrightfulPresence`, 1570; Young Adult and Adult dragons, and the lich's "fear aura"): fires once per combat on the first attack or breath, not on charge; Manhattan-distance range; no "fewer HD than the dragon" filter; HD ≤4 panicked else shaken for 4d6 rounds; raw d20 save (AI-041). Panicked targets then lose their turns (CMB-075). MM (Dragons, Frightful Presence) triggers it on attacks and charges, and a creature that saves is immune for 24 hours.
 - Secondary (metallic) breath: AI-008. Dragon SLAs: CRE-015. Dragon spell-versus-breath choice: AI-037.
 
@@ -705,7 +705,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 ### 11.3 Add a `*ForAI` wrapper
 
-AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10881-11038, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 40 (34 in GameManager.cs); 4 have no callers (AI-053).
+AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10884-11041, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 40 (34 in GameManager.cs); 4 have no callers (AI-053).
 
 ### 11.4 Add an NPC action (attack form, monster ability, special action)
 

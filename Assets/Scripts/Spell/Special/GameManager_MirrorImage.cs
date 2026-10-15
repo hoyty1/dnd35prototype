@@ -39,6 +39,8 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveMirrorImageSpellEffect));
+
         if (caster == null || caster.Stats == null)
             return true;
 

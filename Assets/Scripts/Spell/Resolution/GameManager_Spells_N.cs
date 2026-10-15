@@ -25,6 +25,7 @@ public partial class GameManager
     {
         if (spell == null || spell.SpellId != SpellNames.NEUTRALIZE_POISON) return false;
         if (caster == null || caster.Stats == null || target == null || target.Stats == null) return false;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveNeutralizePoisonSpellEffect));
         if (!result.Success) return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";

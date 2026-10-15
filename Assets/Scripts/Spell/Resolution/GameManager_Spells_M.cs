@@ -206,6 +206,8 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.MAGIC_VESTMENT, StringComparison.Ordinal))
             return false;
 
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveMagicVestmentSpellEffect));
+
         CharacterController recipient = target ?? caster;
         if (recipient == null || recipient.Stats == null)
             return true; // Handled but nothing to apply
