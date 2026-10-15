@@ -43,11 +43,17 @@ namespace Tests.Scenarios
             foreach (PairSpec pair in Pairs())
             {
                 PairSpec p = pair;
-                yield return S("cast-pair-" + p.Family, () => PairScenario(p));
+                yield return S(p.Id != null ? p.Id.Substring("rules/".Length) : "cast-pair-" + p.Family, () => PairScenario(p));
             }
             yield return S("cast-ai-spiritual-weapon", AiSpiritualWeapon);
             yield return S("cast-ai-skips-dimension-door", AiSkipsDimensionDoor);
             yield return S("cast-globe-damage", GlobeDamage);
+            yield return S("area-globe", AreaGlobe);
+            yield return S("cast-globe-held-touch", GlobeHeldTouch);
+            yield return S("cast-globe-dispel", GlobeDispel);
+            yield return S("cast-globe-grease-armor", GlobeGreaseArmor);
+            yield return S("prayer-globe", PrayerGlobe);
+            yield return S("area-globe-invisible", AreaGlobeInvisible);
             yield return S("cast-quickened-threatened", QuickenedThreatened);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
@@ -829,6 +835,8 @@ namespace Tests.Scenarios
         private sealed class PairSpec
         {
             public string Family;
+            /// <summary>The scenario id when it is not "rules/cast-pair-" + <see cref="Family"/>.</summary>
+            public string Id;
             public string SpellId;
             public string Title;
             public string[] Covers;
@@ -875,8 +883,35 @@ namespace Tests.Scenarios
                         ("scripted.target.dead", true), ("scripted.caster.thp", 0), ("scripted.caster.dk", "0"))) };
             yield return new PairSpec { Family = "silence", SpellId = SpellNames.SILENCE, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
                 Title = "Silence on a creature (PHB p.279)", Covers = new[] { "PHB p.279" } };
+            // Sound Burst (PHB p.281, Fortitude partial; batch 11 step 11, SPL-142): the 1d8 (8) sonic damage always lands, the
+            // cast's one Fortitude save decides the stun, and a creature that cannot hear is not stunned.
             yield return new PairSpec { Family = "sound-burst", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst (PHB p.281)", Covers = new[] { "PHB p.281" } };
+                Title = "Sound Burst (PHB p.281)", Covers = new[] { "PHB p.281" },
+                SharedPins = b => b.Expect("A failed Fortitude save: 8 sonic damage and stunned (PHB p.281)",
+                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && t.Contains("Stunned") ? null : "expected hp=142 and Stunned", "L2:1/")) };
+            yield return new PairSpec { Family = "sound-burst-failed", Id = "rules/sound-burst-failed", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Sound Burst stopped by spell resistance (PHB p.281, p.177)", Covers = new[] { "PHB p.281", "PHB p.177", "SPL-142" },
+                // SR 100: the caster level check (d20 19 + CL 7 = 26) fails, so the spell has no effect at all.
+                TargetTweak = c => c.Stats.SpellResistance = 100,
+                SharedPins = b => b.Expect("Spell resistance stops the spell: no damage and no stun on either target, the slot spent (SPL-142)",
+                    PairTargets(t => t.StartsWith("hp=150 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=150 and no Stunned", "L2:1/")) };
+            yield return new PairSpec { Family = "sound-burst-saved", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Sound Burst on a creature that saves (PHB p.281)", Covers = new[] { "PHB p.281", "SPL-142" },
+                TargetTweak = c => SaveTweak(c, 30),
+                SharedPins = b => b.Expect("A successful Fortitude save avoids only the stun: 8 sonic damage, not stunned (PHB p.281; SPL-142)",
+                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=142 and no Stunned", "L2:1/")) };
+            yield return new PairSpec { Family = "sound-burst-deaf", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Sound Burst on a deafened creature (PHB p.281)", Covers = new[] { "PHB p.281", "SPL-142" },
+                TargetTweak = c => c.ApplyCondition(CombatConditionType.Deafened, 100, "scenario"),
+                SharedPins = b => b.Expect("A creature that cannot hear is not stunned but still takes the 8 sonic damage (PHB p.281; SPL-142)",
+                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=142 and no Stunned", "L2:1/")) };
+            // Silence (PHB p.279): a defense against sonic attacks, so a Sound Burst has no effect on a creature under it,
+            // neither the damage nor the stun (delegated RAW reading 2026-10-14; SPL-142).
+            yield return new PairSpec { Family = "sound-burst-silenced", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
+                Title = "Sound Burst on a creature under a Silence (PHB p.281, p.279)", Covers = new[] { "PHB p.281", "PHB p.279", "SPL-142" },
+                TargetTweak = c => { c.Stats.SilenceActive = true; c.Stats.SilenceRoundsRemaining = 100; },
+                SharedPins = b => b.Expect("Silence keeps the sonic spell out: no damage and no stun on either target, the slot spent (PHB p.279)",
+                    PairTargets(t => t.StartsWith("hp=150 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=150 and no Stunned", "L2:1/")) };
             yield return new PairSpec { Family = "searing-light", SpellId = SpellNames.SEARING_LIGHT, Caster = cleric, SlotLevel = 3, TargetNpc = "target_dummy",
                 Title = "Searing Light (PHB p.275)", Covers = new[] { "PHB p.275" } };
             yield return new PairSpec { Family = "death-ward", SpellId = SpellNames.DEATH_WARD, Caster = cleric, SlotLevel = 4,
@@ -952,7 +987,7 @@ namespace Tests.Scenarios
             int dx = p.Adjacent ? 1 : 3;
             string uiTarget = self ? "ui" : "uiTarget";
             string aiTarget = self ? "scripted" : "scriptedTarget";
-            ScenarioBuilder b = Rules("rules/cast-pair-" + p.Family, "Ui and Scripted casts of " + p.Title + " end in the same state (PC_NPC_PARITY)")
+            ScenarioBuilder b = Rules(p.Id ?? "rules/cast-pair-" + p.Family, "Ui and Scripted casts of " + p.Title + " end in the same state (PC_NPC_PARITY)")
                 .Covers(p.Covers).Covers("SPL-054")
                 .MaxRounds(1)
                 .Pc("ui", ActorSource.Stats(() => p.Caster("Pair Ui")), 3, 4, Control.Ui)
@@ -1200,14 +1235,15 @@ namespace Tests.Scenarios
         /// <summary>
         /// SPL-141 (PHB p.236: a globe of invulnerability keeps spells of 4th level and lower from affecting any creature
         /// inside it). The warded dummy raises a Globe of Invulnerability through the shared effect step on its round-1
-        /// turn. The Ui wizard 5 then casts Magic Missile at it (round 1; every d4 is 4, three missiles = 15) and Fireball
-        /// centred on it (round 2; every d6 is 6, it fails its save: 30). Today the single-target pipeline applies the
-        /// missiles' damage in SpellCaster.Cast before it tests the globe (and then logs the block), and Fireball's custom
-        /// area handler never tests it, so both deal damage.
+        /// turn, made to last 10 rounds (the dummy's caster level would give 1; before batch 11 step 11 the globe was gone
+        /// by round 2, so this scenario's Fireball never met it). The Ui wizard 5 then casts Magic Missile at it (round 1; every d4 is 4, three missiles would be 15) and
+        /// Fireball centred on it (round 2; every d6 is 6, it fails its save: it would be 30). The cast core's Globe stage
+        /// tests the globe before SpellCaster.Cast on the single-target path and before the area handlers (batch 11 step
+        /// 11), so neither deals damage.
         /// </summary>
         private static ScenarioDef GlobeDamage()
         {
-            return Rules("rules/cast-globe-damage", "A Globe of Invulnerability is tested after damage (SPL-141, pinned)")
+            return Rules("rules/cast-globe-damage", "A Globe of Invulnerability blocks a spell before its damage")
                 .Covers("SPL-141", "PHB p.236")
                 .MaxRounds(2)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 2, 10, Control.Ui)
@@ -1220,7 +1256,13 @@ namespace Tests.Scenarios
                 .Turn("warded", 1, Step.Assert("raise the globe", ctx =>
                 {
                     CharacterController w = ctx.Get("warded");
-                    ctx.Gm.Harness_ApplySpellBuff(w, w, SpellDatabase.GetSpell(SpellNames.GLOBE_OF_INVULNERABILITY).Clone());
+                    ActiveSpellEffect globe = ctx.Gm.Harness_ApplySpellBuff(w, w, SpellDatabase.GetSpell(SpellNames.GLOBE_OF_INVULNERABILITY).Clone());
+                    // The dummy's caster level gives a 1-round globe; it must still be up for round 2's Fireball (the
+                    // emanation ends with the tracked effect).
+                    if (globe != null)
+                        globe.RemainingRounds = 10;
+                    foreach (LesserGlobeOfInvulnerabilityAreaEffect g in AreaEffectManager.Instance.GetEffectsOfType<LesserGlobeOfInvulnerabilityAreaEffect>())
+                        g.RoundsRemaining = 10;
                     Fact(ctx, "globe", w.StatusEffectManager.HasEffect(SpellNames.GLOBE_OF_INVULNERABILITY));
                     return true;
                 }))
@@ -1230,12 +1272,303 @@ namespace Tests.Scenarios
                     Step.Cast(SpellNames.MAGIC_MISSILE, "warded"),
                     Step.Assert("after missile", ctx => { FactHpLost(ctx, "missile", "warded"); RecordHp(ctx, "warded"); return true; }))
                 .Turn("wizard", 2,
+                    Step.Assert("globe still up", ctx => { Fact(ctx, "blocks.fireball", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(SpellDatabase.GetSpell(SpellNames.FIREBALL), ctx.Get("warded"))); return true; }),
                     Step.Cast(SpellNames.FIREBALL, "warded"),
                     Step.Assert("after fireball", ctx => { FactHpLost(ctx, "fireball", "warded"); return true; }))
-                .Expect("The globe is up and blocks a 1st-level spell against the warded dummy (PHB p.236)", FactsAre(("globe", true), ("blocks.missile", true)))
+                .Expect("The globe is up and blocks a 1st-level and a 3rd-level spell against the warded dummy (PHB p.236)", FactsAre(("globe", true), ("blocks.missile", true), ("blocks.fireball", true)))
                 .Expect("Both Ui casts ran", Expect.All(Expect.StepStatus("wizard", 1, "Cast", 0, "done"), Expect.StepStatus("wizard", 2, "Cast", 0, "done")))
-                .ExpectKnown("SPL-141", "Today the blocked magic missiles still deal 15 and Fireball's handler deals 30 inside the globe (SPL-141)",
-                    FactsAre(("missile.lost.warded", 15), ("fireball.lost.warded", 30)))
+                .Expect("The globe blocks the magic missiles and Fireball before any damage: the warded dummy loses nothing (PHB p.236; SPL-141)",
+                    FactsAre(("missile.lost.warded", 0), ("fireball.lost.warded", 0)))
+                .Build();
+        }
+
+        // ── rules/area-globe (SPL-141) ──────────────────────────────────
+
+        /// <summary>
+        /// SPL-141 (PHB p.236: the area of a spell of 3rd level or lower does not include a lesser globe of invulnerability,
+        /// and the spell fails to affect any creature inside it; Fireball, PHB p.231, is 3rd level). A Scripted wizard 7
+        /// raises Lesser Globe of Invulnerability on itself in round 1 through the spell's registered handler
+        /// (Harness_RunSingleTargetHandler: the NPC path cannot spend an added 4th-level slot, SPL-041; a 10-ft-radius
+        /// emanation, 2 squares, 7 rounds). In round 2 the Ui wizard 5 casts Fireball centred on it (every d6 is 6: 30; every target
+        /// fails its save). Two dummies 15 ft from the warded wizard are in the burst (20-ft radius) and outside the globe.
+        /// The cast core's area Globe stage drops the warded wizard from the targets before Fireball's handler runs (batch
+        /// 11 step 11), so it loses nothing and the dummies lose 30 each.
+        /// </summary>
+        private static ScenarioDef AreaGlobe()
+        {
+            return Rules("rules/area-globe", "A Fireball spares a creature inside a lesser globe of invulnerability and burns the others")
+                .Covers("SPL-141", "PHB p.236", "PHB p.231")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Globe Fireball Wizard", 5)), 2, 10, Control.Ui)
+                .Pc("warded", ActorSource.Stats(() => Wizard("Globe Warded Wizard", 7)), 12, 10, Control.Scripted)
+                .Npc("north", "target_dummy", 12, 13, Control.Idle)
+                .Npc("east", "target_dummy", 15, 10, Control.Idle)
+                .Tweak("wizard", c => AddWizardSlot(c, 3, SpellNames.FIREBALL))
+                .Tweak("warded", Fails)
+                .Tweak("north", Fails)
+                .Tweak("east", Fails)
+                .Initiative("warded", "wizard", "north", "east")
+                .Force(6, 6, null, -1)
+                .Turn("warded", 1, Step.Assert("raise the lesser globe", ctx =>
+                {
+                    CharacterController w = ctx.Get("warded");
+                    Fact(ctx, "globe.raised", ctx.Gm.Harness_RunSingleTargetHandler(w, w, SpellDatabase.GetSpell(SpellNames.LESSER_GLOBE_OF_INVULNERABILITY).Clone()));
+                    return true;
+                }))
+                .Turn("warded", 2, Step.Pass())
+                .Turn("wizard", 1, Step.Pass())
+                .Turn("wizard", 2,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordHp(ctx, "warded", "north", "east");
+                        SpellData fireball = SpellDatabase.GetSpell(SpellNames.FIREBALL);
+                        Fact(ctx, "blocks.warded", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(fireball, ctx.Get("warded")));
+                        Fact(ctx, "blocks.north", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(fireball, ctx.Get("north")));
+                        Fact(ctx, "blocks.east", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(fireball, ctx.Get("east")));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.FIREBALL, "warded"),
+                    Step.Assert("after fireball", ctx => { FactHpLost(ctx, "fireball", "warded", "north", "east"); return true; }))
+                .Expect("The Ui Fireball ran", Expect.StepStatus("wizard", 2, "Cast", 0, "done"))
+                .Expect("The lesser globe covers the warded wizard and neither dummy (PHB p.236: 10-ft radius)",
+                    FactsAre(("globe.raised", true), ("blocks.warded", true), ("blocks.north", false), ("blocks.east", false)))
+                .Expect("Fireball does not affect the creature inside the globe; the others take 30 fire damage (PHB p.236, p.231; SPL-141)",
+                    FactsAre(("fireball.lost.warded", 0), ("fireball.lost.north", 30), ("fireball.lost.east", 30)))
+                .Build();
+        }
+
+        /// <summary>
+        /// Raises a Lesser Globe of Invulnerability (PHB p.236: 10-ft-radius emanation, spells of 3rd level and lower) on
+        /// <paramref name="key"/> through the spell's registered handler (Harness_RunSingleTargetHandler; an NPC or a low
+        /// caster cannot spend a 4th-level slot, SPL-041) and makes every globe last 10 rounds (a 1-round globe from a
+        /// low caster level would be gone before the next round's cast). The globe registers and sets its squares in its
+        /// Start, so it is found as a scene object here, and the cast it should stop comes in a later turn.
+        /// </summary>
+        private static Step RaiseLesserGlobe(string key)
+            => Step.Assert("raise the lesser globe", ctx =>
+            {
+                CharacterController w = ctx.Get(key);
+                Fact(ctx, "globe.raised", ctx.Gm.Harness_RunSingleTargetHandler(w, w, SpellDatabase.GetSpell(SpellNames.LESSER_GLOBE_OF_INVULNERABILITY).Clone()));
+                foreach (LesserGlobeOfInvulnerabilityAreaEffect g in UnityEngine.Object.FindObjectsByType<LesserGlobeOfInvulnerabilityAreaEffect>(UnityEngine.FindObjectsInactive.Exclude))
+                    if (g != null && g.Caster == w)
+                        g.RoundsRemaining = 10;
+                return true;
+            });
+
+        private static bool GlobeBlocks(ScenarioContext ctx, string spellId, string key)
+            => LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(SpellDatabase.GetSpell(spellId), ctx.Get(key));
+
+        // ── rules/cast-globe-held-touch (SPL-141) ───────────────────────
+
+        /// <summary>
+        /// SPL-141, delegated RAW reading 2026-10-14 (PHB p.236: spells of the globe's levels fail to affect any target
+        /// inside it; PHB p.141-142: touching anything while holding a charge discharges the spell, a missed touch keeps
+        /// it). The warded dummy raises a lesser globe in round 1. The Ui wizard 5 holds Shocking Grasp (1st level) and
+        /// delivers it at the dummy: the round-1 touch misses (d20 1), so the charge is kept; the round-2 touch hits (d20
+        /// 19), so the charge is discharged with no effect (every d6 would be 6: 30). The dummy loses nothing.
+        /// </summary>
+        private static ScenarioDef GlobeHeldTouch()
+        {
+            return Rules("rules/cast-globe-held-touch", "A held touch at a creature inside a lesser globe: a miss keeps the charge, a hit discharges it with no effect")
+                .Covers("SPL-141", "PHB p.236", "PHB p.141", "PHB p.142")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Globe Touch Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("warded", "target_dummy", 6, 10, Control.Scripted)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SHOCKING_GRASP))
+                .Tweak("warded", Sturdy)
+                .Initiative("warded", "wizard")
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("warded", 1, RaiseLesserGlobe("warded"))
+                .Turn("warded", 2, Step.Pass())
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "warded"); Fact(ctx, "blocks.grasp", GlobeBlocks(ctx, SpellNames.SHOCKING_GRASP, "warded")); return true; }),
+                    Step.CastHeld(SpellNames.SHOCKING_GRASP),
+                    Step.DeliverHeld("warded"),
+                    Step.Assert("after miss", ctx => { Fact(ctx, "held.miss", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); FactHpLost(ctx, "miss", "warded"); return true; }))
+                .Turn("wizard", 2,
+                    Step.DeliverHeld("warded"),
+                    Step.Assert("after hit", ctx => { Fact(ctx, "held.hit", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); FactHpLost(ctx, "hit", "warded"); return true; }))
+                .Expect("The lesser globe is up around the dummy and excludes Shocking Grasp (PHB p.236)", FactsAre(("globe.raised", true), ("blocks.grasp", true)))
+                .Expect("A missed touch keeps the charge and deals nothing (PHB p.142)", FactsAre(("held.miss", true), ("miss.lost.warded", 0)))
+                .Expect("A touch that lands discharges the spell, which has no effect inside the globe (PHB p.141, p.236)", FactsAre(("held.hit", false), ("hit.lost.warded", 0)))
+                .Build();
+        }
+
+        // ── rules/cast-globe-dispel (SPL-141) ───────────────────────────
+
+        /// <summary>
+        /// SPL-141, delegated RAW reading 2026-10-14 (PHB p.236: a targeted dispel magic can bring the globe down; the globe
+        /// still keeps the spell from the creature inside). The warded dummy has Shield on itself and then raises a lesser
+        /// globe (round 1). In round 2 the Ui wizard 5 casts Dispel Magic (3rd level, PHB p.223) at the dummy; its one dispel
+        /// check (d20 20 + 5 = 25 against DC 11 + the globe's caster level) is made against the globe alone. The globe ends;
+        /// the Shield on the dummy is untouched.
+        /// </summary>
+        private static ScenarioDef GlobeDispel()
+        {
+            return Rules("rules/cast-globe-dispel", "A targeted Dispel Magic at a creature inside a lesser globe brings the globe down and nothing else")
+                .Covers("SPL-141", "PHB p.236", "PHB p.223")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Globe Dispel Wizard", 5)), 2, 10, Control.Ui)
+                .Npc("warded", "target_dummy", 8, 10, Control.Scripted)
+                .Tweak("wizard", c => AddWizardSlot(c, 3, SpellNames.DISPEL_MAGIC))
+                .Tweak("warded", Sturdy)
+                .Initiative("warded", "wizard")
+                .Force(20, 20, DispelMagicService.DispelCheckContext, -1)
+                .Turn("warded", 1,
+                    Step.Assert("shield", ctx =>
+                    {
+                        CharacterController w = ctx.Get("warded");
+                        ActiveSpellEffect shield = ctx.Gm.Harness_ApplySpellBuff(w, w, SpellDatabase.GetSpell(SpellNames.SHIELD).Clone());
+                        if (shield != null)
+                            shield.RemainingRounds = 10;
+                        return true;
+                    }),
+                    RaiseLesserGlobe("warded"))
+                .Turn("warded", 2, Step.Pass())
+                .Turn("wizard", 1, Step.Pass())
+                .Turn("wizard", 2,
+                    Step.Assert("before", ctx =>
+                    {
+                        Fact(ctx, "blocks.before", GlobeBlocks(ctx, SpellNames.DISPEL_MAGIC, "warded"));
+                        Fact(ctx, "shield.before", ctx.Get("warded").StatusEffectManager.HasEffect(SpellNames.SHIELD));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.DISPEL_MAGIC, "warded"),
+                    Step.Assert("after", ctx =>
+                    {
+                        Fact(ctx, "blocks.after", GlobeBlocks(ctx, SpellNames.DISPEL_MAGIC, "warded"));
+                        Fact(ctx, "shield.after", ctx.Get("warded").StatusEffectManager.HasEffect(SpellNames.SHIELD));
+                        return true;
+                    }))
+                .Expect("The Ui Dispel Magic ran", Expect.StepStatus("wizard", 2, "Cast", 0, "done"))
+                .Expect("Before the dispel the globe covers the dummy, which also has Shield", FactsAre(("globe.raised", true), ("blocks.before", true), ("shield.before", true)))
+                .Expect("The targeted dispel ends the globe and leaves the Shield on the creature inside (PHB p.236, p.223)", FactsAre(("blocks.after", false), ("shield.after", true)))
+                .Build();
+        }
+
+        // ── rules/cast-globe-grease-armor (SPL-141) ─────────────────────
+
+        /// <summary>
+        /// SPL-141 (PHB p.236: the spell fails to affect any target inside the globe; Grease, PHB p.237, is 1st level). The
+        /// goblin raises a lesser globe in round 1; in round 2 the Ui wizard 3 casts Grease on the goblin's worn armor. The
+        /// armor is inside the globe, so the cast ends at the Globe stage with no effect, its slot and action spent.
+        /// </summary>
+        private static ScenarioDef GlobeGreaseArmor()
+        {
+            return Rules("rules/cast-globe-grease-armor", "Grease on the armor of a creature inside a lesser globe has no effect")
+                .Covers("SPL-141", "PHB p.236", "PHB p.237")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Globe Grease Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 9, 10, Control.Scripted)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.GREASE))
+                .Tweak("gob", c => { Sturdy(c); AttackTweak(c, -30); })
+                .Initiative("gob", "wizard")
+                .Turn("gob", 1, RaiseLesserGlobe("gob"))
+                .Turn("gob", 2, Step.Pass())
+                .Turn("wizard", 1, Step.Pass())
+                .Turn("wizard", 2,
+                    RecordCaster("wizard"),
+                    Step.Assert("covered", ctx => { Fact(ctx, "blocks.grease", GlobeBlocks(ctx, SpellNames.GREASE, "gob")); return true; }),
+                    Step.CastChoosing(SpellNames.GREASE, "gob", "Grease Worn Armor"),
+                    FactCaster("armor", "wizard"),
+                    Step.Assert("armor effect", ctx =>
+                    {
+                        StatusEffectManager m = ctx.Get("gob").StatusEffectManager;
+                        Fact(ctx, "armor.effect", m != null && m.ActiveEffects.Any(e => e != null && e.GreasedArmorGrappleEscapeBonus == 10));
+                        return true;
+                    }))
+                .Expect("The lesser globe is up around the goblin and excludes Grease", FactsAre(("globe.raised", true), ("blocks.grease", true)))
+                .Expect("The cast spends one 1st-level slot and the standard action (PHB p.174)", FactsAre(("armor.spent", "L1+1"), ("armor.actions", "-m-")))
+                .Expect("The armor inside the globe is not greased (PHB p.236)", FactIs("armor.effect", false))
+                .Build();
+        }
+
+        // ── rules/area-globe-invisible (SPL-141) ────────────────────────
+
+        /// <summary>
+        /// SPL-141 (PHB p.236: the area of a spell of the globe's levels does not include the globe; PHB p.245: an
+        /// invisible caster's spell is an attack when its area or effect includes a foe). The warded dummy raises a lesser
+        /// globe in round 1; the Ui wizard 5 is made invisible in round 1 and in round 2 casts Fireball centred on the dummy,
+        /// the only creature in the burst. The area Globe stage drops the dummy before the invisibility break, so the burst
+        /// includes no foe: the wizard stays invisible and the dummy loses nothing.
+        /// </summary>
+        private static ScenarioDef AreaGlobeInvisible()
+        {
+            return Rules("rules/area-globe-invisible", "An invisible caster whose Fireball reaches only a foe inside a lesser globe stays invisible")
+                .Covers("SPL-141", "PHB p.236", "PHB p.245")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Globe Invisible Wizard", 5)), 2, 10, Control.Ui)
+                .Npc("warded", "target_dummy", 12, 10, Control.Scripted)
+                .Tweak("wizard", c => AddWizardSlot(c, 3, SpellNames.FIREBALL))
+                .Tweak("warded", Fails)
+                .Initiative("warded", "wizard")
+                .Force(6, 6, null, -1)
+                .Turn("warded", 1, RaiseLesserGlobe("warded"))
+                .Turn("warded", 2, Step.Pass())
+                .Turn("wizard", 1, Step.Assert("become invisible", ctx =>
+                {
+                    CharacterController w = ctx.Get("wizard");
+                    ActiveSpellEffect effect = w.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.INVISIBILITY).Clone(), w.Stats.CharacterName, 5);
+                    if (effect != null)
+                        w.ApplyInvisibilityEffect(effect.RemainingRounds, w, isMoving: false);
+                    Fact(ctx, "invisible.before", w.HasActiveInvisibilityEffect);
+                    return true;
+                }))
+                .Turn("wizard", 2,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "warded"); Fact(ctx, "blocks.warded", GlobeBlocks(ctx, SpellNames.FIREBALL, "warded")); return true; }),
+                    Step.Cast(SpellNames.FIREBALL, "warded"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "fireball", "warded"); Fact(ctx, "invisible.after", ctx.Get("wizard").HasActiveInvisibilityEffect); return true; }))
+                .Expect("The Ui Fireball ran", Expect.StepStatus("wizard", 2, "Cast", 0, "done"))
+                .Expect("The wizard is invisible and the globe covers the dummy", FactsAre(("globe.raised", true), ("invisible.before", true), ("blocks.warded", true)))
+                .Expect("The burst includes no foe outside the globe: the dummy loses nothing and the wizard stays invisible (PHB p.236, p.245; SPL-141)",
+                    FactsAre(("fireball.lost.warded", 0), ("invisible.after", true)))
+                .Build();
+        }
+
+        // ── rules/prayer-globe (SPL-141) ────────────────────────────────
+
+        /// <summary>
+        /// SPL-141, delegated RAW reading 2026-10-14 (PHB p.236: the area of a spell of the globe's levels does not include
+        /// the globe, and any type of spell can be cast out of it; Prayer, PHB p.264, is a 3rd-level 40-ft burst centred on
+        /// the caster). The Scripted cleric 7 raises a lesser globe on itself in round 1 and casts Prayer from inside it in
+        /// round 2, through the NPC cast path (the single-target route, whose Globe stage would otherwise fail the whole
+        /// cast). Its ally and its foe inside the globe (5 ft away) get nothing, nor does the cleric; its ally and its foe
+        /// outside the globe (25 and 30 ft away) get +1 luck and -1 on attacks.
+        /// </summary>
+        private static ScenarioDef PrayerGlobe()
+        {
+            return Rules("rules/prayer-globe", "Prayer cast from inside a lesser globe affects only the creatures outside the globe")
+                .Covers("SPL-141", "PHB p.236", "PHB p.264")
+                .MaxRounds(2)
+                .Pc("priest", ActorSource.Stats(() => Cleric("Globe Priest", 7)), 3, 10, Control.Scripted)
+                .Pc("allyIn", ActorSource.Stats(() => Wizard("Globe Ally Inside", 1)), 4, 10, Control.Idle)
+                .Pc("allyOut", ActorSource.Stats(() => Wizard("Globe Ally Outside", 1)), 8, 10, Control.Idle)
+                .Npc("foeIn", "target_dummy", 3, 11, Control.Idle)
+                .Npc("foeOut", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("priest", c => Prepare(c, 3, SpellNames.PRAYER))
+                .Initiative("priest", "allyIn", "allyOut", "foeIn", "foeOut")
+                .Turn("priest", 1, RaiseLesserGlobe("priest"))
+                .Turn("priest", 2,
+                    Step.Assert("covered", ctx =>
+                    {
+                        foreach (string k in new[] { "priest", "allyIn", "allyOut", "foeIn", "foeOut" })
+                            Fact(ctx, "blocks." + k, GlobeBlocks(ctx, SpellNames.PRAYER, k));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.PRAYER, "priest"),
+                    Step.Assert("after", ctx =>
+                    {
+                        foreach (string k in new[] { "priest", "allyIn", "allyOut", "foeIn", "foeOut" })
+                            Fact(ctx, "attack." + k, ctx.Get(k).Stats.EffectAttackBonus);
+                        return true;
+                    }))
+                .Expect("The Scripted Prayer ran", Expect.StepStatus("priest", 2, "Cast", 0, "done"))
+                .Expect("The globe covers the cleric and the creatures 5 ft from it, not those 25 and 30 ft away (PHB p.236: 10-ft radius)",
+                    FactsAre(("globe.raised", true), ("blocks.priest", true), ("blocks.allyIn", true), ("blocks.foeIn", true), ("blocks.allyOut", false), ("blocks.foeOut", false)))
+                .Expect("Prayer gives +1 luck to the ally outside and -1 to the foe outside, and nothing inside the globe (PHB p.264, p.236; SPL-141)",
+                    FactsAre(("attack.priest", 0), ("attack.allyIn", 0), ("attack.foeIn", 0), ("attack.allyOut", 1), ("attack.foeOut", -1)))
                 .Build();
         }
 

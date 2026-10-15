@@ -182,6 +182,10 @@ public partial class GameManager
         Add(nameof(TryResolvePhantasmalKillerSpellEffect), Ok, (c, t, s, r) => gm.TryResolvePhantasmalKillerSpellEffect(c, t, s, r), SpellNames.PHANTASMAL_KILLER);
         Add(nameof(TryResolveFireShieldSpellEffect), Ok, (c, t, s, r) => gm.TryResolveFireShieldSpellEffect(c, t, s, r), SpellNames.FIRE_SHIELD);
         Add(nameof(TryResolveResilientSphereSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveResilientSphereSpellEffect(c, t, s, r), SpellNames.RESILIENT_SPHERE);
+        // Gate None: the existing model drops a missed throw's rope by the target (unchanged legacy behaviour: PHB p.199
+        // says only that the rope must be thrown near the target with a ranged touch attack), which a Success gate would
+        // drop; the handler itself gives a failed cast that made no throw (a deafened caster) no effect (batch 11 step 11,
+        // SPL-142), as Ghoul Touch does.
         Add(nameof(TryResolveAnimateRopeSpellEffect), None, (c, t, s, r) => gm.TryResolveAnimateRopeSpellEffect(c, t, s, r), SpellNames.ANIMATE_ROPE);
         Add(nameof(TryResolveMirrorImageSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveMirrorImageSpellEffect(c, t, s, r), SpellNames.MIRROR_IMAGE);
         Add(nameof(TryResolveDimensionalAnchorSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveDimensionalAnchorSpellEffect(c, t, s, r), SpellNames.DIMENSIONAL_ANCHOR);
@@ -193,7 +197,8 @@ public partial class GameManager
         Add(nameof(TryResolveDeathKnellSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveDeathKnellSpellEffect(c, t, s, r), SpellNames.DEATH_KNELL);
         AddContinuing(nameof(TryResolveShieldOtherSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveShieldOtherSpellEffect(c, t, s, r), SpellNames.SHIELD_OTHER);
         Add(nameof(TryResolveSilenceSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveSilenceSpellEffect(c, t, s, r), SpellNames.SILENCE);
-        AddContinuing(nameof(TryResolveSoundBurstStunEffect), None, (c, t, s, r) => gm.TryResolveSoundBurstStunEffect(c, t, s, r), SpellNames.SOUND_BURST);
+        // Gate Success (batch 11 step 11, SPL-142): a Sound Burst that failed (spell resistance, a deafened caster) stuns no one.
+        AddContinuing(nameof(TryResolveSoundBurstStunEffect), Ok, (c, t, s, r) => gm.TryResolveSoundBurstStunEffect(c, t, s, r), SpellNames.SOUND_BURST);
         Add(nameof(TryResolveSpiritualWeaponSpellEffect), Ok, (c, t, s, r) => gm.TryResolveSpiritualWeaponSpellEffect(c, t, s, r), SpellNames.SPIRITUAL_WEAPON);
         Add(nameof(TryResolveAlignWeaponSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveAlignWeaponSpellEffect(c, t, s, r), SpellNames.ALIGN_WEAPON);
         Add(nameof(TryResolveSearingLightSpellEffect), Ok, (c, t, s, r) => gm.TryResolveSearingLightSpellEffect(c, t, s, r), SpellNames.SEARING_LIGHT);

@@ -71,6 +71,13 @@ public sealed class CastContext
     internal bool RetainedHeldChargeOnMiss;
     internal bool CombatEnded;
 
+    /// <summary>
+    /// The globe of invulnerability around the target of a melee touch spell it excludes, or null: the touch is still
+    /// made, and a touch that lands discharges the spell with no effect (GameManager.CastStageGlobe, SpellCaster.Cast;
+    /// delegated RAW reading 2026-10-14, SPL-141).
+    /// </summary>
+    internal LesserGlobeOfInvulnerabilityAreaEffect GlobeAgainstTouch;
+
     /// <summary>The cast's result log (with <see cref="LogPrefix"/>), shown once (GameManager.FlushCastLog).</summary>
     internal string ResultLog;
     internal bool ResultLogShown;
@@ -87,6 +94,20 @@ public sealed class CastContext
     public CastContext(SpellCastRequest request)
     {
         Request = request ?? new SpellCastRequest();
+    }
+
+    /// <summary>
+    /// Whether a lesser globe or globe of invulnerability keeps this cast's spell from affecting <paramref name="target"/>
+    /// (PHB p.236; LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell, by the spell's base level), and which
+    /// globe does. The cast core's Globe stages test it before any effect (batch 11 step 11, SPL-141); the single-target
+    /// stage lets a targeted Dispel Magic, a melee touch and the spells whose own handler cuts the globe out of their burst
+    /// through (GameManager.CastStageGlobe).
+    /// </summary>
+    public bool IsBlockedByGlobe(CharacterController target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe)
+    {
+        blockingGlobe = null;
+        return target != null && Request.Spell != null
+               && LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(Request.Spell, target, out blockingGlobe);
     }
 
     /// <summary>Clears the run state before a run of the cast core (a cast suspended at a dialog runs again).</summary>
@@ -111,6 +132,7 @@ public sealed class CastContext
         ClaimedByHandler = false;
         RetainedHeldChargeOnMiss = false;
         CombatEnded = false;
+        GlobeAgainstTouch = null;
         ResultLog = null;
         ResultLogShown = false;
         ConsoleLogLabel = "[Spell] ";

@@ -153,6 +153,60 @@ public class DispelMagicService : MonoBehaviour
     }
 
     /// <summary>
+    /// A targeted Dispel Magic aimed at <paramref name="target"/>, a creature inside <paramref name="globe"/>, a globe of
+    /// invulnerability that excludes Dispel Magic: PHB p.236 lets a targeted dispel bring the globe down, while the spell
+    /// still fails to affect the creature inside, so the one dispel check (1d20 + caster level, max +10, PHB p.223) is
+    /// made against the globe alone, DC 11 + its caster level; the globe's own caster succeeds automatically. A success
+    /// ends the globe (with a Globe of Invulnerability's tracked effect on its caster). Delegated RAW reading 2026-10-14
+    /// (SPL-141); PCs and NPCs alike, through the cast core's single-target path.
+    /// </summary>
+    public void PerformGlobeDispel(CharacterController caster, CharacterController target, LesserGlobeOfInvulnerabilityAreaEffect globe, int casterLevel = 0)
+    {
+        if (caster == null || globe == null)
+            return;
+
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "the target";
+        if (casterLevel <= 0)
+            casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int checkBonus = Mathf.Min(casterLevel, 10);
+        int globeCasterLevel = Mathf.Max(1, globe.CasterLevel);
+        int dc = GetDispelDC(globeCasterLevel);
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮",
+            $"{casterName} casts Dispel Magic at {targetName}, inside {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(globe)}: the dispel can reach only the globe (PHB p.236)."));
+
+        bool success;
+        string detail;
+        if (globe.Caster == caster)
+        {
+            success = true;
+            detail = "(auto-success, own spell)";
+        }
+        else
+        {
+            int roll = DiceService.D20(DispelCheckContext);
+            int total = roll + checkBonus;
+            success = total >= dc;
+            detail = $"(1d20 {roll} + {checkBonus} = {total} vs DC {dc})";
+        }
+
+        if (success)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"Dispel Magic succeeds — {globe.EffectName} is brought down {detail}"));
+            Debug.Log($"[DispelMagic] Dispelled {globe.EffectName} (CL {globeCasterLevel}) around {targetName} {detail}");
+            LesserGlobeOfInvulnerabilityAreaEffect.EndGlobe(globe);
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"Dispel Magic fails against {globe.EffectName} {detail}"));
+            Debug.Log($"[DispelMagic] Failed to dispel {globe.EffectName} (CL {globeCasterLevel}) {detail}");
+        }
+
+        _updateAllStatsUI?.Invoke();
+    }
+
+    /// <summary>
     /// Break Enchantment on one creature (PHB p.207): a caster level check (1d20 + caster level, max +15) against
     /// each enchantment, transmutation or curse on it, DC 11 + that effect's caster level; each success frees the
     /// creature of that effect. Only the effects that victimize it are checked (Debuff or Control spells, and

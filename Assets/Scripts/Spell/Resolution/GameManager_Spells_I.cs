@@ -558,6 +558,10 @@ public partial class GameManager
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
             if (dist > radiusSquares) continue;
 
+            // The emanation does not include a globe of invulnerability that excludes the purge (PHB p.236): a creature
+            // inside one keeps its invisibility (batch 11 step 11, SPL-141; later entries are SPL-141's open part).
+            if (ch.HasCondition(CombatConditionType.Invisible) && SkipCreatureInsideGlobe(caster, ch, spell)) continue;
+
             if (ch.HasCondition(CombatConditionType.Invisible))
             {
                 ch.RemoveCondition(CombatConditionType.Invisible);

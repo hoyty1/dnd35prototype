@@ -31,6 +31,7 @@ public static class AnimateRopeRulesTests
         TestAnimateRopeEntangledTargetCanStillMoveAtHalfSpeed();
         TestEntangledConcentrationDcScalesWithSpellLevel();
         TestAnimateRopeConditionDataUsesStandardEntangledMetadata();
+        TestFailedCastAnimatesNoRope();
 
         Debug.Log($"====== Animate Rope Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -190,6 +191,63 @@ public static class AnimateRopeRulesTests
 
         Assert(data.RopeBreakDC == 24, "Animate Rope condition data keeps rope break DC metadata");
         Assert(data.SourceSpellId == SpellNames.ANIMATE_ROPE, "Animate Rope condition data tracks spell source id");
+    }
+
+    /// <summary>
+    /// Batch 11 step 11 (SPL-142): a cast that failed before the throw (a deafened caster's 20% verbal failure, PHB p.307;
+    /// no attack roll made) animates no rope. The handler (gate None, for the missed throw that drops the rope) claims the
+    /// cast, takes no rope from the caster and entangles no one. Play mode (needs the scene GameManager).
+    /// </summary>
+    private static void TestFailedCastAnimatesNoRope()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  SKIP: failed Animate Rope cast (no scene GameManager; runs in the Play pass)");
+            return;
+        }
+
+        CharacterController caster = null;
+        CharacterController target = null;
+        try
+        {
+            caster = Tests.Utilities.TestHelpers.CreateCharacter("RopeCaster", "Wizard", level: 5, intelligence: 16);
+            target = Tests.Utilities.TestHelpers.CreateCharacter("RopeTarget", "Fighter", level: 1, gridPosition: new Vector2Int(2, 0));
+            ItemData rope = ItemDatabase.CloneItem(ItemID.GearRopeHemp);
+            global::Inventory inventory = caster.InventoryComp != null ? caster.InventoryComp.CharacterInventory : null;
+            bool carried = inventory != null && rope != null && inventory.AddItem(rope);
+            Assert(carried, "Failed Animate Rope: the caster carries a hemp rope");
+            if (!carried)
+                return;
+
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.ANIMATE_ROPE).Clone();
+            var failed = new SpellResult
+            {
+                Spell = spell,
+                Success = false,
+                RequiredAttackRoll = false,
+                AttackHit = false,
+                NoEffectReason = "Spell fails due to deafness (20% verbal component failure, d%=05)."
+            };
+            System.Reflection.MethodInfo handler = typeof(GameManager).GetMethod("TryResolveAnimateRopeSpellEffect",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert(handler != null, "Failed Animate Rope: the handler TryResolveAnimateRopeSpellEffect exists");
+            if (handler == null)
+                return;
+
+            bool claimed = (bool)handler.Invoke(gm, new object[] { caster, target, spell, failed });
+            bool ropeKept = System.Array.IndexOf(inventory.GeneralSlots, rope) >= 0;
+            Assert(claimed, "Failed Animate Rope: the handler claims the cast (no generic effect step)");
+            Assert(ropeKept, "Failed Animate Rope: the rope stays with the caster (no rope is animated or thrown)");
+            Assert(!target.HasCondition(CombatConditionType.Entangled), "Failed Animate Rope: the target is not entangled (PHB p.199; SPL-142)");
+        }
+        finally
+        {
+            if (caster != null)
+                Object.DestroyImmediate(caster.gameObject);
+            if (target != null)
+                Object.DestroyImmediate(target.gameObject);
+        }
     }
 }
 }

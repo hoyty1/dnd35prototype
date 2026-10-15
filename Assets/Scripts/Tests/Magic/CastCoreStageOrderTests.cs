@@ -16,7 +16,8 @@ namespace Tests.Magic
 /// A recording fake decider (answers every choice inline, lets a threatened cast proceed or cancels it, and records the
 /// finish) casts four spells of a wizard 5 with the UI path's legacy quirks: a self buff (Shield), a melee touch spell
 /// on an ally (Shocking Grasp), a ray (Ray of Frost) and a buff on another creature (Bull's Strength). Each must run
-/// the stages in today's order (with GlobeAfterCast the Globe stage after Resolve, with
+/// the stages in today's order (the Globe stage before Resolve since batch 11 step 11, on the area path before the
+/// invisibility break, with
 /// ConcentrationGateBeforeProvocation ConcentrationOnCast before Provocation), ask the decider for the choices after the
 /// target test and for the provocation in the Provocation stage, and finish once, Resolved at CombatEnd, with the cast
 /// ended. A Self spell aimed at another creature is refused at Legality with nothing spent; a decider that refuses a
@@ -63,7 +64,7 @@ public static class CastCoreStageOrderTests
     {
         "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
         "decider:provocation", "Counterspell", "RingCounterspell", "InvisibilityBreak", "MirrorImage", "TargetBlink",
-        "Resolve", "Globe", "Handlers", "Buff", "PostCast", "CombatEnd", "decider:before-combat-end",
+        "Globe", "Resolve", "Handlers", "Buff", "PostCast", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
 
@@ -74,14 +75,11 @@ public static class CastCoreStageOrderTests
     private static readonly LegacyCastQuirk[] PcPathBits =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
-        LegacyCastQuirk.GlobeAfterCast,
         LegacyCastQuirk.EntangledUsesCasterLevelFormula,
         LegacyCastQuirk.QuickenedProvokes,
         LegacyCastQuirk.SlotFailureClearsSnapshot,
         LegacyCastQuirk.ConcentrationGateBeforeProvocation,
         LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
-        LegacyCastQuirk.SoundBurstStunIgnoresSuccess,
-        LegacyCastQuirk.AnimateRopeIgnoresSuccess,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.DeafenedRolledInSpellCaster,
         LegacyCastQuirk.ScrollSkipsArcaneFailure,
@@ -91,11 +89,14 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
     };
 
-    /// <summary>The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls.</summary>
+    /// <summary>
+    /// The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls. The
+    /// area Globe stage runs before the invisibility break (batch 11 step 11: a foe inside a globe is not in the area).
+    /// </summary>
     private static readonly string[] AreaResolvedSequence =
     {
         "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
-        "decider:provocation", "Counterspell", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
+        "decider:provocation", "Counterspell", "Globe", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
 
@@ -242,7 +243,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.GlobeAfterCast | LegacyCastQuirk.QuickenedProvokes) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.QuickenedProvokes) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -1151,14 +1152,16 @@ public static class CastCoreStageOrderTests
         var events = new List<string>();
         var decider = new RecordingDecider(events);
         CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, decider, out SpellSlot slot);
-        ctx.Request.Quirks = LegacyCastQuirkSets.UiPath & ~LegacyCastQuirk.GlobeAfterCast;
+        // Shield on the caster: the caster forgoes its save (AlliesForgoEverySave, SPL-149), which the InvisibilityBreak stage
+        // still requires (batch 11 step 11 removed GlobeAfterCast, the bit this test used before).
+        ctx.Request.Quirks = LegacyCastQuirkSets.UiPath & ~LegacyCastQuirk.AlliesForgoEverySave;
         int before = violations.Count;
         gm.ExecuteCast(ctx, null);
 
-        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("GlobeAfterCast"),
+        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("AlliesForgoEverySave"),
             "A request without a quirk a stage still needs raises one cast-core violation naming it", string.Join("; ", violations));
-        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && events.IndexOf("Resolve") < events.IndexOf("Globe"),
-            "...and gets the legacy behaviour anyway (the Globe stage after Resolve)", string.Join(",", events));
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.TargetForgoesSave,
+            "...and gets the legacy behaviour anyway (the caster forgoes its save)", string.Join(",", events));
         sc.SpellSlots.Remove(slot);
     }
 

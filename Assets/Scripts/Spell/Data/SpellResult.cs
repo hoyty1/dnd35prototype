@@ -56,6 +56,10 @@ public class SpellResult
     public int ProtectionSaveBonus;
     public string ProtectionSourceName;
     public string NoEffectReason;
+    /// <summary>A melee touch landed on a creature inside a globe of invulnerability that excludes the spell (PHB p.236; SPL-141).</summary>
+    public bool BlockedByGlobe;
+    /// <summary>A sonic spell had no effect on a creature under a Silence (PHB p.279).</summary>
+    public bool SonicBlockedBySilence;
 
     // ========== DAMAGE ==========
     public int DamageDealt;             // Final damage applied after save and mitigation

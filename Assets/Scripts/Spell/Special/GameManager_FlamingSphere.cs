@@ -206,10 +206,18 @@ public partial class GameManager
         SpellResult impactResult = null;
         Vector2Int sphereFinalCell = targetCell;
         bool repositionedAfterInitialImpact = false;
+        // A creature inside a globe of invulnerability that excludes the sphere takes no impact (PHB p.236; batch 11 step
+        // 11, SPL-141). The sphere's later rams are a persistent effect, not tested (SPL-141's open part).
+        LesserGlobeOfInvulnerabilityAreaEffect impactBlockingGlobe = null;
+        bool impactBlockedByGlobe = occupant != null
+            && LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, occupant, out impactBlockingGlobe);
 
         if (occupant != null)
         {
-            impactResult = ResolveFlamingSphereImpactDamage(caster, sphere, occupant, spell, "on creation");
+            if (impactBlockedByGlobe)
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked " + occupant.Stats.CharacterName);
+            else
+                impactResult = ResolveFlamingSphereImpactDamage(caster, sphere, occupant, spell, "on creation");
 
             if (TryGetInitialFlamingSphereAdjacentCellClosestToCaster(caster, targetCell, out Vector2Int adjacentCell))
             {
@@ -243,6 +251,12 @@ public partial class GameManager
                 sb.AppendLine($"  Sphere settles on near side at ({sphereFinalCell.x}, {sphereFinalCell.y}).");
             else
                 sb.AppendLine("  Sphere cannot move to an adjacent valid square and remains in the target square.");
+        }
+        else if (impactBlockedByGlobe)
+        {
+            sb.AppendLine($"  🛡 Initial impact: {occupant.Stats.CharacterName} is inside {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(impactBlockingGlobe)}: no effect.");
+            if (repositionedAfterInitialImpact)
+                sb.AppendLine($"  Sphere settles on near side at ({sphereFinalCell.x}, {sphereFinalCell.y}).");
         }
         else
         {

@@ -2564,8 +2564,8 @@ public partial class GameManager
 
     /// <summary>
     /// The area handler registry's fallback (GameManager.SpellHandlerRegistry.cs, batch 11 step 9): the generic
-    /// per-target loop for an area spell no custom handler claims. Each creature in the area (after line of effect) that
-    /// no globe protects gets the tracked effect (Buff, Debuff, Control, Illusion, Wall), or SpellCaster.Cast's save and
+    /// per-target loop for an area spell no custom handler claims. Each creature in the area (after line of effect and the
+    /// cast core's Globe stage, which drops the creatures a globe protects) gets the tracked effect (Buff, Debuff, Control, Illusion, Wall), or SpellCaster.Cast's save and
     /// damage, or its healing. Returns the cast's log (without the quickened and spontaneous prefixes, which
     /// FinishAreaCast adds); the core shows it and runs the combat-end check ("ResolveAOESpell").
     /// </summary>
@@ -2611,14 +2611,8 @@ public partial class GameManager
                 targetIndex++;
                 logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
-                // ── Globe of Invulnerability (lesser or full) — block AoE spell effects of its levels ──
-                if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect aoeBlockingGlobe))
-                {
-                    logBuilder.AppendLine($"  🛡 Blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(aoeBlockingGlobe)} (spell level {_pendingSpell.SpellLevel})!");
-                    if (ScenarioHooks.CastStage != null)
-                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Globe, "blocked " + target.Stats.CharacterName);
-                    continue;
-                }
+                // A creature inside a globe of invulnerability that excludes this spell was dropped from the targets by
+                // the cast core's Globe stage before any area handler ran (CastStageAreaGlobe, SPL-141).
 
                 // For buff/debuff/control/illusion/wall spells, apply tracked effects. The area pipeline routes only
                 // the tracked effect types (SpellEffectRouting.IsTrackedEffectType), not the single-target extras.
@@ -5464,7 +5458,13 @@ public partial class GameManager
         // DC 11 + that spell's CL; every success dispels its spell. Auto-succeeds against the caster's own spells.
         if (spell != null && spell.SpellId == SpellNames.DISPEL_MAGIC)
         {
-            PerformTargetedDispel(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));
+            // A creature inside a globe of invulnerability that excludes Dispel Magic: the targeted dispel can bring the
+            // globe down (PHB p.236) but not reach the spells on the creature inside it, so it checks the globe alone
+            // (delegated RAW reading 2026-10-14, SPL-141; the cast core's Globe stage lets it through).
+            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect dispelledGlobe))
+                PerformGlobeDispel(caster, target, dispelledGlobe, SpellDurationRules.CasterLevelFor(caster, spell));
+            else
+                PerformTargetedDispel(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));
             return null; // Dispel Magic is instantaneous — no ongoing effect to track
         }
 

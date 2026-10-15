@@ -445,16 +445,26 @@ public partial class GameManager
 
     // ================================================================
     //  SOUND BURST — PHB p.281
-    //  Evocation [Sonic]. Cleric 2. V, S, DF.
-    //  Range: Close. Area: 10-ft-radius spread.
+    //  Evocation [Sonic]. Brd 2, Clr 2. V, S, F/DF.
+    //  Range: Close. Area: 10-ft-radius spread (single target here, SPL-046).
     //  Duration: Instantaneous.
     //  Saving Throw: Fortitude partial. Spell Resistance: Yes.
-    //  1d8 sonic damage to all creatures in area. Creatures that fail
-    //  Fort save are stunned for 1 round.
-    //  NOTE: The damage is already handled by the existing AoE/damage system.
-    //  This handler adds the stun effect on failed Fort save.
+    //  1d8 sonic damage to every creature in the area; a failed Fortitude
+    //  save also stuns it for 1 round. A creature that cannot hear is not
+    //  stunned but is still damaged (a deafened one); a creature under a
+    //  Silence takes no effect at all (PHB p.279, SpellCaster.Cast).
+    //  The damage is SpellCaster.Cast's, which the save does not reduce
+    //  (SpellData.DamageUnaffectedBySave); this handler adds the stun from
+    //  that same save (batch 11 step 11, SPL-142).
     // ================================================================
 
+    /// <summary>
+    /// Sound Burst's stun (PHB p.281): the cast's one Fortitude save (rolled by SpellCaster.Cast) decides it; a failed
+    /// save stuns the target for 1 round unless it cannot hear: a deafened creature (delegated RAW reading 2026-10-14).
+    /// A forgone save (LegacyCastQuirk.AlliesForgoEverySave, SPL-149) counts as failed. Registered with gate Success, so a
+    /// failed cast (spell resistance, a deafened caster's verbal failure, a Silence on the target, PHB p.279) stuns no
+    /// one; returns false so the cast goes on to the buff step, as before.
+    /// </summary>
     private bool TryResolveSoundBurstStunEffect(
         CharacterController caster, CharacterController target,
         SpellData spell, SpellResult result)
@@ -462,48 +472,47 @@ public partial class GameManager
         if (spell == null || spell.SpellId != SpellNames.SOUND_BURST)
             return false;
 
-        if (caster == null || caster.Stats == null || target == null || target.Stats == null)
+        if (caster == null || caster.Stats == null || target == null || target.Stats == null || result == null || !result.Success)
             return false;
 
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSoundBurstStunEffect) + " (continues)");
 
-        // Sound Burst damage is handled by normal spell damage resolution.
-        // Here we check for the stun: Fort save or stunned for 1 round.
-        int saveDC = GetSpellSaveDC(caster, spell);
-        var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
-
-        Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortResult.Total} vs DC {saveDC}");
-
-        if (!fortResult.Saved)
+        string targetName = target.Stats.CharacterName;
+        if (target.HasCondition(CombatConditionType.Deafened))
         {
-            // Failed — stunned for 1 round
-            if (_conditionService != null)
-            {
-                _conditionService.ApplyCondition(
-                    target,
-                    CombatConditionType.Stunned,
-                    1,
-                    source: caster,
-                    sourceNameOverride: spell.Name,
-                    sourceCategory: "Spell",
-                    sourceId: spell.SpellId);
-            }
-            else
-            {
-                string sourceName = caster.Stats.CharacterName;
-                target.ApplyCondition(CombatConditionType.Stunned, 1, sourceName);
-            }
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{targetName} cannot hear Sound Burst's cacophony and is not stunned (PHB p.281)."));
+            Debug.Log($"[SoundBurst] {targetName} cannot hear: not stunned");
+            return false;
+        }
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {target.Stats.CharacterName} is stunned by Sound Burst! (Fort {fortResult.Total} vs DC {saveDC})"));
-            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} STUNNED for 1 round (Fort {fortResult.Total} < DC {saveDC})");
+        string saveText = result.RequiredSave ? $"Fort {result.SaveTotal} vs DC {result.SaveDC}" : "no save";
+        if (result.RequiredSave && result.SaveSucceeded)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{targetName} resists Sound Burst's stun ({saveText})."));
+            Debug.Log($"[SoundBurst] {targetName} resisted the stun ({saveText})");
+            return false;
+        }
+
+        // Failed (or forgone) save: stunned for 1 round.
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Stunned,
+                1,
+                source: caster,
+                sourceNameOverride: spell.Name,
+                sourceCategory: "Spell",
+                sourceId: spell.SpellId);
         }
         else
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{target.Stats.CharacterName} resists Sound Burst's stun (Fort {fortResult.Total} vs DC {saveDC})."));
-            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} resisted stun (Fort {fortResult.Total} >= DC {saveDC})");
+            target.ApplyCondition(CombatConditionType.Stunned, 1, caster.Stats.CharacterName);
         }
 
-        return false; // Let normal damage resolution continue
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {targetName} is stunned by Sound Burst! ({saveText})"));
+        Debug.Log($"[SoundBurst] {targetName} STUNNED for 1 round ({saveText})");
+        return false; // a continuing entry: the buff step follows
     }
 
     // ================================================================

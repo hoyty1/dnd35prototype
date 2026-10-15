@@ -41,7 +41,9 @@ public static class SpellHandlerRegistryTests
     /// besides the handled flags (None: no result check; Success: result.Success; SuccessNotNegated: result.Success
     /// and !effectNegatedBySave), and whether returning true still let ApplySpellBuff run (Shield Other, left out of
     /// anyClericHandled; the Sound Burst stun, which always returns false), and the one spell id its own guard (an id check
-    /// or an Is*Spell predicate) accepts, read from each method on 2026-10-15.
+    /// or an Is*Spell predicate) accepts, read from each method on 2026-10-15. One gate has changed since by a RAW fix:
+    /// the Sound Burst stun is Success (batch 11 step 11, SPL-142: a failed cast stuns no one); Animate Rope stays None
+    /// (its missed throw drops the rope) and tests a failed cast itself.
     /// </summary>
     private static readonly (string name, string gate, bool continueToBuff, string id)[] Manifest =
     {
@@ -69,7 +71,7 @@ public static class SpellHandlerRegistryTests
         ("TryResolveDeathKnellSpellEffect", OkKept, false, SpellNames.DEATH_KNELL),
         ("TryResolveShieldOtherSpellEffect", OkKept, true, SpellNames.SHIELD_OTHER),
         ("TryResolveSilenceSpellEffect", OkKept, false, SpellNames.SILENCE),
-        ("TryResolveSoundBurstStunEffect", None, true, SpellNames.SOUND_BURST),
+        ("TryResolveSoundBurstStunEffect", Ok, true, SpellNames.SOUND_BURST),        // gate Success since batch 11 step 11 (SPL-142)
         ("TryResolveSpiritualWeaponSpellEffect", Ok, false, SpellNames.SPIRITUAL_WEAPON),
         ("TryResolveAlignWeaponSpellEffect", OkKept, false, SpellNames.ALIGN_WEAPON),
         ("TryResolveSearingLightSpellEffect", Ok, false, SpellNames.SEARING_LIGHT),
@@ -322,7 +324,7 @@ public static class SpellHandlerRegistryTests
             Assert(e != null && e.Name == row.name, "entry " + (i + 1) + " is in the old chain order: " + row.name, e != null ? e.Name : "null");
             if (e == null || e.Name != row.name)
                 continue;
-            Assert(e.Gate.ToString() == row.gate, "gate matches the old guard: " + row.name, "registry " + e.Gate + ", manifest " + row.gate);
+            Assert(e.Gate.ToString() == row.gate, "gate matches the manifest: " + row.name, "registry " + e.Gate + ", manifest " + row.gate);
             Assert(e.ContinueToBuff == row.continueToBuff, "ContinueToBuff matches: " + row.name, "registry " + e.ContinueToBuff);
             Assert(e.SpellIds != null && e.SpellIds.SetEquals(new[] { row.id }), "spell ids equal the id the method's guard accepts: " + row.name,
                 "registry " + (e.SpellIds != null ? string.Join(",", e.SpellIds) : "null") + ", manifest " + row.id);

@@ -49,7 +49,8 @@ public static class SpellCaster
         bool forceFriendlyTouchNoRoll,
         bool forceTargetToFailSave,
         CharacterController casterController,
-        CharacterController targetController)
+        CharacterController targetController,
+        LesserGlobeOfInvulnerabilityAreaEffect globeAgainstTouch = null)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -258,6 +259,38 @@ public static class SpellCaster
                     return result;
                 }
             }
+        }
+
+        // ========== GLOBE OF INVULNERABILITY (a melee touch on a creature inside it) ==========
+        // The cast core decides every other spell at a covered creature before this call (GameManager.CastStageGlobe). A
+        // melee touch is still made: a touch that lands discharges the spell, which fails to affect the creature inside
+        // the globe (PHB p.236, p.141; delegated RAW reading 2026-10-14, SPL-141). A missed touch returned above.
+        if (result.AttackHit && globeAgainstTouch != null)
+        {
+            result.Success = false;
+            result.BlockedByGlobe = true;
+            result.TargetHPBefore = targetStats != null ? targetStats.CurrentHP : 0;
+            result.TargetHPAfter = result.TargetHPBefore;
+            string touchText = result.RequiredAttackRoll
+                ? $"The touch lands (d20 {result.AttackRoll}, total {result.AttackTotal} vs touch AC {result.TouchAC})"
+                : "The touch lands";
+            result.NoEffectReason = $"{touchText}, but {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(globeAgainstTouch)} around {targetStats?.CharacterName} keeps the spell out: it is discharged with no effect (PHB p.236).";
+            return result;
+        }
+
+        // ========== SILENCE (a defense against sonic spells) ==========
+        // PHB p.279: silence stops all sound in its area and is a defense against sonic attacks (its example, a horn of
+        // blasting, deals sonic damage), so a sonic spell has no effect on a creature under it: no damage, no rider.
+        // Only the creature a Silence is centred on is known to be under it (Stats.SilenceActive; the 20-ft emanation is
+        // not modelled, SPL-166). Delegated RAW reading 2026-10-14 (SPL-142).
+        if (result.AttackHit && spell.HasDescriptor(SpellDescriptor.Sonic) && targetStats != null && targetStats.SilenceActive)
+        {
+            result.Success = false;
+            result.SonicBlockedBySilence = true;
+            result.TargetHPBefore = targetStats.CurrentHP;
+            result.TargetHPAfter = targetStats.CurrentHP;
+            result.NoEffectReason = $"{targetStats.CharacterName} is inside a Silence: no sound reaches it, so the sonic spell has no effect (PHB p.279).";
+            return result;
         }
 
         // ========== PROTECTION FROM ALIGNMENT: MENTAL CONTROL BLOCK ==========
@@ -528,9 +561,11 @@ public static class SpellCaster
 
                 result.DamageRolled = baseDmg;
 
+                // A partial save whose damage always lands (Sound Burst, PHB p.281) leaves the damage whole (SPL-142).
+                bool saveReducesDamage = !spell.DamageUnaffectedBySave;
                 if (result.RequiredSave && result.SaveSucceeded && saveHalves)
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled / 2);
-                else if (result.RequiredSave && result.SaveSucceeded && !saveHalves)
+                else if (result.RequiredSave && result.SaveSucceeded && !saveHalves && saveReducesDamage)
                     result.DamageDealt = 0;
                 else
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled);

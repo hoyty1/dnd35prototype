@@ -9910,6 +9910,14 @@ public partial class GameManager : MonoBehaviour
 
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveAnimateRopeSpellEffect));
 
+        // A cast that failed before the throw (a deafened caster's verbal failure) animates no rope: the rope stays with
+        // the caster and nothing is entangled. A missed throw (below) still lands the rope by the target, as the model
+        // did before (PHB p.199 says only that the rope must be thrown near the target with a ranged touch attack).
+        // Registered with gate None for that miss, so the handler tests the failure itself (batch 11 step 11, SPL-142).
+        bool missedThrow = result.RequiredAttackRoll && !result.AttackHit;
+        if (!result.Success && !missedThrow)
+            return true;
+
         ItemData ropeItem = ConsumePendingAnimateRopeItem(caster);
         if (ropeItem == null)
         {

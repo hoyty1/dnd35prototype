@@ -606,6 +606,20 @@ public partial class GameManager
         return ApplySpellBuff(caster ?? target, target, spell, (caster ?? target).Spellcasting, castResult);
     }
 
+    /// <summary>
+    /// Runs the single-target handler registered for <paramref name="spell"/> (the registry's Handlers step,
+    /// RunSingleTargetHandlers) as for a landed cast, without the slot, action and targeting steps around it. Pass a
+    /// clone, never a database template. Used by rules scenarios that need a handler's effect (Lesser Globe of
+    /// Invulnerability's emanation) from an actor that has no slot the cast path can spend for it (SPL-041).
+    /// </summary>
+    internal bool Harness_RunSingleTargetHandler(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (caster == null || spell == null)
+            return false;
+        var landed = new SpellResult { Spell = spell, Success = true, AttackHit = true };
+        return RunSingleTargetHandlers(caster, target ?? caster, spell, landed, false, out _);
+    }
+
     /// <summary>The AoO confirmation the player is being asked to answer, or null.</summary>
     internal AoOProvokingActionInfo Harness_PendingAoO
         => _waitingForAoOConfirmation ? _pendingAoOAction : null;

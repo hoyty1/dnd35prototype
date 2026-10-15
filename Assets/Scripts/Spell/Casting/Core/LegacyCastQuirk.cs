@@ -28,11 +28,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     EvaluateCombatEndOnlyOnTargetDeath = 1 << 0,
 
-    /// <summary>
-    /// The Globe of Invulnerability test runs after SpellCaster.Cast has applied damage and healing, at the base spell
-    /// level (SPL-141; batch 11 step 11 moves it before the effect). Required: the core has no pre-cast globe stage yet.
-    /// </summary>
-    GlobeAfterCast = 1 << 1,
+    // Bit 1 is unused: GlobeAfterCast (SPL-141) was removed by batch 11 step 11 (raw-failed-cast-gating), which tests the
+    // globe before SpellCaster.Cast on the single-target path and before any area handler on the area path.
 
     /// <summary>
     /// The entangled casting check rolls d20 + caster level + casting ability under the "Dispel Magic check" label, and
@@ -66,17 +63,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     RangeHighlightUsesCharacterLevel = 1 << 6,
 
-    /// <summary>
-    /// The Sound Burst stun handler runs (gate None) when the cast failed, and rolls its own Fortitude save (SPL-142;
-    /// batch 11 step 11). Required for a Sound Burst cast.
-    /// </summary>
-    SoundBurstStunIgnoresSuccess = 1 << 7,
-
-    /// <summary>
-    /// The Animate Rope handler runs (gate None) and entangles when the cast failed without an attack roll (SPL-142;
-    /// batch 11 step 11). Required for an Animate Rope cast.
-    /// </summary>
-    AnimateRopeIgnoresSuccess = 1 << 8,
+    // Bits 7 and 8 are unused: SoundBurstStunIgnoresSuccess and AnimateRopeIgnoresSuccess (SPL-142) were removed by batch
+    // 11 step 11; a failed cast lands no Sound Burst stun (gate Success) and no Animate Rope entanglement (the handler
+    // tests the failed result itself).
 
     /// <summary>
     /// The caster and every ally that is not charmed or confused forgo their save against every spell, harmful ones
@@ -408,14 +397,11 @@ public static class LegacyCastQuirkSets
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-        | LegacyCastQuirk.GlobeAfterCast
         | LegacyCastQuirk.EntangledUsesCasterLevelFormula
         | LegacyCastQuirk.QuickenedProvokes
         | LegacyCastQuirk.SlotFailureClearsSnapshot
         | LegacyCastQuirk.ConcentrationGateBeforeProvocation
         | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
-        | LegacyCastQuirk.SoundBurstStunIgnoresSuccess
-        | LegacyCastQuirk.AnimateRopeIgnoresSuccess
         | LegacyCastQuirk.AlliesForgoEverySave
         | LegacyCastQuirk.DeafenedRolledInSpellCaster
         | LegacyCastQuirk.ScrollSkipsArcaneFailure
@@ -452,17 +438,14 @@ public static class LegacyCastQuirkSets
     /// batch 11 step 9): the UI path's bits that an area cast exhibits (the cost and provocation bits, the
     /// casting-while-concentrating step before the provocation, the scroll's spell failure, and the generic loop's
     /// forgone saves and SpellCaster deafness roll), without the single-target ones (the combat-end check on a target's
-    /// death, the globe after the cast, the entangled formula, the targeting highlight's range, the Sound Burst and
-    /// Animate Rope gates, the held-charge delivery), plus the area path's own bits. Tests.Magic.CastCoreStageOrderTests
+    /// death, the entangled formula, the targeting highlight's range, the held-charge delivery), plus the area path's own
+    /// bits. Tests.Magic.CastCoreStageOrderTests
     /// checks the list.
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
         (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-                    | LegacyCastQuirk.GlobeAfterCast
                     | LegacyCastQuirk.EntangledUsesCasterLevelFormula
                     | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
-                    | LegacyCastQuirk.SoundBurstStunIgnoresSuccess
-                    | LegacyCastQuirk.AnimateRopeIgnoresSuccess
                     | LegacyCastQuirk.HeldChargeDeliveryIsFree
                     | LegacyCastQuirk.DeliverySkipsCounterspell))
         | LegacyCastQuirk.AreaSkipsEntangled

@@ -50,6 +50,10 @@ public partial class GameManager
     public void PerformTargetedDispel(CharacterController caster, CharacterController target, int casterLevel = 0)
         => _dispelMagicService?.PerformTargetedDispel(caster, target, casterLevel);
 
+    /// <summary>Delegates to <see cref="DispelMagicService.PerformGlobeDispel"/>.</summary>
+    public void PerformGlobeDispel(CharacterController caster, CharacterController target, LesserGlobeOfInvulnerabilityAreaEffect globe, int casterLevel = 0)
+        => _dispelMagicService?.PerformGlobeDispel(caster, target, globe, casterLevel);
+
     /// <summary>Delegates to <see cref="DispelMagicService.PerformBreakEnchantment"/>.</summary>
     public void PerformBreakEnchantment(CharacterController caster, CharacterController target, int casterLevel = 0)
         => _dispelMagicService?.PerformBreakEnchantment(caster, target, casterLevel);

@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-040 |
 | [Combat](issues/CMB.md) | CMB | 0 | 52 | 63 | 115 | CMB-173 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-024 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 1 | 74 | 71 | 146 | SPL-166 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 1 | 74 | 71 | 146 | SPL-167 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 30 | 41 | 72 | CHR-085 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 33 | 61 | CRE-072 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |

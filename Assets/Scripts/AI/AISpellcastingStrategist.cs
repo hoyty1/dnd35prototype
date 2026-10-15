@@ -264,9 +264,9 @@ public static class AISpellcastingStrategist
         if (spell == null || caster == null)
             return fallbackTarget;
 
-        // Self-targeting spells
+        // Self-targeting spells (none when a globe around the caster would stop the spell, PHB p.236)
         if (spell.TargetType == SpellTargetType.Self)
-            return caster;
+            return IsWastedOnGlobe(spell, caster) ? null : caster;
 
         bool isAllySpell = IsAllyTargetedSpell(spell);
 
@@ -299,6 +299,7 @@ public static class AISpellcastingStrategist
 
             int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
             if (distance > rangeSquares) continue;
+            if (IsWastedOnGlobe(spell, candidate)) continue;
 
             float score = ScoreAllyTarget(caster, candidate, spell);
             if (score > bestScore)
@@ -311,6 +312,8 @@ public static class AISpellcastingStrategist
         // Every candidate refused a healing spell (an undead or construct, or nobody hurt): no target rather than a
         // wasted cure on the caster (SPL-005).
         if (bestTarget == null && spell.EffectType == SpellEffectType.Healing)
+            return null;
+        if (bestTarget == null && IsWastedOnGlobe(spell, caster))
             return null;
         return bestTarget ?? caster;
     }
@@ -396,7 +399,7 @@ public static class AISpellcastingStrategist
                 int mirrorDist = SquareGridUtils.GetDistance(caster.GridPosition, mirrorTarget.GridPosition);
                 int range = spell.GetRangeSquaresForCasterLevel(caster.Stats?.GetCasterLevel() ?? 1);
                 if (range <= 0) range = 1;
-                if (mirrorDist <= range) return mirrorTarget;
+                if (mirrorDist <= range && !IsWastedOnGlobe(spell, mirrorTarget)) return mirrorTarget;
             }
         }
 
@@ -421,6 +424,8 @@ public static class AISpellcastingStrategist
             bool requiresLOS = spell.TargetType == SpellTargetType.SingleEnemy;
             if (requiresLOS && !caster.CanSee(candidate, spell.IsRangedTouchSpell()))
                 continue;
+            if (IsWastedOnGlobe(spell, candidate))
+                continue;
 
             float score = ScoreEnemyTarget(caster, candidate, spell, gm);
             if (score > bestScore)
@@ -434,7 +439,25 @@ public static class AISpellcastingStrategist
         if (bestTarget == null && fallbackTarget != null && spell.EffectType == SpellEffectType.Damage
             && spell.Energy != SpellEnergy.None && !SpellDiceRules.Harms(spell, fallbackTarget.Stats))
             return null;
+        if (bestTarget == null && IsWastedOnGlobe(spell, fallbackTarget))
+            return null;
         return bestTarget ?? fallbackTarget;
+    }
+
+    /// <summary>
+    /// True when a visible globe of invulnerability around <paramref name="target"/> keeps <paramref name="spell"/> from
+    /// affecting it (PHB p.236), so the cast would spend its slot and action for nothing; the AI does not pick that target.
+    /// A targeted Dispel Magic (which can bring the globe down) and Prayer and Invisibility Purge (whose burst leaves only
+    /// the globe out) are still allowed, as the cast core lets them through (GameManager.CastStageGlobe; batch 11 step 11,
+    /// SPL-141). The same globe test as the cast's, so the AI picks only among legal, effective casts.
+    /// </summary>
+    public static bool IsWastedOnGlobe(SpellData spell, CharacterController target)
+    {
+        if (spell == null || target == null)
+            return false;
+        if (spell.SpellId == SpellNames.DISPEL_MAGIC || GameManager.CutsGlobeOutOfOwnBurst(spell))
+            return false;
+        return LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target);
     }
 
     /// <summary>Score an enemy as a target for offensive spells (incorporates save/resistance analysis).</summary>

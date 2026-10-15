@@ -6,8 +6,8 @@ using UnityEngine;
 
 /// <summary>
 /// The stages of the cast core (batch 11 step 7, docs/designs/cast_core_batch11.md), in the order a cast runs them
-/// today. With <see cref="LegacyCastQuirk.GlobeAfterCast"/> (every cast so far) the Globe stage runs after Resolve,
-/// and with <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> ConcentrationOnCast before Provocation.
+/// today. With <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> ConcentrationOnCast runs before
+/// Provocation. The Globe stage runs before Resolve on the single-target and area paths (batch 11 step 11, SPL-141).
 /// </summary>
 public enum CastStage
 {
@@ -893,6 +893,11 @@ public partial class GameManager
     /// </summary>
     private void CastStageInvisibilityBreak(CastContext ctx)
     {
+        // An area spell's creatures lose the ones a globe protects first: the area does not include the globe (PHB p.236),
+        // so a foe inside one does not make the spell an attack (PHB p.245).
+        if (IsAreaCast(ctx))
+            CastStageAreaGlobe(ctx);
+
         EnterCastStage(ctx, CastStage.InvisibilityBreak);
         CharacterController caster = ctx.Request.Caster;
         CharacterController target = ctx.Request.Aim.Target;
@@ -986,14 +991,98 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
         }
 
-        // The globe is still tested after SpellCaster.Cast (SPL-141): no pre-cast globe stage yet.
-        RequireLegacyQuirk(ctx, LegacyCastQuirk.GlobeAfterCast);
+        CastStageGlobe(ctx);
+    }
+
+    /// <summary>
+    /// Globe (PHB p.236): a lesser globe of invulnerability (3rd level or lower) or a globe of invulnerability (4th or
+    /// lower) around the target keeps the spell from affecting it, the caster's own spells included ("such spells fail
+    /// to affect any target located within the globe"). The test runs before SpellCaster.Cast, so a covered target is
+    /// not attacked and takes no damage or healing, and no handler or tracked effect runs: the cast ends Failed here,
+    /// its slot and action spent (batch 11 step 11, SPL-141). Three casts go on to Resolve instead:
+    /// a targeted Dispel Magic, which PHB p.236 lets bring the globe down (ApplySpellBuff then dispels only the globe,
+    /// DispelMagicService.PerformGlobeDispel); a melee touch spell, whose touch is still made (a touch that lands
+    /// discharges the spell with no effect, a missed one keeps a held charge, PHB p.141-142; SpellCaster.Cast); and a
+    /// spell whose handler resolves a burst or emanation around the target creature by creature
+    /// (<see cref="CutsGlobeOutOfOwnBurst"/>: the globe is cut out of the area, the rest of it is affected). The last two
+    /// are delegated RAW readings 2026-10-14. The globe compares the spell's base level (Heighten, PHB p.95, is an open
+    /// part of SPL-141).
+    /// </summary>
+    private void CastStageGlobe(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Globe);
+        CharacterController caster = ctx.Request.Caster;
+        CharacterController target = ctx.Request.Aim.Target;
+        SpellData spell = ctx.Request.Spell;
+        if (ctx.IsBlockedByGlobe(target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
+        {
+            if (string.Equals(spell.SpellId, SpellNames.DISPEL_MAGIC, StringComparison.Ordinal))
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "dispel-at-globe");
+                CastStageResolve(ctx);
+                return;
+            }
+
+            if (CutsGlobeOutOfOwnBurst(spell))
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "burst-excludes-globe");
+                CastStageResolve(ctx);
+                return;
+            }
+
+            if (spell.IsMeleeTouchSpell())
+            {
+                ctx.GlobeAgainstTouch = blockingGlobe;
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "touch-first");
+                CastStageResolve(ctx);
+                return;
+            }
+
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked");
+            string casterName = caster.Stats != null ? caster.Stats.CharacterName : caster.name;
+            ctx.ResultLog = ctx.LogPrefix + CombatLogHelper.Defensive("🛡",
+                $"{casterName} casts {spell.Name} (level {spell.SpellLevel}) at {target.Stats.CharacterName}, but {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName} blocks it: the spell has no effect.");
+            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Globe, "globe-blocked"));
+            return;
+        }
+
         CastStageResolve(ctx);
     }
 
     /// <summary>
+    /// The spells resolved on the single-target path whose handler gives a burst or emanation around the aimed creature
+    /// to each creature in it and leaves out every creature a globe of invulnerability protects (PHB p.236: the area of
+    /// such a spell does not include the globe): Prayer (PHB p.264) and Invisibility Purge (PHB p.245), both centred on
+    /// the caster. The Globe stage does not fail them when the caster stands inside a globe. Other single-target-routed
+    /// spells with an area around the target (Invisibility Sphere, Magic Circle against Evil, Zone of Truth, Silence,
+    /// Resilient Sphere's extra creatures) are still decided whole by the target (SPL-141's open part).
+    /// </summary>
+    internal static bool CutsGlobeOutOfOwnBurst(SpellData spell)
+    {
+        return spell != null
+               && (string.Equals(spell.SpellId, SpellNames.PRAYER, StringComparison.Ordinal)
+                   || string.Equals(spell.SpellId, SpellNames.INVISIBILITY_PURGE, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// True when a globe of invulnerability keeps <paramref name="spell"/>'s burst from <paramref name="creature"/>, which
+    /// the handler of a <see cref="CutsGlobeOutOfOwnBurst"/> spell then skips, with a log line (PHB p.236; SPL-141).
+    /// </summary>
+    private bool SkipCreatureInsideGlobe(CharacterController caster, CharacterController creature, SpellData spell)
+    {
+        if (!LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, creature, out LesserGlobeOfInvulnerabilityAreaEffect globe))
+            return false;
+        string name = creature.Stats != null ? creature.Stats.CharacterName : creature.name;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked " + name);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡",
+            $"{spell.Name} (level {spell.SpellLevel}) does not reach {name}: {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(globe)} keeps it out."));
+        return true;
+    }
+
+    /// <summary>
     /// Resolve: SpellCaster.Cast (attack roll, spell resistance, save, generic damage or healing), then the save's and
-    /// the mind-affecting immunity's log lines; the Globe stage follows (<see cref="LegacyCastQuirk.GlobeAfterCast"/>).
+    /// the mind-affecting immunity's log lines; the Handlers stage follows. A melee touch at a creature inside a globe
+    /// (<see cref="CastContext.GlobeAgainstTouch"/>) lands with no effect when it hits (SpellCaster.Cast).
     /// </summary>
     private void CastStageResolve(CastContext ctx)
     {
@@ -1004,9 +1093,11 @@ public partial class GameManager
 
         if (caster.HasCondition(CombatConditionType.Deafened))
             RequireLegacyQuirk(ctx, LegacyCastQuirk.DeafenedRolledInSpellCaster);
-        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.TargetForgoesSave, caster, target);
+        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.TargetForgoesSave, caster, target, ctx.GlobeAgainstTouch);
         ctx.Result = result;
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
+        if (result.BlockedByGlobe)
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked-on-touch");
 
         // The landed cast's effect step (ApplySpellBuff): every Buff, Debuff, Control, Illusion and Wall spell, and the
         // other spells ApplySpellBuff has a branch for. The same for every caster (SPL-037).
@@ -1022,46 +1113,19 @@ public partial class GameManager
         if (result.MindAffectingImmunityBlocked)
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect."));
 
-        CastStageGlobe(ctx);
-    }
-
-    /// <summary>
-    /// Globe: a lesser globe (3rd level or lower) or globe of invulnerability (4th or lower) around the target blocks the
-    /// spell (PHB p.236); the caster's own spells too. Today after SpellCaster.Cast, at the base level (SPL-141).
-    /// </summary>
-    private void CastStageGlobe(CastContext ctx)
-    {
-        EnterCastStage(ctx, CastStage.Globe);
-        CharacterController caster = ctx.Request.Caster;
-        CharacterController target = ctx.Request.Aim.Target;
-        SpellData spell = ctx.Request.Spell;
-        SpellResult result = ctx.Result;
-        if (target != null && spell != null && result.Success && !ctx.EffectNegatedBySave)
-        {
-            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
-            {
-                result.Success = false;
-                CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{spell.Name} (level {spell.SpellLevel}) is blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName}."));
-            }
-        }
-
         CastStageHandlers(ctx);
     }
 
     /// <summary>
     /// Handlers: the SpellId registry (GameManager.SpellHandlerRegistry.cs) runs the handler registered for the spell when
-    /// its gate passes. A claimed cast skips the Buff stage; Shield Other and the Sound Burst stun go on to it.
+    /// its gate passes. A claimed cast skips the Buff stage; Shield Other and the Sound Burst stun go on to it. A failed
+    /// cast (spell resistance, a deafened caster's verbal failure, a missed touch) lands no handler's effect: the gate, or
+    /// for the gate-None handlers (Cause Fear, Ghoul Touch, Scare, Animate Rope) the handler's own test (SPL-142).
     /// </summary>
     private void CastStageHandlers(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Handlers);
         SpellData spell = ctx.Request.Spell;
-        if (string.Equals(spell.SpellId, SpellNames.SOUND_BURST, StringComparison.Ordinal))
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.SoundBurstStunIgnoresSuccess);
-        else if (string.Equals(spell.SpellId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal))
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.AnimateRopeIgnoresSuccess);
-
         ctx.ClaimedByHandler = RunSingleTargetHandlers(ctx.Request.Caster, ctx.Request.Aim.Target, spell, ctx.Result, ctx.EffectNegatedBySave, out _);
         CastStageBuff(ctx);
     }
@@ -1222,6 +1286,38 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Globe (area; PHB p.236): the area of a spell of a globe's levels does not include the globe, and the spell fails to
+    /// affect any creature inside it. Before the invisibility break and any area handler or the generic loop, the aim's
+    /// creatures drop every one a globe protects from this spell (<see cref="CastContext.IsBlockedByGlobe"/>), each with
+    /// a log line, so every handler that reads <c>Aim.AreaTargets</c> leaves it out and a foe inside a globe does not end
+    /// the caster's invisibility (batch 11 step 11, SPL-141). The aim's squares are kept: a persistent area that a
+    /// creature inside a globe stands in, or enters later, is not tested (SPL-141's open part).
+    /// </summary>
+    private void CastStageAreaGlobe(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Globe);
+        List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
+        if (targets == null || targets.Count == 0)
+            return;
+
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController t = targets[i];
+            if (!ctx.IsBlockedByGlobe(t, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
+                continue;
+
+            targets.RemoveAt(i);
+            i--;
+            string name = t.Stats != null ? t.Stats.CharacterName : t.name;
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked " + name);
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡",
+                $"{spell.Name} (level {spell.SpellLevel}) does not reach {name}: {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} keeps it out."));
+        }
+    }
+
+    /// <summary>
     /// Resolve (area): the area handler registry (GameManager.SpellHandlerRegistry.cs) runs the handler registered for
     /// the spell's id, in the old block order, then the generic per-target loop, which takes what no handler claimed. A
     /// claimed cast goes to <see cref="FinishAreaCast"/>; an Async handler (the walls) returns at once and resumes the
@@ -1229,6 +1325,7 @@ public partial class GameManager
     /// </summary>
     private void CastStageResolveArea(CastContext ctx)
     {
+        // The area Globe stage ran before the invisibility break (CastStageInvisibilityBreak).
         EnterCastStage(ctx, CastStage.Resolve);
         CharacterController caster = ctx.Request.Caster;
         SpellData spell = ctx.Request.Spell;
@@ -1323,10 +1420,29 @@ public partial class GameManager
     /// <summary>
     /// Resolve (Grease, PHB p.237): the mode the caster chose (CastChoices.GreaseMode) greases the aimed 10-ft square, the
     /// object the aim's holder carries or the armor it wears (<see cref="ResolveGreaseCast"/>); the cast ends with its
-    /// result log (<see cref="FinishGreaseCast"/>).
+    /// result log (<see cref="FinishGreaseCast"/>). An object or armor carried by a creature inside a globe of
+    /// invulnerability is a target within the globe, so the spell fails to affect it (PHB p.236): the cast ends Failed at
+    /// the Globe stage with no effect (batch 11 step 11, SPL-141). The 10-ft square is a persistent area, not tested
+    /// against globes (SPL-141's open part).
     /// </summary>
     private void CastStageResolveGrease(CastContext ctx)
     {
+        if ((ctx.Request.Choices.GreaseMode == GreaseCastMode.Object || ctx.Request.Choices.GreaseMode == GreaseCastMode.Armor)
+            && ctx.IsBlockedByGlobe(ctx.Request.Aim.ObjectHolder, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
+        {
+            EnterCastStage(ctx, CastStage.Globe);
+            CharacterController caster = ctx.Request.Caster;
+            CharacterController holder = ctx.Request.Aim.ObjectHolder;
+            SpellData spell = ctx.Request.Spell;
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Globe, "blocked");
+            string casterName = caster.Stats != null ? caster.Stats.CharacterName : caster.name;
+            string what = ctx.Request.Choices.GreaseMode == GreaseCastMode.Armor ? "armor" : "item";
+            ctx.ResultLog = ctx.LogPrefix + CombatLogHelper.Defensive("🛡",
+                $"{casterName} casts {spell.Name} at {holder.Stats.CharacterName}'s {what}, but {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {holder.Stats.CharacterName} blocks it: the spell has no effect.");
+            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Globe, "globe-blocked"));
+            return;
+        }
+
         EnterCastStage(ctx, CastStage.Resolve);
         FinishGreaseCast(ctx, ResolveGreaseCast(ctx));
     }

@@ -598,7 +598,9 @@ public static partial class SpellDatabase
                     DamageType = "sonic",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    SaveHalves = false, // Stunned if failed, not half damage
+                    SaveHalves = false, // Fortitude partial: the save avoids the stun only
+                    DamageUnaffectedBySave = true, // PHB p.281: the 1d8 always lands (SPL-142)
+                    SpellResistanceApplies = true, // PHB p.281: Spell Resistance: Yes (SPL-142)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

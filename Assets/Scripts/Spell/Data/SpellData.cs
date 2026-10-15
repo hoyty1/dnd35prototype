@@ -356,6 +356,13 @@ public class SpellData
     public string SavingThrowType;      // "Reflex", "Will", "Fortitude"
     public int SaveDC;                  // 0 = computed (10 + spell level + casting mod)
     public bool SaveHalves;             // True if save halves damage (e.g., Acid Splash)
+
+    /// <summary>
+    /// True for a "partial" save whose damage always lands (Sound Burst, PHB p.281: the save only avoids the stun its
+    /// handler applies): SpellCaster.Cast deals the full damage whatever the save, and the handler reads the save from the
+    /// cast's result. Without it a successful save that does not halve negates the damage (SPL-142).
+    /// </summary>
+    public bool DamageUnaffectedBySave;
     public bool SpellResistanceApplies; // True if target SR can negate the spell on a caster-level check
 
     /// <summary>

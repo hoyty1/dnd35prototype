@@ -87,6 +87,9 @@ public partial class GameManager
         if (!result.Success)
             return true;
 
+        // A caster inside a globe of invulnerability still casts the burst (the cast core's Globe stage lets it through,
+        // CutsGlobeOutOfOwnBurst); the loop below leaves out every creature inside a globe that excludes Prayer.
+
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
@@ -103,6 +106,10 @@ public partial class GameManager
             // Check distance from caster
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
             if (dist > radiusSquares) continue;
+
+            // The burst does not include a globe of invulnerability that excludes Prayer (PHB p.236): a creature inside one,
+            // the caster included, gets neither the bonus nor the penalty (batch 11 step 11, SPL-141).
+            if (SkipCreatureInsideGlobe(caster, ch, spell)) continue;
 
             if (ApplyPrayerToCreature(caster, ch, spell, casterLevel, durationRounds, out _))
                 allyCount++;
