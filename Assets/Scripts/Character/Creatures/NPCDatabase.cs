@@ -363,6 +363,19 @@ public class AuraAbilityDefinition
     /// </summary>
     public bool IsMindAffecting = false;
 
+    /// <summary>
+    /// A sonic effect (MM: harpy captivating song, gibbering mouther gibbering, allip babble, cloaker moan, shadow mastiff
+    /// bay): a creature within 30 ft of a countersinging bard may use his Perform result in place of its save (PHB p.29;
+    /// BardicMusicRules.ApplyCountersong, CHR-026).
+    /// </summary>
+    public bool IsSonic = false;
+
+    /// <summary>An enchantment effect (a charm or compulsion): the elf's +2, Still Mind (SaveRules, CHR-018).</summary>
+    public bool IsEnchantment = false;
+
+    /// <summary>A charm effect (the harpy's song): Inspire Courage's morale bonus applies (PHB p.29).</summary>
+    public bool IsCharm = false;
+
     /// <summary>Alias for RangeFeet — allows initializer shorthand.</summary>
     public int Range { get { return RangeFeet; } set { RangeFeet = value; } }
 

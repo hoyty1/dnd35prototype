@@ -6101,13 +6101,8 @@ public class CharacterController : MonoBehaviour
                 Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
         }
 
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.BreakCharmOnHostileAction(this, target);
-            GameManager.Instance.BreakCommandUndeadOnHostileAction(this, target);
-            GameManager.Instance.BreakFascinationOnHostileAction(this, target, "attack");
-            GameManager.Instance.BreakFascinationFromLoudNoise(this, target != null ? target.GridPosition : GridPosition, radiusSquares: 4);
-        }
+        // The hostile-action notices (charm, command undead, fascination, combat noise) are sent per swing by
+        // PerformSingleAttackWithCrit, the core every weapon attack path shares (GameManager.NotifyWeaponAttackAgainst).
 
         HasAttackedThisTurn = true;
         return result;
@@ -7352,7 +7347,11 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics (see
     /// <see cref="PerformSingleAttackWithCritCore"/>), then report the result to the inert
-    /// <see cref="ScenarioHooks.AttackResolved"/> test hook. Every weapon attack path calls this.
+    /// <see cref="ScenarioHooks.AttackResolved"/> test hook. Every weapon attack path calls this (single attacks, AoOs,
+    /// full attacks, two-weapon fighting, flurries, natural, rake and grapple attacks), so each swing also sends the
+    /// hostile-action notices against the target here, for PCs and NPCs alike: a charm or command undead by the attacker
+    /// ends, a bard's fascination breaks (an obvious threat, PHB p.29), and the combat noise disturbs fascinated creatures
+    /// nearby (<see cref="GameManager.NotifyWeaponAttackAgainst"/>; CHR-026).
     /// </summary>
     private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
@@ -7367,6 +7366,8 @@ public class CharacterController : MonoBehaviour
             critThreatMin, critMultiplier,
             weapon, situationalTargetAcBonus,
             dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
+        if (GameManager.Instance != null && target != null)
+            GameManager.Instance.NotifyWeaponAttackAgainst(this, target);
         ScenarioHooks.AttackResolved?.Invoke(this, result);
         return result;
     }
@@ -12695,6 +12696,14 @@ public class CharacterController : MonoBehaviour
         bool sunderUsedOffHand = false,
         int sunderDualWieldPenaltyForLog = 0)
     {
+        // A combat maneuver against a creature is an obvious threat to it: it breaks a bard's fascination at once (PHB
+        // p.29) and is a hostile action against it. Here, past the initiation AoOs, the PC wrapper and the NPC executor
+        // send it identically (delegated RAW reading 2026-10-14, CHR-026). Waking an ally and turning undead are not
+        // maneuvers against the target.
+        if (GameManager.Instance != null && target != null
+            && type != SpecialAttackType.WakeSleepingAlly && type != SpecialAttackType.TurnUndead)
+            GameManager.Instance.BreakFascinationOnHostileAction(this, target, GameManager.FascinationThreatManeuver);
+
         SpecialAttackResult result = ExecuteSpecialAttackCore(type, target,
             disarmTargetSlot, disarmAttackBonusOverride, grappleAttackBonusOverride,
             bullRushChargeBonusOverride, disarmAttackerWeaponOverride, tripAttackBonusOverride,

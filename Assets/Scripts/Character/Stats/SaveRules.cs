@@ -28,13 +28,19 @@ public sealed class SaveContext
     public readonly bool IsFeySpellLike;
     /// <summary>A charm effect (enchantment, charm subschool: Inspire Courage's +1 morale bonus, PHB p.29).</summary>
     public readonly bool IsCharm;
+    /// <summary>
+    /// A sonic or language-dependent magical attack: a creature within 30 ft of a bard's countersong may use the bard's
+    /// Perform check result in place of its save (PHB p.29; BardicMusicRules.ApplyCountersong, CHR-026).
+    /// </summary>
+    public readonly bool IsSonicOrLanguageDependent;
     /// <summary>What the save is against, for logs (may be null).</summary>
     public readonly string Label;
 
     public SaveContext(bool spell = false, bool enchantment = false, bool illusion = false, bool fear = false,
         bool poison = false, bool spiderPoison = false, bool trap = false, bool feySpellLike = false, string label = null,
-        bool charm = false)
+        bool charm = false, bool sonicOrLanguageDependent = false)
     {
+        IsSonicOrLanguageDependent = sonicOrLanguageDependent;
         IsSpell = spell;
         IsEnchantment = enchantment;
         IsIllusion = illusion;
@@ -84,8 +90,9 @@ public sealed class SaveContext
         bool illusion = school.StartsWith("Illusion", System.StringComparison.OrdinalIgnoreCase);
         bool fear = SpellCaster.IsFearSpell(spell);
         bool poison = string.Equals(spell.SpellId, DND35e.Identifiers.SpellNames.POISON, System.StringComparison.Ordinal);
+        bool sonicOrLanguage = spell.HasDescriptor(SpellDescriptor.Sonic) || spell.HasDescriptor(SpellDescriptor.LanguageDependent);
         return new SaveContext(spell: true, enchantment: enchantment, illusion: illusion, fear: fear, poison: poison,
-            feySpellLike: feySpellLike, label: spell.Name, charm: IsCharmSpell(spell.SpellId));
+            feySpellLike: feySpellLike, label: spell.Name, charm: IsCharmSpell(spell.SpellId), sonicOrLanguageDependent: sonicOrLanguage);
     }
 
     /// <summary>

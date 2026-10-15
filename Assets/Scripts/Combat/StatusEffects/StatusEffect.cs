@@ -789,6 +789,22 @@ public static class ConditionRules
             MovementMultiplier = 1f
         });
 
+        // A suggestion (PHB p.285) sets a course of activity: the course is carried out by SuggestedBehaviorController on
+        // the creature's turn, PC or NPC (CHR-026). The one course modelled, leave the fight, takes no hostile action at
+        // all, so the creature makes no attack of opportunity and threatens no square (no flanking, no AoO to provoke),
+        // for PCs and NPCs alike through ThreatSystem (delegated RAW reading 2026-10-14).
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Suggested,
+            DisplayName = "Suggested",
+            ShortLabel = "SG",
+            Description = "Follows a suggested course of activity (leave the fight): moves away from the suggester and takes no hostile action (no attacks of opportunity, threatens no square).",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 1f
+        });
+
         // Bestow Curse conditions
         Add(new ConditionDefinition
         {

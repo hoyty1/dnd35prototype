@@ -68,7 +68,10 @@ public static partial class NPCDatabase
                 IsWillSave = true,
                 RangeFeet = 60,
                 Effect = AuraEffectType.Frightened,
-                DurationRounds = 2
+                DurationRounds = 2,
+                // MM p.36: sonic, mind-affecting
+                IsMindAffecting = true,
+                IsSonic = true
             },
             CreatureTags = new List<string> { "Aberration", "MM35" },
             Feats = new List<string> { "Alertness", "Combat Reflexes", "Improved Initiative" },

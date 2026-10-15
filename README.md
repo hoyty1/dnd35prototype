@@ -23,7 +23,7 @@ What follows comes from reading the code. Most of it has not been re-checked in 
 |---|---|
 | Fighter, Rogue, Barbarian, Cleric, Wizard, Sorcerer | Playable. Rage, sneak attack, evasion, Turn Undead, cleric domains (22) and spontaneous cure/inflict work. Known gap: the Destruction domain smite adds no damage. |
 | Monk | Playable; AC bonus, unarmed damage, fast movement, flurry of blows and Stunning Fist uses scale by monk level (PHB Table 3-10). Stunning Fist cannot be switched on yet (CMB-022). |
-| Bard | Spontaneous casting works. Of 9 bardic music abilities, only Inspire Courage can be started. BAB (3/4) and hit die (d6) come from the class definition (CHR-002, fixed 2026-10-08). |
+| Bard | Spontaneous casting works. Bardic music to 8th level (countersong, fascinate, inspire courage, inspire competence, suggestion) works for PCs and NPCs since 2026-10-15 and needs Perform ranks; inspire greatness and the later songs are not built. BAB (3/4) and hit die (d6) come from the class definition (CHR-002, fixed 2026-10-08). |
 | Druid | Prepared casting works, up to 2nd-level spells. As with clerics, creation has no spell step; spells are prepared in the pre-combat hub. Wild shape works from 5th level (the Wild Shape button: a Small or Medium animal, Large from 8th); the animal companion is data only. |
 | Ranger, Paladin | Spell slots are shown, but there is no preparation or casting. Favored enemy, companion, Smite Evil, Lay on Hands and Divine Grace have no effect in play. |
 | Adept, Aristocrat, Commoner, Expert, Warrior | Registered for NPCs. PCs cannot take them (filtered in `CharacterCreationUI` and `LevelUpUI`). Adepts cannot cast. |

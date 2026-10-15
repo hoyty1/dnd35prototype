@@ -58,7 +58,11 @@ public static partial class NPCDatabase
                 IsWillSave = true,
                 RangeFeet = 60,
                 Effect = AuraEffectType.Fascinated,
-                DurationRounds = 3
+                DurationRounds = 3,
+                // MM p.10: a sonic mind-affecting compulsion effect
+                IsMindAffecting = true,
+                IsSonic = true,
+                IsEnchantment = true
             },
             CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
             Feats = new List<string> { "Improved Initiative", "Lightning Reflexes" },

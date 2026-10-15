@@ -662,6 +662,7 @@ public enum SpellDescriptor
     Darkness    = 1 << 14,
     Death       = 1 << 15,
     Force       = 1 << 16,
+    LanguageDependent = 1 << 17, // [Language-Dependent] (PHB p.174): countersong works against it (PHB p.29)
 }
 
 /// <summary>Who or what the spell targets.</summary>

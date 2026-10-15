@@ -196,7 +196,8 @@ public static class SpellSaveResolver
     {
         int roll = DiceRoller.D20();
         int modifier = SaveRules.Modifier(target != null ? target.Stats : null, type, context);
-        int total = roll + modifier;
+        // A countersong's Perform result replaces the save against a sonic or language-dependent attack when higher (PHB p.29).
+        int total = BardicMusicRules.ApplyCountersong(target, roll + modifier, context);
 
         return new SaveResult
         {
@@ -216,7 +217,7 @@ public static class SpellSaveResolver
     {
         int roll = DiceRoller.D20();
         int modifier = SaveRules.Modifier(stats, type, context);
-        int total = roll + modifier;
+        int total = BardicMusicRules.ApplyCountersong(stats != null ? stats.OwnerCharacter : null, roll + modifier, context);
 
         return new SaveResult
         {

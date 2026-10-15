@@ -490,6 +490,19 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Clicks the open selection list's option whose label starts with <paramref name="labelPrefix"/> (the Bardic Music
+    /// lists, CHR-026). False when the list is not open or has no such option.
+    /// </summary>
+    internal bool Harness_ChooseSelectionOption(string labelPrefix)
+    {
+        UnityEngine.UI.Button option = CombatUI != null ? CombatUI.Harness_FindSelectionOption(labelPrefix) : null;
+        if (option == null || !option.interactable)
+            return false;
+        option.onClick.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Presses Cast Now on the open touch-spell prompt (a melee touch spell's Cast Now / Discharge Later choice), as a
     /// player clicks it; false when no prompt or button is open. Writes no game state of its own.
     /// </summary>

@@ -444,7 +444,10 @@ public static class SpellCaster
                 result.ProtectionSaveBonus = protectionSaveBonus;
                 result.SituationalSaveBonus = situationalSaveBonus;
                 result.SituationalSaveBonusSource = situationalSaveSource;
-                result.SaveTotal = saveRoll + saveMod;
+                // A countersong's Perform result replaces the save against a sonic or language-dependent spell when higher
+                // (PHB p.29; CHR-026).
+                result.SaveTotal = BardicMusicRules.ApplyCountersong(targetController, saveRoll + saveMod,
+                    SaveContext.ForSpell(spell, casterController != null ? casterController.Stats : null));
                 result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
             }
         }

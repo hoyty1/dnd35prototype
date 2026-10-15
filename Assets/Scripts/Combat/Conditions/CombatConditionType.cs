@@ -62,5 +62,8 @@ public enum CombatConditionType
     Feinted,
     ChargePenalty,
     Flanked,
-    LostShieldAC
+    LostShieldAC,
+
+    // A suggestion's course of activity (the bard's Suggestion, PHB p.29 and p.285; SuggestedConditionData, CHR-026)
+    Suggested
 }

@@ -2113,7 +2113,8 @@ public partial class GameManager
             return;
         }
 
-        BreakFascinationOnHostileAction(attacker, target, "threatening movement");
+        // The maneuver's hostile-action notice (a bard's fascination breaks) is sent by CharacterController.ExecuteSpecialAttack,
+        // shared with the NPC executor (CHR-026).
 
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(
             type,

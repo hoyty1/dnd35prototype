@@ -744,7 +744,9 @@ public static partial class NPCDatabase
                 DurationRounds = 1,        // Fallback; overridden by DurationDice
                 DurationDice = 2,           // 1d2 rounds per MM
                 GrantsImmunityOnSave = true, // 24-hour immunity on successful save
-                IsMindAffecting = true       // Sonic mind-affecting compulsion
+                IsMindAffecting = true,      // Sonic mind-affecting compulsion
+                IsSonic = true,
+                IsEnchantment = true
             },
             
             // ── Ranged Special: Spittle (Ex) — MM p.126 ──

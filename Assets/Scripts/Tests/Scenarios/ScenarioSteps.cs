@@ -14,7 +14,7 @@ namespace Tests.Scenarios
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
-        WildShape, RevertWildShape
+        WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -47,6 +47,12 @@ namespace Tests.Scenarios
         public string MenuChoice { get; private set; }
         /// <summary>The bestiary id of the animal a <see cref="WildShape"/> step takes (NPCDatabase).</summary>
         public string FormId { get; private set; }
+        /// <summary>The song a <see cref="BardicMusic"/> step starts.</summary>
+        public BardicAbility Ability { get; private set; }
+        /// <summary>The actors a <see cref="BardicMusic"/> step fascinates (or the one ally it inspires with competence).</summary>
+        public string[] Targets { get; private set; }
+        /// <summary>The skill an Inspire Competence step helps.</summary>
+        public string Skill { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
@@ -114,6 +120,22 @@ namespace Tests.Scenarios
         public static Step WildShape(string formId) => new Step(StepKind.WildShape) { FormId = formId };
         /// <summary>Changing back from a wild shape (a standard action). Scripted: TryWildShapeRevertForAI. Ui: the Wild Shape button.</summary>
         public static Step RevertWildShape() => new Step(StepKind.RevertWildShape);
+        /// <summary>
+        /// Starts a bardic music song (BardicMusicRules, CHR-026): Inspire Courage or Countersong with no targets, Fascinate
+        /// with the actors to fascinate. Scripted: GameManager.TryBardicMusicForAI. Ui: the Bardic Music button, the song's
+        /// option, then each target's option and, when fewer than the bard's count were named, Begin Fascinate.
+        /// </summary>
+        public static Step BardicMusic(BardicAbility ability, params string[] targets)
+            => new Step(StepKind.BardicMusic) { Ability = ability, Targets = targets ?? new string[0] };
+        /// <summary>Inspire Competence on <paramref name="ally"/> for <paramref name="skill"/> (Ui: the song, the ally, the skill).</summary>
+        public static Step InspireCompetence(string ally, string skill)
+            => new Step(StepKind.BardicMusic) { Ability = BardicAbility.InspireCompetence, Targets = new[] { ally }, Skill = skill };
+        /// <summary>Concentrates on the bard's song (a standard action). Scripted: TryBardicConcentrateForAI. Ui: the list's Concentrate option.</summary>
+        public static Step BardicConcentrate() => new Step(StepKind.BardicConcentrate);
+        /// <summary>The bard's Suggestion to a creature he fascinates. Scripted: TryBardicSuggestionForAI. Ui: the list's Suggestion option.</summary>
+        public static Step BardicSuggestion(string target) => new Step(StepKind.BardicSuggestion) { Target = target };
+        /// <summary>Stops the bard's song (no action). Scripted: TryBardicStopForAI. Ui: the list's Stop option.</summary>
+        public static Step BardicStop() => new Step(StepKind.BardicStop);
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -232,6 +254,11 @@ namespace Tests.Scenarios
                     return "Assert(" + AssertName + ")";
                 case StepKind.WildShape:
                     return "WildShape(" + FormId + ")";
+                case StepKind.BardicMusic:
+                    return "BardicMusic(" + Ability + (Targets != null && Targets.Length > 0 ? "," + string.Join(",", Targets) : "")
+                        + (string.IsNullOrEmpty(Skill) ? "" : "," + Skill) + ")";
+                case StepKind.BardicSuggestion:
+                    return "BardicSuggestion(" + Target + ")";
                 case StepKind.Wait:
                     return "Wait(" + Frames + ")";
                 default:
@@ -258,6 +285,12 @@ namespace Tests.Scenarios
                 return "Cast without a spell id";
             if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
                 return Describe() + ": no bestiary entry '" + FormId + "'";
+            if (Kind == StepKind.BardicSuggestion && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
+                return Describe() + ": target '" + Target + "' is not an actor";
+            if (Kind == StepKind.BardicMusic && Targets != null)
+                foreach (string t in Targets)
+                    if (def.Find(t) == null)
+                        return Describe() + ": target '" + t + "' is not an actor";
             if (Kind == StepKind.Maneuver && ManeuverType == SpecialAttackType.BullRushCharge)
                 return Describe() + ": a bull rush on a charge is Charge(target, bullRush: true)";
             if (Kind == StepKind.Assert && Check == null)
@@ -329,6 +362,8 @@ namespace Tests.Scenarios
                     sb.Append(act.StandardActionUsed).Append(act.MoveActionUsed).Append(act.FullRoundActionUsed)
                       .Append(act.StandardConvertedToMove).Append(act.HasMoved5Ft).Append(act.SwiftActionUsed);
                 sb.Append('|').Append(string.Join(",", ScenarioTrace.ConditionNames(a)));
+                // A bardic music stop costs no action: the song under way and the uses left show the change.
+                sb.Append('|').Append(BardicMusicRules.ActiveAbility(a.Stats)).Append(BardicMusicRules.UsesLeft(a.Stats));
             }
             return sb.ToString();
         }
@@ -512,6 +547,40 @@ namespace Tests.Scenarios
                     case StepKind.RevertWildShape:
                         if (!WildShapeRules.CanRevert(a, out string revertRefusal)) { ok = false; note = revertRefusal; break; }
                         ok = gm.TryWildShapeRevertForAI(a);
+                        yield return null;
+                        break;
+
+                    case StepKind.BardicMusic:
+                    {
+                        if (!BardicMusicRules.CanStart(a, s.Ability, out string bardicRefusal)) { ok = false; note = bardicRefusal; break; }
+                        var bardicTargets = new List<CharacterController>();
+                        if (s.Targets != null)
+                            foreach (string key in s.Targets)
+                                bardicTargets.Add(job.Ctx.Get(key));
+                        ok = gm.TryBardicMusicForAI(a, s.Ability, bardicTargets, s.Skill);
+                        if (ok == false) note = "refused (see the combat log)";
+                        yield return null;
+                        break;
+                    }
+
+                    case StepKind.BardicConcentrate:
+                        if (!BardicMusicRules.CanConcentrate(a, out string concentrateRefusal)) { ok = false; note = concentrateRefusal; break; }
+                        ok = gm.TryBardicConcentrateForAI(a);
+                        yield return null;
+                        break;
+
+                    case StepKind.BardicSuggestion:
+                    {
+                        string suggestionRefusal = BardicMusicRules.SuggestionTargetProblem(a, target);
+                        if (suggestionRefusal != null) { ok = false; note = suggestionRefusal; break; }
+                        ok = gm.TryBardicSuggestionForAI(a, target);
+                        yield return null;
+                        break;
+                    }
+
+                    case StepKind.BardicStop:
+                        if (!BardicMusicRules.IsPerforming(a.Stats)) { ok = false; note = "not performing"; break; }
+                        ok = gm.TryBardicStopForAI(a);
                         yield return null;
                         break;
 
@@ -901,6 +970,49 @@ namespace Tests.Scenarios
                 case StepKind.RevertWildShape:
                     if (!WildShapeRules.IsWildShaped(_actor.Stats)) { _awaitNote = "not in animal form"; break; }
                     gm.OnWildShapeButtonPressed();
+                    break;
+                case StepKind.BardicMusic:
+                {
+                    gm.OnBardicMusicButtonPressed();
+                    string song = BardicAbilityInfo.GetDisplayName(s.Ability) + " (";
+                    if (!gm.Harness_ChooseSelectionOption(song)) { _awaitNote = "the Bardic Music list did not offer " + song; gm.CombatUI?.HidePickUpItemSelection(); break; }
+                    bool picked = true;
+                    if (s.Targets != null)
+                    {
+                        foreach (string key in s.Targets)
+                        {
+                            CharacterController t = _job.Ctx.Get(key);
+                            if (t == null || !gm.Harness_ChooseSelectionOption(t.Stats.CharacterName + " ("))
+                            {
+                                _awaitNote = "the list did not offer " + key;
+                                picked = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (picked && s.Ability == BardicAbility.InspireCompetence && !gm.Harness_ChooseSelectionOption(s.Skill + " ("))
+                    {
+                        _awaitNote = "the skill list did not offer " + s.Skill;
+                        picked = false;
+                    }
+                    if (picked && s.Ability == BardicAbility.Fascinate)
+                        gm.Harness_ChooseSelectionOption("Begin Fascinate");
+                    if (!picked)
+                        gm.CombatUI?.HidePickUpItemSelection();
+                    break;
+                }
+                case StepKind.BardicConcentrate:
+                    gm.OnBardicMusicButtonPressed();
+                    if (!gm.Harness_ChooseSelectionOption("Concentrate on")) { _awaitNote = "no Concentrate option"; gm.CombatUI?.HidePickUpItemSelection(); }
+                    break;
+                case StepKind.BardicSuggestion:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnBardicMusicButtonPressed();
+                    if (!gm.Harness_ChooseSelectionOption("Suggestion: " + target.Stats.CharacterName)) { _awaitNote = "no Suggestion option for " + s.Target; gm.CombatUI?.HidePickUpItemSelection(); }
+                    break;
+                case StepKind.BardicStop:
+                    gm.OnBardicMusicButtonPressed();
+                    if (!gm.Harness_ChooseSelectionOption("Stop ")) { _awaitNote = "no Stop option"; gm.CombatUI?.HidePickUpItemSelection(); }
                     break;
                 case StepKind.NaturalAttack:
                 {

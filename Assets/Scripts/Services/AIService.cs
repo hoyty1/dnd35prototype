@@ -53,6 +53,20 @@ public class AIService : MonoBehaviour
         => _gameManager == null || _gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver;
 
     /// <summary>
+    /// The context of a save against a creature's aura (ExecuteAura): a fear aura is a fear effect for the bonuses that
+    /// apply against fear (SaveRules, CHR-018); a charm or compulsion is an enchantment (the elf's +2, Still Mind) and a
+    /// charm gets Inspire Courage's bonus; a sonic aura (a harpy's song, a gibbering mouther's gibbering) can be met with
+    /// a bard's countersong (PHB p.29; BardicMusicRules.ApplyCountersong, CHR-026).
+    /// </summary>
+    public static SaveContext AuraSaveContext(AuraAbilityDefinition aura, CombatConditionType conditionType)
+    {
+        if (aura == null)
+            return SaveContext.None;
+        return new SaveContext(enchantment: aura.IsEnchantment || aura.IsCharm, fear: conditionType == CombatConditionType.Frightened,
+            label: aura.Name, charm: aura.IsCharm, sonicOrLanguageDependent: aura.IsSonic);
+    }
+
+    /// <summary>
     /// Whether <see cref="ExecuteNPCTurn"/> runs a non-summoned creature with this behaviour and profile through the
     /// ranged-kiter routine: with a profile, a healer (its default route; it melees only when
     /// <see cref="HealerAIProfile.DetermineCombatMode"/> picks melee for a physical attack, a stat comparison made at
@@ -141,6 +155,14 @@ public class AIService : MonoBehaviour
             }
 
             yield return new WaitForSeconds(0.25f);
+            yield break;
+        }
+
+        // A creature under a suggestion follows its course instead of acting (the bard's Suggestion, PHB p.29 and p.285;
+        // the same behaviour as a suggested PC's forced turn, CHR-026).
+        if (_gameManager.TryGetSuggestedTurnDecisionForAI(npc, out SuggestedBehaviorController.SuggestedTurnDecision suggestedDecision))
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.ExecuteSuggestedTurnDecisionForAI(npc, suggestedDecision));
             yield break;
         }
 
@@ -294,6 +316,16 @@ public class AIService : MonoBehaviour
         if (isSummon)
         {
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteSummonedCreatureTurnForAI(npc));
+            yield break;
+        }
+
+        // Bardic music (PHB p.29-30): a song, its concentration or a suggestion with the standard action, through the rules
+        // the PC Bardic Music button calls (BardicMusicRules, CHR-026), when AIProfile.ChooseBardicMusic picks one; the AI
+        // ends its turn after it (a simplification: it does not move afterwards). Stopping a song costs no action, and the
+        // turn goes on (to cast while Inspire Courage lingers).
+        if (_gameManager.TryNPCBardicMusicTurnForAI(npc))
+        {
+            yield return new WaitForSeconds(0.5f);
             yield break;
         }
 
@@ -3728,9 +3760,7 @@ public class AIService : MonoBehaviour
             }
 
             // Roll saving throw
-            // A fear aura is a fear effect for the bonuses that apply against fear (SaveRules, CHR-018).
-            bool fearAura = conditionType == CombatConditionType.Frightened;
-            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC, fearAura ? SaveContext.Fear : SaveContext.None);
+            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC, AuraSaveContext(aura, conditionType));
 
             if (saveResult.Saved)
             {

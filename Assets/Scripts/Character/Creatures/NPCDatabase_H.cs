@@ -300,7 +300,12 @@ public static partial class NPCDatabase
                 IsWillSave = true,
                 RangeFeet = 300,
                 Effect = AuraEffectType.Fascinated,
-                DurationRounds = 10
+                DurationRounds = 10,
+                // MM p.150: a sonic mind-affecting charm effect
+                IsMindAffecting = true,
+                IsSonic = true,
+                IsEnchantment = true,
+                IsCharm = true
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

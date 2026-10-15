@@ -109,6 +109,14 @@ public static class ScrollValidator
             return result;
         }
 
+        // While performing bardic music the bard cannot activate a magic item by spell completion or by magic word (PHB
+        // p.29: scrolls, wands; a staff is a spell-trigger item like a wand; BardicMusicRules, CHR-026).
+        if (BardicMusicRules.BlocksSpellcasting(character.Stats))
+        {
+            result.FailureReason = BardicMusicRules.SpellcastingBlockedReason;
+            return result;
+        }
+
         CharacterStats stats = character.Stats;
         SpellDatabase.Init();
 

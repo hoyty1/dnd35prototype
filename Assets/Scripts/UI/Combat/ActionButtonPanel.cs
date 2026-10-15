@@ -886,30 +886,23 @@ public class ActionButtonPanel : MonoBehaviour
         else rageLabel = "Rage (Used)";
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
 
-        // ── Bardic Music (Bard only, Standard Action) ──
-        bool isBard = pc.Stats.IsBard;
-        bool bardicMusicActive = false;
-        bool canPerformBardicMusic = false;
+        // ── Bardic Music (PHB p.29-30): shown to a bard with the Perform ranks; the list it opens starts a song, keeps one
+        // up, makes a suggestion or stops it (BardicMusicRules, CHR-026) ──
+        bool isBard = pc != null && pc.Stats != null && BardicMusicRules.HasBardicMusic(pc.Stats);
+        string bardicReason = string.Empty;
+        bool canPerformBardicMusic = isBard && !context.IsTurned && context.Gm != null && context.Gm.CanUseBardicMusicButton(pc, out bardicReason);
         string bardicMusicLabel = "Bardic Music";
         if (isBard)
         {
-            pc.Stats.EnsureBardicMusicInitialized();
-            var bm = pc.Stats.BardBardicMusic;
-            if (bm != null)
+            string uses = $"{BardicMusicRules.UsesLeft(pc.Stats)}/{BardicMusicRules.UsesPerDay(pc.Stats)}";
+            BardicAbility active = BardicMusicRules.ActiveAbility(pc.Stats);
+            if (active != BardicAbility.None)
             {
-                bardicMusicActive = bm.IsPerforming;
-                bool hasUses = bm.RemainingUses > 0;
-                canPerformBardicMusic = (bardicMusicActive || (context.Actions.HasStandardAction && hasUses)) && !context.IsTurned;
-
-                if (bm.IsPerforming)
-                    bardicMusicLabel = $"♪ {BardicAbilityInfo.GetDisplayName(bm.ActiveAbility)} ({bm.RemainingUses}/{bm.MaxUsesPerDay})\n[Click to Stop]";
-                else if (bm.IsEffectActive)
-                    bardicMusicLabel = $"♪ Lingering ({bm.LingerRoundsRemaining} rds)";
-                else if (hasUses)
-                    bardicMusicLabel = $"Bardic Music ({bm.RemainingUses}/{bm.MaxUsesPerDay})";
-                else
-                    bardicMusicLabel = "Bardic Music (Used)";
+                bool owesConcentration = BardicMusicRules.CanConcentrate(pc, out _);
+                bardicMusicLabel = $"♪ {BardicAbilityInfo.GetDisplayName(active)} ({uses})" + (owesConcentration ? "\n[Concentrate or it ends]" : "\n[Options]");
             }
+            else
+                bardicMusicLabel = canPerformBardicMusic ? $"Bardic Music ({uses})" : $"Bardic Music ({bardicReason}; {uses})";
         }
         states.Set(BardicMusicButton, new ActionButtonState(isBard, canPerformBardicMusic, bardicMusicLabel));
 

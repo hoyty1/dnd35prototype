@@ -621,6 +621,11 @@ public partial class GameManager
         if (npc == null)
             return;
 
+        // The record of hostile actions against the slot's old creature and of its attack noise (bardic Fascinate's
+        // nearby combat; CRE-046).
+        _lastHostileActionRound.Remove(npc);
+        _lastWeaponAttackNoise.Remove(npc);
+
         var others = new List<CharacterController>();
         if (PCs != null) others.AddRange(PCs);
         if (NPCs != null) others.AddRange(NPCs);
@@ -635,6 +640,9 @@ public partial class GameManager
                 continue;
 
             other.ForgetCreature(npc);
+            // Another bard's links to the slot's old creature: inspired, fascinated, suggested, resisted today, the
+            // competence ally (CHR-026).
+            BardicMusicRules.ForgetCreature(other.Stats, npc);
 
             // A spell another creature concentrates on whose effect sits on this creature ends with it.
             ConcentrationManager conc = other.GetComponent<ConcentrationManager>();
@@ -748,6 +756,8 @@ public partial class GameManager
         }
         // A ranger's combat style and favored enemies: the definition's, or the DMG p.122 sample ranger's (CHR-020).
         RangerRules.ApplyNpcChoices(stats, def);
+        // An NPC bard's Perform ranks (the class-skill maximum, as the DMG's NPC bard), which bardic music needs (CHR-026).
+        BardicMusicRules.ApplyNpcChoices(stats);
         if (!string.IsNullOrEmpty(def.WeaponFocusChoice))
             stats.WeaponFocusChoice = def.WeaponFocusChoice;
 

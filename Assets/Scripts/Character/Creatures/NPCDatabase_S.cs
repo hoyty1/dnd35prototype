@@ -383,7 +383,10 @@ public static partial class NPCDatabase
                 IsWillSave = true,
                 RangeFeet = 300,
                 Effect = AuraEffectType.Frightened,
-                DurationRounds = 6
+                DurationRounds = 6,
+                // MM p.222: a sonic mind-affecting fear effect
+                IsMindAffecting = true,
+                IsSonic = true
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

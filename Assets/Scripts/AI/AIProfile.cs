@@ -210,6 +210,97 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// AI choice, not a rule: the bard's bardic music this turn (CHR-020, CHR-026): start a song, concentrate on it,
+        /// make a suggestion to a fascinated creature, stop (free, to cast while Inspire Courage lingers), or nothing
+        /// (null). The rules (BardicMusicRules) are shared with the PC Bardic Music button. <see cref="DefaultBardicMusicChoice"/>.
+        /// </summary>
+        public virtual BardicMusicChoice ChooseBardicMusic(CharacterController self, IList<CharacterController> combatants)
+            => DefaultBardicMusicChoice(self, combatants);
+
+        /// <summary>
+        /// The default bardic music choice, also used for creatures without a profile:
+        /// - fascinating: a suggestion to a fascinated foe when the bard has it, else concentrate to keep the song up;
+        /// - inspiring competence: concentrate;
+        /// - singing Inspire Courage: stop (no action) when the bard has a spell to cast, so the song lingers 5 rounds while
+        ///   it casts; otherwise keep singing;
+        /// - not performing, with a living foe: Fascinate the best foes it can (highest Hit Dice first, up to its count) when
+        ///   it can fascinate two, or one while Inspire Courage still lingers or no one else would gain from it; else Inspire
+        ///   Courage when no song of its own lingers and it would help two creatures (or the bard alone, when it has no
+        ///   spell to cast). The AI never starts Countersong or Inspire Competence (AI-067).
+        /// </summary>
+        public static BardicMusicChoice DefaultBardicMusicChoice(CharacterController self, IList<CharacterController> combatants)
+        {
+            if (self == null || self.Stats == null || combatants == null || !BardicMusicRules.HasBardicMusic(self.Stats))
+                return null;
+            BardicMusicData d = BardicMusicRules.Data(self.Stats);
+            if (d == null)
+                return null;
+
+            bool anyFoe = false;
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CharacterController c = combatants[i];
+                if (c != null && c.Stats != null && !c.IsDead && !c.IsUnconscious && TeamUtility.IsEnemy(self, c))
+                {
+                    anyFoe = true;
+                    break;
+                }
+            }
+
+            switch (d.ActiveAbility)
+            {
+                case BardicAbility.Fascinate:
+                    for (int i = 0; i < d.FascinatedTargets.Count; i++)
+                    {
+                        CharacterController t = d.FascinatedTargets[i];
+                        if (TeamUtility.IsEnemy(self, t) && BardicMusicRules.SuggestionTargetProblem(self, t) == null)
+                            return BardicMusicChoice.Suggest(t);
+                    }
+                    return BardicMusicRules.CanConcentrate(self, out _) ? BardicMusicChoice.Concentrate() : null;
+                case BardicAbility.InspireCompetence:
+                    return BardicMusicRules.CanConcentrate(self, out _) ? BardicMusicChoice.Concentrate() : null;
+                case BardicAbility.InspireCourage:
+                    return anyFoe && BardicMusicRules.HasCastableSpellIgnoringPerformance(self) ? BardicMusicChoice.Stop() : null;
+                case BardicAbility.Countersong:
+                    return null;
+            }
+            if (!anyFoe)
+                return null;
+
+            bool icLingers = d.LingerRoundsRemaining > 1;
+            int icGain = 0;
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CharacterController c = combatants[i];
+                if (BardicMusicRules.IsInspireCourageRecipient(self, c) && !c.Stats.HasInspireCourageBonus)
+                    icGain++;
+            }
+
+            if (BardicMusicRules.CanStart(self, BardicAbility.Fascinate, out _))
+            {
+                List<CharacterController> candidates = BardicMusicRules.FascinateCandidates(self, combatants);
+                candidates.RemoveAll(c => !TeamUtility.IsEnemy(self, c));
+                if (candidates.Count > 0 && (candidates.Count >= 2 || icLingers || icGain <= 1))
+                {
+                    candidates.Sort((a, b) =>
+                    {
+                        int hd = TeamUtility.GetHitDice(b).CompareTo(TeamUtility.GetHitDice(a));
+                        return hd != 0 ? hd : self.GetMinimumDistanceToTarget(a, chebyshev: false).CompareTo(self.GetMinimumDistanceToTarget(b, chebyshev: false));
+                    });
+                    int cap = d.FascinateTargetCount;
+                    if (candidates.Count > cap)
+                        candidates.RemoveRange(cap, candidates.Count - cap);
+                    return BardicMusicChoice.Start(BardicAbility.Fascinate, candidates);
+                }
+            }
+
+            if (!icLingers && BardicMusicRules.CanStart(self, BardicAbility.InspireCourage, out _)
+                && (icGain >= 2 || (icGain >= 1 && !BardicMusicRules.HasCastableSpellIgnoringPerformance(self))))
+                return BardicMusicChoice.Start(BardicAbility.InspireCourage, null);
+            return null;
+        }
+
+        /// <summary>
         /// AI choice, not a rule: whether a paladin lays on hands this turn, and on whom (CHR-020). The rules
         /// (LayOnHandsRules) are shared with the PC Lay on Hands button. Null for no lay on hands.
         /// <see cref="DefaultLayOnHandsTarget"/>.
@@ -719,5 +810,23 @@ namespace DND35.AI
 
             return count;
         }
+    }
+
+    /// <summary>An AI bardic music choice (AIProfile.ChooseBardicMusic): what to do, with which song and targets.</summary>
+    public sealed class BardicMusicChoice
+    {
+        public enum ChoiceKind { Start, Concentrate, Suggest, Stop }
+
+        public ChoiceKind Kind;
+        public BardicAbility Ability;
+        public List<CharacterController> Targets = new List<CharacterController>();
+        public string Skill;
+
+        public static BardicMusicChoice Start(BardicAbility ability, List<CharacterController> targets, string skill = null)
+            => new BardicMusicChoice { Kind = ChoiceKind.Start, Ability = ability, Targets = targets ?? new List<CharacterController>(), Skill = skill };
+        public static BardicMusicChoice Concentrate() => new BardicMusicChoice { Kind = ChoiceKind.Concentrate };
+        public static BardicMusicChoice Suggest(CharacterController target)
+            => new BardicMusicChoice { Kind = ChoiceKind.Suggest, Ability = BardicAbility.Suggestion, Targets = new List<CharacterController> { target } };
+        public static BardicMusicChoice Stop() => new BardicMusicChoice { Kind = ChoiceKind.Stop };
     }
 }

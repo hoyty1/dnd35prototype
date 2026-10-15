@@ -315,6 +315,17 @@
       "notes": "CHR-018: the shared save modifier (CharacterStats.GetSaveTotal, SaveRules) and its bonus sources, Aura of Courage and fear immunity; bare stats, an Inventory without a GameObject, a StatusEffectManager and CharacterControllers on plain GameObjects. 104/104 in edit and Play mode on 2026-10-09."
     },
     {
+      "type": "Tests.Classes.BardClassRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 90,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-020 (bard), CHR-026 (2026-10-15): the bard's bardic music on one PC/NPC core (PHB p.29-30; BardicMusicRules): the ability gates by bard level and Perform ranks (3/3/3, 6 and 3rd for inspire competence, 9 and 6th for suggestion), uses per day, the inspire courage and fascinate counts, the suggestion DC with a negative Charisma, the Quick Start bard's Perform ranks, NPC bards' Perform ranks; inspire courage (the bard and the allies who hear him, not a deafened ally or a foe, +1 morale, one use, a standard action, no spells or wands while performing, no further use while singing, stop at no action, 5 rounds of linger); fascinate (two foes, the Perform check as the Will DC, one use, concentration owed and spent, an attack breaks it at once, no concentration ends it, a creature just attacked is distracted, a save makes it safe for the day, the rest clears it); nearby combat (a foe in melee with the bard's ally, out of range at 100 ft, a creature attacked this round); suggestion (only on a fascinated creature, Int 2 refused, a failed save gives Suggested, the fascination goes on, no use, it is the round's concentration, no second suggestion); countersong (20 ft yes, 50 ft no; Sound Burst sonic, Command language-dependent, Hold Person neither; a higher save stands; 10 rounds); inspire competence (not on the bard, +2 on the chosen skill only, ends without concentration); a deaf bard's 20% failure spends the use; the AI choice (inspire courage near a fight, fascinate two distant foes by Hit Dice, then concentrate with forced dice); review fixes: the bard is no distraction to his own fascinate but a foe threatening him is, a deafened ally keeps inspire courage 5 rounds then loses it and regains it on hearing, a deafened creature uses the countersong against the harpy's sonic charm aura (AIService.AuraSaveContext), ForgetCreature, the fascinate save context (an elf's +2 on every save), Suggested blocks AoOs and threatening, inspire competence without Hide or Move Silently. Play only (CharacterController.Init, the condition service). 90/90 in a fresh Play session with the baseline seed on 2026-10-15 (20261015T054255Z-play)."
+    },
+    {
       "type": "Tests.Classes.DruidClassRulesTests",
       "needs": "play",
       "skip": "",

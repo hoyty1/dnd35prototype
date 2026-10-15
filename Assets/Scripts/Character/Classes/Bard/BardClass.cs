@@ -86,7 +86,9 @@ public class BardClass : ICharacterClass
     // UI — purple/silver artistic theme
     public Color TitleColor => new Color(0.6f, 0.35f, 0.75f);
     public Color ButtonColor => new Color(0.35f, 0.18f, 0.45f);
-    public string InfoText => "Hit Die: d6 | BAB: +2 (3/4)\nGood Saves: Reflex, Will\n• Bardic Music (9 abilities)\n• Bardic Knowledge\n• Spontaneous Arcane Spells (CHA)\n• 6 skill points per level";
+    // Class-selection text lists only what works (CHR-053): bardic music to 8th level needs Perform ranks (3; 6 for Inspire
+    // Competence, 9 for Suggestion); bardic knowledge is data only (the game has no lore checks).
+    public string InfoText => "Hit Die: d6 | BAB: +2 (3/4)\nGood Saves: Reflex, Will\n• Bardic Music (needs Perform ranks): Countersong, Fascinate, Inspire Courage, Inspire Competence (3rd), Suggestion (6th)\n• Spontaneous Arcane Spells (CHA)\n• 6 skill points per level\nNot yet implemented: bardic knowledge checks, Inspire Greatness and the later songs";
 
     // Class Features
     // D&D 3.5e PHB p.28: Bards do NOT receive any automatic feats.
@@ -139,6 +141,8 @@ public class BardClass : ICharacterClass
         data.ComputeFinalStats();
         data.PreparedSpellSlotIds = new List<string>(); // Spontaneous caster
 
+        // Perform at the maximum (character level + 3): the bard's music needs 3 ranks, 6 for Inspire Competence (PHB p.29).
+        data.SkillRanks["Perform"] = 6;
         data.SkillRanks["Diplomacy"] = 6;
         data.SkillRanks["Bluff"] = 6;
         data.SkillRanks["Listen"] = 4;
@@ -154,11 +158,11 @@ public class BardClass : ICharacterClass
     // Bard Class Feature Queries (static helpers)
     // ─────────────────────────────────────────────
 
-    /// <summary>Bardic Music uses per day = Bard level (PHB p.28).</summary>
+    /// <summary>Bardic Music uses per day = Bard level (PHB p.29).</summary>
     public static int BardicMusicUsesPerDay(int level) => Mathf.Max(0, level);
 
     /// <summary>
-    /// Inspire Courage morale bonus progression (PHB p.28).
+    /// Inspire Courage morale bonus progression (PHB p.29).
     /// +1 at L1, +2 at L8, +3 at L14, +4 at L20.
     /// </summary>
     public static int InspireCourageBonus(int level)
@@ -171,7 +175,7 @@ public class BardClass : ICharacterClass
     }
 
     /// <summary>
-    /// Fascinate target count (PHB p.28).
+    /// Fascinate target count (PHB p.29).
     /// 1 at L1, +1 per 3 levels after 1st.
     /// </summary>
     public static int FascinateTargets(int level)
@@ -181,12 +185,12 @@ public class BardClass : ICharacterClass
     }
 
     /// <summary>
-    /// Bardic Music DC for Will saves.
-    /// DC = 10 + 1/2 bard level + Cha modifier (PHB p.28).
+    /// The save DC of the bard's Suggestion (and Mass Suggestion): 10 + 1/2 bard level + Cha modifier, a negative one
+    /// included (PHB p.29). Fascinate's DC is the bard's Perform check result instead.
     /// </summary>
     public static int BardicMusicDC(int level, int chaMod)
     {
-        return 10 + level / 2 + Mathf.Max(0, chaMod);
+        return 10 + level / 2 + chaMod;
     }
 
     /// <summary>

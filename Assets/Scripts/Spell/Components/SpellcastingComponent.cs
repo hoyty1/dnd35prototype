@@ -2579,14 +2579,17 @@ public class SpellcastingComponent : MonoBehaviour
     /// True while the caster is in a wild shape without Natural Spell and <paramref name="spell"/> has a verbal or
     /// somatic component left after its metamagic (a prepared slot's, or the spell's own MetamagicDataRef: Silent and
     /// Still Spell remove them) (WildShapeRules.CanCastInCurrentForm; PHB p.37, p.98; CHR-020): one test for the PC menu, the
-    /// AI candidate list, the NPC executor and counterspelling.
+    /// AI candidate list, the NPC executor and counterspelling. Also true while the caster performs bardic music, which
+    /// forbids casting (PHB p.29; BardicMusicRules.BlocksSpellcasting, CHR-026).
     /// </summary>
     private bool IsBlockedByWildShape(SpellData spell, MetamagicData metamagic = null)
     {
         if (spell == null)
             return false;
         var owner = GetComponent<CharacterController>();
-        return owner != null && owner.Stats != null && !WildShapeRules.CanCastInCurrentForm(owner.Stats, spell, metamagic);
+        if (owner == null || owner.Stats == null)
+            return false;
+        return !WildShapeRules.CanCastInCurrentForm(owner.Stats, spell, metamagic) || BardicMusicRules.BlocksSpellcasting(owner.Stats);
     }
 
     /// <summary>

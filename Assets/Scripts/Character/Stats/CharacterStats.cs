@@ -679,8 +679,8 @@ public class CharacterStats
     public BardicMusicData BardBardicMusic;
 
     /// <summary>
-    /// Ensures BardBardicMusic is created and up-to-date for a bard character.
-    /// Safe to call repeatedly — only creates/updates when needed.
+    /// Ensures BardBardicMusic is created and up-to-date for a bard character: bard level, Charisma modifier and Perform
+    /// ranks (each ability needs a minimum, PHB p.29; BardicMusicRules). Safe to call repeatedly.
     /// </summary>
     public void EnsureBardicMusicInitialized()
     {
@@ -688,16 +688,17 @@ public class CharacterStats
         int bardLevel = GetClassLevel("Bard");
         if (bardLevel < 1) return;
 
+        int performRanks = Skills != null && Skills.TryGetValue("Perform", out Skill perform) && perform != null ? perform.Ranks : 0;
         if (BardBardicMusic == null)
         {
             BardBardicMusic = new BardicMusicData();
-            BardBardicMusic.Initialize(bardLevel, CHAMod, 0);
-            Debug.Log($"[CharacterStats] Initialized BardicMusicData for {CharacterName} (Bard L{bardLevel}, CHA mod {CHAMod})");
+            BardBardicMusic.Initialize(bardLevel, CHAMod, performRanks);
+            Debug.Log($"[CharacterStats] Initialized BardicMusicData for {CharacterName} (Bard L{bardLevel}, CHA mod {CHAMod}, Perform {performRanks})");
         }
         else
         {
-            // Re-sync level and CHA in case of level-up or buff changes
-            BardBardicMusic.Initialize(bardLevel, CHAMod, 0);
+            // Re-sync level, CHA and ranks in case of level-up or buff changes
+            BardBardicMusic.Initialize(bardLevel, CHAMod, performRanks);
         }
     }
 
@@ -729,6 +730,24 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Sets the Inspire Courage morale bonus to <paramref name="bonus"/> (the best song this creature hears; two bards'
+    /// songs are one effect and do not stack, PHB p.171), or removes it at 0 (BardicMusicRules.RefreshInspireCourage).
+    /// </summary>
+    public void SetInspireCourage(int bonus)
+    {
+        if (bonus <= 0)
+        {
+            RemoveInspireCourage();
+            return;
+        }
+        if (HasInspireCourageBonus && AppliedInspireCourageValue == bonus)
+            return;
+        Bonuses.RemoveOwner(InspireCourageBonusSource);
+        HasInspireCourageBonus = false;
+        ApplyInspireCourage(bonus);
+    }
+
+    /// <summary>
     /// Remove Inspire Courage morale bonuses from this character.
     /// </summary>
     public void RemoveInspireCourage()
@@ -740,8 +759,22 @@ public class CharacterStats
         AppliedInspireCourageValue = 0;
     }
 
-    /// <summary>Bard's bardic knowledge tracking data.</summary>
+    /// <summary>
+    /// Bard's bardic knowledge (PHB p.28: d20 + bard level + Int modifier). Data only: the game has no lore check to make
+    /// with it (CHR-020). Kept in step by <see cref="EnsureBardicKnowledgeInitialized"/>.
+    /// </summary>
     public BardicKnowledgeData BardBardicKnowledge;
+
+    /// <summary>Creates or re-syncs <see cref="BardBardicKnowledge"/> for a bard (level and Int modifier).</summary>
+    public BardicKnowledgeData EnsureBardicKnowledgeInitialized()
+    {
+        int bardLevel = GetClassLevel("Bard");
+        if (bardLevel < 1)
+            return null;
+        BardBardicKnowledge ??= new BardicKnowledgeData();
+        BardBardicKnowledge.Initialize(bardLevel, INTMod);
+        return BardBardicKnowledge;
+    }
 
     /// <summary>Bardic Music uses per day = bard level (PHB p.29).</summary>
     public int BardicMusicUsesPerDay => IsBard ? BardClass.BardicMusicUsesPerDay(GetClassLevel("Bard")) : 0;
@@ -749,7 +782,7 @@ public class CharacterStats
     /// <summary>Inspire Courage morale bonus at current bard level (PHB p.29).</summary>
     public int InspireCourageBonus => IsBard ? BardClass.InspireCourageBonus(GetClassLevel("Bard")) : 0;
 
-    /// <summary>Bardic Music DC = 10 + half bard level + CHA mod (PHB p.29).</summary>
+    /// <summary>The bard's Suggestion DC = 10 + half bard level + CHA mod (PHB p.29); Fascinate's DC is the Perform check.</summary>
     public int BardicMusicDC => IsBard ? BardClass.BardicMusicDC(GetClassLevel("Bard"), CHAMod) : 0;
 
     /// <summary>Bardic Knowledge modifier = bard level + INT modifier (PHB p.28).</summary>

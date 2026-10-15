@@ -261,6 +261,20 @@ public static partial class SpellDatabase
         SetDescriptor("wail_of_the_banshee", SpellDescriptor.Death);
         SetDescriptor(SpellNames.CAUSE_FEAR, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
 
+        // === [Sonic] and [Language-Dependent] (PHB spell headers): a bard's countersong covers saves against them
+        // (PHB p.29; CHR-026). Sound Burst also gets [Sonic] from its damage type above.
+        SetDescriptor(SpellNames.SOUND_BURST, SpellDescriptor.Sonic);
+        SetDescriptor(SpellNames.SHOUT, SpellDescriptor.Sonic);
+        SetDescriptor(SpellNames.SHATTER, SpellDescriptor.Sonic);
+        SetDescriptor("wail_of_the_banshee", SpellDescriptor.Sonic);
+        SetDescriptor("holy_word", SpellDescriptor.Sonic);
+        SetDescriptor("blasphemy", SpellDescriptor.Sonic);
+        SetDescriptor("dictum", SpellDescriptor.Sonic);
+        SetDescriptor("word_of_chaos", SpellDescriptor.Sonic);
+        SetDescriptor(SpellNames.ENTHRALL, SpellDescriptor.Sonic | SpellDescriptor.LanguageDependent | SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.COMMAND, SpellDescriptor.LanguageDependent);
+        SetDescriptor(SpellNames.MASS_SUGGESTION, SpellDescriptor.LanguageDependent | SpellDescriptor.MindAffecting);
+
         // === [Fear] / [Mind-Affecting] ===
         SetDescriptor(SpellNames.DOOM, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
         SetDescriptor(SpellNames.COMMAND, SpellDescriptor.MindAffecting);

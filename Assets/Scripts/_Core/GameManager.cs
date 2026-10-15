@@ -985,17 +985,14 @@ public partial class GameManager : MonoBehaviour
             stats.RefreshPaladinDailyUses();
             stats.RagesUsedToday = 0;
             stats.TurnUndeadAttemptsUsedToday = 0;
-            // Reset Bardic Music uses and clear any active performance/linger
-            if (stats.BardBardicMusic != null)
-            {
-                if (stats.BardBardicMusic.IsPerforming || stats.BardBardicMusic.IsEffectActive)
-                    RemoveInspireCourageFromParty();
-                stats.BardBardicMusic.RefreshUses();
-            }
+            // Bardic music: the day's uses return and every song ends; after an ordinary victory OnCombatEnded does not
+            // run (CORE-002), so this is where the party's songs end (BardicMusicRules, CHR-026).
+            stats.BardBardicMusic?.RefreshUses();
             stats.HasInspireCourageBonus = false;
             stats.AppliedInspireCourageValue = 0;
-            // Inspire Courage and a pounce's charge bonus are ledger entries of their own (CharacterStats.Bonuses).
+            // Inspire Courage, Inspire Competence and a pounce's charge bonus are ledger entries of their own (CharacterStats.Bonuses).
             stats.Bonuses.RemoveOwner(CharacterStats.InspireCourageBonusSource);
+            stats.Bonuses.RemoveOwner(BardicMusicRules.CompetenceBonusSource);
             stats.Bonuses.RemoveOwner(CharacterStats.ChargeBonusSource);
             // Reset domain power daily uses
             stats.StrengthDomainUsesToday = 0;
@@ -3242,10 +3239,46 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    /// <summary>The disturbance reason of a combat maneuver against a fascinated creature: an obvious threat (PHB p.29; CHR-026).</summary>
+    public const string FascinationThreatManeuver = "maneuver";
+
+    /// <summary>Per attacker: the (round, creature whose turn it was, target) of its last combat-noise notice.</summary>
+    private readonly Dictionary<CharacterController, (int round, CharacterController turn, CharacterController target)> _lastWeaponAttackNoise
+        = new Dictionary<CharacterController, (int round, CharacterController turn, CharacterController target)>();
+
+    /// <summary>
+    /// The hostile-action notices of one weapon attack against <paramref name="target"/>, sent by every swing
+    /// (CharacterController.PerformSingleAttackWithCrit: single attacks, AoOs, full attacks, two-weapon fighting, flurries,
+    /// natural, rake and grapple attacks), for PCs and NPCs alike: the attacker's charm or command undead on the target
+    /// ends, a fascination by the attacker's side breaks (an obvious threat; a bard's fascinate, PHB p.29), the hostile
+    /// action is recorded (fascinate's nearby combat), and the combat noise disturbs fascinated creatures within 20 ft of
+    /// the target. The noise is sent once per attacker, target and turn, so a full attack is one noise as a single attack
+    /// is (CHR-026).
+    /// </summary>
+    public void NotifyWeaponAttackAgainst(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
+            return;
+        BreakCharmOnHostileAction(attacker, target);
+        BreakCommandUndeadOnHostileAction(attacker, target);
+        BreakFascinationOnHostileAction(attacker, target, "attack");
+
+        var noiseKey = (CurrentRound, CurrentCharacter, target);
+        if (_lastWeaponAttackNoise.TryGetValue(attacker, out var lastKey) && lastKey == noiseKey)
+            return;
+        _lastWeaponAttackNoise[attacker] = noiseKey;
+        BreakFascinationFromLoudNoise(attacker, target.GridPosition, radiusSquares: 4);
+    }
+
     public void BreakFascinationOnHostileAction(CharacterController attacker, CharacterController target, string disturbanceReason = "hostile action")
     {
         if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
             return;
+
+        // A hostile action against a creature is a danger that keeps it from being fascinated for a while (the bard's
+        // Fascinate, "nearby combat", BardicMusicRules.NearbyCombatReason; delegated RAW reading 2026-10-14).
+        if (TeamUtility.IsEnemy(attacker, target))
+            RecordHostileActionAgainst(target);
 
         if (!HasCondition(target, CombatConditionType.Fascinated))
             return;
@@ -3314,15 +3347,43 @@ public partial class GameManager : MonoBehaviour
         FascinatedConditionData data = fascinatedCondition.Data as FascinatedConditionData;
 
         string reasonText = string.IsNullOrWhiteSpace(reason) ? "disturbance" : reason;
+
+        // A bard's fascination (PHB p.29; DMG p.301 fascinated): an obvious threat (an attack, a hostile spell or maneuver
+        // against the creature) breaks it at once; a potential threat (the combat noise of an attack nearby) makes the bard
+        // roll a new Perform check, the DC of the creature's new save (delegated RAW reading 2026-10-14, CHR-026). A foe
+        // approaching the creature is not detected yet (no movement hook; CHR-020).
+        bool bardic = fascinatedCondition.SourceId == BardicMusicRules.FascinateSourceId;
+        bool obviousThreat = reasonText == "attack" || reasonText == "spell attack" || reasonText == "hostile action"
+            || reasonText == FascinationThreatManeuver;
+        if (bardic && obviousThreat)
+        {
+            if (RemoveCondition(target, CombatConditionType.Fascinated))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🔔", $"{target.Stats.CharacterName} is shaken out of the fascination by an obvious threat ({reasonText})."));
+            return;
+        }
+
         int disturbanceDc = 10;
         if (data != null)
             disturbanceDc = Mathf.Max(1, data.DisturbanceSaveDC);
+        if (bardic && source != null)
+        {
+            int newCheck = BardicMusicRules.NewFascinateCheckForThreat(source);
+            if (newCheck > 0)
+            {
+                disturbanceDc = newCheck;
+                if (data != null)
+                    data.DisturbanceSaveDC = newCheck;
+            }
+        }
 
         // A save against the fascinating effect (usually an enchantment such as Hypnotism): the shared modifier with
-        // that spell's context, so the elf's +2 and Still Mind apply (SaveRules, CHR-018).
-        SaveContext fascinationContext = data != null && !string.IsNullOrEmpty(data.SourceSpellId)
-            ? SaveContext.ForSpellId(data.SourceSpellId, source != null ? source.Stats : null)
-            : SaveContext.None;
+        // that spell's context, so the elf's +2 and Still Mind apply (SaveRules, CHR-018). A bard's fascinate is a
+        // spell-like enchantment, saved against with the same context as its first save (BardicMusicRules).
+        SaveContext fascinationContext = bardic
+            ? BardicMusicRules.FascinateSaveContext()
+            : data != null && !string.IsNullOrEmpty(data.SourceSpellId)
+                ? SaveContext.ForSpellId(data.SourceSpellId, source != null ? source.Stats : null)
+                : SaveContext.None;
         int saveRoll = DiceService.D20("Disturbance Will save");
         int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, fascinationContext);
         bool saveSucceeded = saveTotal >= disturbanceDc;
@@ -3433,6 +3494,9 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public void StartCombat()
     {
+        // A new fight: no hostile action has happened yet (bardic Fascinate's nearby combat, BardicMusicRules).
+        _lastHostileActionRound.Clear();
+        _lastWeaponAttackNoise.Clear();
         int turnOrderCountBefore = _turnService != null && _turnService.InitiativeOrder != null ? _turnService.InitiativeOrder.Count : 0;
         string currentCharacterName = CurrentCharacter != null && CurrentCharacter.Stats != null
             ? CurrentCharacter.Stats.CharacterName
@@ -3671,6 +3735,8 @@ public partial class GameManager : MonoBehaviour
         TickAllSpellDurations(atThisCount, roundBoundary: false);
         _conditionService?.OnInitiativeCountReached(count);
         PruneTurnUndeadTrackers();
+        // A round of the bard's performance passes at his count, PC or NPC, dead or alive (BardicMusicRules, CHR-069).
+        TickBardicMusicAtCount(count);
     }
 
     /// <summary>
@@ -3714,20 +3780,8 @@ public partial class GameManager : MonoBehaviour
         });
 
         CurrentPhase = TurnPhase.CombatOver;
-        // Clean up any active bardic music effects
-        foreach (var pc in PCs)
-        {
-            if (pc?.Stats != null)
-                pc.Stats.RemoveInspireCourage();
-            if (pc?.Stats?.BardBardicMusic != null)
-            {
-                // StopPerformance + clear linger by ticking it down
-                if (pc.Stats.BardBardicMusic.IsPerforming)
-                    pc.Stats.BardBardicMusic.StopPerformance();
-                while (pc.Stats.BardBardicMusic.LingerRoundsRemaining > 0)
-                    pc.Stats.BardBardicMusic.TickLingerRound();
-            }
-        }
+        // Every bard's song and its effects end with the fight, on both sides (BardicMusicRules, CHR-026, CHR-069).
+        EndAllBardicMusicForCombatEnd();
         EffectService.ClearAll();
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
@@ -3821,6 +3875,8 @@ public partial class GameManager : MonoBehaviour
         if (endingCharacter != null && SmiteRules.LapseAtTurnEnd(endingCharacter.Stats))
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{endingCharacter.Stats.CharacterName}'s declared smite lapses unused (no use spent)."));
         WarnFlamingSphereNotMovedAtTurnEnd(endingCharacter);
+        // Fascinate and Inspire Competence end when the bard spent no standard action on them this turn (PHB p.29).
+        CheckBardicConcentrationAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
 
@@ -3927,12 +3983,7 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        // Tick Bardic Music at start of bard's turn
-        if (pc.Stats.IsBard && pc.Stats.BardBardicMusic != null &&
-            (pc.Stats.BardBardicMusic.IsPerforming || pc.Stats.BardBardicMusic.LingerRoundsRemaining > 0))
-        {
-            TickBardicMusic(pc);
-        }
+        // Bardic music rounds pass at the bard's initiative count for PCs and NPCs alike (OnInitiativeCountReached, CHR-069).
 
         EndAttackSequence();
         EndThrownAttackSequence();
@@ -3964,6 +4015,9 @@ public partial class GameManager : MonoBehaviour
         UpdateInitiativeUI();
 
         if (TryBeginConfusedPCTurn(pc))
+            return;
+        // A creature under a suggestion follows its course (the bard's Suggestion, PHB p.29; CHR-026).
+        if (TryBeginSuggestedPCTurn(pc))
             return;
 
         Debug.Log($"[Turn] Beginning turn for {pc.Stats.CharacterName}");
@@ -9262,147 +9316,8 @@ public partial class GameManager : MonoBehaviour
     }
 
     // ========== BARDIC MUSIC ==========
-
-    /// <summary>
-    /// Called when the Bardic Music button is pressed.
-    /// If already performing, stops the performance (effects linger 5 rounds).
-    /// Otherwise, starts Inspire Courage (Standard Action), applying morale bonuses to all allies.
-    /// </summary>
-    public void OnBardicMusicButtonPressed()
-    {
-        CharacterController pc = ActivePC;
-        if (pc == null || !pc.Stats.IsBard) return;
-
-        pc.Stats.EnsureBardicMusicInitialized();
-        var bm = pc.Stats.BardBardicMusic;
-        if (bm == null) return;
-
-        // If currently performing, stop the performance
-        if (bm.IsPerforming)
-        {
-            StopBardicMusic(pc);
-            return;
-        }
-
-        // Cannot start if no standard action or no uses remaining
-        if (!pc.Actions.HasStandardAction)
-        {
-            CombatUI.ShowCombatLog(CombatLogHelper.Failure("♪", $"{pc.Stats.CharacterName} needs a standard action to begin a bardic performance."));
-            return;
-        }
-
-        // Start Inspire Courage (the primary bardic music ability)
-        bool started = bm.StartPerformance(BardicAbility.InspireCourage);
-        if (started)
-        {
-            int bonus = bm.InspireCourageBonus;
-            ApplyInspireCourageToParty(pc, bonus);
-            pc.Actions.UseStandardAction();
-
-            CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
-                $"{pc.Stats.CharacterName} begins Inspire Courage! All allies gain +{bonus} morale bonus to attack, damage, and saves. ({bm.RemainingUses}/{bm.MaxUsesPerDay} uses remaining)"));
-            UpdateAllStatsUI();
-            CombatUI.UpdateActionButtons(pc);
-            Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Inspire Courage +{bonus} via Bardic Music button");
-        }
-        else
-        {
-            string reason = bm.RemainingUses <= 0 ? "no uses remaining today" : "unable to perform";
-            CombatUI.ShowCombatLog(CombatLogHelper.Failure("♪", $"{pc.Stats.CharacterName} cannot perform bardic music: {reason}"));
-            Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to start Inspire Courage: {reason}");
-        }
-    }
-
-    /// <summary>
-    /// Stop the bard's current performance. Effects linger for 5 rounds per PHB rules.
-    /// </summary>
-    private void StopBardicMusic(CharacterController bard)
-    {
-        var bm = bard.Stats.BardBardicMusic;
-        if (bm == null || !bm.IsPerforming) return;
-
-        string abilityName = BardicAbilityInfo.GetDisplayName(bm.ActiveAbility);
-        bm.StopPerformance();
-
-        CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
-            $"{bard.Stats.CharacterName} stops {abilityName}. Effects linger for {bm.LingerRoundsRemaining} rounds."));
-        UpdateAllStatsUI();
-        CombatUI.UpdateActionButtons(bard);
-        Debug.Log($"[GameManager] {bard.Stats.CharacterName} stopped bardic music. Linger: {bm.LingerRoundsRemaining} rounds.");
-    }
-
-    /// <summary>
-    /// Apply Inspire Courage morale bonuses to all living allied PCs.
-    /// </summary>
-    private void ApplyInspireCourageToParty(CharacterController bard, int bonus)
-    {
-        foreach (var ally in PCs)
-        {
-            if (ally == null || ally.Stats == null || ally.Stats.IsDead) continue;
-            ally.Stats.ApplyInspireCourage(bonus);
-        }
-    }
-
-    /// <summary>
-    /// Remove Inspire Courage morale bonuses from all PCs.
-    /// </summary>
-    private void RemoveInspireCourageFromParty()
-    {
-        foreach (var ally in PCs)
-        {
-            if (ally == null || ally.Stats == null) continue;
-            ally.Stats.RemoveInspireCourage();
-        }
-    }
-
-    /// <summary>
-    /// Tick bardic music at the start of the bard's turn:
-    /// - If performing, sustain the performance (costs 1 use)
-    /// - If lingering (stopped but effects still active), tick down the linger timer
-    /// - When linger expires, remove all morale bonuses from allies
-    /// </summary>
-    private void TickBardicMusic(CharacterController bard)
-    {
-        if (!bard.Stats.IsBard) return;
-        var bm = bard.Stats.BardBardicMusic;
-        if (bm == null) return;
-
-        if (bm.IsPerforming)
-        {
-            // Sustain the performance (costs 1 use per round)
-            bool sustained = bm.SustainPerformance();
-            if (!sustained)
-            {
-                // Ran out of uses — performance auto-stops, linger begins
-                CombatUI.ShowCombatLog(CombatLogHelper.Warning("♪",
-                    $"{bard.Stats.CharacterName}'s bardic music runs out of uses! Effects linger for {bm.LingerRoundsRemaining} rounds."));
-                UpdateAllStatsUI();
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
-                    $"{bard.Stats.CharacterName}: ♪ Inspire Courage — {bm.RemainingUses}/{bm.MaxUsesPerDay} uses remaining"));
-            }
-        }
-        else if (bm.LingerRoundsRemaining > 0)
-        {
-            // Tick down the linger timer
-            bm.TickLingerRound();
-            if (bm.LingerRoundsRemaining > 0)
-            {
-                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
-                    $"{bard.Stats.CharacterName}: Inspire Courage lingering ({bm.LingerRoundsRemaining} rounds remaining)"));
-            }
-            else
-            {
-                // Linger expired — remove all bonuses
-                RemoveInspireCourageFromParty();
-                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
-                    $"{bard.Stats.CharacterName}'s Inspire Courage effect has faded."));
-                UpdateAllStatsUI();
-            }
-        }
-    }
+    // The Bardic Music button, its executors and the AI wrappers are in Combat/Special/BardicMusicSystem.cs; the rules in
+    // Character/Classes/Bard/BardicMusicRules.cs (CHR-020, CHR-026).
 
     // ========== SPELLCASTING ==========
 
