@@ -9736,38 +9736,35 @@ public partial class GameManager : MonoBehaviour
         return spell != null && string.Equals(spell.SpellId, SpellNames.MAGIC_WEAPON, StringComparison.Ordinal);
     }
 
-    private bool TryHandleMagicWeaponWeaponSelection(CharacterController caster, CharacterController target)
+    /// <summary>
+    /// The Magic Weapon picker of the UI decider (GameManager.CastDeciders.cs, UiFillCastChoices): Filled when the cast
+    /// needs no pick or has one (a single weapon is picked at once), Suspended while the dialog is open (it re-enters
+    /// PerformSpellCast or ends the cast), Refused when the target has no weapon (the cast core ends the cast).
+    /// </summary>
+    private CastChoiceFill TryHandleMagicWeaponWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsMagicWeaponSpell(_pendingSpell))
         {
             _pendingMagicWeaponItem = null;
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         if (target == null || target.Stats == null)
-            return false;
+            return CastChoiceFill.Filled;
 
         if (_pendingMagicWeaponItem != null)
-            return false;
+            return CastChoiceFill.Filled;
 
         if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no weapon in inventory to enchant with Magic Weapon."));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingAnimateRopeItem = null;
-            _pendingResistEnergyType = null;
-            _pendingProtectionFromEnergyType = null;
-            _pendingMagicWeaponItem = null;
-            ShowActionChoices();
-            return true;
+            return CastChoiceFill.Refused;
         }
 
         if (weaponOptions.Count == 1)
         {
             _pendingMagicWeaponItem = weaponOptions[0];
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         CombatUI?.ShowPickUpItemSelection(
@@ -9806,7 +9803,7 @@ public partial class GameManager : MonoBehaviour
             bodyOverride: $"Choose which weapon from {target.Stats.CharacterName}'s inventory to enchant.",
             optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
 
-        return true;
+        return CastChoiceFill.Suspended;
     }
 
     private static bool TryGetMagicWeaponInventoryOptions(CharacterController target, out List<ItemData> weapons, out List<string> labels)

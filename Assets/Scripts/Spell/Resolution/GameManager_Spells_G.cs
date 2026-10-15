@@ -27,33 +27,31 @@ public partial class GameManager
 
     // _pendingGreaterMagicWeaponItem: the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
 
-    private bool TryHandleGreaterMagicWeaponSelection(CharacterController caster, CharacterController target)
+    /// <summary>The Greater Magic Weapon picker of the UI decider: Filled, Suspended (dialog open) or Refused (no weapon); see TryHandleMagicWeaponWeaponSelection.</summary>
+    private CastChoiceFill TryHandleGreaterMagicWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsGreaterMagicWeaponSpell(_pendingSpell))
         {
             _pendingGreaterMagicWeaponItem = null;
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         if (target == null || target.Stats == null)
-            return false;
+            return CastChoiceFill.Filled;
 
         if (_pendingGreaterMagicWeaponItem != null)
-            return false;
+            return CastChoiceFill.Filled;
 
         if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no weapon in inventory to enchant with Greater Magic Weapon."));
-            _pendingSpell = null;
-            _pendingGreaterMagicWeaponItem = null;
-            ShowActionChoices();
-            return true;
+            return CastChoiceFill.Refused;
         }
 
         if (weaponOptions.Count == 1)
         {
             _pendingGreaterMagicWeaponItem = weaponOptions[0];
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         CombatUI?.ShowPickUpItemSelection(
@@ -81,7 +79,7 @@ public partial class GameManager
             titleOverride: "Greater Magic Weapon - Select Weapon",
             bodyOverride: $"Choose which weapon from {target.Stats.CharacterName}'s inventory to enchant.",
             optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
-        return true;
+        return CastChoiceFill.Suspended;
     }
 
     private bool TryApplyGreaterMagicWeaponToPendingItem(CharacterController caster, CharacterController target, SpellData spell)

@@ -1415,6 +1415,17 @@
       "notes": "Batch 11 step 5 (docs/designs/cast_core_batch11.md, handler-registry-pc): GameManager's single-target handler registry (GameManager.SpellHandlerRegistry.cs) that PerformSpellCast runs in place of its old cascade of handled flags. Every private GameManager method named TryResolve*SpellEffect, plus TryResolveSoundBurstStunEffect, found by reflection, is registered exactly once with the (caster, target, spell, result) -> bool signature; no spell id is claimed by two entries; every registered spell id exists in SpellDatabase; the order, gates (None, Success, SuccessNotNegated), ContinueToBuff flags and spell ids equal the manifest re-derived from the old chain's guards and each method's own id check; the gate evaluation. Batch 11 step 6 (npc-handler-registry, 2026-10-15) runs the registry on the NPC cast path too and removed the shadow-ledger predictions and their 14 checks; it added 52 checks that the AI leaves out of its candidates exactly the registered spells whose handler needs a caster choice it cannot give (Dimension Door, Imbue with Spell Ability; AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive, SPL-091). Added 2026-10-15."
     },
     {
+      "type": "Tests.Magic.CastCoreStageOrderTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 72,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 7 (docs/designs/cast_core_batch11.md, cast-core-single-target-pc): the staged cast core GameManager.ExecuteCast. A recording fake decider casts, for a wizard 5 with the UI path's legacy quirks, a self buff (Shield), a melee touch spell on an ally (Shocking Grasp), a ray (Ray of Frost) and a buff on another creature (Bull's Strength): each runs Legality, the decider's choices, Cost, Distraction, Failure, Spend, ConcentrationOnCast, Provocation with the decider's answer, Counterspell, RingCounterspell, InvisibilityBreak, MirrorImage, TargetBlink, Resolve, Globe (after Resolve, GlobeAfterCast), Handlers, Buff, PostCast and CombatEnd, then FinishCast once (Resolved at CombatEnd, the cast ended, slot and standard action spent); a Self spell on another creature is refused at Legality with nothing spent, and CheckLegality has no side effect; a decider that refuses a choice ends the cast at Legality with nothing spent; a decider that suspends at a choice leaves the cast open with no outcome and nothing spent, and the re-entry runs every stage again and finishes once; a cancel at the provocation restores the slot and the action; a run waiting for the provocation answer refuses a re-entry (one violation, no reset) and finishes once on the answer; the decider is called before the combat-end check (BeforeCombatEndCheck); no stage changes CurrentSubPhase or the last combat log; the source of GameManager.CastCore.cs uses CombatUI only through CombatUI?.ShowCombatLog and none of the UI follow-up; ForUi and ForUiPrebuilt set LegacyCastQuirkSets.UiPath, which equals an explicit list of the 15 PC-path bits; a request lacking a bit a stage still needs raises one cast-core violation and keeps the legacy behaviour. The source scan also runs in edit mode. Added 2026-10-15."
+    },
+    {
       "type": "Tests.Magic.SpellDiceRulesTests",
       "needs": "either",
       "skip": "",

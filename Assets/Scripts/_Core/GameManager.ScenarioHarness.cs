@@ -486,6 +486,9 @@ public partial class GameManager
     /// <summary>The request of the cast on top of the per-cast context stack, or null (batch 11 step 4).</summary>
     internal SpellCastRequest Harness_CurrentCastRequest => CurrentCast?.Request;
 
+    /// <summary>The last combat log a cast or attack kept (_lastCombatLog; the UI decider writes it after a cast, the cast core never).</summary>
+    internal string Harness_LastCombatLog => _lastCombatLog;
+
     /// <summary>Ends every open cast, as the combat reset does (a test's cleanup).</summary>
     internal void Harness_EndAllCasts(string reason) => EndAllCasts(reason);
 

@@ -20,6 +20,15 @@ public sealed class SpellCastRequest
     public ICastDecider Decider = UiCastDecider.Instance;
 
     /// <summary>
+    /// The legacy behaviours this cast keeps until a later batch 11 step fixes them (<see cref="LegacyCastQuirk"/>): set
+    /// by the builder, read only by the cast core's stage methods.
+    /// </summary>
+    public LegacyCastQuirk Quirks;
+
+    /// <summary>True when <paramref name="quirk"/> is set on this request.</summary>
+    public bool HasQuirk(LegacyCastQuirk quirk) => (Quirks & quirk) == quirk;
+
+    /// <summary>
     /// The clone a cast works on. It keeps the template's MetamagicDataRef reference (a prepared metamagic spell's
     /// record, which SpellData.Clone drops), so the cast reads exactly what it read when it held the instance itself.
     /// </summary>
@@ -47,7 +56,8 @@ public sealed class SpellCastRequest
             Spell = spell == null ? null : hasMetamagic ? spell.Clone() : CloneForCast(spell),
             Metamagic = metamagic,
             Source = source ?? new CastSource(),
-            Decider = UiCastDecider.Instance
+            Decider = UiCastDecider.Instance,
+            Quirks = LegacyCastQuirkSets.UiPath
         };
         if (request.Spell != null && hasMetamagic)
             SpellCaster.ApplyMetamagicToSpellData(request.Spell, metamagic);
@@ -66,7 +76,8 @@ public sealed class SpellCastRequest
             Spell = spell,
             Metamagic = metamagic,
             Source = source ?? new CastSource(),
-            Decider = UiCastDecider.Instance
+            Decider = UiCastDecider.Instance,
+            Quirks = LegacyCastQuirkSets.UiPath
         };
     }
 

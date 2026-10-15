@@ -15,7 +15,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 ## Ground rules
 
 - **The code is the source of truth.** Docs, comments and commit messages are often wrong. Grep a member before calling or relying on it.
-- **Compile after every C# change:** `bash tools/compile_check.sh`. Keep `errors=0`; baseline 508 warnings (479 CS0618), a jump is a regression. Needs `Library/Bee` from a prior Unity open; cannot catch player-build-only errors.
+- **Compile after every C# change:** `bash tools/compile_check.sh`. Keep `errors=0`; baseline 507 warnings (479 CS0618; 508 until batch 11 step 7 removed an unused local), a jump is a regression. Needs `Library/Bee` from a prior Unity open; cannot catch player-build-only errors.
 - **C# 9 only** (no file-scoped namespaces, `global using`, `record struct`). With `using System;` and `Random`, add `using Random = UnityEngine.Random;` (REPO-006).
 - **Unity MCP tools may point at another project:** check that console paths exist here. No Unity batchmode without permission (writes `Library/` and `.meta` files).
 - **PCs and NPCs follow identical rules (owner, 2026-10-07).** Put mechanics in actor-agnostic code that the PC UI and the AI both call; `IsControllable` may only choose between UI input and AI choice. Never fix a rule on one side only. Divergences and the unification plan: `docs/systems/PC_NPC_PARITY.md`.
@@ -28,7 +28,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 
 ## Build, run, test
 
-- **Compile:** `bash tools/compile_check.sh` (about 5 s, `VERBOSE=1` lists warnings); expect `exit=0 errors=0 warnings=508`.
+- **Compile:** `bash tools/compile_check.sh` (about 5 s, `VERBOSE=1` lists warnings); expect `exit=0 errors=0 warnings=507`.
 - **Run:** open in 6000.4.0f1, open `MainScene`, Play. Through the Unity MCP you can enter and exit Play mode, run the static suites (`docs/TESTING.md` 3) and play scripted or AI-vs-AI fights with `Tests.Scenarios.ScenarioHarness` (`docs/TESTING.md` 3.4-3.5); hand play-testing of UI flows is still the owner's, so state what you did not verify.
 - **Fast party:** **Play Now!** or **Quick Start** on character creation.
 - **Dev tools:** the F12 Spell Testing Panel and `*_test` presets bypass normal rules; see `docs/TESTING.md` 4.2-4.3.
@@ -59,18 +59,18 @@ Where to look first:
 | Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; non-weapon damage `GameManager.DealDamage` (`_Core/GameManager.Damage.cs`); `Combat/Core/DamageModel.cs` (`DamagePackets`) |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |
-| Spell casting | `Spell/Resolution/GameManager.SpellCasting.cs` (`BeginPendingSpellTargeting`, `PerformSpellCast`, `PerformAoESpellCast`, `ApplySpellBuff`); `GameManager_Spells_<Letter>.cs`; `SpellCaster.Cast` |
+| Spell casting | `Spell/Resolution/GameManager.SpellCasting.cs` (`BeginPendingSpellTargeting`, `PerformSpellCast`, `PerformAoESpellCast`, `ApplySpellBuff`); the staged cast core `GameManager.CastCore.cs` (`ExecuteCast`, PC single-target casts); `GameManager_Spells_<Letter>.cs`; `SpellCaster.Cast` |
 | Spell / item / NPC data | `SpellNames`, `SpellDatabase_<Letter>`; `ItemDatabase`, `ItemIDs`, `Inventory.RecalculateStats`; `NPCDatabase_<Letter>`, `GameManager.NPCSetup.cs` |
 | AI turn | `GameManager.SingleNPCTurnFromInitiative` -> `AIService.ExecuteNPCTurn`; `TryNPCPerformSpellCast` |
 | UI | `SceneBootstrap.WireButtons`, `CombatUI`, `ActionButtonPanel`, `UI/Encounter/`, `StoreUI` |
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 60 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack, and the old `_pending*` spell names forward to it (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 62 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack, and the old `_pending*` spell names forward to it (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); AoE handlers are chained string compares; unclaimed spells fall to `ApplySpellBuff`.
-5. **Four hand-synced cast pipelines:** `PerformSpellCast`, `PerformAoESpellCast`, `TryNPCPerformSpellCast` (no metamagic), `TryConsumePendingSpellCast`. Scrolls, wands, F12 enter via `BeginPendingSpellTargeting`.
+5. **Cast pipelines:** `PerformSpellCast` runs the staged cast core (`ExecuteCast`, `GameManager.CastCore.cs`; legacy behaviour kept as `LegacyCastQuirk` bits); `PerformAoESpellCast`, `TryNPCPerformSpellCast` (no metamagic) and `TryConsumePendingSpellCast` are still hand-synced copies (batch 11 moves them onto the core). Scrolls, wands, F12 enter via `BeginPendingSpellTargeting`.
 6. **String IDs:** `SpellNames.X`, `ItemIDs.X` (`[Obsolete]` string overloads still the norm), snake_case NPC ids, free-string feats (`HasFeat("Power Attack")`).
 7. **Static databases** with lazy `Init()`; rings, rods, wondrous items join `ItemDatabase` only via `RegisterAll*` (ITM-032).
 8. **UI is built in code** and wired by `SceneBootstrap`; `WaitingFor*` flags block world input.

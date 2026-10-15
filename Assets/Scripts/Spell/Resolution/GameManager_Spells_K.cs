@@ -27,20 +27,21 @@ public partial class GameManager
 
     // _pendingKeenEdgeItem and _pendingKeenEdgeIsAmmo: the open cast's choices (GameManager.CastContext.cs, batch 11 step 4).
 
-    private bool TryHandleKeenEdgeWeaponSelection(CharacterController caster, CharacterController target)
+    /// <summary>The Keen Edge picker of the UI decider: Filled, Suspended (dialog open) or Refused (nothing to enchant); see TryHandleMagicWeaponWeaponSelection.</summary>
+    private CastChoiceFill TryHandleKeenEdgeWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsKeenEdgeSpell(_pendingSpell))
         {
             _pendingKeenEdgeItem = null;
             _pendingKeenEdgeIsAmmo = false;
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         if (target == null || target.Stats == null)
-            return false;
+            return CastChoiceFill.Filled;
 
         if (_pendingKeenEdgeItem != null || _pendingKeenEdgeIsAmmo)
-            return false;
+            return CastChoiceFill.Filled;
 
         // Gather weapon options from target
         TryGetKeenEdgeWeaponOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels);
@@ -66,25 +67,21 @@ public partial class GameManager
         if (weaponOptions.Count == 0 && !hasAmmo)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no eligible slashing/piercing weapon and {(caster != null ? caster.Stats.CharacterName : "caster")} has no ammunition for Keen Edge."));
-            _pendingSpell = null;
-            _pendingKeenEdgeItem = null;
-            _pendingKeenEdgeIsAmmo = false;
-            ShowActionChoices();
-            return true;
+            return CastChoiceFill.Refused;
         }
 
         // If only weapons and exactly one, auto-select
         if (weaponOptions.Count == 1 && !hasAmmo)
         {
             _pendingKeenEdgeItem = weaponOptions[0];
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         // If only ammo and no weapons, auto-select ammo path
         if (weaponOptions.Count == 0 && hasAmmo)
         {
             _pendingKeenEdgeIsAmmo = true;
-            return false;
+            return CastChoiceFill.Filled;
         }
 
         // Build combined option list: weapons + ammo option
@@ -134,7 +131,7 @@ public partial class GameManager
             titleOverride: "Keen Edge - Select Target",
             bodyOverride: $"Choose a weapon or ammunition to enchant with Keen Edge.",
             optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
-        return true;
+        return CastChoiceFill.Suspended;
     }
 
     private static bool TryGetKeenEdgeWeaponOptions(CharacterController target, out List<ItemData> weapons, out List<string> labels)

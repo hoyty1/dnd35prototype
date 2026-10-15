@@ -1,25 +1,31 @@
+using System;
+
 /// <summary>
 /// The state of one open cast (batch 11, cast_core_batch11.md): its <see cref="SpellCastRequest"/> and the fields the
-/// staged cast core (step 7 on) fills as the cast runs. GameManager keeps open contexts on a stack (BeginCast and
-/// EndCast, Spell/Resolution/GameManager.CastContext.cs): a synchronous AI cast nests on top of a Ui cast that waits for
-/// the player, and a pop that does not match the top is a scenario-harness violation.
+/// staged cast core (GameManager.ExecuteCast, Spell/Resolution/GameManager.CastCore.cs) fills as the cast runs.
+/// GameManager keeps open contexts on a stack (BeginCast and EndCast, Spell/Resolution/GameManager.CastContext.cs): a
+/// synchronous AI cast nests on top of a Ui cast that waits for the player, and a pop that does not match the top is a
+/// scenario-harness violation.
 /// </summary>
 public sealed class CastContext
 {
     public readonly SpellCastRequest Request;
 
-    /// <summary>The cast's SpellCaster result, once resolved (filled by the cast core, step 7 on).</summary>
+    /// <summary>The cast's SpellCaster result, once resolved.</summary>
     public SpellResult Result;
 
-    /// <summary>Whether a save negated the effect (filled by the cast core, step 7 on).</summary>
+    /// <summary>Whether a save negated the effect.</summary>
     public bool EffectNegatedBySave;
 
-    /// <summary>The caster level and save DC the cast uses (filled by the cast core, steps 7 and 14).</summary>
+    /// <summary>The caster level and save DC the cast uses (filled from batch 11 step 14, CasterLevelRules).</summary>
     public int CasterLevel;
     public int SaveDC;
 
-    /// <summary>The spontaneous and quickened log prefixes, built once (filled by the cast core, step 7 on).</summary>
-    public string LogPrefix;
+    /// <summary>
+    /// The quickened and spontaneous prefixes of the cast's result log, built once by the Cost stage (SPL-063): the
+    /// quickened line, then the spontaneous line, each ending in a newline; empty for a plain cast.
+    /// </summary>
+    public string LogPrefix = "";
 
     /// <summary>The actions and spells per day before the spend, for a cancel to give back (moves here with the cast core).</summary>
     internal CastResourceSnapshot Snapshot;
@@ -27,8 +33,76 @@ public sealed class CastContext
     /// <summary>Set when the context left the cast stack (EndCast, or a combat reset).</summary>
     public bool Ended { get; internal set; }
 
+    /// <summary>The stage the cast core is running or ran last.</summary>
+    public CastStage Stage { get; internal set; }
+
+    /// <summary>The outcome FinishCast gave the cast, or null while it runs or waits for the player.</summary>
+    public CastOutcome Outcome { get; internal set; }
+
+    /// <summary>
+    /// Called with each stage as the cast core enters it (a static test records the sequence). Null in play: the core
+    /// then does nothing extra.
+    /// </summary>
+    public Action<CastStage> StageObserver;
+
+    // ── The current run's state (GameManager.CastCore.cs); a run that re-enters after a dialog starts it again ──
+
+    /// <summary>The continuation ExecuteCast was given; FinishCast calls it once.</summary>
+    internal Action<CastOutcome> Done;
+
+    /// <summary>
+    /// Set while the run waits for the decider's provocation answer (the PC's AoO prompt). ExecuteCast refuses to start
+    /// another run of this context meanwhile (GameManager.RejectCastReentry); ResetRun leaves it alone.
+    /// </summary>
+    internal bool AwaitingDecider;
+
+    internal bool IsHeldChargeDelivery;
+    internal bool IsQuickened;
+    internal bool IsSpontaneousConversion;
+    internal int SpontaneousLevel = -1;
+    internal string SpontaneousSacrificedSpellId;
+    internal bool HasMetamagicApplied;
+    internal int SlotLevelToConsume;
+    internal SpellcastingComponent SpellComp;
+    internal bool SkipFriendlyTouchAttackRoll;
+    internal bool TargetForgoesSave;
+    internal bool AppliesTrackedEffect;
+    internal bool ClaimedByHandler;
+    internal bool RetainedHeldChargeOnMiss;
+    internal bool CombatEnded;
+
+    /// <summary>The cast's result log (with <see cref="LogPrefix"/>), shown once (GameManager.FlushCastLog).</summary>
+    internal string ResultLog;
+    internal bool ResultLogShown;
+
     public CastContext(SpellCastRequest request)
     {
         Request = request ?? new SpellCastRequest();
+    }
+
+    /// <summary>Clears the run state before a run of the cast core (a cast suspended at a dialog runs again).</summary>
+    internal void ResetRun()
+    {
+        Result = null;
+        EffectNegatedBySave = false;
+        LogPrefix = "";
+        Outcome = null;
+        Done = null;
+        IsHeldChargeDelivery = false;
+        IsQuickened = false;
+        IsSpontaneousConversion = false;
+        SpontaneousLevel = -1;
+        SpontaneousSacrificedSpellId = null;
+        HasMetamagicApplied = false;
+        SlotLevelToConsume = 0;
+        SpellComp = null;
+        SkipFriendlyTouchAttackRoll = false;
+        TargetForgoesSave = false;
+        AppliesTrackedEffect = false;
+        ClaimedByHandler = false;
+        RetainedHeldChargeOnMiss = false;
+        CombatEnded = false;
+        ResultLog = null;
+        ResultLogShown = false;
     }
 }

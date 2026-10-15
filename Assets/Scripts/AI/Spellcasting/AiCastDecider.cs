@@ -14,6 +14,26 @@ public sealed class AiCastDecider : ICastDecider
 
     public bool IsSynchronous => true;
 
+    /// <summary>The AI request's choices are filled when it is built (<see cref="FillDefaultChoices"/>).</summary>
+    public CastChoiceFill FillChoices(GameManager gm, CastContext ctx) => CastChoiceFill.Filled;
+
+    /// <summary>
+    /// Today's NPC decision and rolls for a threatened cast (AISpellcastingStrategist.ShouldCastDefensively, then
+    /// ResolveThreatenedSpellcast, through GameManager.ResolveNPCSpellcastProvocation). The NPC cast path does not run
+    /// through the cast core until batch 11 step 8, so no cast asks this yet.
+    /// </summary>
+    public void ChooseProvocation(GameManager gm, CastContext ctx, System.Action<CastProvocationAnswer> answer)
+    {
+        bool proceeds = gm.AiResolveCastProvocation(ctx);
+        answer?.Invoke(proceeds ? CastProvocationAnswer.Proceeds : CastProvocationAnswer.Lost);
+    }
+
+    /// <summary>Nothing to do before the combat-end check.</summary>
+    public void BeforeCombatEndCheck(GameManager gm, CastContext ctx) { }
+
+    /// <summary>The NPC turn goes on by itself; nothing to do after a cast.</summary>
+    public void OnCastFinished(GameManager gm, CastContext ctx, CastOutcome outcome) { }
+
     /// <summary>
     /// Fills the choices the NPC cast path has always made for the caster: fire for Resist Energy (PHB p.272) and
     /// Protection from Energy (PHB p.266), and the warm form of Fire Shield (PHB p.230). The values are today's; the
