@@ -68,6 +68,14 @@ public sealed class CastOutcome
     /// <summary>True when the cast's combat-end check ended the combat.</summary>
     public bool CombatEnded;
 
+    /// <summary>
+    /// True when the UI goes straight back to the action menu after this cast, with no stat-panel refresh and no pause,
+    /// although the cast counts as cast (<see cref="WasCast"/> is unchanged): a summon whose creature could not be
+    /// spawned, and with <see cref="LegacyCastQuirk.LostCastShowsActionMenu"/> a summon or Grease lost to a distraction or
+    /// a spell failure.
+    /// </summary>
+    public bool ShowsActionMenu;
+
     public CastOutcome(CastOutcomeKind kind, CastStage at, string reason, SpellResult result = null)
     {
         Kind = kind;
@@ -117,7 +125,12 @@ public sealed class CastOutcome
 /// path's skips are the bits of LegacyCastQuirkSets.UiAreaPath), and after the invisibility break the area Resolve
 /// stage (<see cref="CastStageResolveArea"/>) runs the area handler registry (GameManager.SpellHandlerRegistry.cs); every
 /// area cast ends in <see cref="FinishAreaCast"/>, which shows the log once with its prefixes and runs the handler's
-/// combat-end check before FinishCast.
+/// combat-end check before FinishCast. Step 10 runs the summon, Grease and held-charge casts through the same stages with
+/// the Summon, Grease and HoldCharge resolve variants (SpellCastRequest.ForUiSummon, ForUiGrease, ForUiHoldCharge), as a
+/// pure move of TryConsumePendingSpellCast, its five callers and HoldPendingMeleeTouchCharge: their skips are the bits of
+/// LegacyCastQuirkSets.UiSummonPath, UiGreasePath and UiHoldPath, and the resolve stages
+/// (<see cref="CastStageResolveSummon"/>, <see cref="CastStageResolveGrease"/>, <see cref="CastStageResolveHoldCharge"/>)
+/// run the old resolution code.
 /// </summary>
 public partial class GameManager
 {
@@ -205,15 +218,36 @@ public partial class GameManager
     /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
     /// target test (IsValidTargetForSpell), with the NPC bits the range at the caster level and the area refusal, and
     /// the material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
-    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>). No side effect. A refusal
+    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>), and for a hold the grapple
+    /// test (<see cref="CheckHoldChargeLegality"/>). No side effect, except that a hold request without
+    /// <see cref="LegacyCastQuirk.HoldSkipsGrappleLegality"/> logs the grapple refusal (batch 11 step 15 must keep that
+    /// log out of pure pre-checks). A refusal
     /// comes back with Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not
     /// checked here (the decider makes them).
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
-        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckCastTargetLegality(req) ?? CheckNpcRangeAndAreaLegality(req)
-                              ?? CheckCastComponentLegality(req);
+        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
+                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
+    }
+
+    /// <summary>
+    /// The grapple test a cast meets in its targeting (BeginPendingSpellTargeting) and a hold bypasses: a grappled or
+    /// pinned caster can cast only a spell that the grapple allows (CanBeginSpellcastWhileGrappledOrPinned, PHB p.156).
+    /// A hold skips it today (<see cref="LegacyCastQuirk.HoldSkipsGrappleLegality"/>, SPL-146; batch 11 step 15).
+    /// Holding a charge inside a Resilient Sphere is legal: the cast and the held charge send nothing through the sphere
+    /// (PHB p.258); only a delivery to a creature on the other side crosses it, which is the delivery's test (CMB-092)
+    /// (delegated RAW reading 2026-10-14). Null for any other request, or when the hold passes. The grapple test logs
+    /// its own refusal, so without the bit <see cref="CheckLegality"/> is no longer free of side effects for a hold.
+    /// </summary>
+    private CastOutcome CheckHoldChargeLegality(SpellCastRequest req)
+    {
+        if (req == null || req.ResolveKind != CastResolveKind.HoldCharge || req.Caster == null || req.Spell == null)
+            return null;
+        if (!req.HasQuirk(LegacyCastQuirk.HoldSkipsGrappleLegality) && !CanBeginSpellcastWhileGrappledOrPinned(req.Caster, req.Spell))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple");
+        return null;
     }
 
     /// <summary>
@@ -272,9 +306,12 @@ public partial class GameManager
     {
         if (req == null || req.Spell == null || req.Caster == null)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-cast");
-        // An area cast has no single target: its creatures are the ones in the aimed area (the area path never had a
-        // target test; step 23 gives area aims their own legality).
-        if (req.ResolveKind == CastResolveKind.Area)
+        // Only a single-target cast has a target creature to test. An area cast's creatures are the ones in the aimed area
+        // (the area path never had a target test; step 23 gives area aims their own legality); a summon aims at a square
+        // and Grease at an area or an object, both picked from the targeting highlight (PerformSummonMonsterCast,
+        // PerformSummonSwarmCast and PerformGreaseCast never had a target test either); a hold has no target until its
+        // delivery, which has its own cast and test.
+        if (req.ResolveKind != CastResolveKind.Single)
             return null;
         if (!IsValidTargetForSpell(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "invalid-target");
@@ -287,10 +324,14 @@ public partial class GameManager
         // panel casts (their Components bypass), scroll casts and wand casts bypass it (the item provides the
         // components); the cast's own source decides (batch 11 step 4).
         // NPCs carry no pouch and are not tested (NpcNoComponentCheck, SPL-114), nor are area casts (AreaSkipsPouch,
-        // SPL-006); decision D3 removes both in step 17.
+        // SPL-006), summons, Grease and holds (SummonSkipsPouch, GreaseSkipsPouch, HoldSkipsPouch; SPL-006, SPL-146);
+        // decision D3 removes them in steps 15 and 17.
         CastSource source = req.Source;
         bool componentsBypassed = req.HasQuirk(LegacyCastQuirk.NpcNoComponentCheck)
                                   || req.HasQuirk(LegacyCastQuirk.AreaSkipsPouch)
+                                  || req.HasQuirk(LegacyCastQuirk.SummonSkipsPouch)
+                                  || req.HasQuirk(LegacyCastQuirk.GreaseSkipsPouch)
+                                  || req.HasQuirk(LegacyCastQuirk.HoldSkipsPouch)
                                   || (source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem));
         if (componentsBypassed || !req.Spell.HasMaterialComponent)
             return null;
@@ -339,6 +380,15 @@ public partial class GameManager
             return;
         }
 
+        // A hold meets the grapple test a cast meets in its targeting, unless it still skips it (SPL-146).
+        refusal = CheckHoldChargeLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            FinishCast(ctx, refusal);
+            return;
+        }
+
         refusal = CheckCastTargetLegality(req);
         if (refusal != null)
         {
@@ -357,7 +407,8 @@ public partial class GameManager
             return;
         }
 
-        CastChoiceFill fill = req.Decider.FillChoices(this, ctx);
+        // A hold asks none of the caster's choices (HoldSkipsChoices, SPL-146): its delivery's cast does.
+        CastChoiceFill fill = req.HasQuirk(LegacyCastQuirk.HoldSkipsChoices) ? CastChoiceFill.Filled : req.Decider.FillChoices(this, ctx);
         if (fill == CastChoiceFill.Suspended)
             return;
         if (fill == CastChoiceFill.Refused)
@@ -404,7 +455,8 @@ public partial class GameManager
         // Quickened applies when CASTING the spell, not when delivering a previously held charge.
         bool isQuickened = !isDeliveringHeldCharge && metamagic != null && metamagic.Has(MetamagicFeatId.QuickenSpell);
         ctx.IsQuickened = isQuickened;
-        if (isScrollCast || isWandCast)
+        // A summon from a scroll or wand also spends the casting's action here (SummonItemCastCommitsCastAction, SPL-163).
+        if ((isScrollCast || isWandCast) && !req.HasQuirk(LegacyCastQuirk.SummonItemCastCommitsCastAction))
         {
             // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
             Debug.Log($"[{(isWandCast ? "WandCast" : "ScrollCast")}] {caster.Stats.CharacterName} casting from {(isWandCast ? "wand" : "scroll")} — action consumed via post-cast handler.");
@@ -449,7 +501,7 @@ public partial class GameManager
             CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "quickened");
         }
         // Test instrumentation (inert outside the scenario harness): a cast begins. Delivering a held charge is not a
-        // cast (HoldPendingMeleeTouchCharge raised it when the spell was cast).
+        // cast (the hold raised it when the spell was cast). A summon, Grease or hold has no target creature here.
         if (!isDeliveringHeldCharge)
             ScenarioHooks.SpellCast?.Invoke(caster, target, spell);
 
@@ -464,8 +516,10 @@ public partial class GameManager
         ctx.SpellComp = spellComp;
 
         // A cleric converting a specific prepared spell: the cast's own source, which the spell menu filled once from its
-        // Convert button (batch 11 step 4), so a cancelled conversion cannot make a later cast spontaneous.
-        bool isSpontaneous = !isDeliveringHeldCharge && sourceKind == CastSourceKind.SpontaneousConversion;
+        // Convert button (batch 11 step 4), so a cancelled conversion cannot make a later cast spontaneous. A hold ignores
+        // the conversion and spends as a plain slot cast (HoldIgnoresConversion, SPL-154).
+        bool isSpontaneous = !isDeliveringHeldCharge && sourceKind == CastSourceKind.SpontaneousConversion
+                             && !req.HasQuirk(LegacyCastQuirk.HoldIgnoresConversion);
         ctx.IsSpontaneousConversion = isSpontaneous;
         ctx.SpontaneousLevel = isSpontaneous ? req.Source.ConversionLevel : -1;
         ctx.SpontaneousSacrificedSpellId = isSpontaneous ? req.Source.SacrificedSpellId : null;
@@ -511,8 +565,9 @@ public partial class GameManager
             CharacterController caster = req.Caster;
             SpellData spell = req.Spell;
 
-            // An area cast makes no entangled check (AreaSkipsEntangled, SPL-006; step 13).
-            bool entangledCheck = !req.HasQuirk(LegacyCastQuirk.AreaSkipsEntangled);
+            // An area cast and a hold make no entangled check (AreaSkipsEntangled, SPL-006; HoldSkipsEntangled, SPL-146;
+            // step 13).
+            bool entangledCheck = !req.HasQuirk(LegacyCastQuirk.AreaSkipsEntangled) && !req.HasQuirk(LegacyCastQuirk.HoldSkipsEntangled);
             if (entangledCheck && caster.HasCondition(CombatConditionType.Entangled))
                 RequireLegacyQuirk(ctx, LegacyCastQuirk.EntangledUsesCasterLevelFormula);
             if (entangledCheck && !ResolveEntangledSomaticCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
@@ -520,7 +575,7 @@ public partial class GameManager
             {
                 CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
+                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
                 return;
             }
 
@@ -529,7 +584,7 @@ public partial class GameManager
             {
                 CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
+                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
                 return;
             }
         }
@@ -569,15 +624,16 @@ public partial class GameManager
                 CheckConcentrationOnLostCast(ctx);
                 LogArcaneSpellFailure(caster, spell, asfRoll, asfChance);
                 ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, "arcane-spell-failure"));
+                FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Failed, CastStage.Failure, "arcane-spell-failure"));
                 return;
             }
 
             // PHB p.206: a blinking caster has a 20% spell failure chance (the caster may be on the Ethereal Plane when
             // the spell is cast), checked separately from and in addition to arcane spell failure. The NPC path rolls
-            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160); an area cast
-            // makes no Blink check (AreaSkipsBlink, SPL-006; step 13).
-            if (caster.HasActiveBlinkEffect && !req.HasQuirk(LegacyCastQuirk.AreaSkipsBlink))
+            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160); an area cast, a
+            // summon, Grease and a hold make no Blink check (AreaSkipsBlink, SummonSkipsBlink, GreaseSkipsBlink,
+            // HoldSkipsBlink; SPL-006, SPL-146; step 13).
+            if (caster.HasActiveBlinkEffect && !SkipsCasterBlinkCheck(req))
             {
                 bool npcBlink = req.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
                 int blinkSpellRoll = DiceService.Percentile(npcBlink ? "Blink NPC caster spell failure" : "Blink caster spell failure");
@@ -595,7 +651,7 @@ public partial class GameManager
                     CheckConcentrationOnLostCast(ctx);
                     CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{caster.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)"));
                     ClearSpellcastResourceSnapshot();
-                    FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, "blink-caster"));
+                    FinishCast(ctx, LostCastOutcome(ctx, CastOutcomeKind.Failed, CastStage.Failure, "blink-caster"));
                     return;
                 }
 
@@ -669,6 +725,9 @@ public partial class GameManager
         {
             EnterCastStage(ctx, CastStage.ConcentrationOnCast);
             HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+            // Grease runs the step a second time (GreaseConcentrationCheckedTwice, SPL-152; step 12).
+            if (ctx.Request.HasQuirk(LegacyCastQuirk.GreaseConcentrationCheckedTwice))
+                HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
         }
         next(ctx);
     }
@@ -737,11 +796,24 @@ public partial class GameManager
             CastStageCounterspell(ctx);
     }
 
-    /// <summary>Counterspell: a readied counterspell (PHB p.170) stops the spell; not for a held-charge delivery.</summary>
+    /// <summary>
+    /// Counterspell: a readied counterspell (PHB p.170) stops the spell. Not for a held-charge delivery, which is no
+    /// casting (PHB p.141; <see cref="LegacyCastQuirk.DeliverySkipsCounterspell"/> while the hold is not countered either),
+    /// and skipped for a summon, Grease and a hold (<see cref="LegacyCastQuirk.SummonSkipsCounterspell"/>,
+    /// <see cref="LegacyCastQuirk.GreaseSkipsCounterspell"/>, <see cref="LegacyCastQuirk.HoldSkipsCounterspell"/>;
+    /// SPL-006, SPL-146; step 15).
+    /// </summary>
     private void CastStageCounterspell(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Counterspell);
-        if (!ctx.IsHeldChargeDelivery)
+        SpellCastRequest req = ctx.Request;
+        if (ctx.IsHeldChargeDelivery)
+            RequireLegacyQuirk(ctx, LegacyCastQuirk.DeliverySkipsCounterspell);
+        bool skipped = ctx.IsHeldChargeDelivery
+                       || req.HasQuirk(LegacyCastQuirk.SummonSkipsCounterspell)
+                       || req.HasQuirk(LegacyCastQuirk.GreaseSkipsCounterspell)
+                       || req.HasQuirk(LegacyCastQuirk.HoldSkipsCounterspell);
+        if (!skipped)
         {
             CharacterController caster = ctx.Request.Caster;
             SpellData spell = ctx.Request.Spell;
@@ -788,15 +860,29 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// After the pre-resolution checks: the single-target stages from Mirror Image on, or the area Resolve stage
-    /// (<see cref="CastResolveKind.Area"/>).
+    /// After the pre-resolution checks, the request's resolve variant: the single-target stages from Mirror Image on, the
+    /// area Resolve stage (<see cref="CastResolveKind.Area"/>), or the Summon, Grease and HoldCharge Resolve stages.
     /// </summary>
     private void CastStageResolveVariant(CastContext ctx)
     {
-        if (IsAreaCast(ctx))
-            CastStageResolveArea(ctx);
-        else
-            CastStageMirrorImage(ctx);
+        switch (ctx.Request.ResolveKind)
+        {
+            case CastResolveKind.Area:
+                CastStageResolveArea(ctx);
+                break;
+            case CastResolveKind.Summon:
+                CastStageResolveSummon(ctx);
+                break;
+            case CastResolveKind.Grease:
+                CastStageResolveGrease(ctx);
+                break;
+            case CastResolveKind.HoldCharge:
+                CastStageResolveHoldCharge(ctx);
+                break;
+            default:
+                CastStageMirrorImage(ctx);
+                break;
+        }
     }
 
     /// <summary>
@@ -812,15 +898,31 @@ public partial class GameManager
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
 
-        if (IsAreaCast(ctx))
+        if (ctx.Request.ResolveKind != CastResolveKind.Single)
         {
-            // An area spell is hostile when it reaches a foe in the area; the touch and forgone-save tests below read a
-            // single target, and the area handlers make their own.
-            BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
+            switch (ctx.Request.ResolveKind)
+            {
+                case CastResolveKind.Area:
+                    // An area spell is hostile when it reaches a foe in the area; the touch and forgone-save tests below
+                    // read a single target, and the area handlers make their own.
+                    BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
+                    break;
+                case CastResolveKind.Grease:
+                    // Grease never ends the caster's invisibility today (GreaseSkipsInvisibilityBreak, SPL-006; step 15).
+                    if (!ctx.Request.HasQuirk(LegacyCastQuirk.GreaseSkipsInvisibilityBreak))
+                        BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
+                    break;
+                default:
+                    // A summon or a hold targets no creature. A summoned creature, a swarm laid on a foe's square included,
+                    // harms only indirectly, which is no attack: PHB p.245 names "summon monsters and have them attack"
+                    // (delegated RAW reading 2026-10-14). A held charge attacks when it is delivered.
+                    break;
+            }
+
             if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
                 CastStageCounterspell(ctx);
             else
-                CastStageResolveArea(ctx);
+                CastStageResolveVariant(ctx);
             return;
         }
 
@@ -1201,6 +1303,93 @@ public partial class GameManager
         });
     }
 
+    // ── The Summon, Grease and HoldCharge resolve variants (batch 11 step 10) ───────────────────────────────────
+
+    /// <summary>
+    /// Resolve (summon): places the summoned creatures (Summon Monster and Summon Nature's Ally,
+    /// <see cref="ResolveSummonMonsterCast"/>) or the swarm (Summon Swarm, <see cref="ResolveSummonSwarmCast"/>) on the
+    /// aim's destination, inserts them into the initiative after the caster and registers them, then ends the cast at this
+    /// stage (<see cref="FinishEffectCast"/>).
+    /// </summary>
+    private void CastStageResolveSummon(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Resolve);
+        if (IsSummonSwarmSpell(ctx.Request.Spell))
+            ResolveSummonSwarmCast(ctx);
+        else
+            ResolveSummonMonsterCast(ctx);
+    }
+
+    /// <summary>
+    /// Resolve (Grease, PHB p.237): the mode the caster chose (CastChoices.GreaseMode) greases the aimed 10-ft square, the
+    /// object the aim's holder carries or the armor it wears (<see cref="ResolveGreaseCast"/>); the cast ends with its
+    /// result log (<see cref="FinishGreaseCast"/>).
+    /// </summary>
+    private void CastStageResolveGrease(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Resolve);
+        FinishGreaseCast(ctx, ResolveGreaseCast(ctx));
+    }
+
+    /// <summary>
+    /// Resolve (hold): the cast spell's charge is held (SpellcastingComponent.SetHeldTouchCharge, PHB p.141 and p.176),
+    /// with the cast's metamagic, for a later delivery (OnDischargeHeldTouchButtonPressed, a HeldChargeDelivery cast).
+    /// </summary>
+    private void CastStageResolveHoldCharge(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Resolve);
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        ctx.SpellComp.SetHeldTouchCharge(spell, ctx.Request.Metamagic);
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "hold-charge");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {spell.Name}."));
+        FinishEffectCast(ctx, "held");
+    }
+
+    /// <summary>
+    /// The exit of a resolved summon or hold: both logged their own lines as they resolved, so the cast has no result
+    /// log; it ends at the Resolve stage, and the UI decider refreshes the stat panels, clears the highlights and pauses
+    /// (AfterAttackDelay, 1 s). No combat-end check (<see cref="LegacyCastQuirk.EffectResolveSkipsCombatEndCheck"/>,
+    /// CORE-039; step 11).
+    /// </summary>
+    private void FinishEffectCast(CastContext ctx, string reason)
+    {
+        if (ctx.Outcome != null)
+            return;
+        RequireLegacyQuirk(ctx, LegacyCastQuirk.EffectResolveSkipsCombatEndCheck);
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.Resolve, reason));
+    }
+
+    /// <summary>
+    /// The exit of a summon whose creature could not be spawned: the slot is spent and the cast is over, and the UI goes
+    /// straight back to the action menu (<see cref="CastOutcome.ShowsActionMenu"/>), as the old summon paths did.
+    /// </summary>
+    private void FinishFailedSummon(CastContext ctx, string reason)
+    {
+        if (ctx.Outcome != null)
+            return;
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Resolve, reason) { ShowsActionMenu = true });
+    }
+
+    /// <summary>
+    /// The exit of a resolved Grease: its result log goes out, then the decider's follow-up that precedes a combat-end
+    /// check (the UI's last combat log, stat panels and highlights), and the cast ends at the CombatEnd stage, so the UI
+    /// paces the turn as after a resolved cast (AfterAttackDelay, 1.5 s). No combat-end check
+    /// (<see cref="LegacyCastQuirk.EffectResolveSkipsCombatEndCheck"/>, CORE-039; step 11).
+    /// </summary>
+    private void FinishGreaseCast(CastContext ctx, string log)
+    {
+        if (ctx.Outcome != null)
+            return;
+        EnterCastStage(ctx, CastStage.CombatEnd);
+        ctx.ResultLog = log;
+        ctx.ConsoleLogLabel = null;
+        FlushCastLog(ctx);
+        ctx.Request.Decider?.BeforeCombatEndCheck(this, ctx);
+        RequireLegacyQuirk(ctx, LegacyCastQuirk.EffectResolveSkipsCombatEndCheck);
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, "resolved"));
+    }
+
     // ── The single exit ─────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -1249,6 +1438,22 @@ public partial class GameManager
         Debug.LogWarning("[CastCore] " + detail);
         ScenarioHooks.CastStackViolation?.Invoke(detail);
         return true;
+    }
+
+    /// <summary>
+    /// The outcome of a cast lost to a distraction or a spell failure; with <see cref="LegacyCastQuirk.LostCastShowsActionMenu"/>
+    /// (a summon or Grease, SPL-006) the UI goes straight back to the action menu.
+    /// </summary>
+    private static CastOutcome LostCastOutcome(CastContext ctx, CastOutcomeKind kind, CastStage at, string reason)
+    {
+        return new CastOutcome(kind, at, reason) { ShowsActionMenu = ctx.Request.HasQuirk(LegacyCastQuirk.LostCastShowsActionMenu) };
+    }
+
+    /// <summary>True when the request makes no blinking-caster check (the area, summon, Grease and hold bits; step 13).</summary>
+    private static bool SkipsCasterBlinkCheck(SpellCastRequest req)
+    {
+        return req.HasQuirk(LegacyCastQuirk.AreaSkipsBlink) || req.HasQuirk(LegacyCastQuirk.SummonSkipsBlink)
+               || req.HasQuirk(LegacyCastQuirk.GreaseSkipsBlink) || req.HasQuirk(LegacyCastQuirk.HoldSkipsBlink);
     }
 
     /// <summary>

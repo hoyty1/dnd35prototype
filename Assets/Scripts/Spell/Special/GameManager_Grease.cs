@@ -218,7 +218,7 @@ public partial class GameManager
         _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
-        PerformGreaseAreaCast(caster, targets, greaseCells);
+        PerformGreaseCast(caster, null, targets, greaseCells);
         return true;
     }
 
@@ -259,93 +259,100 @@ public partial class GameManager
         return SpellSaveDCRules.Compute(caster, spell, metamagic);
     }
 
-    private int GetGreaseDurationRounds(CharacterController caster)
+    /// <summary>Grease lasts 1 round per caster level (PHB p.237), at the caster level of the cast's own spell.</summary>
+    private static int GetGreaseDurationRounds(CharacterController caster, SpellData spell)
     {
-        return SpellCastingHelper.GetEffectiveCasterLevel(caster, _pendingSpell);
+        return SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
     }
 
-    private void PerformGreaseAreaCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> greaseCells)
+    /// <summary>
+    /// The Grease target click, in any of its three forms (PHB p.237): the request builder of one Grease cast (batch 11
+    /// step 10; formerly PerformGreaseAreaCast, PerformGreaseObjectCast and PerformGreaseArmorCast). The form is the open
+    /// cast's choice (CastChoices.GreaseMode, from the mode prompt, TryShowGreaseCastModePrompt); an area cast passes its
+    /// 10-ft square's <paramref name="greaseCells"/> and the creatures in it, <paramref name="areaTargets"/>; an object or
+    /// armor cast the creature holding or wearing it, <paramref name="objectHolder"/>. The cast runs through the cast core
+    /// (SpellCastRequest.ForUiGrease, the Grease resolve, <see cref="ResolveGreaseCast"/>).
+    /// </summary>
+    private void PerformGreaseCast(CharacterController caster, CharacterController objectHolder,
+        List<CharacterController> areaTargets, HashSet<Vector2Int> greaseCells)
     {
-        if (caster == null || _pendingSpell == null)
+        GreaseCastMode mode = _pendingGreaseCastMode;
+        bool missingHolder = mode == GreaseCastMode.Object ? objectHolder == null
+            : mode == GreaseCastMode.Armor && (objectHolder == null || objectHolder.Stats == null);
+        if (caster == null || _pendingSpell == null || missingHolder)
         {
             ShowActionChoices();
             return;
         }
 
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseAreaCast));
+        CastContext ctx = OpenUiCastForBuilder(nameof(PerformGreaseCast));
+        if (ctx == null)
+            return;
+
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseCast) + ":" + mode);
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CaptureSpellcastResourceSnapshot(caster);
+        SpellCastRequest.ForUiGrease(ctx.Request, objectHolder, areaTargets, greaseCells);
+        ExecuteCast(ctx, null);
+    }
 
-        if (!TryConsumePendingSpellCast(caster))
+    /// <summary>
+    /// Resolve (Grease, PHB p.237), by the cast's mode: the area's grease (CreateGreaseArea), the held object's
+    /// (ResolveGreaseObjectCast) or the worn armor's (ResolveGreaseArmorCast). Returns the cast's result log.
+    /// </summary>
+    private string ResolveGreaseCast(CastContext ctx)
+    {
+        switch (ctx.Request.Choices.GreaseMode)
         {
-            ClearSpellcastResourceSnapshot();
-            ShowActionChoices();
-            return;
+            case GreaseCastMode.Object:
+                CastStageTrace.Mark(ctx.Request.Caster, ctx.Request.Spell, CastStageTrace.Handler, nameof(ResolveGreaseObjectCast));
+                return ResolveGreaseObjectCast(ctx.Request.Caster, ctx.Request.Aim.ObjectHolder, ctx.Request.Spell);
+            case GreaseCastMode.Armor:
+                return ResolveGreaseArmorCast(ctx);
+            default:
+                return ResolveGreaseAreaCast(ctx);
+        }
+    }
+
+    /// <summary>Grease on a 10-ft square (PHB p.237): the persistent grease area and its log.</summary>
+    private string ResolveGreaseAreaCast(CastContext ctx)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
+        HashSet<Vector2Int> greaseCells = ctx.Request.Aim.Cells;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(CreateGreaseArea));
+
+        int saveDC = GetSpellSaveDC(caster, spell);
+        int durationRounds = GetGreaseDurationRounds(caster, spell);
+
+        var log = new StringBuilder();
+        log.AppendLine("═══════════════════════════════════");
+        log.AppendLine($"✨ {caster.Stats.CharacterName} casts {spell.Name}! (10-ft square)");
+        log.AppendLine($"  Duration: {durationRounds} rounds | Reflex DC: {saveDC}");
+        if (_isGreaseTestEncounter)
+            log.AppendLine("  [TEST] Verifying low-Reflex grappler saves and prone results for clustered targets.");
+
+        if (targets != null && targets.Count > 0)
+        {
+            var seenTargets = new HashSet<CharacterController>();
+            int uniqueTargets = 0;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                CharacterController target = targets[i];
+                if (target == null || target.Stats == null || target.Stats.IsDead || !seenTargets.Add(target))
+                    continue;
+
+                uniqueTargets++;
+            }
+
+            log.AppendLine($"  Creatures currently in area: {uniqueTargets}");
         }
 
-        HandleConcentrationOnCasting(caster, _pendingSpell);
+        CreateGreaseArea(GetGreaseCenterWorldPosition(greaseCells), durationRounds, saveDC, caster, spell);
 
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
-
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(CreateGreaseArea));
-
-            int saveDC = GetSpellSaveDC(caster, _pendingSpell);
-            int durationRounds = GetGreaseDurationRounds(caster);
-
-            var log = new StringBuilder();
-            log.AppendLine("═══════════════════════════════════");
-            log.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! (10-ft square)");
-            log.AppendLine($"  Duration: {durationRounds} rounds | Reflex DC: {saveDC}");
-            if (_isGreaseTestEncounter)
-                log.AppendLine("  [TEST] Verifying low-Reflex grappler saves and prone results for clustered targets.");
-
-            if (targets != null && targets.Count > 0)
-            {
-                var seenTargets = new HashSet<CharacterController>();
-                int uniqueTargets = 0;
-                for (int i = 0; i < targets.Count; i++)
-                {
-                    CharacterController target = targets[i];
-                    if (target == null || target.Stats == null || target.Stats.IsDead || !seenTargets.Add(target))
-                        continue;
-
-                    uniqueTargets++;
-                }
-
-                log.AppendLine($"  Creatures currently in area: {uniqueTargets}");
-            }
-
-            CreateGreaseArea(GetGreaseCenterWorldPosition(greaseCells), durationRounds, saveDC, caster);
-
-            log.AppendLine("  Ground is now greased (difficult movement, Balance DC 10 to stay upright).");
-            log.Append("═══════════════════════════════════");
-
-            _lastCombatLog = log.ToString();
-            CombatUI?.ShowCombatLog(_lastCombatLog);
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            ResetPendingGreaseCastMode();
-
-            Grid.ClearAllHighlights();
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(caster, 1.5f));
-        });
+        log.AppendLine("  Ground is now greased (difficult movement, Balance DC 10 to stay upright).");
+        log.Append("═══════════════════════════════════");
+        return log.ToString();
     }
 
     private Vector3 GetGreaseCenterWorldPosition(HashSet<Vector2Int> cells)
@@ -372,7 +379,7 @@ public partial class GameManager
     /// <summary>
     /// Creates a grease area through the reusable persistent area-effect system.
     /// </summary>
-    public void CreateGreaseArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster)
+    public void CreateGreaseArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster, SpellData spell)
     {
         GameObject greaseObj = new GameObject("Grease_Area");
         greaseObj.transform.position = centerPosition;
@@ -382,7 +389,7 @@ public partial class GameManager
         grease.RoundsRemaining = Mathf.Max(1, duration);
         grease.SaveDC = saveDC;
         grease.Caster = caster;
-        grease.CasterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, _pendingSpell);
+        grease.CasterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
     }
 
     /// <summary>
@@ -397,163 +404,71 @@ public partial class GameManager
             _movementService.SetDifficultTerrain(cell, isDifficult);
     }
 
-    private void PerformGreaseObjectCast(CharacterController caster, CharacterController target)
+    /// <summary>
+    /// Grease on worn armor (PHB p.237): a +10 circumstance bonus on the wearer's checks to resist or escape a grapple
+    /// or a pin, replacing an earlier greased-armor effect, and its log.
+    /// </summary>
+    private string ResolveGreaseArmorCast(CastContext ctx)
     {
-        if (caster == null || target == null || _pendingSpell == null)
+        CharacterController caster = ctx.Request.Caster;
+        CharacterController target = ctx.Request.Aim.ObjectHolder;
+        SpellData spell = ctx.Request.Spell;
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "grease-armor");
+
+        int durationRounds = GetGreaseDurationRounds(caster, spell);
+        StatusEffectManager statusMgr = target.StatusEffectManager;
+        if (statusMgr == null)
+            statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(target.Stats);
+
+        for (int i = statusMgr.ActiveEffects.Count - 1; i >= 0; i--)
         {
-            ShowActionChoices();
-            return;
+            ActiveSpellEffect existing = statusMgr.ActiveEffects[i];
+            if (existing == null)
+                continue;
+
+            bool isGreaseArmor = (existing.Spell != null && existing.Spell.SpellId == "grease_armor")
+                || existing.GreasedArmorGrappleResistBonus != 0
+                || existing.GreasedArmorGrappleEscapeBonus != 0
+                || existing.GreasedArmorBreakPinBonus != 0
+                || existing.GreasedArmorResistPinBonus != 0;
+
+            if (isGreaseArmor)
+                statusMgr.RemoveEffect(existing);
         }
 
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseObjectCast));
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CaptureSpellcastResourceSnapshot(caster);
-
-        if (!TryConsumePendingSpellCast(caster))
+        var effectSpell = new SpellData
         {
-            ClearSpellcastResourceSnapshot();
-            ShowActionChoices();
-            return;
-        }
+            SpellId = "grease_armor",
+            Name = "Grease (Armor)",
+            BuffType = "circumstance"
+        };
 
-        HandleConcentrationOnCasting(caster, _pendingSpell);
-
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
+        var greasedArmorEffect = new ActiveSpellEffect
         {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
+            Spell = effectSpell,
+            CasterName = caster.Stats.CharacterName,
+            CasterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell),
+            AffectedCharacterName = target.Stats.CharacterName,
+            DurationType = DurationType.Rounds,
+            RemainingRounds = durationRounds,
+            BonusTypeLegacy = "Circumstance",
+            BonusTypeEnum = BonusType.Circumstance,
+            IsApplied = true,
+            GreasedArmorGrappleResistBonus = 10,
+            GreasedArmorGrappleEscapeBonus = 10,
+            GreasedArmorBreakPinBonus = 10,
+            GreasedArmorResistPinBonus = 10
+        };
+        statusMgr.ActiveEffects.Add(greasedArmorEffect);
 
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveGreaseObjectCast));
-
-            _lastCombatLog = ResolveGreaseObjectCast(caster, target);
-            CombatUI?.ShowCombatLog(_lastCombatLog);
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            ResetPendingGreaseCastMode();
-
-            Grid.ClearAllHighlights();
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(caster, 1.5f));
-        });
-    }
-
-    private void PerformGreaseArmorCast(CharacterController caster, CharacterController target)
-    {
-        if (caster == null || target == null || target.Stats == null || _pendingSpell == null)
-        {
-            ShowActionChoices();
-            return;
-        }
-
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseArmorCast));
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CaptureSpellcastResourceSnapshot(caster);
-
-        if (!TryConsumePendingSpellCast(caster))
-        {
-            ClearSpellcastResourceSnapshot();
-            ShowActionChoices();
-            return;
-        }
-
-        HandleConcentrationOnCasting(caster, _pendingSpell);
-
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
-
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "grease-armor");
-
-            int durationRounds = GetGreaseDurationRounds(caster);
-            StatusEffectManager statusMgr = target.StatusEffectManager;
-            if (statusMgr == null)
-                statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-
-            for (int i = statusMgr.ActiveEffects.Count - 1; i >= 0; i--)
-            {
-                ActiveSpellEffect existing = statusMgr.ActiveEffects[i];
-                if (existing == null)
-                    continue;
-
-                bool isGreaseArmor = (existing.Spell != null && existing.Spell.SpellId == "grease_armor")
-                    || existing.GreasedArmorGrappleResistBonus != 0
-                    || existing.GreasedArmorGrappleEscapeBonus != 0
-                    || existing.GreasedArmorBreakPinBonus != 0
-                    || existing.GreasedArmorResistPinBonus != 0;
-
-                if (isGreaseArmor)
-                    statusMgr.RemoveEffect(existing);
-            }
-
-            var effectSpell = new SpellData
-            {
-                SpellId = "grease_armor",
-                Name = "Grease (Armor)",
-                BuffType = "circumstance"
-            };
-
-            var greasedArmorEffect = new ActiveSpellEffect
-            {
-                Spell = effectSpell,
-                CasterName = caster.Stats.CharacterName,
-                CasterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, _pendingSpell),
-                AffectedCharacterName = target.Stats.CharacterName,
-                DurationType = DurationType.Rounds,
-                RemainingRounds = durationRounds,
-                BonusTypeLegacy = "Circumstance",
-                BonusTypeEnum = BonusType.Circumstance,
-                IsApplied = true,
-                GreasedArmorGrappleResistBonus = 10,
-                GreasedArmorGrappleEscapeBonus = 10,
-                GreasedArmorBreakPinBonus = 10,
-                GreasedArmorResistPinBonus = 10
-            };
-            statusMgr.ActiveEffects.Add(greasedArmorEffect);
-
-            var log = new StringBuilder();
-            log.AppendLine("═══════════════════════════════");
-            log.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s armor!");
-            log.AppendLine($"Duration: {durationRounds} rounds | Save: none (worn armor)");
-            log.AppendLine($"{target.Stats.CharacterName} gains +10 circumstance bonus to resist/escape grapple and pin checks.");
-            log.Append("═══════════════════════════════");
-            _lastCombatLog = log.ToString();
-            CombatUI?.ShowCombatLog(_lastCombatLog);
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            ResetPendingGreaseCastMode();
-
-            Grid.ClearAllHighlights();
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(caster, 1.5f));
-        });
+        var log = new StringBuilder();
+        log.AppendLine("═══════════════════════════════");
+        log.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s armor!");
+        log.AppendLine($"Duration: {durationRounds} rounds | Save: none (worn armor)");
+        log.AppendLine($"{target.Stats.CharacterName} gains +10 circumstance bonus to resist/escape grapple and pin checks.");
+        log.Append("═══════════════════════════════");
+        return log.ToString();
     }
 
     private bool IsCellInActiveGreaseArea(Vector2Int pos)
@@ -648,7 +563,7 @@ public partial class GameManager
         _activeGreasedObjects.Clear();
     }
 
-    private string ResolveGreaseObjectCast(CharacterController caster, CharacterController target)
+    private string ResolveGreaseObjectCast(CharacterController caster, CharacterController target, SpellData spell)
     {
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return "Grease fizzles: invalid caster/target.";
@@ -662,9 +577,9 @@ public partial class GameManager
         if (targetItem == null)
             return $"Grease has no effect: no held item found on {target.Stats.CharacterName}.";
 
-        int saveDC = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDC = GetSpellSaveDC(caster, spell);
         int roll = DiceRoller.D20();
-        int greaseReflexMod = SaveRules.Modifier(target.Stats, SavingThrowType.Reflex, SaveContext.ForSpell(_pendingSpell, caster.Stats)); // CHR-018
+        int greaseReflexMod = SaveRules.Modifier(target.Stats, SavingThrowType.Reflex, SaveContext.ForSpell(spell, caster.Stats)); // CHR-018
         int total = roll + greaseReflexMod;
         bool saveSucceeded = total >= saveDC;
 
@@ -690,8 +605,9 @@ public partial class GameManager
             }
         }
 
-        RegisterGreasedObject(targetItem, GetGreaseDurationRounds(caster), saveDC, caster.Stats.CharacterName);
-        sb.AppendLine($"{targetItem.Name} remains slick for {GetGreaseDurationRounds(caster)} rounds.");
+        int durationRounds = GetGreaseDurationRounds(caster, spell);
+        RegisterGreasedObject(targetItem, durationRounds, saveDC, caster.Stats.CharacterName);
+        sb.AppendLine($"{targetItem.Name} remains slick for {durationRounds} rounds.");
         sb.Append("═══════════════════════════════");
 
         return sb.ToString();

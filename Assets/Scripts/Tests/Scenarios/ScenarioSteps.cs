@@ -216,8 +216,15 @@ namespace Tests.Scenarios
         public static Step CastChoosing(string spellId, string target, params string[] choices)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Choices = choices ?? new string[0] };
         /// <summary>
+        /// Ui only: <see cref="CastChoosing"/> aimed at the square (<paramref name="x"/>, <paramref name="y"/>) rather than at
+        /// an actor: the destination of a Summon Monster or Summon Swarm cast, or the anchor of a Grease area. The choices
+        /// answer the selection lists the cast opens (the Grease mode, the summoned creature, the swarm type) in order.
+        /// </summary>
+        public static Step CastAt(string spellId, int x, int y, params string[] choices)
+            => new Step(StepKind.Cast) { SpellId = spellId, Cell = new Vector2Int(x, y), HasCell = true, Choices = choices ?? new string[0] };
+        /// <summary>
         /// Ui only: casts a prepared melee touch spell and answers its touch-spell prompt Discharge Later
-        /// (GameManager.HoldPendingMeleeTouchCharge), so the caster holds the charge.
+        /// (GameManager.BeginHoldTouchCharge, the cast core's HoldCharge resolve), so the caster holds the charge.
         /// </summary>
         public static Step CastHeld(string spellId) => new Step(StepKind.CastHeld) { SpellId = spellId };
         /// <summary>Ui only: the Discharge button (GameManager.OnDischargeHeldTouchButtonPressed), then the target's square.</summary>
@@ -275,7 +282,7 @@ namespace Tests.Scenarios
                 case StepKind.AnswerImprovedGrab:
                     return "AnswerImprovedGrab(" + MenuChoice + ")";
                 case StepKind.Cast:
-                    return "Cast(" + SpellId + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "")
+                    return "Cast(" + SpellId + "," + (HasCell ? Cell.x + "," + Cell.y : Target) + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "")
                         + (Choices != null ? ",choose=" + string.Join("|", Choices) : "") + ")";
                 case StepKind.CastHeld:
                     return "CastHeld(" + SpellId + ")";
@@ -310,7 +317,7 @@ namespace Tests.Scenarios
         {
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
-                || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
+                || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
                 || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
@@ -344,6 +351,8 @@ namespace Tests.Scenarios
                 if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
                     || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
+                if (Kind == StepKind.Cast && HasCell)
+                    return Describe() + ": a cast aimed at a square is Ui only (the NPC path casts at an actor)";
                 if (Kind == StepKind.Cast && Choices != null)
                     return Describe() + ": selection-list choices are Ui only (the NPC path makes its own)";
                 if (Kind == StepKind.Cast && Metamagic != null && Metamagic.HasAnyMetamagic)
@@ -1103,7 +1112,7 @@ namespace Tests.Scenarios
                     break;
                 case StepKind.Cast:
                 {
-                    if (target == null) { _awaitNote = "no target"; break; }
+                    if (target == null && !s.HasCell) { _awaitNote = "no target"; break; }
                     SpellData spell = FindPreparedSpell(_actor, s.SpellId);
                     if (spell == null) { _awaitNote = "no unused prepared slot holds " + s.SpellId; break; }
                     gm.OnCastSpellButtonPressed();
@@ -1118,7 +1127,7 @@ namespace Tests.Scenarios
                         AnswerChoices(gm, s, ref choice);
                     GameManager.PlayerSubPhase sub = gm.CurrentSubPhase;
                     if (sub == GameManager.PlayerSubPhase.SelectingAttackTarget || sub == GameManager.PlayerSubPhase.SelectingAoETarget)
-                        ClickIf(gm, sub, target.GridPosition);
+                        ClickIf(gm, sub, s.HasCell ? s.Cell : target.GridPosition);
                     // A self-centered burst (Bless, Prayer) opens a preview that a left click confirms; the step confirms it.
                     else if (sub == GameManager.PlayerSubPhase.ConfirmingSelfAoE && !gm.Harness_ConfirmSelfAoE())
                         _awaitNote = "the self-centered area preview could not be confirmed";

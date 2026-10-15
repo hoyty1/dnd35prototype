@@ -563,8 +563,8 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Presses Discharge Later on the open touch-spell prompt, as a player clicks it (the caster then holds the charge,
-    /// HoldPendingMeleeTouchCharge); false when no prompt or button is open. Writes no game state of its own.
+    /// Presses Discharge Later on the open touch-spell prompt, as a player clicks it (the caster then holds the charge
+    /// through the cast core, BeginHoldTouchCharge); false when no prompt or button is open. Writes no game state of its own.
     /// </summary>
     internal bool Harness_AnswerTouchSpellPromptDischargeLater()
     {

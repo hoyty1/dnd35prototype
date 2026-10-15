@@ -5,7 +5,10 @@ using System;
 /// (docs/designs/cast_core_batch11.md, "Migration rule"). Each bit names one known deviation and cites its issue. Request
 /// builders set the bits (<see cref="SpellCastRequest.ForUi"/> and <see cref="SpellCastRequest.ForUiPrebuilt"/> set
 /// <see cref="LegacyCastQuirkSets.UiPath"/>, the PC single-target path as it is today,
-/// <see cref="SpellCastRequest.ForUiArea"/> sets <see cref="LegacyCastQuirkSets.UiAreaPath"/>, the PC area path, and
+/// <see cref="SpellCastRequest.ForUiArea"/> sets <see cref="LegacyCastQuirkSets.UiAreaPath"/>, the PC area path,
+/// <see cref="SpellCastRequest.ForUiSummon"/>, <see cref="SpellCastRequest.ForUiGrease"/> and
+/// <see cref="SpellCastRequest.ForUiHoldCharge"/> set <see cref="LegacyCastQuirkSets.UiSummonPath"/>,
+/// <see cref="LegacyCastQuirkSets.UiGreasePath"/> and <see cref="LegacyCastQuirkSets.UiHoldPath"/>, and
 /// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one); only the cast core's stage
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
@@ -261,9 +264,145 @@ public enum LegacyCastQuirk : long
     /// bit every area log carries it. Batch 11 step 11 removes the bit.
     /// </summary>
     AreaLogPrefixOnlyInSomeHandlers = 1L << 33,
+
+    // The summon, Grease and held-charge paths' own behaviours (batch 11 step 10): set only by SpellCastRequest.ForUiSummon,
+    // ForUiGrease and ForUiHoldCharge (LegacyCastQuirkSets.UiSummonPath, UiGreasePath and UiHoldPath), and the held charge's
+    // delivery (UiPath). Each names the issue of what that path skips or does differently today.
+
+    /// <summary>
+    /// A blinking caster's Summon Monster, Summon Nature's Ally or Summon Swarm has no 20% spell failure (PHB p.206;
+    /// SPL-006): the Failure stage skips the roll. Batch 11 step 13 (raw-distraction-failure-stages) removes the bit.
+    /// </summary>
+    SummonSkipsBlink = 1L << 34,
+
+    /// <summary>
+    /// A summon is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch
+    /// 11 step 15 (raw-counterspell-order-parity) removes the bit.
+    /// </summary>
+    SummonSkipsCounterspell = 1L << 35,
+
+    /// <summary>
+    /// A summon makes no spell component pouch test (PHB p.174 and p.130; SPL-006, SPL-114): the Legality stage's
+    /// component test passes it (Summon Swarm has an M/DF component). Batch 11 step 15 removes the bit.
+    /// </summary>
+    SummonSkipsPouch = 1L << 36,
+
+    /// <summary>
+    /// A summon cast from a scroll or a wand spends the casting's action (the standard action, or a full round for a
+    /// spontaneous caster's metamagic) in the Cost stage as well as the item's own action when the item is spent
+    /// (ConsumeScrollAfterCast, ConsumeWandChargeAfterCast; SPL-163), where the other paths charge only the item's.
+    /// Batch 11 step 12 (raw-action-cost-provocation) gives every cast one action cost and removes the bit.
+    /// </summary>
+    SummonItemCastCommitsCastAction = 1L << 37,
+
+    /// <summary>
+    /// A blinking caster's Grease has no 20% spell failure (PHB p.206; SPL-006): the Failure stage skips the roll. Batch
+    /// 11 step 13 removes the bit.
+    /// </summary>
+    GreaseSkipsBlink = 1L << 38,
+
+    /// <summary>
+    /// Grease is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch 11
+    /// step 15 removes the bit.
+    /// </summary>
+    GreaseSkipsCounterspell = 1L << 39,
+
+    /// <summary>
+    /// Grease makes no spell component pouch test for its material component (PHB p.237, p.174 and p.130; SPL-006,
+    /// SPL-114): the Legality stage's component test passes it. Batch 11 step 15 removes the bit.
+    /// </summary>
+    GreaseSkipsPouch = 1L << 40,
+
+    /// <summary>
+    /// Grease never ends the caster's invisibility (PHB p.245; SPL-006), even when its area takes in a foe: the
+    /// InvisibilityBreak stage is skipped. Whether greasing an object a foe holds or wears is an attack on the foe is a
+    /// reading the step that removes the bit records (batch 11 step 15, with the Ring of Counterspells reading of
+    /// AreaSkipsRing).
+    /// </summary>
+    GreaseSkipsInvisibilityBreak = 1L << 41,
+
+    /// <summary>
+    /// Grease runs the casting-while-concentrating step (HandleConcentrationOnCasting) twice before the provocation, so a
+    /// caster who passes the first check rolls again (SPL-152). Batch 11 step 12 (raw-action-cost-provocation) removes the
+    /// bit with ConcentrationGateBeforeProvocation.
+    /// </summary>
+    GreaseConcentrationCheckedTwice = 1L << 42,
+
+    // Bit 43 is unused. A hold needs no Resilient Sphere bit: holding a charge inside a sphere is legal (PHB p.258:
+    // nothing crosses the sphere until the charge is delivered; delegated RAW reading 2026-10-14), and the delivery's
+    // boundary test belongs to CMB-092.
+
+    /// <summary>
+    /// Holding a touch charge skips the grapple legality test (CanBeginSpellcastWhileGrappledOrPinned, PHB p.156;
+    /// SPL-146): without the bit the Legality stage runs it. Batch 11 step 15 removes the bit.
+    /// </summary>
+    HoldSkipsGrappleLegality = 1L << 44,
+
+    /// <summary>
+    /// Holding a touch charge makes no entangled casting check (PHB p.308; SPL-146, SPL-145): the Distraction stage skips
+    /// it. Batch 11 step 13 removes the bit.
+    /// </summary>
+    HoldSkipsEntangled = 1L << 45,
+
+    /// <summary>
+    /// A blinking caster who holds a touch charge has no 20% spell failure (PHB p.206; SPL-146): the Failure stage skips
+    /// the roll. Batch 11 step 13 removes the bit.
+    /// </summary>
+    HoldSkipsBlink = 1L << 46,
+
+    /// <summary>
+    /// Holding a touch charge makes no spell component pouch test (PHB p.174 and p.130; SPL-146, SPL-114): the Legality
+    /// stage's component test passes it. Batch 11 step 15 removes the bit.
+    /// </summary>
+    HoldSkipsPouch = 1L << 47,
+
+    /// <summary>
+    /// Holding a touch charge is never offered to a readied counterspell (PHB p.170; SPL-146): the Counterspell stage is
+    /// skipped. The charge is the spell already cast (PHB p.141), so it is countered when it is cast, at the hold. Batch
+    /// 11 step 15 removes the bit.
+    /// </summary>
+    HoldSkipsCounterspell = 1L << 48,
+
+    /// <summary>
+    /// Holding a touch charge asks none of the caster's choices (the Resist Energy and Protection from Energy types, the
+    /// Magic Weapon, Keen Edge and Greater Magic Weapon pickers; SPL-146): the Legality stage does not call the decider's
+    /// FillChoices, so the delivery's cast asks them. The choices belong to the casting (PHB p.141: the charge is the spell
+    /// already cast); batch 11 step 15 removes the bit.
+    /// </summary>
+    HoldSkipsChoices = 1L << 49,
+
+    /// <summary>
+    /// Holding the charge of a cleric's converted cure or inflict spell ignores the conversion: the Cost stage treats the
+    /// cast as a plain slot cast, so the spend looks for a prepared copy of the cure or inflict spell (SPL-154, SPL-147).
+    /// Batch 11 step 14 (raw-resources-caster-level) removes the bit.
+    /// </summary>
+    HoldIgnoresConversion = 1L << 50,
+
+    /// <summary>
+    /// Delivering a held touch charge is never offered to a readied counterspell, and while the hold is not either
+    /// (<see cref="HoldSkipsCounterspell"/>) a held charge can never be countered (SPL-146). Delivering is no casting
+    /// (PHB p.141), so the delivery's skip is the rule; the Counterspell stage requires the bit until batch 11 step 15
+    /// counters the charge at the hold and removes both bits. Required for a held-charge delivery.
+    /// </summary>
+    DeliverySkipsCounterspell = 1L << 51,
+
+    /// <summary>
+    /// A summon or Grease lost to the entangled or grappled check or to arcane spell failure (the casting lost, its slot
+    /// spent) goes straight back to the action menu, with no stat-panel refresh and no pause (CastOutcome.ShowsActionMenu;
+    /// SPL-006), where every other lost cast pauses (AfterAttackDelay). Batch 11 step 13 removes the bit with the one
+    /// distraction and failure rule.
+    /// </summary>
+    LostCastShowsActionMenu = 1L << 52,
+
+    /// <summary>
+    /// A resolved summon, Grease or held charge runs no combat-end check (EvaluateCombatEnd), so an end it causes is
+    /// caught at the next ShowActionChoices or turn boundary (CORE-039). Required: the Summon, Grease and HoldCharge
+    /// resolves have no combat-end stage yet; batch 11 step 11 (raw-failed-cast-gating) gives them one and removes the bit.
+    /// </summary>
+    EffectResolveSkipsCombatEndCheck = 1L << 53,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8 and 9).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
@@ -282,7 +421,8 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.ScrollSkipsArcaneFailure
         | LegacyCastQuirk.HeldChargeDeliveryIsFree
         | LegacyCastQuirk.QuickenBeforeSpontaneousFullRound
-        | LegacyCastQuirk.SpontaneousFullRoundByCasterClass;
+        | LegacyCastQuirk.SpontaneousFullRoundByCasterClass
+        | LegacyCastQuirk.DeliverySkipsCounterspell;
 
     /// <summary>
     /// Today's NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8):
@@ -323,11 +463,72 @@ public static class LegacyCastQuirkSets
                     | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
                     | LegacyCastQuirk.SoundBurstStunIgnoresSuccess
                     | LegacyCastQuirk.AnimateRopeIgnoresSuccess
-                    | LegacyCastQuirk.HeldChargeDeliveryIsFree))
+                    | LegacyCastQuirk.HeldChargeDeliveryIsFree
+                    | LegacyCastQuirk.DeliverySkipsCounterspell))
         | LegacyCastQuirk.AreaSkipsEntangled
         | LegacyCastQuirk.AreaSkipsBlink
         | LegacyCastQuirk.AreaSkipsRing
         | LegacyCastQuirk.AreaSkipsPouch
         | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
         | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
+
+    /// <summary>
+    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the cost bits, the provocation of a
+    /// quickened cast, the snapshot cleared after a failed spend, and the casting-while-concentrating step before the
+    /// provocation.
+    /// </summary>
+    private const LegacyCastQuirk UiEffectPathShared =
+        LegacyCastQuirk.QuickenedProvokes
+        | LegacyCastQuirk.SlotFailureClearsSnapshot
+        | LegacyCastQuirk.ConcentrationGateBeforeProvocation
+        | LegacyCastQuirk.QuickenBeforeSpontaneousFullRound
+        | LegacyCastQuirk.SpontaneousFullRoundByCasterClass
+        | LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
+
+    /// <summary>
+    /// Today's PC summon path (PerformSummonMonsterCast and PerformSummonSwarmCast through the cast core's Summon resolve,
+    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits, the entangled formula, the targeting
+    /// highlight's range (the placement range is by character level too), a scroll's spell failure, plus the summon
+    /// path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk UiSummonPath =
+        UiEffectPathShared
+        | LegacyCastQuirk.EntangledUsesCasterLevelFormula
+        | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
+        | LegacyCastQuirk.ScrollSkipsArcaneFailure
+        | LegacyCastQuirk.SummonSkipsBlink
+        | LegacyCastQuirk.SummonSkipsCounterspell
+        | LegacyCastQuirk.SummonSkipsPouch
+        | LegacyCastQuirk.SummonItemCastCommitsCastAction
+        | LegacyCastQuirk.LostCastShowsActionMenu;
+
+    /// <summary>
+    /// Today's PC Grease path (the three Grease casts, now one request through the cast core's Grease resolve, batch 11
+    /// step 10): the shared bits, the entangled formula, plus the Grease path's own bits. Tests.Magic.CastCoreStageOrderTests
+    /// checks the list.
+    /// </summary>
+    public const LegacyCastQuirk UiGreasePath =
+        UiEffectPathShared
+        | LegacyCastQuirk.EntangledUsesCasterLevelFormula
+        | LegacyCastQuirk.GreaseSkipsBlink
+        | LegacyCastQuirk.GreaseSkipsCounterspell
+        | LegacyCastQuirk.GreaseSkipsPouch
+        | LegacyCastQuirk.GreaseSkipsInvisibilityBreak
+        | LegacyCastQuirk.GreaseConcentrationCheckedTwice
+        | LegacyCastQuirk.LostCastShowsActionMenu;
+
+    /// <summary>
+    /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10;
+    /// formerly HoldPendingMeleeTouchCharge): the shared bits plus the hold path's own (it makes no entangled check, so it
+    /// needs no entangled-formula bit). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk UiHoldPath =
+        UiEffectPathShared
+        | LegacyCastQuirk.HoldSkipsGrappleLegality
+        | LegacyCastQuirk.HoldSkipsEntangled
+        | LegacyCastQuirk.HoldSkipsBlink
+        | LegacyCastQuirk.HoldSkipsPouch
+        | LegacyCastQuirk.HoldSkipsCounterspell
+        | LegacyCastQuirk.HoldSkipsChoices
+        | LegacyCastQuirk.HoldIgnoresConversion;
 }

@@ -1700,8 +1700,10 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     internal Button Harness_FindSelectionOption(string labelPrefix)
     {
-        if (_pickUpItemSelectionPanel == null || string.IsNullOrEmpty(labelPrefix))
+        if (string.IsNullOrEmpty(labelPrefix))
             return null;
+        if (_pickUpItemSelectionPanel == null)
+            return Harness_FindSummonCreatureOption(labelPrefix);
         foreach (Button b in _pickUpItemSelectionPanel.GetComponentsInChildren<Button>(true))
         {
             if (b == null || !b.name.StartsWith("PickUpOption_", System.StringComparison.Ordinal))
@@ -1717,10 +1719,32 @@ public class CombatUI : MonoBehaviour
     internal Button Harness_FindFirstSelectionOption()
     {
         if (_pickUpItemSelectionPanel == null)
-            return null;
+            return Harness_FindSummonCreatureOption(null);
         foreach (Button b in _pickUpItemSelectionPanel.GetComponentsInChildren<Button>(true))
             if (b != null && b.name.StartsWith("PickUpOption_", System.StringComparison.Ordinal))
                 return b;
+        return null;
+    }
+
+    /// <summary>
+    /// Editor-only, read-only (scenario harness): the open Summon Monster creature list's option button (ShowSummonCreatureSelection,
+    /// at the list level it shows) whose label starts with <paramref name="labelPrefix"/>, or its first option for null; null
+    /// when the list is not open. The selection-list finders fall back to it when no ShowPickUpItemSelection list is open.
+    /// </summary>
+    internal Button Harness_FindSummonCreatureOption(string labelPrefix)
+    {
+        if (_summonSelectionPanel == null)
+            return null;
+        foreach (Button b in _summonSelectionPanel.GetComponentsInChildren<Button>(true))
+        {
+            if (b == null || !b.name.StartsWith("Option_", System.StringComparison.Ordinal))
+                continue;
+            if (labelPrefix == null)
+                return b;
+            Text label = b.GetComponentInChildren<Text>(true);
+            if (label != null && label.text.StartsWith(labelPrefix, System.StringComparison.Ordinal))
+                return b;
+        }
         return null;
     }
 #endif

@@ -31,143 +31,6 @@ public partial class GameManager
     //  SPELL CASTING ORCHESTRATION
     // ═══════════════════════════════════════════════════════════════════
 
-    private bool TryConsumePendingSpellCast(CharacterController caster)
-    {
-        if (caster == null || _pendingSpell == null) return false;
-
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(TryConsumePendingSpellCast));
-
-        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        var spellComp = caster.Spellcasting;
-        if (spellComp == null)
-        {
-            Debug.LogError("[GameManager] TryConsumePendingSpellCast: No SpellcastingComponent!");
-            EndPendingCast();
-            return false;
-        }
-
-        if (!isQuickened)
-        {
-            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
-            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
-                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
-            if (isSpontaneousMetamagic)
-                caster.Actions.UseFullRoundAction();
-            else
-                caster.CommitStandardAction();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
-        }
-        else
-        {
-            spellComp.MarkQuickenedSpellCast();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
-        }
-        // Test instrumentation (inert outside the scenario harness): a PC-pipeline cast begins, as on the NPC path.
-        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
-
-        int slotLevelToConsume = _pendingSpell.SpellLevel;
-        bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
-        if (hasMetamagicApplied)
-            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
-
-
-        if (!ResolveEntangledSomaticCastingConcentration(
-                caster,
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                false,
-                -1,
-                null))
-        {
-            HandleConcentrationOnCasting(caster, _pendingSpell);
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingAnimateRopeItem = null;
-            _pendingResistEnergyType = null;
-            _pendingFireShieldIsWarm = null;
-            _pendingProtectionFromEnergyType = null;
-            ResetPendingWallOfFireMode();
-            ResetPendingWallOfIceMode();
-            return false;
-        }
-
-        if (!ResolveGrappledOrPinnedCastingConcentration(
-                caster,
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                false,
-                -1,
-                null))
-        {
-            HandleConcentrationOnCasting(caster, _pendingSpell);
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingAnimateRopeItem = null;
-            _pendingResistEnergyType = null;
-            _pendingFireShieldIsWarm = null;
-            _pendingProtectionFromEnergyType = null;
-            ResetPendingWallOfFireMode();
-            ResetPendingWallOfIceMode();
-            return false;
-        }
-        if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
-        {
-            bool consumedOnFailure = ConsumePendingSpellSlot(
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                false,
-                -1,
-                null);
-
-            if (!consumedOnFailure)
-            {
-                Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} slot for {_pendingSpell.Name}");
-                EndPendingCast();
-                return false;
-            }
-
-            HandleConcentrationOnCasting(caster, _pendingSpell);
-            LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-
-            return false;
-        }
-
-        bool consumed = ConsumePendingSpellSlot(
-            spellComp,
-            _pendingSpell,
-            _pendingMetamagic,
-            hasMetamagicApplied,
-            slotLevelToConsume,
-            false,
-            -1,
-            null);
-
-        if (!consumed)
-        {
-            Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} slot for summon spell {_pendingSpell.Name}");
-            EndPendingCast();
-            return false;
-        }
-
-        HandleConcentrationOnCasting(caster, _pendingSpell);
-        return true;
-    }
-
     private bool ConsumePendingSpellSlot(
         SpellcastingComponent spellComp,
         SpellData spell,
@@ -618,6 +481,31 @@ public partial class GameManager
             visual.SetDuration(durationRounds, durationRounds);
     }
 
+    /// <summary>
+    /// The open Ui cast a summon or Grease builder hands to the cast core, or null (with a warning and a return to the
+    /// action menu) when there is none, it is an AI cast, or it waits for its AoO prompt's answer (a re-entry would wipe
+    /// the waiting run's state).
+    /// </summary>
+    private CastContext OpenUiCastForBuilder(string from)
+    {
+        CastContext ctx = CurrentCast;
+        if (RejectCastReentry(ctx, from))
+            return null;
+        if (ctx == null || ctx.Request.Spell == null || ctx.Request.Decider.IsSynchronous)
+        {
+            Debug.LogWarning($"[SpellCasting] {from} without an open Ui cast; back to the action menu.");
+            ShowActionChoices();
+            return null;
+        }
+        return ctx;
+    }
+
+    /// <summary>
+    /// The Summon Swarm placement click (PHB p.289): the request builder of a Summon Swarm cast (batch 11 step 10). The
+    /// swarm type is the open cast's choice (CastChoices.SummonSwarmNpcId); the cast places it on
+    /// <paramref name="targetCell"/> through the cast core (SpellCastRequest.ForUiSummon, the Summon resolve,
+    /// <see cref="ResolveSummonSwarmCast"/>).
+    /// </summary>
     private void PerformSummonSwarmCast(CharacterController caster, SquareCell targetCell, string swarmNpcId)
     {
         if (caster == null || targetCell == null || string.IsNullOrWhiteSpace(swarmNpcId) || _pendingSpell == null)
@@ -634,90 +522,83 @@ public partial class GameManager
             return;
         }
 
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CaptureSpellcastResourceSnapshot(caster);
+        CastContext ctx = OpenUiCastForBuilder(nameof(PerformSummonSwarmCast));
+        if (ctx == null)
+            return;
 
-        if (!TryConsumePendingSpellCast(caster))
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformSummonSwarmCast));
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        ctx.Request.Choices.SummonSwarmNpcId = swarmNpcId;
+        SpellCastRequest.ForUiSummon(ctx.Request, targetCell.Coords);
+        ExecuteCast(ctx, null);
+    }
+
+    /// <summary>
+    /// Resolve (Summon Swarm, PHB p.289): the chosen swarm appears on the destination, uncontrolled (it attacks the nearest
+    /// creature, friend or foe), joins the initiative after the caster and lasts while the caster concentrates, then
+    /// 2 rounds. The cast ends at its Resolve stage.
+    /// </summary>
+    private void ResolveSummonSwarmCast(CastContext ctx)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        string swarmNpcId = ctx.Request.Choices.SummonSwarmNpcId;
+        SquareCell targetCell = Grid.GetCell(ctx.Request.Aim.Destination.Value);
+        NPCDefinition baseDef = NPCDatabase.Get(swarmNpcId);
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(PerformSummonSwarmCast));
+
+        SummonMonsterOption option = new SummonMonsterOption
         {
-            ClearSpellcastResourceSnapshot();
-            ShowActionChoices();
+            DisplayName = baseDef.Name,
+            NpcDefinitionId = swarmNpcId,
+            TemplateId = null
+        };
+
+        CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
+        if (summonCC == null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm failed: creature could not be spawned."));
+            FinishFailedSummon(ctx, "not-spawned");
             return;
         }
 
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
+        summonCC.aiProfile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+        summonCC.EnemyUseCoupDeGraceOverride = false;
 
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
+        // Swarm is completely uncontrollable - it attacks nearest creature regardless of team
+        summonCC.SetControllable(false);
 
-            ClearSpellcastResourceSnapshot();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(PerformSummonSwarmCast));
+        InsertIntoInitiative(summonCC, caster);
 
-            SummonMonsterOption option = new SummonMonsterOption
-            {
-                DisplayName = baseDef.Name,
-                NpcDefinitionId = swarmNpcId,
-                TemplateId = null
-            };
+        int persistedRounds = 2;
+        RegisterActiveSummon(
+            summonCC,
+            caster,
+            spell.SpellId,
+            durationRoundsOverride: persistedRounds,
+            concentrationSummon: true,
+            startsInPostConcentrationMode: false);
 
-            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
-            if (summonCC == null)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm failed: creature could not be spawned."));
-                ShowActionChoices();
-                return;
-            }
+        BeginSummonSwarmConcentration(caster, spell, summonCC);
 
-            summonCC.aiProfile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
-            summonCC.EnemyUseCoupDeGraceOverride = false;
+        int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {spell.Name}!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Swarm type: {baseDef.Name}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{caster.Stats.CharacterName} is concentrating on {spell.Name}."));
 
-            // Swarm is completely uncontrollable - it attacks nearest creature regardless of team
-            summonCC.SetControllable(false);
-
-            InsertIntoInitiative(summonCC, caster);
-
-            int persistedRounds = 2;
-            RegisterActiveSummon(
-                summonCC,
-                caster,
-                _pendingSpell.SpellId,
-                durationRoundsOverride: persistedRounds,
-                concentrationSummon: true,
-                startsInPostConcentrationMode: false);
-
-            BeginSummonSwarmConcentration(caster, _pendingSpell, summonCC);
-
-            int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
-            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name}!"));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)"));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})"));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Swarm type: {baseDef.Name}"));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!"));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{caster.Stats.CharacterName} is concentrating on {_pendingSpell.Name}."));
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingSummonSwarmNpcId = null;
-            _pendingSummonSelection = null;
-            _pendingSummonListLevel = 0;
-            _pendingSummonCountInfo = null;
-
-            Grid.ClearAllHighlights();
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(caster, 1.0f));
-        });
+        FinishEffectCast(ctx, "summoned");
     }
 
+    /// <summary>
+    /// The Summon Monster (or Summon Nature's Ally) placement click (PHB p.285-288): the request builder of a summon cast
+    /// (batch 11 step 10). The creature, list level and count rule are the open cast's choices, written by the creature
+    /// prompt; a square without room for the creature asks for another square. The cast places it on
+    /// <paramref name="targetCell"/> through the cast core (SpellCastRequest.ForUiSummon, the Summon resolve,
+    /// <see cref="ResolveSummonMonsterCast"/>).
+    /// </summary>
     private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonMonsterOption option)
     {
         if (caster == null || targetCell == null || option == null || _pendingSpell == null)
@@ -734,8 +615,6 @@ public partial class GameManager
             return;
         }
 
-        bool isSwarmSummonOption = SummonMonsterLists.IsSwarmOption(option);
-
         int summonSizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
         if (!Grid.CanPlaceCreature(targetCell.Coords, summonSizeSquares))
         {
@@ -744,114 +623,105 @@ public partial class GameManager
             return;
         }
 
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CaptureSpellcastResourceSnapshot(caster);
+        CastContext ctx = OpenUiCastForBuilder(nameof(PerformSummonMonsterCast));
+        if (ctx == null)
+            return;
 
-        if (!TryConsumePendingSpellCast(caster))
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformSummonMonsterCast));
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        ctx.Request.Choices.SummonSelection = option;
+        SpellCastRequest.ForUiSummon(ctx.Request, targetCell.Coords);
+        ExecuteCast(ctx, null);
+    }
+
+    /// <summary>
+    /// Resolve (Summon Monster, Summon Nature's Ally; PHB p.285-288): rolls the creature count of the chosen list level,
+    /// places the first creature on the destination and the others on the best free squares near it (stacked on the
+    /// destination when none is free), inserts each into the initiative after the caster (RAW it acts at once, on the
+    /// caster's turn when the 1-round casting completes, PHB p.285, p.288; SPL-164) and registers it for the spell's
+    /// duration (1 round per caster level, SPL-002). The cast ends at its Resolve stage.
+    /// </summary>
+    private void ResolveSummonMonsterCast(CastContext ctx)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        CastChoices choices = ctx.Request.Choices;
+        SummonMonsterOption option = choices.SummonSelection;
+        SquareCell targetCell = Grid.GetCell(ctx.Request.Aim.Destination.Value);
+        NPCDefinition baseDef = NPCDatabase.Get(option.NpcDefinitionId);
+        bool isSwarmSummonOption = SummonMonsterLists.IsSwarmOption(option);
+        int summonSizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(PerformSummonMonsterCast));
+
+        int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId);
+        int selectedListLevel = choices.SummonListLevel > 0 ? choices.SummonListLevel : spellLevel;
+        SummonCreatureCountInfo countInfo = choices.SummonCountInfo ?? SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
+        int creatureCount = RollSummonCreatureCount(spellLevel, selectedListLevel, out string rollLog);
+        creatureCount = Mathf.Max(1, creatureCount);
+
+        string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {spell.Name} (using Level {selectedListRoman} list)."));
+        if (countInfo != null && countInfo.RequiresRoll)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{rollLog}"));
+
+        string summonLabel = option.BuildUiLabel();
+        CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}..."));
+        if (isSwarmSummonOption)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Swarm summons are AI-controlled allies and cannot be directly commanded."));
+
+        List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
+        Vector2Int primaryCell = targetCell.Coords;
+        // PHB p.285: summon monster lasts 1 round/level, from the cast's caster level (Extend doubles it) (SPL-002).
+        int? summonDurationRounds = SpellDurationRules.IsTimed(spell)
+            ? SpellCastingHelper.CalculateDuration(spell, SpellDurationRules.CasterLevelFor(caster, spell))
+            : (int?)null;
+        int summonRangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster != null && caster.Stats != null ? caster.Stats.Level : 0));
+
+        for (int i = 0; i < creatureCount; i++)
         {
-            ClearSpellcastResourceSnapshot();
-            ShowActionChoices();
+            SquareCell spawnCell = i == 0
+                ? targetCell
+                : FindBestAdditionalSummonCell(caster, primaryCell, summonSizeSquares, summonRangeSquares);
+
+            bool stackedDueToNoSpace = false;
+            if (spawnCell == null)
+            {
+                spawnCell = targetCell;
+                stackedDueToNoSpace = true;
+            }
+
+            CharacterController summonCC = SpawnSummonedCreature(caster, spawnCell.Coords, option);
+            if (summonCC == null)
+                continue;
+
+            if (isSwarmSummonOption)
+            {
+                // Summoned swarms stay allied, but act under AI control.
+                summonCC.SetControllable(false);
+
+                if (!(summonCC.aiProfile is SwarmAI) && !(summonCC.aiProfile is IndiscriminateSwarmAI))
+                    summonCC.aiProfile = ScriptableObject.CreateInstance<SwarmAI>();
+            }
+
+            if (stackedDueToNoSpace)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "Not enough open slots; stacking extra summons on the primary tile."));
+
+            InsertIntoInitiative(summonCC, caster);
+            RegisterActiveSummon(summonCC, caster, spell.SpellId, durationRoundsOverride: summonDurationRounds);
+            spawnedCreatures.Add(summonCC);
+
+            string summonIndexLabel = creatureCount > 1 ? $" {i + 1}" : string.Empty;
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{summonLabel}{summonIndexLabel} appears!"));
+        }
+
+        if (spawnedCreatures.Count == 0)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summoning failed: no valid creatures could be spawned."));
+            FinishFailedSummon(ctx, "not-spawned");
             return;
         }
 
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
-
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(PerformSummonMonsterCast));
-
-            int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(_pendingSpell.SpellId);
-            int selectedListLevel = _pendingSummonListLevel > 0 ? _pendingSummonListLevel : spellLevel;
-            SummonCreatureCountInfo countInfo = _pendingSummonCountInfo ?? SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
-            int creatureCount = RollSummonCreatureCount(spellLevel, selectedListLevel, out string rollLog);
-            creatureCount = Mathf.Max(1, creatureCount);
-
-            string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
-            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name} (using Level {selectedListRoman} list)."));
-            if (countInfo != null && countInfo.RequiresRoll)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{rollLog}"));
-
-            string summonLabel = option.BuildUiLabel();
-            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}..."));
-            if (isSwarmSummonOption)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Swarm summons are AI-controlled allies and cannot be directly commanded."));
-
-            List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
-            Vector2Int primaryCell = targetCell.Coords;
-            // PHB p.285: summon monster lasts 1 round/level, from the cast's caster level (Extend doubles it) (SPL-002).
-            int? summonDurationRounds = SpellDurationRules.IsTimed(_pendingSpell)
-                ? SpellCastingHelper.CalculateDuration(_pendingSpell, SpellDurationRules.CasterLevelFor(caster, _pendingSpell))
-                : (int?)null;
-            int summonRangeSquares = Mathf.Max(1, _pendingSpell.GetRangeSquaresForCasterLevel(caster != null && caster.Stats != null ? caster.Stats.Level : 0));
-
-            for (int i = 0; i < creatureCount; i++)
-            {
-                SquareCell spawnCell = i == 0
-                    ? targetCell
-                    : FindBestAdditionalSummonCell(caster, primaryCell, summonSizeSquares, summonRangeSquares);
-
-                bool stackedDueToNoSpace = false;
-                if (spawnCell == null)
-                {
-                    spawnCell = targetCell;
-                    stackedDueToNoSpace = true;
-                }
-
-                CharacterController summonCC = SpawnSummonedCreature(caster, spawnCell.Coords, option);
-                if (summonCC == null)
-                    continue;
-
-                if (isSwarmSummonOption)
-                {
-                    // Summoned swarms stay allied, but act under AI control.
-                    summonCC.SetControllable(false);
-
-                    if (!(summonCC.aiProfile is SwarmAI) && !(summonCC.aiProfile is IndiscriminateSwarmAI))
-                        summonCC.aiProfile = ScriptableObject.CreateInstance<SwarmAI>();
-                }
-
-                if (stackedDueToNoSpace)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "Not enough open slots; stacking extra summons on the primary tile."));
-
-                InsertIntoInitiative(summonCC, caster);
-                RegisterActiveSummon(summonCC, caster, _pendingSpell.SpellId, durationRoundsOverride: summonDurationRounds);
-                spawnedCreatures.Add(summonCC);
-
-                string summonIndexLabel = creatureCount > 1 ? $" {i + 1}" : string.Empty;
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{summonLabel}{summonIndexLabel} appears!"));
-            }
-
-            if (spawnedCreatures.Count == 0)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summoning failed: no valid creatures could be spawned."));
-                ShowActionChoices();
-                return;
-            }
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingSummonSelection = null;
-            _pendingSummonListLevel = 0;
-            _pendingSummonCountInfo = null;
-            _pendingSummonSwarmNpcId = null;
-
-            Grid.ClearAllHighlights();
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(caster, 1.0f));
-        });
+        FinishEffectCast(ctx, "summoned");
     }
 
     private void BeginPendingSpellTargeting(CharacterController caster)
@@ -1518,166 +1388,24 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Convert the currently selected melee touch spell into a held charge.
-    /// The slot is consumed now; delivery can happen on a later action.
+    /// Discharge Later on the touch prompt (PHB p.141, p.176): the request builder of a hold (batch 11 step 10). The open
+    /// cast of the melee touch spell becomes a hold (SpellCastRequest.ForUiHoldCharge) and runs through the cast core: the
+    /// action, the slot, the distraction and failure checks and the provocation as for any cast, then the HoldCharge
+    /// resolve stores the charge (SpellcastingComponent.SetHeldTouchCharge); its delivery is a cast of its own
+    /// (OnDischargeHeldTouchButtonPressed).
     /// </summary>
-    private void HoldPendingMeleeTouchCharge(CharacterController caster)
+    private void BeginHoldTouchCharge(CharacterController caster)
     {
         if (caster == null || _pendingSpell == null) { ShowActionChoices(); return; }
 
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(HoldPendingMeleeTouchCharge));
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-
-        CaptureSpellcastResourceSnapshot(caster);
-
-        var spellComp = caster.Spellcasting;
-        if (spellComp == null)
-        {
-            ClearSpellcastResourceSnapshot();
-            Debug.LogError("[GameManager] HoldPendingMeleeTouchCharge: No SpellcastingComponent!");
-            EndPendingCast();
-            ShowActionChoices();
+        CastContext ctx = OpenUiCastForBuilder(nameof(BeginHoldTouchCharge));
+        if (ctx == null)
             return;
-        }
 
-        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (!isQuickened)
-        {
-            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
-            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
-                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
-            if (isSpontaneousMetamagic)
-                caster.Actions.UseFullRoundAction();
-            else
-                caster.CommitStandardAction();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
-        }
-        else
-        {
-            spellComp.MarkQuickenedSpellCast();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
-        }
-        // Test instrumentation (inert outside the scenario harness): the held charge's cast begins (its delivery is no cast).
-        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
-
-        bool consumed = true;
-        if (!_pendingSpellFromHeldCharge)
-        {
-            bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
-            int slotLevelToConsume = _pendingSpell.SpellLevel;
-            if (hasMetamagicApplied)
-                slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
-
-            if (!ResolveGrappledOrPinnedCastingConcentration(
-                    caster,
-                    spellComp,
-                    _pendingSpell,
-                    _pendingMetamagic,
-                    hasMetamagicApplied,
-                    slotLevelToConsume,
-                    false,
-                    -1,
-                    null))
-            {
-                HandleConcentrationOnCasting(caster, _pendingSpell);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-
-                ClearSpellcastResourceSnapshot();
-                StartCoroutine(AfterAttackDelay(caster, 1.0f));
-                return;
-            }
-            if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
-            {
-                consumed = ConsumePendingSpellSlot(
-                    spellComp,
-                    _pendingSpell,
-                    _pendingMetamagic,
-                    hasMetamagicApplied,
-                    slotLevelToConsume,
-                    false,
-                    -1,
-                    null);
-
-                if (!consumed)
-                {
-                    ClearSpellcastResourceSnapshot();
-                    Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} spell slot for held charge!");
-                    EndPendingCast();
-                    ShowActionChoices();
-                    return;
-                }
-
-                HandleConcentrationOnCasting(caster, _pendingSpell);
-                LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-
-                ClearSpellcastResourceSnapshot();
-                StartCoroutine(AfterAttackDelay(caster, 1.0f));
-                return;
-            }
-
-            consumed = ConsumePendingSpellSlot(
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                false,
-                -1,
-                null);
-
-            if (!consumed)
-            {
-                ClearSpellcastResourceSnapshot();
-                Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot for held charge!");
-                EndPendingCast();
-                ShowActionChoices();
-                return;
-            }
-        }
-
-        HandleConcentrationOnCasting(caster, _pendingSpell);
-
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
-                {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
-                }
-
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-            spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "hold-charge");
-
-            CombatUI.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}."));
-            UpdateAllStatsUI();
-            Grid.ClearAllHighlights();
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-
-            StartCoroutine(AfterAttackDelay(caster, 1.0f));
-        });
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(BeginHoldTouchCharge));
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        SpellCastRequest.ForUiHoldCharge(ctx.Request);
+        ExecuteCast(ctx, null);
     }
     /// <summary>
     /// Casts the open single-target cast from <paramref name="caster"/> at <paramref name="target"/> (the spell menu's
@@ -6723,42 +6451,6 @@ public partial class GameManager
         Array.Copy(saved, live, Mathf.Min(saved.Length, live.Length));
     }
 
-    private void HandleSpellcastCancelledFromAoOPrompt(CharacterController caster)
-    {
-        RestoreSpellcastResourceSnapshot(caster);
-        _spellcastProvocationCancelled = false;
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
-        CleanupScrollCastState();
-        ResetPendingGreaseCastMode();
-
-        Grid.ClearAllHighlights();
-        UpdateAllStatsUI();
-
-        if (caster != null && caster.Stats != null)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{caster.Stats.CharacterName} cancels spell cast."));
-
-        ShowActionChoices();
-    }
-
-    private void HandleInterruptedSpellCast(CharacterController caster, float delaySeconds = 1.0f)
-    {
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
-        CleanupScrollCastState();
-        ResetPendingGreaseCastMode();
-
-        Grid.ClearAllHighlights();
-        UpdateAllStatsUI();
-
-        if (caster != null)
-            StartCoroutine(AfterAttackDelay(caster, delaySeconds));
-        else
-            ShowActionChoices();
-    }
     // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
 
     /// <summary>Delegates to <see cref="ConcentrationService.IsConcentratingOnSpell"/>.</summary>

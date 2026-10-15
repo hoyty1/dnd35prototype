@@ -9520,32 +9520,40 @@ public partial class GameManager : MonoBehaviour
         if (TryHandleAnimateRopeComponentSelection(pc))
             return;
 
-        if (ShouldShowTouchSpellPrompt(_pendingSpell))
+        // A melee touch spell: the cast's decider chooses to cast now, hold the charge or back out (the UI's touch
+        // prompt, UiCastDecider.ChooseTouchDelivery; batch 11 step 10). It answers inside the selection's own cast.
+        CastContext touchCast = CurrentCast;
+        if (ShouldShowTouchSpellPrompt(_pendingSpell) && touchCast != null)
         {
-            CombatUI?.ShowTouchSpellPrompt(
-                _pendingSpell,
-                onCastNow: () => { BeginPendingSpellTargeting(pc); },
-                onDischargeLater: () =>
-                {
-                    // The touch prompt answers inside the selection's own cast: Discharge Later makes it a hold. A cleric's
-                    // conversion keeps its source kind (holding a converted charge is SPL-154).
-                    CastSource heldSource = CurrentCastSource;
-                    if (heldSource != null && (heldSource.Kind == CastSourceKind.PreparedSlot || heldSource.Kind == CastSourceKind.SpontaneousSlot))
-                        heldSource.Kind = CastSourceKind.HeldChargeHold;
-                    HoldPendingMeleeTouchCharge(pc);
-                },
-                onCancel: () =>
-                {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    ResetPendingGreaseCastMode();
-                    ShowActionChoices();
-                });
+            touchCast.Request.Decider.ChooseTouchDelivery(this, touchCast, delivery => OnTouchDeliveryChosen(pc, delivery));
             return;
         }
 
         BeginPendingSpellTargeting(pc);
+    }
+
+    /// <summary>
+    /// The answer to the touch prompt: Cast Now goes on to the spell's targeting, Discharge Later holds the charge
+    /// through the cast core (BeginHoldTouchCharge, SpellCastRequest.ForUiHoldCharge), Cancel ends the cast.
+    /// </summary>
+    private void OnTouchDeliveryChosen(CharacterController pc, CastTouchDelivery delivery)
+    {
+        switch (delivery)
+        {
+            case CastTouchDelivery.CastNow:
+                BeginPendingSpellTargeting(pc);
+                break;
+            case CastTouchDelivery.HoldCharge:
+                BeginHoldTouchCharge(pc);
+                break;
+            default:
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                ResetPendingGreaseCastMode();
+                ShowActionChoices();
+                break;
+        }
     }
 
     /// <summary>

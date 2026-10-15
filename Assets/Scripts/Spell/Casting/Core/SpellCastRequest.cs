@@ -3,13 +3,18 @@ using UnityEngine;
 
 /// <summary>
 /// How the cast core resolves a cast once it passed the shared stages (batch 11, cast_core_batch11.md "Executor"):
-/// on one target (the Mirror Image, target Blink, Globe, SpellCaster.Cast, handler and buff stages) or over an area (the
-/// area handler registry, since step 9). Summon and held-charge resolves join in step 10.
+/// on one target (the Mirror Image, target Blink, Globe, SpellCaster.Cast, handler and buff stages), over an area (the
+/// area handler registry, since step 9), or, since step 10, by placing summoned creatures (Summon Monster, Summon
+/// Nature's Ally and Summon Swarm), by greasing an area, a held object or worn armor (Grease, its mode in
+/// CastChoices.GreaseMode), or by holding a touch spell's charge (Discharge Later).
 /// </summary>
 public enum CastResolveKind
 {
     Single,
-    Area
+    Area,
+    Summon,
+    Grease,
+    HoldCharge
 }
 
 /// <summary>
@@ -33,7 +38,10 @@ public sealed class SpellCastRequest
     public CastAim Aim = new CastAim();
     public ICastDecider Decider = UiCastDecider.Instance;
 
-    /// <summary>How the core resolves the cast: one target (the default) or an area (<see cref="ForUiArea"/>).</summary>
+    /// <summary>
+    /// How the core resolves the cast: one target (the default), an area (<see cref="ForUiArea"/>), a summon
+    /// (<see cref="ForUiSummon"/>), Grease (<see cref="ForUiGrease"/>) or a held charge (<see cref="ForUiHoldCharge"/>).
+    /// </summary>
     public CastResolveKind ResolveKind = CastResolveKind.Single;
 
     /// <summary>
@@ -116,6 +124,74 @@ public sealed class SpellCastRequest
         request.Aim.AreaTargets = targets;
         request.Aim.Cells = cells;
         request.Quirks = LegacyCastQuirkSets.UiAreaPath;
+        return request;
+    }
+
+    /// <summary>
+    /// The PC summon builder (batch 11 step 10): turns the open Ui cast <paramref name="request"/> of a Summon Monster,
+    /// Summon Nature's Ally or Summon Swarm spell, whose creature (or swarm), list level and count rule the placement
+    /// prompts already wrote into its choices, into a summon cast that places it on <paramref name="destination"/>, with
+    /// no target creature, and gives it the summon path's legacy quirks (<see cref="LegacyCastQuirkSets.UiSummonPath"/>).
+    /// Returns the request.
+    /// </summary>
+    public static SpellCastRequest ForUiSummon(SpellCastRequest request, Vector2Int destination)
+    {
+        if (request == null)
+            return null;
+        request.ResolveKind = CastResolveKind.Summon;
+        if (request.Aim == null)
+            request.Aim = new CastAim();
+        request.Aim.Target = null;
+        request.Aim.Destination = destination;
+        request.Quirks = LegacyCastQuirkSets.UiSummonPath;
+        return request;
+    }
+
+    /// <summary>
+    /// The PC Grease builder (batch 11 step 10): turns the open Ui Grease cast <paramref name="request"/>, whose mode the
+    /// mode prompt wrote into its choices (CastChoices.GreaseMode, PHB p.237), into one Grease cast: an area cast records
+    /// the 10-ft square's <paramref name="cells"/> and the creatures in it, <paramref name="areaTargets"/>; an object or
+    /// armor cast records the creature holding or wearing the object, <paramref name="objectHolder"/> (the spell's target
+    /// is the object). No target creature; the Grease path's legacy quirks (<see cref="LegacyCastQuirkSets.UiGreasePath"/>).
+    /// Returns the request.
+    /// </summary>
+    public static SpellCastRequest ForUiGrease(SpellCastRequest request, CharacterController objectHolder,
+        List<CharacterController> areaTargets, HashSet<Vector2Int> cells)
+    {
+        if (request == null)
+            return null;
+        request.ResolveKind = CastResolveKind.Grease;
+        if (request.Aim == null)
+            request.Aim = new CastAim();
+        request.Aim.Target = null;
+        request.Aim.ObjectHolder = objectHolder;
+        request.Aim.AreaTargets = areaTargets;
+        request.Aim.Cells = cells;
+        request.Quirks = LegacyCastQuirkSets.UiGreasePath;
+        return request;
+    }
+
+    /// <summary>
+    /// The PC hold builder (batch 11 step 10): turns the open Ui cast <paramref name="request"/> of a melee touch spell,
+    /// answered Discharge Later at the touch prompt (ICastDecider.ChooseTouchDelivery), into a hold: the cast runs the
+    /// core's stages through Spend and Provocation and then stores the charge (PHB p.141, p.176). A prepared or
+    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>; a cleric's conversion keeps its kind
+    /// (holding a converted charge is SPL-154). No target creature (the charge is delivered later, by a cast of its own);
+    /// the hold path's legacy quirks (<see cref="LegacyCastQuirkSets.UiHoldPath"/>). Returns the request.
+    /// </summary>
+    public static SpellCastRequest ForUiHoldCharge(SpellCastRequest request)
+    {
+        if (request == null)
+            return null;
+        request.ResolveKind = CastResolveKind.HoldCharge;
+        if (request.Source == null)
+            request.Source = new CastSource();
+        if (request.Source.Kind == CastSourceKind.PreparedSlot || request.Source.Kind == CastSourceKind.SpontaneousSlot)
+            request.Source.Kind = CastSourceKind.HeldChargeHold;
+        if (request.Aim == null)
+            request.Aim = new CastAim();
+        request.Aim.Target = null;
+        request.Quirks = LegacyCastQuirkSets.UiHoldPath;
         return request;
     }
 

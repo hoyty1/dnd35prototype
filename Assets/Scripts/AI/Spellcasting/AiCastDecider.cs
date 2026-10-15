@@ -26,6 +26,13 @@ public sealed class AiCastDecider : ICastDecider
     }
 
     /// <summary>
+    /// A melee touch spell is always cast now: the NPC path never holds a charge (SPL-115; batch 11 step 27 lets the AI
+    /// hold one).
+    /// </summary>
+    public void ChooseTouchDelivery(GameManager gm, CastContext ctx, System.Action<CastTouchDelivery> answer)
+        => answer?.Invoke(CastTouchDelivery.CastNow);
+
+    /// <summary>
     /// Today's NPC decision and rolls for a threatened cast (AISpellcastingStrategist.ShouldCastDefensively, then
     /// ResolveThreatenedSpellcast, through GameManager.ResolveNPCSpellcastProvocation), answered at once: the spell
     /// proceeds or is lost; the AI never cancels.

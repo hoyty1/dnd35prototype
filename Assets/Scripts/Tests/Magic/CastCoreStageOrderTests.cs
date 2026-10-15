@@ -45,6 +45,13 @@ namespace Tests.Magic
 /// once, Resolved at CombatEnd, ended, with the slot and action spent; the generic loop's log carries the cast's
 /// quickened prefix and Sleep's does not (SPL-161). Skipped when a side is already out (the area exit runs the
 /// combat-end check).
+///
+/// Batch 11 step 10 (cast-core-summon-held-grease): SpellCastRequest.ForUiSummon, ForUiGrease and ForUiHoldCharge set the
+/// Summon, Grease and HoldCharge resolve kinds, no target creature and LegacyCastQuirkSets.UiSummonPath, UiGreasePath and
+/// UiHoldPath (explicit lists; the Summon*, Grease* and Hold* bits are each set by their own builder only); a held-charge
+/// delivery carries DeliverySkipsCounterspell (UiPath); the AI decider casts a touch spell now. A hold (no choices asked,
+/// the charge stored, Resolved at Resolve) and a Grease armor cast (Resolved at CombatEnd with its log) by the recording
+/// decider run the shared stages and their resolve stage once each.
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -81,6 +88,7 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
         LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
         LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
+        LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
     };
 
     /// <summary>The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls.</summary>
@@ -165,6 +173,7 @@ public static class CastCoreStageOrderTests
         SpellDatabase.Init();
 
         TestQuirkSets();
+        TestEffectQuirkSets();
         TestCoreSourceTouchesNoUi();
 
         if (GameManager.Instance != null)
@@ -197,6 +206,12 @@ public static class CastCoreStageOrderTests
         {
             Events.Add("decider:fill");
             return Fills.Count > 0 ? Fills.Dequeue() : CastChoiceFill.Filled;
+        }
+
+        public void ChooseTouchDelivery(GameManager gm, CastContext ctx, Action<CastTouchDelivery> answer)
+        {
+            Events.Add("decider:touch");
+            answer(CastTouchDelivery.CastNow);
         }
 
         public void ChooseProvocation(GameManager gm, CastContext ctx, Action<CastProvocationAnswer> answer)
@@ -386,6 +401,12 @@ public static class CastCoreStageOrderTests
             TestAreaCasts(gm, sc, caster);
             Assert(violations.Count == violationsBeforeArea, "No cast-core or cast-stack violation for area requests",
                 string.Join("; ", violations.GetRange(violationsBeforeArea, violations.Count - violationsBeforeArea)));
+
+            // Batch 11 step 10: a hold and a Grease cast through the same core.
+            int violationsBeforeEffects = violations.Count;
+            TestEffectCasts(gm, sc, caster, ally);
+            Assert(violations.Count == violationsBeforeEffects, "No cast-core or cast-stack violation for hold and Grease requests",
+                string.Join("; ", violations.GetRange(violationsBeforeEffects, violations.Count - violationsBeforeEffects)));
         }
         finally
         {
@@ -454,6 +475,12 @@ public static class CastCoreStageOrderTests
         {
             Events.Add("decider:fill");
             return AiCastDecider.Instance.FillChoices(gm, ctx);
+        }
+
+        public void ChooseTouchDelivery(GameManager gm, CastContext ctx, Action<CastTouchDelivery> answer)
+        {
+            Events.Add("decider:touch");
+            AiCastDecider.Instance.ChooseTouchDelivery(gm, ctx, answer);
         }
 
         public void ChooseProvocation(GameManager gm, CastContext ctx, Action<CastProvocationAnswer> answer)
@@ -933,6 +960,189 @@ public static class CastCoreStageOrderTests
         else
             Assert(!ctx.ResultLog.Contains("QUICKENED") && ctx.ResultLog.StartsWith("═", StringComparison.Ordinal) && template.HasMaterialComponent,
                 label + ": the log has no prefix, and the material-component spell was cast without a pouch (AreaSkipsPouch)", ctx.ResultLog);
+        sc.SpellSlots.Remove(slot);
+    }
+
+    // ── Batch 11 step 10: the Summon, Grease and HoldCharge resolve variants ──────────────────────────────────
+
+    /// <summary>The stages of a hold (Discharge Later) with the hold path's quirks: no choices asked, Resolve ends the cast.</summary>
+    private static readonly string[] HoldResolvedSequence =
+    {
+        "Legality", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation", "decider:provocation",
+        "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "decider:finished:Resolved@Resolve"
+    };
+
+    /// <summary>The stages of a Grease cast with the Grease path's quirks: the shared stages, Resolve, then CombatEnd.</summary>
+    private static readonly string[] GreaseResolvedSequence =
+    {
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
+        "decider:provocation", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "CombatEnd",
+        "decider:before-combat-end", "decider:finished:Resolved@CombatEnd"
+    };
+
+    /// <summary>The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared).</summary>
+    private static readonly LegacyCastQuirk[] EffectSharedBits =
+    {
+        LegacyCastQuirk.QuickenedProvokes,
+        LegacyCastQuirk.SlotFailureClearsSnapshot,
+        LegacyCastQuirk.ConcentrationGateBeforeProvocation,
+        LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
+        LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
+        LegacyCastQuirk.EffectResolveSkipsCombatEndCheck,   // CORE-039
+    };
+
+    /// <summary>Today's PC summon path, beyond the shared bits (batch 11 step 10).</summary>
+    private static readonly LegacyCastQuirk[] SummonPathBits =
+    {
+        LegacyCastQuirk.EntangledUsesCasterLevelFormula,
+        LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
+        LegacyCastQuirk.ScrollSkipsArcaneFailure,
+        LegacyCastQuirk.SummonSkipsBlink,                   // SPL-006
+        LegacyCastQuirk.SummonSkipsCounterspell,            // SPL-006
+        LegacyCastQuirk.SummonSkipsPouch,                   // SPL-006, SPL-114
+        LegacyCastQuirk.SummonItemCastCommitsCastAction,    // SPL-163
+        LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
+    };
+
+    /// <summary>Today's PC Grease path, beyond the shared bits (batch 11 step 10).</summary>
+    private static readonly LegacyCastQuirk[] GreasePathBits =
+    {
+        LegacyCastQuirk.EntangledUsesCasterLevelFormula,
+        LegacyCastQuirk.GreaseSkipsBlink,                   // SPL-006
+        LegacyCastQuirk.GreaseSkipsCounterspell,            // SPL-006
+        LegacyCastQuirk.GreaseSkipsPouch,                   // SPL-006, SPL-114
+        LegacyCastQuirk.GreaseSkipsInvisibilityBreak,       // SPL-006
+        LegacyCastQuirk.GreaseConcentrationCheckedTwice,    // SPL-152
+        LegacyCastQuirk.LostCastShowsActionMenu,            // SPL-006
+    };
+
+    /// <summary>Today's PC hold path, beyond the shared bits (batch 11 step 10).</summary>
+    private static readonly LegacyCastQuirk[] HoldPathBits =
+    {
+        LegacyCastQuirk.HoldSkipsGrappleLegality,           // SPL-146
+        LegacyCastQuirk.HoldSkipsEntangled,                 // SPL-146
+        LegacyCastQuirk.HoldSkipsBlink,                     // SPL-146
+        LegacyCastQuirk.HoldSkipsPouch,                     // SPL-146, SPL-114
+        LegacyCastQuirk.HoldSkipsCounterspell,              // SPL-146
+        LegacyCastQuirk.HoldSkipsChoices,                   // SPL-146
+        LegacyCastQuirk.HoldIgnoresConversion,              // SPL-154
+    };
+
+    private static LegacyCastQuirk Union(params LegacyCastQuirk[][] lists)
+    {
+        LegacyCastQuirk all = LegacyCastQuirk.None;
+        foreach (LegacyCastQuirk[] list in lists)
+            foreach (LegacyCastQuirk bit in list)
+            {
+                Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The bit " + bit + " is one named flag");
+                all |= bit;
+            }
+        return all;
+    }
+
+    /// <summary>The summon, Grease and hold builders and their quirk sets (batch 11 step 10).</summary>
+    private static void TestEffectQuirkSets()
+    {
+        SpellData summon = SpellDatabase.GetSpell(SpellNames.SUMMON_MONSTER_1);
+        SpellCastRequest s = SpellCastRequest.ForUiSummon(SpellCastRequest.ForUi(null, summon, null, null), new Vector2Int(3, 4));
+        Assert(s.ResolveKind == CastResolveKind.Summon && s.Aim.Target == null && s.Aim.Destination == new Vector2Int(3, 4)
+               && s.Quirks == LegacyCastQuirkSets.UiSummonPath,
+            "ForUiSummon makes a summon request aimed at its destination, with no target creature and the summon path's quirks", "" + s.Quirks);
+        Assert(LegacyCastQuirkSets.UiSummonPath == Union(EffectSharedBits, SummonPathBits),
+            "The summon path's quirk set is exactly today's summon-path bits", "" + LegacyCastQuirkSets.UiSummonPath);
+
+        SpellData grease = SpellDatabase.GetSpell(SpellNames.GREASE);
+        SpellCastRequest g = SpellCastRequest.ForUi(null, grease, null, null);
+        g.Choices.GreaseMode = GreaseCastMode.Armor;
+        SpellCastRequest.ForUiGrease(g, null, null, null);
+        Assert(g.ResolveKind == CastResolveKind.Grease && g.Aim.Target == null && g.Choices.GreaseMode == GreaseCastMode.Armor
+               && g.Quirks == LegacyCastQuirkSets.UiGreasePath,
+            "ForUiGrease makes one Grease request that keeps its mode choice, with the Grease path's quirks", "" + g.Quirks);
+        Assert(LegacyCastQuirkSets.UiGreasePath == Union(EffectSharedBits, GreasePathBits),
+            "The Grease path's quirk set is exactly today's Grease-path bits", "" + LegacyCastQuirkSets.UiGreasePath);
+
+        SpellData grasp = SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP);
+        SpellCastRequest h = SpellCastRequest.ForUiHoldCharge(SpellCastRequest.ForUi(null, grasp, null, new CastSource { Kind = CastSourceKind.SpontaneousSlot }));
+        SpellCastRequest hc = SpellCastRequest.ForUiHoldCharge(SpellCastRequest.ForUi(null, grasp, null,
+            new CastSource { Kind = CastSourceKind.SpontaneousConversion, ConversionLevel = 1 }));
+        Assert(h.ResolveKind == CastResolveKind.HoldCharge && h.Source.Kind == CastSourceKind.HeldChargeHold && h.Aim.Target == null
+               && h.Quirks == LegacyCastQuirkSets.UiHoldPath && hc.Source.Kind == CastSourceKind.SpontaneousConversion,
+            "ForUiHoldCharge makes a hold (a slot's source becomes HeldChargeHold, a conversion keeps its kind, SPL-154) with the hold path's quirks",
+            h.Source.Kind + " / " + hc.Source.Kind);
+        Assert(LegacyCastQuirkSets.UiHoldPath == Union(EffectSharedBits, HoldPathBits),
+            "The hold path's quirk set is exactly today's hold-path bits", "" + LegacyCastQuirkSets.UiHoldPath);
+
+        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
+        {
+            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
+            LegacyCastQuirk owner = name.StartsWith("Summon", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiSummonPath
+                : name.StartsWith("Grease", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiGreasePath
+                : name.StartsWith("Hold", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiHoldPath
+                : LegacyCastQuirk.None;
+            if (owner == LegacyCastQuirk.None)
+                continue;
+            LegacyCastQuirk others = (LegacyCastQuirkSets.UiPath | LegacyCastQuirkSets.AiPath | LegacyCastQuirkSets.UiAreaPath
+                                      | LegacyCastQuirkSets.UiSummonPath | LegacyCastQuirkSets.UiGreasePath | LegacyCastQuirkSets.UiHoldPath) & ~owner;
+            Assert((owner & bit) == bit && (others & bit) == 0, "The bit " + name + " is set by its own builder only");
+        }
+        Assert((LegacyCastQuirkSets.UiPath & LegacyCastQuirk.DeliverySkipsCounterspell) != 0
+               && (LegacyCastQuirkSets.UiAreaPath & LegacyCastQuirk.DeliverySkipsCounterspell) == 0,
+            "A held-charge delivery (a UI single-target request) carries DeliverySkipsCounterspell; an area request does not");
+
+        var touch = new List<CastTouchDelivery>();
+        AiCastDecider.Instance.ChooseTouchDelivery(null, null, touch.Add);
+        Assert(touch.Count == 1 && touch[0] == CastTouchDelivery.CastNow, "The AI decider casts a touch spell now (it never holds a charge, SPL-115)",
+            string.Join(",", touch));
+    }
+
+    /// <summary>
+    /// A hold and a Grease cast by the recording decider: each runs the shared stages with its path's skips, then its
+    /// resolve stage, and finishes once with the slot and the standard action spent. The hold asks no choices, stores the
+    /// charge with the cast's metamagic and ends at Resolve; the Grease armor cast greases the ally's armor and ends at
+    /// CombatEnd with its result log. Summons need the grid and spawning, so the scenarios cover them
+    /// (rules/cast-ui-summon-*).
+    /// </summary>
+    private static void TestEffectCasts(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        // The hold.
+        var events = new List<string>();
+        var decider = new RecordingDecider(events);
+        CastContext ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, decider, out SpellSlot slot);
+        SpellCastRequest.ForUiHoldCharge(ctx.Request);
+        CastOutcome done = null;
+        int doneCalls = 0;
+        gm.ExecuteCast(ctx, o => { done = o; doneCalls++; });
+        Assert(string.Join(",", events) == string.Join(",", HoldResolvedSequence),
+            "A hold runs the shared stages with no choices asked, then the HoldCharge Resolve stage", string.Join(",", events));
+        Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.Resolve
+               && ctx.Ended && gm.Harness_OpenCastCount == 0,
+            "A hold finishes once, Resolved at Resolve, and its cast is ended", "" + done);
+        Assert(slot.IsUsed && caster.Actions.StandardActionUsed && sc.HasHeldTouchCharge && sc.HeldTouchSpell != null
+               && sc.HeldTouchSpell.SpellId == SpellNames.SHOCKING_GRASP,
+            "A hold spends the slot and the standard action and holds the charge (PHB p.176)");
+        sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+        sc.SpellSlots.Remove(slot);
+
+        // Grease on the ally's worn armor.
+        events = new List<string>();
+        decider = new RecordingDecider(events);
+        ctx = Begin(gm, sc, caster, null, SpellNames.GREASE, decider, out slot);
+        ctx.Request.Choices.GreaseMode = GreaseCastMode.Armor;
+        SpellCastRequest.ForUiGrease(ctx.Request, ally, null, null);
+        done = null;
+        doneCalls = 0;
+        gm.ExecuteCast(ctx, o => { done = o; doneCalls++; });
+        Assert(string.Join(",", events) == string.Join(",", GreaseResolvedSequence),
+            "A Grease cast runs the shared stages, then the Grease Resolve and CombatEnd stages", string.Join(",", events));
+        Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.CombatEnd
+               && !done.CombatEnded && ctx.Ended && gm.Harness_OpenCastCount == 0,
+            "A Grease cast finishes once, Resolved at CombatEnd (no combat-end check), and its cast is ended", "" + done);
+        StatusEffectManager allyEffects = ally.StatusEffectManager;
+        Assert(slot.IsUsed && caster.Actions.StandardActionUsed && ctx.ResultLog != null && ctx.ResultLog.Contains("armor")
+               && allyEffects != null && allyEffects.ActiveEffects.Exists(e => e != null && e.GreasedArmorGrappleEscapeBonus == 10),
+            "A Grease armor cast spends the slot and the action and greases the ally's armor (+10 to escape a grapple, PHB p.237)", ctx.ResultLog);
+        if (allyEffects != null)
+            allyEffects.ActiveEffects.RemoveAll(e => e != null && e.Spell != null && e.Spell.SpellId == "grease_armor");
         sc.SpellSlots.Remove(slot);
     }
 

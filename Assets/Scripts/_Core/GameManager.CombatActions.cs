@@ -1381,13 +1381,13 @@ public partial class GameManager
             {
                 if (IsPendingGreaseObjectCast())
                 {
-                    PerformGreaseObjectCast(pc, cell.Occupant);
+                    PerformGreaseCast(pc, cell.Occupant, null, null);
                     return;
                 }
 
                 if (IsPendingGreaseArmorCast())
                 {
-                    PerformGreaseArmorCast(pc, cell.Occupant);
+                    PerformGreaseCast(pc, cell.Occupant, null, null);
                     return;
                 }
 

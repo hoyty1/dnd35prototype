@@ -58,6 +58,20 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The PC's choice for a melee touch spell (batch 11 step 10; PHB p.141, p.176): the touch prompt's Cast Now,
+    /// Discharge Later and Cancel buttons (CombatUI.ShowTouchSpellPrompt). Without a CombatUI nothing is asked and the
+    /// cast stays open, as before.
+    /// </summary>
+    internal void UiChooseTouchDelivery(CastContext ctx, Action<CastTouchDelivery> answer)
+    {
+        CombatUI?.ShowTouchSpellPrompt(
+            ctx.Request.Spell,
+            onCastNow: () => answer(CastTouchDelivery.CastNow),
+            onDischargeLater: () => answer(CastTouchDelivery.HoldCharge),
+            onCancel: () => answer(CastTouchDelivery.Cancel));
+    }
+
+    /// <summary>
     /// The PC's answer to a threatened cast: the AoO prompt (ShowAoOActionConfirmation, through
     /// ResolveSpellcastProvocation), whose Cast Defensively and Proceed buttons resolve the rolls through
     /// ResolveThreatenedSpellcast and whose Cancel backs out.
@@ -84,7 +98,9 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The UI follow-up of a finished PC cast: a refusal, a cancel or a failed spend returns to the action menu; any
+    /// The UI follow-up of a finished PC cast: a refusal, a cancel, a failed spend or an outcome that asks for it
+    /// (<see cref="CastOutcome.ShowsActionMenu"/>: a summon that spawned nothing, a summon or Grease lost before its
+    /// provocation) returns to the action menu; any
     /// other cast refreshes the stat panels, clears the highlights and keeps its result log as the last combat log (a
     /// cast resolved at the CombatEnd stage did that before its combat-end check, UiBeforeCastCombatEndCheck) and,
     /// unless it ended the combat, pauses before the next action (AfterAttackDelay: 1.5 s after a resolved cast, 1 s
@@ -102,7 +118,7 @@ public partial class GameManager
             return;
         }
 
-        if (outcome.BackToActionMenu)
+        if (outcome.BackToActionMenu || outcome.ShowsActionMenu)
         {
             ShowActionChoices();
             return;

@@ -34,6 +34,12 @@ namespace Tests.Scenarios
             yield return S("cast-scroll-aoo-cancel", () => ItemAoOCancel(scroll: true));
             yield return S("cast-wand-aoo-cancel", () => ItemAoOCancel(scroll: false));
             yield return S("cast-held-touch-charge", HeldTouchCharge);
+            yield return S("cast-held-aoo-cancel", HeldAoOCancel);
+            yield return S("cast-ui-summon-monster", UiSummonMonster);
+            yield return S("cast-ui-summon-aoo-cancel", UiSummonAoOCancel);
+            yield return S("cast-ui-summon-entangled", UiSummonEntangled);
+            yield return S("cast-ui-summon-swarm", UiSummonSwarm);
+            yield return S("cast-ui-grease", UiGrease);
             foreach (PairSpec pair in Pairs())
             {
                 PairSpec p = pair;
@@ -578,7 +584,8 @@ namespace Tests.Scenarios
         /// <summary>
         /// A held touch charge through the Ui (PHB p.176, Holding the Charge). Round 1: a wizard 5 casts Shocking Grasp
         /// (PHB p.279: melee touch, 1d6 per caster level, at most 5d6) and answers the touch prompt Discharge Later
-        /// (HoldPendingMeleeTouchCharge): one 1st-level slot and the standard action are spent and the charge is held. It
+        /// (BeginHoldTouchCharge, the cast core's HoldCharge resolve since batch 11 step 10): one 1st-level slot and the
+        /// standard action are spent and the charge is held. It
         /// then delivers the charge to the dummy beside it with the touch attack forced to a natural 1: the attack misses and
         /// the charge is still held (PHB p.176: a missed touch keeps the charge). Round 2: it delivers again with the attack
         /// forced to 19: 5d6 with every d6 at 6 = 30, and the charge is gone. Only the touch in the round of casting comes
@@ -623,6 +630,196 @@ namespace Tests.Scenarios
                 .Expect("The held charge's cast is in the trace once, its deliveries are not casts", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
                 .ExpectKnown("SPL-156", "Today the round-2 delivery costs no action (every action left), where a touch after the casting round takes the attack action (SPL-156)",
                     FactIs("actions.hit", "smf"))
+                .Build();
+        }
+
+        // ── rules/cast-ui-summon-*, cast-ui-grease, cast-held-aoo-cancel (batch 11 step 10) ──
+
+        /// <summary>The living summoned creatures on the field (GameManager.IsSummonedCreature).</summary>
+        private static int Summons()
+        {
+            GameManager gm = GameManager.Instance;
+            return gm == null ? 0 : gm.Combat_GetAllCharacters().Count(c => c != null && c.Stats != null && !c.Stats.IsDead && gm.IsSummonedCreature(c));
+        }
+
+        private static Step RecordCaster(string key)
+            => Step.Assert("record", ctx => { RecordSlots(ctx, key); Fact(ctx, "summons.before", Summons()); return true; });
+
+        private static Step FactCaster(string tag, string key)
+            => Step.Assert(tag, ctx =>
+            {
+                CharacterController c = ctx.Get(key);
+                FactSlotsSpent(ctx, tag + ".spent", key);
+                Fact(ctx, tag + ".actions", Actions(c));
+                Fact(ctx, tag + ".summons", Summons());
+                Fact(ctx, tag + ".held", c.Spellcasting != null && c.Spellcasting.HasHeldTouchCharge);
+                return true;
+            });
+
+        /// <summary>
+        /// A Ui Summon Monster I (PHB p.285-286): a wizard 3 casts it at an empty square 2 squares away and takes the first
+        /// creature of list I (one creature, PHB p.286). The cast runs PerformSummonMonsterCast (since batch 11 step 10 a
+        /// request builder for the cast core's Summon resolve): one 1st-level slot is spent and one creature appears and joins
+        /// the initiative after the caster. Summon Monster's 1-round casting time costs only the standard action today
+        /// (SPL-162, pinned).
+        /// </summary>
+        private static ScenarioDef UiSummonMonster()
+        {
+            return Rules("rules/cast-ui-summon-monster", "A Ui Summon Monster I: one slot, one creature from list I (PHB p.285-286)")
+                .Covers("PHB p.285", "PHB p.286", "SPL-162", "SPL-006")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 15, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SUMMON_MONSTER_1))
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastAt(SpellNames.SUMMON_MONSTER_1, 7, 10, "*"),
+                    FactCaster("cast", "wizard"))
+                .Expect("The summon spends one 1st-level slot and brings one creature (PHB p.286)", FactsAre(("summons.before", 0), ("cast.spent", "L1+1"), ("cast.summons", 1)))
+                .Expect("The summon cast is in the trace once (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SUMMON_MONSTER_1, 1))
+                .ExpectKnown("SPL-162", "Today Summon Monster's 1-round casting time costs only the standard action (SPL-162)", FactIs("cast.actions", "-m-"))
+                .Build();
+        }
+
+        /// <summary>
+        /// A threatened Ui Summon Monster I cancelled at the AoO prompt: casting provokes (PHB p.140; the adjacent goblin has
+        /// Combat Reflexes, so it threatens while flat-footed, PHB p.92), and backing out before the spell is cast gives back
+        /// the action and the slot; no creature appears.
+        /// </summary>
+        private static ScenarioDef UiSummonAoOCancel()
+        {
+            return Rules("rules/cast-ui-summon-aoo-cancel", "A threatened Ui Summon Monster I cancelled at the AoO prompt spends nothing (PHB p.140)")
+                .Covers("PHB p.140", "SPL-006")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SUMMON_MONSTER_1))
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastAt(SpellNames.SUMMON_MONSTER_1, 5, 12, "*"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    FactCaster("cancel", "wizard"))
+                .Expect("The cast's AoO confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("Nothing is spent and nothing appears", FactsAre(("cancel.spent", "none"), ("cancel.actions", "smf"), ("cancel.summons", 0)))
+                .Build();
+        }
+
+        /// <summary>
+        /// An entangled Ui wizard 3 loses Summon Monster I to its entangled check (the d20 forced to 1 under SPL-145's
+        /// "Dispel Magic check" label: 1 + caster level 3 + INT 3 against DC 16): the slot is spent and no creature appears
+        /// (PHB p.308).
+        /// </summary>
+        private static ScenarioDef UiSummonEntangled()
+        {
+            return Rules("rules/cast-ui-summon-entangled", "An entangled Ui Summon Monster I lost to the entangled check spends its slot (PHB p.308)")
+                .Covers("PHB p.308", "SPL-145", "SPL-006")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 15, 10, Control.Idle)
+                .StartCondition("wizard", CombatConditionType.Entangled, 10)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SUMMON_MONSTER_1))
+                .Initiative("wizard", "gob")
+                .Force(20, 1, "Dispel Magic check", 1)
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastAt(SpellNames.SUMMON_MONSTER_1, 7, 10, "*"),
+                    FactCaster("lost", "wizard"))
+                .Expect("The lost spell spends its slot and summons nothing", FactsAre(("lost.spent", "L1+1"), ("lost.summons", 0)))
+                .Build();
+        }
+
+        /// <summary>
+        /// A Ui Summon Swarm (PHB p.289): a wizard 3 places the first swarm type on a square in range; the swarm is
+        /// uncontrolled, the caster concentrates on it, and one 2nd-level slot is spent.
+        /// </summary>
+        private static ScenarioDef UiSummonSwarm()
+        {
+            return Rules("rules/cast-ui-summon-swarm", "A Ui Summon Swarm: one 2nd-level slot, one swarm, the caster concentrating (PHB p.289)")
+                .Covers("PHB p.289", "SPL-006")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 15, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 2, SpellNames.SUMMON_SWARM))
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastAt(SpellNames.SUMMON_SWARM, 9, 10, "*"),
+                    FactCaster("cast", "wizard"),
+                    Step.Assert("concentration", ctx =>
+                    {
+                        ConcentrationManager conc = ctx.Get("wizard").Concentration;
+                        Fact(ctx, "concentrating", conc != null && conc.IsConcentrating);
+                        return true;
+                    }))
+                .Expect("The swarm spends one 2nd-level slot and appears", FactsAre(("cast.spent", "L2+1"), ("cast.summons", 1)))
+                .Expect("The caster concentrates on the swarm (PHB p.289)", FactIs("concentrating", true))
+                .Build();
+        }
+
+        /// <summary>
+        /// Grease's three forms through the Ui (PHB p.237): round 1 a 10-ft square anchored on the goblin's square, round 2
+        /// the goblin's held object, round 3 its worn armor. Each cast spends one 1st-level slot and the standard action.
+        /// </summary>
+        private static ScenarioDef UiGrease()
+        {
+            return Rules("rules/cast-ui-grease", "Ui Grease as an area, a held object and worn armor: one slot each (PHB p.237)")
+                .Covers("PHB p.237", "SPL-006", "SPL-152")
+                .MaxRounds(3)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 9, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.GREASE, 3))
+                .Tweak("gob", Sturdy)
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastAt(SpellNames.GREASE, 9, 10, "Grease Area"),
+                    FactCaster("area", "wizard"))
+                .Turn("wizard", 2,
+                    RecordCaster("wizard"),
+                    Step.CastChoosing(SpellNames.GREASE, "gob", "Grease Held Object"),
+                    FactCaster("object", "wizard"))
+                .Turn("wizard", 3,
+                    RecordCaster("wizard"),
+                    Step.CastChoosing(SpellNames.GREASE, "gob", "Grease Worn Armor"),
+                    FactCaster("armor", "wizard"),
+                    Step.Assert("armor effect", ctx =>
+                    {
+                        StatusEffectManager m = ctx.Get("gob").StatusEffectManager;
+                        Fact(ctx, "armor.effect", m != null && m.ActiveEffects.Any(e => e != null && e.GreasedArmorGrappleEscapeBonus == 10));
+                        return true;
+                    }))
+                .Expect("Each Grease spends one 1st-level slot and the standard action (PHB p.237, p.174)",
+                    FactsAre(("area.spent", "L1+1"), ("area.actions", "-m-"), ("object.spent", "L1+1"), ("object.actions", "-m-"), ("armor.spent", "L1+1"), ("armor.actions", "-m-")))
+                .Expect("Greased armor gives +10 on grapple escapes (PHB p.237)", FactIs("armor.effect", true))
+                .Expect("Three Grease casts are in the trace", CastEvents("wizard", SpellNames.GREASE, 3))
+                .Build();
+        }
+
+        /// <summary>
+        /// A threatened Ui Shocking Grasp held with Discharge Later and cancelled at the AoO prompt (PHB p.140, p.176; the
+        /// adjacent goblin has Combat Reflexes, so it threatens while flat-footed): the hold spends nothing and no charge is
+        /// held.
+        /// </summary>
+        private static ScenarioDef HeldAoOCancel()
+        {
+            return Rules("rules/cast-held-aoo-cancel", "A threatened Ui touch spell held with Discharge Later and cancelled at the AoO prompt spends nothing (PHB p.140, p.176)")
+                .Covers("PHB p.140", "PHB p.176", "SPL-146")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SHOCKING_GRASP))
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    RecordCaster("wizard"),
+                    Step.CastHeld(SpellNames.SHOCKING_GRASP),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    FactCaster("cancel", "wizard"))
+                .Expect("The hold's AoO confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("Nothing is spent and no charge is held", FactsAre(("cancel.spent", "none"), ("cancel.actions", "smf"), ("cancel.held", false)))
                 .Build();
         }
 

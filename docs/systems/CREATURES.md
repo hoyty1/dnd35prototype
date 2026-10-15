@@ -225,7 +225,7 @@ DragonData.cs defines 10 types x 6 ages. The `DragonAgeCategory` enum runs Wyrml
 ## 6. Summoning
 
 The flow, spawn pipeline and lifecycle are covered in the architecture part. In brief:
-- **Flow.** Choose the spell, then the list level and creature (`ShowSummonCreatureSelectionMenu`), then the tile, then `PerformSummonMonsterCast`.
+- **Flow.** Choose the spell, then the list level and creature (`ShowSummonCreatureSelectionMenu`), then the tile, then `PerformSummonMonsterCast`, which builds a summon request for the cast core (its Summon resolve, `ResolveSummonMonsterCast`, since batch 11 step 10).
 - **Spawn.** `SpawnSummonedCreature` clones the NPCDatabase entry, clears `AppliedTemplateIds`, adds `option.TemplateId` and runs `ApplyTemplatesClone`.
 - **Lifecycle.** `RegisterActiveSummon` registers the summon; `TickSummonDurations` runs from `OnNewRound`; `DespawnSummonWithEffect` removes it.
 - **Spell-level detection.** It uses the regexes `summon_monster_(\d+)` and `summon_natures_ally_(\d+)` in `SummonMonsterLists`, so the class alias IDs match automatically.
@@ -247,9 +247,9 @@ All missing entries are aquatic. The SNA gaps are CRE-021. Octopus and large_sha
 
 **Rules as implemented.**
 - **Count.** A creature from the spell's own level gives 1; one level lower gives 1d3; two or more lower gives 1d4+1. This matches the PHB.
-- **Duration.** 1 round per `caster.Stats.Level` (character level, not caster level), minimum 1.
+- **Duration.** Summon Monster and Summon Nature's Ally: 1 round per caster level of the cast (`SpellDurationRules.CasterLevelFor`, Extend doubles it; PHB p.285, SPL-002). Summon Swarm: while the caster concentrates, then 2 rounds (PHB p.289).
 - **Placement.** Range scales with `GetRangeSquaresForCasterLevel`. Space is checked with `Grid.CanPlaceCreature`. Extra creatures go to `FindBestAdditionalSummonCell`, or stack on the first tile if there is no room.
-- **Initiative.** The summon is inserted right after the caster, with the caster's initiative.
+- **Initiative.** The summon is inserted right after the caster, with the caster's initiative, so it acts once the caster's turn ends; RAW it acts at once, on the caster's turn when the 1-round casting completes (PHB p.285, p.288; SPL-164).
 - **Alignment.** `SummonMonsterOption.IsAvailableTo` restricts **only clerics**, to creatures within one alignment step (`AlignmentHelper.IsWithinOneStep`, which also allows diagonal steps, CHR-013). As recalled, the PHB instead bars clerics and druids from casting spells whose alignment descriptor opposes theirs. The druid half is not enforced; only the unicorn sets `SummonedCreatureAlignment` among SNA entries. The spawned creature's alignment comes from `SummonedCreatureAlignment` (fallback NG/NE/TN), and it matters for smite and for Protection from Evil's summoned-contact barrier (`SpellCaster`). Dismissal (`TryResolveDismissalSpellEffect`) does not read alignment.
 - **Augment Summoning.** `FeatManager.ApplyAugmentSummoningBonuses` adds +4 to `BaseSTR` and `BaseCON`, which the ability modifiers do not read, so a summon gets only the +2 HP per HD (CHR-009).
 - **Control.** Allied summons are spawned controllable (`ConfigureTeamControl(team, controllable: alliedToPlayer)`) and take full player turns. The right-click menu (`ShowSummonContextMenu`) sets `SummonCommandType.AttackNearest` or `ProtectCaster`, or dismisses the summon. Commands are refused for Summon Swarm and non-controllable summons, so in practice they do nothing (CRE-032). `AI_SummonedCreature` (GameManager.NPCTurns.cs) runs only for non-controllable summons. It targets by command via `AIService.SelectSummonTarget`, retreats at 30% HP or below, advances, trips, and attacks through `NPCPerformAttack`, where a templated summon declares its smite like any creature (`SmiteRules`: no attack bonus, +HD damage up to +20 against an evil or good foe, MM p.31, p.107; once a day; CHR-020, AI-056 fixed 2026-10-14).
