@@ -1,3 +1,17 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// How the cast core resolves a cast once it passed the shared stages (batch 11, cast_core_batch11.md "Executor"):
+/// on one target (the Mirror Image, target Blink, Globe, SpellCaster.Cast, handler and buff stages) or over an area (the
+/// area handler registry, since step 9). Summon and held-charge resolves join in step 10.
+/// </summary>
+public enum CastResolveKind
+{
+    Single,
+    Area
+}
+
 /// <summary>
 /// One cast, as its source built it (batch 11 step 4, cast_core_batch11.md): the caster, its own clone of the spell, the
 /// metamagic, where the spell comes from, the caster's choices, the aim and the decider that makes the choices. Every
@@ -18,6 +32,9 @@ public sealed class SpellCastRequest
     public CastChoices Choices = new CastChoices();
     public CastAim Aim = new CastAim();
     public ICastDecider Decider = UiCastDecider.Instance;
+
+    /// <summary>How the core resolves the cast: one target (the default) or an area (<see cref="ForUiArea"/>).</summary>
+    public CastResolveKind ResolveKind = CastResolveKind.Single;
 
     /// <summary>
     /// The legacy behaviours this cast keeps until a later batch 11 step fixes them (<see cref="LegacyCastQuirk"/>): set
@@ -79,6 +96,27 @@ public sealed class SpellCastRequest
             Decider = UiCastDecider.Instance,
             Quirks = LegacyCastQuirkSets.UiPath
         };
+    }
+
+    /// <summary>
+    /// The PC area builder (batch 11 step 9): turns the open Ui cast <paramref name="request"/> (built by
+    /// <see cref="ForUi"/> or <see cref="ForUiPrebuilt"/> when the spell, scroll, wand or F12 cast was chosen) into an area
+    /// cast aimed at <paramref name="cells"/> with the creatures in them, <paramref name="targets"/> (the core's Legality
+    /// stage filters both by line of effect), with no single target, and gives it the PC area path's legacy quirks
+    /// (<see cref="LegacyCastQuirkSets.UiAreaPath"/>). Returns the request.
+    /// </summary>
+    public static SpellCastRequest ForUiArea(SpellCastRequest request, List<CharacterController> targets, HashSet<Vector2Int> cells)
+    {
+        if (request == null)
+            return null;
+        request.ResolveKind = CastResolveKind.Area;
+        if (request.Aim == null)
+            request.Aim = new CastAim();
+        request.Aim.Target = null;
+        request.Aim.AreaTargets = targets;
+        request.Aim.Cells = cells;
+        request.Quirks = LegacyCastQuirkSets.UiAreaPath;
+        return request;
     }
 
     /// <summary>

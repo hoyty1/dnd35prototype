@@ -36,6 +36,15 @@ namespace Tests.Magic
 /// violation; an AI cast leaves an outer cast's cancel snapshot in place; the NPC Blink branches (the slot spent before
 /// the failure checks, the NPC dice labels, no log for a passed check, a miss on a blinking target) hold with forced
 /// dice; the AI's refusals log nothing; and the core's source names no decider type and never asks who controls the caster.
+///
+/// Batch 11 step 9 (cast-core-area): SpellCastRequest.ForUiArea sets CastResolveKind.Area, no single target and
+/// LegacyCastQuirkSets.UiAreaPath (an explicit list: the UI path's bits an area cast shows plus the Area* bits, which no
+/// other set carries). Area casts by the recording decider (a plain Burning Hands through the generic loop, a quickened
+/// one, and a quickened Sleep, a material-component spell the pouchless wizard may cast because the area path skips the
+/// pouch) run the shared stages without the Ring of Counterspells, then the area Resolve and CombatEnd stages, and finish
+/// once, Resolved at CombatEnd, ended, with the slot and action spent; the generic loop's log carries the cast's
+/// quickened prefix and Sleep's does not (SPL-161). Skipped when a side is already out (the area exit runs the
+/// combat-end check).
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -72,6 +81,33 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
         LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
         LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
+    };
+
+    /// <summary>The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls.</summary>
+    private static readonly string[] AreaResolvedSequence =
+    {
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "ConcentrationOnCast", "Provocation",
+        "decider:provocation", "Counterspell", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
+        "decider:finished:Resolved@CombatEnd"
+    };
+
+    /// <summary>Today's PC area path, bit by bit (batch 11 step 9).</summary>
+    private static readonly LegacyCastQuirk[] AreaPathBits =
+    {
+        LegacyCastQuirk.QuickenedProvokes,
+        LegacyCastQuirk.SlotFailureClearsSnapshot,
+        LegacyCastQuirk.ConcentrationGateBeforeProvocation,
+        LegacyCastQuirk.AlliesForgoEverySave,
+        LegacyCastQuirk.DeafenedRolledInSpellCaster,
+        LegacyCastQuirk.ScrollSkipsArcaneFailure,
+        LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
+        LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
+        LegacyCastQuirk.AreaSkipsEntangled,                 // SPL-006
+        LegacyCastQuirk.AreaSkipsBlink,                     // SPL-006
+        LegacyCastQuirk.AreaSkipsRing,                      // SPL-006
+        LegacyCastQuirk.AreaSkipsPouch,                     // SPL-006, SPL-114
+        LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers,    // CORE-039
+        LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers,    // SPL-161
     };
 
     /// <summary>
@@ -191,7 +227,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.GlobeAfterCast | LegacyCastQuirk.QuickenedProvokes) && !ui.HasQuirk((LegacyCastQuirk)(1 << 30)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.GlobeAfterCast | LegacyCastQuirk.QuickenedProvokes) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -220,8 +256,32 @@ public static class CastCoreStageOrderTests
             if (!name.StartsWith("Npc", StringComparison.Ordinal))
                 continue;
             var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
-            Assert((LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == bit,
+            Assert((LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == bit
+                   && (LegacyCastQuirkSets.UiAreaPath & bit) == 0,
                 "The NPC bit " + name + " is set by the AI builder only");
+        }
+
+        // Batch 11 step 9: the area path's set.
+        SpellCastRequest area = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(null, missile, null, null),
+            new List<CharacterController>(), new HashSet<Vector2Int>());
+        Assert(area.Quirks == LegacyCastQuirkSets.UiAreaPath && area.ResolveKind == CastResolveKind.Area && area.Aim.Target == null
+               && ui.ResolveKind == CastResolveKind.Single && ai.ResolveKind == CastResolveKind.Single,
+            "ForUiArea makes an area request with no single target and the area path's legacy quirks (the other builders stay Single)", "" + area.Quirks);
+        LegacyCastQuirk listedArea = LegacyCastQuirk.None;
+        foreach (LegacyCastQuirk bit in AreaPathBits)
+        {
+            Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The area-path bit " + bit + " is one named flag");
+            listedArea |= bit;
+        }
+        Assert(LegacyCastQuirkSets.UiAreaPath == listedArea, "The area path's quirk set is exactly today's area-path bits (" + AreaPathBits.Length + ")",
+            "UiAreaPath " + LegacyCastQuirkSets.UiAreaPath + " vs listed " + listedArea);
+        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
+        {
+            if (!name.StartsWith("Area", StringComparison.Ordinal))
+                continue;
+            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
+            Assert((LegacyCastQuirkSets.UiAreaPath & bit) == bit && (LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == 0,
+                "The area bit " + name + " is set by the area builder only");
         }
     }
 
@@ -320,6 +380,12 @@ public static class CastCoreStageOrderTests
 
             TestReentryWhileAwaitingProvocation(gm, sc, caster, ally, violations);
             TestMissingQuirk(gm, sc, caster, violations);
+
+            // Batch 11 step 9: area casts through the same core.
+            int violationsBeforeArea = violations.Count;
+            TestAreaCasts(gm, sc, caster);
+            Assert(violations.Count == violationsBeforeArea, "No cast-core or cast-stack violation for area requests",
+                string.Join("; ", violations.GetRange(violationsBeforeArea, violations.Count - violationsBeforeArea)));
         }
         finally
         {
@@ -786,6 +852,87 @@ public static class CastCoreStageOrderTests
             "A cast cancelled at the provocation stops there", string.Join(",", events));
         Assert(ctx.Ended && !slot.IsUsed && !caster.Actions.StandardActionUsed, "The cancel gives back the slot and the action (the snapshot)",
             "slot used " + slot.IsUsed + ", standard used " + caster.Actions.StandardActionUsed);
+        sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// Batch 11 step 9: area casts by the recording decider through the area resolve variant (no creature in the area, so
+    /// nothing but the log and the spend comes of them). Skipped when a side is already out of the fight, since the area
+    /// exit runs the combat-end check of the handlers that had one.
+    /// </summary>
+    private static void TestAreaCasts(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        CombatEndRules.SideCounts sides = gm.GetCombatEndSides();
+        if (sides.PlayersOut || sides.EnemiesOut)
+        {
+            Debug.Log("  SKIP: the area casts (a side is out of the fight in this Play session, so their combat-end check would end it)");
+            return;
+        }
+
+        GameManager.PlayerSubPhase subPhaseBefore = gm.CurrentSubPhase;
+        string lastLogBefore = gm.Harness_LastCombatLog;
+
+        RunArea(gm, sc, caster, SpellNames.BURNING_HANDS, false, true, "an area spell through the generic loop (Burning Hands)");
+        RunArea(gm, sc, caster, SpellNames.BURNING_HANDS, true, true, "a quickened area spell through the generic loop (Burning Hands)");
+        Assert(!SpellComponentRegistry.HasSpellComponentPouch(caster),
+            "The test wizard carries no spell component pouch (so the Sleep cast below tests AreaSkipsPouch)");
+        RunArea(gm, sc, caster, SpellNames.SLEEP, true, false, "a quickened Sleep (a handler that logs no prefix, SPL-161)");
+
+        Assert(gm.CurrentSubPhase == subPhaseBefore, "No area stage set CurrentSubPhase", subPhaseBefore + " -> " + gm.CurrentSubPhase);
+        Assert(gm.Harness_LastCombatLog == lastLogBefore, "No area stage wrote the last combat log (the UI decider's follow-up does)");
+    }
+
+    private static void RunArea(GameManager gm, SpellcastingComponent sc, CharacterController caster, string spellId, bool quickened,
+        bool expectPrefixedLog, string label)
+    {
+        SpellData template = SpellDatabase.GetSpell(spellId);
+        MetamagicData metamagic = null;
+        int slotLevel = template.SpellLevel;
+        if (quickened)
+        {
+            metamagic = new MetamagicData();
+            metamagic.AppliedMetamagic.Add(MetamagicFeatId.QuickenSpell);
+            slotLevel = metamagic.GetEffectiveSpellLevel(template.SpellLevel);
+        }
+        var slot = new SpellSlot(slotLevel, template.Clone(), false, "Wizard");
+        sc.SpellSlots.Add(slot);
+        caster.Actions.Reset();
+
+        var events = new List<string>();
+        var decider = new RecordingDecider(events);
+        SpellCastRequest req = SpellCastRequest.ForUi(caster, template, metamagic, new CastSource());
+        var cells = new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) };
+        SpellCastRequest.ForUiArea(req, new List<CharacterController>(), cells);
+        req.Decider = decider;
+        CastContext ctx = gm.BeginCast(req);
+        ctx.StageObserver = stage => events.Add(stage.ToString());
+
+        CastOutcome done = null;
+        int doneCalls = 0;
+        gm.ExecuteCast(ctx, o => { done = o; doneCalls++; });
+
+        Assert(string.Join(",", events) == string.Join(",", AreaResolvedSequence),
+            label + ": the area cast runs the shared stages (no Ring of Counterspells), then the area Resolve and CombatEnd stages",
+            string.Join(",", events));
+        Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.CombatEnd,
+            label + ": FinishAreaCast and FinishCast give Resolved at CombatEnd once", "" + done);
+        Assert(ctx.Ended && gm.Harness_OpenCastCount == 0, label + ": the cast is ended when it finishes");
+        Assert(slot.IsUsed && (quickened || caster.Actions.StandardActionUsed),
+            label + ": the slot is spent (and the standard action, unless quickened)", "slot used " + slot.IsUsed);
+        Assert(ctx.AreaHandler != null && ctx.ResultLog != null, label + ": an area handler resolved the cast and built its log");
+        if (ctx.ResultLog == null)
+        {
+            sc.SpellSlots.Remove(slot);
+            return;
+        }
+
+        Assert(!quickened || ctx.LogPrefix.Contains("QUICKENED"), label + ": the Cost stage built the quickened prefix once", ctx.LogPrefix);
+        if (expectPrefixedLog)
+            Assert(ctx.ResultLog.StartsWith(ctx.LogPrefix, StringComparison.Ordinal) && ctx.ResultLog.Contains("No valid targets in area!"),
+                label + ": the generic loop's log carries the cast's prefix", ctx.ResultLog);
+        else
+            Assert(!ctx.ResultLog.Contains("QUICKENED") && ctx.ResultLog.StartsWith("═", StringComparison.Ordinal) && template.HasMaterialComponent,
+                label + ": the log has no prefix, and the material-component spell was cast without a pouch (AreaSkipsPouch)", ctx.ResultLog);
         sc.SpellSlots.Remove(slot);
     }
 

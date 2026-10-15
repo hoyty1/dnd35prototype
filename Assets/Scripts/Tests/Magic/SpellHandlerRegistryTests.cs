@@ -19,7 +19,13 @@ namespace Tests.Magic
 /// in SpellDatabase; and the order, gates, ContinueToBuff flags and spell ids equal the manifest below, re-derived on 2026-10-15
 /// from the old chain's guard expressions. Also the gate evaluation, and (batch 11 step 6, which runs the registry on the
 /// NPC cast path too) that the AI keeps out of its candidates exactly the registered spells whose handler needs a caster
-/// choice it cannot give (SPL-091). Runs in edit or Play mode.
+/// choice it cannot give (SPL-091).
+///
+/// Batch 11 step 9 (cast-core-area): the area handler registry (GameManager.DescribeAreaHandlers). Its order, spell ids,
+/// combat-end contexts, log-prefix and async flags and cast-stage mark placement equal <see cref="AreaManifest"/>, read
+/// on 2026-10-15 from the old PerformAoESpellCast blocks; the generic per-target loop is the one fallback and comes last;
+/// every wrapped method exists on GameManager; no spell id is claimed twice; every id exists in SpellDatabase.
+/// Runs in edit or Play mode.
 /// </summary>
 public static class SpellHandlerRegistryTests
 {
@@ -92,6 +98,57 @@ public static class SpellHandlerRegistryTests
         ("TryResolveCommandPlantsSpellEffect", OkKept, false, SpellNames.COMMAND_PLANTS),
     };
 
+    /// <summary>
+    /// The old PerformAoESpellCast blocks (before batch 11 step 9), in order: the handler method, the source context of
+    /// the combat-end check its block ran (null: none), whether its log had no quickened or spontaneous prefix (the five
+    /// Resolve*Spell methods that showed their own log), whether it answered through a callback (the walls), whether its
+    /// "handler" cast-stage mark came before the call ("before") or after the claim ("after"), and the spell ids its own
+    /// guard accepts.
+    /// </summary>
+    private static readonly (string name, string combatEnd, bool noPrefix, bool async, string mark, string[] ids)[] AreaManifest =
+    {
+        ("TryHandleConcealmentAreaSpellCast", null, false, false, "after", new[] { SpellNames.OBSCURING_MIST, SpellNames.FOG_CLOUD, SpellNames.DARKNESS, SpellNames.GUST_OF_WIND, SpellNames.SLEET_STORM, SpellNames.STINKING_CLOUD, SpellNames.SOLID_FOG }),
+        ("TryResolveConsecrateAreaEffect", null, false, false, "after", new[] { SpellNames.CONSECRATE }),
+        ("TryResolveDesecrateAreaEffect", null, false, false, "after", new[] { SpellNames.DESECRATE }),
+        ("TryResolveScaledAoEDamageSpell", "ResolveScaledAoEDamageSpell", false, false, "after", new[] { SpellNames.FIREBALL, SpellNames.LIGHTNING_BOLT, SpellNames.CALL_LIGHTNING }),
+        ("TryResolveDaylightSpell", null, false, false, "after", new[] { SpellNames.DAYLIGHT }),
+        ("TryResolveWindWallSpell", null, false, false, "after", new[] { SpellNames.WIND_WALL }),
+        ("TryResolveHaltUndeadSpell", "ResolveHaltUndeadSpell", false, false, "after", new[] { SpellNames.HALT_UNDEAD }),
+        ("ResolveHypnotismSpell", "ResolveHypnotismSpell", true, false, "before", new[] { SpellNames.HYPNOTISM }),
+        ("ResolveSleepSpell", "ResolveSleepSpell", true, false, "before", new[] { SpellNames.SLEEP }),
+        ("ResolveDeepSlumberSpell", "ResolveDeepSlumberSpell", true, false, "before", new[] { SpellNames.DEEP_SLUMBER }),
+        ("ResolveColorSpraySpell", "ResolveColorSpraySpell", true, false, "before", new[] { SpellNames.COLOR_SPRAY }),
+        ("ResolveFearSpell", "ResolveFearSpell", true, false, "before", new[] { SpellNames.FEAR }),
+        ("TryResolveGlitterdustSpell", null, false, false, "after", new[] { SpellNames.GLITTERDUST }),
+        ("TryResolveWebSpell", null, false, false, "after", new[] { SpellNames.WEB }),
+        ("TryResolveRainbowPatternAoE", null, false, false, "after", new[] { SpellNames.RAINBOW_PATTERN }),
+        ("TryResolveIceStormAoE", "IceStorm", false, false, "after", new[] { SpellNames.ICE_STORM }),
+        ("TryResolveShoutAoE", "Shout", false, false, "after", new[] { SpellNames.SHOUT }),
+        ("TryResolveWallOfFireSpell", null, false, false, "after", new[] { SpellNames.WALL_OF_FIRE }),
+        ("ResolveWallOfIceWithReflexSaves", null, false, true, "before", new[] { SpellNames.WALL_OF_ICE }),
+        ("ResolveWallOfForce", null, false, true, "before", new[] { SpellNames.WALL_OF_FORCE }),
+        ("TryResolveFlamingSphereAoECast", null, false, false, "after", new[] { SpellNames.FLAMING_SPHERE }),
+        ("TryResolveEntangleSpell", null, false, false, "after", new[] { SpellNames.ENTANGLE }),
+        ("TryResolveSoftenEarthSpell", null, false, false, "after", new[] { SpellNames.SOFTEN_EARTH }),
+        ("TryResolveSpikeStoneSpell", null, false, false, "after", new[] { SpellNames.SPIKE_STONES }),
+        ("TryResolvePlantGrowthSpell", null, false, false, "after", new[] { SpellNames.PLANT_GROWTH }),
+        ("TryResolveCalmAnimalsSpell", null, false, false, "after", new[] { SpellNames.CALM_ANIMALS }),
+        ("TryResolveCalmEmotionsSpell", null, false, false, "after", new[] { SpellNames.CALM_EMOTIONS }),
+        ("TryResolveConeOfColdSpell", "ConeOfCold", false, false, "after", new[] { SpellNames.CONE_OF_COLD }),
+        ("TryResolveChainLightningSpell", "ChainLightning", false, false, "after", new[] { SpellNames.CHAIN_LIGHTNING }),
+        ("TryResolveCircleOfDeathSpell", "CircleOfDeath", false, false, "after", new[] { SpellNames.CIRCLE_OF_DEATH }),
+        ("TryResolveCrushingDespairSpell", null, false, false, "after", new[] { SpellNames.CRUSHING_DESPAIR }),
+        ("TryResolveMindFogSpell", null, false, false, "after", new[] { SpellNames.MIND_FOG }),
+        ("TryResolveMassSuggestionSpell", null, false, false, "after", new[] { SpellNames.MASS_SUGGESTION }),
+        ("TryResolveInsectPlagueSpell", "InsectPlague", false, false, "after", new[] { SpellNames.INSECT_PLAGUE }),
+        ("TryResolveWallOfThornsSpell", "WallOfThorns", false, false, "after", new[] { SpellNames.WALL_OF_THORNS }),
+        ("TryResolvePersistentImageSpell", null, false, false, "after", new[] { SpellNames.PERSISTENT_IMAGE }),
+        ("TryResolveSunburstSpell", "Sunburst", false, false, "after", new[] { SpellNames.SUNBURST }),
+        ("TryResolveEarthquakeSpell", "Earthquake", false, false, "after", new[] { SpellNames.EARTHQUAKE }),
+        ("TryResolveShieldOfLawSpell", null, false, false, "after", new[] { SpellNames.SHIELD_OF_LAW }),
+        ("TryResolveBlackTentaclesAoECast", null, false, false, "after", new[] { SpellNames.EVARDS_BLACK_TENTACLES }),
+    };
+
     public static void RunAll()
     {
         _passed = 0;
@@ -114,8 +171,74 @@ public static class SpellHandlerRegistryTests
         TestManifest(entries);
         TestGates();
         TestAiCandidateExclusions(entries);
+        TestAreaRegistry();
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
+    }
+
+    /// <summary>Batch 11 step 9: the area handler registry against <see cref="AreaManifest"/>.</summary>
+    private static void TestAreaRegistry()
+    {
+        IReadOnlyList<AreaHandlerEntry> area = GameManager.DescribeAreaHandlers();
+        Assert(area != null && area.Count == AreaManifest.Length + 1, "the area registry has the manifest's handlers plus the fallback",
+            area != null ? "count " + area.Count + ", manifest " + AreaManifest.Length : "null");
+        if (area == null || area.Count == 0)
+            return;
+
+        int fallbacks = 0;
+        foreach (AreaHandlerEntry e in area)
+            if (e != null && e.IsFallback)
+                fallbacks++;
+        AreaHandlerEntry last = area[area.Count - 1];
+        Assert(fallbacks == 1 && last != null && last.IsFallback && last.Name == "ResolveGenericAreaSpell"
+               && last.CombatEndContext == "ResolveAOESpell" && last.ConsoleLogLabel == "[AoE Spell] " && !last.Async && !last.OmitsLogPrefix
+               && last.Mark == AreaHandlerMark.ByHandler,
+            "the generic per-target loop is the one fallback, last, with its old combat-end context, console label and own mark");
+
+        var owner = new Dictionary<string, string>(StringComparer.Ordinal);
+        int n = Math.Min(area.Count - 1, AreaManifest.Length);
+        for (int i = 0; i < n; i++)
+        {
+            AreaHandlerEntry e = area[i];
+            var row = AreaManifest[i];
+            Assert(e != null && e.Name == row.name && e.Resolve != null && !e.IsFallback,
+                "area entry " + (i + 1) + " is in the old block order: " + row.name, e != null ? e.Name : "null");
+            if (e == null || e.Name != row.name || e.SpellIds == null)
+                continue;
+
+            Assert(e.CombatEndContext == row.combatEnd, "combat-end context as the old block: " + row.name,
+                "registry " + (e.CombatEndContext ?? "none") + ", manifest " + (row.combatEnd ?? "none"));
+            Assert(e.OmitsLogPrefix == row.noPrefix && e.Async == row.async, "prefix and async flags as the old block: " + row.name,
+                "omits prefix " + e.OmitsLogPrefix + ", async " + e.Async);
+            AreaHandlerMark mark = row.mark == "before" ? AreaHandlerMark.BeforeResolve : AreaHandlerMark.AfterClaim;
+            Assert(e.Mark == mark, "handler mark placed as the old block's: " + row.name, "registry " + e.Mark);
+            Assert(e.BeginsConcentrationAfterLog == (row.name == "TryResolveRainbowPatternAoE"),
+                "only Rainbow Pattern's block called the concentration tracking after its log: " + row.name);
+            Assert(e.ConsoleLogLabel == null, "a handler's log has no console copy (only the generic loop's had): " + row.name);
+            Assert(e.SpellIds.SetEquals(row.ids), "spell ids equal the ids the method's guard accepts: " + row.name,
+                "registry " + string.Join(",", e.SpellIds));
+
+            MethodInfo method = typeof(GameManager).GetMethod(row.name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert(method != null, "the wrapped method exists on GameManager: " + row.name);
+
+            foreach (string id in e.SpellIds)
+            {
+                if (owner.TryGetValue(id, out string other))
+                    Assert(false, "area spell id claimed by one entry only: " + id, other + " and " + e.Name);
+                else
+                    owner[id] = e.Name;
+                SpellData spell = string.IsNullOrEmpty(id) ? null : SpellDatabase.GetSpell(id);
+                Assert(spell != null && spell.SpellId == id, "registered area spell id exists in SpellDatabase: " + id, e.Name);
+            }
+        }
+
+        MethodInfo generic = typeof(GameManager).GetMethod("ResolveGenericAreaSpell", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(generic != null && generic.ReturnType == typeof(string), "the generic area loop returns its log to the core");
+        foreach (string selfPaced in new[] { "ResolveHypnotismSpell", "ResolveSleepSpell", "ResolveDeepSlumberSpell", "ResolveColorSpraySpell", "ResolveFearSpell" })
+        {
+            MethodInfo m = typeof(GameManager).GetMethod(selfPaced, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(m != null && m.ReturnType == typeof(string), selfPaced + " returns its log to the core (it no longer shows it or paces the turn)");
+        }
     }
 
     private static readonly Regex HandlerName = new Regex(@"^TryResolve\w+SpellEffect$", RegexOptions.CultureInvariant);

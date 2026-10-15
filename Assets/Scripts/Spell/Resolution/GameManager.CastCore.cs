@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DND35.Magic;
 using DND35e.Identifiers;
 using UnityEngine;
@@ -110,7 +111,13 @@ public sealed class CastOutcome
 /// single-target casts (TryNPCPerformSpellCast) through the same stages with the AI decider (<see cref="RunCastSync"/>),
 /// as a pure move of the old NPC executor: its differences from the PC path are the request's NPC quirk bits
 /// (LegacyCastQuirkSets.AiPath), which only the stages read. No stage asks who controls the caster; only the entry
-/// points choose the decider. The area casts join in step 9.
+/// points choose the decider. Step 9 runs the PC area casts (PerformAoESpellCast) through the same stages with the area
+/// resolve variant (SpellCastRequest.ForUiArea, CastResolveKind.Area), as a pure move of PerformAoESpellCast's old
+/// body: the Legality stage filters the area by line of effect, the shared stages spend and check the cast (the area
+/// path's skips are the bits of LegacyCastQuirkSets.UiAreaPath), and after the invisibility break the area Resolve
+/// stage (<see cref="CastStageResolveArea"/>) runs the area handler registry (GameManager.SpellHandlerRegistry.cs); every
+/// area cast ends in <see cref="FinishAreaCast"/>, which shows the log once with its prefixes and runs the handler's
+/// combat-end check before FinishCast.
 /// </summary>
 public partial class GameManager
 {
@@ -265,6 +272,10 @@ public partial class GameManager
     {
         if (req == null || req.Spell == null || req.Caster == null)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-cast");
+        // An area cast has no single target: its creatures are the ones in the aimed area (the area path never had a
+        // target test; step 23 gives area aims their own legality).
+        if (req.ResolveKind == CastResolveKind.Area)
+            return null;
         if (!IsValidTargetForSpell(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "invalid-target");
         return null;
@@ -275,9 +286,11 @@ public partial class GameManager
         // Spells with common material components (M with no GP cost) need a spell component pouch (PHB p.130). F12 test
         // panel casts (their Components bypass), scroll casts and wand casts bypass it (the item provides the
         // components); the cast's own source decides (batch 11 step 4).
-        // NPCs carry no pouch and are not tested (NpcNoComponentCheck, SPL-114; decision D3 removes it in step 17).
+        // NPCs carry no pouch and are not tested (NpcNoComponentCheck, SPL-114), nor are area casts (AreaSkipsPouch,
+        // SPL-006); decision D3 removes both in step 17.
         CastSource source = req.Source;
         bool componentsBypassed = req.HasQuirk(LegacyCastQuirk.NpcNoComponentCheck)
+                                  || req.HasQuirk(LegacyCastQuirk.AreaSkipsPouch)
                                   || (source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem));
         if (componentsBypassed || !req.Spell.HasMaterialComponent)
             return null;
@@ -313,6 +326,10 @@ public partial class GameManager
         // The NPC path casts without metamagic (AI-001, SPL-038; step 21 removes the bit).
         if (req.HasQuirk(LegacyCastQuirk.NpcNullMetamagic))
             req.Metamagic = null;
+
+        // An area reaches only the squares and creatures its origin has line of effect to (PHB p.176).
+        if (req.ResolveKind == CastResolveKind.Area)
+            FilterAreaAimByLineOfEffect(req);
 
         CastOutcome refusal = CheckNpcCasterLegality(req);
         if (refusal != null)
@@ -440,7 +457,7 @@ public partial class GameManager
         if (spellComp == null)
         {
             DropSnapshotAfterFailedSpend(ctx);
-            Debug.LogError("[GameManager] PerformSpellCast: No SpellcastingComponent!");
+            Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "PerformAoESpellCast" : "PerformSpellCast")}: No SpellcastingComponent!");
             FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Cost, CastOutcome.ReasonNoSpellcasting));
             return;
         }
@@ -494,9 +511,11 @@ public partial class GameManager
             CharacterController caster = req.Caster;
             SpellData spell = req.Spell;
 
-            if (caster.HasCondition(CombatConditionType.Entangled))
+            // An area cast makes no entangled check (AreaSkipsEntangled, SPL-006; step 13).
+            bool entangledCheck = !req.HasQuirk(LegacyCastQuirk.AreaSkipsEntangled);
+            if (entangledCheck && caster.HasCondition(CombatConditionType.Entangled))
                 RequireLegacyQuirk(ctx, LegacyCastQuirk.EntangledUsesCasterLevelFormula);
-            if (!ResolveEntangledSomaticCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
+            if (entangledCheck && !ResolveEntangledSomaticCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
                     ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
             {
                 CheckConcentrationOnLostCast(ctx);
@@ -542,7 +561,7 @@ public partial class GameManager
                 if (!spentAlready && !SpendCastSlot(ctx))
                 {
                     DropSnapshotAfterFailedSpend(ctx);
-                    Debug.LogError($"[GameManager] ASF failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
+                    Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE ASF" : "ASF")} failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
                     FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, CastOutcome.ReasonSlotNotSpent));
                     return;
                 }
@@ -556,8 +575,9 @@ public partial class GameManager
 
             // PHB p.206: a blinking caster has a 20% spell failure chance (the caster may be on the Ethereal Plane when
             // the spell is cast), checked separately from and in addition to arcane spell failure. The NPC path rolls
-            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160).
-            if (caster.HasActiveBlinkEffect)
+            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160); an area cast
+            // makes no Blink check (AreaSkipsBlink, SPL-006; step 13).
+            if (caster.HasActiveBlinkEffect && !req.HasQuirk(LegacyCastQuirk.AreaSkipsBlink))
             {
                 bool npcBlink = req.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
                 int blinkSpellRoll = DiceService.Percentile(npcBlink ? "Blink NPC caster spell failure" : "Blink caster spell failure");
@@ -607,7 +627,7 @@ public partial class GameManager
             {
                 DropSnapshotAfterFailedSpend(ctx);
                 if (!beforeFailure)
-                    Debug.LogError($"[GameManager] Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
+                    Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE: " : "")}Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Spend, CastOutcome.ReasonSlotNotSpent));
                 return;
             }
@@ -740,25 +760,43 @@ public partial class GameManager
         CastStageRingCounterspell(ctx);
     }
 
-    /// <summary>RingCounterspell: a Ring of Counterspells on the target holding this spell counters it (DMG p.230).</summary>
+    /// <summary>
+    /// RingCounterspell: a Ring of Counterspells on the target holding this spell counters it (DMG p.230). Skipped for an
+    /// area cast (<see cref="LegacyCastQuirk.AreaSkipsRing"/>, SPL-006).
+    /// </summary>
     private void CastStageRingCounterspell(CastContext ctx)
     {
-        EnterCastStage(ctx, CastStage.RingCounterspell);
-        CharacterController caster = ctx.Request.Caster;
-        CharacterController target = ctx.Request.Aim.Target;
-        SpellData spell = ctx.Request.Spell;
-        if (target != null && spell != null && CounterspellManager.TryRingCounterspell(target, spell))
+        if (!ctx.Request.HasQuirk(LegacyCastQuirk.AreaSkipsRing))
         {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Ring, "countered");
-            Debug.Log($"[RingCounterspell] {spell.Name} countered by Ring of Counterspells on {target.Stats?.CharacterName}!");
-            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.RingCounterspell, "ring"));
-            return;
+            EnterCastStage(ctx, CastStage.RingCounterspell);
+            CharacterController caster = ctx.Request.Caster;
+            CharacterController target = ctx.Request.Aim.Target;
+            SpellData spell = ctx.Request.Spell;
+            if (target != null && spell != null && CounterspellManager.TryRingCounterspell(target, spell))
+            {
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Ring, "countered");
+                Debug.Log($"[RingCounterspell] {spell.Name} countered by Ring of Counterspells on {target.Stats?.CharacterName}!");
+                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.RingCounterspell, "ring"));
+                return;
+            }
         }
 
         if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
-            CastStageMirrorImage(ctx);
+            CastStageResolveVariant(ctx);
         else
             CastStageInvisibilityBreak(ctx);
+    }
+
+    /// <summary>
+    /// After the pre-resolution checks: the single-target stages from Mirror Image on, or the area Resolve stage
+    /// (<see cref="CastResolveKind.Area"/>).
+    /// </summary>
+    private void CastStageResolveVariant(CastContext ctx)
+    {
+        if (IsAreaCast(ctx))
+            CastStageResolveArea(ctx);
+        else
+            CastStageMirrorImage(ctx);
     }
 
     /// <summary>
@@ -773,6 +811,18 @@ public partial class GameManager
         CharacterController caster = ctx.Request.Caster;
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
+
+        if (IsAreaCast(ctx))
+        {
+            // An area spell is hostile when it reaches a foe in the area; the touch and forgone-save tests below read a
+            // single target, and the area handlers make their own.
+            BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
+            if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
+                CastStageCounterspell(ctx);
+            else
+                CastStageResolveArea(ctx);
+            return;
+        }
 
         BreakInvisibilityOnHostileSpellCast(caster, spell, target, null);
         // A willing friendly target of a melee touch spell needs no touch attack.
@@ -1029,6 +1079,128 @@ public partial class GameManager
         });
     }
 
+    // ── The area resolve variant (batch 11 step 9) ──────────────────────────────────────────────────────────────
+
+    private static bool IsAreaCast(CastContext ctx) => ctx.Request.ResolveKind == CastResolveKind.Area;
+
+    /// <summary>
+    /// The area's line of effect (PHB p.176): the squares and creatures the origin cannot reach are dropped from the
+    /// request's aim, in place (the lists the UI passed, as before). The origin is the centre of a burst's squares, else
+    /// the caster's square (cones, lines and the rest), and is recorded on the aim.
+    /// </summary>
+    private static void FilterAreaAimByLineOfEffect(SpellCastRequest req)
+    {
+        SpellData spell = req.Spell;
+        CharacterController caster = req.Caster;
+        HashSet<Vector2Int> aoeCells = req.Aim.Cells;
+        if (spell == null || caster == null || aoeCells == null || aoeCells.Count == 0)
+            return;
+
+        Vector2Int loeOrigin;
+        if (spell.AoEShapeType == AoEShape.Burst)
+        {
+            // For bursts, the centre of the area's squares.
+            int sumX = 0, sumY = 0, count = 0;
+            foreach (Vector2Int c in aoeCells)
+            {
+                sumX += c.x;
+                sumY += c.y;
+                count++;
+            }
+            loeOrigin = count > 0 ? new Vector2Int(sumX / count, sumY / count) : caster.GridPosition;
+        }
+        else
+        {
+            loeOrigin = caster.GridPosition;
+        }
+
+        req.Aim.Origin = loeOrigin;
+        AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
+        AoESystem.FilterTargetsByLineOfEffect(req.Aim.AreaTargets, loeOrigin);
+    }
+
+    /// <summary>
+    /// Resolve (area): the area handler registry (GameManager.SpellHandlerRegistry.cs) runs the handler registered for
+    /// the spell's id, in the old block order, then the generic per-target loop, which takes what no handler claimed. A
+    /// claimed cast goes to <see cref="FinishAreaCast"/>; an Async handler (the walls) returns at once and resumes the
+    /// cast from its callback (<see cref="ResumeAreaCast"/>).
+    /// </summary>
+    private void CastStageResolveArea(CastContext ctx)
+    {
+        EnterCastStage(ctx, CastStage.Resolve);
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+
+        foreach (AreaHandlerEntry entry in AreaHandlersFor(spell.SpellId))
+        {
+            if (entry.Mark == AreaHandlerMark.BeforeResolve)
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, entry.Name);
+
+            ctx.AreaHandler = entry;
+            AreaHandlerResult result = entry.Resolve(ctx);
+            if (result.IsPending)
+                return;
+            if (!result.IsClaimed)
+                continue;
+
+            if (entry.Mark == AreaHandlerMark.AfterClaim)
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, entry.Name);
+            FinishAreaCast(ctx, entry, result.Log);
+            return;
+        }
+    }
+
+    /// <summary>The callback of an Async area handler (Wall of Ice, Wall of Force): the cast goes on with its log.</summary>
+    private void ResumeAreaCast(CastContext ctx, string log)
+    {
+        if (ctx == null || ctx.Outcome != null || ctx.AreaHandler == null)
+            return;
+        FinishAreaCast(ctx, ctx.AreaHandler, log);
+    }
+
+    /// <summary>
+    /// The single exit of a resolved area cast (SPL-063): the handler's log with the cast's quickened and spontaneous
+    /// prefixes, built once (<see cref="CastContext.LogPrefix"/>; without them for the handlers that never had them,
+    /// <see cref="LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers"/>, SPL-161), goes out, then the decider's follow-up
+    /// that precedes the check (the UI's last combat log, stat panels with their Flanked refresh, and highlights, in the
+    /// old order), Rainbow Pattern's concentration call, and the combat-end check under the handler's own source context
+    /// (only for the handlers that had one, <see cref="LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers"/>, CORE-039).
+    /// FinishCast then ends the cast, and the UI decider paces the turn (AfterAttackDelay) unless the combat ended.
+    /// </summary>
+    private void FinishAreaCast(CastContext ctx, AreaHandlerEntry entry, string handlerLog)
+    {
+        if (ctx.Outcome != null)
+            return;
+
+        EnterCastStage(ctx, CastStage.CombatEnd);
+        SpellCastRequest req = ctx.Request;
+        CharacterController caster = req.Caster;
+        SpellData spell = req.Spell;
+
+        bool prefixed = !(entry.OmitsLogPrefix && req.HasQuirk(LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers));
+        ctx.ResultLog = handlerLog == null ? null : (prefixed ? ctx.LogPrefix : "") + handlerLog;
+        ctx.ConsoleLogLabel = entry.ConsoleLogLabel;
+        FlushCastLog(ctx);
+        req.Decider?.BeforeCombatEndCheck(this, ctx);
+
+        if (entry.BeginsConcentrationAfterLog && spell.DurationType == DurationType.Concentration)
+            BeginConcentrationTracking(caster, null, spell);
+
+        string combatEndContext = entry.CombatEndContext;
+        if (combatEndContext == null && !req.HasQuirk(LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers))
+            combatEndContext = entry.Name;
+        if (combatEndContext != null && EvaluateCombatEnd(combatEndContext))
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.CombatEnd, combatEndContext);
+            ctx.CombatEnded = true;
+        }
+
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, ctx.CombatEnded ? "combat-over" : "resolved")
+        {
+            CombatEnded = ctx.CombatEnded
+        });
+    }
+
     // ── The single exit ─────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -1056,8 +1228,8 @@ public partial class GameManager
         if (ctx.ResultLogShown || ctx.ResultLog == null)
             return;
         ctx.ResultLogShown = true;
-        if (LogAttacksToConsole && ctx.Stage == CastStage.CombatEnd)
-            Debug.Log("[Spell] " + ctx.ResultLog);
+        if (LogAttacksToConsole && ctx.Stage == CastStage.CombatEnd && ctx.ConsoleLogLabel != null)
+            Debug.Log(ctx.ConsoleLogLabel + ctx.ResultLog);
         CombatUI?.ShowCombatLog(ctx.ResultLog);
     }
 

@@ -2763,7 +2763,7 @@ public partial class GameManager
 
         ClearSelfAoEState();
 
-        // Now execute the spell (Wall of Ice LoE filtering handled inside PerformAoESpellCast)
+        // Now execute the spell (the cast core's Legality stage filters the area by line of effect)
         PerformAoESpellCast(caster, targets, cells);
     }
 
@@ -2793,1335 +2793,197 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Execute an AoE spell against all valid targets in the area.
-    /// Handles spell slot consumption, then resolves the spell for each target.
+    /// Casts the open area cast from <paramref name="caster"/> over <paramref name="aoeCells"/> at the creatures in it
+    /// (<paramref name="targets"/>): the aimed burst, cone or line, a self-centred area once confirmed, the walls once
+    /// placed. Since batch 11 step 9 the body is the staged cast core (GameManager.CastCore.cs, ExecuteCast) with the UI
+    /// decider and the area resolve variant: this method only does the UI's part before the cast and turns the open cast's
+    /// request into an area request (SpellCastRequest.ForUiArea, which sets the area path's legacy quirks); the core then
+    /// filters the area by line of effect, spends the cast, runs the area handler registry (GameManager.SpellHandlerRegistry.cs)
+    /// and finishes in FinishAreaCast. The UI follow-up comes from UiCastDecider.OnCastFinished (GameManager.CastDeciders.cs).
     /// </summary>
     private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
+        // A cast whose run waits for the AoO prompt's answer is not re-entered: its aim and run state stay.
+        if (RejectCastReentry(CurrentCast, nameof(PerformAoESpellCast)))
+            return;
+
         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformAoESpellCast));
 
-        // ── WALL OF ICE LINE-OF-EFFECT FILTERING (centralized) ──
-        // Determine AoE origin for LoE checks based on spell shape:
-        //   Burst spells: use centroid of AoE cells as origin (burst center)
-        //   Cone/Line/other: use caster position as origin
-        if (_pendingSpell != null && caster != null && aoeCells != null && aoeCells.Count > 0)
-        {
-            Vector2Int loeOrigin;
-            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
-            {
-                // For bursts, compute the center of the AoE cells
-                int sumX = 0, sumY = 0, count = 0;
-                foreach (Vector2Int c in aoeCells)
-                {
-                    sumX += c.x; sumY += c.y; count++;
-                }
-                loeOrigin = count > 0 ? new Vector2Int(sumX / count, sumY / count) : caster.GridPosition;
-            }
-            else
-            {
-                loeOrigin = caster.GridPosition;
-            }
-
-            AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
-            AoESystem.FilterTargetsByLineOfEffect(targets, loeOrigin);
-        }
-
         CurrentSubPhase = PlayerSubPhase.Animating;
+        // The spell menu's spontaneous-conversion state was copied into the cast's source and cleared when the request
+        // was built (batch 11 step 4); clearing it again is the old belt and braces.
+        CombatUI?.ClearSpontaneousCastState();
 
-        CaptureSpellcastResourceSnapshot(caster);
+        CastContext ctx = CurrentCast;
+        if (ctx == null || ctx.Request.Spell == null || ctx.Request.Decider.IsSynchronous)
+        {
+            Debug.LogWarning("[AoE] PerformAoESpellCast without an open Ui cast; back to the action menu.");
+            ShowActionChoices();
+            return;
+        }
 
-        // Quickened spells don't consume standard action; scroll/wand casts already consumed action
-        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (_pendingScrollCastActive)
+        SpellCastRequest req = ctx.Request;
+        if (req.Caster != caster)
         {
-            Debug.Log($"[ScrollCast] AoE scroll cast — action consumed via ConsumeScrollAfterCast.");
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "scroll");
+            if (req.Caster != null)
+                Debug.LogWarning($"[AoE] PerformAoESpellCast: the cast's caster {req.Caster.Stats?.CharacterName} is replaced by {caster?.Stats?.CharacterName}.");
+            req.Caster = caster;
         }
-        else if (_pendingWandCastActive)
+        SpellCastRequest.ForUiArea(req, targets, aoeCells);
+
+        ExecuteCast(ctx, null);
+    }
+
+    /// <summary>
+    /// The area handler registry's fallback (GameManager.SpellHandlerRegistry.cs, batch 11 step 9): the generic
+    /// per-target loop for an area spell no custom handler claims. Each creature in the area (after line of effect) that
+    /// no globe protects gets the tracked effect (Buff, Debuff, Control, Illusion, Wall), or SpellCaster.Cast's save and
+    /// damage, or its healing. Returns the cast's log (without the quickened and spontaneous prefixes, which
+    /// FinishAreaCast adds); the core shows it and runs the combat-end check ("ResolveAOESpell").
+    /// </summary>
+    private string ResolveGenericAreaSpell(CastContext ctx)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
+        HashSet<Vector2Int> aoeCells = ctx.Request.Aim.Cells;
+        SpellcastingComponent spellComp = ctx.SpellComp;
+
+        if (aoeCells != null
+            && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
         {
-            Debug.Log($"[WandCast] AoE wand cast — action consumed via ConsumeWandChargeAfterCast.");
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "wand");
+            foreach (Vector2Int cell in aoeCells)
+                NotifyFireDamageAtPosition(cell, _pendingSpell.Name);
         }
-        else if (!isQuickened)
+
+        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "generic-area-loop");
+
+        // Build the combat log header
+        var logBuilder = new System.Text.StringBuilder();
+        string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
+                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
+        logBuilder.AppendLine($"═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
+        logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
+        if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
+            logBuilder.AppendLine($"  Metamagic: {_pendingMetamagic.GetDisplayName()}");
+        logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
+        logBuilder.AppendLine();
+
+        if (targets.Count == 0)
         {
-            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
-            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
-                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
-            if (isSpontaneousMetamagic)
-                caster.Actions.UseFullRoundAction();
-            else
-                caster.CommitStandardAction();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
+            logBuilder.AppendLine($"  No valid targets in area!");
+            logBuilder.Append($"═══════════════════════════════════");
         }
         else
         {
-            var casterSpellComp = caster.Spellcasting;
-            if (casterSpellComp != null)
-                casterSpellComp.MarkQuickenedSpellCast();
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Cost, "quickened");
-        }
-        // Test instrumentation (inert outside the scenario harness): a PC-pipeline area cast begins (no single target).
-        ScenarioHooks.SpellCast?.Invoke(caster, null, _pendingSpell);
-
-        // Get spellcasting component
-        var spellComp = caster.Spellcasting;
-        if (spellComp == null)
-        {
-            ClearSpellcastResourceSnapshot();
-            Debug.LogError("[GameManager] PerformAoESpellCast: No SpellcastingComponent!");
-            EndPendingCast();
-            ShowActionChoices();
-            return;
-        }
-
-        // Check spontaneous casting state: the cast's own source (batch 11 step 4; see PerformSpellCast)
-        CastSource castSource = CurrentCastSource;
-        bool isSpontaneous = castSource != null && castSource.Kind == CastSourceKind.SpontaneousConversion;
-        int spontaneousLevel = isSpontaneous ? castSource.ConversionLevel : -1;
-        string spontaneousSacrificedSpellId = isSpontaneous ? castSource.SacrificedSpellId : null;
-
-        if (CombatUI != null)
-            CombatUI.ClearSpontaneousCastState();
-
-        // Consume spell slot (same logic as PerformSpellCast)
-        int slotLevelToConsume = _pendingSpell.SpellLevel;
-        bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
-
-        if (hasMetamagicApplied)
-        {
-            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
-        }
-
-        if (!ResolveGrappledOrPinnedCastingConcentration(
-                caster,
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                isSpontaneous,
-                spontaneousLevel,
-                spontaneousSacrificedSpellId))
-        {
-            HandleConcentrationOnCasting(caster, _pendingSpell);
-            UpdateAllStatsUI();
-            Grid.ClearAllHighlights();
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-
-            ClearSpellcastResourceSnapshot();
-            StartCoroutine(AfterAttackDelay(caster, 1.0f));
-            return;
-        }
-        if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
-        {
-            bool consumedOnFailure = ConsumePendingSpellSlot(
-                spellComp,
-                _pendingSpell,
-                _pendingMetamagic,
-                hasMetamagicApplied,
-                slotLevelToConsume,
-                isSpontaneous,
-                spontaneousLevel,
-                spontaneousSacrificedSpellId);
-
-            if (!consumedOnFailure)
+            // Resolve spell for each target
+            int targetIndex = 0;
+            foreach (CharacterController target in targets)
             {
-                ClearSpellcastResourceSnapshot();
-                Debug.LogError($"[GameManager] AoE ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
-                EndPendingCast();
-                ShowActionChoices();
-                return;
-            }
+                targetIndex++;
+                logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
-            HandleConcentrationOnCasting(caster, _pendingSpell);
-            LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
-            UpdateAllStatsUI();
-            Grid.ClearAllHighlights();
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-
-            ClearSpellcastResourceSnapshot();
-            StartCoroutine(AfterAttackDelay(caster, 1.0f));
-            return;
-        }
-
-        bool consumed = ConsumePendingSpellSlot(
-            spellComp,
-            _pendingSpell,
-            _pendingMetamagic,
-            hasMetamagicApplied,
-            slotLevelToConsume,
-            isSpontaneous,
-            spontaneousLevel,
-            spontaneousSacrificedSpellId);
-
-        if (!consumed)
-        {
-            ClearSpellcastResourceSnapshot();
-            Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
-            EndPendingCast();
-            ShowActionChoices();
-            return;
-        }
-
-        // Check if caster is concentrating on another spell — casting requires a concentration check
-        HandleConcentrationOnCasting(caster, _pendingSpell);
-
-        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
-        {
-            if (!canProceed)
-            {
-                if (_spellcastProvocationCancelled)
+                // ── Globe of Invulnerability (lesser or full) — block AoE spell effects of its levels ──
+                if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect aoeBlockingGlobe))
                 {
-                    HandleSpellcastCancelledFromAoOPrompt(caster);
-                    return;
+                    logBuilder.AppendLine($"  🛡 Blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(aoeBlockingGlobe)} (spell level {_pendingSpell.SpellLevel})!");
+                    if (ScenarioHooks.CastStage != null)
+                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Globe, "blocked " + target.Stats.CharacterName);
+                    continue;
                 }
 
-                ClearSpellcastResourceSnapshot();
-                HandleInterruptedSpellCast(caster, 1.0f);
-                return;
-            }
-
-            ClearSpellcastResourceSnapshot();
-
-            // ── COUNTERSPELL CHECK (AoE spell cast path) ──
-            {
-                CounterspellResult aoeCounterspellResult = TryResolveCounterspell(caster, _pendingSpell);
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Counterspell,
-                    aoeCounterspellResult == null ? "none" : aoeCounterspellResult.Success ? "countered" : "not-countered");
-                if (aoeCounterspellResult != null && aoeCounterspellResult.Success)
+                // For buff/debuff/control/illusion/wall spells, apply tracked effects. The area pipeline routes only
+                // the tracked effect types (SpellEffectRouting.IsTrackedEffectType), not the single-target extras.
+                if (SpellEffectRouting.IsTrackedEffectType(_pendingSpell.EffectType))
                 {
-                    Debug.Log($"[Counterspell] AoE spell {_pendingSpell.Name} was countered! No effect.");
-                    UpdateAllStatsUI();
-                    Grid.ClearAllHighlights();
-
-                    _pendingSpell = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingMetamagic = null;
-                    _pendingAnimateRopeItem = null;
-                    _pendingResistEnergyType = null;
-                    _pendingFireShieldIsWarm = null;
-                    _pendingProtectionFromEnergyType = null;
-                    _pendingDisguiseSelfRace = null;
-                    ResetPendingGreaseCastMode();
-
-                    StartCoroutine(AfterAttackDelay(caster, 1.0f));
-                    return;
-                }
-            }
-
-            BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, null, targets);
-
-            if (TryHandleConcealmentAreaSpellCast(caster, _pendingSpell, aoeCells, targets, out string concealmentAreaLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryHandleConcealmentAreaSpellCast));
-                _lastCombatLog = concealmentAreaLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Consecrate / Desecrate area effects (GameManager_HolyAreas.cs) ──
-            if (TryResolveConsecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string consecrateLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveConsecrateAreaEffect));
-                _lastCombatLog = consecrateLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            if (TryResolveDesecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string desecrateLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveDesecrateAreaEffect));
-                _lastCombatLog = desecrateLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Lightning Bolt & Fireball — scalable AoE damage (1d6/CL, max 10d6)
-            if (TryResolveScaledAoEDamageSpell(caster, _pendingSpell, targets, aoeCells, out string scaledDamagLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveScaledAoEDamageSpell));
-                _lastCombatLog = scaledDamagLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                // Check for victory/defeat
-                if (EvaluateCombatEnd("ResolveScaledAoEDamageSpell"))
-                {
-                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveScaledAoEDamageSpell");
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    return;
-                }
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Daylight — persistent light area effect that counters/dispels darkness
-            if (TryResolveDaylightSpell(caster, _pendingSpell, targets, aoeCells, out string daylightLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveDaylightSpell));
-                _lastCombatLog = daylightLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Wind Wall — persistent line area effect that deflects ranged attacks and disperses fog/smoke
-            if (TryResolveWindWallSpell(caster, _pendingSpell, targets, aoeCells, out string windWallLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWindWallSpell));
-                _lastCombatLog = windWallLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Halt Undead — paralyzes up to 3 undead within 30 ft of each other (Will save for intelligent only)
-            if (TryResolveHaltUndeadSpell(caster, _pendingSpell, targets, aoeCells, out string haltUndeadLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveHaltUndeadSpell));
-                _lastCombatLog = haltUndeadLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                // Check for victory/defeat (paralyzed enemies don't typically end combat, but check anyway)
-                if (EvaluateCombatEnd("ResolveHaltUndeadSpell"))
-                {
-                    CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveHaltUndeadSpell");
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    return;
-                }
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            if (string.Equals(_pendingSpell.SpellId, SpellNames.HYPNOTISM, StringComparison.Ordinal))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveHypnotismSpell));
-                ResolveHypnotismSpell(caster, targets, aoeCells);
-                return;
-            }
-
-            if (string.Equals(_pendingSpell.SpellId, SpellNames.SLEEP, StringComparison.Ordinal))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveSleepSpell));
-                ResolveSleepSpell(caster, targets, aoeCells);
-                return;
-            }
-
-            if (string.Equals(_pendingSpell.SpellId, SpellNames.DEEP_SLUMBER, StringComparison.Ordinal))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveDeepSlumberSpell));
-                ResolveDeepSlumberSpell(caster, targets, aoeCells);
-                return;
-            }
-
-            if (string.Equals(_pendingSpell.SpellId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveColorSpraySpell));
-                ResolveColorSpraySpell(caster, targets, aoeCells);
-                return;
-            }
-
-            if (string.Equals(_pendingSpell.SpellId, SpellNames.FEAR, StringComparison.Ordinal))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(ResolveFearSpell));
-                ResolveFearSpell(caster, targets, aoeCells);
-                return;
-            }
-
-            if (TryResolveGlitterdustSpell(caster, _pendingSpell, targets, aoeCells, out string glitterdustLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveGlitterdustSpell));
-                _lastCombatLog = glitterdustLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            if (TryResolveWebSpell(caster, _pendingSpell, targets, aoeCells, out string webLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWebSpell));
-                _lastCombatLog = webLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Rainbow Pattern — AoE fascination (mind-affecting, up to 24 HD)
-            if (TryResolveRainbowPatternAoE(caster, _pendingSpell, targets, aoeCells, out string rainbowLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveRainbowPatternAoE));
-                _lastCombatLog = rainbowLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                // Begin concentration tracking for Rainbow Pattern
-                if (_pendingSpell.DurationType == DurationType.Concentration)
-                {
-                    BeginConcentrationTracking(caster, null, _pendingSpell);
-                }
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Ice Storm (AoE, no save, 3d6 bludgeoning + 2d6 cold) ──
-            if (TryResolveIceStormAoE(caster, _pendingSpell, targets, aoeCells, out string iceStormLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveIceStormAoE));
-                _lastCombatLog = iceStormLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                if (EvaluateCombatEnd("IceStorm")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "IceStorm"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Shout (Cone AoE, 5d6 sonic, Fort half, deafen on fail) ──
-            if (TryResolveShoutAoE(caster, _pendingSpell, targets, aoeCells, out string shoutLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveShoutAoE));
-                _lastCombatLog = shoutLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                if (EvaluateCombatEnd("Shout")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Shout"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Wall of Fire (line wall, persistent area effect) ──
-            if (TryResolveWallOfFireSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfFireLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWallOfFireSpell));
-                _lastCombatLog = wallOfFireLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Wall of Ice (line wall, persistent area effect) ──
-            // Check for adjacent creatures that can attempt Reflex save to disrupt
-            if (IsWallOfIceSpell(_pendingSpell))
-            {
-                // Capture local copies for the callback closure
-                SpellData wallSpell = _pendingSpell;
-                bool wallIsSpontaneous = isSpontaneous;
-                string wallSpontaneousSacrificedSpellId = spontaneousSacrificedSpellId;
-                bool wallIsQuickened = isQuickened;
-                List<CharacterController> wallTargets = targets;
-                HashSet<Vector2Int> wallAoeCells = aoeCells;
-
-                CastStageTrace.Mark(caster, wallSpell, CastStageTrace.Handler, nameof(ResolveWallOfIceWithReflexSaves));
-                ResolveWallOfIceWithReflexSaves(caster, wallSpell, wallTargets, wallAoeCells, wallLog =>
-                {
-                    _lastCombatLog = wallLog;
-
-                    if (wallIsSpontaneous)
+                    var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+                    if (ScenarioHooks.CastStage != null)
+                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Buff, (appliedEffect != null ? "applied " : "no-effect ") + target.Stats.CharacterName);
+
+                    // Track concentration for the first target of a concentration AoE effect
+                    if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
                     {
-                        string sacrificeInfo = !string.IsNullOrEmpty(wallSpontaneousSacrificedSpellId)
-                            ? $"Sacrificed: {wallSpontaneousSacrificedSpellId}"
-                            : "Converted prepared spell";
-                        _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {wallSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                        BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
                     }
 
-                    if (wallIsQuickened)
-                        _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {wallSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                    CombatUI.ShowCombatLog(_lastCombatLog);
-                    UpdateAllStatsUI();
-                    Grid.ClearAllHighlights();
-
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                });
-                return;
-            }
-
-            // ── Wall of Force (invisible force wall, persistent area effect) ──
-            // No saves, no SR — just placement. Immune to all damage.
-            if (IsWallOfForceSpell(_pendingSpell))
-            {
-                // Capture local copies for the callback closure
-                SpellData forceSpell = _pendingSpell;
-                bool forceIsSpontaneous = isSpontaneous;
-                string forceSpontaneousSacrificedSpellId = spontaneousSacrificedSpellId;
-                bool forceIsQuickened = isQuickened;
-                List<CharacterController> forceTargets = targets;
-                HashSet<Vector2Int> forceAoeCells = aoeCells;
-
-                CastStageTrace.Mark(caster, forceSpell, CastStageTrace.Handler, nameof(ResolveWallOfForce));
-                ResolveWallOfForce(caster, forceSpell, forceTargets, forceAoeCells, forceLog =>
+                    string effectLabel = (_pendingSpell.EffectType == SpellEffectType.Debuff || _pendingSpell.EffectType == SpellEffectType.Control)
+                        ? "DEBUFF APPLIED" : "BUFF APPLIED";
+                    logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
+                    Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
+                }
+                // For damage spells, resolve with save and damage
+                else if (_pendingSpell.EffectType == SpellEffectType.Damage)
                 {
-                    _lastCombatLog = forceLog;
+                    // VOLUNTARY SAVE FAILURE: AoE damage spells also respect voluntary save failure for allies.
+                    bool aoeForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
+                    if (ScenarioHooks.CastStage != null)
+                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
-                    if (forceIsSpontaneous)
+                    if (result.RequiredSave)
                     {
-                        string sacrificeInfo = !string.IsNullOrEmpty(forceSpontaneousSacrificedSpellId)
-                            ? $"Sacrificed: {forceSpontaneousSacrificedSpellId}"
-                            : "Converted prepared spell";
-                        _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {forceSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                        string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
+                        logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
                     }
 
-                    if (forceIsQuickened)
-                        _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {forceSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                    CombatUI.ShowCombatLog(_lastCombatLog);
-                    UpdateAllStatsUI();
-                    Grid.ClearAllHighlights();
-
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                });
-                return;
-            }
-
-            if (TryResolveFlamingSphereAoECast(caster, _pendingSpell, aoeCells, out string flamingSphereLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveFlamingSphereAoECast));
-                _lastCombatLog = flamingSphereLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Entangle (persistent entangling area effect) ──
-            if (TryResolveEntangleSpell(caster, _pendingSpell, targets, aoeCells, out string entangleLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveEntangleSpell));
-                _lastCombatLog = entangleLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Soften Earth and Stone (instantaneous difficult terrain) ──
-            if (TryResolveSoftenEarthSpell(caster, _pendingSpell, targets, aoeCells, out string softenEarthLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSoftenEarthSpell));
-                _lastCombatLog = softenEarthLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Spike Stones (persistent movement-damage area) ──
-            if (TryResolveSpikeStoneSpell(caster, _pendingSpell, targets, aoeCells, out string spikeStonesLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSpikeStoneSpell));
-                _lastCombatLog = spikeStonesLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Plant Growth (instantaneous overgrowth) ──
-            if (TryResolvePlantGrowthSpell(caster, _pendingSpell, targets, aoeCells, out string plantGrowthLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolvePlantGrowthSpell));
-                _lastCombatLog = plantGrowthLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Calm Animals (AoE HD-budget animal calming) ──
-            if (TryResolveCalmAnimalsSpell(caster, _pendingSpell, targets, aoeCells, out string calmAnimalsLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCalmAnimalsSpell));
-                _lastCombatLog = calmAnimalsLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Calm Emotions (AoE morale/emotion suppression) ──
-            if (TryResolveCalmEmotionsSpell(caster, _pendingSpell, targets, aoeCells, out string calmEmotionsLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCalmEmotionsSpell));
-                _lastCombatLog = calmEmotionsLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Phase 1 Staff AoE Spells ──
-
-            // Cone of Cold — 60-ft cone, 1d6/CL cold (max 15d6), Reflex half
-            if (TryResolveConeOfColdSpell(caster, _pendingSpell, targets, aoeCells, out string coneOfColdLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveConeOfColdSpell));
-                _lastCombatLog = coneOfColdLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("ConeOfCold")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ConeOfCold"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Chain Lightning — 1d6/CL (max 20d6) primary, half secondary
-            if (TryResolveChainLightningSpell(caster, _pendingSpell, targets, aoeCells, out string chainLightningLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveChainLightningSpell));
-                _lastCombatLog = chainLightningLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("ChainLightning")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ChainLightning"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Circle of Death — [Death] 40-ft burst, kills 1d4 HD/CL, Fort negates
-            if (TryResolveCircleOfDeathSpell(caster, _pendingSpell, targets, aoeCells, out string circleOfDeathLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCircleOfDeathSpell));
-                _lastCombatLog = circleOfDeathLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("CircleOfDeath")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "CircleOfDeath"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Crushing Despair — 30-ft cone, -2 attacks/saves/checks, Will negates
-            if (TryResolveCrushingDespairSpell(caster, _pendingSpell, targets, aoeCells, out string crushingDespairLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveCrushingDespairSpell));
-                _lastCombatLog = crushingDespairLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Mind Fog — 20-ft radius, -10 Wis checks & Will saves, Will negates
-            if (TryResolveMindFogSpell(caster, _pendingSpell, targets, aoeCells, out string mindFogLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveMindFogSpell));
-                _lastCombatLog = mindFogLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Mass Suggestion — multi-target charm, Will negates
-            if (TryResolveMassSuggestionSpell(caster, _pendingSpell, targets, aoeCells, out string massSuggestionLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveMassSuggestionSpell));
-                _lastCombatLog = massSuggestionLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Insect Plague — swarm damage + nausea
-            if (TryResolveInsectPlagueSpell(caster, _pendingSpell, targets, aoeCells, out string insectPlagueLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveInsectPlagueSpell));
-                _lastCombatLog = insectPlagueLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("InsectPlague")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "InsectPlague"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Wall of Thorns — wall dealing 25 - AC damage to creatures passing through
-            if (TryResolveWallOfThornsSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfThornsLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveWallOfThornsSpell));
-                _lastCombatLog = wallOfThornsLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("WallOfThorns")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "WallOfThorns"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Persistent Image — illusion creation (no combat effect)
-            if (TryResolvePersistentImageSpell(caster, _pendingSpell, targets, aoeCells, out string persistentImageLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolvePersistentImageSpell));
-                _lastCombatLog = persistentImageLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Phase 2 AoE Spells ──
-
-            // Sunburst — 80-ft burst, 6d6 damage + blindness
-            if (TryResolveSunburstSpell(caster, _pendingSpell, targets, aoeCells, out string sunburstLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveSunburstSpell));
-                _lastCombatLog = sunburstLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("Sunburst")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Sunburst"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Earthquake — 80-ft spread, knocks prone + debris damage
-            if (TryResolveEarthquakeSpell(caster, _pendingSpell, targets, aoeCells, out string earthquakeLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveEarthquakeSpell));
-                _lastCombatLog = earthquakeLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                if (EvaluateCombatEnd("Earthquake")) { CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "Earthquake"); _pendingSpell = null; _pendingMetamagic = null; return; }
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // Shield of Law — AoE buff, +4 deflection AC + +4 saves
-            if (TryResolveShieldOfLawSpell(caster, _pendingSpell, targets, aoeCells, out string shieldOfLawLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveShieldOfLawSpell));
-                _lastCombatLog = shieldOfLawLog;
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-                _pendingSpell = null; _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            // ── Evard's Black Tentacles (persistent grappling area effect) ──
-            if (TryResolveBlackTentaclesAoECast(caster, _pendingSpell, aoeCells, out string blackTentaclesLog))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, nameof(TryResolveBlackTentaclesAoECast));
-                _lastCombatLog = blackTentaclesLog;
-
-                if (isSpontaneous)
-                {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
-
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
-                return;
-            }
-
-            if (aoeCells != null
-                && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (Vector2Int cell in aoeCells)
-                    NotifyFireDamageAtPosition(cell, _pendingSpell.Name);
-            }
-
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "generic-area-loop");
-
-            // Build the combat log header
-            var logBuilder = new System.Text.StringBuilder();
-            string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
-                              _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
-            logBuilder.AppendLine($"═══════════════════════════════════");
-            logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
-            logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
-            if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
-                logBuilder.AppendLine($"  Metamagic: {_pendingMetamagic.GetDisplayName()}");
-            logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
-            logBuilder.AppendLine();
-
-            if (targets.Count == 0)
-            {
-                logBuilder.AppendLine($"  No valid targets in area!");
-                logBuilder.Append($"═══════════════════════════════════");
-            }
-            else
-            {
-                // Resolve spell for each target
-                int targetIndex = 0;
-                foreach (CharacterController target in targets)
-                {
-                    targetIndex++;
-                    logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
-
-                    // ── Globe of Invulnerability (lesser or full) — block AoE spell effects of its levels ──
-                    if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect aoeBlockingGlobe))
+                    if (result.DamageDealt > 0)
                     {
-                        logBuilder.AppendLine($"  🛡 Blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(aoeBlockingGlobe)} (spell level {_pendingSpell.SpellLevel})!");
-                        if (ScenarioHooks.CastStage != null)
-                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Globe, "blocked " + target.Stats.CharacterName);
-                        continue;
-                    }
-
-                    // For buff/debuff/control/illusion/wall spells, apply tracked effects. The area pipeline routes only
-                    // the tracked effect types (SpellEffectRouting.IsTrackedEffectType), not the single-target extras.
-                    if (SpellEffectRouting.IsTrackedEffectType(_pendingSpell.EffectType))
-                    {
-                        var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
-                        if (ScenarioHooks.CastStage != null)
-                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Buff, (appliedEffect != null ? "applied " : "no-effect ") + target.Stats.CharacterName);
-
-                        // Track concentration for the first target of a concentration AoE effect
-                        if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
-                        {
-                            BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
-                        }
-
-                        string effectLabel = (_pendingSpell.EffectType == SpellEffectType.Debuff || _pendingSpell.EffectType == SpellEffectType.Control)
-                            ? "DEBUFF APPLIED" : "BUFF APPLIED";
-                        logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
-                        Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
-                    }
-                    // For damage spells, resolve with save and damage
-                    else if (_pendingSpell.EffectType == SpellEffectType.Damage)
-                    {
-                        // VOLUNTARY SAVE FAILURE: AoE damage spells also respect voluntary save failure for allies.
-                        bool aoeForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
-                        if (ScenarioHooks.CastStage != null)
-                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
-
-                        if (result.RequiredSave)
-                        {
-                            string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
-                            logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
-                        }
-
-                        if (result.DamageDealt > 0)
-                        {
-                            if (result.DamageRolls != null && result.DamageRolls.Length > 0 && result.Spell != null)
-                                logBuilder.AppendLine($"  Damage: {result.DiceCount}d{result.DiceSides}{(result.DiceBonus > 0 ? "+" + result.DiceBonus : "")} {SpellResult.FormatDiceRolls(result.DamageRolls)} (CL {result.CasterLevel}) = {result.DamageDealt} {result.DamageType}");
-                            else
-                                logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
-                            if (result.EmpowerBonus > 0)
-                                logBuilder.AppendLine($"    Empower: +{result.EmpowerBonus} (×1.5)");
-                            if (result.Metamagic != null && result.Metamagic.Has(MetamagicFeatId.MaximizeSpell))
-                                logBuilder.AppendLine($"    Maximized (all dice set to max)");
-                            logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
-
-                            // Check concentration for AoE spell damage
-                            CheckConcentrationOnDamage(target, result.DamageDealt);
-                        }
-
-                        if (result.TargetKilled)
-                        {
-                            target.OnDeath();
-                            HandleSummonDeathCleanup(target);
-                            logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                        }
-                    }
-                    // For healing spells
-                    else if (_pendingSpell.EffectType == SpellEffectType.Healing)
-                    {
-                        // VOLUNTARY SAVE FAILURE: AoE healing spells also respect voluntary save failure for allies.
-                        bool aoeHealForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
-                        if (ScenarioHooks.CastStage != null)
-                            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
-
-                        logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
+                        if (result.DamageRolls != null && result.DamageRolls.Length > 0 && result.Spell != null)
+                            logBuilder.AppendLine($"  Damage: {result.DiceCount}d{result.DiceSides}{(result.DiceBonus > 0 ? "+" + result.DiceBonus : "")} {SpellResult.FormatDiceRolls(result.DamageRolls)} (CL {result.CasterLevel}) = {result.DamageDealt} {result.DamageType}");
+                        else
+                            logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
                         if (result.EmpowerBonus > 0)
                             logBuilder.AppendLine($"    Empower: +{result.EmpowerBonus} (×1.5)");
                         if (result.Metamagic != null && result.Metamagic.Has(MetamagicFeatId.MaximizeSpell))
                             logBuilder.AppendLine($"    Maximized (all dice set to max)");
                         logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+
+                        // Check concentration for AoE spell damage
+                        CheckConcentrationOnDamage(target, result.DamageDealt);
                     }
 
-                    logBuilder.AppendLine();
+                    if (result.TargetKilled)
+                    {
+                        target.OnDeath();
+                        HandleSummonDeathCleanup(target);
+                        logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                    }
+                }
+                // For healing spells
+                else if (_pendingSpell.EffectType == SpellEffectType.Healing)
+                {
+                    // VOLUNTARY SAVE FAILURE: AoE healing spells also respect voluntary save failure for allies.
+                    bool aoeHealForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
+                    if (ScenarioHooks.CastStage != null)
+                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
+
+                    logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
+                    if (result.EmpowerBonus > 0)
+                        logBuilder.AppendLine($"    Empower: +{result.EmpowerBonus} (×1.5)");
+                    if (result.Metamagic != null && result.Metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                        logBuilder.AppendLine($"    Maximized (all dice set to max)");
+                    logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
                 }
 
-                logBuilder.Append($"═══════════════════════════════════");
+                logBuilder.AppendLine();
             }
 
-            _lastCombatLog = logBuilder.ToString();
+            logBuilder.Append($"═══════════════════════════════════");
+        }
 
-            if (isSpontaneous)
-            {
-                string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                    ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                    : "Converted prepared spell";
-                _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-            }
-
-            if (isQuickened)
-            {
-                _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-            }
-
-            if (GameManager.LogAttacksToConsole)
-                Debug.Log("[AoE Spell] " + _lastCombatLog);
-
-            CombatUI.ShowCombatLog(_lastCombatLog);
-            UpdateAllStatsUI();
-
-            Grid.ClearAllHighlights();
-
-            // Check for victory/defeat
-            if (EvaluateCombatEnd("ResolveAOESpell"))
-            {
-                CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveAOESpell");
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                return;
-            }
-
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-
-            StartCoroutine(AfterAttackDelay(caster, 1.5f));
-        });
+        return logBuilder.ToString();
     }
 
-    private void ResolveHypnotismSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    /// <summary>
+    /// Resolve Hypnotism (PHB p.242) over the area's creatures.
+    /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
+    /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
+    /// </summary>
+    private string ResolveHypnotismSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
         if (caster == null || caster.Stats == null || _pendingSpell == null)
-            return;
+            return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
@@ -4259,22 +3121,8 @@ public partial class GameManager
         logBuilder.AppendLine($"  Result: {affectedCount} target(s) fascinated. Remaining HD pool: {remainingPool}.");
         logBuilder.Append("═══════════════════════════════════");
 
-        _lastCombatLog = logBuilder.ToString();
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (EvaluateCombatEnd("ResolveHypnotismSpell"))
-        {
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveHypnotismSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        // The cast core shows the log, refreshes the UI, runs the combat-end check and paces the turn (FinishAreaCast).
+        return logBuilder.ToString();
     }
 
     /// <summary>
@@ -4286,10 +3134,15 @@ public partial class GameManager
         return SpellUtilities.GetCastingAbilityModifier(caster, spell);
     }
 
-    private void ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    /// <summary>
+    /// Resolve Sleep (PHB p.280) over the area's creatures.
+    /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
+    /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
+    /// </summary>
+    private string ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
         if (caster == null || caster.Stats == null || _pendingSpell == null)
-            return;
+            return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
@@ -4375,33 +3228,21 @@ public partial class GameManager
         logBuilder.AppendLine($"  Result: {affectedCount} target(s) asleep. Remaining HD pool: {remainingPool}.");
         logBuilder.Append("═══════════════════════════════════");
 
-        _lastCombatLog = logBuilder.ToString();
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (EvaluateCombatEnd("ResolveSleepSpell"))
-        {
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveSleepSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        // The cast core shows the log, refreshes the UI, runs the combat-end check and paces the turn (FinishAreaCast).
+        return logBuilder.ToString();
     }
 
     /// <summary>
     /// Resolve Deep Slumber spell (PHB p.217).
     /// As Sleep, but affects up to 10 HD of creatures (no per-creature HD cap).
     /// Lowest HD creatures affected first; Will negates; SR applies.
+    /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
+    /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private void ResolveDeepSlumberSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveDeepSlumberSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
         if (caster == null || caster.Stats == null || _pendingSpell == null)
-            return;
+            return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
@@ -4487,28 +3328,19 @@ public partial class GameManager
         logBuilder.AppendLine($"  Result: {affectedCount} target(s) in deep slumber. Remaining HD pool: {remainingPool}.");
         logBuilder.Append("═══════════════════════════════════");
 
-        _lastCombatLog = logBuilder.ToString();
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (EvaluateCombatEnd("ResolveDeepSlumberSpell"))
-        {
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveDeepSlumberSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        // The cast core shows the log, refreshes the UI, runs the combat-end check and paces the turn (FinishAreaCast).
+        return logBuilder.ToString();
     }
 
-    private void ResolveColorSpraySpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    /// <summary>
+    /// Resolve Color Spray (PHB p.210) over the cone's creatures.
+    /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
+    /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
+    /// </summary>
+    private string ResolveColorSpraySpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
         if (caster == null || caster.Stats == null || _pendingSpell == null)
-            return;
+            return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
@@ -4573,22 +3405,8 @@ public partial class GameManager
         logBuilder.AppendLine($"  Result: {affectedCount} target(s) affected.");
         logBuilder.Append("═══════════════════════════════════");
 
-        _lastCombatLog = logBuilder.ToString();
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (EvaluateCombatEnd("ResolveColorSpraySpell"))
-        {
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveColorSpraySpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        // The cast core shows the log, refreshes the UI, runs the combat-end check and paces the turn (FinishAreaCast).
+        return logBuilder.ToString();
     }
 
     private ColorSprayEffectData BuildColorSprayEffectData(CharacterController caster, int targetHd)
@@ -5249,11 +4067,13 @@ public partial class GameManager
     /// All living creatures in the 30-ft cone: Will partial.
     /// Failed save → Panicked for 1 round/level.
     /// Successful save → Shaken for 1 round.
+    /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
+    /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private void ResolveFearSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveFearSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
         if (caster == null || caster.Stats == null || _pendingSpell == null)
-            return;
+            return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
@@ -5390,21 +4210,8 @@ public partial class GameManager
         logBuilder.AppendLine($"Result: {panickedCount} panicked, {shakenCount} shaken, {immuneCount} immune/resisted");
         logBuilder.AppendLine("═══════════════════════════════════");
 
-        CombatUI?.ShowCombatLog(logBuilder.ToString());
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (EvaluateCombatEnd("ResolveFearSpell"))
-        {
-            CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.CombatEnd, "ResolveFearSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        // The cast core shows the log, refreshes the UI, runs the combat-end check and paces the turn (FinishAreaCast).
+        return logBuilder.ToString();
     }
 
     private static bool IsRayOfEnfeeblementSpell(SpellData spell)

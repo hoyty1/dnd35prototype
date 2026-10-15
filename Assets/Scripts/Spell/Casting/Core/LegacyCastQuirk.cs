@@ -4,14 +4,15 @@ using System;
 /// Behaviours of today's cast paths that the staged cast core keeps on purpose until a later batch 11 step fixes them
 /// (docs/designs/cast_core_batch11.md, "Migration rule"). Each bit names one known deviation and cites its issue. Request
 /// builders set the bits (<see cref="SpellCastRequest.ForUi"/> and <see cref="SpellCastRequest.ForUiPrebuilt"/> set
-/// <see cref="LegacyCastQuirkSets.UiPath"/>, the PC single-target path as it is today, and
+/// <see cref="LegacyCastQuirkSets.UiPath"/>, the PC single-target path as it is today,
+/// <see cref="SpellCastRequest.ForUiArea"/> sets <see cref="LegacyCastQuirkSets.UiAreaPath"/>, the PC area path, and
 /// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one); only the cast core's stage
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
 /// </summary>
 [Flags]
-public enum LegacyCastQuirk
+public enum LegacyCastQuirk : long
 {
     None = 0,
 
@@ -212,9 +213,57 @@ public enum LegacyCastQuirk
     /// (TryBeginMirrorImageSwapSelection). Batch 11 step 26 (raw-mirror-image, decision D7) removes the swap and the bit.
     /// </summary>
     NpcNoMirrorImageSwap = 1 << 27,
+
+    // The PC area path's own behaviours (batch 11 step 9): set only by SpellCastRequest.ForUiArea
+    // (LegacyCastQuirkSets.UiAreaPath). Each names the issue of what an area cast skips or does differently today.
+
+    /// <summary>
+    /// An area cast makes no entangled casting check (SPL-006; the check itself is SPL-145): the Distraction stage skips
+    /// it. Batch 11 step 13 (raw-distraction-failure-stages) gives every cast one entangled rule and removes the bit.
+    /// </summary>
+    AreaSkipsEntangled = 1L << 28,
+
+    /// <summary>
+    /// A blinking caster's area spell has no 20% spell failure (PHB p.206; SPL-006): the Failure stage skips the roll.
+    /// Batch 11 step 13 removes the bit.
+    /// </summary>
+    AreaSkipsBlink = 1L << 29,
+
+    /// <summary>
+    /// An area cast is never tested against a Ring of Counterspells (DMG p.230; SPL-006): the RingCounterspell stage is
+    /// skipped (an area request has no single target for it to test). The ring counters its stored spell when that spell
+    /// is cast on the wearer; RAW does not say whether an area spell whose area takes in the wearer counts, nor whether the
+    /// ring then stops the whole spell or only its effect on the wearer. So this bit is not yet a known deviation: batch 11
+    /// step 15 (raw-counterspell-order-parity) must decide that reading under the owner's delegation and record it in
+    /// docs/systems/RULES_COVERAGE.md 4.1 before it removes the bit.
+    /// </summary>
+    AreaSkipsRing = 1L << 30,
+
+    /// <summary>
+    /// An area cast makes no spell component pouch test (PHB p.174 and p.130; SPL-006, SPL-114): the Legality stage's
+    /// component test passes it. Batch 11 step 17 (raw-components-all-casters, decision D3) removes the bit.
+    /// </summary>
+    AreaSkipsPouch = 1L << 31,
+
+    /// <summary>
+    /// Only some area handlers end their cast with a combat-end check (EvaluateCombatEnd): the generic loop, the scaled
+    /// damage spells (Fireball, Lightning Bolt, Call Lightning), Halt Undead, Hypnotism, Sleep, Deep Slumber, Color
+    /// Spray, Fear, Ice Storm, Shout, Cone of Cold, Chain Lightning, Circle of Death, Insect Plague, Wall of Thorns,
+    /// Sunburst and Earthquake (AreaHandlerEntry.CombatEndContext); the other handlers end without one, so an end they
+    /// cause is caught at the next ShowActionChoices or turn boundary (CORE-039). Without the bit FinishAreaCast checks
+    /// after every area cast. Batch 11 step 11 (raw-failed-cast-gating) removes the bit with CORE-039.
+    /// </summary>
+    AreaCombatEndOnlyInSomeHandlers = 1L << 32,
+
+    /// <summary>
+    /// The Hypnotism, Sleep, Deep Slumber, Color Spray and Fear handlers log no quickened or spontaneous line
+    /// (AreaHandlerEntry.OmitsLogPrefix; SPL-161): FinishAreaCast leaves the cast's log prefix off their log. Without the
+    /// bit every area log carries it. Batch 11 step 11 removes the bit.
+    /// </summary>
+    AreaLogPrefixOnlyInSomeHandlers = 1L << 33,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7 and 8).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8 and 9).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
@@ -257,4 +306,28 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;
+
+    /// <summary>
+    /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
+    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the cost and provocation bits, the
+    /// casting-while-concentrating step before the provocation, the scroll's spell failure, and the generic loop's
+    /// forgone saves and SpellCaster deafness roll), without the single-target ones (the combat-end check on a target's
+    /// death, the globe after the cast, the entangled formula, the targeting highlight's range, the Sound Burst and
+    /// Animate Rope gates, the held-charge delivery), plus the area path's own bits. Tests.Magic.CastCoreStageOrderTests
+    /// checks the list.
+    /// </summary>
+    public const LegacyCastQuirk UiAreaPath =
+        (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
+                    | LegacyCastQuirk.GlobeAfterCast
+                    | LegacyCastQuirk.EntangledUsesCasterLevelFormula
+                    | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
+                    | LegacyCastQuirk.SoundBurstStunIgnoresSuccess
+                    | LegacyCastQuirk.AnimateRopeIgnoresSuccess
+                    | LegacyCastQuirk.HeldChargeDeliveryIsFree))
+        | LegacyCastQuirk.AreaSkipsEntangled
+        | LegacyCastQuirk.AreaSkipsBlink
+        | LegacyCastQuirk.AreaSkipsRing
+        | LegacyCastQuirk.AreaSkipsPouch
+        | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
+        | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
 }

@@ -10,7 +10,7 @@ using DND35e.Identifiers;
 /// <c>ApplySpellBuff</c> has a dedicated branch for it: those are listed here, so both pipelines route them the same
 /// way (docs/systems/PC_NPC_PARITY.md). A listed Healing or Damage spell sets <c>HealingResolvedByHandler</c> or
 /// <c>DamageResolvedByHandler</c>, so <c>SpellCaster.Cast</c> does not heal or damage the target a second time.
-/// The PC area pipeline (<c>PerformAoESpellCast</c>) routes only the tracked effect types
+/// The area casts' generic per-target loop (<c>ResolveGenericAreaSpell</c>, the area handler registry's fallback) routes only the tracked effect types
 /// (<see cref="IsTrackedEffectType"/>) to ApplySpellBuff for each target, not the single-target extras listed here.
 /// </summary>
 public static class SpellEffectRouting

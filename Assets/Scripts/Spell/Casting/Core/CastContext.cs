@@ -75,6 +75,15 @@ public sealed class CastContext
     internal string ResultLog;
     internal bool ResultLogShown;
 
+    /// <summary>
+    /// The console label FlushCastLog puts before the result log when GameManager.LogAttacksToConsole is on, or null for
+    /// none (an area handler's log; the generic area loop's is "[AoE Spell] ").
+    /// </summary>
+    internal string ConsoleLogLabel = "[Spell] ";
+
+    /// <summary>The area handler resolving an area cast (GameManager.SpellHandlerRegistry.cs, batch 11 step 9), once chosen.</summary>
+    internal AreaHandlerEntry AreaHandler;
+
     public CastContext(SpellCastRequest request)
     {
         Request = request ?? new SpellCastRequest();
@@ -104,5 +113,7 @@ public sealed class CastContext
         CombatEnded = false;
         ResultLog = null;
         ResultLogShown = false;
+        ConsoleLogLabel = "[Spell] ";
+        AreaHandler = null;
     }
 }

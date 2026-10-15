@@ -77,7 +77,7 @@ public partial class GameManager
     /// caps to 3 closest to the caster, performs SR check, and (for intelligent
     /// undead only) a Will save. On failure, applies Paralyzed + Helpless for
     /// 1 round per caster level.
-    /// Called from PerformAoESpellCast when the pending spell matches.
+    /// Registered in the area handler registry (GameManager.SpellHandlerRegistry.cs, BuildAreaHandlers).
     /// </summary>
     private bool TryResolveHaltUndeadSpell(
         CharacterController caster,

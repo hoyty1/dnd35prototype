@@ -44,16 +44,16 @@ public static class ScenarioHooks
     /// A cast begins, right after its action is spent and before Concentration, spell failure, AoOs or counterspells
     /// decide whether it goes off: caster, target (null for an area, summon or Grease cast and a held charge), spell.
     /// Raised for every caster by the cast core's Cost stage (GameManager.ExecuteCast: PerformSpellCast for a PC and,
-    /// since batch 11 step 8, TryNPCPerformSpellCast for an NPC) and, since batch 11 step 3, by the other PC pipelines
-    /// at their cost point (PerformAoESpellCast, HoldPendingMeleeTouchCharge and
+    /// since batch 11 step 8, TryNPCPerformSpellCast for an NPC, since step 9 PerformAoESpellCast for a PC area cast)
+    /// and, since batch 11 step 3, by the other PC pipelines at their cost point (HoldPendingMeleeTouchCharge and
     /// TryConsumePendingSpellCast; scroll and wand casts included, the delivery of a held charge not).
     /// </summary>
     public static Action<CharacterController, CharacterController, SpellData> SpellCast;
 
     /// <summary>
     /// A stage point of a spell cast was reached (CastStageTrace.Mark): caster, spell, stage, detail (may be null).
-    /// Raised by every cast pipeline (the cast core run by PerformSpellCast and TryNPCPerformSpellCast,
-    /// PerformAoESpellCast, HoldPendingMeleeTouchCharge, TryConsumePendingSpellCast, the Grease casts,
+    /// Raised by every cast pipeline (the cast core run by PerformSpellCast, PerformAoESpellCast and
+    /// TryNPCPerformSpellCast, HoldPendingMeleeTouchCharge, TryConsumePendingSpellCast, the Grease casts,
     /// HandleConcentrationOnCasting) and by
     /// the spell effect handlers when they claim a cast. The scenario harness writes it to a side file
     /// (caststages.jsonl) that is not part of the hashed trace; handlers must not register actors or emit trace events.

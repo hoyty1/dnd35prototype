@@ -27,6 +27,8 @@ namespace Tests.Scenarios
         {
             yield return S("cast-ui-fireball", UiFireball);
             yield return S("cast-ui-cone-line", UiConeLine);
+            yield return S("cast-ui-sleep", UiSleep);
+            yield return S("cast-ui-sleep-quickened", UiSleepQuickened);
             yield return S("cast-scroll-ui", () => ItemCast(scroll: true));
             yield return S("cast-wand-ui", () => ItemCast(scroll: false));
             yield return S("cast-scroll-aoo-cancel", () => ItemAoOCancel(scroll: true));
@@ -332,6 +334,88 @@ namespace Tests.Scenarios
                 .Expect("One 3rd-level slot is spent", FactIs("spent", "L3+1"))
                 .Expect("Casting is a standard action: the move action is left (PHB p.174)", FactIs("actions", "-m-"))
                 .Expect("The PC area cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.FIREBALL, 1))
+                .Build();
+        }
+
+        // ── rules/cast-ui-sleep, rules/cast-ui-sleep-quickened (batch 11 step 9) ──────
+
+        /// <summary>A trace condition event: <paramref name="actor"/> gained (or lost) <paramref name="type"/>.</summary>
+        private static bool IsCondition(TraceEvent e, string actor, string type, bool added)
+            => e.Str("actor") == actor && Convert.ToString(e.Get("type")) == type && e.Bool("added") == added;
+
+        /// <summary>
+        /// A Ui area cast resolved by one of the area handlers that used to show its own log and pace the turn
+        /// (ResolveSleepSpell; batch 11 step 9 moved that into the cast core's FinishAreaCast). A wizard 1 (Ui) casts Sleep
+        /// (PHB p.280: 4d4 HD of creatures, those with 4 HD or less, lowest first, in a 10-ft-radius burst; Will negates)
+        /// centred on g1; g1 and g2, goblins of 1 HD, are in the burst. Every d4 is 4 (a 16 HD pool); g1 fails its Will
+        /// save and falls asleep, g2 makes it. The cast spends the 1st-level slot, logs one Sleep result, and the turn goes
+        /// on (the step settles at the action menu); the fight is not over (g2 is awake). Sleep's casting time is 1 round
+        /// (PHB p.280), a full-round action (PHB p.174), but the data stores it as a standard action and the cast core's
+        /// Cost stage never reads SpellData.ActionType, so today the move action is left (SPL-162, pinned).
+        /// </summary>
+        private static ScenarioDef UiSleep()
+        {
+            return Rules("rules/cast-ui-sleep", "A Ui Sleep: an area handler resolves it and the cast core finishes it (PHB p.280; SPL-162 pinned)")
+                .Covers("PHB p.280", "PHB p.174", "SPL-162", "batch 11 step 9")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 1)), 2, 10, Control.Ui)
+                .Npc("g1", "goblin", 8, 10, Control.Idle)
+                .Npc("g2", "goblin", 9, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SLEEP))
+                .Tweak("g1", Fails).Tweak("g2", Saves)
+                .Initiative("wizard", "g1", "g2")
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "wizard"); return true; }),
+                    Step.Cast(SpellNames.SLEEP, "g1"),
+                    Step.Assert("after", ctx =>
+                    {
+                        Fact(ctx, "asleep.g1", ctx.Get("g1").HasCondition(CombatConditionType.Asleep));
+                        Fact(ctx, "asleep.g2", ctx.Get("g2").HasCondition(CombatConditionType.Asleep));
+                        FactSlotsSpent(ctx, "spent", "wizard");
+                        Fact(ctx, "actions", Actions(ctx.Get("wizard")));
+                        return true;
+                    }))
+                .Expect("The Ui cast ran and the turn went on", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("g1 failed its Will save and sleeps, g2 made it (PHB p.280)", FactsAre(("asleep.g1", true), ("asleep.g2", false)))
+                .Expect("One 1st-level slot is spent", FactIs("spent", "L1+1"))
+                .ExpectKnown("SPL-162", "Today Sleep costs only the standard action and the move action is left; RAW its 1-round casting time is a full-round action (PHB p.280, p.174; SPL-162)",
+                    FactIs("actions", "-m-"))
+                .Expect("One Sleep result is logged", Expect.Count("log", e => (e.Str("text") ?? "").Contains("casts Sleep!"), 1, 1))
+                .Expect("The PC area cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SLEEP, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// The same handler with a quickened Sleep that ends the fight. A wizard 9 with Quicken Spell (Ui) casts a quickened
+        /// Sleep from an added 5th-level slot (PHB p.98: free action, +4 levels; SPL-041 for the slot) at g1; both goblins
+        /// fail their Will saves and fall asleep, so the hostile side is out (asleep counts as unconscious) and the cast
+        /// core's area exit (FinishAreaCast, Sleep's own combat-end check) declares the victory. Today Sleep's log has no
+        /// quickened line (SPL-161, pinned).
+        /// </summary>
+        private static ScenarioDef UiSleepQuickened()
+        {
+            var quicken = new MetamagicData();
+            quicken.Toggle(MetamagicFeatId.QuickenSpell);
+            return Rules("rules/cast-ui-sleep-quickened", "A quickened Ui Sleep puts both foes to sleep and the area exit ends the fight (SPL-161 pinned)")
+                .Covers("PHB p.280", "PHB p.98", "SPL-161", "batch 11 step 9")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Quicken Spell")), 2, 10, Control.Ui)
+                .Npc("g1", "goblin", 8, 10, Control.Idle)
+                .Npc("g2", "goblin", 9, 10, Control.Idle)
+                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.SLEEP))
+                .Tweak("g1", Fails).Tweak("g2", Fails)
+                .Initiative("wizard", "g1", "g2")
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Cast(SpellNames.SLEEP, "g1", quicken))
+                .Expect("Both goblins fall asleep (PHB p.280)", Expect.All(
+                    Expect.Count("cond", e => IsCondition(e, "g1", "Asleep", true), 1),
+                    Expect.Count("cond", e => IsCondition(e, "g2", "Asleep", true), 1)))
+                .Expect("The game declares the victory itself, from the area cast's combat-end check", Expect.Outcome(Outcome.Victory))
+                .Expect("The PC area cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SLEEP, 1))
+                .ExpectKnown("SPL-161", "Today the quickened Sleep logs no quickened line (SPL-161)",
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("casts QUICKENED Sleep"), 0, 0))
                 .Build();
         }
 

@@ -182,7 +182,7 @@ public partial class GameManager
     /// <summary>
     /// Resolves Lightning Bolt or Fireball as AoE damage spells with
     /// 1d6/CL damage (max 10d6), Reflex half, and SR.
-    /// Called from PerformAoESpellCast when the pending spell matches.
+    /// Registered in the area handler registry (GameManager.SpellHandlerRegistry.cs, BuildAreaHandlers).
     /// </summary>
     private bool TryResolveScaledAoEDamageSpell(
         CharacterController caster,
