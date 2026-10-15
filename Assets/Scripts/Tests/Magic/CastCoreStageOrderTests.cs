@@ -27,6 +27,15 @@ namespace Tests.Magic
 /// (CombatUI?.ShowCombatLog) and never calls ShowActionChoices, AfterAttackDelay, UpdateAllStatsUI or the highlights,
 /// nor reads IsControllable. The builders set LegacyCastQuirkSets.UiPath (an explicit list of today's PC-path bits),
 /// and a request lacking a bit a stage still needs raises a cast-core violation. Play mode (needs the scene GameManager); the source scan also runs in edit mode.
+///
+/// Batch 11 step 8 (cast-core-npc-single-target): the NPC path (SpellCastRequest.ForAI, GameManager.RunCastSync, the
+/// AI decider) runs the same four casts through the same stages, except where an NPC quirk bit moves or skips one
+/// (listed in <see cref="DeriveAiSequence"/>); ForAI sets LegacyCastQuirkSets.AiPath, which differs from UiPath only by
+/// the listed parity bits; RunCastSync returns the old NPC executor's bool (true once the slot is spent, false for a
+/// refusal) and refuses a decider that is not synchronous, and a run that suspends anyway returns false (Refused) with one
+/// violation; an AI cast leaves an outer cast's cancel snapshot in place; the NPC Blink branches (the slot spent before
+/// the failure checks, the NPC dice labels, no log for a passed check, a miss on a blinking target) hold with forced
+/// dice; the AI's refusals log nothing; and the core's source names no decider type and never asks who controls the caster.
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -64,6 +73,51 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.QuickenBeforeSpontaneousFullRound,
         LegacyCastQuirk.SpontaneousFullRoundByCasterClass,
     };
+
+    /// <summary>
+    /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
+    /// issue: the two PC-only bits it drops and the NPC bits it adds.
+    /// </summary>
+    private static readonly LegacyCastQuirk[] AiPathDifferences =
+    {
+        LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
+        LegacyCastQuirk.RangeHighlightUsesCharacterLevel,        // dropped: SPL-017 (the PC targeting highlight)
+        LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
+        LegacyCastQuirk.NpcRangeUsesCasterLevel,                 // SPL-017
+        LegacyCastQuirk.NpcRefusesArea,                          // AI-001
+        LegacyCastQuirk.NpcNullMetamagic,                        // AI-001, SPL-038
+        LegacyCastQuirk.NpcNoComponentCheck,                     // SPL-114
+        LegacyCastQuirk.NpcNoConcentrationOnCastCheck,           // SPL-114
+        LegacyCastQuirk.NpcNoConcentrationTracking,              // SPL-114
+        LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell,  // SPL-118
+        LegacyCastQuirk.NpcSpendsBeforeFailureChecks,            // SPL-160
+        LegacyCastQuirk.NpcBlinkLabelsAndSilentPass,             // SPL-160
+        LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
+        LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
+        LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
+    };
+
+    /// <summary>
+    /// The AI path's stage sequence from the PC path's, by the NPC quirk bits that move or skip a stage:
+    /// NpcSpendsBeforeFailureChecks (Spend before Failure), NpcNoConcentrationOnCastCheck (no ConcentrationOnCast) and
+    /// NpcInvisibilityBreakBeforeCounterspell (InvisibilityBreak before Counterspell). Every other stage is the same.
+    /// </summary>
+    private static List<string> DeriveAiSequence(IEnumerable<string> pcSequence)
+    {
+        var seq = new List<string>(pcSequence);
+        seq.Remove("ConcentrationOnCast");
+        MoveBefore(seq, "Spend", "Failure");
+        MoveBefore(seq, "InvisibilityBreak", "Counterspell");
+        return seq;
+    }
+
+    private static void MoveBefore(List<string> seq, string item, string before)
+    {
+        if (!seq.Contains(item) || !seq.Contains(before))
+            return;
+        seq.Remove(item);
+        seq.Insert(seq.IndexOf(before), item);
+    }
 
     public static void RunAll()
     {
@@ -148,6 +202,27 @@ public static class CastCoreStageOrderTests
         }
         Assert(LegacyCastQuirkSets.UiPath == listed, "The UI path's quirk set is exactly today's PC-path bits (" + PcPathBits.Length + ")",
             "UiPath " + LegacyCastQuirkSets.UiPath + " vs listed " + listed);
+
+        // Batch 11 step 8: the AI path's set.
+        SpellCastRequest ai = SpellCastRequest.ForAI(null, null, missile);
+        Assert(ai.Quirks == LegacyCastQuirkSets.AiPath && ai.Decider is AiCastDecider, "ForAI sets the AI path's legacy quirks and the AI decider", "" + ai.Quirks);
+        LegacyCastQuirk differences = LegacyCastQuirk.None;
+        foreach (LegacyCastQuirk bit in AiPathDifferences)
+        {
+            Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The AI-path difference " + bit + " is one named flag");
+            differences |= bit;
+        }
+        Assert((LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath) == differences,
+            "The AI path's quirk set differs from the UI path's exactly by the listed parity bits (" + AiPathDifferences.Length + ")",
+            "AiPath ^ UiPath = " + (LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath));
+        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
+        {
+            if (!name.StartsWith("Npc", StringComparison.Ordinal))
+                continue;
+            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
+            Assert((LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == bit,
+                "The NPC bit " + name + " is set by the AI builder only");
+        }
     }
 
     /// <summary>The cast core's source: CombatUI only to log, and none of the UI follow-up.</summary>
@@ -178,6 +253,11 @@ public static class CastCoreStageOrderTests
         Assert(uses > 0 && uses == logs, "Every CombatUI use in the cast core's stages is CombatUI?.ShowCombatLog", logs + " of " + uses);
 
         foreach (string forbidden in new[] { "ShowActionChoices", "AfterAttackDelay", "UpdateAllStatsUI", "ClearAllHighlights", "CurrentSubPhase", "_lastCombatLog", "IsControllable", "_pendingSpell", "StartCoroutine" })
+            Assert(!src.Contains(forbidden), "The cast core's code does not use " + forbidden);
+
+        // Batch 11 step 8: no stage asks who controls the caster or which decider it has; only the entry points choose
+        // the decider (the request's quirk bits carry the NPC path's differences).
+        foreach (string forbidden in new[] { "IsPlayerControlled", "IsPC", "ActivePC", "AiCastDecider", "UiCastDecider", "is ICastDecider" })
             Assert(!src.Contains(forbidden), "The cast core's code does not use " + forbidden);
     }
 
@@ -223,6 +303,21 @@ public static class CastCoreStageOrderTests
             TestCancel(gm, sc, caster, ally);
 
             Assert(violations.Count == 0, "No cast-core or cast-stack violation for UI-path requests", string.Join("; ", violations));
+
+            // Batch 11 step 8: the AI path through RunCastSync.
+            RunAiResolved(gm, sc, caster, caster, SpellNames.SHIELD, "AI: a self buff (Shield)");
+            RunAiResolved(gm, sc, caster, ally, SpellNames.SHOCKING_GRASP, "AI: a touch spell on an ally (Shocking Grasp)");
+            RunAiResolved(gm, sc, caster, ally, SpellNames.RAY_OF_FROST, "AI: a ray (Ray of Frost)");
+            RunAiResolved(gm, sc, caster, ally, SpellNames.BULLS_STRENGTH, "AI: a buff on another creature (Bull's Strength)");
+            Assert(gm.CurrentSubPhase == subPhaseBefore, "No AI cast set CurrentSubPhase", subPhaseBefore + " -> " + gm.CurrentSubPhase);
+            TestAiRefusals(gm, sc, caster, ally);
+            Assert(violations.Count == 0, "No cast-core or cast-stack violation for AI-path requests", string.Join("; ", violations));
+            TestRunCastSyncRefusesUiDecider(gm, sc, caster, violations);
+            TestRunCastSyncSuspendedRun(gm, sc, caster, violations);
+            TestAiCastKeepsOuterSnapshot(gm, sc, caster, ally);
+            TestAiBlink(gm, sc, caster, ally);
+            Assert(violations.Count == 0, "No cast-core or cast-stack violation for the AI-path failure cases", string.Join("; ", violations));
+
             TestReentryWhileAwaitingProvocation(gm, sc, caster, ally, violations);
             TestMissingQuirk(gm, sc, caster, violations);
         }
@@ -277,6 +372,302 @@ public static class CastCoreStageOrderTests
         Assert(slot.IsUsed && caster.Actions.StandardActionUsed, label + ": the slot and the standard action are spent");
         Assert(ctx.Result != null && !string.IsNullOrEmpty(ctx.ResultLog) && ctx.ResultLog.StartsWith(ctx.LogPrefix, StringComparison.Ordinal),
             label + ": the result log is built once, with the cast's (empty) log prefix");
+    }
+
+    /// <summary>
+    /// Records the AI decider's calls and passes them on to <see cref="AiCastDecider"/> (the real NPC answers: the
+    /// defaults, the threatened-cast decision and the follow-up).
+    /// </summary>
+    private sealed class RecordingAiDecider : ICastDecider
+    {
+        public readonly List<string> Events;
+        public RecordingAiDecider(List<string> events) { Events = events; }
+        public bool IsSynchronous => AiCastDecider.Instance.IsSynchronous;
+
+        public CastChoiceFill FillChoices(GameManager gm, CastContext ctx)
+        {
+            Events.Add("decider:fill");
+            return AiCastDecider.Instance.FillChoices(gm, ctx);
+        }
+
+        public void ChooseProvocation(GameManager gm, CastContext ctx, Action<CastProvocationAnswer> answer)
+        {
+            Events.Add("decider:provocation");
+            AiCastDecider.Instance.ChooseProvocation(gm, ctx, answer);
+        }
+
+        public void BeforeCombatEndCheck(GameManager gm, CastContext ctx)
+        {
+            Events.Add("decider:before-combat-end");
+            AiCastDecider.Instance.BeforeCombatEndCheck(gm, ctx);
+        }
+
+        public void OnCastFinished(GameManager gm, CastContext ctx, CastOutcome outcome)
+        {
+            Events.Add("decider:finished:" + outcome.Kind + "@" + outcome.At);
+            AiCastDecider.Instance.OnCastFinished(gm, ctx, outcome);
+        }
+    }
+
+    /// <summary>An AI-path request (ForAI) for <paramref name="spellId"/> with a fresh slot and the caster's actions reset.</summary>
+    private static SpellCastRequest BeginAi(SpellcastingComponent sc, CharacterController caster, CharacterController target,
+        string spellId, List<string> events, out SpellSlot slot)
+    {
+        SpellData template = SpellDatabase.GetSpell(spellId);
+        slot = new SpellSlot(template.SpellLevel, template.Clone(), false, "Wizard");
+        sc.SpellSlots.Add(slot);
+        caster.Actions.Reset();
+
+        SpellCastRequest req = SpellCastRequest.ForAI(caster, target, template);
+        if (events != null)
+            req.Decider = new RecordingAiDecider(events);
+        return req;
+    }
+
+    private static void RunAiResolved(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController target,
+        string spellId, string label)
+    {
+        var events = new List<string>();
+        SpellCastRequest req = BeginAi(sc, caster, target, spellId, events, out SpellSlot slot);
+        bool cast = gm.RunCastSync(req, out CastOutcome outcome, stage => events.Add(stage.ToString()));
+
+        List<string> expected = DeriveAiSequence(ResolvedSequence);
+        Assert(string.Join(",", events) == string.Join(",", expected),
+            label + ": the AI path runs the PC path's stages, moved or skipped only by the NPC quirk bits (Spend before Failure, no ConcentrationOnCast, InvisibilityBreak before Counterspell)",
+            string.Join(",", events));
+        Assert(cast && outcome != null && outcome.Kind == CastOutcomeKind.Resolved && outcome.At == CastStage.CombatEnd && outcome.WasCast && !outcome.CombatEnded,
+            label + ": RunCastSync returns true with Resolved at CombatEnd (no combat-end check in the stage: the NPC wrapper runs it)", "" + outcome);
+        Assert(gm.Harness_OpenCastCount == 0, label + ": the AI cast is ended when RunCastSync returns");
+        Assert(slot.IsUsed && caster.Actions.StandardActionUsed, label + ": the slot and the standard action are spent");
+        Assert(gm.Harness_LastCombatLog != null && gm.Harness_LastCombatLog.Contains(SpellDatabase.GetSpell(spellId).Name),
+            label + ": the AI follow-up keeps the result log as the last combat log, as the old NPC executor did");
+        sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// The AI path's refusals: RunCastSync returns false (the old NPC executor's false) with nothing spent and no
+    /// combat-log line, for a caster with no standard action, a Self spell aimed at another creature, a target out of
+    /// range and an area spell.
+    /// </summary>
+    private static void TestAiRefusals(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        var logs = new List<string>();
+        Action<string> oldLog = ScenarioHooks.CombatLog;
+        ScenarioHooks.CombatLog = m => logs.Add(m);
+        try
+        {
+            var events = new List<string>();
+            SpellCastRequest noAction = BeginAi(sc, caster, caster, SpellNames.SHIELD, events, out SpellSlot slot);
+            caster.Actions.UseStandardAction();
+            bool cast = gm.RunCastSync(noAction, out CastOutcome o, s => events.Add(s.ToString()));
+            Assert(!cast && o.Kind == CastOutcomeKind.Refused && o.Reason == "no-standard-action" && !slot.IsUsed
+                   && string.Join(",", events) == "Legality,decider:finished:Refused@Legality",
+                "AI: a caster with no standard action is refused at Legality (false, nothing spent)", o + " " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+
+            SpellCastRequest wrongTarget = BeginAi(sc, caster, ally, SpellNames.SHIELD, null, out slot);
+            cast = gm.RunCastSync(wrongTarget, out o);
+            Assert(!cast && o.Reason == "invalid-target" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+                "AI: a Self spell aimed at another creature is refused (false, nothing spent)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            CharacterController far = TestHelpers.CreateCharacter("CastCoreFar", "Fighter", level: 1, gridPosition: new Vector2Int(40, 0));
+            try
+            {
+                far.SetTeam(CharacterTeam.Player);
+                SpellCastRequest outOfRange = BeginAi(sc, caster, far, SpellNames.SHOCKING_GRASP, null, out slot);
+                cast = gm.RunCastSync(outOfRange, out o);
+                Assert(!cast && o.Reason == "out-of-range" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+                    "AI: a touch spell at a creature 40 squares away is refused by the caster-level range (NpcRangeUsesCasterLevel)", "" + o);
+                sc.SpellSlots.Remove(slot);
+            }
+            finally
+            {
+                Object.DestroyImmediate(far.gameObject);
+            }
+
+            SpellCastRequest area = BeginAi(sc, caster, ally, SpellNames.BURNING_HANDS, null, out slot);
+            cast = gm.RunCastSync(area, out o);
+            Assert(!cast && o.Reason == "area-refused" && !slot.IsUsed, "AI: an area spell is refused (NpcRefusesArea, AI-001)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            Assert(logs.Count == 0, "AI: the refusals log no combat-log line, as the old NPC executor did", string.Join(" | ", logs));
+            Assert(gm.Harness_OpenCastCount == 0, "AI: every refused cast is ended");
+        }
+        finally
+        {
+            ScenarioHooks.CombatLog = oldLog;
+        }
+    }
+
+    /// <summary>RunCastSync refuses a decider that may wait for the player: one cast-stack violation, false, no cast opened.</summary>
+    private static void TestRunCastSyncRefusesUiDecider(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)
+    {
+        SpellCastRequest req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out SpellSlot slot);
+        req.Decider = UiCastDecider.Instance;
+        int before = violations.Count;
+        bool cast = gm.RunCastSync(req, out CastOutcome o);
+        Assert(!cast && o.Reason == "not-synchronous" && violations.Count == before + 1 && gm.Harness_OpenCastCount == 0 && !slot.IsUsed,
+            "RunCastSync refuses a decider that is not synchronous with one violation and opens no cast", o + " " + string.Join("; ", violations));
+        violations.RemoveRange(before, violations.Count - before);
+        sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// A synchronous decider that suspends at the choices anyway: RunCastSync ends the run, raises one cast-stack violation
+    /// and returns false (Refused, nothing spent), so the NPC wrapper does not count a cast that never spent its slot.
+    /// </summary>
+    private static void TestRunCastSyncSuspendedRun(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)
+    {
+        var events = new List<string>();
+        SpellCastRequest req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out SpellSlot slot);
+        var decider = new RecordingDecider(events);
+        decider.Fills.Enqueue(CastChoiceFill.Suspended);
+        req.Decider = decider;
+        int before = violations.Count;
+        bool cast = gm.RunCastSync(req, out CastOutcome o);
+        Assert(!cast && o.Kind == CastOutcomeKind.Refused && o.At == CastStage.Legality && o.Reason == "not-synchronous" && !o.WasCast
+               && violations.Count == before + 1 && gm.Harness_OpenCastCount == 0 && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+            "RunCastSync: a run suspended before its slot is spent raises one violation, is ended and returns false (Refused, nothing spent)",
+            o + " " + string.Join("; ", violations));
+        violations.RemoveRange(before, violations.Count - before);
+        sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// An AI cast that runs while another cast's cancel snapshot is held (a PC cast waiting at its AoO prompt) leaves that
+    /// snapshot as it was: the old NPC executor never touched it (batch 11 step 8 review).
+    /// </summary>
+    private static void TestAiCastKeepsOuterSnapshot(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        var outer = new CastResourceSnapshot { Caster = ally, StandardActionUsed = true };
+        CastResourceSnapshot saved = gm.Harness_PendingSpellcastSnapshot;
+        gm.Harness_PendingSpellcastSnapshot = outer;
+        try
+        {
+            SpellCastRequest req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out SpellSlot slot);
+            bool cast = gm.RunCastSync(req, out CastOutcome o);
+            Assert(cast && o.Kind == CastOutcomeKind.Resolved && ReferenceEquals(gm.Harness_PendingSpellcastSnapshot, outer),
+                "AI: a resolved cast leaves an outer cast's cancel snapshot in place", o + " snapshot kept: " + ReferenceEquals(gm.Harness_PendingSpellcastSnapshot, outer));
+            sc.SpellSlots.Remove(slot);
+
+            req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
+            caster.Actions.UseStandardAction();
+            cast = gm.RunCastSync(req, out o);
+            Assert(!cast && ReferenceEquals(gm.Harness_PendingSpellcastSnapshot, outer),
+                "AI: a refused cast leaves an outer cast's cancel snapshot in place", "" + o);
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            gm.Harness_PendingSpellcastSnapshot = saved;
+        }
+    }
+
+    /// <summary>
+    /// The NPC Blink branches (NpcSpendsBeforeFailureChecks, NpcBlinkLabelsAndSilentPass): a blinking AI caster that fails
+    /// its 20% check has already spent its slot (Spend before Failure), fails at Failure under the NPC dice label and still
+    /// counts as cast; one that passes logs no "Blink spell check" line; an AI ray at a blinking target that misses fails at
+    /// TargetBlink under the NPC label and counts as cast. Percentile dice forced through ScenarioHooks.RollFilter.
+    /// </summary>
+    private static void TestAiBlink(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        var labels = new List<string>();
+        var logs = new List<string>();
+        int casterBlinkRoll = 10;
+        int targetBlinkRoll = 10;
+        Func<int, string, int, int> oldFilter = ScenarioHooks.RollFilter;
+        Action<string> oldLog = ScenarioHooks.CombatLog;
+        ScenarioHooks.RollFilter = (sides, label, natural) =>
+        {
+            if (label != null && label.StartsWith("Blink", StringComparison.Ordinal))
+            {
+                labels.Add(label);
+                return label.Contains("caster") ? casterBlinkRoll : targetBlinkRoll;
+            }
+            return natural;
+        };
+        ScenarioHooks.CombatLog = m => logs.Add(m);
+        ActiveSpellEffect casterBlink = AddBlink(caster);
+        ActiveSpellEffect allyBlink = null;
+        try
+        {
+            // The caster fails its Blink check: the slot is already spent.
+            var events = new List<string>();
+            SpellCastRequest req = BeginAi(sc, caster, caster, SpellNames.SHIELD, events, out SpellSlot slot);
+            bool cast = gm.RunCastSync(req, out CastOutcome o, s => events.Add(s.ToString()));
+            Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.Failure && o.Reason == "blink-caster" && slot.IsUsed
+                   && string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Spend,Failure,decider:finished:Failed@Failure",
+                "AI: a blinking caster that fails its 20% has spent its slot first (Spend before Failure) and counts as cast",
+                o + " " + string.Join(",", events));
+            Assert(labels.Count == 1 && labels[0] == "Blink NPC caster spell failure",
+                "AI: the caster's Blink check rolls under the NPC dice label", string.Join(",", labels));
+            sc.SpellSlots.Remove(slot);
+
+            // The caster passes: no "Blink spell check" line.
+            casterBlinkRoll = 90;
+            labels.Clear();
+            logs.Clear();
+            req = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
+            cast = gm.RunCastSync(req, out o);
+            Assert(cast && o.Kind == CastOutcomeKind.Resolved && labels.Count == 1 && !logs.Exists(l => l != null && l.Contains("Blink spell check")),
+                "AI: a blinking caster that passes casts and logs no Blink check line (NpcBlinkLabelsAndSilentPass)", o + " " + string.Join(" | ", logs));
+            sc.SpellSlots.Remove(slot);
+            RemoveBlink(caster, casterBlink);
+            casterBlink = null;
+
+            // A ray at a blinking target misses: Failed at TargetBlink, the slot spent.
+            allyBlink = AddBlink(ally);
+            labels.Clear();
+            req = BeginAi(sc, caster, ally, SpellNames.RAY_OF_FROST, null, out slot);
+            int allyHp = ally.Stats.CurrentHP;
+            cast = gm.RunCastSync(req, out o);
+            Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.TargetBlink && o.Reason == "target-blinked" && slot.IsUsed
+                   && ally.Stats.CurrentHP == allyHp && labels.Count == 1 && labels[0] == "Blink NPC target spell failure",
+                "AI: a ray at a blinking target that misses fails at TargetBlink under the NPC dice label and counts as cast",
+                o + " " + string.Join(",", labels));
+            sc.SpellSlots.Remove(slot);
+            Assert(gm.Harness_OpenCastCount == 0, "AI: every Blink case's cast is ended");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = oldFilter;
+            ScenarioHooks.CombatLog = oldLog;
+            RemoveBlink(caster, casterBlink);
+            RemoveBlink(ally, allyBlink);
+        }
+    }
+
+    private static ActiveSpellEffect AddBlink(CharacterController c)
+    {
+        StatusEffectManager statusMgr = c.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+        {
+            statusMgr = c.gameObject.AddComponent<StatusEffectManager>();
+            statusMgr.Init(c.Stats);
+        }
+
+        var effect = new ActiveSpellEffect
+        {
+            Spell = new SpellData { SpellId = SpellNames.BLINK, Name = "Blink" },
+            CasterName = "UnitTest",
+            CasterLevel = 5,
+            RemainingRounds = 5,
+            DurationType = DurationType.Rounds,
+            AffectedCharacterName = c.Stats.CharacterName,
+            IsApplied = true
+        };
+        statusMgr.ActiveEffects.Add(effect);
+        return effect;
+    }
+
+    private static void RemoveBlink(CharacterController c, ActiveSpellEffect effect)
+    {
+        if (c == null || effect == null)
+            return;
+        StatusEffectManager statusMgr = c.GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+            statusMgr.ActiveEffects.Remove(effect);
     }
 
     private static void TestRefusal(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)

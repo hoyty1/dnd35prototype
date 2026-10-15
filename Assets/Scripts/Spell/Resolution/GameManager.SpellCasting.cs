@@ -181,8 +181,8 @@ public partial class GameManager
         if (spellComp == null || spell == null) return false;
 
         // What the cast spends is its own source (batch 11 step 4): the cast on top of the cast stack, which is this
-        // cast (TryNPCPerformSpellCast opens its own context before it reaches here through the entangled and grappled
-        // helpers), so a scroll or wand cast of another caster, or a cancelled one, can never be spent here.
+        // cast (every cast core run, PC or NPC, and every other pipeline opens its own context before it reaches here),
+        // so a scroll or wand cast of another caster, or a cancelled one, can never be spent here.
         CastContext cast = CurrentCast;
         CastSourceKind sourceKind = cast != null ? cast.Request.Source.Kind : CastSourceKind.PreparedSlot;
 
@@ -7862,6 +7862,15 @@ public partial class GameManager
     private void ClearSpellcastResourceSnapshot()
     {
         _pendingSpellcastSnapshot = null;
+    }
+
+    /// <summary>The cancel snapshot as it stands (RunCastSync keeps it for an outer cast; batch 11 step 8).</summary>
+    private CastResourceSnapshot PeekSpellcastResourceSnapshot() => _pendingSpellcastSnapshot;
+
+    /// <summary>Puts back a snapshot <see cref="PeekSpellcastResourceSnapshot"/> returned (RunCastSync, after a nested AI cast).</summary>
+    private void PutBackSpellcastResourceSnapshot(CastResourceSnapshot snapshot)
+    {
+        _pendingSpellcastSnapshot = snapshot;
     }
 
     private void RestoreSpellcastResourceSnapshot(CharacterController caster)

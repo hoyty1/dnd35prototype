@@ -52,9 +52,10 @@ internal sealed class SpellHandlerEntry
 /// (Shield Other and the Sound Burst stun excepted: they continue to the buff step). The table keeps the old chain
 /// order so a later overlap would still resolve in that order.
 ///
-/// <see cref="RunSingleTargetHandlers"/> is the handler step of both single-target cast paths: PerformSpellCast (PC, since
-/// step 5) and TryNPCPerformSpellCast (NPC, since step 6, which replaced the NPC path's own 19-handler chain; SPL-054),
-/// with the same gates, so a handler resolves the same for every caster. A handler must read the caster it is given,
+/// <see cref="RunSingleTargetHandlers"/> is the handler step of single-target casts: PerformSpellCast (PC, since step 5)
+/// and TryNPCPerformSpellCast (NPC, since step 6, which replaced the NPC path's own 19-handler chain; SPL-054), and since
+/// steps 7 and 8 the cast core's Handlers stage runs it for both, with the same gates, so a handler resolves the same for
+/// every caster. A handler must read the caster it is given,
 /// never ActivePC, IsControllable or a <c>_pending*</c> choice (Dimension Door's destination search still forks on
 /// IsPlayerControlled, a known divergence filed in SPL-091); a spell whose handler needs a choice the AI cannot give
 /// yet (Dimension Door's destination, Imbue with Spell Ability's slot picker) is kept out of the AI's candidates by

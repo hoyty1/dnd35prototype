@@ -52,19 +52,35 @@ public static class CastRequestContextTests
         SpellCastRequest r = SpellCastRequest.ForAI(null, null, resist);
         Assert(r.Spell != null && !ReferenceEquals(r.Spell, resist) && r.Spell.SpellId == SpellNames.RESIST_ENERGY,
             "ForAI: the request's spell is its own clone of the template");
-        Assert(r.Choices.Energy == ResistEnergyType.Fire, "ForAI: Resist Energy gets fire, the NPC path's old default (SPL-112 AI half)", "" + r.Choices.Energy);
+        Assert(!r.Choices.Energy.HasValue, "ForAI: the choices are left to the decider (the cast core's Legality stage asks it)");
+        Assert(FillAi(r) == CastChoiceFill.Filled && r.Choices.Energy == ResistEnergyType.Fire,
+            "AiCastDecider.FillChoices: Resist Energy gets fire, the NPC path's old default (SPL-112 AI half)", "" + r.Choices.Energy);
         Assert(r.Decider is AiCastDecider && r.Decider.IsSynchronous, "ForAI: the AI decider answers inline");
         Assert(r.Metamagic == null && r.Source.Kind == CastSourceKind.PreparedSlot, "ForAI: no metamagic; a caster without spellcasting casts from a prepared slot");
+        Assert(r.Quirks == LegacyCastQuirkSets.AiPath, "ForAI: the NPC path's legacy quirks (batch 11 step 8)", "" + r.Quirks);
 
         SpellCastRequest p = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_ENERGY));
-        Assert(p.Choices.Energy == ResistEnergyType.Fire, "ForAI: Protection from Energy gets fire", "" + p.Choices.Energy);
+        Assert(FillAi(p) == CastChoiceFill.Filled && p.Choices.Energy == ResistEnergyType.Fire, "AiCastDecider.FillChoices: Protection from Energy gets fire", "" + p.Choices.Energy);
 
         SpellCastRequest f = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.FIRE_SHIELD));
-        Assert(f.Choices.FireShieldWarm == true, "ForAI: Fire Shield is warm", "" + f.Choices.FireShieldWarm);
+        Assert(FillAi(f) == CastChoiceFill.Filled && f.Choices.FireShieldWarm == true, "AiCastDecider.FillChoices: Fire Shield is warm", "" + f.Choices.FireShieldWarm);
 
         SpellCastRequest m = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE));
-        Assert(!m.Choices.Energy.HasValue && !m.Choices.FireShieldWarm.HasValue, "ForAI: another spell gets no energy or shield choice");
+        Assert(FillAi(m) == CastChoiceFill.Filled && !m.Choices.Energy.HasValue && !m.Choices.FireShieldWarm.HasValue,
+            "AiCastDecider.FillChoices: another spell gets no energy or shield choice");
+
+        SpellCastRequest w = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.MAGIC_WEAPON));
+        Assert(FillAi(w) == CastChoiceFill.Filled && w.Choices.MagicWeaponItem == null && w.Choices.DisguiseRace == null,
+            "AiCastDecider.FillChoices: no weapon for Magic Weapon (it still fizzles for an NPC, SPL-113) and no race (own race)");
+
+        SpellCastRequest chosen = SpellCastRequest.ForAI(null, null, resist);
+        chosen.Choices.Energy = ResistEnergyType.Cold;
+        Assert(FillAi(chosen) == CastChoiceFill.Filled && chosen.Choices.Energy == ResistEnergyType.Cold,
+            "AiCastDecider.FillChoices keeps a choice the request already carries");
     }
+
+    private static CastChoiceFill FillAi(SpellCastRequest request)
+        => AiCastDecider.Instance.FillChoices(null, new CastContext(request));
 
     private static void TestUiRequestClone()
     {
@@ -129,6 +145,7 @@ public static class CastRequestContextTests
             Assert(ui != null && !ui.Decider.IsSynchronous, "The scratch cast is a Ui cast");
 
             CastContext ai = gm.BeginCast(SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.RESIST_ENERGY)));
+            ai.Request.Decider.FillChoices(gm, ai);
             Assert(gm.Harness_OpenCastCount == 2 && gm.Harness_GetPendingSpell() != null && gm.Harness_GetPendingSpell().SpellId == SpellNames.RESIST_ENERGY
                 && gm.Harness_GetPendingMetamagic() == null && gm.Harness_CurrentCastRequest.Choices.Energy == ResistEnergyType.Fire,
                 "An AI cast nests over the Ui cast and shows only its own spell, metamagic and choices");

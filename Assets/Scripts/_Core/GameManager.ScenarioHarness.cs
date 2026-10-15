@@ -489,6 +489,16 @@ public partial class GameManager
     /// <summary>The last combat log a cast or attack kept (_lastCombatLog; the UI decider writes it after a cast, the cast core never).</summary>
     internal string Harness_LastCombatLog => _lastCombatLog;
 
+    /// <summary>
+    /// The resource snapshot a cast keeps for a cancel at the AoO prompt (_pendingSpellcastSnapshot); a test sets one to
+    /// check that a nested AI cast (RunCastSync) leaves it as it was (batch 11 step 8).
+    /// </summary>
+    internal CastResourceSnapshot Harness_PendingSpellcastSnapshot
+    {
+        get => _pendingSpellcastSnapshot;
+        set => _pendingSpellcastSnapshot = value;
+    }
+
     /// <summary>Ends every open cast, as the combat reset does (a test's cleanup).</summary>
     internal void Harness_EndAllCasts(string reason) => EndAllCasts(reason);
 

@@ -83,6 +83,14 @@ public sealed class CastOutcome
         => Kind == CastOutcomeKind.Refused || Kind == CastOutcomeKind.Cancelled
            || Reason == ReasonSlotNotSpent || Reason == ReasonNoSpellcasting;
 
+    /// <summary>
+    /// True when the cast counts as cast: it passed Legality and spent its slot, whatever came of the spell afterwards
+    /// (resolved, lost to a distraction or the attacks of opportunity, failed, countered). False for a refusal, a cancel
+    /// and a slot that could not be spent. TryNPCPerformSpellCast returns it, exactly as its old body returned true or false
+    /// (GameManager.RunCastSync).
+    /// </summary>
+    public bool WasCast => !BackToActionMenu;
+
     public override string ToString() => $"{Kind}@{At}({Reason})";
 }
 
@@ -98,8 +106,11 @@ public sealed class CastOutcome
 /// <see cref="LegacyCastQuirk"/> bits of the request (Tests.Magic.CastCoreStageOrderTests checks both).
 ///
 /// Step 7 runs the PC single-target casts (PerformSpellCast) through the core with the UI decider, as a pure move of
-/// PerformSpellCast's old body: every check, roll, log line and trace mark in today's order. The NPC path joins in step
-/// 8, the area casts in step 9.
+/// PerformSpellCast's old body: every check, roll, log line and trace mark in today's order. Step 8 runs the NPC
+/// single-target casts (TryNPCPerformSpellCast) through the same stages with the AI decider (<see cref="RunCastSync"/>),
+/// as a pure move of the old NPC executor: its differences from the PC path are the request's NPC quirk bits
+/// (LegacyCastQuirkSets.AiPath), which only the stages read. No stage asks who controls the caster; only the entry
+/// points choose the decider. The area casts join in step 9.
 /// </summary>
 public partial class GameManager
 {
@@ -126,15 +137,128 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Whether <paramref name="req"/> may be cast as it stands: the target test (IsValidTargetForSpell) and the
-    /// material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components bypass,
-    /// scrolls and wands). No side effect. A refusal comes back with Kind Refused; a legal request with Kind Resolved
-    /// and reason "ok". The caster's choices are not checked here (the decider makes them).
+    /// Runs <paramref name="req"/> through the cast core at once, for a decider that answers inline (the AI): opens its
+    /// context on the cast stack, runs <see cref="ExecuteCast"/> and returns whether the cast counts as cast
+    /// (<see cref="CastOutcome.WasCast"/>), the bool TryNPCPerformSpellCast has always returned. The run must finish
+    /// before this returns; one that did not (a decider that suspended) is ended here and raises a cast-stack violation
+    /// (ScenarioHooks.CastStackViolation, which the scenario harness turns into a failure), and so does a decider that is
+    /// not synchronous. Such a run counts as cast only if it stopped after its slot was spent. An exception still ends the
+    /// context. The GameManager's cancel snapshot (_pendingSpellcastSnapshot, which the Cost stage captures and the later
+    /// stages clear) is put back as it was before the run: the old NPC executor never touched it, and a synchronous AI cast
+    /// never cancels, so a nested AI cast cannot take the snapshot of a PC cast waiting at its AoO prompt.
+    /// <paramref name="stageObserver"/> sees each stage (a test).
+    /// </summary>
+    internal bool RunCastSync(SpellCastRequest req, out CastOutcome outcome, Action<CastStage> stageObserver = null)
+    {
+        if (req == null)
+        {
+            outcome = new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-cast");
+            return false;
+        }
+
+        if (req.Decider == null || !req.Decider.IsSynchronous)
+        {
+            ReportCastStackViolation("RunCastSync was given " + DescribeCast(req) + ", whose decider is not synchronous");
+            outcome = new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "not-synchronous");
+            return false;
+        }
+
+        CastResourceSnapshot outerSnapshot = PeekSpellcastResourceSnapshot();
+        CastContext ctx = BeginCast(req);
+        ctx.StageObserver = stageObserver;
+        CastOutcome finished = null;
+        try
+        {
+            ExecuteCast(ctx, o => finished = o);
+        }
+        finally
+        {
+            // A run that threw or did not finish must not stay on the cast stack (the old NPC executor's finally).
+            if (finished == null && !ctx.Ended)
+                EndCast(ctx);
+            PutBackSpellcastResourceSnapshot(outerSnapshot);
+        }
+
+        if (finished == null)
+        {
+            ReportCastStackViolation("RunCastSync: the cast " + DescribeCast(req) + " did not finish synchronously (stopped in stage " + ctx.Stage + ")");
+            // Counts as cast only once the slot is spent: after the Spend stage, or in the Failure stage when the request
+            // spends before the failure checks (NpcSpendsBeforeFailureChecks).
+            bool slotSpent = ctx.Stage > CastStage.Spend
+                             || (ctx.Stage == CastStage.Failure && req.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks));
+            finished = new CastOutcome(slotSpent ? CastOutcomeKind.Failed : CastOutcomeKind.Refused, ctx.Stage, "not-synchronous");
+        }
+
+        outcome = finished;
+        return finished.WasCast;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="req"/> may be cast as it stands: with <see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>
+    /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
+    /// target test (IsValidTargetForSpell), with the NPC bits the range at the caster level and the area refusal, and
+    /// the material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
+    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>). No side effect. A refusal
+    /// comes back with Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not
+    /// checked here (the decider makes them).
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
-        CastOutcome refusal = CheckCastTargetLegality(req) ?? CheckCastComponentLegality(req);
+        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckCastTargetLegality(req) ?? CheckNpcRangeAndAreaLegality(req)
+                              ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
+    }
+
+    /// <summary>
+    /// The NPC path's own caster tests, in its old order (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160):
+    /// a standard action left, a living target, a caster that can cast spells, a slot for the spell. Null when the
+    /// request does not carry the bit or passes.
+    /// </summary>
+    private static CastOutcome CheckNpcCasterLegality(SpellCastRequest req)
+    {
+        if (req == null || !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks) || req.Caster == null || req.Spell == null)
+            return null;
+
+        CharacterController caster = req.Caster;
+        CharacterController target = req.Aim != null ? req.Aim.Target : null;
+        if (caster.Actions == null || !caster.Actions.HasStandardAction)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-standard-action");
+        if (target != null && target.Stats != null && target.Stats.IsDead)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "target-dead");
+        SpellcastingComponent spellComp = caster.Spellcasting;
+        if (spellComp == null || !spellComp.CanCastSpells)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-spellcasting");
+        if (!spellComp.CanCast(req.Spell))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "cannot-cast");
+        return null;
+    }
+
+    /// <summary>
+    /// The NPC range test (<see cref="LegacyCastQuirk.NpcRangeUsesCasterLevel"/>, SPL-017: the spell's range at the
+    /// caster's caster level, at least 1 square, to the target's anchor square), then the area refusal
+    /// (<see cref="LegacyCastQuirk.NpcRefusesArea"/>, AI-001). Null when the request carries neither bit or passes.
+    /// </summary>
+    private static CastOutcome CheckNpcRangeAndAreaLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+
+        CharacterController caster = req.Caster;
+        CharacterController target = req.Aim != null ? req.Aim.Target : null;
+        SpellData spell = req.Spell;
+        if (req.HasQuirk(LegacyCastQuirk.NpcRangeUsesCasterLevel) && target != null && caster.Stats != null)
+        {
+            int rangeSquares = spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel());
+            if (rangeSquares <= 0)
+                rangeSquares = 1;
+            if (SquareGridUtils.GetDistance(caster.GridPosition, target.GridPosition) > rangeSquares)
+                return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "out-of-range");
+        }
+
+        // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests) mirrors this data refusal: keep them in step.
+        if (req.HasQuirk(LegacyCastQuirk.NpcRefusesArea) && spell.TargetType == SpellTargetType.Area)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "area-refused");
+        return null;
     }
 
     private CastOutcome CheckCastTargetLegality(SpellCastRequest req)
@@ -151,8 +275,10 @@ public partial class GameManager
         // Spells with common material components (M with no GP cost) need a spell component pouch (PHB p.130). F12 test
         // panel casts (their Components bypass), scroll casts and wand casts bypass it (the item provides the
         // components); the cast's own source decides (batch 11 step 4).
+        // NPCs carry no pouch and are not tested (NpcNoComponentCheck, SPL-114; decision D3 removes it in step 17).
         CastSource source = req.Source;
-        bool componentsBypassed = source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem);
+        bool componentsBypassed = req.HasQuirk(LegacyCastQuirk.NpcNoComponentCheck)
+                                  || (source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem));
         if (componentsBypassed || !req.Spell.HasMaterialComponent)
             return null;
 
@@ -172,7 +298,10 @@ public partial class GameManager
 
     /// <summary>
     /// Legality: the target, then the caster's choices (the decider; the UI may suspend here at a dialog), then the
-    /// components. Nothing is spent before the cast passes.
+    /// components. Nothing is spent before the cast passes. With the NPC bits: no metamagic
+    /// (<see cref="LegacyCastQuirk.NpcNullMetamagic"/>), the NPC path's own caster tests before the target and its
+    /// unlogged target refusal (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the range at the caster level and the
+    /// area refusal after it, and no component test.
     /// </summary>
     private void CastStageLegality(CastContext ctx)
     {
@@ -181,12 +310,32 @@ public partial class GameManager
         CharacterController caster = req.Caster;
         SpellData spell = req.Spell;
 
-        CastOutcome refusal = CheckCastTargetLegality(req);
+        // The NPC path casts without metamagic (AI-001, SPL-038; step 21 removes the bit).
+        if (req.HasQuirk(LegacyCastQuirk.NpcNullMetamagic))
+            req.Metamagic = null;
+
+        CastOutcome refusal = CheckNpcCasterLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            FinishCast(ctx, refusal);
+            return;
+        }
+
+        refusal = CheckCastTargetLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, "invalid-target");
-            if (spell != null)
+            if (spell != null && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
+            FinishCast(ctx, refusal);
+            return;
+        }
+
+        refusal = CheckNpcRangeAndAreaLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
             FinishCast(ctx, refusal);
             return;
         }
@@ -259,9 +408,17 @@ public partial class GameManager
                 RequireLegacyQuirk(ctx, LegacyCastQuirk.SpontaneousFullRoundByCasterClass);
             bool isSpontaneousMetamagic = hasAnyMetamagic && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
             if (isSpontaneousMetamagic)
+            {
                 caster.Actions.UseFullRoundAction();
-            else
-                caster.CommitStandardAction();
+            }
+            else if (!caster.CommitStandardAction() && req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+            {
+                // The NPC path refuses a cast whose standard action cannot be committed (SPL-160); nothing was spent.
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "commit-failed");
+                ClearSpellcastResourceSnapshot();
+                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Refused, CastStage.Cost, "commit-failed"));
+                return;
+            }
             CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, isSpontaneousMetamagic ? "full-round" : "standard");
         }
         else
@@ -324,7 +481,10 @@ public partial class GameManager
         CastStageDistraction(ctx);
     }
 
-    /// <summary>Distraction: the entangled check, then grappled or pinned Concentration (not for a held-charge delivery).</summary>
+    /// <summary>
+    /// Distraction: the entangled check, then grappled or pinned Concentration (not for a held-charge delivery). Then
+    /// the Failure stage, or with <see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/> the Spend stage first.
+    /// </summary>
     private void CastStageDistraction(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Distraction);
@@ -339,7 +499,7 @@ public partial class GameManager
             if (!ResolveEntangledSomaticCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
                     ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
             {
-                HandleConcentrationOnCasting(caster, spell);
+                CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
                 return;
@@ -348,20 +508,27 @@ public partial class GameManager
             if (!ResolveGrappledOrPinnedCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
                     ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
             {
-                HandleConcentrationOnCasting(caster, spell);
+                CheckConcentrationOnLostCast(ctx);
                 ClearSpellcastResourceSnapshot();
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
                 return;
             }
         }
 
-        CastStageFailure(ctx);
+        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks))
+            CastStageSpend(ctx);
+        else
+            CastStageFailure(ctx);
     }
 
-    /// <summary>Failure: arcane spell failure, then the blinking caster's 20% (not for a held-charge delivery). A failed spell spends its slot.</summary>
+    /// <summary>
+    /// Failure: arcane spell failure, then the blinking caster's 20% (not for a held-charge delivery). A failed spell
+    /// spends its slot here, unless the Spend stage already ran (<see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/>).
+    /// </summary>
     private void CastStageFailure(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Failure);
+        bool spentAlready = ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks);
         if (!ctx.IsHeldChargeDelivery)
         {
             SpellCastRequest req = ctx.Request;
@@ -372,7 +539,7 @@ public partial class GameManager
                 RequireLegacyQuirk(ctx, LegacyCastQuirk.ScrollSkipsArcaneFailure);
             if (TryRollArcaneSpellFailure(caster, spell, false, out int asfRoll, out int asfChance))
             {
-                if (!SpendCastSlot(ctx))
+                if (!spentAlready && !SpendCastSlot(ctx))
                 {
                     DropSnapshotAfterFailedSpend(ctx);
                     Debug.LogError($"[GameManager] ASF failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
@@ -380,7 +547,7 @@ public partial class GameManager
                     return;
                 }
 
-                HandleConcentrationOnCasting(caster, spell);
+                CheckConcentrationOnLostCast(ctx);
                 LogArcaneSpellFailure(caster, spell, asfRoll, asfChance);
                 ClearSpellcastResourceSnapshot();
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, "arcane-spell-failure"));
@@ -388,14 +555,16 @@ public partial class GameManager
             }
 
             // PHB p.206: a blinking caster has a 20% spell failure chance (the caster may be on the Ethereal Plane when
-            // the spell is cast), checked separately from and in addition to arcane spell failure.
+            // the spell is cast), checked separately from and in addition to arcane spell failure. The NPC path rolls
+            // under its own dice label and logs no passed check (NpcBlinkLabelsAndSilentPass, SPL-160).
             if (caster.HasActiveBlinkEffect)
             {
-                int blinkSpellRoll = DiceService.Percentile("Blink caster spell failure");
+                bool npcBlink = req.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
+                int blinkSpellRoll = DiceService.Percentile(npcBlink ? "Blink NPC caster spell failure" : "Blink caster spell failure");
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, blinkSpellRoll <= 20 ? "blink-failed" : "blink-passed");
                 if (blinkSpellRoll <= 20)
                 {
-                    if (!SpendCastSlot(ctx))
+                    if (!spentAlready && !SpendCastSlot(ctx))
                     {
                         DropSnapshotAfterFailedSpend(ctx);
                         Debug.LogError($"[GameManager] Blink spell failure path: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
@@ -403,24 +572,33 @@ public partial class GameManager
                         return;
                     }
 
-                    HandleConcentrationOnCasting(caster, spell);
+                    CheckConcentrationOnLostCast(ctx);
                     CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{caster.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)"));
                     ClearSpellcastResourceSnapshot();
                     FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, "blink-caster"));
                     return;
                 }
 
-                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds)."));
+                if (!npcBlink)
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds)."));
             }
         }
 
-        CastStageSpend(ctx);
+        if (spentAlready)
+            CastStageAfterSpend(ctx);
+        else
+            CastStageSpend(ctx);
     }
 
-    /// <summary>Spend: the slot (or the scroll, the wand charge, the converted spell), not for a held-charge delivery.</summary>
+    /// <summary>
+    /// Spend: the slot (or the scroll, the wand charge, the converted spell), not for a held-charge delivery. Then the
+    /// concentration step and the provocation, or with <see cref="LegacyCastQuirk.NpcSpendsBeforeFailureChecks"/> the
+    /// Failure stage (a slot that cannot be spent then ends the cast without an error log, as the NPC path did).
+    /// </summary>
     private void CastStageSpend(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Spend);
+        bool beforeFailure = ctx.Request.HasQuirk(LegacyCastQuirk.NpcSpendsBeforeFailureChecks);
         if (!ctx.IsHeldChargeDelivery)
         {
             CharacterController caster = ctx.Request.Caster;
@@ -428,7 +606,8 @@ public partial class GameManager
             if (!SpendCastSlot(ctx))
             {
                 DropSnapshotAfterFailedSpend(ctx);
-                Debug.LogError($"[GameManager] Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
+                if (!beforeFailure)
+                    Debug.LogError($"[GameManager] Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Spend, CastOutcome.ReasonSlotNotSpent));
                 return;
             }
@@ -439,6 +618,19 @@ public partial class GameManager
                 Debug.Log($"[GameManager] Spontaneous cast (level-based): {caster.Stats.CharacterName} converted a level {ctx.SpontaneousLevel} slot → {spell.Name}");
         }
 
+        if (beforeFailure)
+            CastStageFailure(ctx);
+        else
+            CastStageAfterSpend(ctx);
+    }
+
+    /// <summary>
+    /// After the spend and the failure checks: the concentration step, then the provocation with
+    /// <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> (SPL-152), else the provocation alone (the
+    /// concentration step follows once it lets the cast proceed).
+    /// </summary>
+    private void CastStageAfterSpend(CastContext ctx)
+    {
         if (ctx.Request.HasQuirk(LegacyCastQuirk.ConcentrationGateBeforeProvocation))
             CastStageConcentrationOnCast(ctx, CastStageProvocation);
         else
@@ -448,12 +640,16 @@ public partial class GameManager
     /// <summary>
     /// ConcentrationOnCast: a caster concentrating on another spell checks it as it casts (HandleConcentrationOnCasting;
     /// decision D1 replaces it in step 16). Before the provocation stage with
-    /// <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> (SPL-152), else once the provocation lets the cast proceed.
+    /// <see cref="LegacyCastQuirk.ConcentrationGateBeforeProvocation"/> (SPL-152), else once the provocation lets the cast
+    /// proceed. Skipped with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
     /// </summary>
     private void CastStageConcentrationOnCast(CastContext ctx, Action<CastContext> next)
     {
-        EnterCastStage(ctx, CastStage.ConcentrationOnCast);
-        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+        if (!ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationOnCastCheck))
+        {
+            EnterCastStage(ctx, CastStage.ConcentrationOnCast);
+            HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+        }
         next(ctx);
     }
 
@@ -503,9 +699,22 @@ public partial class GameManager
         }
 
         if (ctx.Request.HasQuirk(LegacyCastQuirk.ConcentrationGateBeforeProvocation))
-            CastStageCounterspell(ctx);
+            CastStageBeforeResolution(ctx);
         else
-            CastStageConcentrationOnCast(ctx, CastStageCounterspell);
+            CastStageConcentrationOnCast(ctx, CastStageBeforeResolution);
+    }
+
+    /// <summary>
+    /// The pre-resolution checks after a proceeding provocation: the counterspell, the Ring of Counterspells, then the
+    /// invisibility break, or with <see cref="LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell"/> (SPL-118) the
+    /// invisibility break first.
+    /// </summary>
+    private void CastStageBeforeResolution(CastContext ctx)
+    {
+        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
+            CastStageInvisibilityBreak(ctx);
+        else
+            CastStageCounterspell(ctx);
     }
 
     /// <summary>Counterspell: a readied counterspell (PHB p.170) stops the spell; not for a held-charge delivery.</summary>
@@ -546,12 +755,17 @@ public partial class GameManager
             return;
         }
 
-        CastStageInvisibilityBreak(ctx);
+        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
+            CastStageMirrorImage(ctx);
+        else
+            CastStageInvisibilityBreak(ctx);
     }
 
     /// <summary>
     /// InvisibilityBreak: a hostile cast ends the caster's invisibility (PHB p.245). Here too, as before, the cast settles
-    /// whether a willing target skips the touch attack and whether the target forgoes its save.
+    /// whether a willing target skips the touch attack and whether the target forgoes its save (both read only the
+    /// creatures, so the NPC order does not change them). Then the Mirror Image stage, or with
+    /// <see cref="LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell"/> the counterspell.
     /// </summary>
     private void CastStageInvisibilityBreak(CastContext ctx)
     {
@@ -567,7 +781,10 @@ public partial class GameManager
         if (ctx.TargetForgoesSave)
             RequireLegacyQuirk(ctx, LegacyCastQuirk.AlliesForgoEverySave);
 
-        CastStageMirrorImage(ctx);
+        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
+            CastStageCounterspell(ctx);
+        else
+            CastStageMirrorImage(ctx);
     }
 
     /// <summary>MirrorImage: a targeted spell against a creature with figments may strike one instead (PHB p.254).</summary>
@@ -601,7 +818,9 @@ public partial class GameManager
             && spell.TargetType != SpellTargetType.Self
             && spell.TargetType != SpellTargetType.Area)
         {
-            int blinkTargetRoll = DiceService.Percentile("Blink target spell failure");
+            // The NPC path rolls under its own dice label and logs no connecting spell (NpcBlinkLabelsAndSilentPass, SPL-160).
+            bool npcBlink = ctx.Request.HasQuirk(LegacyCastQuirk.NpcBlinkLabelsAndSilentPass);
+            int blinkTargetRoll = DiceService.Percentile(npcBlink ? "Blink NPC target spell failure" : "Blink target spell failure");
             CastStageTrace.Mark(caster, spell, CastStageTrace.TargetBlink, blinkTargetRoll <= 50 ? "missed" : "connects");
             string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
             if (blinkTargetRoll <= 50)
@@ -611,7 +830,8 @@ public partial class GameManager
                 return;
             }
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
+            if (!npcBlink)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
         }
 
         // The globe is still tested after SpellCaster.Cast (SPL-141): no pre-cast globe stage yet.
@@ -637,10 +857,10 @@ public partial class GameManager
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
 
         // The landed cast's effect step (ApplySpellBuff): every Buff, Debuff, Control, Illusion and Wall spell, and the
-        // other spells ApplySpellBuff has a branch for. Shared with TryNPCPerformSpellCast (SPL-037).
+        // other spells ApplySpellBuff has a branch for. The same for every caster (SPL-037).
         ctx.AppliesTrackedEffect = SpellEffectRouting.ReachesApplySpellBuff(spell);
 
-        // Shared with TryNPCPerformSpellCast (SPL-007): Debuff and Control saves negate; Cause Fear and Scare are
+        // The same for every caster (SPL-007): Debuff and Control saves negate; Cause Fear and Scare are
         // partial; nonintelligent undead get no save vs Command Undead.
         bool effectNegatedBySave = SpellUtilities.IsEffectNegatedBySave(spell, result, target != null && !target.IsIntelligentUndead());
         ctx.EffectNegatedBySave = effectNegatedBySave;
@@ -708,7 +928,9 @@ public partial class GameManager
             var appliedEffect = ApplySpellBuff(caster, ctx.Request.Aim.Target, spell, ctx.SpellComp, ctx.Result);
             CastStageTrace.Mark(caster, spell, CastStageTrace.Buff, appliedEffect != null ? "applied" : "no-effect");
 
-            if (appliedEffect != null && spell.DurationType == DurationType.Concentration)
+            // The NPC path tracks no concentration (NpcNoConcentrationTracking, SPL-114).
+            if (appliedEffect != null && spell.DurationType == DurationType.Concentration
+                && !ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationTracking))
                 BeginConcentrationTracking(caster, appliedEffect, spell);
         }
 
@@ -717,7 +939,8 @@ public partial class GameManager
 
     /// <summary>
     /// PostCast: the target's concentration against the spell's damage, the held charge (kept when the delivering touch
-    /// misses, PHB p.141), the target's death, and the cast's result log with its prefixes.
+    /// misses, PHB p.141), the target's death, and the cast's result log with its prefixes (built, and shown at once,
+    /// before the death with <see cref="LegacyCastQuirk.NpcResultLogBeforeTargetDeath"/>).
     /// </summary>
     private void CastStagePostCast(CastContext ctx)
     {
@@ -745,18 +968,33 @@ public partial class GameManager
             }
         }
 
+        // The NPC path shows its result log before the target's death (NpcResultLogBeforeTargetDeath, SPL-160).
+        bool logBeforeDeath = ctx.Request.HasQuirk(LegacyCastQuirk.NpcResultLogBeforeTargetDeath);
+        if (logBeforeDeath)
+        {
+            BuildCastResultLog(ctx);
+            FlushCastLog(ctx);
+        }
+
         if (result.TargetKilled && target != null)
         {
             target.OnDeath();
             HandleSummonDeathCleanup(target);
         }
 
-        string log = ctx.LogPrefix + result.GetFormattedLog();
-        if (ctx.RetainedHeldChargeOnMiss)
-            log += $"\n✋ Touch attack missed — {caster.Stats.CharacterName} retains {spell.Name} charge.";
-        ctx.ResultLog = log;
+        if (!logBeforeDeath)
+            BuildCastResultLog(ctx);
 
         CastStageCombatEnd(ctx);
+    }
+
+    /// <summary>The cast's result log: its prefixes, SpellCaster's log and, for a missed held-charge touch, the kept charge.</summary>
+    private static void BuildCastResultLog(CastContext ctx)
+    {
+        string log = ctx.LogPrefix + ctx.Result.GetFormattedLog();
+        if (ctx.RetainedHeldChargeOnMiss)
+            log += $"\n✋ Touch attack missed — {ctx.Request.Caster.Stats.CharacterName} retains {ctx.Request.Spell.Name} charge.";
+        ctx.ResultLog = log;
     }
 
     /// <summary>
@@ -764,7 +1002,8 @@ public partial class GameManager
     /// panels, which also refresh the Flanked conditions, and highlights, in the old order), then the shared combat-end
     /// check (EvaluateCombatEnd), also when a handler dealt the damage through DealDamage without setting
     /// result.TargetKilled (SPL-004). With <see cref="LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath"/> (CORE-039)
-    /// only when the target was killed or is out of the fight.
+    /// only when the target was killed or is out of the fight; with <see cref="LegacyCastQuirk.NpcCombatEndCheckedByCaller"/>
+    /// (CORE-039) not here: the NPC wrapper checks after the cast returns.
     /// </summary>
     private void CastStageCombatEnd(CastContext ctx)
     {
@@ -774,8 +1013,10 @@ public partial class GameManager
 
         CharacterController target = ctx.Request.Aim.Target;
         SpellResult result = ctx.Result;
-        bool check = !ctx.Request.HasQuirk(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
-                     || result.TargetKilled || (target != null && CombatEndRules.IsOutOfFight(target));
+        // The NPC wrapper TryNPCPerformSpellCastForAI checks after the cast returns (NpcCombatEndCheckedByCaller, CORE-039).
+        bool check = !ctx.Request.HasQuirk(LegacyCastQuirk.NpcCombatEndCheckedByCaller)
+                     && (!ctx.Request.HasQuirk(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
+                         || result.TargetKilled || (target != null && CombatEndRules.IsOutOfFight(target)));
         if (check && EvaluateCombatEnd("ResolveSingleTargetSpell"))
         {
             CastStageTrace.Mark(ctx.Request.Caster, ctx.Request.Spell, CastStageTrace.CombatEnd, "ResolveSingleTargetSpell");
@@ -836,6 +1077,16 @@ public partial class GameManager
         Debug.LogWarning("[CastCore] " + detail);
         ScenarioHooks.CastStackViolation?.Invoke(detail);
         return true;
+    }
+
+    /// <summary>
+    /// A spell lost to a distraction or a spell failure still runs the casting-while-concentrating step
+    /// (HandleConcentrationOnCasting), except with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
+    /// </summary>
+    private void CheckConcentrationOnLostCast(CastContext ctx)
+    {
+        if (!ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationOnCastCheck))
+            HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
     }
 
     /// <summary>Spends the cast's slot (or scroll, wand charge, converted spell) with the parameters the Cost stage set.</summary>

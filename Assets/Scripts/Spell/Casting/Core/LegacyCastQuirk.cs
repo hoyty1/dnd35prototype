@@ -4,7 +4,8 @@ using System;
 /// Behaviours of today's cast paths that the staged cast core keeps on purpose until a later batch 11 step fixes them
 /// (docs/designs/cast_core_batch11.md, "Migration rule"). Each bit names one known deviation and cites its issue. Request
 /// builders set the bits (<see cref="SpellCastRequest.ForUi"/> and <see cref="SpellCastRequest.ForUiPrebuilt"/> set
-/// <see cref="LegacyCastQuirkSets.UiPath"/>, the PC single-target path as it is today); only the cast core's stage
+/// <see cref="LegacyCastQuirkSets.UiPath"/>, the PC single-target path as it is today, and
+/// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one); only the cast core's stage
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
@@ -116,9 +117,104 @@ public enum LegacyCastQuirk
     /// quickened.
     /// </summary>
     SpontaneousFullRoundByCasterClass = 1 << 14,
+
+    // The NPC path's own behaviours (batch 11 step 8): set only by SpellCastRequest.ForAI (LegacyCastQuirkSets.AiPath).
+    // Each names a PC/NPC parity issue; the RAW-fix step that removes it applies one rule to both sides.
+
+    /// <summary>
+    /// The NPC path's own legality list (SPL-160): before the shared target test the Legality stage refuses, with a
+    /// trace mark and no log line, a caster with no standard action left, a dead target, a caster that cannot cast
+    /// spells and a spell the caster has no slot for (SpellcastingComponent.CanCast); the target test's refusal is not
+    /// logged; and the Cost stage refuses a cast whose standard action cannot be committed. The PC path leaves these
+    /// to the spell menu. Batch 11 step 22 (ai-single-target-decider) moves the AI's tests into CheckLegality for every
+    /// caster and removes the bit.
+    /// </summary>
+    NpcOwnLegalityChecks = 1 << 15,
+
+    /// <summary>
+    /// The NPC range test: the Legality stage refuses a target beyond the spell's range at the caster's caster level
+    /// (GetCasterLevel, at least 1 square), measured to the target's anchor square. The PC range is the targeting
+    /// highlight's, by character level and to any footprint square (<see cref="RangeHighlightUsesCharacterLevel"/>;
+    /// SPL-017). Batch 11 step 14 (raw-resources-caster-level) gives both one CasterLevelRules range.
+    /// </summary>
+    NpcRangeUsesCasterLevel = 1 << 16,
+
+    /// <summary>
+    /// The Legality stage refuses every spell whose target type is Area (AI-001; Tests.Magic.SpellRoutingGoldenTests
+    /// mirrors this data refusal). Batch 11 step 25 (npc-area-casting) lets NPCs cast area spells and removes the bit.
+    /// </summary>
+    NpcRefusesArea = 1 << 17,
+
+    /// <summary>
+    /// The cast runs without metamagic whatever the request carries: the Legality stage drops it (AI-001, SPL-038).
+    /// Batch 11 step 21 (metamagic-legality-and-slots) casts a prepared metamagic slot's spell with its metamagic.
+    /// </summary>
+    NpcNullMetamagic = 1 << 18,
+
+    /// <summary>
+    /// No material-component test (the spell component pouch, PHB p.174 and p.130): NPCs carry no pouch (SPL-114).
+    /// Batch 11 step 17 (raw-components-all-casters, decision D3) gives every caster its components and removes the bit.
+    /// </summary>
+    NpcNoComponentCheck = 1 << 19,
+
+    /// <summary>
+    /// No casting-while-concentrating step (HandleConcentrationOnCasting): the ConcentrationOnCast stage is skipped, and
+    /// a spell lost to a distraction or a spell failure does not run the step either (SPL-114). Batch 11 step 15
+    /// (raw-counterspell-order-parity) removes the bit.
+    /// </summary>
+    NpcNoConcentrationOnCastCheck = 1 << 20,
+
+    /// <summary>
+    /// A Concentration-duration effect the Buff stage applies starts no concentration tracking
+    /// (BeginConcentrationTracking), so it never ends by damage or by the caster's choice (SPL-114). Batch 11 step 15
+    /// removes the bit.
+    /// </summary>
+    NpcNoConcentrationTracking = 1 << 21,
+
+    /// <summary>
+    /// The hostile-cast invisibility break runs right after the provocation, before the counterspell and the Ring of
+    /// Counterspells, so a countered NPC spell still ends the caster's invisibility (SPL-118). Batch 11 step 15 applies
+    /// decision D4's one order to every caster and removes the bit.
+    /// </summary>
+    NpcInvisibilityBreakBeforeCounterspell = 1 << 22,
+
+    /// <summary>
+    /// The Spend stage runs right after the distraction checks, before the Failure stage, so the arcane spell failure
+    /// and the blinking caster's 20% are rolled with the slot already spent (and spend nothing more), and a slot that
+    /// cannot be spent ends the cast without an error log (SPL-160). Batch 11 step 13 (raw-distraction-failure-stages)
+    /// makes the failure checks one rule on every path and removes the bit.
+    /// </summary>
+    NpcSpendsBeforeFailureChecks = 1 << 23,
+
+    /// <summary>
+    /// The blinking caster's and the blinking target's percentile rolls carry the NPC dice labels ("Blink NPC caster
+    /// spell failure", "Blink NPC target spell failure"), and a passed Blink check logs no line (SPL-160). Batch 11 step
+    /// 13 gives both one Blink rule and one label and removes the bit.
+    /// </summary>
+    NpcBlinkLabelsAndSilentPass = 1 << 24,
+
+    /// <summary>
+    /// The PostCast stage shows the cast's result log before the target's death (OnDeath and the summon cleanup) instead
+    /// of after it (SPL-160). Batch 11 step 11 (raw-failed-cast-gating), which settles the CombatEnd stage, removes it.
+    /// </summary>
+    NpcResultLogBeforeTargetDeath = 1 << 25,
+
+    /// <summary>
+    /// The CombatEnd stage runs no combat-end check: the NPC wrapper TryNPCPerformSpellCastForAI runs it after every
+    /// cast that counts as cast (CastOutcome.WasCast), once the stat panels are refreshed, failed casts included
+    /// (CORE-039). Batch 11 step 11 puts one check after every cast in the stage for every caster and removes the bit.
+    /// </summary>
+    NpcCombatEndCheckedByCaller = 1 << 26,
+
+    /// <summary>
+    /// The Mirror Image end-of-turn swap is offered only to controllable casters, so an NPC's figments keep their places
+    /// (SPL-117). Not read by a stage: the swap is an end-of-turn action outside the cast core
+    /// (TryBeginMirrorImageSwapSelection). Batch 11 step 26 (raw-mirror-image, decision D7) removes the swap and the bit.
+    /// </summary>
+    NpcNoMirrorImageSwap = 1 << 27,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 step 7 on).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7 and 8).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
@@ -138,4 +234,27 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.HeldChargeDeliveryIsFree
         | LegacyCastQuirk.QuickenBeforeSpontaneousFullRound
         | LegacyCastQuirk.SpontaneousFullRoundByCasterClass;
+
+    /// <summary>
+    /// Today's NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8):
+    /// the UI path's bits except the two that describe only the PC side (the combat-end check on a target's death,
+    /// CORE-039, and the targeting highlight's range, SPL-017), plus the NPC path's own bits. It differs from
+    /// <see cref="UiPath"/> only by bits that name a PC/NPC parity issue (Tests.Magic.CastCoreStageOrderTests checks the
+    /// list).
+    /// </summary>
+    public const LegacyCastQuirk AiPath =
+        (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath | LegacyCastQuirk.RangeHighlightUsesCharacterLevel))
+        | LegacyCastQuirk.NpcOwnLegalityChecks
+        | LegacyCastQuirk.NpcRangeUsesCasterLevel
+        | LegacyCastQuirk.NpcRefusesArea
+        | LegacyCastQuirk.NpcNullMetamagic
+        | LegacyCastQuirk.NpcNoComponentCheck
+        | LegacyCastQuirk.NpcNoConcentrationOnCastCheck
+        | LegacyCastQuirk.NpcNoConcentrationTracking
+        | LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell
+        | LegacyCastQuirk.NpcSpendsBeforeFailureChecks
+        | LegacyCastQuirk.NpcBlinkLabelsAndSilentPass
+        | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
+        | LegacyCastQuirk.NpcCombatEndCheckedByCaller
+        | LegacyCastQuirk.NpcNoMirrorImageSwap;
 }

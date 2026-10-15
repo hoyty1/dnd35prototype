@@ -83,8 +83,9 @@ public sealed class SpellCastRequest
 
     /// <summary>
     /// An NPC (AI-run) cast of <paramref name="spell"/> at <paramref name="target"/>: no metamagic (the NPC path has
-    /// none, SPL-038), a prepared or spontaneous slot as the caster's spellcasting says, and the caster's choices filled
-    /// by <see cref="AiCastDecider"/>.
+    /// none, SPL-038), a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy quirks
+    /// (<see cref="LegacyCastQuirkSets.AiPath"/>, batch 11 step 8) and <see cref="AiCastDecider"/>, which fills the
+    /// caster's choices when the cast core asks (the Legality stage).
     /// </summary>
     public static SpellCastRequest ForAI(CharacterController caster, CharacterController target, SpellData spell)
     {
@@ -98,10 +99,10 @@ public sealed class SpellCastRequest
             {
                 Kind = spellComp != null && spellComp.IsSpontaneousCaster ? CastSourceKind.SpontaneousSlot : CastSourceKind.PreparedSlot
             },
-            Decider = AiCastDecider.Instance
+            Decider = AiCastDecider.Instance,
+            Quirks = LegacyCastQuirkSets.AiPath
         };
         request.Aim.Target = target;
-        AiCastDecider.Instance.FillDefaultChoices(request);
         return request;
     }
 }

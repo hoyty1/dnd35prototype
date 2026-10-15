@@ -8,8 +8,8 @@ using UnityEngine;
 /// <see cref="UiCastDecider"/> calls the Ui methods here: the PC's choice dialogs, the AoO prompt and the UI follow-up of
 /// a finished cast. This is the only cast-core code that touches CombatUI beyond the log, the sub-phase, the highlights,
 /// the stat panels, ShowActionChoices and AfterAttackDelay; the stages themselves (GameManager.CastCore.cs) never do.
-/// <see cref="AiCastDecider"/> calls <see cref="AiResolveCastProvocation"/> (used once the NPC path joins the core in
-/// step 8).
+/// <see cref="AiCastDecider"/> calls <see cref="AiResolveCastProvocation"/> and <see cref="AiOnCastFinished"/> (the NPC
+/// path runs through the core since step 8: TryNPCPerformSpellCast, RunCastSync).
 /// </summary>
 public partial class GameManager
 {
@@ -131,5 +131,21 @@ public partial class GameManager
     internal bool AiResolveCastProvocation(CastContext ctx)
     {
         return ResolveNPCSpellcastProvocation(ctx.Request.Caster, ctx.Request.Spell);
+    }
+
+    /// <summary>
+    /// The follow-up of a finished NPC cast (AiCastDecider.OnCastFinished), as the old NPC executor did it before it
+    /// returned true: a cast that counts as cast (<see cref="CastOutcome.WasCast"/>) keeps its result log, if it has one
+    /// (a resolved cast or a struck mirror image), as the last combat log and refreshes the stat panels, which also
+    /// applies and removes the Flanked conditions. A refused or unspendable cast (the old false returns) does neither.
+    /// The combat-end check comes after, in TryNPCPerformSpellCastForAI (LegacyCastQuirk.NpcCombatEndCheckedByCaller).
+    /// </summary>
+    internal void AiOnCastFinished(CastContext ctx, CastOutcome outcome)
+    {
+        if (outcome == null || !outcome.WasCast)
+            return;
+        if (ctx.ResultLog != null)
+            _lastCombatLog = ctx.ResultLog;
+        UpdateAllStatsUI();
     }
 }

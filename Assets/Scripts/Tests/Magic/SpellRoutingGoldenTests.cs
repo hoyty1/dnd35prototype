@@ -16,7 +16,8 @@ namespace Tests.Magic
 /// Per spell: the EffectType after SpellCategoryClassifier.ReclassifyAll (run by SpellDatabase.Init), TargetType,
 /// AoEShapeType, SpellEffectRouting.ReachesApplySpellBuff, the branch GameManager.BeginPendingSpellTargeting takes for a
 /// PC cast (aoe, summon, swarm, wish, self, single; grease for Grease, whose branch is the caster's mode choice) and
-/// whether GameManager.TryNPCPerformSpellCast refuses it on data alone (an Area target type). Everything is computed
+/// whether the NPC cast path (GameManager.TryNPCPerformSpellCast, the cast core's Legality stage with the NpcRefusesArea
+/// quirk) refuses it on data alone (an Area target type). Everything is computed
 /// from data, without casting. The result is compared with tools/tests/spell-routing-golden.json; every changed, added
 /// or missing spell is one failure naming the spell. After a deliberate routing change, regenerate the file with
 /// <see cref="WriteGolden"/> (through the Unity MCP) and list the changed spells in the commit body.
@@ -139,7 +140,10 @@ public static class SpellRoutingGoldenTests
         return spell.TargetType == SpellTargetType.Self ? "self" : "single";
     }
 
-    /// <summary>The data refusal of GameManager.TryNPCPerformSpellCast (an Area target type; AI-001).</summary>
+    /// <summary>
+    /// The data refusal of the NPC cast path (an Area target type; AI-001): the cast core's Legality stage for a request
+    /// with LegacyCastQuirk.NpcRefusesArea (GameManager.CheckNpcRangeAndAreaLegality).
+    /// </summary>
     public static bool NpcRefusesOnData(SpellData spell) => spell.TargetType == SpellTargetType.Area;
 
     private static void CompareRows(SortedDictionary<string, string> golden, SortedDictionary<string, string> current)
