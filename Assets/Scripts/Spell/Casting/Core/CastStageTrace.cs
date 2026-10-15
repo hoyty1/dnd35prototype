@@ -31,6 +31,12 @@ public static class CastStageTrace
     public const string Handler = "handler";
     public const string Buff = "buff";
     public const string CombatEnd = "combat-end";
+    /// <summary>
+    /// Batch 11 step 5 shadow ledger: on the NPC cast path, the NPC handler chain's claim against the shared
+    /// single-target registry's predicted claim, plus the continuing handler it would run that the NPC chain lacks
+    /// ("npcClaimed=X registryWouldClaim=Y [entry=Name] [registryWouldRun=Name npcRan=false]"); removed in step 6.
+    /// </summary>
+    public const string Shadow = "shadow";
 
     /// <summary>Raises <see cref="ScenarioHooks.CastStage"/> when a handler is installed; otherwise does nothing.</summary>
     public static void Mark(CharacterController caster, SpellData spell, string stage, string detail = null)

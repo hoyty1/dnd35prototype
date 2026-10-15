@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 59 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 60 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,7 +140,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 59 files (since batch 11 step 4 added `GameManager.CastContext.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 60 files (since batch 11 step 5 added `GameManager.SpellHandlerRegistry.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -159,7 +159,8 @@ There are 59 files (since batch 11 step 4 added `GameManager.CastContext.cs`), f
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
 | **Spell/Resolution/** (26) | | |
 | GameManager.CastContext.cs | 330 | The per-cast context (batch 11 step 4): the cast stack (`BeginCast`, `EndCast`, `EndPendingCast`, `EndAllCasts`; a misuse raises `ScenarioHooks.CastStackViolation`) and the old `_pending*` names as private forwarding properties onto the open cast's `SpellCastRequest` ([Spells: per-cast context](architecture/spells.md)). |
-| GameManager.SpellCasting.cs | 8,957 | Spell targeting and casting orchestration (`BeginPendingSpellTargeting`, `PerformSpellCast`), summon spawn and despawn, `TickSummonDurations`, `TickAllSpellDurations`. |
+| GameManager.SpellHandlerRegistry.cs | 293 | The single-target spell handler registry (batch 11 step 5): one `SpellHandlerEntry` per `TryResolve*SpellEffect` handler (spell ids, gate, ContinueToBuff), `RunSingleTargetHandlers` for `PerformSpellCast` and the pure `PredictSingleTargetClaim` and `PredictSingleTargetContinuingEntry` for the NPC shadow ledger ([Spells: handler chains](architecture/spells.md)). |
+| GameManager.SpellCasting.cs | 8,974 | Spell targeting and casting orchestration (`BeginPendingSpellTargeting`, `PerformSpellCast`), summon spawn and despawn, `TickSummonDurations`, `TickAllSpellDurations`. |
 | GameManager.DispelCounterspell.cs | 70 | `_dispelMagicService` field plus thin delegates to `DispelMagicService`. |
 | GameManager_Spells_A/B/C/E/L/N/V.cs | 60-234 each | One or two spells each: Align Weapon; Blink, Bestow Curse; Contagion; Enervation; Lesser Globe; Neutralize Poison; Vampiric Touch. |
 | GameManager_Spells_D.cs | 780 | Death Ward, Divine Power, Dismissal, Daylight, Displacement, Death Knell, Dimension Door, Dimensional Anchor, Black Tentacles. |

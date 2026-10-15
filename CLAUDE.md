@@ -66,10 +66,10 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 59 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack, and the old `_pending*` spell names forward to it (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 60 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack, and the old `_pending*` spell names forward to it (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
-4. **Spell effects dispatch by SpellId string compare** in chained `TryResolve<Name>SpellEffect` handlers; unclaimed spells fall to `ApplySpellBuff`.
+4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); AoE handlers are chained string compares; unclaimed spells fall to `ApplySpellBuff`.
 5. **Four hand-synced cast pipelines:** `PerformSpellCast`, `PerformAoESpellCast`, `TryNPCPerformSpellCast` (no metamagic), `TryConsumePendingSpellCast`. Scrolls, wands, F12 enter via `BeginPendingSpellTargeting`.
 6. **String IDs:** `SpellNames.X`, `ItemIDs.X` (`[Obsolete]` string overloads still the norm), snake_case NPC ids, free-string feats (`HasFeat("Power Attack")`).
 7. **Static databases** with lazy `Init()`; rings, rods, wondrous items join `ItemDatabase` only via `RegisterAll*` (ITM-032).
@@ -82,7 +82,7 @@ Where to look first:
 ## Traps that bite
 
 - A method missing from `GameManager.cs` is in another partial. Grep before adding a duplicate.
-- A new single-target spell handler goes in the PC chain, its `anyPriorHandled`/`anyClericHandled` flags, and `TryNPCPerformSpellCast` (SPL-054).
+- A new single-target spell handler is one line in the SpellId registry (`BuildSingleTargetHandlers`, `GameManager.SpellHandlerRegistry.cs`) with its gate, plus a manifest row in `SpellHandlerRegistryTests`; the NPC path still has its own 19-handler chain in `TryNPCPerformSpellCast`, so add it there too until batch 11 step 6 (SPL-054).
 - In `ApplySpellBuff`, the generic `StatusEffectManager` branch is last and returns for every spell: a special case goes above it, and a spell that is not Buff/Debuff/Control/Illusion/Wall also needs an entry in `SpellEffectRouting` (a Healing or Damage one also `HealingResolvedByHandler`/`DamageResolvedByHandler`).
 - Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043), weapon damage terms in `BuildWeaponDamageBonus` (CMB-003); rake and grapple weapon attacks still sum their own attack modifier (CMB-087); typed attack, damage, save, skill, speed and ability bonuses go in `CharacterStats.Bonuses` with their real `BonusType` (stacked by `BonusStacking`, PHB p.171-172); never sum a new bonus source by hand.
 - Save rolls use `SaveRules.Modifier(stats, save, SaveContext)` (`Character/Stats/SaveRules.cs`): a bonus on every save goes in `CharacterStats.GetSaveTotal`, one against some effects in `SaveRules.SituationalBonus` (CHR-018).

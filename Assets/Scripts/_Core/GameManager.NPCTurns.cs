@@ -1466,6 +1466,16 @@ public partial class GameManager
             }
         }
 
+        // Batch 11 step 5 shadow ledger (inert outside the scenario harness): what the shared single-target registry
+        // (GameManager.SpellHandlerRegistry.cs) would claim for this cast, predicted from the result as it stands before
+        // any handler runs, without running one. Compared below with this chain's claim and written to the cast-stage
+        // side channel only; step 6 replaces this chain with the registry (SPL-054).
+        bool shadowLedger = ScenarioHooks.CastStage != null;
+        SpellHandlerEntry registryWouldClaim = shadowLedger ? PredictSingleTargetClaimEntry(spell, result, effectNegatedBySave) : null;
+        // The continuing handlers (Sound Burst stun, Shield Other's link) never claim, so the claim comparison cannot show
+        // them; this chain runs neither, so any one the registry would run is a step 6 difference too.
+        SpellHandlerEntry registryWouldRun = shadowLedger ? PredictSingleTargetContinuingEntry(spell, result, effectNegatedBySave) : null;
+
         bool handledCauseFear = TryResolveCauseFearSpellEffect(npc, target, spell, result);
 
         // Scare (Will partial: shaken 1 round on a save) resolves in its own handler, as on the PC path.
@@ -1543,6 +1553,19 @@ public partial class GameManager
         bool handledPrayer = false;
         if (!handledCauseFear && !handledSearingLight && result.Success)
             handledPrayer = TryResolvePrayerSpellEffect(npc, target, spell, result);
+
+        if (shadowLedger)
+        {
+            bool npcClaimed = handledCauseFear || handledScare || handledRayOfEnfeeblement || handledTouchOfIdiocy || handledMelfsAcidArrow
+                || handledRayOfExhaustion || handledVampiricTouch || handledEnervation || handledContagion || handledBestowCurse
+                || handledGreaterInvisibility || handledPhantasmalKiller || handledFireShield || handledResilientSphere || handledAnimateRope
+                || handledMirrorImage || handledLesserGlobe || handledSearingLight || handledPrayer;
+            CastStageTrace.Mark(npc, spell, CastStageTrace.Shadow,
+                "npcClaimed=" + (npcClaimed ? "true" : "false")
+                + " registryWouldClaim=" + (registryWouldClaim != null ? "true" : "false")
+                + (registryWouldClaim != null ? " entry=" + registryWouldClaim.Name : "")
+                + (registryWouldRun != null ? " registryWouldRun=" + registryWouldRun.Name + " npcRan=false" : ""));
+        }
 
         if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && !handledPrayer && result.Success && appliesTrackedEffect && !effectNegatedBySave)
         {

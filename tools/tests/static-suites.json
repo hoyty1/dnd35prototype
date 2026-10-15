@@ -1404,6 +1404,17 @@
       "notes": "Batch 11 step 2 (docs/designs/cast_core_batch11.md): for every SpellDatabase spell, the EffectType after SpellCategoryClassifier.ReclassifyAll, TargetType, AoEShapeType, SpellEffectRouting.ReachesApplySpellBuff, the GameManager.BeginPendingSpellTargeting branch of a PC cast (aoe, summon, swarm, wish, self, single, grease) and the TryNPCPerformSpellCast data refusal (Area target type), computed from data without casting and compared with tools/tests/spell-routing-golden.json (292 spells, generated 2026-10-15); a changed, added or removed spell is one failure naming it. Regenerate with WriteGolden() only for a deliberate routing change and list the changed spells in the commit body. Added 2026-10-15."
     },
     {
+      "type": "Tests.Magic.SpellHandlerRegistryTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 484,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 5 (docs/designs/cast_core_batch11.md, handler-registry-pc): GameManager's single-target handler registry (GameManager.SpellHandlerRegistry.cs) that PerformSpellCast runs in place of its old cascade of handled flags. Every private GameManager method named TryResolve*SpellEffect, plus TryResolveSoundBurstStunEffect, found by reflection, is registered exactly once with the (caster, target, spell, result) -> bool signature; no spell id is claimed by two entries; every registered spell id exists in SpellDatabase; the order, gates (None, Success, SuccessNotNegated), ContinueToBuff flags and spell ids equal the manifest re-derived from the old chain's guards and each method's own id check; the gate evaluation and the pure claim and continuing-handler predictions of the NPC shadow ledger. Added 2026-10-15."
+    },
+    {
       "type": "Tests.Magic.SpellDiceRulesTests",
       "needs": "either",
       "skip": "",
