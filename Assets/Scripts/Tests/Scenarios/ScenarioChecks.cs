@@ -28,6 +28,8 @@ namespace Tests.Scenarios
         public const string CombatEndEarly = "combat-end-early";
         public const string PhaseAfterCombatOver = "phase-after-combatover";
         public const string HookError = "hook-error";
+        /// <summary>The per-cast context stack (GameManager.BeginCast, EndCast; batch 11 step 4) was popped out of order or misused.</summary>
+        public const string CastStack = "cast-stack";
 
         /// <summary>Frames and game-seconds without progress before a soft lock is declared.</summary>
         public int SoftLockFrames = 300;
@@ -615,6 +617,9 @@ namespace Tests.Scenarios
             string line = nl >= 0 ? s.Substring(0, nl) : s;
             return line.Length > 300 ? line.Substring(0, 300) : line;
         }
+
+        /// <summary>A per-cast context stack fault reported by the game (ScenarioHooks.CastStackViolation).</summary>
+        public void OnCastStackViolation(string detail) => Violation(CastStack, detail);
 
         public void CheckHookErrors()
         {

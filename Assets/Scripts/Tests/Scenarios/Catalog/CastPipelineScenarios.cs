@@ -43,12 +43,19 @@ namespace Tests.Scenarios
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("cast-entangled", Entangled);
             yield return S("cast-slot-failure-refund", SlotFailureRefund);
+            yield return S("stale-cast-state-energy", StaleEnergyChoice);
+            yield return S("stale-cast-state-fire-shield", FireShieldChoicePerCast);
+            yield return S("stale-cast-state-wand-asf", StaleWandFlag);
+            yield return S("stale-cast-state-f12-bypass", TestPanelBypassThroughResolution);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("CastPipelineScenarios rules/" + name, build);
 
         private static ScenarioBuilder Rules(string id, string title)
             => Scenario.Define(id, title).Tags("rules", "cast-pipeline").Covers("PC_NPC_PARITY", "batch 11 step 3");
+
+        private static ScenarioBuilder StaleRules(string id, string title)
+            => Scenario.Define(id, title).Tags("rules", "cast-pipeline", "cast-context").Covers("PC_NPC_PARITY", "batch 11 step 4");
 
         // ── Builders ────────────────────────────────────────────────────
 
@@ -911,6 +918,240 @@ namespace Tests.Scenarios
                     v => v.Log(@"Entangled somatic concentration \(Pin Wizard, Magic Missile\): d20 10 \+ 8 = 18 vs DC 16").Count == 1
                         ? ExpectResult.Pass("logged d20 10 + 8 = 18 vs DC 16") : ExpectResult.Fail("no entangled check logged as d20 10 + 8 = 18 vs DC 16"),
                     FactIs("missile.lost.dummy", 15)))
+                .Build();
+        }
+
+        // ── rules/stale-cast-state-* (batch 11 step 4) ──────────────────
+
+        /// <summary>The resist energy entries of <paramref name="c"/>, such as "Fire:10", or "none".</summary>
+        private static string ResistEntries(CharacterController c)
+        {
+            List<string> entries = c.Stats.ActiveResistEnergyEffects != null
+                ? c.Stats.ActiveResistEnergyEffects.Where(r => r != null).Select(r => r.EnergyType + ":" + r.ResistanceAmount).ToList()
+                : new List<string>();
+            return entries.Count > 0 ? string.Join(",", entries) : "none";
+        }
+
+        /// <summary>
+        /// Lets the NPC executor's availability check (SpellcastingComponent.CanCast, which first bounds the spell level by
+        /// the per-level SlotsRemaining view) see a slot <see cref="AddWizardSlot"/> added above the class table (SPL-041):
+        /// the view is widened to <paramref name="level"/> with one slot there. The spend itself reads the slots.
+        /// </summary>
+        private static void WidenSlotsRemaining(CharacterController c, int level)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            int[] old = sc.SlotsRemaining ?? new int[0];
+            if (old.Length > level)
+                return;
+            var widened = new int[level + 1];
+            Array.Copy(old, widened, old.Length);
+            widened[level] = 1;
+            sc.SlotsRemaining = widened;
+        }
+
+        /// <summary>The pack slot of the first item with ItemDatabase id <paramref name="itemId"/>, or -1.</summary>
+        private static int PackIndex(CharacterController c, string itemId)
+        {
+            global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+            if (inv == null || inv.GeneralSlots == null)
+                return -1;
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                if (inv.GeneralSlots[i] != null && inv.GeneralSlots[i].Id == itemId)
+                    return i;
+            return -1;
+        }
+
+        /// <summary>
+        /// Batch 11 step 4 (SPL-112, stale-choice half; PHB p.272: the caster chooses the energy type). A threatened Ui wizard
+        /// 5 picks cold for Resist Energy on itself and cancels the cast at its AoO confirmation (the goblin beside it is
+        /// first in initiative, so it threatens; -30 on attacks). The cancel used to leave the cold choice in GameManager's
+        /// shared field, and the Scripted wizard 5 who casts Resist Energy on itself next (away from the goblin) took that
+        /// stale cold instead of its own choice. The choice is now the cancelled cast's own and ends with it; the Scripted
+        /// cast's request gets the NPC path's fire (AiCastDecider; the AI's real choice is SPL-112's open half). The cancel
+        /// spends nothing (the AoO prompt's refund) and leaves no cast open.
+        /// </summary>
+        private static ScenarioDef StaleEnergyChoice()
+        {
+            return StaleRules("rules/stale-cast-state-energy", "A cancelled PC energy choice does not reach a later NPC Resist Energy (SPL-112)")
+                .Covers("SPL-112", "PHB p.272", "PHB p.141")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Stale Ui Wizard", 5)), 5, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Stale Scripted Wizard", 5)), 5, 16, Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 2, SpellNames.RESIST_ENERGY))
+                .Tweak("scripted", c => Prepare(c, 2, SpellNames.RESIST_ENERGY))
+                .Tweak("gob", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("gob", "wizard", "scripted")
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { Fact(ctx, "slots.before", Slots(ctx.Get("wizard"))); return true; }),
+                    Step.CastChoosing(SpellNames.RESIST_ENERGY, "wizard", "Cold"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("after the cancel", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "slots.after", Slots(w));
+                        Fact(ctx, "ui.resist", ResistEntries(w));
+                        Fact(ctx, "open.casts", ctx.Gm.Harness_OpenCastCount);
+                        return true;
+                    }))
+                .Turn("scripted", 1,
+                    Step.Cast(SpellNames.RESIST_ENERGY, "scripted"),
+                    Step.Assert("record", ctx => { Fact(ctx, "scripted.resist", ResistEntries(ctx.Get("scripted"))); return true; }))
+                .Expect("The Ui cast reached its AoO confirmation and was cancelled", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("The cancelled cast spends no slot, grants nothing and leaves no cast open", FactsAre(("ui.resist", "none"), ("open.casts", 0)))
+                .Expect("The cancelled cast's slot is given back", FactsEqual("slots.before", "slots.after"))
+                .Expect("The Scripted cast ran", Expect.StepStatus("scripted", 1, "Cast", 0, "done"))
+                .Expect("The Scripted cast resists its own request's energy, fire, not the cancelled PC cast's cold (SPL-112 stale-choice half)", FactIs("scripted.resist", "Fire:10"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 11 step 4 (PHB p.230: the caster chooses warm or chill). The Fire Shield prompt re-enters the target
+        /// selection (BeginPendingSpellTargeting) inside the same cast, so the Ui wizard's chill pick reaches its cast; the
+        /// Scripted wizard's cast that follows has its own request, warm (AiCastDecider, the NPC path's old default).
+        /// Fire Shield is in an added 4th-level slot (SPL-041; for the Scripted wizard the NPC executor's slot view is widened
+        /// to it right before its cast, <see cref="WidenSlotsRemaining"/>, which is why that cast is made from an Assert step
+        /// through TryNPCPerformSpellCastForAI, the call the Scripted Cast step makes).
+        /// </summary>
+        private static ScenarioDef FireShieldChoicePerCast()
+        {
+            return StaleRules("rules/stale-cast-state-fire-shield", "The Fire Shield choice survives the prompt's re-entry and stays with its cast (SPL-112)")
+                .Covers("SPL-112", "PHB p.230")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Stale Ui Wizard", 7)), 5, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Stale Scripted Wizard", 7)), 5, 16, Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 13, Control.Idle)
+                .Tweak("wizard", c => AddWizardSlot(c, 4, SpellNames.FIRE_SHIELD))
+                .Tweak("scripted", c => AddWizardSlot(c, 4, SpellNames.FIRE_SHIELD))
+                .Initiative("wizard", "scripted", "dummy")
+                .Turn("wizard", 1,
+                    Step.CastChoosing(SpellNames.FIRE_SHIELD, "wizard", "Chill"),
+                    Step.Assert("record", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "ui.shield", w.Stats.FireShieldActive ? (w.Stats.FireShieldIsWarm ? "warm" : "chill") : "none");
+                        Fact(ctx, "open.casts", ctx.Gm.Harness_OpenCastCount);
+                        return true;
+                    }))
+                .Turn("scripted", 1,
+                    Step.Assert("cast Fire Shield through the NPC executor", ctx =>
+                    {
+                        CharacterController s = ctx.Get("scripted");
+                        WidenSlotsRemaining(s, 4);
+                        Fact(ctx, "scripted.cast", ctx.Gm.TryNPCPerformSpellCastForAI(s, s, SpellDatabase.GetSpell(SpellNames.FIRE_SHIELD).Clone()));
+                        Fact(ctx, "scripted.shield", s.Stats.FireShieldActive ? (s.Stats.FireShieldIsWarm ? "warm" : "chill") : "none");
+                        return true;
+                    }))
+                .Expect("Both casts ran", Expect.All(Expect.StepStatus("wizard", 1, "Cast", 0, "done"), FactIs("scripted.cast", true)))
+                .Expect("The Ui wizard's chill pick reaches its own cast through the prompt's re-entry, and the cast closes", FactsAre(("ui.shield", "chill"), ("open.casts", 0)))
+                .Expect("The Scripted cast's own request is warm (the NPC path's choice)", FactIs("scripted.shield", "warm"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 11 step 4 (SPL-116; PHB p.122: an arcane caster in armor risks arcane spell failure on a spell with a
+        /// somatic component). A Ui wizard 5 uses its wand of magic missile and cancels at the target selection (right-click,
+        /// CancelSpellTargeting); the wand flag used to stay set after that cancel, and the shared spell-failure check skipped
+        /// arcane spell failure for every later caster while it was set. The Scripted wizard 5 then casts Magic Missile with
+        /// 100% arcane spell failure (set just before its cast): it must roll and lose the spell. The wand keeps its charges
+        /// (the cast never got to spend one).
+        /// </summary>
+        private static ScenarioDef StaleWandFlag()
+        {
+            return StaleRules("rules/stale-cast-state-wand-asf", "A wand cast cancelled at targeting does not spare a later NPC cast its arcane spell failure (SPL-116)")
+                .Covers("SPL-116", "PHB p.122", "DMG p.245")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Stale Ui Wizard", 5)), 5, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Stale Scripted Wizard", 5)), 5, 16, Control.Scripted)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Npc("dummy2", "target_dummy", 9, 16, Control.Idle)
+                .Tweak("wizard", c => GiveItem(c, WandId))
+                .Tweak("scripted", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
+                .Tweak("dummy2", Sturdy)
+                .Initiative("wizard", "scripted", "dummy", "dummy2")
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("use the wand, then cancel the target selection", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        RecordItem(ctx, WandId, "before");
+                        int slot = PackIndex(w, WandId);
+                        bool used = slot >= 0 && ctx.Gm.TryUseConsumableFromInventory(w, slot, out _);
+                        Fact(ctx, "wand.selecting", used && ctx.Gm.CurrentSubPhase == GameManager.PlayerSubPhase.SelectingAttackTarget);
+                        Fact(ctx, "wand.cancelled", ctx.Gm.Harness_CancelSelection());
+                        Fact(ctx, "open.casts", ctx.Gm.Harness_OpenCastCount);
+                        RecordItem(ctx, WandId, "after");
+                        return true;
+                    }))
+                .Turn("scripted", 1,
+                    Step.Assert("cast Magic Missile in armor with 100% arcane spell failure", ctx =>
+                    {
+                        CharacterController s = ctx.Get("scripted");
+                        RecordHp(ctx, "dummy2");
+                        s.Stats.ArcaneSpellFailure = 100;
+                        Fact(ctx, "cast", ctx.Gm.TryNPCPerformSpellCastForAI(s, ctx.Get("dummy2"), SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE).Clone()));
+                        FactHpLost(ctx, "missile", "dummy2");
+                        return true;
+                    }))
+                .Expect("The wand's target selection opened and was cancelled, leaving no cast open", FactsAre(("wand.selecting", true), ("wand.cancelled", true), ("open.casts", 0)))
+                .Expect("The cancelled wand cast spent no charge", FactsEqual("charges.before", "charges.after"))
+                .Expect("The Scripted cast went through the executor", FactIs("cast", true))
+                .Expect("It rolled arcane spell failure (PHB p.122)", v => v.Log(@"ASF Check \(Stale Scripted Wizard, Magic Missile\): roll \d+% vs 100%").Count == 1
+                    ? ExpectResult.Pass("one ASF check logged at 100%") : ExpectResult.Fail("no ASF check logged for the Scripted cast"))
+                .Expect("The spell is lost: the dummy takes nothing (SPL-116 stale-flag part)", FactIs("missile.lost.dummy2", 0))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 11 step 4 (SPL-036). The F12 Spell Testing Panel's privileges (no arcane spell failure, no component pouch
+        /// or costly components) are TestPanelBypass flags on its cast's source; they used to be cleared as soon as a
+        /// single-target cast started resolving (PerformSpellCast), so that cast got none of them. A Ui wizard 5 with 100%
+        /// arcane spell failure casts Magic Missile at the dummy through TestCastSpellFromPanel (every d4 4: three missiles of
+        /// 1d4+1 = 15); the bypass holds through resolution, so no failure check is rolled and the missiles hit, and the
+        /// panel's caster is forgotten when the cast ends (no leak into later casts). The panel is clicked twice first: the
+        /// second F12 cast replaces the first, still at its target selection, and keeps the panel's caster.
+        /// </summary>
+        private static ScenarioDef TestPanelBypassThroughResolution()
+        {
+            return StaleRules("rules/stale-cast-state-f12-bypass", "An F12 single-target cast keeps its bypass through resolution (SPL-036)")
+                .Covers("SPL-036", "PHB p.122", "PHB p.251")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Stale Ui Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("F12 cast at the dummy with 100% arcane spell failure", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        RecordHp(ctx, "dummy");
+                        w.Stats.ArcaneSpellFailure = 100;
+                        // A first F12 click left at its target selection, then a second: the second cast replaces the first
+                        // and keeps the panel's caster (it is stored after the new cast opens).
+                        ctx.Gm.TestCastSpellFromPanel(w, SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE), false);
+                        ctx.Gm.TestCastSpellFromPanel(w, SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE), false);
+                        Fact(ctx, "f12.second.caster", ReferenceEquals(ctx.Gm.GetTestPanelCaster(), w) ? "kept" : "lost");
+                        Fact(ctx, "f12.second.open", ctx.Gm.Harness_OpenCastCount);
+                        Fact(ctx, "f12.selecting", ctx.Gm.CurrentSubPhase == GameManager.PlayerSubPhase.SelectingAttackTarget);
+                        ctx.Gm.OnCellClicked(ctx.Gm.Grid.GetCell(ctx.Get("dummy").GridPosition));
+                        FactHpLost(ctx, "missile", "dummy");
+                        return true;
+                    }),
+                    Step.Assert("after", ctx =>
+                    {
+                        Fact(ctx, "f12.caster", ctx.Gm.GetTestPanelCaster() == null ? "none" : "kept");
+                        Fact(ctx, "open.casts", ctx.Gm.Harness_OpenCastCount);
+                        return true;
+                    }))
+                .Expect("A second F12 click replaces the open F12 cast and keeps the panel's caster", FactsAre(("f12.second.caster", "kept"), ("f12.second.open", 1)))
+                .Expect("The F12 cast opened its target selection", FactIs("f12.selecting", true))
+                .Expect("No arcane spell failure is rolled for the F12 cast (its ArcaneFailure bypass holds through resolution, SPL-036)",
+                    v => v.Log(@"ASF Check \(Stale Ui Wizard, Magic Missile\)").Count == 0
+                        ? ExpectResult.Pass("no ASF check logged") : ExpectResult.Fail("an ASF check was logged for the F12 cast"))
+                .Expect("The missiles hit: 3 x (1d4+1) = 15 (PHB p.251)", FactIs("missile.lost.dummy", 15))
+                .Expect("The cast ended: no cast open and the panel's caster forgotten", FactsAre(("f12.caster", "none"), ("open.casts", 0)))
                 .Build();
         }
 

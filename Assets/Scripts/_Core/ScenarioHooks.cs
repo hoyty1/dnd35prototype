@@ -58,6 +58,13 @@ public static class ScenarioHooks
     /// </summary>
     public static Action<CharacterController, SpellData, string, string> CastStage;
 
+    /// <summary>
+    /// The per-cast context stack went wrong (GameManager.BeginCast, EndCast; batch 11 step 4): a cast ended while another
+    /// was on top of the stack, a Ui cast began inside an AI cast, or a Ui exit tried to end an AI cast. The scenario
+    /// harness turns it into a 'cast-stack' violation.
+    /// </summary>
+    public static Action<string> CastStackViolation;
+
     /// <summary>A position change: mover, from, to, movement type ("move", "path-move", "teleport", ...).</summary>
     public static Action<CharacterController, Vector2Int, Vector2Int, string> Moved;
 
@@ -222,6 +229,7 @@ public static class ScenarioHooks
         if (ThreatenedCast != null) set.Add(nameof(ThreatenedCast));
         if (SpellCast != null) set.Add(nameof(SpellCast));
         if (CastStage != null) set.Add(nameof(CastStage));
+        if (CastStackViolation != null) set.Add(nameof(CastStackViolation));
         if (Moved != null) set.Add(nameof(Moved));
         if (ConditionChanged != null) set.Add(nameof(ConditionChanged));
         if (CombatLog != null) set.Add(nameof(CombatLog));
@@ -243,6 +251,7 @@ public static class ScenarioHooks
         ThreatenedCast = null;
         SpellCast = null;
         CastStage = null;
+        CastStackViolation = null;
         Moved = null;
         ConditionChanged = null;
         CombatLog = null;

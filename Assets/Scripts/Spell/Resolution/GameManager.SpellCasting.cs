@@ -42,6 +42,7 @@ public partial class GameManager
         if (spellComp == null)
         {
             Debug.LogError("[GameManager] TryConsumePendingSpellCast: No SpellcastingComponent!");
+            EndPendingCast();
             return false;
         }
 
@@ -132,6 +133,7 @@ public partial class GameManager
             if (!consumedOnFailure)
             {
                 Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} slot for {_pendingSpell.Name}");
+                EndPendingCast();
                 return false;
             }
 
@@ -158,6 +160,7 @@ public partial class GameManager
         if (!consumed)
         {
             Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} slot for summon spell {_pendingSpell.Name}");
+            EndPendingCast();
             return false;
         }
 
@@ -177,25 +180,26 @@ public partial class GameManager
     {
         if (spellComp == null || spell == null) return false;
 
-        // The scroll and wand flags belong to the PC's pending cast. TryNPCPerformSpellCast also
-        // reaches this method (through the entangled and grappled helpers) with its own spell, so
-        // a flag left set by a cancelled PC scroll or wand cast must not spend that item here.
-        bool isPendingPCCast = ReferenceEquals(spell, _pendingSpell);
+        // What the cast spends is its own source (batch 11 step 4): the cast on top of the cast stack, which is this
+        // cast (TryNPCPerformSpellCast opens its own context before it reaches here through the entangled and grappled
+        // helpers), so a scroll or wand cast of another caster, or a cancelled one, can never be spent here.
+        CastContext cast = CurrentCast;
+        CastSourceKind sourceKind = cast != null ? cast.Request.Source.Kind : CastSourceKind.PreparedSlot;
 
         // Scroll casts do not consume spell slots — the scroll IS the resource
-        if (isPendingPCCast && _pendingScrollCastActive)
+        if (sourceKind == CastSourceKind.Scroll)
         {
             Debug.Log($"[ScrollCast] Skipping spell slot consumption — casting from scroll.");
-            ConsumeScrollAfterCast(ActivePC);
+            ConsumeScrollAfterCast(cast.Request.Caster);
             MarkCastSpend(spellComp, spell, "scroll");
             return true;
         }
 
         // Wand casts do not consume spell slots — the wand charge IS the resource
-        if (isPendingPCCast && _pendingWandCastActive)
+        if (sourceKind == CastSourceKind.Wand)
         {
             Debug.Log($"[WandCast] Skipping spell slot consumption — casting from wand.");
-            ConsumeWandChargeAfterCast(ActivePC);
+            ConsumeWandChargeAfterCast(cast.Request.Caster);
             MarkCastSpend(spellComp, spell, "wand");
             return true;
         }
@@ -232,8 +236,11 @@ public partial class GameManager
         if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
             return false;
 
-        // Bypass arcane spell failure for F12 test panel casts, scroll casts, and wand casts
-        if (_testPanelCastActive || _pendingScrollCastActive || _pendingWandCastActive)
+        // No arcane spell failure for the F12 test panel's casts (its ArcaneFailure bypass) or for scroll and wand casts:
+        // the cast's own source decides (batch 11 step 4), so a flag of another or a cancelled cast never reaches an NPC
+        // (SPL-116). The scroll exemption contradicts DMG p.238 and stays until batch 11 step 13 (SPL-116).
+        CastSource castSource = CurrentCastSource;
+        if (castSource != null && (castSource.HasBypass(TestPanelBypass.ArcaneFailure) || castSource.IsItem))
             return false;
 
         if (!caster.Stats.IsAffectedByArcaneSpellFailure)
@@ -1529,6 +1536,7 @@ public partial class GameManager
         {
             ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] HoldPendingMeleeTouchCharge: No SpellcastingComponent!");
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -1600,6 +1608,7 @@ public partial class GameManager
                 {
                     ClearSpellcastResourceSnapshot();
                     Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} spell slot for held charge!");
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }
@@ -1632,6 +1641,7 @@ public partial class GameManager
             {
                 ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot for held charge!");
+                EndPendingCast();
                 ShowActionChoices();
                 return;
             }
@@ -1678,8 +1688,8 @@ public partial class GameManager
 
         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformSpellCast));
 
-        // Clean up test-panel override now that the spell is resolving
-        CleanupTestPanelCast();
+        // The F12 panel's bypass flags are the cast's own (its CastSource) and end with it: they are no longer cleared
+        // here, before the cast resolved (SPL-036).
 
         CombatUI?.HideDisguiseSelfRaceSelector();
         CurrentSubPhase = PlayerSubPhase.Animating;
@@ -1734,8 +1744,11 @@ public partial class GameManager
 
         // ── Spell Component Pouch check (D&D 3.5e PHB p.130) ──
         // Spells with common material components (M with no GP cost) require a spell component pouch.
-        // F12 test panel casts, scroll casts, and wand casts bypass this requirement (item provides components).
-        if (!_testPanelCastActive && !_pendingScrollCastActive && !_pendingWandCastActive && _pendingSpell.HasMaterialComponent)
+        // F12 test panel casts (their Components bypass), scroll casts, and wand casts bypass this requirement (item
+        // provides components); the cast's own source decides (batch 11 step 4).
+        CastSource pouchSource = CurrentCastSource;
+        bool componentsBypassed = pouchSource != null && (pouchSource.HasBypass(TestPanelBypass.Components) || pouchSource.IsItem);
+        if (!componentsBypassed && _pendingSpell.HasMaterialComponent)
         {
             if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
             {
@@ -1811,16 +1824,20 @@ public partial class GameManager
         {
             ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] PerformSpellCast: No SpellcastingComponent!");
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
 
-        // Check if this is a spontaneous cast (cleric converting a specific prepared spell)
-        bool isSpontaneous = !isDeliveringHeldCharge && CombatUI != null && CombatUI.IsSpontaneousCast;
-        int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
-        string spontaneousSacrificedSpellId = isSpontaneous ? CombatUI.SpontaneousSacrificedSpellId : null;
+        // Check if this is a spontaneous cast (cleric converting a specific prepared spell): the cast's own source, which
+        // the spell menu filled once from its Convert button (batch 11 step 4), so a cancelled conversion cannot make a
+        // later cast spontaneous.
+        CastSource castSource = CurrentCastSource;
+        bool isSpontaneous = !isDeliveringHeldCharge && castSource != null && castSource.Kind == CastSourceKind.SpontaneousConversion;
+        int spontaneousLevel = isSpontaneous ? castSource.ConversionLevel : -1;
+        string spontaneousSacrificedSpellId = isSpontaneous ? castSource.SacrificedSpellId : null;
 
-        // Clear spontaneous casting state
+        // Clear the spell menu's spontaneous casting state (already copied and cleared when the request was built)
         if (CombatUI != null)
             CombatUI.ClearSpontaneousCastState();
 
@@ -1908,6 +1925,7 @@ public partial class GameManager
                 {
                     ClearSpellcastResourceSnapshot();
                     Debug.LogError($"[GameManager] ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }
@@ -1953,6 +1971,7 @@ public partial class GameManager
                     {
                         ClearSpellcastResourceSnapshot();
                         Debug.LogError($"[GameManager] Blink spell failure path: failed to consume level {slotLevelToConsume} spell slot!");
+                        EndPendingCast();
                         ShowActionChoices();
                         return;
                     }
@@ -1996,6 +2015,7 @@ public partial class GameManager
             {
                 ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot!");
+                EndPendingCast();
                 ShowActionChoices();
                 return;
             }
@@ -3445,14 +3465,9 @@ public partial class GameManager
         _lastAoEHoverPos = new Vector2Int(-1, -1);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingProtectionFromEnergyType = null;
-        ResetPendingGreaseCastMode();
+        // The cast ends with its spell, metamagic, choices and item or F12 source (batch 11 step 4); the wall sub-phase
+        // fields are UI sequencing and are reset below.
+        EndPendingCast();
         ResetPendingWallOfFireMode();
         ResetPendingWallOfIceMode();
 
@@ -3468,19 +3483,9 @@ public partial class GameManager
     /// </summary>
     private void CancelSpellTargeting()
     {
-        _pendingSpell = null;
-        _pendingSpellFromHeldCharge = false;
-        _pendingMetamagic = null;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
-        CleanupScrollCastState();
-        ResetPendingGreaseCastMode();
+        // The cast ends with its spell, metamagic, choices, summon picks and scroll, wand or F12 source (batch 11 step 4:
+        // a cancelled wand cast used to leave its wand flag set, SPL-116); the wall sub-phase fields are UI sequencing.
+        EndPendingCast();
         ResetPendingWallOfFireMode();
         ResetPendingWallOfIceMode();
         _pendingAttackMode = PendingAttackMode.Single;
@@ -3573,10 +3578,8 @@ public partial class GameManager
 
         ClearSelfAoEState();
 
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
-        CleanupScrollCastState();
+        // The cast ends with its own state (batch 11 step 4).
+        EndPendingCast();
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -3667,14 +3670,16 @@ public partial class GameManager
         {
             ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] PerformAoESpellCast: No SpellcastingComponent!");
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
 
-        // Check spontaneous casting state
-        bool isSpontaneous = CombatUI != null && CombatUI.IsSpontaneousCast;
-        int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
-        string spontaneousSacrificedSpellId = isSpontaneous ? CombatUI.SpontaneousSacrificedSpellId : null;
+        // Check spontaneous casting state: the cast's own source (batch 11 step 4; see PerformSpellCast)
+        CastSource castSource = CurrentCastSource;
+        bool isSpontaneous = castSource != null && castSource.Kind == CastSourceKind.SpontaneousConversion;
+        int spontaneousLevel = isSpontaneous ? castSource.ConversionLevel : -1;
+        string spontaneousSacrificedSpellId = isSpontaneous ? castSource.SacrificedSpellId : null;
 
         if (CombatUI != null)
             CombatUI.ClearSpontaneousCastState();
@@ -3726,6 +3731,7 @@ public partial class GameManager
             {
                 ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] AoE ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
+                EndPendingCast();
                 ShowActionChoices();
                 return;
             }
@@ -3757,6 +3763,7 @@ public partial class GameManager
         {
             ClearSpellcastResourceSnapshot();
             Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -7073,15 +7080,12 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
+            // The energy type is the cast's own choice: the PC prompt or the AI request build (AiCastDecider) filled it
+            // (batch 11 step 4); this rule no longer asks who controls the caster.
             if (!_pendingResistEnergyType.HasValue)
             {
-                if (caster != null && !caster.IsControllable)
-                    _pendingResistEnergyType = ResistEnergyType.Fire;
-                else
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy failed: no energy type selected."));
-                    return null;
-                }
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy failed: no energy type selected."));
+                return null;
             }
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
@@ -7126,15 +7130,12 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
+            // The energy type is the cast's own choice: the PC prompt or the AI request build (AiCastDecider) filled it
+            // (batch 11 step 4); this rule no longer asks who controls the caster.
             if (!_pendingProtectionFromEnergyType.HasValue)
             {
-                if (caster != null && !caster.IsControllable)
-                    _pendingProtectionFromEnergyType = ResistEnergyType.Fire;
-                else
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy failed: no energy type selected."));
-                    return null;
-                }
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy failed: no energy type selected."));
+                return null;
             }
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
@@ -7215,9 +7216,10 @@ public partial class GameManager
                 return null;
 
             // Check and consume material components (250 gp diamond dust from inventory)
-            // F12 test panel casts bypass inventory requirements for testing convenience.
+            // F12 test panel casts bypass inventory requirements for testing convenience: the cast's own Components
+            // bypass (batch 11 step 4), which now holds through a single-target cast's resolution (SPL-036).
             CharacterStats casterStats = caster != null ? caster.Stats : null;
-            bool isTestPanelCast = _testPanelCastActive;
+            bool isTestPanelCast = CurrentCastSource != null && CurrentCastSource.HasBypass(TestPanelBypass.Components);
             if (casterStats != null && SpellComponentRegistry.HasCostlyComponents(spell.SpellId) && !isTestPanelCast)
             {
                 var req = SpellComponentRegistry.GetRequirements(spell.SpellId);
@@ -8610,7 +8612,7 @@ public partial class GameManager
         if (caster == null)
             return;
 
-        var snapshot = new SpellcastResourceSnapshot
+        var snapshot = new CastResourceSnapshot
         {
             Caster = caster,
             MoveActionUsed = caster.Actions.MoveActionUsed,

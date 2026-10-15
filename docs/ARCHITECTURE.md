@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 58 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 59 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,7 +140,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 58 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 59 files (since batch 11 step 4 added `GameManager.CastContext.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -157,7 +157,8 @@ There are 58 files, found with `grep -rlE '^\s*public partial class GameManager\
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
 | GameManager.ScenarioHarness.cs | 579 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat (the reset also releases grapple links, CMB-038), dump turn state and the open prompt, call the PC menu callbacks (open the Special Attack menu and click a maneuver button as a player would, pick a spell, cancel a selection) and answer the AoO prompt. No game code calls it. |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
-| **Spell/Resolution/** (25) | | |
+| **Spell/Resolution/** (26) | | |
+| GameManager.CastContext.cs | 330 | The per-cast context (batch 11 step 4): the cast stack (`BeginCast`, `EndCast`, `EndPendingCast`, `EndAllCasts`; a misuse raises `ScenarioHooks.CastStackViolation`) and the old `_pending*` names as private forwarding properties onto the open cast's `SpellCastRequest` ([Spells: per-cast context](architecture/spells.md)). |
 | GameManager.SpellCasting.cs | 8,957 | Spell targeting and casting orchestration (`BeginPendingSpellTargeting`, `PerformSpellCast`), summon spawn and despawn, `TickSummonDurations`, `TickAllSpellDurations`. |
 | GameManager.DispelCounterspell.cs | 70 | `_dispelMagicService` field plus thin delegates to `DispelMagicService`. |
 | GameManager_Spells_A/B/C/E/L/N/V.cs | 60-234 each | One or two spells each: Align Weapon; Blink, Bestow Curse; Contagion; Enervation; Lesser Globe; Neutralize Poison; Vampiric Touch. |
@@ -254,6 +255,7 @@ Assets/Scripts/
                          AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator (+ README.md)
+    Spellcasting/ (1)    AiCastDecider (the NPC cast's choices, batch 11)
     Profiles/ (19)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile
   Character/
@@ -274,8 +276,9 @@ Assets/Scripts/
     Data/ (8)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...
     Database/ (25)       SpellDatabase + 23 SpellDatabase_<letter> partials (A..Z, some letters
                          absent) + SpontaneousCastingType
-    Casting/ (8), Components/ (7), Effects/ (1: EffectService)
-    Resolution/ (25), Special/ (9), Domain/ (3)   mostly GameManager partials
+    Casting/ (12) + Core/ (9: SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
+                         UiCastDecider, CastResourceSnapshot, CastStageTrace), Components/ (7), Effects/ (1: EffectService)
+    Resolution/ (26), Special/ (9), Domain/ (3)   mostly GameManager partials
     AreaEffects/ (32), StatusEffects/ (29)
   Equipment/             Items/ (9), Inventory/ (10), Weapons/ (18), Armor/ (10), Rings/ (7),
                          Rods/ (5), Staves/ (3), Wondrous/ (4), SpecificItems/ (4), Enchantments/ (7),

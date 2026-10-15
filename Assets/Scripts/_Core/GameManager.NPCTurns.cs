@@ -1262,11 +1262,30 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>
+    /// The NPC cast executor. The cast runs in its own context (batch 11 step 4): an AI request with the caster's choices
+    /// filled by AiCastDecider, opened before any check and ended on every exit (the finally), so it nests cleanly over a
+    /// Ui cast the player left open and nothing of that cast (an item flag, the F12 bypass, a choice) reaches this one.
+    /// </summary>
     private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell)
     {
         if (npc == null || target == null || spell == null || npc.Stats == null || target.Stats == null)
             return false;
 
+        CastContext cast = BeginCast(SpellCastRequest.ForAI(npc, target, spell));
+        try
+        {
+            return ResolveNPCSpellCastInContext(npc, target, spell);
+        }
+        finally
+        {
+            EndCast(cast);
+        }
+    }
+
+    /// <summary>The body of <see cref="TryNPCPerformSpellCast"/>, inside the cast's own context.</summary>
+    private bool ResolveNPCSpellCastInContext(CharacterController npc, CharacterController target, SpellData spell)
+    {
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSpellCast));
 
         if (!npc.Actions.HasStandardAction)

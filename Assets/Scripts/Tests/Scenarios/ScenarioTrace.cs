@@ -435,6 +435,7 @@ namespace Tests.Scenarios
             ScenarioHooks.ThreatenedCast = ScenarioHooks.Safe<CharacterController, SpellData, bool, bool, int>("Trace.ThreatenedCast", OnThreatenedCast);
             ScenarioHooks.SpellCast = ScenarioHooks.Safe<CharacterController, CharacterController, SpellData>("Trace.SpellCast", OnSpellCast);
             ScenarioHooks.CastStage = ScenarioHooks.Safe<CharacterController, SpellData, string, string>("Trace.CastStage", OnCastStage);
+            ScenarioHooks.CastStackViolation = ScenarioHooks.Safe<string>("Trace.CastStack", OnCastStackViolation);
             ScenarioHooks.Moved = ScenarioHooks.Safe<CharacterController, Vector2Int, Vector2Int, string>("Trace.Moved", OnMoved);
             ScenarioHooks.ConditionChanged = ScenarioHooks.Safe<CharacterController, CombatConditionType, bool, int, string>("Trace.Condition", OnCondition);
             ScenarioHooks.CombatLog = ScenarioHooks.Safe<string>("Trace.Log", OnLog);
@@ -733,6 +734,14 @@ namespace Tests.Scenarios
              .Set("stage", stage)
              .Set("detail", detail);
             _castStages.Add(Json.Serialize(o));
+        }
+
+        /// <summary>The per-cast context stack went wrong (GameManager.BeginCast, EndCast): a 'cast-stack' violation.</summary>
+        private void OnCastStackViolation(string detail)
+        {
+            if (Closed)
+                return;
+            _job.Checks.OnCastStackViolation(detail);
         }
 
         private void OnMoved(CharacterController mover, Vector2Int from, Vector2Int to, string type)

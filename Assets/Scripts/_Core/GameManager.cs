@@ -318,32 +318,14 @@ public partial class GameManager : MonoBehaviour
     private PendingAttackMode _pendingAttackMode;
     private AttackType _currentAttackType = AttackType.Melee;
     private bool _pendingDefensiveAttackSelection; // Set when targeting for a defensive attack action
-    private SpellData _pendingSpell; // Spell selected for casting
-    private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
-    private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
-    private ItemData _pendingAnimateRopeItem; // Selected rope material component reserved for the pending Animate Rope cast
-    private ItemData _pendingMagicWeaponItem; // Selected weapon to receive the pending Magic Weapon spell
-    private ResistEnergyType? _pendingResistEnergyType;
-    private ResistEnergyType? _pendingProtectionFromEnergyType;
-    private bool? _pendingFireShieldIsWarm; // Chosen Fire Shield type: true=Warm, false=Chill, null=not yet chosen
-    private string _pendingDisguiseSelfRace;
-    private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
-    private int _pendingSummonListLevel; // Selected Summon Monster list level (I/II/III...)
-    private SummonCreatureCountInfo _pendingSummonCountInfo; // Count formula/range for selected list level
-    private string _pendingSummonSwarmNpcId; // Selected swarm type for Summon Swarm placement
+    // The per-cast fields (_pendingSpell, _pendingMetamagic, _pendingSpellFromHeldCharge, the caster's choices, the summon
+    // picks) are forwarding properties onto the open cast's context since batch 11 step 4: Spell/Resolution/GameManager.CastContext.cs.
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
     private bool _pendingNaturalAttackIsHasteExtra; // The selected natural attack is Haste's extra attack (CMB-106)
 
-    // Scroll casting state — tracks scroll being cast through the targeting pipeline
-    private ItemData _pendingScrollCastItem;      // The scroll item being consumed after spell resolves
-    private int _pendingScrollCastInventoryIndex = -1; // Inventory slot of the scroll being cast
-    private bool _pendingScrollCastActive;         // True when a scroll is being cast through the spell pipeline
-
-    // Wand casting state — tracks wand being cast through the targeting pipeline
-    private ItemData _pendingWandCastItem;        // The wand whose charge is consumed after spell resolves
-    private int _pendingWandCastInventoryIndex = -1; // Inventory slot of the wand being cast
-    private bool _pendingWandCastActive;           // True when a wand is being cast through the spell pipeline
+    // Scroll and wand casting state (the item, its pack slot, whether the open cast uses one) is the open cast's CastSource
+    // since batch 11 step 4: forwarding properties in Spell/Resolution/GameManager.CastContext.cs.
 
     // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
@@ -1142,28 +1124,11 @@ public partial class GameManager : MonoBehaviour
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
 
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingMagicWeaponItem = null;
-        _pendingKeenEdgeItem = null;
-        _pendingKeenEdgeIsAmmo = false;
-        _pendingGreaterMagicWeaponItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingDisguiseSelfRace = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
+        // Every open cast ends with its own state (spell, metamagic, choices, scroll, wand and F12 source; batch 11 step 4).
+        EndAllCasts("combat reset (" + safeContext + ")");
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
         _pendingNaturalAttackIsHasteExtra = false;
-        CleanupScrollCastState();
-        CleanupWandCastState();
-        ResetPendingGreaseCastMode();
 
         _isConfirmingSelfAoE = false;
         _pendingSelfAoECells = null;
@@ -4274,6 +4239,7 @@ public partial class GameManager : MonoBehaviour
     public bool TryUseConsumableFromInventory(CharacterController actor, int inventoryIndex, out string feedback)
     {
         feedback = string.Empty;
+        _lastConsumableCast = null; // this use's scroll or wand cast, if it opens one (ConsumableCastAwaitingSpend)
 
         if (actor == null || actor.Stats == null)
         {
@@ -4440,7 +4406,7 @@ public partial class GameManager : MonoBehaviour
             {
                 // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
                 // do NOT consume the action or reset UI — targeting mode handles that.
-                if (_pendingScrollCastActive || _pendingWandCastActive)
+                if (ConsumableCastAwaitingSpend)
                 {
                     CombatUI?.ShowCombatLog(noThreatMessage);
                     return; // targeting mode is active; action consumed after cast resolves
@@ -4509,7 +4475,7 @@ public partial class GameManager : MonoBehaviour
         {
             // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
             // do NOT consume the action or reset UI — targeting mode handles that.
-            if (_pendingScrollCastActive || _pendingWandCastActive)
+            if (ConsumableCastAwaitingSpend)
             {
                 CombatUI?.ShowCombatLog(resultMessage);
                 yield break; // targeting mode is active; action consumed after cast resolves
@@ -4591,7 +4557,7 @@ public partial class GameManager : MonoBehaviour
             // If a scroll/wand entered the targeting pipeline (AoE cone, single-target, etc.),
             // do NOT reset the UI — the targeting overlay needs to stay active.
             // ShowActionChoices would kill the targeting mode.
-            if (!_pendingScrollCastActive && !_pendingWandCastActive)
+            if (!ConsumableCastAwaitingSpend)
                 ShowActionChoices();
         };
         QuickItemUsePanel.OnCancelled = () =>
@@ -5422,6 +5388,7 @@ public partial class GameManager : MonoBehaviour
 
     private bool ApplyConsumableEffectAndConsume(CharacterController actor, int inventoryIndex, out string resultMessage)
     {
+        _lastConsumableCast = null; // set again when this use hands a scroll or wand to the cast pipeline
         resultMessage = string.Empty;
 
         if (actor == null || actor.Stats == null)
@@ -5900,28 +5867,17 @@ public partial class GameManager : MonoBehaviour
 
         SpellData spellClone = BuildScrollPipelineSpell(scrollItem, baseSpell, out MetamagicData scrollMetamagic, out int scrollCasterLevel);
 
-        // Store scroll state for consumption after spell resolves
-        _pendingScrollCastItem = scrollItem;
-        _pendingScrollCastInventoryIndex = inventoryIndex;
-        _pendingScrollCastActive = true;
-
-        // Set up pending spell state (mirrors OnSpellSelectedWithMetamagic)
-        _pendingSpell = spellClone;
-        _pendingMetamagic = scrollMetamagic ?? new MetamagicData();
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingMagicWeaponItem = null;
-        _pendingKeenEdgeItem = null;
-        _pendingKeenEdgeIsAmmo = false;
-        _pendingGreaterMagicWeaponItem = null;
-        _pendingDisguiseSelfRace = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
+        // The scroll's own cast (batch 11 step 4): its clone of the spell, and a Scroll source carrying the scroll, its pack
+        // slot, caster level and DC, spent after the spell resolves (ConsumeScrollAfterCast). Opening it ends any Ui cast
+        // the UI left open, as the old reset list here overwrote its fields.
+        _lastConsumableCast = BeginCast(SpellCastRequest.ForUiPrebuilt(actor, spellClone, scrollMetamagic ?? new MetamagicData(), new CastSource
+        {
+            Kind = CastSourceKind.Scroll,
+            Item = scrollItem,
+            ItemIndex = inventoryIndex,
+            ItemCasterLevel = scrollCasterLevel,
+            SaveDCOverride = spellClone.SaveDC > 0 ? spellClone.SaveDC : (int?)null
+        }));
 
         string metamagicInfo = scrollItem.HasScrollMetamagic ? $" (metamagic: {scrollItem.ScrollMetamagicFeats.Count} feat(s))" : "";
         Debug.Log($"[ScrollCast] {charName} initiating scroll cast: {spellClone.Name}{metamagicInfo} CL {scrollCasterLevel}");
@@ -5992,8 +5948,8 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Consumes the scroll after a successful spell cast through the targeting pipeline.
-    /// Called from PerformSpellCast when _pendingScrollCastActive is true.
+    /// Consumes the scroll after a successful spell cast through the targeting pipeline: the open cast's scroll, spent by
+    /// its caster (the request's Caster, ConsumePendingSpellSlot). Called when the open cast's source is a scroll.
     /// </summary>
     private void ConsumeScrollAfterCast(CharacterController caster)
     {
@@ -6021,13 +5977,13 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Resets scroll casting state. Called after spell resolution or cancellation.
+    /// Marks the open scroll cast's scroll as spent (its source keeps the Scroll kind for the rest of the cast). A cancel
+    /// or reset needs no cleanup any more: the scroll state is the cast's own and ends with it (batch 11 step 4).
     /// </summary>
     private void CleanupScrollCastState()
     {
         _pendingScrollCastItem = null;
         _pendingScrollCastInventoryIndex = -1;
-        _pendingScrollCastActive = false;
     }
 
     // ==================== WAND TARGETING PIPELINE ====================
@@ -6045,28 +6001,17 @@ public partial class GameManager : MonoBehaviour
         SpellData spellClone = BuildWandPipelineSpell(wandItem, baseSpell, out MetamagicData wandMetamagic, out int wandCasterLevel);
         WandData wd = wandItem.Wand;
 
-        // Store wand state for charge consumption after spell resolves
-        _pendingWandCastItem = wandItem;
-        _pendingWandCastInventoryIndex = inventoryIndex;
-        _pendingWandCastActive = true;
-
-        // Set up pending spell state (mirrors InitiateScrollCastThroughPipeline)
-        _pendingSpell = spellClone;
-        _pendingMetamagic = wandMetamagic ?? new MetamagicData();
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingMagicWeaponItem = null;
-        _pendingKeenEdgeItem = null;
-        _pendingKeenEdgeIsAmmo = false;
-        _pendingGreaterMagicWeaponItem = null;
-        _pendingDisguiseSelfRace = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
+        // The wand's own cast (batch 11 step 4): its clone of the spell, and a Wand source carrying the wand, its pack slot,
+        // caster level and DC; a charge is spent after the spell resolves (ConsumeWandChargeAfterCast). Opening it ends any
+        // Ui cast the UI left open, as the old reset list here overwrote its fields.
+        _lastConsumableCast = BeginCast(SpellCastRequest.ForUiPrebuilt(actor, spellClone, wandMetamagic ?? new MetamagicData(), new CastSource
+        {
+            Kind = CastSourceKind.Wand,
+            Item = wandItem,
+            ItemIndex = inventoryIndex,
+            ItemCasterLevel = wandCasterLevel,
+            SaveDCOverride = spellClone.SaveDC > 0 ? spellClone.SaveDC : (int?)null
+        }));
 
         string metamagicInfo = (wd != null && wd.HasMetamagic) ? $" (metamagic: {wd.MetamagicFeats.Count} feat(s))" : "";
         Debug.Log($"[WandCast] {charName} initiating wand cast: {spellClone.Name}{metamagicInfo} CL {wandCasterLevel}");
@@ -6123,8 +6068,8 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Consumes a wand charge after a successful spell cast through the targeting pipeline.
-    /// Called from ConsumePendingSpellSlot when _pendingWandCastActive is true.
+    /// Consumes a wand charge after a successful spell cast through the targeting pipeline: the open cast's wand, used by
+    /// its caster (the request's Caster). Called from ConsumePendingSpellSlot when the open cast's source is a wand.
     /// </summary>
     private void ConsumeWandChargeAfterCast(CharacterController caster)
     {
@@ -6152,13 +6097,14 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Resets wand casting state. Called after spell resolution or cancellation.
+    /// Marks the open wand cast's charge as spent (its source keeps the Wand kind for the rest of the cast). A cancel or
+    /// reset needs no cleanup any more: the wand state is the cast's own and ends with it (batch 11 step 4; it used to
+    /// stay set after a cancel, SPL-116).
     /// </summary>
     private void CleanupWandCastState()
     {
         _pendingWandCastItem = null;
         _pendingWandCastInventoryIndex = -1;
-        _pendingWandCastActive = false;
     }
 
     // ==================== WAND USAGE (D&D 3.5e DMG) ====================
@@ -9364,9 +9310,10 @@ public partial class GameManager : MonoBehaviour
         if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null)
             return;
 
-        _pendingSpell = spellComp.HeldTouchSpell;
-        _pendingMetamagic = spellComp.HeldTouchMetamagic;
-        _pendingSpellFromHeldCharge = true;
+        // The delivery is its own Ui cast (batch 11 step 4): a clone of the held spell as it was cast (its metamagic's
+        // pre-cast changes already made), with a held-charge-delivery source.
+        BeginCast(SpellCastRequest.ForUiPrebuilt(pc, SpellCastRequest.CloneForCast(spellComp.HeldTouchSpell), spellComp.HeldTouchMetamagic,
+            new CastSource { Kind = CastSourceKind.HeldChargeDelivery }));
 
         _pendingAttackMode = PendingAttackMode.CastSpell;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -9550,22 +9497,12 @@ public partial class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
 
-        _pendingSpell = spell;
-        _pendingMetamagic = metamagic;
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingMagicWeaponItem = null;
-        _pendingKeenEdgeItem = null;
-        _pendingKeenEdgeIsAmmo = false;
-        _pendingGreaterMagicWeaponItem = null;
-        _pendingDisguiseSelfRace = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
+        // The cast's own request and context (batch 11 step 4): a clone of the menu's spell with the metamagic's
+        // pre-cast changes, the slot or cleric conversion it spends and fresh choices. Opening it ends any Ui cast the UI
+        // left open, as the old reset list here overwrote its fields.
+        BeginCast(SpellCastRequest.ForUi(pc, spell, metamagic, BuildSpellMenuCastSource(pc)));
+        if (metamagic != null && metamagic.HasAnyMetamagic)
+            Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
 
         // Casting another spell while holding a touch charge ends the held charge.
         var spellComp = pc.Spellcasting;
@@ -9575,13 +9512,7 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{pc.Stats.CharacterName}'s held touch charge dissipates as they begin another spell."));
         }
 
-        // If metamagic modifies the spell data (range, action type), clone and apply
-        if (metamagic != null && metamagic.HasAnyMetamagic)
-        {
-            _pendingSpell = spell.Clone();
-            SpellCaster.ApplyMetamagicToSpellData(_pendingSpell, metamagic);
-            Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
-        }
+        // (A metamagic clone of the spell, with its range and action changes, is part of the request build above.)
 
         if (TryShowGreaseCastModePrompt(pc))
             return;
@@ -9594,7 +9525,15 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowTouchSpellPrompt(
                 _pendingSpell,
                 onCastNow: () => { BeginPendingSpellTargeting(pc); },
-                onDischargeLater: () => { HoldPendingMeleeTouchCharge(pc); },
+                onDischargeLater: () =>
+                {
+                    // The touch prompt answers inside the selection's own cast: Discharge Later makes it a hold. A cleric's
+                    // conversion keeps its source kind (holding a converted charge is SPL-154).
+                    CastSource heldSource = CurrentCastSource;
+                    if (heldSource != null && (heldSource.Kind == CastSourceKind.PreparedSlot || heldSource.Kind == CastSourceKind.SpontaneousSlot))
+                        heldSource.Kind = CastSourceKind.HeldChargeHold;
+                    HoldPendingMeleeTouchCharge(pc);
+                },
                 onCancel: () =>
                 {
                     _pendingSpell = null;
@@ -9607,6 +9546,28 @@ public partial class GameManager : MonoBehaviour
         }
 
         BeginPendingSpellTargeting(pc);
+    }
+
+    /// <summary>
+    /// The source of a spell-menu cast: a cleric's spontaneous conversion when the menu's Convert button was used (its
+    /// level and sacrificed spell are copied from CombatUI once, here, and the menu's state is cleared, so it cannot
+    /// reach a later scroll, wand or spell cast), else the caster's spontaneous or prepared slot.
+    /// </summary>
+    private CastSource BuildSpellMenuCastSource(CharacterController caster)
+    {
+        var source = new CastSource();
+        if (CombatUI != null && CombatUI.IsSpontaneousCast)
+        {
+            source.Kind = CastSourceKind.SpontaneousConversion;
+            source.ConversionLevel = CombatUI.SpontaneousCastLevel;
+            source.SacrificedSpellId = CombatUI.SpontaneousSacrificedSpellId;
+            CombatUI.ClearSpontaneousCastState();
+        }
+        else if (caster != null && caster.Spellcasting != null && caster.Spellcasting.IsSpontaneousCaster)
+        {
+            source.Kind = CastSourceKind.SpontaneousSlot;
+        }
+        return source;
     }
 
     private static bool IsAnimateRopeSpell(SpellData spell)
@@ -10759,25 +10720,8 @@ public partial class GameManager : MonoBehaviour
 
     // Spellcast cancellation recovery (AoO prompt cancel should not spend actions/slots).
     private bool _spellcastProvocationCancelled;
-    private SpellcastResourceSnapshot _pendingSpellcastSnapshot;
-
-    private sealed class SpellcastResourceSnapshot
-    {
-        public CharacterController Caster;
-        public bool MoveActionUsed;
-        public bool StandardActionUsed;
-        public bool FullRoundActionUsed;
-        public bool SwiftActionUsed;
-        public bool StandardConvertedToMove;
-        public bool QuickenedSpellUsed;
-        public List<bool> SlotUsedStates;
-        // Spells-per-day counters spent before the AoO prompt (spontaneous casters,
-        // the legacy per-level array and paladin/ranger partial casters), so a
-        // cancelled cast refunds every kind of caster alike (SPL-138 review).
-        public int[] SpontaneousSlotsRemaining;
-        public int[] LegacySlotsRemaining;
-        public int[] PartialSlotsRemaining;
-    }
+    // The snapshot of the open PC cast (CastResourceSnapshot, Spell/Casting/Core; moves onto CastContext with the cast core).
+    private CastResourceSnapshot _pendingSpellcastSnapshot;
 
     private void ShowMovementRange(CharacterController pc, int maxRangeOverride = -1)
     {

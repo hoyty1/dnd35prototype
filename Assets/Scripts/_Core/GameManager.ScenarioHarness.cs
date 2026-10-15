@@ -463,9 +463,10 @@ public partial class GameManager
 
     /// <summary>
     /// Sets the pending cast's spell and metamagic directly, with no menu, targeting or other side effect (TST-006: replaces
-    /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which batch 11 turns into properties). Pass a clone,
-    /// never a database template. Read the old values first with <see cref="Harness_GetPendingSpell"/> and
-    /// <see cref="Harness_GetPendingMetamagic"/> and put them back afterwards.
+    /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which batch 11 step 4 made forwarding properties onto
+    /// the open cast's context). Pass a clone, never a database template. With no cast open, a spell opens a scratch Ui
+    /// cast; a null spell ends the open Ui cast (GameManager.CastContext.cs). Read the old values first with
+    /// <see cref="Harness_GetPendingSpell"/> and <see cref="Harness_GetPendingMetamagic"/> and put them back afterwards.
     /// </summary>
     internal void Harness_SetPendingCast(SpellData spell, MetamagicData metamagic)
     {
@@ -478,6 +479,21 @@ public partial class GameManager
 
     /// <summary>The pending cast's metamagic, or null.</summary>
     internal MetamagicData Harness_GetPendingMetamagic() => _pendingMetamagic;
+
+    /// <summary>The number of open casts on the per-cast context stack (batch 11 step 4).</summary>
+    internal int Harness_OpenCastCount => _castStack.Count;
+
+    /// <summary>The request of the cast on top of the per-cast context stack, or null (batch 11 step 4).</summary>
+    internal SpellCastRequest Harness_CurrentCastRequest => CurrentCast?.Request;
+
+    /// <summary>Ends every open cast, as the combat reset does (a test's cleanup).</summary>
+    internal void Harness_EndAllCasts(string reason) => EndAllCasts(reason);
+
+    /// <summary>
+    /// Right-click or Escape, as the player backs out of the open selection (HandleInputCancelRequested: a spell's target
+    /// selection, an area preview, a move and the like). False when nothing was open to cancel.
+    /// </summary>
+    internal bool Harness_CancelSelection() => HandleInputCancelRequested(null);
 
     /// <summary>
     /// Confirms an open self-centered area preview (Bless, Prayer: "Left-click to confirm"), as the player's left click

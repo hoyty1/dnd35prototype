@@ -173,8 +173,17 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
-        // Use the player's shield-type choice; fall back to warm if not set (NPC casts)
-        bool isWarmShield = _pendingFireShieldIsWarm ?? true;
+        // The cast's own shield-type choice: the PC prompt's, or the AI request build's (AiCastDecider: warm) since batch 11
+        // step 4, so a choice left by a cancelled PC cast no longer reaches an NPC's Fire Shield (SPL-112). The caster
+        // chooses warm or chill (PHB p.230); the rules code no longer chooses for it. A cast with no choice (neither
+        // pipeline builds one) is refused, as Resist Energy and Protection from Energy refuse one with no energy type.
+        if (!_pendingFireShieldIsWarm.HasValue)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Fire Shield failed: no shield type selected."));
+            Debug.LogWarning($"[FireShield] {caster.Stats.CharacterName}'s Fire Shield reached resolution with no warm/chill choice; not applied.");
+            return true;
+        }
+        bool isWarmShield = _pendingFireShieldIsWarm.Value;
 
         // Track via StatusEffectManager for duration and UI
         StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;

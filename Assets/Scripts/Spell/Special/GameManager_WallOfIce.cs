@@ -28,17 +28,9 @@ public partial class GameManager
     //  Wall of Ice mode selection state
     // ─────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Casting mode for Wall of Ice. Null means no mode chosen yet.
-    /// </summary>
-    private enum WallOfIceMode
-    {
-        Line,   // Straight wall — pick start + end points
-        Circle  // Hemisphere — pick center + radius
-    }
-
-    /// <summary>Current Wall of Ice mode. Null = not yet selected.</summary>
-    private WallOfIceMode? _pendingWallOfIceMode;
+    // The Wall of Ice mode (WallOfIceMode, Spell/Casting/Core/CastChoices.cs) is the open cast's choice,
+    // _pendingWallOfIceMode (GameManager.CastContext.cs, batch 11 step 4); the line and circle sub-phase fields below are
+    // UI sequencing and stay here.
 
     /// <summary>
     /// For Line Mode two-click targeting: stores the first click (wall start point).

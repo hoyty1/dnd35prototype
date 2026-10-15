@@ -25,8 +25,7 @@ public partial class GameManager
         return spell != null && string.Equals(spell.SpellId, SpellNames.KEEN_EDGE, StringComparison.Ordinal);
     }
 
-    private ItemData _pendingKeenEdgeItem;
-    private bool _pendingKeenEdgeIsAmmo; // true when user chose the ammo path
+    // _pendingKeenEdgeItem and _pendingKeenEdgeIsAmmo: the open cast's choices (GameManager.CastContext.cs, batch 11 step 4).
 
     private bool TryHandleKeenEdgeWeaponSelection(CharacterController caster, CharacterController target)
     {

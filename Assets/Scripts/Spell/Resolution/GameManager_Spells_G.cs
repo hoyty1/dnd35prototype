@@ -25,7 +25,7 @@ public partial class GameManager
         return spell != null && string.Equals(spell.SpellId, SpellNames.GREATER_MAGIC_WEAPON, StringComparison.Ordinal);
     }
 
-    private ItemData _pendingGreaterMagicWeaponItem;
+    // _pendingGreaterMagicWeaponItem: the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
 
     private bool TryHandleGreaterMagicWeaponSelection(CharacterController caster, CharacterController target)
     {

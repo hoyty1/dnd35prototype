@@ -5,14 +5,6 @@ using DND35e.Identifiers;
 
 public partial class GameManager
 {
-    private enum GreaseCastMode
-    {
-        None,
-        Area,
-        Object,
-        Armor
-    }
-
     private sealed class ActiveGreasedObject
     {
         public ItemData Item;
@@ -21,7 +13,7 @@ public partial class GameManager
         public string CasterName;
     }
 
-    private GreaseCastMode _pendingGreaseCastMode;
+    // _pendingGreaseCastMode (GreaseCastMode, Spell/Casting/Core/CastChoices.cs): the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
     private readonly List<ActiveGreasedObject> _activeGreasedObjects = new List<ActiveGreasedObject>();
 
     private static bool IsGreaseSpell(SpellData spell)
