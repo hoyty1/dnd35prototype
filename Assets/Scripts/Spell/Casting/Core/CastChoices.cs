@@ -27,7 +27,7 @@ public enum WallOfIceMode
 /// The caster's own choices for one cast (batch 11, cast_core_batch11.md). The PC prompts fill them for a Ui cast; the
 /// AI request build fills them through <see cref="AiCastDecider"/> for an NPC cast. They live on the cast's
 /// <see cref="SpellCastRequest"/>, so a choice made for a cancelled cast cannot reach a later one (SPL-112, SPL-113).
-/// GameManager still reads them through its old <c>_pending*</c> names, which are forwarding properties onto the cast
+/// GameManager's UI and handlers read them through its old <c>_pending*</c> names, read-only views of the cast
 /// on top of its cast stack.
 /// </summary>
 public sealed class CastChoices

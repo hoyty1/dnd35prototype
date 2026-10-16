@@ -495,7 +495,7 @@ public partial class GameManager
                 string targetName = target.Stats.CharacterName;
                 sb.AppendLine($"  --- Target {targetIndex}: {targetName} ---");
 
-                // The request's metamagic and save rule, not the _pendingMetamagic forwarding property (whichever cast
+                // The request's metamagic and save rule, not the _pendingMetamagic view (whichever cast
                 // is on top of the stack), so the entry serves every caster alike (review of batch 11 step 23).
                 SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, false, ctx.TargetForgoesSave(target), caster, target,
                     areaDamageRoll: areaDamageRoll);

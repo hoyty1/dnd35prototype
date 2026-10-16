@@ -941,7 +941,7 @@ public partial class GameManager
     /// <summary>
     /// Failure: one roll each per casting, for every cast but a held-charge delivery, on every path and for every caster
     /// (batch 11 step 13): arcane spell failure (a somatic component, a slot or a scroll; TryRollArcaneSpellFailure,
-    /// SPL-096, SPL-116), the blinking caster's 20% (PHB p.206; SpellResolutionService.TryBlinkCasterFailure, SPL-006,
+    /// SPL-096, SPL-116), the blinking caster's 20% (PHB p.206; BlinkCastRules.TryCasterFailure, SPL-006,
     /// SPL-146) and the deafened caster's verbal failure (PHB p.307; CastComponentRules.TryDeafenedFailure, SPL-150). A
     /// failed spell spends its slot here (<see cref="LoseCastAtFailure"/>); a cast that passes goes on to the Spend stage.
     /// </summary>
@@ -963,7 +963,7 @@ public partial class GameManager
 
             // PHB p.206: a blinking caster's spell has a 20% chance to activate just as the caster goes ethereal, checked
             // separately from and in addition to arcane spell failure.
-            if (SpellResolutionService.TryBlinkCasterFailure(caster, spell.Name, out int blinkSpellRoll))
+            if (BlinkCastRules.TryCasterFailure(caster, spell.Name, out int blinkSpellRoll))
             {
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Failure, "blink-failed");
                 LoseCastAtFailure(ctx, "blink-caster", "Blink spell failure path",
@@ -1352,7 +1352,7 @@ public partial class GameManager
 
     /// <summary>
     /// TargetBlink: an individually targeted spell has a 50% chance to fail against a blinking creature (PHB p.206); not
-    /// for area or self spells (SpellResolutionService.TryBlinkTargetFailure, one roll, label and log for every caster,
+    /// for area or self spells (BlinkCastRules.TryTargetFailure, one roll, label and log for every caster,
     /// batch 11 step 13).
     /// </summary>
     private void CastStageTargetBlink(CastContext ctx)
@@ -1361,7 +1361,7 @@ public partial class GameManager
         CharacterController caster = ctx.Request.Caster;
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
-        bool missed = SpellResolutionService.TryBlinkTargetFailure(caster, target, spell, out int blinkTargetRoll);
+        bool missed = BlinkCastRules.TryTargetFailure(caster, target, spell, out int blinkTargetRoll);
         if (blinkTargetRoll > 0)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.TargetBlink, missed ? "missed" : "connects");

@@ -748,7 +748,7 @@ public static class CastCoreStageOrderTests
 
     /// <summary>
     /// The Blink rolls on the AI path (batch 11 step 13: one rule, label and log for every caster, through
-    /// SpellResolutionService): a blinking AI caster that fails its 20% check fails at Failure under the shared dice
+    /// BlinkCastRules): a blinking AI caster that fails its 20% check fails at Failure under the shared dice
     /// label, its slot spent there, and still counts as cast (the Spend stage is not entered); one that passes logs the
     /// "Blink spell check" line as a PC's does; an AI ray at a blinking target that misses fails at TargetBlink under the
     /// shared label and counts as cast. Percentile dice forced through ScenarioHooks.RollFilter.
@@ -783,7 +783,7 @@ public static class CastCoreStageOrderTests
                    && string.Join(",", events) == "Legality,decider:fill,Cost,Distraction,Failure,decider:finished:Failed@Failure",
                 "AI: a blinking caster that fails its 20% loses the spell at Failure, its slot spent there, and counts as cast",
                 o + " " + string.Join(",", events));
-            Assert(labels.Count == 1 && labels[0] == SpellResolutionService.BlinkCasterDiceContext,
+            Assert(labels.Count == 1 && labels[0] == BlinkCastRules.CasterDiceContext,
                 "AI: the caster's Blink check rolls under the shared dice label", string.Join(",", labels));
             sc.SpellSlots.Remove(slot);
 
@@ -806,7 +806,7 @@ public static class CastCoreStageOrderTests
             int allyHp = ally.Stats.CurrentHP;
             cast = gm.RunCastSync(req, out o);
             Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.TargetBlink && o.Reason == "target-blinked" && slot.IsUsed
-                   && ally.Stats.CurrentHP == allyHp && labels.Count == 1 && labels[0] == SpellResolutionService.BlinkTargetDiceContext,
+                   && ally.Stats.CurrentHP == allyHp && labels.Count == 1 && labels[0] == BlinkCastRules.TargetDiceContext,
                 "AI: a ray at a blinking target that misses fails at TargetBlink under the shared dice label and counts as cast",
                 o + " " + string.Join(",", labels));
             sc.SpellSlots.Remove(slot);
@@ -1257,7 +1257,7 @@ public static class CastCoreStageOrderTests
         ActiveSpellEffect blink = AddBlink(caster);
         try
         {
-            forced[SpellResolutionService.BlinkCasterDiceContext] = 10;
+            forced[BlinkCastRules.CasterDiceContext] = 10;
             var events = new List<string>();
             CastContext ctx = BeginArea(gm, sc, caster, new RecordingDecider(events), out SpellSlot slot);
             gm.ExecuteCast(ctx, null);

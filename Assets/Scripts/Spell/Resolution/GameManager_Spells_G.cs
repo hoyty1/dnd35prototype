@@ -25,16 +25,14 @@ public partial class GameManager
         return spell != null && string.Equals(spell.SpellId, SpellNames.GREATER_MAGIC_WEAPON, StringComparison.Ordinal);
     }
 
-    // _pendingGreaterMagicWeaponItem: the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
+    // _pendingGreaterMagicWeaponItem: the current cast's choice, a read-only view of its request (GameManager.CastContext.cs);
+    // the picker answers through UiCastChoicesForAnswer.
 
     /// <summary>The Greater Magic Weapon picker of the UI decider: Filled, Suspended (dialog open) or Refused (no weapon); see TryHandleMagicWeaponWeaponSelection.</summary>
     private CastChoiceFill TryHandleGreaterMagicWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsGreaterMagicWeaponSpell(_pendingSpell))
-        {
-            _pendingGreaterMagicWeaponItem = null;
             return CastChoiceFill.Filled;
-        }
 
         if (target == null || target.Stats == null)
             return CastChoiceFill.Filled;
@@ -50,7 +48,7 @@ public partial class GameManager
 
         if (weaponOptions.Count == 1)
         {
-            _pendingGreaterMagicWeaponItem = weaponOptions[0];
+            UiCastChoicesForAnswer.GreaterMagicWeaponItem = weaponOptions[0];
             return CastChoiceFill.Filled;
         }
 
@@ -61,19 +59,17 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= weaponOptions.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingGreaterMagicWeaponItem = null;
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingGreaterMagicWeaponItem = weaponOptions[selectedIndex];
+                UiCastChoicesForAnswer.GreaterMagicWeaponItem = weaponOptions[selectedIndex];
                 PerformSpellCast(caster, target);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingGreaterMagicWeaponItem = null;
+                EndPendingCast();
                 ShowActionChoices();
             },
             titleOverride: "Greater Magic Weapon - Select Weapon",
@@ -88,7 +84,6 @@ public partial class GameManager
             return false;
 
         ItemData weapon = _pendingGreaterMagicWeaponItem;
-        _pendingGreaterMagicWeaponItem = null;
 
         if (weapon == null)
         {

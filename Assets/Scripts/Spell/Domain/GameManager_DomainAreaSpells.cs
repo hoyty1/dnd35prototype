@@ -47,7 +47,7 @@ public partial class GameManager
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
 
         // Create area effect
-        CreateEntangleArea(centerPos, durationRounds, saveDc, caster, footprint: aoeCells);
+        CreateEntangleArea(centerPos, durationRounds, saveDc, casterLevel, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -61,7 +61,7 @@ public partial class GameManager
     }
 
     /// <summary>Creates an EntangleAreaEffect at the specified position.</summary>
-    public void CreateEntangleArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster, HashSet<Vector2Int> footprint = null)
+    public void CreateEntangleArea(Vector3 centerPosition, int duration, int saveDC, int casterLevel, HashSet<Vector2Int> footprint = null)
     {
         var go = new GameObject("EntangleArea");
         go.transform.position = centerPosition;
@@ -70,7 +70,7 @@ public partial class GameManager
         effect.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         effect.RoundsRemaining = duration;
         effect.SaveDC = saveDC;
-        effect.CasterLevel = CasterLevelRules.ForCaster(caster, _pendingSpell);
+        effect.CasterLevel = casterLevel; // the cast's caster level (CasterLevelRules.ForCaster, SPL-016, SPL-017)
 
         Debug.Log($"[GameManager] Entangle area created at {centerPosition}, duration={duration}, DC={saveDC}");
     }

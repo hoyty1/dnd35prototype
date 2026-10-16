@@ -17,6 +17,15 @@ using System;
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
+/// <para>
+/// Batch 11 step 29 (retire-legacy-cast-code, 2026-10-16) was a pure cleanup, so it kept the eight bits left, each the
+/// behaviour of a fix not built yet; deleting a bit means building its fix, which changes fights: the combat-end bits
+/// <see cref="EvaluateCombatEndOnlyOnTargetDeath"/>, <see cref="NpcCombatEndCheckedByCaller"/>,
+/// <see cref="AreaCombatEndOnlyInSomeHandlers"/> and <see cref="EffectResolveSkipsCombatEndCheck"/> (CORE-039), with
+/// <see cref="AreaLogPrefixOnlyInSomeHandlers"/> (SPL-161) and <see cref="NpcResultLogBeforeTargetDeath"/> (SPL-160 d),
+/// are step 11's item 3; <see cref="NpcOwnLegalityChecks"/> (SPL-160 a) is step 22b; <see cref="HeldChargeDeliveryIsFree"/>
+/// is SPL-156's fix in the Cost stage. The enum goes when the last of them is built.
+/// </para>
 /// </summary>
 [Flags]
 public enum LegacyCastQuirk : long
@@ -27,7 +36,7 @@ public enum LegacyCastQuirk : long
     /// The PC single-target cast runs the combat-end check only when its target was killed or is out of the fight, not
     /// after every cast (CORE-039; the core's end state is "CombatEnd: EvaluateCombatEnd, always", which the NPC cast
     /// wrapper TryNPCPerformSpellCastForAI already does for every cast that returns true). Another end is caught at the
-    /// next ShowActionChoices or turn boundary. Batch 11 step 11 (raw-failed-cast-gating) removes the bit. Without the
+    /// next ShowActionChoices or turn boundary. Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) removes the bit. Without the
     /// bit the core evaluates after every resolved cast.
     /// </summary>
     EvaluateCombatEndOnlyOnTargetDeath = 1 << 0,
@@ -127,18 +136,18 @@ public enum LegacyCastQuirk : long
 
     // Bit 24 is unused: NpcBlinkLabelsAndSilentPass (SPL-160) was removed by batch 11 step 13
     // (raw-distraction-failure-stages); both Blink rolls carry one label and log for every caster
-    // (SpellResolutionService).
+    // (BlinkCastRules).
 
     /// <summary>
     /// The PostCast stage shows the cast's result log before the target's death (OnDeath and the summon cleanup) instead
-    /// of after it (SPL-160). Batch 11 step 11 (raw-failed-cast-gating), which settles the CombatEnd stage, removes it.
+    /// of after it (SPL-160). Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet), which settles the CombatEnd stage, removes it.
     /// </summary>
     NpcResultLogBeforeTargetDeath = 1 << 25,
 
     /// <summary>
     /// The CombatEnd stage runs no combat-end check: the NPC wrapper TryNPCPerformSpellCastForAI runs it after every
     /// cast that counts as cast (CastOutcome.WasCast), once the stat panels are refreshed, failed casts included
-    /// (CORE-039). Batch 11 step 11 puts one check after every cast in the stage for every caster and removes the bit.
+    /// (CORE-039). Batch 11 step 11 item 3 (not built yet) puts one check after every cast in the stage for every caster and removes the bit.
     /// </summary>
     NpcCombatEndCheckedByCaller = 1 << 26,
 
@@ -164,14 +173,14 @@ public enum LegacyCastQuirk : long
     /// Spray, Fear, Ice Storm, Shout, Cone of Cold, Chain Lightning, Circle of Death, Insect Plague, Wall of Thorns,
     /// Sunburst and Earthquake (AreaHandlerEntry.CombatEndContext); the other handlers end without one, so an end they
     /// cause is caught at the next ShowActionChoices or turn boundary (CORE-039). Without the bit FinishAreaCast checks
-    /// after every area cast. Batch 11 step 11 (raw-failed-cast-gating) removes the bit with CORE-039.
+    /// after every area cast. Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) removes the bit with CORE-039.
     /// </summary>
     AreaCombatEndOnlyInSomeHandlers = 1L << 32,
 
     /// <summary>
     /// The Hypnotism, Sleep, Deep Slumber, Color Spray and Fear handlers log no quickened or spontaneous line
     /// (AreaHandlerEntry.OmitsLogPrefix; SPL-161): FinishAreaCast leaves the cast's log prefix off their log. Without the
-    /// bit every area log carries it. Batch 11 step 11 removes the bit.
+    /// bit every area log carries it. Batch 11 step 11 item 3 (not built yet) removes the bit.
     /// </summary>
     AreaLogPrefixOnlyInSomeHandlers = 1L << 33,
 
@@ -226,7 +235,7 @@ public enum LegacyCastQuirk : long
     /// <summary>
     /// A resolved summon, Grease or held charge runs no combat-end check (EvaluateCombatEnd), so an end it causes is
     /// caught at the next ShowActionChoices or turn boundary (CORE-039). Required: the Summon, Grease and HoldCharge
-    /// resolves have no combat-end stage yet; batch 11 step 11 (raw-failed-cast-gating) gives them one and removes the bit.
+    /// resolves have no combat-end stage yet; batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) gives them one and removes the bit.
     /// </summary>
     EffectResolveSkipsCombatEndCheck = 1L << 53,
 }

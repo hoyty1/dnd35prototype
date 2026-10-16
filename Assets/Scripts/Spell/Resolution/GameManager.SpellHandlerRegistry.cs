@@ -402,13 +402,13 @@ public partial class GameManager
             ctx => Claim(gm.TryResolveShoutAoE(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, out string log), log),
             SpellNames.SHOUT);
         Add(nameof(TryResolveWallOfFireSpell), null,
-            ctx => Claim(gm.TryResolveWallOfFireSpell(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, out string log), log),
+            ctx => Claim(gm.TryResolveWallOfFireSpell(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, ctx.Request.Choices.WallOfFireMode, out string log), log),
             SpellNames.WALL_OF_FIRE);
         AreaHandlerEntry wallOfIce = Add(nameof(ResolveWallOfIceWithReflexSaves), null, ctx =>
         {
             // The Reflex prompts of a player's creatures may answer later: the callback resumes the cast.
             gm.ResolveWallOfIceWithReflexSaves(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells,
-                wallLog => gm.ResumeAreaCast(ctx, wallLog));
+                ctx.Request.Choices.WallOfIceMode, wallLog => gm.ResumeAreaCast(ctx, wallLog));
             return AreaHandlerResult.Pending;
         }, SpellNames.WALL_OF_ICE);
         wallOfIce.Async = true;

@@ -218,9 +218,6 @@ public partial class GameManager
 
         Debug.Log($"[FireShield] {recipient.Stats.CharacterName}: {shieldName}, CL {casterLevel}, {durationRounds} rounds");
 
-        // Clear the pending choice
-        _pendingFireShieldIsWarm = null;
-
         return true;
     }
 

@@ -28,9 +28,9 @@ public partial class GameManager
     //  Wall of Ice mode selection state
     // ─────────────────────────────────────────────────────────────
 
-    // The Wall of Ice mode (WallOfIceMode, Spell/Casting/Core/CastChoices.cs) is the open cast's choice,
-    // _pendingWallOfIceMode (GameManager.CastContext.cs, batch 11 step 4); the line and circle sub-phase fields below are
-    // UI sequencing and stay here.
+    // The Wall of Ice mode (WallOfIceMode, Spell/Casting/Core/CastChoices.cs) is the current cast's choice, read through
+    // the view _pendingWallOfIceMode and answered through UiCastChoicesForAnswer (GameManager.CastContext.cs); the line
+    // and circle sub-phase fields below are UI sequencing and stay here.
 
     /// <summary>
     /// For Line Mode two-click targeting: stores the first click (wall start point).
@@ -54,10 +54,9 @@ public partial class GameManager
     //  Helpers
     // ─────────────────────────────────────────────────────────────
 
-    /// <summary>Reset all Wall of Ice pending state.</summary>
+    /// <summary>Resets the Wall of Ice UI sub-phase state (the mode is the cast's own choice and ends with the cast).</summary>
     private void ResetPendingWallOfIceMode()
     {
-        _pendingWallOfIceMode = null;
         _pendingWallOfIceLineStart = null;
         _pendingWallOfIceCircleRadius = null;
         _pendingWallOfIceCircleCenter = null;
@@ -154,16 +153,14 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
+                    EndPendingCast();
                     ResetPendingWallOfIceMode();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wall of Ice cancelled: no mode selected."));
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingWallOfIceMode = selectedIndex == 0
+                UiCastChoicesForAnswer.WallOfIceMode = selectedIndex == 0
                     ? WallOfIceMode.Line
                     : WallOfIceMode.Circle;
 
@@ -175,9 +172,7 @@ public partial class GameManager
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
+                EndPendingCast();
                 ResetPendingWallOfIceMode();
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Wall of Ice cancelled (mode not selected)."));
                 ShowActionChoices();
@@ -247,9 +242,7 @@ public partial class GameManager
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid cells for hemisphere. Wall of Ice cancelled."));
                     ResetPendingWallOfIceMode();
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }

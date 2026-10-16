@@ -17,8 +17,8 @@ namespace Tests.Magic
 /// Curse and Invisibility are "(harmless)"), never against a foe's spell; a charmed or confused creature keeps only the
 /// Buff case. A forgone save rolls no die and fails.</item>
 /// <item>PHB p.177 and p.100 (spell resistance, Spell Penetration; SPL-122): one d20 + caster level + Spell Penetration
-/// against SR, under the caller's dice label, skipped with no die when the target has no SR; TryOvercomeSpellResistance
-/// and SpellSaveRules.RollSpellResistance use it.</item>
+/// against SR, under the caller's dice label, skipped with no die when the target has no SR; SpellSaveRules.RollSpellResistance
+/// uses it (the old SpellResolutionService wrapper went with SPL-056, batch 11 step 29).</item>
 /// <item>SPL-018: SaveRules gives the bonuses that depend on the spell and its caster to any save whose context carries
 /// them (SaveContext.ForSpellCast): the protection ward (PHB p.266), Hideous Laughter's +4 (PHB p.292), Lullaby's -2
 /// against sleep effects (PHB p.249) and Charm Person's and Charm Monster's +5 when attacked (PHB p.209); SpellSaveRules.RollSave uses the
@@ -219,10 +219,6 @@ public static class SpellSaveAndResistanceRulesTests
         labels.Clear();
         SRResult none = SpellSaveResolver.RollSpellResistance(5, 2, 0, "test SR");
         Assert(none.Skipped && none.Overcame && labels.Count == 0, "SR: a target with no SR is skipped with no die");
-
-        bool overcame = SpellResolutionService.TryOvercomeSpellResistance(10, 20, "legacy SR", out int roll, out int total);
-        Assert(overcame && roll == 10 && total == 20 && labels.Count == 1 && labels[0] == "legacy SR",
-            "TryOvercomeSpellResistance is the same check (one d20 under its label)", roll + "/" + total);
 
         // Spell Penetration through the cast rule: the caster's own caster level plus the feat.
         labels.Clear();

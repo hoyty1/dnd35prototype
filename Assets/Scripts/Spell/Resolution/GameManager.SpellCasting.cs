@@ -53,7 +53,7 @@ public partial class GameManager
         if (sourceKind == CastSourceKind.Scroll)
         {
             Debug.Log($"[ScrollCast] Skipping spell slot consumption — casting from scroll.");
-            ConsumeScrollAfterCast(cast.Request.Caster);
+            ConsumeScrollAfterCast(cast);
             MarkCastSpend(spellComp, spell, "scroll");
             return true;
         }
@@ -62,7 +62,7 @@ public partial class GameManager
         if (sourceKind == CastSourceKind.Wand)
         {
             Debug.Log($"[WandCast] Skipping spell slot consumption — casting from wand.");
-            ConsumeWandChargeAfterCast(cast.Request.Caster);
+            ConsumeWandChargeAfterCast(cast);
             MarkCastSpend(spellComp, spell, "wand");
             return true;
         }
@@ -768,18 +768,14 @@ public partial class GameManager
             && _pendingSpell.TargetType != SpellTargetType.Self)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"{caster.Stats.CharacterName}'s spell cannot pass through the Resilient Sphere!"));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
 
         if (!CanBeginSpellcastWhileGrappledOrPinned(caster, _pendingSpell))
         {
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -896,10 +892,7 @@ public partial class GameManager
         if (raceOptions == null || raceOptions.Count == 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No races available for size {casterSize}. Disguise Self cancelled."));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingDisguiseSelfRace = null;
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -912,15 +905,12 @@ public partial class GameManager
             raceOptions,
             onSelect: selectedRace =>
             {
-                _pendingDisguiseSelfRace = selectedRace;
+                UiCastChoicesForAnswer.DisguiseRace = selectedRace;
                 PerformSpellCast(caster, caster);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingDisguiseSelfRace = null;
+                EndPendingCast();
                 ShowActionChoices();
             });
     }
@@ -970,29 +960,19 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingResistEnergyType = null;
-                    _pendingFireShieldIsWarm = null;
-                    _pendingProtectionFromEnergyType = null;
+                    EndPendingCast();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy cancelled: no energy type selected."));
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingResistEnergyType = (ResistEnergyType)selectedIndex;
+                UiCastChoicesForAnswer.Energy = (ResistEnergyType)selectedIndex;
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Resist Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
                 ResumeCastAfterChoiceDialog(caster);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingResistEnergyType = null;
-                _pendingFireShieldIsWarm = null;
-                _pendingProtectionFromEnergyType = null;
+                EndPendingCast();
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Resist Energy cancelled (energy type not selected)."));
                 ShowActionChoices();
             },
@@ -1028,25 +1008,19 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingProtectionFromEnergyType = null;
+                    EndPendingCast();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy cancelled: no energy type selected."));
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingProtectionFromEnergyType = (ResistEnergyType)selectedIndex;
+                UiCastChoicesForAnswer.Energy = (ResistEnergyType)selectedIndex;
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Protection from Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
                 ResumeCastAfterChoiceDialog(caster);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingProtectionFromEnergyType = null;
+                EndPendingCast();
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Protection from Energy cancelled (energy type not selected)."));
                 ShowActionChoices();
             },
@@ -1079,27 +1053,21 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingFireShieldIsWarm = null;
+                    EndPendingCast();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Fire Shield cancelled: no shield type selected."));
                     ShowActionChoices();
                     return;
                 }
 
                 // Index 0 = Chill Shield (not warm), Index 1 = Warm Shield
-                _pendingFireShieldIsWarm = (selectedIndex == 1);
+                UiCastChoicesForAnswer.FireShieldWarm = (selectedIndex == 1);
                 string chosen = selectedIndex == 1 ? "Warm Shield" : "Chill Shield";
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Fire Shield prepared: {chosen}."));
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingFireShieldIsWarm = null;
+                EndPendingCast();
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Fire Shield cancelled (shield type not selected)."));
                 ShowActionChoices();
             },
@@ -1121,10 +1089,6 @@ public partial class GameManager
     /// <summary>Called when spell selection is cancelled.</summary>
     private void OnSpellSelectionCancelled()
     {
-        _pendingResistEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingDisguiseSelfRace = null;
         ResetPendingWallOfFireMode();
         ResetPendingWallOfIceMode();
         ShowActionChoices();
@@ -2676,7 +2640,7 @@ public partial class GameManager
         List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
         HashSet<Vector2Int> aoeCells = ctx.Request.Aim.Cells;
         SpellcastingComponent spellComp = ctx.SpellComp;
-        // The request's own spell and metamagic, not the _pendingSpell and _pendingMetamagic forwarding properties, which
+        // The request's own spell and metamagic, not the _pendingSpell and _pendingMetamagic views, which
         // read whichever cast is on top of the cast stack (batch 11 step 25: an NPC area cast runs nested over a Ui cast
         // the player left open).
         SpellData spell = ctx.Request.Spell;
@@ -2898,15 +2862,15 @@ public partial class GameManager
     /// </summary>
     private string ResolveHypnotismSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || ctx.Request.Spell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDc = GetSpellSaveDC(caster, ctx.Request.Spell);
         // 2d4 HD and 2d4 rounds, variable effects the cast's Empower and Maximize change (PHB p.93, p.97); Extend doubles
         // the rounds (PHB p.94) (ctx.RollSpellDice, SpellDurationRules.Extended; batch 11 step 19, SPL-038)
         int hdPool = ctx.RollSpellDice(CustomSpellDice.HypnotismHitDice(), "Hypnotism HD pool 2d4"); // 2d4
-        int fascinatedRounds = SpellDurationRules.Extended(_pendingSpell, ctx.RollSpellDice(CustomSpellDice.HypnotismRounds(), "Fascinated rounds 2d4")); // 2d4
+        int fascinatedRounds = SpellDurationRules.Extended(ctx.Request.Spell, ctx.RollSpellDice(CustomSpellDice.HypnotismRounds(), "Fascinated rounds 2d4")); // 2d4
 
         List<CharacterController> candidates = new List<CharacterController>();
         for (int i = 0; i < targets.Count; i++)
@@ -2983,7 +2947,7 @@ public partial class GameManager
             remainingPool -= targetHd;
 
             // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018).
-            if (_pendingSpell.SpellResistanceApplies)
+            if (ctx.Request.Spell.SpellResistanceApplies)
             {
                 SRResult sr = ctx.RollSpellResistance(target, "Hypnotism SR check");
                 if (!sr.Overcame)
@@ -3008,8 +2972,8 @@ public partial class GameManager
                 CasterName = caster.Stats.CharacterName,
                 RemainingRounds = fascinatedRounds,
                 DisturbanceSaveDC = saveDc,
-                SourceSpellId = _pendingSpell.SpellId,
-                SourceEffectName = _pendingSpell.Name
+                SourceSpellId = ctx.Request.Spell.SpellId,
+                SourceEffectName = ctx.Request.Spell.Name
             };
 
             if (_conditionService != null)
@@ -3020,9 +2984,9 @@ public partial class GameManager
                     fascinatedRounds,
                     source: caster,
                     data: fascinatedData,
-                    sourceNameOverride: _pendingSpell.Name,
+                    sourceNameOverride: ctx.Request.Spell.Name,
                     sourceCategory: "Spell",
-                    sourceId: _pendingSpell.SpellId);
+                    sourceId: ctx.Request.Spell.SpellId);
             }
             else
             {
@@ -3057,13 +3021,13 @@ public partial class GameManager
     /// </summary>
     private string ResolveSleepSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || ctx.Request.Spell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDc = GetSpellSaveDC(caster, ctx.Request.Spell);
         int hdPool = DiceService.RollMultiple(4, 4, "Sleep HD pool 4d4"); // 4d4
-        int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
+        int sleepRounds = SpellCastingHelper.CalculateDuration(ctx.Request.Spell, casterLevel);
 
         List<CharacterController> candidates = new List<CharacterController>();
         for (int i = 0; i < targets.Count; i++)
@@ -3118,7 +3082,7 @@ public partial class GameManager
 
             // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018); Lullaby's -2 against
             // sleep effects (PHB p.249) is in the save's spell context.
-            if (_pendingSpell.SpellResistanceApplies)
+            if (ctx.Request.Spell.SpellResistanceApplies)
             {
                 SRResult sr = ctx.RollSpellResistance(target, "Sleep SR check");
                 if (!sr.Overcame)
@@ -3136,7 +3100,7 @@ public partial class GameManager
                 continue;
             }
 
-            ApplySleepState(caster, target, sleepRounds, saveDc, _pendingSpell);
+            ApplySleepState(caster, target, sleepRounds, saveDc, ctx.Request.Spell);
             affectedCount++;
             logBuilder.AppendLine($"  • {target.Stats.CharacterName}: falls asleep for {sleepRounds} rounds (Will {saveTotal} vs DC {saveDc}).");
         }
@@ -3158,13 +3122,13 @@ public partial class GameManager
     /// </summary>
     private string ResolveDeepSlumberSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || ctx.Request.Spell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDc = GetSpellSaveDC(caster, ctx.Request.Spell);
         int hdPool = 10; // Deep Slumber: flat 10 HD (no dice roll, unlike Sleep's 4d4)
-        int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
+        int sleepRounds = SpellCastingHelper.CalculateDuration(ctx.Request.Spell, casterLevel);
 
         // Gather eligible candidates — Deep Slumber has no per-creature HD cap (unlike Sleep's 4 HD limit)
         List<CharacterController> candidates = new List<CharacterController>();
@@ -3217,7 +3181,7 @@ public partial class GameManager
 
             // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018); Lullaby's -2 against
             // sleep effects (PHB p.249) is in the save's spell context. The dice keep their old labels.
-            if (_pendingSpell.SpellResistanceApplies)
+            if (ctx.Request.Spell.SpellResistanceApplies)
             {
                 SRResult sr = ctx.RollSpellResistance(target, "Color Spray SR check");
                 if (!sr.Overcame)
@@ -3235,7 +3199,7 @@ public partial class GameManager
                 continue;
             }
 
-            ApplySleepState(caster, target, sleepRounds, saveDc, _pendingSpell);
+            ApplySleepState(caster, target, sleepRounds, saveDc, ctx.Request.Spell);
             affectedCount++;
             logBuilder.AppendLine($"  • {target.Stats.CharacterName}: falls into deep slumber for {sleepRounds} rounds (Will {saveTotal} vs DC {saveDc}).");
         }
@@ -3255,11 +3219,11 @@ public partial class GameManager
     /// </summary>
     private string ResolveColorSpraySpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || ctx.Request.Spell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDc = GetSpellSaveDC(caster, ctx.Request.Spell);
 
         var logBuilder = new System.Text.StringBuilder();
         logBuilder.AppendLine("═══════════════════════════════════");
@@ -3286,7 +3250,7 @@ public partial class GameManager
 
             // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018). The dice keep their
             // old labels.
-            if (_pendingSpell.SpellResistanceApplies)
+            if (ctx.Request.Spell.SpellResistanceApplies)
             {
                 SRResult sr = ctx.RollSpellResistance(target, "Dazing Touch SR check");
                 if (!sr.Overcame)
@@ -3304,8 +3268,8 @@ public partial class GameManager
                 continue;
             }
 
-            ColorSprayEffectData effectData = BuildColorSprayEffectData(caster, targetHd, _pendingSpell);
-            ApplyColorSprayStageConditions(target, effectData, _pendingSpell);
+            ColorSprayEffectData effectData = BuildColorSprayEffectData(caster, targetHd, ctx.Request.Spell);
+            ApplyColorSprayStageConditions(target, effectData, ctx.Request.Spell);
             affectedCount++;
 
             string stageSummary = effectData.HdTier switch
@@ -4001,11 +3965,11 @@ public partial class GameManager
     /// </summary>
     private string ResolveFearSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || ctx.Request.Spell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
+        int saveDc = GetSpellSaveDC(caster, ctx.Request.Spell);
         string casterName = caster.Stats.CharacterName;
 
         var logBuilder = new System.Text.StringBuilder();
@@ -4043,7 +4007,7 @@ public partial class GameManager
             }
 
             // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018).
-            if (_pendingSpell.SpellResistanceApplies)
+            if (ctx.Request.Spell.SpellResistanceApplies)
             {
                 SRResult sr = ctx.RollSpellResistance(target, "Fear SR check");
                 if (!sr.Overcame)
@@ -4063,7 +4027,7 @@ public partial class GameManager
             if (saveSuccess)
             {
                 // Successful save: Shaken for 1 round, doubled by Extend (PHB p.94; batch 11 step 19, SPL-038)
-                int fearShakenRounds = SpellDurationRules.Extended(_pendingSpell, 1);
+                int fearShakenRounds = SpellDurationRules.Extended(ctx.Request.Spell, 1);
                 if (_conditionService != null)
                 {
                     _conditionService.ApplyCondition(
@@ -4071,9 +4035,9 @@ public partial class GameManager
                         CombatConditionType.Shaken,
                         fearShakenRounds,
                         source: caster,
-                        sourceNameOverride: _pendingSpell.Name,
+                        sourceNameOverride: ctx.Request.Spell.Name,
                         sourceCategory: "Spell",
-                        sourceId: _pendingSpell.SpellId);
+                        sourceId: ctx.Request.Spell.SpellId);
                 }
                 else
                 {
@@ -4086,15 +4050,15 @@ public partial class GameManager
             else
             {
                 // Failed save: Panicked for 1 round/level
-                int panickedRounds = SpellDurationRules.Rounds(_pendingSpell, casterLevel); // the cast's duration, Extend included (batch 11 step 19)
+                int panickedRounds = SpellDurationRules.Rounds(ctx.Request.Spell, casterLevel); // the cast's duration, Extend included (batch 11 step 19)
 
                 var fearData = new FrightenedConditionData
                 {
                     Caster = caster,
                     CasterName = casterName,
                     RemainingRounds = panickedRounds,
-                    SourceSpellId = _pendingSpell.SpellId,
-                    SourceEffectName = _pendingSpell.Name
+                    SourceSpellId = ctx.Request.Spell.SpellId,
+                    SourceEffectName = ctx.Request.Spell.Name
                 };
 
                 if (_conditionService != null)
@@ -4105,9 +4069,9 @@ public partial class GameManager
                         panickedRounds,
                         source: caster,
                         data: fearData,
-                        sourceNameOverride: _pendingSpell.Name,
+                        sourceNameOverride: ctx.Request.Spell.Name,
                         sourceCategory: "Spell",
-                        sourceId: _pendingSpell.SpellId);
+                        sourceId: ctx.Request.Spell.SpellId);
                 }
                 else
                 {
@@ -4862,7 +4826,6 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🎭", $"{recipient.Stats.CharacterName} now appears as {recipient.DisplayedRace} ({effect.GetDurationDisplayString()})."));
             }
 
-            _pendingDisguiseSelfRace = null;
             UpdateAllStatsUI();
             return effect;
         }
@@ -5061,9 +5024,6 @@ public partial class GameManager
 
             string energyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageType);
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🛡", $"{recipient.Stats.CharacterName} gains Resist Energy ({energyLabel} {resistance}) for {Mathf.Max(0, durationRounds)} rounds."));
-            _pendingResistEnergyType = null;
-            _pendingFireShieldIsWarm = null;
-            _pendingProtectionFromEnergyType = null;
             UpdateAllStatsUI();
             return null;
         }
@@ -5113,7 +5073,6 @@ public partial class GameManager
 
             string protEnergyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageTypeProtEnergy);
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🛡", $"{recipient.Stats.CharacterName} gains Protection from Energy ({protEnergyLabel}, {absorptionPool} pts) for {Mathf.Max(0, durationRoundsProtEnergy)} rounds (CL {casterLevel})."));
-            _pendingProtectionFromEnergyType = null;
             UpdateAllStatsUI();
             return null;
         }

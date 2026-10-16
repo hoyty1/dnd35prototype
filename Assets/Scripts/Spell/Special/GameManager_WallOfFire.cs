@@ -26,9 +26,9 @@ public partial class GameManager
     //  Wall of Fire mode selection state
     // ─────────────────────────────────────────────────────────────
 
-    // The Wall of Fire mode (WallOfFireMode, Spell/Casting/Core/CastChoices.cs) is the open cast's choice,
-    // _pendingWallOfFireMode (GameManager.CastContext.cs, batch 11 step 4); the line and ring sub-phase fields below are
-    // UI sequencing and stay here.
+    // The Wall of Fire mode (WallOfFireMode, Spell/Casting/Core/CastChoices.cs) is the current cast's choice, read through
+    // the view _pendingWallOfFireMode and answered through UiCastChoicesForAnswer (GameManager.CastContext.cs); the line
+    // and ring sub-phase fields below are UI sequencing and stay here.
 
     /// <summary>
     /// For Line Mode two-click targeting: stores the first click (wall start point).
@@ -121,10 +121,9 @@ public partial class GameManager
     //  Helpers
     // ─────────────────────────────────────────────────────────────
 
-    /// <summary>Reset all Wall of Fire pending state.</summary>
+    /// <summary>Resets the Wall of Fire UI sub-phase state (the mode is the cast's own choice and ends with the cast).</summary>
     private void ResetPendingWallOfFireMode()
     {
-        _pendingWallOfFireMode = null;
         _pendingWallLineStart = null;
         _pendingWallRingRadius = null;
         _pendingWallRingCenter = null;
@@ -225,16 +224,14 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
+                    EndPendingCast();
                     ResetPendingWallOfFireMode();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wall of Fire cancelled: no mode selected."));
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingWallOfFireMode = selectedIndex == 0
+                UiCastChoicesForAnswer.WallOfFireMode = selectedIndex == 0
                     ? WallOfFireMode.Line
                     : WallOfFireMode.Ring;
 
@@ -246,9 +243,7 @@ public partial class GameManager
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
+                EndPendingCast();
                 ResetPendingWallOfFireMode();
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Wall of Fire cancelled (mode not selected)."));
                 ShowActionChoices();
@@ -318,9 +313,7 @@ public partial class GameManager
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid cells for ring. Wall of Fire cancelled."));
                     ResetPendingWallOfFireMode();
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }

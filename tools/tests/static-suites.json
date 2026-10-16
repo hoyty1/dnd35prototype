@@ -1472,6 +1472,17 @@
       "notes": "Batch 11 step 23 (2026-10-16, area-routing-data; SPL-119, SPL-046, SPL-042): AoESystem.GetTargetsInArea filters with TeamUtility relative to the caster, for a Player-team and an Enemy-team caster alike (AlliesOnly the caster and its allies, PHB p.205; EnemiesOnly its enemies, PHB p.203; All, Self; never the dead); AoESystem.GetCubeCells footprints (odd and even sides, clipped at the grid edge) and GetPlacedAreaCells; every spell AoESystem.RoutesToArea routes to the area targeting has a shape and a size (Summon Swarm placed first), the eleven spells of SPL-046 and SPL-042 carry their PHB areas, filters and ranges and are refused as single-target requests and cast by the AI as areas (batch 11 step 25), Bane mirrors Bless's 50-ft. burst and allows SR and is mind-affecting (PHB p.203), Passwall is cast with no target, Prayer is area-routed for a PC; Wall of Thorns' 25 minus AC without Dexterity and dodge, none at 25 or with Woodland Stride (PHB p.300); Consecrate's -1 and Desecrate's +1 profane on attacks, damage and saves through the ledger (HolyAreaRules, PHB p.212, p.218); the alignment bursts' outsider dice. A test grid of its own; Play mode (CharacterController.Init needs its Awake). Added 2026-10-16; 123/123 in its first Play pass (20261016T092900Z-play), 124/124 with Bane's flags, 125 with the step 23 review's check that Bane's descriptors are [Fear, Mind-Affecting] with no alignment descriptor."
     },
     {
+      "type": "Tests.Magic.BlinkCastRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 17,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 29 (2026-10-16, retire-legacy-cast-code; SPL-056): replaces Tests.Services.SpellResolutionServiceTests (116 checks, most of them a 100-roll statistical SR loop) when SpellResolutionService was folded into the cast core as BlinkCastRules (Spell/Casting/Core). Forced dice (ScenarioHooks.RollFilter): a blinking caster's spell fails on a percentile 20 and goes off on 21, one roll under BlinkCastRules.CasterDiceContext, and a caster that is not blinking (or none) rolls nothing; an individually targeted spell fails against a blinking creature on 50 and reaches it on 51, one roll under TargetDiceContext, with no roll for a target that is not blinking, the caster itself, a Self or an Area spell, or no target (PHB p.206); spell resistance: SpellSaveResolver.RollSpellResistance, d20 1 + CL 10 overcomes SR 5 and d20 20 + CL 1 does not overcome SR 30, one d20 under the caller's label (PHB p.177). 17/17 in edit mode (all=true) and in the Play pass 20261016T161947Z-play."
+    },
+    {
       "type": "Tests.Magic.CastCoreStageOrderTests",
       "needs": "play",
       "skip": "",
@@ -1542,11 +1553,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 45,
+      "passed": 44,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 11 step 18 (docs/designs/cast_core_batch11.md, raw-saves-and-sr; SPL-149, SPL-122, SPL-018): the voluntary save (PHB p.177): SpellSaveRules.IsHarmlessOrBeneficialTo gives up a save only against a spell of the creature's own side that is not Damage, Debuff, Control or Wall, by the runtime EffectType (Bull's Strength Buff, Cure Light Wounds Healing, Burning Hands Damage, Hold Person Control or Debuff, Remove Curse Dispel, Invisibility Illusion, Wall of Fire Wall), never against a foe's spell; an undead ally rolls against healing; a charmed ally keeps only the Buff case (it rolls against healing and Invisibility); both deciders answer the same and CastDeciders.For picks the PC decider for a controllable creature; a forgone save rolls no die and fails. The one spell resistance check (PHB p.177, p.100): one d20 under the caller's label + caster level + Spell Penetration, met exactly and missed by one, skipped with no die for SR 0; TryOvercomeSpellResistance and SpellSaveRules.RollSpellResistance use it. The spell-and-caster save bonuses in SaveRules (SPL-018): Protection from Evil +2 against an evil caster's Fireball and any of its effects, nothing for SaveContext.None or a neutral caster; Hideous Laughter +4 for another creature type; Lullaby -2 on Will saves against Sleep only; Charm Person +5 on the Will save of a hurt foe; SpellSaveRules.RollSave uses the same modifier. Added 2026-10-15; 42 in Play mode. Step 18 review (2026-10-16): Charm Monster's +5 like Charm Person's (PHB p.209), and an audit that every registered spell with a save that an ally would give up is on a checked list (harmless or wanted by its subject; 35 spells); 45 in Play mode."
+      "notes": "Batch 11 step 18 (docs/designs/cast_core_batch11.md, raw-saves-and-sr; SPL-149, SPL-122, SPL-018): the voluntary save (PHB p.177): SpellSaveRules.IsHarmlessOrBeneficialTo gives up a save only against a spell of the creature's own side that is not Damage, Debuff, Control or Wall, by the runtime EffectType (Bull's Strength Buff, Cure Light Wounds Healing, Burning Hands Damage, Hold Person Control or Debuff, Remove Curse Dispel, Invisibility Illusion, Wall of Fire Wall), never against a foe's spell; an undead ally rolls against healing; a charmed ally keeps only the Buff case (it rolls against healing and Invisibility); both deciders answer the same and CastDeciders.For picks the PC decider for a controllable creature; a forgone save rolls no die and fails. The one spell resistance check (PHB p.177, p.100): one d20 under the caller's label + caster level + Spell Penetration, met exactly and missed by one, skipped with no die for SR 0; SpellSaveRules.RollSpellResistance uses it (the TryOvercomeSpellResistance wrapper went in batch 11 step 29). The spell-and-caster save bonuses in SaveRules (SPL-018): Protection from Evil +2 against an evil caster's Fireball and any of its effects, nothing for SaveContext.None or a neutral caster; Hideous Laughter +4 for another creature type; Lullaby -2 on Will saves against Sleep only; Charm Person +5 on the Will save of a hurt foe; SpellSaveRules.RollSave uses the same modifier. Added 2026-10-15; 42 in Play mode. Step 18 review (2026-10-16): Charm Monster's +5 like Charm Person's (PHB p.209), and an audit that every registered spell with a save that an ally would give up is on a checked list (harmless or wanted by its subject; 35 spells); 45 in Play mode. Batch 11 step 29 (2026-10-16, retire-legacy-cast-code; SPL-056): the check that the old SpellResolutionService.TryOvercomeSpellResistance wrapper made the same roll went with the wrapper (45 to 44; the SR threshold checks moved to Tests.Magic.BlinkCastRulesTests); 44/44 in the Play pass 20261016T161947Z-play."
     },
     {
       "type": "Tests.Magic.SpellSaveDCRulesTests",
@@ -1879,17 +1890,6 @@
       "skip": "",
       "expectThrow": "",
       "passed": 8,
-      "failed": 0,
-      "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
-    },
-    {
-      "type": "Tests.Services.SpellResolutionServiceTests",
-      "needs": "either",
-      "skip": "",
-      "expectThrow": "",
-      "passed": 116,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],

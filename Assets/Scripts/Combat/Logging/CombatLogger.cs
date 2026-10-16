@@ -78,36 +78,6 @@ public static class CombatLogger
     // ========================================================================
 
     /// <summary>
-    /// Format a Blink caster spell failure message (20% failure).
-    /// </summary>
-    /// <param name="casterName">Name of the blinking caster.</param>
-    /// <param name="spellName">Name of the spell that fizzled.</param>
-    /// <param name="roll">The percentile roll (1-100).</param>
-    /// <param name="failed">Whether the spell failed.</param>
-    /// <returns>Formatted Blink spell failure message.</returns>
-    public static string FormatBlinkCasterSpellFailure(string casterName, string spellName, int roll, bool failed)
-    {
-        if (failed)
-            return $"⚡ {casterName}'s {spellName} fizzles! (Blink spell failure: rolled {roll} ≤ 20%)";
-        return $"⚡ Blink spell check: {casterName} rolled {roll} > 20% (spell proceeds).";
-    }
-
-    /// <summary>
-    /// Format a Blink target spell failure message (50% failure for targeted spells).
-    /// </summary>
-    /// <param name="spellName">Name of the spell.</param>
-    /// <param name="targetName">Name of the blinking target.</param>
-    /// <param name="roll">The percentile roll (1-100).</param>
-    /// <param name="failed">Whether the spell failed to reach the target.</param>
-    /// <returns>Formatted Blink target spell failure message.</returns>
-    public static string FormatBlinkTargetSpellFailure(string spellName, string targetName, int roll, bool failed)
-    {
-        if (failed)
-            return $"🌀 {spellName} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {roll} ≤ 50%)";
-        return $"🌀 Blink target check: {targetName} rolled {roll} > 50% (spell connects).";
-    }
-
-    /// <summary>
     /// Format an arcane spell failure from armor message.
     /// </summary>
     /// <param name="casterName">Name of the caster.</param>
@@ -228,22 +198,5 @@ public static class CombatLogger
         if (missed)
             return $"🌫 Attack misses {targetName} due to concealment{source}! (rolled {roll} ≤ {missChance}%)";
         return $"🌫 Concealment check vs {targetName}{source}: rolled {roll} > {missChance}% (attack connects).";
-    }
-
-    // ========================================================================
-    // UTILITY - Direct show to CombatUI
-    // ========================================================================
-
-    /// <summary>
-    /// Log a message directly to the CombatUI if available.
-    /// Convenience wrapper for GameManager.Instance access.
-    /// </summary>
-    /// <param name="message">The pre-formatted message to display.</param>
-    public static void Show(string message)
-    {
-        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-        {
-            GameManager.Instance.CombatUI.ShowCombatLog(message);
-        }
     }
 }

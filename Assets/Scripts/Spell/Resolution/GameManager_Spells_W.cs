@@ -156,6 +156,7 @@ public partial class GameManager
         SpellData spell,
         List<CharacterController> targets,
         HashSet<Vector2Int> aoeCells,
+        WallOfFireMode? mode,
         out string log)
     {
         log = string.Empty;
@@ -169,8 +170,8 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = GetSpellSaveDC(caster, spell);
 
-        // Determine which mode was selected
-        bool isRingMode = _pendingWallOfFireMode.HasValue && _pendingWallOfFireMode.Value == WallOfFireMode.Ring;
+        // The shape the cast's request carries (the caster's choice, CastChoices.WallOfFireMode)
+        bool isRingMode = mode.HasValue && mode.Value == WallOfFireMode.Ring;
         string modeLabel = isRingMode ? "Ring" : "Wall";
 
         // Compute center and direction from the AoE cells
@@ -456,12 +457,15 @@ public partial class GameManager
     /// Resolves Wall of Ice with Reflex save checks for adjacent creatures.
     /// Uses a callback to handle async player prompts.
     /// The callback receives the combat log string when resolution is complete.
+    /// <paramref name="mode"/> is the cast's own Wall of Ice choice (CastContext.Request.Choices), passed from the
+    /// registry line so the async resume never reads whichever cast is on top of the stack (batch 11 step 29).
     /// </summary>
     private void ResolveWallOfIceWithReflexSaves(
         CharacterController caster,
         SpellData spell,
         List<CharacterController> targets,
         HashSet<Vector2Int> aoeCells,
+        WallOfIceMode? mode,
         System.Action<string> onComplete)
     {
         if (caster == null || caster.Stats == null || spell == null)
@@ -496,7 +500,7 @@ public partial class GameManager
         if (adjacentCreatures.Count == 0)
         {
             // No adjacent enemies — proceed directly to wall creation
-            string log = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+            string log = CreateWallOfIceEffect(caster, spell, targets, aoeCells, mode);
             onComplete?.Invoke(log);
             return;
         }
@@ -543,7 +547,7 @@ public partial class GameManager
         if (aiDisruptor != null)
         {
             MoveCreatureToWallCell(aiDisruptor, aiDisruptorTargetCell);
-            string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, saveLog.ToString(), aiDisruptor);
+            string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, mode, saveLog.ToString(), aiDisruptor);
             ResetPendingWallOfIceMode();
             onComplete?.Invoke(disruptLog);
             return;
@@ -554,14 +558,14 @@ public partial class GameManager
         {
             // Process player creatures sequentially via callbacks
             ProcessPlayerWallOfIceReflexSaves(
-                caster, spell, targets, aoeCells, saveDC,
+                caster, spell, targets, aoeCells, mode, saveDC,
                 playerCreatures, 0, saveLog,
                 onComplete);
             return;
         }
 
         // All AI creatures failed their saves — proceed to wall creation
-        string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+        string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells, mode);
         if (saveLog.Length > 0)
         {
             wallLog = saveLog.ToString() + "\n" + wallLog;
@@ -579,6 +583,7 @@ public partial class GameManager
         SpellData spell,
         List<CharacterController> targets,
         HashSet<Vector2Int> aoeCells,
+        WallOfIceMode? mode,
         int saveDC,
         List<CharacterController> playerCreatures,
         int currentIndex,
@@ -588,7 +593,7 @@ public partial class GameManager
         // Base case: all player creatures processed, no disruption
         if (currentIndex >= playerCreatures.Count)
         {
-            string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+            string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells, mode);
             if (accumulatedLog.Length > 0)
                 wallLog = accumulatedLog.ToString() + "\n" + wallLog;
             onComplete?.Invoke(wallLog);
@@ -600,7 +605,7 @@ public partial class GameManager
         {
             // Skip dead/null — move to next
             ProcessPlayerWallOfIceReflexSaves(
-                caster, spell, targets, aoeCells, saveDC,
+                caster, spell, targets, aoeCells, mode, saveDC,
                 playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
             return;
         }
@@ -633,7 +638,7 @@ public partial class GameManager
                         Vector2Int targetCell = FindClosestWallCell(pc, aoeCells);
                         MoveCreatureToWallCell(pc, targetCell);
 
-                        string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, accumulatedLog.ToString(), pc);
+                        string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, mode, accumulatedLog.ToString(), pc);
                         ResetPendingWallOfIceMode();
                         onComplete?.Invoke(disruptLog);
                         return;
@@ -652,7 +657,7 @@ public partial class GameManager
 
                 // Move to next player creature
                 ProcessPlayerWallOfIceReflexSaves(
-                    caster, spell, targets, aoeCells, saveDC,
+                    caster, spell, targets, aoeCells, mode, saveDC,
                     playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
             },
             onCancel: () =>
@@ -661,7 +666,7 @@ public partial class GameManager
                 accumulatedLog.AppendLine($"🛡 {pcName} chooses not to attempt a Reflex save against the Wall of Ice.");
 
                 ProcessPlayerWallOfIceReflexSaves(
-                    caster, spell, targets, aoeCells, saveDC,
+                    caster, spell, targets, aoeCells, mode, saveDC,
                     playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
             },
             titleOverride: "Wall of Ice — Reflex Save to Disrupt",
@@ -679,10 +684,11 @@ public partial class GameManager
         CharacterController caster,
         SpellData spell,
         HashSet<Vector2Int> aoeCells,
+        WallOfIceMode? mode,
         string saveLog,
         CharacterController disruptor)
     {
-        bool isCircleMode = _pendingWallOfIceMode.HasValue && _pendingWallOfIceMode.Value == WallOfIceMode.Circle;
+        bool isCircleMode = mode == WallOfIceMode.Circle;
         string modeLabel = isCircleMode ? "Hemisphere" : "Wall";
 
         var sb = new StringBuilder();
@@ -707,13 +713,14 @@ public partial class GameManager
         CharacterController caster,
         SpellData spell,
         List<CharacterController> targets,
-        HashSet<Vector2Int> aoeCells)
+        HashSet<Vector2Int> aoeCells,
+        WallOfIceMode? mode)
     {
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Determine which mode was selected
-        bool isCircleMode = _pendingWallOfIceMode.HasValue && _pendingWallOfIceMode.Value == WallOfIceMode.Circle;
+        bool isCircleMode = mode == WallOfIceMode.Circle;
         string modeLabel = isCircleMode ? "Hemisphere" : "Wall";
 
         // Compute center and direction from the AoE cells
@@ -1062,8 +1069,7 @@ public partial class GameManager
             if (WishUI == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wish UI not available — spell fizzles."));
-                _pendingSpell = null;
-                _pendingMetamagic = null;
+                EndPendingCast();
                 ShowActionChoices();
                 return;
             }
@@ -1080,8 +1086,7 @@ public partial class GameManager
                 else
                     CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
-                _pendingSpell = null;
-                _pendingMetamagic = null;
+                EndPendingCast();
                 ShowActionChoices();
             };
 
@@ -1089,8 +1094,7 @@ public partial class GameManager
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{caster.Stats.CharacterName} decides not to make a Wish."));
                 // Note: spell slot is already consumed; this is intentional for D&D 3.5e (casting began).
-                _pendingSpell = null;
-                _pendingMetamagic = null;
+                EndPendingCast();
                 ShowActionChoices();
             };
 
@@ -1110,8 +1114,7 @@ public partial class GameManager
             else
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
-            _pendingSpell = null;
-            _pendingMetamagic = null;
+            EndPendingCast();
             ShowActionChoices();
         }
     }

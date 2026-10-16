@@ -15,7 +15,8 @@ public partial class GameManager
         public CharacterController Caster;
     }
 
-    // _pendingGreaseCastMode (GreaseCastMode, Spell/Casting/Core/CastChoices.cs): the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
+    // _pendingGreaseCastMode (GreaseCastMode, Spell/Casting/Core/CastChoices.cs): the current cast's choice, a read-only view of
+    // its request (GameManager.CastContext.cs); the mode prompt answers through UiCastChoicesForAnswer.
     private readonly List<ActiveGreasedObject> _activeGreasedObjects = new List<ActiveGreasedObject>();
 
     private static bool IsGreaseSpell(SpellData spell)
@@ -38,11 +39,6 @@ public partial class GameManager
         return IsGreaseSpell(_pendingSpell) && _pendingGreaseCastMode == GreaseCastMode.Armor;
     }
 
-    private void ResetPendingGreaseCastMode()
-    {
-        _pendingGreaseCastMode = GreaseCastMode.None;
-    }
-
     private bool TryShowGreaseCastModePrompt(CharacterController caster)
     {
         if (!IsGreaseSpell(_pendingSpell) || CombatUI == null || caster == null || caster.Stats == null)
@@ -61,20 +57,17 @@ public partial class GameManager
             onSelect: selectedIndex =>
             {
                 if (selectedIndex == 0)
-                    _pendingGreaseCastMode = GreaseCastMode.Area;
+                    UiCastChoicesForAnswer.GreaseMode = GreaseCastMode.Area;
                 else if (selectedIndex == 1)
-                    _pendingGreaseCastMode = GreaseCastMode.Object;
+                    UiCastChoicesForAnswer.GreaseMode = GreaseCastMode.Object;
                 else
-                    _pendingGreaseCastMode = GreaseCastMode.Armor;
+                    UiCastChoicesForAnswer.GreaseMode = GreaseCastMode.Armor;
 
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                ResetPendingGreaseCastMode();
+                EndPendingCast();
                 ShowActionChoices();
             },
             titleOverride: "Grease: Choose Target Mode",

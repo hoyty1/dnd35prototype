@@ -505,16 +505,21 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Sets the pending cast's spell and metamagic directly, with no menu, targeting or other side effect (TST-006: replaces
-    /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which batch 11 step 4 made forwarding properties onto
-    /// the open cast's context). Pass a clone, never a database template. With no cast open, a spell opens a scratch Ui
-    /// cast; a null spell ends the open Ui cast (GameManager.CastContext.cs). Read the old values first with
+    /// Sets the current cast's spell and metamagic directly, with no menu, targeting or other side effect (TST-006: replaces
+    /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which are read-only views of the current cast's
+    /// request since batch 11 step 29). Pass a clone, never a database template. With no cast open, a spell opens a scratch
+    /// Ui cast (CastForWrite); a null spell ends the open Ui cast (EndPendingCast). Read the old values first with
     /// <see cref="Harness_GetPendingSpell"/> and <see cref="Harness_GetPendingMetamagic"/> and put them back afterwards.
     /// </summary>
     internal void Harness_SetPendingCast(SpellData spell, MetamagicData metamagic)
     {
-        _pendingSpell = spell;
-        _pendingMetamagic = metamagic;
+        if (spell == null)
+            EndPendingCast();
+        else
+            CastForWrite(false).Request.Spell = spell;
+        CastContext open = CastForWrite(metamagic == null);
+        if (open != null)
+            open.Request.Metamagic = metamagic;
     }
 
     /// <summary>The pending cast's spell, or null.</summary>

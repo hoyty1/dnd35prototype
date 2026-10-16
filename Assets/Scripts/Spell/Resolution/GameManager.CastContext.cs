@@ -12,13 +12,14 @@ using UnityEngine;
 /// Open contexts sit on a stack: a synchronous AI cast nests on top of a Ui cast that waits for the player, and pops
 /// in order; a pop that does not match the top raises a scenario-harness violation (ScenarioHooks.CastStackViolation).
 ///
-/// During the migration GameManager's old per-cast fields keep their names as private forwarding properties onto the
-/// context on top of the stack (below). A getter with no cast open returns the old default; a setter that writes a
-/// non-default value with no cast open opens a scratch Ui context, so the UI's scratch flow is unchanged. Assigning
-/// null to <c>_pendingSpell</c> ends the open Ui cast: every legacy exit (cast resolved, cancelled, refused) already
-/// does that, so the context closes exactly where the old flow let go of the spell. Exits that never cleared the spell
-/// call <see cref="EndPendingCast"/>. A new Ui cast ends any Ui cast the UI left open (the old reset lists), and the
-/// combat reset ends them all.
+/// GameManager's old per-cast field names (<c>_pendingSpell</c>, <c>_pendingMetamagic</c>, the choices, the scroll and
+/// wand state) are the current cast's request: read-only views onto the context on top of the stack (below; batch 11
+/// step 29 removed their setters). A view with no cast open returns the old default. The request builders
+/// (SpellCastRequest.For*) fill a request; the UI's choice dialogs answer into the current cast through
+/// <see cref="UiCastChoicesForAnswer"/> (with no cast open, a scratch Ui context, as before); every UI exit (cast
+/// resolved, cancelled, refused) ends the open Ui cast with <see cref="EndPendingCast"/>; the cast core's stages read
+/// <see cref="CastContext"/>. A new Ui cast ends any Ui cast the UI left open (the old reset lists), and the combat
+/// reset ends them all.
 /// </summary>
 public partial class GameManager
 {
@@ -195,174 +196,78 @@ public partial class GameManager
     private bool ConsumableCastAwaitingSpend
         => _lastConsumableCast != null && _lastConsumableCast.Request.Source.Item != null;
 
-    // ── Forwarding properties: the old per-cast field names, onto the cast on top of the stack ──────────────
+    /// <summary>
+    /// The current cast's choices for the UI's choice dialogs to fill (the Disguise Self race, the energy types, the Fire
+    /// Shield form, the weapon, rope and Grease pickers, the wall shapes, the summon picks): the request of the cast on top
+    /// of the stack, or, with no cast open, a new scratch Ui cast's (CastForWrite). Only the UI writes the request this
+    /// way; the AI decider fills its own request (AiCastDecider.FillChoices) and the rules read it.
+    /// </summary>
+    private CastChoices UiCastChoicesForAnswer => CastForWrite(false).Request.Choices;
 
-    /// <summary>The open cast's spell. Assigning null ends the open Ui cast (every legacy exit does so).</summary>
-    private SpellData _pendingSpell
-    {
-        get => CurrentCast?.Request.Spell;
-        set
-        {
-            if (value == null)
-            {
-                EndPendingCast();
-                return;
-            }
-            CastForWrite(false).Request.Spell = value;
-        }
-    }
+    // ── The current cast's request: read-only views onto the cast on top of the stack ─────────────────────
+    // The old per-cast field names (batch 11 step 4) are views of the current cast's request since batch 11 step 29: no
+    // setters. A request builder (SpellCastRequest.For*) fills the request, the UI's dialogs answer through
+    // UiCastChoicesForAnswer, a cast ends with EndPendingCast or EndCast, and the cast core's stages read CastContext.
+    // With no cast open each view returns its default.
 
-    private MetamagicData _pendingMetamagic
-    {
-        get => CurrentCast?.Request.Metamagic;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Metamagic = value; }
-    }
+    /// <summary>The current cast's spell, or null with no cast open.</summary>
+    private SpellData _pendingSpell => CurrentCast?.Request.Spell;
 
-    /// <summary>True when the open cast delivers a held touch charge (its source kind).</summary>
-    private bool _pendingSpellFromHeldCharge
-    {
-        get => CurrentCastSource?.Kind == CastSourceKind.HeldChargeDelivery;
-        set
-        {
-            CastContext c = CastForWrite(!value);
-            if (c == null)
-                return;
-            if (value)
-                c.Request.Source.Kind = CastSourceKind.HeldChargeDelivery;
-            else if (c.Request.Source.Kind == CastSourceKind.HeldChargeDelivery)
-                c.Request.Source.Kind = CastSourceKind.PreparedSlot;
-        }
-    }
+    /// <summary>The current cast's metamagic, or null.</summary>
+    private MetamagicData _pendingMetamagic => CurrentCast?.Request.Metamagic;
 
-    private ItemData _pendingAnimateRopeItem
-    {
-        get => CurrentCast?.Request.Choices.AnimateRopeItem;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.AnimateRopeItem = value; }
-    }
+    /// <summary>True when the current cast delivers a held touch charge (its source kind).</summary>
+    private bool _pendingSpellFromHeldCharge => CurrentCastSource?.Kind == CastSourceKind.HeldChargeDelivery;
 
-    private ItemData _pendingMagicWeaponItem
-    {
-        get => CurrentCast?.Request.Choices.MagicWeaponItem;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.MagicWeaponItem = value; }
-    }
+    private ItemData _pendingAnimateRopeItem => CurrentCast?.Request.Choices.AnimateRopeItem;
 
-    private ItemData _pendingKeenEdgeItem
-    {
-        get => CurrentCast?.Request.Choices.KeenEdgeItem;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.KeenEdgeItem = value; }
-    }
+    private ItemData _pendingMagicWeaponItem => CurrentCast?.Request.Choices.MagicWeaponItem;
 
-    private bool _pendingKeenEdgeIsAmmo
-    {
-        get => CurrentCast != null && CurrentCast.Request.Choices.KeenEdgeIsAmmo;
-        set { CastContext c = CastForWrite(!value); if (c != null) c.Request.Choices.KeenEdgeIsAmmo = value; }
-    }
+    private ItemData _pendingKeenEdgeItem => CurrentCast?.Request.Choices.KeenEdgeItem;
 
-    private ItemData _pendingGreaterMagicWeaponItem
-    {
-        get => CurrentCast?.Request.Choices.GreaterMagicWeaponItem;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.GreaterMagicWeaponItem = value; }
-    }
+    private bool _pendingKeenEdgeIsAmmo => CurrentCast != null && CurrentCast.Request.Choices.KeenEdgeIsAmmo;
 
-    /// <summary>The energy type of the open Resist Energy cast (one choice field with Protection from Energy).</summary>
-    private ResistEnergyType? _pendingResistEnergyType
-    {
-        get => CurrentCast?.Request.Choices.Energy;
-        set { CastContext c = CastForWrite(!value.HasValue); if (c != null) c.Request.Choices.Energy = value; }
-    }
+    private ItemData _pendingGreaterMagicWeaponItem => CurrentCast?.Request.Choices.GreaterMagicWeaponItem;
 
-    /// <summary>The energy type of the open Protection from Energy cast (one choice field with Resist Energy).</summary>
-    private ResistEnergyType? _pendingProtectionFromEnergyType
-    {
-        get => CurrentCast?.Request.Choices.Energy;
-        set { CastContext c = CastForWrite(!value.HasValue); if (c != null) c.Request.Choices.Energy = value; }
-    }
+    /// <summary>The energy type of the current Resist Energy cast (one choice field with Protection from Energy).</summary>
+    private ResistEnergyType? _pendingResistEnergyType => CurrentCast?.Request.Choices.Energy;
 
-    private bool? _pendingFireShieldIsWarm
-    {
-        get => CurrentCast?.Request.Choices.FireShieldWarm;
-        set { CastContext c = CastForWrite(!value.HasValue); if (c != null) c.Request.Choices.FireShieldWarm = value; }
-    }
+    /// <summary>The energy type of the current Protection from Energy cast (one choice field with Resist Energy).</summary>
+    private ResistEnergyType? _pendingProtectionFromEnergyType => CurrentCast?.Request.Choices.Energy;
 
-    private string _pendingDisguiseSelfRace
-    {
-        get => CurrentCast?.Request.Choices.DisguiseRace;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.DisguiseRace = value; }
-    }
+    private bool? _pendingFireShieldIsWarm => CurrentCast?.Request.Choices.FireShieldWarm;
 
-    private SummonMonsterOption _pendingSummonSelection
-    {
-        get => CurrentCast?.Request.Choices.SummonSelection;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.SummonSelection = value; }
-    }
+    private string _pendingDisguiseSelfRace => CurrentCast?.Request.Choices.DisguiseRace;
 
-    private int _pendingSummonListLevel
-    {
-        get => CurrentCast != null ? CurrentCast.Request.Choices.SummonListLevel : 0;
-        set { CastContext c = CastForWrite(value == 0); if (c != null) c.Request.Choices.SummonListLevel = value; }
-    }
+    private SummonMonsterOption _pendingSummonSelection => CurrentCast?.Request.Choices.SummonSelection;
 
-    private SummonCreatureCountInfo _pendingSummonCountInfo
-    {
-        get => CurrentCast?.Request.Choices.SummonCountInfo;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.SummonCountInfo = value; }
-    }
+    private int _pendingSummonListLevel => CurrentCast != null ? CurrentCast.Request.Choices.SummonListLevel : 0;
 
-    private string _pendingSummonSwarmNpcId
-    {
-        get => CurrentCast?.Request.Choices.SummonSwarmNpcId;
-        set { CastContext c = CastForWrite(value == null); if (c != null) c.Request.Choices.SummonSwarmNpcId = value; }
-    }
+    private SummonCreatureCountInfo _pendingSummonCountInfo => CurrentCast?.Request.Choices.SummonCountInfo;
 
-    private GreaseCastMode _pendingGreaseCastMode
-    {
-        get => CurrentCast != null ? CurrentCast.Request.Choices.GreaseMode : GreaseCastMode.None;
-        set { CastContext c = CastForWrite(value == GreaseCastMode.None); if (c != null) c.Request.Choices.GreaseMode = value; }
-    }
+    private string _pendingSummonSwarmNpcId => CurrentCast?.Request.Choices.SummonSwarmNpcId;
 
-    private WallOfFireMode? _pendingWallOfFireMode
-    {
-        get => CurrentCast?.Request.Choices.WallOfFireMode;
-        set { CastContext c = CastForWrite(!value.HasValue); if (c != null) c.Request.Choices.WallOfFireMode = value; }
-    }
+    private GreaseCastMode _pendingGreaseCastMode => CurrentCast != null ? CurrentCast.Request.Choices.GreaseMode : GreaseCastMode.None;
 
-    private WallOfIceMode? _pendingWallOfIceMode
-    {
-        get => CurrentCast?.Request.Choices.WallOfIceMode;
-        set { CastContext c = CastForWrite(!value.HasValue); if (c != null) c.Request.Choices.WallOfIceMode = value; }
-    }
+    private WallOfFireMode? _pendingWallOfFireMode => CurrentCast?.Request.Choices.WallOfFireMode;
 
-    /// <summary>True when the open cast reads a scroll (its source kind).</summary>
+    private WallOfIceMode? _pendingWallOfIceMode => CurrentCast?.Request.Choices.WallOfIceMode;
+
+    /// <summary>True when the current cast reads a scroll (its source kind).</summary>
     private bool _pendingScrollCastActive => CurrentCastSource?.Kind == CastSourceKind.Scroll;
 
-    /// <summary>The open scroll cast's scroll; null once spent (or for any other source).</summary>
-    private ItemData _pendingScrollCastItem
-    {
-        get => _pendingScrollCastActive ? CurrentCastSource.Item : null;
-        set { if (_pendingScrollCastActive) CurrentCastSource.Item = value; }
-    }
+    /// <summary>The current scroll cast's scroll; null once spent (or for any other source).</summary>
+    private ItemData _pendingScrollCastItem => _pendingScrollCastActive ? CurrentCastSource.Item : null;
 
-    private int _pendingScrollCastInventoryIndex
-    {
-        get => _pendingScrollCastActive ? CurrentCastSource.ItemIndex : -1;
-        set { if (_pendingScrollCastActive) CurrentCastSource.ItemIndex = value; }
-    }
+    private int _pendingScrollCastInventoryIndex => _pendingScrollCastActive ? CurrentCastSource.ItemIndex : -1;
 
-    /// <summary>True when the open cast uses a wand (its source kind).</summary>
+    /// <summary>True when the current cast uses a wand (its source kind).</summary>
     private bool _pendingWandCastActive => CurrentCastSource?.Kind == CastSourceKind.Wand;
 
-    /// <summary>The open wand cast's wand; null once its charge is spent (or for any other source).</summary>
-    private ItemData _pendingWandCastItem
-    {
-        get => _pendingWandCastActive ? CurrentCastSource.Item : null;
-        set { if (_pendingWandCastActive) CurrentCastSource.Item = value; }
-    }
+    /// <summary>The current wand cast's wand; null once its charge is spent (or for any other source).</summary>
+    private ItemData _pendingWandCastItem => _pendingWandCastActive ? CurrentCastSource.Item : null;
 
-    private int _pendingWandCastInventoryIndex
-    {
-        get => _pendingWandCastActive ? CurrentCastSource.ItemIndex : -1;
-        set { if (_pendingWandCastActive) CurrentCastSource.ItemIndex = value; }
-    }
+    private int _pendingWandCastInventoryIndex => _pendingWandCastActive ? CurrentCastSource.ItemIndex : -1;
 
     /// <summary>True when the open cast comes from the F12 Spell Testing Panel (its source kind).</summary>
     private bool _testPanelCastActive => CurrentCastSource?.Kind == CastSourceKind.TestPanel;

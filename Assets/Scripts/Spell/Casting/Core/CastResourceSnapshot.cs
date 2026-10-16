@@ -26,7 +26,7 @@ internal sealed class CastResourceSnapshot
     public int[] PartialSlotsRemaining;
 
     // The cast's scroll or wand (a Scroll or Wand source), so a cancelled or unspent item cast keeps its item (ITM-084).
-    /// <summary>The cast's source, whose item and pack slot the spend clears (GameManager.CleanupScrollCastState).</summary>
+    /// <summary>The cast's source, whose item and pack slot the spend clears (GameManager.MarkCastItemSpent).</summary>
     public CastSource ItemSource;
     /// <summary>The scroll or wand; null when the cast uses none.</summary>
     public ItemData Item;

@@ -25,17 +25,14 @@ public partial class GameManager
         return spell != null && string.Equals(spell.SpellId, SpellNames.KEEN_EDGE, StringComparison.Ordinal);
     }
 
-    // _pendingKeenEdgeItem and _pendingKeenEdgeIsAmmo: the open cast's choices (GameManager.CastContext.cs, batch 11 step 4).
+    // _pendingKeenEdgeItem and _pendingKeenEdgeIsAmmo: the current cast's choices, read-only views of its request
+    // (GameManager.CastContext.cs); the picker answers through UiCastChoicesForAnswer.
 
     /// <summary>The Keen Edge picker of the UI decider: Filled, Suspended (dialog open) or Refused (nothing to enchant); see TryHandleMagicWeaponWeaponSelection.</summary>
     private CastChoiceFill TryHandleKeenEdgeWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsKeenEdgeSpell(_pendingSpell))
-        {
-            _pendingKeenEdgeItem = null;
-            _pendingKeenEdgeIsAmmo = false;
             return CastChoiceFill.Filled;
-        }
 
         if (target == null || target.Stats == null)
             return CastChoiceFill.Filled;
@@ -73,14 +70,14 @@ public partial class GameManager
         // If only weapons and exactly one, auto-select
         if (weaponOptions.Count == 1 && !hasAmmo)
         {
-            _pendingKeenEdgeItem = weaponOptions[0];
+            UiCastChoicesForAnswer.KeenEdgeItem = weaponOptions[0];
             return CastChoiceFill.Filled;
         }
 
         // If only ammo and no weapons, auto-select ammo path
         if (weaponOptions.Count == 0 && hasAmmo)
         {
-            _pendingKeenEdgeIsAmmo = true;
+            UiCastChoicesForAnswer.KeenEdgeIsAmmo = true;
             return CastChoiceFill.Filled;
         }
 
@@ -101,9 +98,7 @@ public partial class GameManager
             {
                 if (selectedIndex < 0 || selectedIndex >= allOptions.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingKeenEdgeItem = null;
-                    _pendingKeenEdgeIsAmmo = false;
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }
@@ -111,21 +106,19 @@ public partial class GameManager
                 if (allOptions[selectedIndex] == null)
                 {
                     // Ammo path selected
-                    _pendingKeenEdgeIsAmmo = true;
-                    _pendingKeenEdgeItem = null;
+                    UiCastChoicesForAnswer.KeenEdgeIsAmmo = true;
+                    UiCastChoicesForAnswer.KeenEdgeItem = null;
                 }
                 else
                 {
-                    _pendingKeenEdgeItem = allOptions[selectedIndex];
-                    _pendingKeenEdgeIsAmmo = false;
+                    UiCastChoicesForAnswer.KeenEdgeItem = allOptions[selectedIndex];
+                    UiCastChoicesForAnswer.KeenEdgeIsAmmo = false;
                 }
                 PerformSpellCast(caster, target);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingKeenEdgeItem = null;
-                _pendingKeenEdgeIsAmmo = false;
+                EndPendingCast();
                 ShowActionChoices();
             },
             titleOverride: "Keen Edge - Select Target",
@@ -192,14 +185,9 @@ public partial class GameManager
 
         // ── Ammo path: enchant up to 50 projectiles (like Flame Arrow) ──
         if (_pendingKeenEdgeIsAmmo)
-        {
-            _pendingKeenEdgeIsAmmo = false;
-            _pendingKeenEdgeItem = null;
             return TryApplyKeenEdgeToAmmo(caster, spell);
-        }
 
         ItemData weapon = _pendingKeenEdgeItem;
-        _pendingKeenEdgeItem = null;
 
         if (weapon == null)
         {

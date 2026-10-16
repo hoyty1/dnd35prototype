@@ -1357,17 +1357,7 @@ public partial class GameManager
             if (!_highlightedCells.Contains(cell))
             {
                 Debug.Log($"[CombatActions] Spell targeting CANCELLED – cell {cell?.Coords} not in highlighted set (count={_highlightedCells.Count})");
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingAnimateRopeItem = null;
-                _pendingResistEnergyType = null;
-                _pendingProtectionFromEnergyType = null;
-                _pendingSummonSelection = null;
-                _pendingSummonListLevel = 0;
-                _pendingSummonCountInfo = null;
-                _pendingSummonSwarmNpcId = null;
-                ResetPendingGreaseCastMode();
+                EndPendingCast();
                 CleanupTestPanelCast();
                 ShowActionChoices();
                 return;
@@ -1393,10 +1383,7 @@ public partial class GameManager
             }
 
             // Fallback cancel
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            ResetPendingGreaseCastMode();
+            EndPendingCast();
             ShowActionChoices();
             return;
         }

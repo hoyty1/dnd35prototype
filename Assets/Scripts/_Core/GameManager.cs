@@ -250,14 +250,11 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private EconomyService _economyService;
     [SerializeField] private SummoningService _summoningService;
     [SerializeField] private EncounterService _encounterService;
-    [SerializeField] private SpellApplicationService _spellApplicationService;
 
     /// <summary>Centralized summoning service. Manages summoned creature lifecycle.</summary>
     public SummoningService Summoning => _summoningService;
     /// <summary>Centralized encounter service. Manages combat encounter lifecycle.</summary>
     public EncounterService Encounters => _encounterService;
-    /// <summary>Centralized spell application service. Manages spell effect application and queries.</summary>
-    public SpellApplicationService SpellApplication => _spellApplicationService;
 
     private ConfusedBehaviorController _confusedBehaviorController;
     private CharmedBehaviorController _charmedBehaviorController;
@@ -318,14 +315,14 @@ public partial class GameManager : MonoBehaviour
     private PendingAttackMode _pendingAttackMode;
     private AttackType _currentAttackType = AttackType.Melee;
     private bool _pendingDefensiveAttackSelection; // Set when targeting for a defensive attack action
-    // The per-cast fields (_pendingSpell, _pendingMetamagic, _pendingSpellFromHeldCharge, the caster's choices, the summon
-    // picks) are forwarding properties onto the open cast's context since batch 11 step 4: Spell/Resolution/GameManager.CastContext.cs.
+    // The per-cast state (_pendingSpell, _pendingMetamagic, _pendingSpellFromHeldCharge, the caster's choices, the summon
+    // picks) is the current cast's request: read-only views in Spell/Resolution/GameManager.CastContext.cs (batch 11 steps 4, 29).
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
     private bool _pendingNaturalAttackIsHasteExtra; // The selected natural attack is Haste's extra attack (CMB-106)
 
-    // Scroll and wand casting state (the item, its pack slot, whether the open cast uses one) is the open cast's CastSource
-    // since batch 11 step 4: forwarding properties in Spell/Resolution/GameManager.CastContext.cs.
+    // Scroll and wand casting state (the item, its pack slot, whether the current cast uses one) is the cast's CastSource
+    // since batch 11 step 4: read-only views in Spell/Resolution/GameManager.CastContext.cs.
 
     // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
@@ -539,9 +536,6 @@ public partial class GameManager : MonoBehaviour
 
         _encounterService ??= gameObject.GetComponent<EncounterService>() ?? gameObject.AddComponent<EncounterService>();
         _encounterService.Initialize(this, () => CombatUI);
-
-        _spellApplicationService ??= gameObject.GetComponent<SpellApplicationService>() ?? gameObject.AddComponent<SpellApplicationService>();
-        _spellApplicationService.Initialize(this, () => CombatUI, _conditionService);
 
         _dispelMagicService ??= gameObject.GetComponent<DispelMagicService>() ?? gameObject.AddComponent<DispelMagicService>();
         _dispelMagicService.Initialize(
@@ -5742,7 +5736,7 @@ public partial class GameManager : MonoBehaviour
     /// (TryApplySpellConsumableEffect: a spell with no target to pick, or any use outside an encounter), the same rules in
     /// the same order (batch 11 step 13): the entangled and grappled or pinned Concentration checks for a scroll (DMG
     /// p.238; not a wand, CastComponentRules.CastingDistractionApplies), arcane spell failure
-    /// (CastComponentRules.ArcaneFailureApplies), the blinking user's 20% (SpellResolutionService.TryBlinkCasterFailure)
+    /// (CastComponentRules.ArcaneFailureApplies), the blinking user's 20% (BlinkCastRules.TryCasterFailure)
     /// and the deafened 20% (CastComponentRules.TryDeafenedFailure). True when the spell goes on; false when it is lost,
     /// with <paramref name="lostReason"/> saying why, and the caller spends the scroll or the charge. Silence is refused
     /// earlier (<see cref="ItemUseSilenceRefusal"/>).
@@ -5792,7 +5786,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        if (SpellResolutionService.TryBlinkCasterFailure(actor, spell.Name, out int blinkRoll))
+        if (BlinkCastRules.TryCasterFailure(actor, spell.Name, out int blinkRoll))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{name}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkRoll} ≤ 20%)"));
             lostReason = $"Blink spell failure (rolled {blinkRoll} ≤ 20%, PHB p.206).";
@@ -6112,42 +6106,47 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Consumes the scroll after a successful spell cast through the targeting pipeline: the open cast's scroll, spent by
-    /// its caster (the request's Caster, ConsumePendingSpellSlot). Called when the open cast's source is a scroll.
+    /// Consumes the scroll after a successful spell cast through the targeting pipeline: the cast's scroll (its source),
+    /// spent by its caster (the request's Caster, ConsumePendingSpellSlot). Does nothing unless the cast's source is an
+    /// unspent scroll.
     /// </summary>
-    private void ConsumeScrollAfterCast(CharacterController caster)
+    private void ConsumeScrollAfterCast(CastContext cast)
     {
-        if (!_pendingScrollCastActive || _pendingScrollCastItem == null) return;
+        CastSource source = cast != null ? cast.Request.Source : null;
+        if (source == null || source.Kind != CastSourceKind.Scroll || source.Item == null) return;
+        CharacterController caster = cast.Request.Caster;
+        ItemData scroll = source.Item;
 
         // Consume the action that was deferred when the scroll entered targeting mode
         ConsumeItemManipulationAction(caster);
 
         var inv = caster?.InventoryComp?.CharacterInventory;
-        if (inv != null && _pendingScrollCastInventoryIndex >= 0)
+        if (inv != null && source.ItemIndex >= 0)
         {
-            string scrollName = _pendingScrollCastItem.Name;
-            ConsumeOneFromStack(inv, _pendingScrollCastInventoryIndex, _pendingScrollCastItem);
+            string scrollName = scroll.Name;
+            ConsumeOneFromStack(inv, source.ItemIndex, scroll);
 
             string stackInfo = "";
-            if (_pendingScrollCastItem.IsStackable && _pendingScrollCastItem.StackCount > 0)
-                stackInfo = $" ({_pendingScrollCastItem.StackCount} remaining)";
+            if (scroll.IsStackable && scroll.StackCount > 0)
+                stackInfo = $" ({scroll.StackCount} remaining)";
 
-            string dcInfo = _pendingScrollCastItem.ScrollSavedDC > 0 ? $" (DC {_pendingScrollCastItem.ScrollSavedDC})" : "";
+            string dcInfo = scroll.ScrollSavedDC > 0 ? $" (DC {scroll.ScrollSavedDC})" : "";
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("📜", $"{scrollName} consumed.{dcInfo}{stackInfo}"));
             Debug.Log($"[ScrollCast] Scroll consumed: {scrollName}");
         }
 
-        CleanupScrollCastState();
+        MarkCastItemSpent(source);
     }
 
     /// <summary>
-    /// Marks the open scroll cast's scroll as spent (its source keeps the Scroll kind for the rest of the cast). A cancel
-    /// or reset needs no cleanup any more: the scroll state is the cast's own and ends with it (batch 11 step 4).
+    /// Marks the cast's scroll or wand as spent: its source keeps the Scroll or Wand kind for the rest of the cast, with no
+    /// item and no pack slot (CastResourceSnapshot puts them back on a cancel). A cancel or reset needs no cleanup: the
+    /// item state is the cast's own and ends with it (batch 11 step 4; a wand's used to stay set after a cancel, SPL-116).
     /// </summary>
-    private void CleanupScrollCastState()
+    private static void MarkCastItemSpent(CastSource source)
     {
-        _pendingScrollCastItem = null;
-        _pendingScrollCastInventoryIndex = -1;
+        source.Item = null;
+        source.ItemIndex = -1;
     }
 
     // ==================== WAND TARGETING PIPELINE ====================
@@ -6233,43 +6232,34 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Consumes a wand charge after a successful spell cast through the targeting pipeline: the open cast's wand, used by
-    /// its caster (the request's Caster). Called from ConsumePendingSpellSlot when the open cast's source is a wand.
+    /// Consumes a wand charge after a successful spell cast through the targeting pipeline: the cast's wand (its source),
+    /// used by its caster (the request's Caster). Called from ConsumePendingSpellSlot when the cast's source is a wand.
     /// </summary>
-    private void ConsumeWandChargeAfterCast(CharacterController caster)
+    private void ConsumeWandChargeAfterCast(CastContext cast)
     {
-        if (!_pendingWandCastActive || _pendingWandCastItem == null) return;
+        CastSource source = cast != null ? cast.Request.Source : null;
+        if (source == null || source.Kind != CastSourceKind.Wand || source.Item == null) return;
+        ItemData wand = source.Item;
 
         // Consume the action that was deferred when the wand entered targeting mode
-        ConsumeItemManipulationAction(caster);
+        ConsumeItemManipulationAction(cast.Request.Caster);
 
-        string wandName = _pendingWandCastItem.Name;
+        string wandName = wand.Name;
 
         // Consume 1 charge from WandData and legacy field
-        if (_pendingWandCastItem.Wand != null) _pendingWandCastItem.Wand.ConsumeCharge();
-        _pendingWandCastItem.CurrentCharges--;
+        if (wand.Wand != null) wand.Wand.ConsumeCharge();
+        wand.CurrentCharges--;
 
-        string chargeInfo = $"{_pendingWandCastItem.CurrentCharges}/{_pendingWandCastItem.MaxCharges} charges";
-        string depletedNote = _pendingWandCastItem.CurrentCharges <= 0 ? " ⚠ DEPLETED!" : "";
+        string chargeInfo = $"{wand.CurrentCharges}/{wand.MaxCharges} charges";
+        string depletedNote = wand.CurrentCharges <= 0 ? " ⚠ DEPLETED!" : "";
 
-        int wandDC = _pendingWandCastItem.Wand?.SaveDC ?? WandFactory.CalculateWandSaveDC(_pendingWandCastItem.WandSpellLevel);
+        int wandDC = wand.Wand?.SaveDC ?? WandFactory.CalculateWandSaveDC(wand.WandSpellLevel);
         string dcInfo = wandDC > 0 ? $" (DC {wandDC})" : "";
 
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{wandName} charge consumed.{dcInfo} {chargeInfo}{depletedNote}"));
         Debug.Log($"[WandCast] Wand charge consumed: {wandName} ({chargeInfo})");
 
-        CleanupWandCastState();
-    }
-
-    /// <summary>
-    /// Marks the open wand cast's charge as spent (its source keeps the Wand kind for the rest of the cast). A cancel or
-    /// reset needs no cleanup any more: the wand state is the cast's own and ends with it (batch 11 step 4; it used to
-    /// stay set after a cancel, SPL-116).
-    /// </summary>
-    private void CleanupWandCastState()
-    {
-        _pendingWandCastItem = null;
-        _pendingWandCastInventoryIndex = -1;
+        MarkCastItemSpent(source);
     }
 
     // ==================== WAND USAGE (D&D 3.5e DMG) ====================
@@ -9743,10 +9733,7 @@ public partial class GameManager : MonoBehaviour
                 BeginHoldTouchCharge(pc);
                 break;
             default:
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                ResetPendingGreaseCastMode();
+                EndPendingCast();
                 ShowActionChoices();
                 break;
         }
@@ -9783,12 +9770,7 @@ public partial class GameManager : MonoBehaviour
     private bool TryHandleAnimateRopeComponentSelection(CharacterController caster)
     {
         if (!IsAnimateRopeSpell(_pendingSpell))
-        {
-            _pendingAnimateRopeItem = null;
-            _pendingResistEnergyType = null;
-            _pendingProtectionFromEnergyType = null;
             return false;
-        }
 
         if (caster == null || caster.Stats == null)
             return false;
@@ -9796,19 +9778,14 @@ public partial class GameManager : MonoBehaviour
         if (!TryGetAnimateRopeInventoryOptions(caster, out List<ItemData> ropeOptions))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "You need rope to cast this spell."));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingAnimateRopeItem = null;
-            _pendingResistEnergyType = null;
-            _pendingProtectionFromEnergyType = null;
+            EndPendingCast();
             ShowActionChoices();
             return true;
         }
 
         if (ropeOptions.Count == 1)
         {
-            _pendingAnimateRopeItem = ropeOptions[0];
+            UiCastChoicesForAnswer.AnimateRopeItem = ropeOptions[0];
             return false;
         }
 
@@ -9829,27 +9806,17 @@ public partial class GameManager : MonoBehaviour
                 {
                     if (selectedIndex < 0 || selectedIndex >= ropeOptions.Count)
                     {
-                        _pendingSpell = null;
-                        _pendingMetamagic = null;
-                        _pendingSpellFromHeldCharge = false;
-                        _pendingAnimateRopeItem = null;
-                        _pendingResistEnergyType = null;
-                        _pendingProtectionFromEnergyType = null;
+                        EndPendingCast();
                         ShowActionChoices();
                         return;
                     }
 
-                    _pendingAnimateRopeItem = ropeOptions[selectedIndex];
+                    UiCastChoicesForAnswer.AnimateRopeItem = ropeOptions[selectedIndex];
                     BeginPendingSpellTargeting(caster);
                 },
                 onCancel: () =>
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingAnimateRopeItem = null;
-                    _pendingResistEnergyType = null;
-                    _pendingProtectionFromEnergyType = null;
+                    EndPendingCast();
                     ShowActionChoices();
                 },
                 titleOverride: "Animate Rope - Select Rope",
@@ -9930,9 +9897,6 @@ public partial class GameManager : MonoBehaviour
         if (!inventory.RemoveItem(selected))
             return null;
 
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
         return selected;
     }
 
@@ -9949,10 +9913,7 @@ public partial class GameManager : MonoBehaviour
     private CastChoiceFill TryHandleMagicWeaponWeaponSelection(CharacterController caster, CharacterController target)
     {
         if (!IsMagicWeaponSpell(_pendingSpell))
-        {
-            _pendingMagicWeaponItem = null;
             return CastChoiceFill.Filled;
-        }
 
         if (target == null || target.Stats == null)
             return CastChoiceFill.Filled;
@@ -9968,7 +9929,7 @@ public partial class GameManager : MonoBehaviour
 
         if (weaponOptions.Count == 1)
         {
-            _pendingMagicWeaponItem = weaponOptions[0];
+            UiCastChoicesForAnswer.MagicWeaponItem = weaponOptions[0];
             return CastChoiceFill.Filled;
         }
 
@@ -9979,29 +9940,17 @@ public partial class GameManager : MonoBehaviour
             {
                 if (selectedIndex < 0 || selectedIndex >= weaponOptions.Count)
                 {
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingAnimateRopeItem = null;
-                    _pendingResistEnergyType = null;
-                    _pendingProtectionFromEnergyType = null;
-                    _pendingMagicWeaponItem = null;
+                    EndPendingCast();
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingMagicWeaponItem = weaponOptions[selectedIndex];
+                UiCastChoicesForAnswer.MagicWeaponItem = weaponOptions[selectedIndex];
                 PerformSpellCast(caster, target);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingAnimateRopeItem = null;
-                _pendingResistEnergyType = null;
-                _pendingProtectionFromEnergyType = null;
-                _pendingMagicWeaponItem = null;
+                EndPendingCast();
                 ShowActionChoices();
             },
             titleOverride: "Magic Weapon - Select Weapon",
@@ -10068,7 +10017,6 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         ItemData weapon = _pendingMagicWeaponItem;
-        _pendingMagicWeaponItem = null;
 
         if (weapon == null)
         {
@@ -10674,13 +10622,7 @@ public partial class GameManager : MonoBehaviour
         if (availableListLevels == null || availableListLevels.Count == 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"No summon list levels available for {spell.Name}."));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingSummonSelection = null;
-            _pendingSummonListLevel = 0;
-            _pendingSummonCountInfo = null;
-            _pendingSummonSwarmNpcId = null;
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -10696,13 +10638,7 @@ public partial class GameManager : MonoBehaviour
         if (!hasAnySummonOption)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"No valid summon options for {spell.Name} ({caster.Stats.CharacterAlignment})."));
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            _pendingSpellFromHeldCharge = false;
-            _pendingSummonSelection = null;
-            _pendingSummonListLevel = 0;
-            _pendingSummonCountInfo = null;
-            _pendingSummonSwarmNpcId = null;
+            EndPendingCast();
             ShowActionChoices();
             return;
         }
@@ -10734,22 +10670,16 @@ public partial class GameManager : MonoBehaviour
                     return;
                 }
 
-                _pendingSummonListLevel = selectedLevel;
-                _pendingSummonSelection = levelOptions[selectedIndex];
-                _pendingSummonCountInfo = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedLevel);
+                UiCastChoicesForAnswer.SummonListLevel = selectedLevel;
+                UiCastChoicesForAnswer.SummonSelection = levelOptions[selectedIndex];
+                UiCastChoicesForAnswer.SummonCountInfo = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedLevel);
                 _pendingAttackMode = PendingAttackMode.CastSpell;
                 CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
                 ShowSummonPlacementTargets(caster, spell);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingSummonSelection = null;
-                _pendingSummonListLevel = 0;
-                _pendingSummonCountInfo = null;
-                _pendingSummonSwarmNpcId = null;
+                EndPendingCast();
                 ShowActionChoices();
             });
     }
@@ -10830,17 +10760,14 @@ public partial class GameManager : MonoBehaviour
                     return;
                 }
 
-                _pendingSummonSwarmNpcId = ids[idx];
+                UiCastChoicesForAnswer.SummonSwarmNpcId = ids[idx];
                 _pendingAttackMode = PendingAttackMode.CastSpell;
                 CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
                 ShowSummonSwarmPlacementTargets(caster, spell);
             },
             onCancel: () =>
             {
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                _pendingSummonSwarmNpcId = null;
+                EndPendingCast();
                 ShowActionChoices();
             },
             titleOverride: "SUMMON SWARM - Select Swarm Type",
