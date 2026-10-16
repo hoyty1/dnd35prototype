@@ -60,11 +60,10 @@ public partial class GameManager
         // SR is already checked by the base spell pipeline (SpellCaster.cs).
         // If this method is called with result.Success = true, SR has already passed.
 
-        // Roll damage: 1d6 per 2 caster levels, max 10d6
-        int diceCount = Mathf.Clamp(casterLevel / 2, 1, 10);
-        int damage = 0;
-        for (int i = 0; i < diceCount; i++)
-            damage += DiceRoller.D6();
+        // Roll damage: 1d6 per 2 caster levels, max 10d6, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+        SpellDice touchDice = CustomSpellDice.VampiricTouch(casterLevel);
+        int diceCount = touchDice.Count;
+        int damage = SpellDiceRules.RollFor(spell, touchDice);
 
         // Negative energy damage through the mitigation pipeline (SPL-004); the touch pipeline runs concentration,
         // death and the combat-end check from result. The temporary hit points equal the damage dealt (PHB p.298).
@@ -90,8 +89,9 @@ public partial class GameManager
 
         if (tempHP > 0)
         {
-            // Vampiric Touch temp HP lasts 1 hour = 600 rounds
-            int durationRounds = 600;
+            // Vampiric Touch temp HP lasts 1 hour = 600 rounds (PHB p.298; doubled by Extend: the spell's duration is
+            // Instantaneous/1 hour in the PHB, a timed part as Death Knell's, SpellDurationRules.Extended)
+            int durationRounds = SpellDurationRules.Extended(spell, 600);
             FalseLifeEffectData vampiricTempHP = FalseLifeEffectData.CreateGenericTempHP(
                 SpellNames.VAMPIRIC_TOUCH,
                 "Vampiric Touch",

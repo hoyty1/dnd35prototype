@@ -7389,8 +7389,9 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// The handler DC helper (private GameManager.GetSpellSaveDC, called by every GameManager spell handler) adds the
-        /// pending cast's Heighten (PHB p.95) for the pending spell only. Sets and restores the pending spell and metamagic
-        /// through GameManager.Harness_SetPendingCast (TST-006); the helper itself is still reached by reflection.
+        /// cast's Heighten (PHB p.95) from the metamagic stamped on the cast's spell clone (SpellData.MetamagicDataRef,
+        /// SpellCaster.ApplyMetamagicToSpellData; batch 11 step 19, SPL-038), and nothing for an unstamped clone. The helper
+        /// is reached by reflection (TST-006).
         /// </summary>
         private static bool HandlerHeightenCheck(ScenarioContext ctx, SpellData hold)
         {
@@ -7413,19 +7414,11 @@ namespace Tests.Scenarios
             heighten.Toggle(MetamagicFeatId.HeightenSpell);
             heighten.HeightenToLevel = 5;
 
-            SpellData oldSpell = gm.Harness_GetPendingSpell();
-            MetamagicData oldMm = gm.Harness_GetPendingMetamagic();
-            int heightened, plain;
-            try
-            {
-                gm.Harness_SetPendingCast(pending, heighten);
-                heightened = (int)helper.Invoke(gm, new object[] { wizard, pending });
-                plain = (int)helper.Invoke(gm, new object[] { wizard, other });
-            }
-            finally
-            {
-                gm.Harness_SetPendingCast(oldSpell, oldMm);
-            }
+            // The cast's clone carries its metamagic (SpellCaster.ApplyMetamagicToSpellData stamps MetamagicDataRef; batch 11
+            // step 19), which the handler helper reads whether or not the spell is the open PC cast.
+            SpellCaster.ApplyMetamagicToSpellData(pending, heighten);
+            int heightened = (int)helper.Invoke(gm, new object[] { wizard, pending });
+            int plain = (int)helper.Invoke(gm, new object[] { wizard, other });
 
             int expectedHeightened = 10 + 5 + s.INTMod + focus;
             int expectedPlain = 10 + hold.GetSpellLevelFor("Wizard") + s.INTMod + focus;
@@ -7482,6 +7475,10 @@ namespace Tests.Scenarios
                 .Npc("dAcid", "target_dummy", 15, 5, Control.Idle)
                 .Npc("dSwarm", "target_dummy", 16, 5, Control.Idle)
                 .Npc("dSwarmDr", "target_dummy", 17, 5, Control.Idle)
+                .Npc("dEmp", "target_dummy", 13, 9, Control.Idle)
+                .Npc("dMax", "target_dummy", 14, 9, Control.Idle)
+                .Npc("dBoth", "target_dummy", 15, 9, Control.Idle)
+                .Npc("dRes", "target_dummy", 16, 9, Control.Idle)
                 .Hp("dLow", 5)
                 .Tweak("hero", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("hero2", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
@@ -7494,12 +7491,18 @@ namespace Tests.Scenarios
                 .Tweak("dIceDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("dAcid", c => { c.Stats.AddDamageResistance(DamageType.Acid, 2); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("dSwarmDr", c => c.Stats.AddDamageReduction(5, DamageBypassTag.Magic))
-                .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid", "dSwarm", "dSwarmDr")
+                .Tweak("dEmp", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dMax", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dBoth", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dRes", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid", "dSwarm", "dSwarmDr", "dEmp", "dMax", "dBoth", "dRes")
                 .Force(10, 10, "Breath weapon damage", -1)
                 .Script("dragon", BreathAtHeroes)
                 .Turn("hero2", 1,
                     Step.Assert("The breath weapon's fire takes the fighter's fire resistance (MM p.314)", BreathMitigationCheck),
-                    Step.Assert("Spell and special-attack damage takes immunity and resistance and ignores DR (MM p.307); Insect Plague's swarms take DR (MM p.316)", SpellDamageMitigationChecks))
+                    Step.Assert("Spell and special-attack damage takes immunity and resistance and ignores DR (MM p.307); Insect Plague's swarms take DR (MM p.316)", SpellDamageMitigationChecks),
+                    Step.Assert("Empower, Maximize and both reach the custom handlers of Fireball and Searing Light (PHB p.93, p.97; SPL-038, SPL-097)", SpellDamageMetamagicChecks),
+                    Step.Assert("A Maximize-stamped clone reaches every converted damage resolver (PHB p.97; SPL-038)", CustomResolverMaximizeChecks))
                 .Expect("The dragon breathed", v =>
                 {
                     TraceEvent n = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "") == DamageNotePrefix + "breath");
@@ -7639,6 +7642,157 @@ namespace Tests.Scenarios
                     s.FireShieldActive = wasActive;
                     s.FireShieldIsWarm = wasWarm;
                     s.FireShieldCasterLevel = oldCl;
+                }
+            }
+            finally
+            {
+                ScenarioHooks.RollFilter = previous;
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// Batch 11 step 19 (SPL-038): the Maximize stamped on a cast's spell clone reaches each converted damage resolver,
+        /// invoked by reflection on dRes (a 50 HP target dummy, true neutral, saves made to fail with -30, its HP restored
+        /// before each call) under a roll filter of every d20 at 20 and every other die at 3: Lightning Bolt
+        /// (TryResolveScaledAoEDamageSpell), Cone of Cold, Chain Lightning's primary bolt, Ice Storm, Shout, Sunburst (on a
+        /// living creature), Vampiric Touch, Produce Flame and Holy Smite (ResolveAlignmentBurstSpell, half on a neutral
+        /// creature) each deal their spec's maximum (CustomSpellDice) at the caster level of arcane_missile_adept, not the
+        /// 3s the filter rolls. One Maximize row per resolver proves the stamp reaches it (a dropped RollFor or the template
+        /// passed instead of the clone deals the 3s); CustomSpellDiceTests checks the specs and the dice rule.
+        /// </summary>
+        private static bool CustomResolverMaximizeChecks(ScenarioContext ctx)
+        {
+            GameManager gm = ctx.Gm;
+            CharacterController mage = ctx.Get("mage");
+            CharacterController dummy = ctx.Get("dRes");
+            Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+            bool ok = true;
+            try
+            {
+                const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var maximize = new MetamagicData();
+                maximize.Toggle(MetamagicFeatId.MaximizeSpell);
+
+                SpellData Stamped(string id)
+                {
+                    SpellData clone = SpellDatabase.GetSpell(id).Clone();
+                    SpellCaster.ApplyMetamagicToSpellData(clone, maximize);
+                    return clone;
+                }
+                int Cl(string id) => SpellCastingHelper.GetEffectiveCasterLevel(mage, SpellDatabase.GetSpell(id));
+
+                bool Check(string label, string method, string id, int expected, bool area)
+                {
+                    System.Reflection.MethodInfo handler = typeof(GameManager).GetMethod(method, flags);
+                    if (handler == null)
+                    {
+                        ctx.Note(DamageNotePrefix + "maximize: " + method + " was not found");
+                        return false;
+                    }
+                    dummy.Stats.CurrentHP = dummy.Stats.TotalMaxHP;
+                    SpellData spell = Stamped(id);
+                    Dictionary<string, int> before = HpOf(ctx, "dRes");
+                    object[] args = area
+                        ? new object[] { mage, spell, new List<CharacterController> { dummy }, null, null }
+                        : new object[] { mage, dummy, spell, new SpellResult { Success = true, Spell = spell } };
+                    bool handled = (bool)handler.Invoke(gm, args);
+                    if (!handled)
+                        ctx.Note(DamageNotePrefix + "maximize: " + method + " did not handle " + id);
+                    return handled & Taken(ctx, "Maximized " + label, "dRes", before, expected);
+                }
+
+                ok &= Check("Lightning Bolt", "TryResolveScaledAoEDamageSpell", DND35e.Identifiers.SpellNames.LIGHTNING_BOLT,
+                    CustomSpellDice.FireballOrLightningBolt(Cl(DND35e.Identifiers.SpellNames.LIGHTNING_BOLT)).Maximum, true);
+                ok &= Check("Cone of Cold", "TryResolveConeOfColdSpell", DND35e.Identifiers.SpellNames.CONE_OF_COLD,
+                    CustomSpellDice.ConeOfCold(Cl(DND35e.Identifiers.SpellNames.CONE_OF_COLD)).Maximum, true);
+                ok &= Check("Chain Lightning", "TryResolveChainLightningSpell", DND35e.Identifiers.SpellNames.CHAIN_LIGHTNING,
+                    CustomSpellDice.ChainLightning(Cl(DND35e.Identifiers.SpellNames.CHAIN_LIGHTNING)).Maximum, true);
+                ok &= Check("Ice Storm", "TryResolveIceStormAoE", DND35e.Identifiers.SpellNames.ICE_STORM,
+                    CustomSpellDice.IceStormBludgeoning().Maximum + CustomSpellDice.IceStormCold().Maximum, true);
+                ok &= Check("Shout", "TryResolveShoutAoE", DND35e.Identifiers.SpellNames.SHOUT,
+                    CustomSpellDice.Shout().Maximum, true);
+                ok &= Check("Sunburst", "TryResolveSunburstSpell", DND35e.Identifiers.SpellNames.SUNBURST,
+                    CustomSpellDice.Sunburst(Cl(DND35e.Identifiers.SpellNames.SUNBURST), false).Maximum, true);
+                ok &= Check("Vampiric Touch", "TryResolveVampiricTouchSpellEffect", DND35e.Identifiers.SpellNames.VAMPIRIC_TOUCH,
+                    CustomSpellDice.VampiricTouch(Cl(DND35e.Identifiers.SpellNames.VAMPIRIC_TOUCH)).Maximum, false);
+                ok &= Check("Produce Flame", "TryResolveProduceFlameSpellEffect", DND35e.Identifiers.SpellNames.PRODUCE_FLAME,
+                    CustomSpellDice.ProduceFlame(Cl(DND35e.Identifiers.SpellNames.PRODUCE_FLAME)).Maximum, false);
+                ok &= Check("Holy Smite", "TryResolveHolySmiteSpellEffect", DND35e.Identifiers.SpellNames.HOLY_SMITE,
+                    Mathf.Max(1, CustomSpellDice.AlignmentBurst(Cl(DND35e.Identifiers.SpellNames.HOLY_SMITE)).Maximum / 2), false);
+                dummy.Stats.CurrentHP = dummy.Stats.TotalMaxHP;
+            }
+            finally
+            {
+                ScenarioHooks.RollFilter = previous;
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// Batch 11 step 19 (SPL-038, SPL-097): the cast's metamagic, stamped on its spell clone
+        /// (SpellCaster.ApplyMetamagicToSpellData), reaches the custom handlers' dice (SpellDiceRules.Roll). Every d20 is 20
+        /// (the ray hits; the -30 tweaks still fail every save) and every other die 3. arcane_missile_adept (Wizard 5)
+        /// casts Fireball (TryResolveScaledAoEDamageSpell, 5d6 = 15 plain) Empowered on dEmp (15 + 7 = 22, PHB p.93),
+        /// Maximized on dMax (30, PHB p.97) and both on dBoth (30 + half of the normal 15 = 37, PHB p.97-98), then Searing
+        /// Light (TryResolveSearingLightSpellEffect, 2d8 = 6 halved for a living creature, SPL-177) Empowered on dEmp (9,
+        /// halved 4), Maximized on dMax (16, halved 8) and both on dBoth (16 + 3 = 19, halved 9).
+        /// </summary>
+        private static bool SpellDamageMetamagicChecks(ScenarioContext ctx)
+        {
+            GameManager gm = ctx.Gm;
+            CharacterController mage = ctx.Get("mage");
+            Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+            bool ok = true;
+            try
+            {
+                const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                System.Reflection.MethodInfo scaled = typeof(GameManager).GetMethod("TryResolveScaledAoEDamageSpell", flags);
+                System.Reflection.MethodInfo searingHandler = typeof(GameManager).GetMethod("TryResolveSearingLightSpellEffect", flags);
+                ok &= scaled != null && searingHandler != null;
+                if (!ok)
+                {
+                    ctx.Note(DamageNotePrefix + "metamagic: a handler was not found");
+                    return false;
+                }
+
+                // The expected totals at the mage's caster level (5: Fireball 5d6, Searing Light 2d8), every die at 3.
+                int fireDice = Mathf.Clamp(SpellCastingHelper.GetEffectiveCasterLevel(mage, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.FIREBALL)), 1, 10);
+                int lightDice = Mathf.Clamp(SpellCastingHelper.GetEffectiveCasterLevel(mage, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.SEARING_LIGHT)) / 2, 1, 5);
+                int fireNormal = 3 * fireDice, lightNormal = 3 * lightDice;
+                var rows = new[]
+                {
+                    (key: "dEmp", feats: new[] { MetamagicFeatId.EmpowerSpell },
+                        fireball: fireNormal + fireNormal / 2, searing: Mathf.Max(1, (lightNormal + lightNormal / 2) / 2)),
+                    (key: "dMax", feats: new[] { MetamagicFeatId.MaximizeSpell },
+                        fireball: 6 * fireDice, searing: Mathf.Max(1, 8 * lightDice / 2)),
+                    (key: "dBoth", feats: new[] { MetamagicFeatId.EmpowerSpell, MetamagicFeatId.MaximizeSpell },
+                        fireball: 6 * fireDice + fireNormal / 2, searing: Mathf.Max(1, (8 * lightDice + lightNormal / 2) / 2)),
+                };
+                ctx.Note(DamageNotePrefix + "metamagic: Fireball " + fireDice + "d6, Searing Light " + lightDice + "d8, every die at 3");
+                foreach (var row in rows)
+                {
+                    var metamagic = new MetamagicData();
+                    foreach (MetamagicFeatId feat in row.feats)
+                        metamagic.Toggle(feat);
+                    string label = metamagic.GetDisplayName();
+
+                    SpellData fireball = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.FIREBALL).Clone();
+                    SpellCaster.ApplyMetamagicToSpellData(fireball, metamagic);
+                    Dictionary<string, int> before = HpOf(ctx, row.key);
+                    bool handled = (bool)scaled.Invoke(gm, new object[] { mage, fireball, new List<CharacterController> { ctx.Get(row.key) }, null, null });
+                    ok &= handled && Taken(ctx, label + " Fireball", row.key, before, row.fireball);
+
+                    SpellData searing = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.SEARING_LIGHT).Clone();
+                    SpellCaster.ApplyMetamagicToSpellData(searing, metamagic);
+                    CharacterController lit = ctx.Get(row.key);
+                    SpellResult searingResult = SpellCaster.Cast(searing, mage.Stats, lit.Stats, null, false, false, mage, lit);
+                    before = HpOf(ctx, row.key);
+                    bool searingHandled = searingResult != null && searingResult.Success
+                        && (bool)searingHandler.Invoke(gm, new object[] { mage, lit, searing, searingResult });
+                    ok &= searingHandled && Taken(ctx, label + " Searing Light", row.key, before, row.searing);
                 }
             }
             finally

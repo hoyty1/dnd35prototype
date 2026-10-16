@@ -53,7 +53,7 @@ public partial class GameManager
         // Determine wall direction from caster facing (or from caster -> centerCell vector)
         Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
 
-        CreateWindWallArea(centerPosition, centerCell, maxLengthSquares, direction, durationRounds, casterLevel, caster, aoeCells);
+        CreateWindWallArea(centerPosition, centerCell, maxLengthSquares, direction, durationRounds, casterLevel, caster, aoeCells, SpellDiceRules.MetamagicOf(spell));
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -110,7 +110,8 @@ public partial class GameManager
         int durationRounds,
         int casterLevel,
         CharacterController caster,
-        HashSet<Vector2Int> providedCells = null)
+        HashSet<Vector2Int> providedCells = null,
+        MetamagicData metamagic = null)
     {
         GameObject windWallObject = new GameObject("WindWall_Area");
         windWallObject.transform.position = centerPosition;
@@ -124,6 +125,7 @@ public partial class GameManager
         windWall.RoundsRemaining = Mathf.Max(1, durationRounds);
         windWall.CasterLevel = Mathf.Max(1, casterLevel);
         windWall.Caster = caster;
+        windWall.Metamagic = metamagic; // the cast's Empower and Maximize for the wall's buffeting (batch 11 step 19)
 
         if (providedCells != null && providedCells.Count > 0)
             windWall.SetExplicitCells(providedCells);
@@ -215,6 +217,7 @@ public partial class GameManager
         wallObj.transform.position = centerPosition;
 
         WallOfFireAreaEffect wallEffect = wallObj.AddComponent<WallOfFireAreaEffect>();
+        wallEffect.Metamagic = SpellDiceRules.MetamagicOf(spell); // the cast's Empower and Maximize for the wall's fire (batch 11 step 19)
         wallEffect.CenterPosition = centerPosition;
         wallEffect.CenterCell = centerCell;
         wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
@@ -751,6 +754,7 @@ public partial class GameManager
         wallObj.transform.position = centerPosition;
 
         WallOfIceAreaEffect wallEffect = wallObj.AddComponent<WallOfIceAreaEffect>();
+        wallEffect.Metamagic = SpellDiceRules.MetamagicOf(spell); // the cast's Empower and Maximize for the wall's cold (batch 11 step 19)
         wallEffect.CenterPosition = centerPosition;
         wallEffect.CenterCell = centerCell;
         wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;

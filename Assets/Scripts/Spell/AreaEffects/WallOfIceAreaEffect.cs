@@ -600,7 +600,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
         }
 
         // Line mode: 1d6 + CL cold damage
-        int coldDamage = DiceRoller.D6() + CasterLevel;
+        int coldDamage = SpellDiceRules.Roll(SpellDice.Of(1, 6, CasterLevel), Metamagic, null); // the cast's Empower and Maximize (batch 11 step 19)
         DamageResolutionResult dealt = DealSpellDamage(character, coldDamage, DamageType.Cold);
 
         LogEffect($"❄️ {character.Stats.CharacterName} takes {dealt.FinalDamage} cold damage{GameManager.DescribeMitigation(dealt)} passing through breached Wall of Ice at ({cell.x},{cell.y})");

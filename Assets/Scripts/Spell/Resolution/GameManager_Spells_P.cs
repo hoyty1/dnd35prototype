@@ -163,7 +163,7 @@ public partial class GameManager
         }
 
         // Initial CON damage: 1d10
-        int conDamage = DiceRoller.D10();
+        int conDamage = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 10)); // the cast's metamagic (PHB p.93, p.97; batch 11 step 19)
         target.Stats.AbilityScoreDamage.ApplyDamage(AbilityType.CON, conDamage);
 
         // Apply Poisoned condition (for secondary damage tracking)
@@ -258,7 +258,7 @@ public partial class GameManager
         if (fortSave.Succeeded)
         {
             // Fort succeeded: 3d6 damage + shaken for 1 round
-            int damage = DiceService.RollMultiple(3, 6, "Phantasmal Killer 3d6 damage");
+            int damage = SpellDiceRules.RollFor(spell, CustomSpellDice.PhantasmalKiller(), "Phantasmal Killer 3d6 damage"); // the cast's metamagic (batch 11 step 19)
 
             // Untyped damage through the mitigation pipeline (SPL-004); the single-target pipeline runs
             // concentration, death and the combat-end check from result.

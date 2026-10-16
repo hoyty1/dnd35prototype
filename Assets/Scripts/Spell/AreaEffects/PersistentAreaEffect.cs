@@ -51,6 +51,13 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     public int SaveDC { get; set; }
     public int CasterLevel { get; set; }
 
+    /// <summary>
+    /// The metamagic of the cast that created the area (the spell clone's MetamagicDataRef): Empower and Maximize change
+    /// the dice the area rolls later (a wall's fire, the tentacles' crush, a burning web, the lingering nausea; PHB p.93,
+    /// p.97; SpellDiceRules.Roll, batch 11 step 19, SPL-038). Null for a plain cast.
+    /// </summary>
+    public MetamagicData Metamagic { get; set; }
+
     // ═══════════════════════════════════════════════════
     // WIND DISPERSION
     // ═══════════════════════════════════════════════════

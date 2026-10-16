@@ -74,7 +74,14 @@ public partial class GameManager
             Effect = effect
         };
 
-        int intendedCloneCount = UnityEngine.Random.Range(2, 6); // 1d4+1
+        // 1d4+1 as the handler draws it (the count by caster level is decision D7's step). A variable effect the cast's
+        // Empower and Maximize change (PHB p.93: more images; at most 8, PHB p.254; SpellDiceRules, batch 11 step 19).
+        MetamagicData imageMetamagic = SpellDiceRules.MetamagicOf(spell);
+        bool imageDiceChanged = imageMetamagic != null
+            && (imageMetamagic.Has(MetamagicFeatId.EmpowerSpell) || imageMetamagic.Has(MetamagicFeatId.MaximizeSpell));
+        int intendedCloneCount = imageDiceChanged
+            ? Mathf.Min(8, SpellDiceRules.RollUnfiltered(SpellDice.Of(1, 4, 1), imageMetamagic))
+            : UnityEngine.Random.Range(2, 6); // 1d4+1
         List<SquareCell> spawnCells = GetMirrorImageSpawnCells(recipient, intendedCloneCount);
 
         for (int i = 0; i < spawnCells.Count; i++)

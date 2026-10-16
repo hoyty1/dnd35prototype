@@ -146,7 +146,7 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
-        CreateSpikeStoneArea(centerPos, durationRounds, caster, casterLevel);
+        CreateSpikeStoneArea(centerPos, durationRounds, caster, casterLevel, SpellDiceRules.MetamagicOf(spell));
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -159,7 +159,7 @@ public partial class GameManager
     }
 
     /// <summary>Creates a SpikeStoneAreaEffect at the specified position.</summary>
-    public void CreateSpikeStoneArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel)
+    public void CreateSpikeStoneArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel, MetamagicData metamagic = null)
     {
         var go = new GameObject("SpikeStoneArea");
         go.transform.position = centerPosition;
@@ -167,6 +167,7 @@ public partial class GameManager
         effect.CenterPosition = centerPosition;
         effect.RoundsRemaining = duration;
         effect.CasterLevel = casterLevel;
+        effect.Metamagic = metamagic; // the cast's Empower and Maximize for the spikes' dice (batch 11 step 19)
 
         Debug.Log($"[GameManager] Spike Stones area created at {centerPosition}, duration={duration}, CL={casterLevel}");
     }

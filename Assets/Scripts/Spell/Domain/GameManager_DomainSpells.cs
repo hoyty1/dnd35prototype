@@ -114,8 +114,9 @@ public partial class GameManager
         int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
 
-        // Roll 2d4 + caster level for HD budget
-        int hdBudget = DiceRoller.D4() + DiceRoller.D4() + casterLevel;
+        // Roll 2d4 + caster level for HD budget, a variable effect the cast's Empower and Maximize change (PHB p.93, p.97;
+        // the whole 2d4 + caster level is the result, as PHB p.93 multiplies a magic missile's 1d4+1; batch 11 step 19)
+        int hdBudget = SpellDiceRules.RollFor(spell, CustomSpellDice.CalmAnimalsHitDice(casterLevel));
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -329,7 +330,7 @@ public partial class GameManager
 
         if (hit)
         {
-            int damage = DiceRoller.D6() + bonusDamage; // 1d6 + min(CL,5)
+            int damage = SpellDiceRules.RollFor(spell, CustomSpellDice.ProduceFlame(casterLevel)); // 1d6 + min(CL,5), the cast's metamagic (batch 11 step 19)
             damage = Mathf.Max(1, damage);
 
             int hpBefore = target.Stats.CurrentHP;
@@ -428,9 +429,9 @@ public partial class GameManager
             return;
         }
 
-        int totalDamage = 0;
-        for (int i = 0; i < diceCount; i++)
-            totalDamage += DiceRoller.D4(); // 1d4
+        // With the metamagic the Heat Metal effect was cast with (GameManager.ActiveSpellMetamagic; batch 11 step 19). The
+        // tick has no caller yet (SPL-109).
+        int totalDamage = SpellDiceRules.Roll(CustomSpellDice.HeatMetalRound(roundsElapsed), ActiveSpellMetamagic(target, SpellNames.HEAT_METAL), null);
 
         int hpBefore = target.Stats.CurrentHP;
         DamageResolutionResult dealt = DealDamage(target, totalDamage, DamagePackets.Spell("Heat Metal", DamageType.Fire));

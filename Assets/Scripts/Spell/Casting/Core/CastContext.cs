@@ -109,7 +109,7 @@ public sealed class CastContext
 
     /// <summary>
     /// Whether a lesser globe or globe of invulnerability keeps this cast's spell from affecting <paramref name="target"/>
-    /// (PHB p.236; LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell, by the spell's base level), and which
+    /// (PHB p.236; LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell, at the spell's heightened level, PHB p.95), and which
     /// globe does. The cast core's Globe stages test it before any effect (batch 11 step 11, SPL-141); the single-target
     /// stage lets a targeted Dispel Magic, a melee touch and the spells whose own handler cuts the globe out of their burst
     /// through (GameManager.CastStageGlobe).
@@ -142,6 +142,13 @@ public sealed class CastContext
     /// </summary>
     public SRResult RollSpellResistance(CharacterController target, string diceContext = null)
         => SpellSaveRules.RollSpellResistance(Request.Caster, target, Request.Spell, diceContext, CasterLevelRules.For(Request));
+
+    /// <summary>
+    /// Rolls this cast's spell dice with its metamagic (SpellDiceRules.Roll): the request's metamagic, else the one stamped
+    /// on its spell clone; Maximize, Empower and both as PHB p.93 and p.97 give them (batch 11 step 19, SPL-038, SPL-097).
+    /// </summary>
+    public SpellDiceRoll RollSpellDice(SpellDice dice, string diceContext = null)
+        => SpellDiceRules.Roll(dice, SpellDiceRules.MetamagicOf(Request.Spell, Request.Metamagic), diceContext);
 
     /// <summary>Clears the run state before a run of the cast core (a cast suspended at a dialog runs again).</summary>
     internal void ResetRun()

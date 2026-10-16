@@ -22,6 +22,29 @@ public partial class GameManager
         => EffectService.TickClericSpell3Durations(character, msg => CombatUI?.ShowCombatLog(msg));
 
     // ================================================================
+    //  METAMAGIC OF A LASTING EFFECT (batch 11 step 19, SPL-038)
+    // ================================================================
+
+    /// <summary>
+    /// The metamagic of <paramref name="holder"/>'s active <paramref name="spellId"/> effect: the one stamped on the cast's
+    /// spell clone the effect keeps (ActiveSpellEffect.Spell.MetamagicDataRef), so the later dice of a lasting effect
+    /// (Spiritual Weapon's attacks, Heat Metal's rounds) use the metamagic it was cast with. Null when there is none.
+    /// </summary>
+    internal static MetamagicData ActiveSpellMetamagic(CharacterController holder, string spellId)
+    {
+        StatusEffectManager effects = holder != null ? holder.StatusEffectManager : null;
+        if (effects == null || effects.ActiveEffects == null || string.IsNullOrEmpty(spellId))
+            return null;
+        for (int i = 0; i < effects.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = effects.ActiveEffects[i];
+            if (effect != null && effect.Spell != null && effect.Spell.SpellId == spellId)
+                return effect.Spell.MetamagicDataRef;
+        }
+        return null;
+    }
+
+    // ================================================================
     //  ALIGNMENT BURST SPELLS — shared helper
     // ================================================================
     // Chaos Hammer, Holy Smite, Order's Wrath, Unholy Blight all share
@@ -43,7 +66,7 @@ public partial class GameManager
             a => AlignmentHelper.IsLawful(a),
             a => AlignmentHelper.IsNeutralLC(a),
             (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Staggered, rounds, "Slow"); }, // Slowed = Staggered for simplicity
-            () => DiceRoller.D6() // 1d6 rounds
+            () => SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6)) // 1d6 rounds, a variable effect Empower and Maximize change (PHB p.93)
         );
     }
 
@@ -88,7 +111,7 @@ public partial class GameManager
             a => AlignmentHelper.IsGood(a),
             a => AlignmentHelper.IsNeutralGE(a),
             (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Sickened, rounds, "Sicken"); },
-            () => DiceRoller.D4() // 1d4 rounds
+            () => SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4)) // 1d4 rounds, a variable effect Empower and Maximize change (PHB p.93)
         );
     }
 
@@ -128,11 +151,10 @@ public partial class GameManager
             return true;
         }
 
-        // Roll damage: 1d8 per 2 CL, max 5d8
-        int numDice = Mathf.Clamp(casterLevel / 2, 1, 5);
-        int damage = 0;
-        for (int i = 0; i < numDice; i++)
-            damage += DiceRoller.D8(); // 1d8
+        // Roll damage: 1d8 per 2 CL, max 5d8, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+        SpellDice burstDice = CustomSpellDice.AlignmentBurst(casterLevel);
+        int numDice = burstDice.Count;
+        int damage = SpellDiceRules.RollFor(spell, burstDice);
 
         // Half damage for neutral creatures on the relevant axis
         if (halfDamage)
@@ -204,7 +226,8 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         // Call Lightning: fixed 3d6 (PHB p.207). Fireball/Lightning Bolt: 1d6/CL, max 10d6.
-        int diceCount = isCallLightning ? 3 : Mathf.Clamp(casterLevel, 1, 10);
+        SpellDice scaledDice = isCallLightning ? CustomSpellDice.CallLightningBolt() : CustomSpellDice.FireballOrLightningBolt(casterLevel);
+        int diceCount = scaledDice.Count;
         int saveDc = GetSpellSaveDC(caster, spell);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, spell);
 
@@ -252,10 +275,8 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll damage
-                int damage = 0;
-                for (int i = 0; i < diceCount; i++)
-                    damage += DiceRoller.D6(); // 1d6
+                // Roll damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+                int damage = SpellDiceRules.RollFor(spell, scaledDice);
 
                 // Reflex save + Blink
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
@@ -306,10 +327,8 @@ public partial class GameManager
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
-                // Roll separate damage for the wall (same dice as character damage)
-                int wallDamage = 0;
-                for (int i = 0; i < diceCount; i++)
-                    wallDamage += DiceRoller.D6();
+                // Roll separate damage for the wall (same dice as character damage, the same metamagic)
+                int wallDamage = SpellDiceRules.RollFor(spell, scaledDice);
 
                 // No save for objects; fire is especially effective
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

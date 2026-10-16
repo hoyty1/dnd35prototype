@@ -33,7 +33,8 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int diceCount = Mathf.Clamp(casterLevel, 1, 15); // 1d6/CL, max 15d6
+        SpellDice coneDice = CustomSpellDice.ConeOfCold(casterLevel); // 1d6/CL, max 15d6
+        int diceCount = coneDice.Count;
         int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -67,10 +68,8 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll damage
-                int damage = 0;
-                for (int i = 0; i < diceCount; i++)
-                    damage += DiceRoller.D6();
+                // Roll damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+                int damage = SpellDiceRules.RollFor(spell, coneDice);
 
                 // Reflex save + Evasion + Blink
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
@@ -120,14 +119,13 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int diceCount = Mathf.Clamp(casterLevel, 1, 20); // 1d6/CL, max 20d6
+        SpellDice chainDice = CustomSpellDice.ChainLightning(casterLevel); // 1d6/CL, max 20d6
+        int diceCount = chainDice.Count;
         int saveDc = GetSpellSaveDC(caster, spell);
         int maxSecondary = Mathf.Min(casterLevel, 20);
 
-        // Roll primary damage once
-        int primaryDamage = 0;
-        for (int i = 0; i < diceCount; i++)
-            primaryDamage += DiceRoller.D6();
+        // Roll primary damage once, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+        int primaryDamage = SpellDiceRules.RollFor(spell, chainDice);
         int secondaryDamage = Mathf.Max(1, primaryDamage / 2);
 
         var sb = new StringBuilder();
@@ -213,13 +211,13 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int hdDiceCount = Mathf.Clamp(casterLevel, 1, 20);
+        SpellDice hdDice = CustomSpellDice.CircleOfDeathHitDice(casterLevel);
+        int hdDiceCount = hdDice.Count;
         int saveDc = GetSpellSaveDC(caster, spell);
 
-        // Roll total HD pool
-        int hdPool = 0;
-        for (int i = 0; i < hdDiceCount; i++)
-            hdPool += DiceRoller.D4(); // 1d4 per CL
+        // Roll total HD pool (1d4 per CL), a variable effect Empower and Maximize change (PHB p.93: "affects half again
+        // as many targets"; SpellDiceRules, batch 11 step 19)
+        int hdPool = SpellDiceRules.RollFor(spell, hdDice);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -618,7 +616,10 @@ public partial class GameManager
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
                 sb.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-                // Swarm damage: 2d6 (no save, no SR)
+                // Swarm damage: 2d6 (no save, no SR). It is the summoned locust swarm's attack, not a variable effect of the
+                // spell, so Empower and Maximize do not change it (delegated RAW reading 2026-10-14, batch 11 step 19: PHB
+                // p.93 raises the spell's own numbers, and the owner interpretation of 2026-10-11 below treats this damage
+                // as the creatures' attack; the number of swarms, 1 per three levels, has no die).
                 int swarmDmg = DiceRoller.D6() + DiceRoller.D6();
 
                 // Owner interpretation 2026-10-11 (SPL-004): the plague's locust swarms are summoned creatures

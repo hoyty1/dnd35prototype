@@ -51,8 +51,8 @@ public partial class GameManager
             return true;
         }
 
-        // Roll 1d4 negative levels
-        int negativeLevels = DiceRoller.D4(); // 1d4
+        // Roll 1d4 negative levels, a variable effect the cast's Empower and Maximize change (PHB p.93, p.97; batch 11 step 19)
+        int negativeLevels = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4)); // 1d4
 
         // Apply negative levels using existing system
         int newTotal = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, "Enervation");

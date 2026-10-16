@@ -45,8 +45,11 @@ public partial class GameManager
         bool isUndead = SpellTargetingService.IsUndead(target);
         bool isConstruct = SpellTargetingService.IsConstruct(target);
 
-        // Calculate number of dice: 1 die per 2 caster levels, max 5 dice
-        int numDice = Mathf.Clamp(casterLevel / 2, 1, 5);
+        // Calculate number of dice: 1 die per 2 caster levels, max 5 dice (CustomSpellDice.SearingLight; the undead and
+        // living-creature dice differ from PHB p.275, SPL-177), rolled with the cast's metamagic (SpellDiceRules; batch 11
+        // step 19, SPL-038).
+        SpellDice searingDice = CustomSpellDice.SearingLight(casterLevel, isConstruct && !isUndead);
+        int numDice = searingDice.Count;
 
         int damage = 0;
         string damageDesc;
@@ -54,23 +57,19 @@ public partial class GameManager
         if (isUndead)
         {
             // Undead: 1d8 per 2 CL, max 5d8
-            for (int i = 0; i < numDice; i++)
-                damage += DiceRoller.D8(); // 1d8
+            damage = SpellDiceRules.RollFor(spell, searingDice);
             damageDesc = $"{numDice}d8 = {damage} (undead — full divine damage)";
         }
         else if (isConstruct)
         {
             // Constructs: 1d6 per 2 CL, max 5d6
-            for (int i = 0; i < numDice; i++)
-                damage += DiceRoller.D6(); // 1d6
+            damage = SpellDiceRules.RollFor(spell, searingDice);
             damageDesc = $"{numDice}d6 = {damage} (construct)";
         }
         else
         {
             // Others: 1d8 per 2 CL, max 5d8, then half damage
-            int fullDamage = 0;
-            for (int i = 0; i < numDice; i++)
-                fullDamage += DiceRoller.D8(); // 1d8
+            int fullDamage = SpellDiceRules.RollFor(spell, searingDice);
             damage = Mathf.Max(1, fullDamage / 2);
             damageDesc = $"{numDice}d8 = {fullDamage}, halved to {damage} (living creature)";
         }
@@ -301,10 +300,8 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll 5d6 sonic damage
-                int damage = 0;
-                for (int i = 0; i < 5; i++)
-                    damage += DiceRoller.D6();
+                // Roll 5d6 sonic damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+                int damage = SpellDiceRules.RollFor(spell, CustomSpellDice.Shout());
 
                 // Fortitude save
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDc);
@@ -319,8 +316,8 @@ public partial class GameManager
                 }
                 else
                 {
-                    // Failed save: deafened for 2d6 rounds
-                    deafRounds = DiceRoller.D6() + DiceRoller.D6();
+                    // Failed save: deafened for 2d6 rounds, a variable effect Empower and Maximize change (PHB p.93)
+                    deafRounds = SpellDiceRules.RollFor(spell, CustomSpellDice.ShoutDeafenedRounds());
                     deafened = true;
                 }
 
@@ -378,9 +375,8 @@ public partial class GameManager
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
-                // 5d6 sonic (no save for objects)
-                int wallDamage = 0;
-                for (int i = 0; i < 5; i++) wallDamage += DiceRoller.D6();
+                // 5d6 sonic (no save for objects), the same metamagic
+                int wallDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.Shout());
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
                 sb.AppendLine($"  Sonic damage to overlapping sections: {wallDamage}");
@@ -561,7 +557,7 @@ public partial class GameManager
         }
 
         // Make the initial attack on casting
-        string attackLog = ResolveSpiritualWeaponAttack(caster, target, casterLevel);
+        string attackLog = ResolveSpiritualWeaponAttack(caster, target, casterLevel, SpellDiceRules.MetamagicOf(spell));
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚔", $"🌟 Spiritual Weapon! {caster.Stats.CharacterName} conjures a force weapon for {durationRounds} round(s)!\n{attackLog}"));
         Debug.Log($"[SpiritualWeapon] Created for {caster.Stats.CharacterName}, target={target.Stats.CharacterName}, CL={casterLevel}, duration={durationRounds}");
@@ -571,10 +567,11 @@ public partial class GameManager
 
     /// <summary>
     /// Resolves a single Spiritual Weapon attack roll and damage.
-    /// Uses caster's BAB + WIS mod for attack, 1d8 + floor(CL/3) force damage (max +5).
+    /// Uses caster's BAB + WIS mod for attack, 1d8 + floor(CL/3) force damage (max +5), with the cast's metamagic
+    /// (<paramref name="metamagic"/>: Empower and Maximize change every attack's damage, PHB p.93, p.97; batch 11 step 19).
     /// </summary>
     private string ResolveSpiritualWeaponAttack(
-        CharacterController caster, CharacterController target, int casterLevel)
+        CharacterController caster, CharacterController target, int casterLevel, MetamagicData metamagic)
     {
         if (caster?.Stats == null || target?.Stats == null)
             return "";
@@ -593,8 +590,7 @@ public partial class GameManager
         if (isHit)
         {
             // Damage: 1d8 + floor(CL/3), max bonus of +5
-            int damageBonus = Mathf.Min(5, casterLevel / 3);
-            int damage = DiceService.D8("Spiritual Weapon damage 1d8") + damageBonus;
+            int damage = SpellDiceRules.Roll(CustomSpellDice.SpiritualWeapon(casterLevel), metamagic, "Spiritual Weapon damage 1d8");
             damage = Mathf.Max(1, damage);
 
             // Force damage that "strikes as a spell, not as a weapon", so damage reduction does not apply (PHB p.283).
@@ -661,7 +657,8 @@ public partial class GameManager
             }
         }
 
-        string attackLog = ResolveSpiritualWeaponAttack(character, target, character.Stats.SpiritualWeaponCasterLevel);
+        string attackLog = ResolveSpiritualWeaponAttack(character, target, character.Stats.SpiritualWeaponCasterLevel,
+            ActiveSpellMetamagic(character, SpellNames.SPIRITUAL_WEAPON));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attackLog}"));
         UpdateAllStatsUI();
     }

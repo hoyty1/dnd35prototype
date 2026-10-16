@@ -184,18 +184,20 @@ public class CommandUndeadEffectData
 
     /// <summary>
     /// Factory: Creates a Command Undead effect for a nonintelligent undead.
-    /// No saving throw required. Duration = casterLevel days.
+    /// No saving throw required. Duration = casterLevel days, or <paramref name="durationRounds"/> when given (the cast's
+    /// clone through SpellDurationRules.Rounds, so Extend doubles it; batch 11 step 19).
     /// </summary>
     public static CommandUndeadEffectData CreateForNonintelligent(
         CharacterController caster,
         CharacterController target,
-        int casterLevel)
+        int casterLevel,
+        int durationRounds = -1)
     {
         var data = new CommandUndeadEffectData
         {
             IsActive = true,
             IsIntelligent = false,
-            DurationRemainingRounds = casterLevel * ROUNDS_PER_DAY,
+            DurationRemainingRounds = durationRounds > 0 ? durationRounds : casterLevel * ROUNDS_PER_DAY,
             CasterLevel = casterLevel,
             SourceSpellId = SpellNames.COMMAND_UNDEAD,
             SourceName = "Command Undead"
@@ -207,19 +209,21 @@ public class CommandUndeadEffectData
 
     /// <summary>
     /// Factory: Creates a Command Undead effect for an intelligent undead.
-    /// Will save was already failed at this point. Duration = casterLevel days.
+    /// Will save was already failed at this point. Duration = casterLevel days, or <paramref name="durationRounds"/> when
+    /// given (the cast's clone through SpellDurationRules.Rounds, so Extend doubles it; batch 11 step 19).
     /// Intelligent undead treat caster as Friendly but refuse suicidal orders.
     /// </summary>
     public static CommandUndeadEffectData CreateForIntelligent(
         CharacterController caster,
         CharacterController target,
-        int casterLevel)
+        int casterLevel,
+        int durationRounds = -1)
     {
         var data = new CommandUndeadEffectData
         {
             IsActive = true,
             IsIntelligent = true,
-            DurationRemainingRounds = casterLevel * ROUNDS_PER_DAY,
+            DurationRemainingRounds = durationRounds > 0 ? durationRounds : casterLevel * ROUNDS_PER_DAY,
             CasterLevel = casterLevel,
             SourceSpellId = SpellNames.COMMAND_UNDEAD,
             SourceName = "Command Undead"

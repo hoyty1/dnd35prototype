@@ -387,7 +387,7 @@ public partial class GameManager
         CharacterController caster = req.Caster;
         SpellData spell = req.Spell;
 
-        // The NPC path casts without metamagic (AI-001, SPL-038; step 21 removes the bit).
+        // The NPC path casts without metamagic (AI-001; step 21 removes the bit).
         if (req.HasQuirk(LegacyCastQuirk.NpcNullMetamagic))
             req.Metamagic = null;
 

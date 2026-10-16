@@ -394,7 +394,7 @@ public class SpellData
     /// <summary>
     /// LEGACY rounds count (0 = none, -1 = hours/level). It sets no duration: DurationType, DurationValue and
     /// DurationScalesWithLevel do, through SpellDurationRules (SPL-002); registration turns a spell that sets only this field
-    /// into a real duration and warns. Still read by the Extend Spell offer test (SPL-095), Extend's legacy doubling,
+    /// into a real duration and warns. Still read by Extend's legacy doubling,
     /// SpellcastingComponent.ApplyBuff (the ActiveBuffs countdown) and AISpellcastingStrategist's long-duration pre-buff check.
     /// </summary>
     public int BuffDurationRounds;
@@ -576,6 +576,23 @@ public class SpellData
     [NonSerialized]
     public MetamagicData MetamagicDataRef;
 
+    /// <summary>
+    /// True on the spell of a prepared metamagic slot (SpellcastingComponent.GetUniqueAvailableSpells,
+    /// MetamagicSystem.PrepareMetamagicSpell): only such a spell counts against metamagic slots of its metamagic
+    /// (SpellcastingComponent.CountAvailablePreparedSpell). A cast's clone stamped by SpellCaster.ApplyMetamagicToSpellData
+    /// carries its metamagic in <see cref="MetamagicDataRef"/> without this flag, so the spell menu's counts never read it
+    /// (batch 11 step 19). <see cref="Clone"/> clears it with the reference; SpellCastRequest.CloneForCast keeps both.
+    /// </summary>
+    [NonSerialized]
+    public bool IsPreparedMetamagicSlotSpell;
+
+    /// <summary>
+    /// The duration line is "Instantaneous/..." with a timed part after the instantaneous effect (Death Knell, PHB p.217:
+    /// Instantaneous/10 minutes per HD of subject): Extend Spell doubles that timed part (SpellDurationRules.IsExtendable;
+    /// delegated RAW reading 2026-10-14).
+    /// </summary>
+    public bool HasTimedAftereffect;
+
     /// <summary>Whether this spell has any metamagic applied.</summary>
     public bool HasMetamagic => AppliedMetamagics != null && AppliedMetamagics.Count > 0;
 
@@ -600,6 +617,7 @@ public class SpellData
             ? new List<MetamagicFeatId>(AppliedMetamagics)
             : new List<MetamagicFeatId>();
         clone.MetamagicDataRef = null; // Don't share mutable reference
+        clone.IsPreparedMetamagicSlotSpell = false;
         return clone;
     }
 

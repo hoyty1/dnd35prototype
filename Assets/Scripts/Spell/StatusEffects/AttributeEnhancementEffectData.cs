@@ -152,14 +152,17 @@ public class AttributeEnhancementEffectData
 
     /// <summary>
     /// Factory: Creates an attribute enhancement effect for any of the 6 spells.
-    /// For Bear's Endurance, calculates HP bonus based on Hit Dice.
+    /// For Bear's Endurance, calculates HP bonus based on Hit Dice. <paramref name="durationRounds"/> is the cast's
+    /// duration (SpellDurationRules.Rounds on the cast's spell clone, so Extend doubles it; batch 11 step 19, SPL-038);
+    /// without it, 1 min./level.
     /// </summary>
     public static AttributeEnhancementEffectData Create(string spellId, int casterLevel,
-        int targetHitDice, CharacterController caster)
+        int targetHitDice, CharacterController caster, int durationRounds = -1)
     {
         AbilityType ability = GetAbilityForSpell(spellId);
         string displayName = GetSpellDisplayName(spellId);
-        int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
+        if (durationRounds < 0)
+            durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
 
         int bonusHP = 0;
         if (spellId == SpellNames.BEARS_ENDURANCE)

@@ -234,12 +234,13 @@ public class GustOfWindEffect
         bool flying = IsFlyingTarget(target);
         if (flying)
         {
-            int pushDistanceFeet = (DiceRoller.D6() + DiceRoller.D6()) * 10; // 2d6 x 10
+            // The gust's dice take the cast's Empower and Maximize (PHB p.93, p.97; SpellDiceRules, batch 11 step 19)
+            int pushDistanceFeet = SpellDiceRules.RollFor(spell, SpellDice.Of(2, 6)) * 10; // 2d6 x 10
             int requestedSquares = Mathf.Max(0, pushDistanceFeet / 5);
             int movedSquares = PushTargetAlongWind(target, requestedSquares);
             int movedFeet = movedSquares * 5;
 
-            int nonlethalDamage = DiceRoller.D6() + DiceRoller.D6(); // 2d6
+            int nonlethalDamage = SpellDiceRules.RollFor(spell, SpellDice.Of(2, 6)); // 2d6
             int appliedDamage = ApplySpellNonlethalDamage(target, nonlethalDamage, "Gust of Wind (flying)");
 
             log.AppendLine($"    Flying target is blown back {Mathf.Max(0, movedFeet)} ft (rolled {pushDistanceFeet} ft). Takes {appliedDamage} nonlethal damage.");
@@ -252,14 +253,12 @@ public class GustOfWindEffect
         {
             target.ApplyCondition(CombatConditionType.Prone, 1, "Gust of Wind");
 
-            int tenFootIncrements = DiceRoller.D4(); // 1d4 x 10 ft
+            int tenFootIncrements = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4)); // 1d4 x 10 ft, the cast's metamagic
             int requestedSquares = tenFootIncrements * 2;
             int movedSquares = PushTargetAlongWind(target, requestedSquares);
             int movedTenFootIncrements = movedSquares / 2;
 
-            int totalNonlethal = 0;
-            for (int i = 0; i < movedTenFootIncrements; i++)
-                totalNonlethal += DiceRoller.D4(); // 1d4 per 10 ft actually moved
+            int totalNonlethal = SpellDiceRules.RollFor(spell, SpellDice.Of(movedTenFootIncrements, 4)); // 1d4 per 10 ft actually moved
 
             int appliedDamage = ApplySpellNonlethalDamage(target, totalNonlethal, "Gust of Wind (tiny)");
             log.AppendLine($"    Tiny or smaller: knocked prone and rolled {movedSquares * 5} ft (rolled {tenFootIncrements * 10} ft). Takes {appliedDamage} nonlethal damage.");

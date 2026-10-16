@@ -92,6 +92,11 @@ public static class MetamagicSystemTests
         // Feat definitions
         TestAllMetamagicFeatsRegistered();
 
+        // Batch 11 step 19: metamagic on the spell clone (SPL-038), Empower with Maximize (SPL-097), the Extend offer (SPL-095)
+        TestApplyMetamagicStampsTheClone();
+        TestEmpowerPlusMaximizeIsMaximumPlusHalfANormalRoll();
+        TestExtendOfferMatchesItsEffect();
+
         Debug.Log($"========== METAMAGIC TESTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -896,6 +901,117 @@ public static class MetamagicSystemTests
         Assert(result.ModifiedSpell.BaseSpellLevel == 3, "BaseSpellLevel is 3");
         Assert(result.ModifiedSpell.EffectiveSpellLevel == 8, "EffectiveSpellLevel is 8");
     }
+
+    // ========================================================================
+    // BATCH 11 STEP 19 (SPL-038, SPL-097, SPL-095)
+    // ========================================================================
+
+    /// <summary>
+    /// SpellCaster.ApplyMetamagicToSpellData stamps the metamagic on the clone it changes (SPL-038), which is not a
+    /// prepared metamagic slot's spell; SpellData.Clone drops both, SpellCastRequest.CloneForCast keeps both.
+    /// </summary>
+    private static void TestApplyMetamagicStampsTheClone()
+    {
+        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
+        var mm = new MetamagicData();
+        mm.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
+        var clone = spell.Clone();
+        SpellCaster.ApplyMetamagicToSpellData(clone, mm);
+        Assert(ReferenceEquals(clone.MetamagicDataRef, mm) && !clone.IsPreparedMetamagicSlotSpell,
+            "SPL-038: ApplyMetamagicToSpellData stamps the metamagic on the clone (not a prepared-slot spell)");
+        Assert(spell.MetamagicDataRef == null, "SPL-038: the source spell keeps no metamagic");
+        Assert(clone.Clone().MetamagicDataRef == null, "SpellData.Clone drops the stamp");
+
+        clone.IsPreparedMetamagicSlotSpell = true;
+        SpellData forCast = SpellCastRequest.CloneForCast(clone);
+        Assert(ReferenceEquals(forCast.MetamagicDataRef, mm) && forCast.IsPreparedMetamagicSlotSpell,
+            "SpellCastRequest.CloneForCast keeps the stamp and the prepared-slot flag");
+
+        var none = spell.Clone();
+        SpellCaster.ApplyMetamagicToSpellData(none, new MetamagicData());
+        Assert(none.MetamagicDataRef == null, "No metamagic, no stamp");
+    }
+
+    /// <summary>
+    /// PHB p.97-98 (Maximize Spell): an empowered, maximized spell deals the maximum result plus one-half of the normally
+    /// rolled result (SPL-097), through the one dice rule SpellDiceRules.Roll; before, the maximum x1.5.
+    /// </summary>
+    private static void TestEmpowerPlusMaximizeIsMaximumPlusHalfANormalRoll()
+    {
+        var mm = new MetamagicData();
+        mm.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
+        mm.AppliedMetamagic.Add(MetamagicFeatId.MaximizeSpell);
+        SpellDiceRoll roll = SpellDiceRules.RollWith(SpellDice.Of(10, 6), mm, sides => 2);
+        Assert(roll.Total == 70 && roll.Base == 60 && roll.EmpowerBonus == 10,
+            $"SPL-097: Empowered Maximized 10d6 rolling 2s = 60 + half of 20 = 70, not 90 (got {roll.Total})");
+        SpellDiceRoll odd = SpellDiceRules.RollWith(SpellDice.Of(3, 6), mm, sides => 1);
+        Assert(odd.Total == 19, $"SPL-097: Empowered Maximized 3d6 rolling 1s = 18 + half of 3, rounded down = 19 (got {odd.Total})");
+    }
+
+    /// <summary>
+    /// SPL-095 (PHB p.94): the Extend Spell offer (MetamagicData.CanExtend, used by preparation, crafting and the combat
+    /// panel) is the same test as its effect (SpellDurationRules.IsExtendable in ApplyMetamagicToSpellData) for every
+    /// spell: Blur and Divine Power are offered, the permanent, instantaneous and concentration spells are not, and a
+    /// rolled duration (Hypnotism's 2d4 rounds) and Death Knell's timed part are.
+    /// </summary>
+    private static void TestExtendOfferMatchesItsEffect()
+    {
+        SpellDatabase.Init();
+        int mismatches = 0;
+        string first = null;
+        foreach (SpellData spell in SpellDatabase.GetAllSpells())
+        {
+            if (spell == null)
+                continue;
+            if (MetamagicData.CanExtend(spell) != SpellDurationRules.IsExtendable(spell))
+            {
+                mismatches++;
+                first = first ?? spell.SpellId;
+            }
+        }
+        Assert(mismatches == 0, $"SPL-095: the Extend offer equals its effect test for every spell ({mismatches} differ, first {first})");
+
+        void Offered(string id, bool expected, string why)
+        {
+            SpellData spell = SpellDatabase.GetSpell(id);
+            Assert(spell != null && MetamagicData.CanExtend(spell) == expected,
+                $"SPL-095: Extend {(expected ? "is" : "is not")} offered for {spell?.Name ?? id} ({why})");
+        }
+        Offered(SpellNames.BLUR, true, "1 min./level");
+        Offered(SpellNames.DIVINE_POWER, true, "1 round/level");
+        Offered(SpellNames.HYPNOTISM, true, "2d4 rounds");
+        Offered(SpellNames.DEATH_KNELL, true, "Instantaneous/10 minutes per HD: the timed part");
+        Offered(SpellNames.BLINDNESS_DEAFNESS, false, "permanent");
+        Offered(SpellNames.MAGIC_MISSILE, false, "instantaneous");
+        Offered(SpellNames.MAGE_HAND, false, "concentration");
+        Offered(SpellNames.RAINBOW_PATTERN, true, "concentration + 1 round/level: the rounds after concentration");
+        Offered(SpellNames.SUMMON_SWARM, true, "concentration + 2 rounds: the rounds after concentration");
+
+        // The effect follows the offer: an extended Death Knell clone doubles a duration its handler computes.
+        SpellData knell = SpellDatabase.GetSpell(SpellNames.DEATH_KNELL).Clone();
+        var extend = new MetamagicData();
+        extend.AppliedMetamagic.Add(MetamagicFeatId.ExtendSpell);
+        SpellCaster.ApplyMetamagicToSpellData(knell, extend);
+        Assert(SpellDurationRules.Extended(knell, 300) == 600, "Extend doubles a handler's own rounds on an extended clone (Death Knell 300 to 600)");
+        SpellData plainKnell = SpellDatabase.GetSpell(SpellNames.DEATH_KNELL).Clone();
+        Assert(SpellDurationRules.Extended(plainKnell, 300) == 300, "A plain clone keeps the handler's rounds");
+        // "Concentration + N rounds": Extend doubles only the rounds after the concentration (PHB p.94, p.176; delegated
+        // RAW reading 2026-10-14).
+        SpellData pattern = SpellDatabase.GetSpell(SpellNames.RAINBOW_PATTERN).Clone();
+        SpellCaster.ApplyMetamagicToSpellData(pattern, extend);
+        Assert(ConcentrationRules.TailRounds(pattern, 5) == 10, "Extend doubles the rounds after concentration on an extended clone (Rainbow Pattern CL 5: 5 to 10)");
+        Assert(SpellDurationRules.Rounds(pattern, 5) == SpellDurationRules.ConcentrationRounds, "An extended Rainbow Pattern still lasts while its caster concentrates");
+        Assert(ConcentrationRules.TailRounds(SpellDatabase.GetSpell(SpellNames.RAINBOW_PATTERN), 5) == 5, "Extend leaves the Rainbow Pattern template's tail at 1 round/level");
+
+        // A handler's factory duration follows Extend: Command Undead lasts 2 days/level when extended (PHB p.211).
+        SpellData command = SpellDatabase.GetSpell(SpellNames.COMMAND_UNDEAD).Clone();
+        SpellCaster.ApplyMetamagicToSpellData(command, extend);
+        CommandUndeadEffectData commanded = CommandUndeadEffectData.CreateForNonintelligent(null, null, 4, SpellDurationRules.Rounds(command, 4));
+        Assert(commanded.DurationRemainingRounds == 8 * SpellDurationRules.RoundsPerDay, "An extended Command Undead at CL 4 lasts 8 days");
+        CommandUndeadEffectData plainCommand = CommandUndeadEffectData.CreateForIntelligent(null, null, 4, SpellDurationRules.Rounds(SpellDatabase.GetSpell(SpellNames.COMMAND_UNDEAD), 4));
+        Assert(plainCommand.DurationRemainingRounds == 4 * SpellDurationRules.RoundsPerDay, "A plain Command Undead at CL 4 lasts 4 days");
+    }
+
 
     private static void TestSpellDataClonePreservesMetamagic()
     {

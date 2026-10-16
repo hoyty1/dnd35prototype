@@ -2003,8 +2003,10 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (spell == null) return 0;
 
-        // D&D 3.5e: If the spell has MetamagicDataRef, count only slots with matching metamagic
-        if (spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
+        // D&D 3.5e: a prepared metamagic slot's spell counts only the slots with matching metamagic. Only such a spell
+        // (SpellData.IsPreparedMetamagicSlotSpell): a cast's clone stamped with the metamagic the caster applies at the
+        // cast (SpellCaster.ApplyMetamagicToSpellData, batch 11 step 19) counts as the plain spell it was before.
+        if (spell.IsPreparedMetamagicSlotSpell && spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
         {
             string metamagicKey = spell.MetamagicDataRef.GetDisplayName();
             return SpellSlots.Count(s => s.PreparedSpell != null &&
@@ -2059,6 +2061,7 @@ public class SpellcastingComponent : MonoBehaviour
                     // Clone the SpellData and attach metamagic info for combat UI display
                     var metamagicSpell = slot.PreparedSpell.Clone();
                     metamagicSpell.MetamagicDataRef = slot.AppliedMetamagic.Clone();
+                    metamagicSpell.IsPreparedMetamagicSlotSpell = true;
                     metamagicSpell.BaseSpellLevel = slot.BaseSpellLevel;
                     metamagicSpell.EffectiveSpellLevel = slot.Level;
                     if (metamagicSpell.AppliedMetamagics == null)

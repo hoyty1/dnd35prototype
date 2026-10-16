@@ -110,7 +110,7 @@ public class WebAreaEffect : PersistentAreaEffect
             if (character == null || character.Stats == null || character.Stats.IsDead)
                 continue;
 
-            int damage = DiceRoller.D4() + DiceRoller.D4(); // 2d4 fire
+            int damage = SpellDiceRules.Roll(SpellDice.Of(2, 4), Metamagic, null); // 2d4 fire, the cast's Empower and Maximize (batch 11 step 19)
             DamageResolutionResult mitigation = character.Stats.ApplyIncomingDamage(damage, packet);
             int applied = mitigation != null ? mitigation.FinalDamage : 0;
             affectedCount++;

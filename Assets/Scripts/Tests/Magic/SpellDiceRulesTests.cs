@@ -62,6 +62,19 @@ public static class SpellDiceRulesTests
         TestBakeForCasterLevel();
         TestFactoryHealDice();
 
+        // Batch 11 step 19 (SPL-038, SPL-097): the metamagic dice rule, pure and through SpellCaster.Cast.
+        TestMetamagicDiceRule();
+        Func<int, string, int, int> before19 = ScenarioHooks.RollFilter;
+        ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+        try
+        {
+            TestCastMetamagicDice();
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = before19;
+        }
+
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
     }
 
@@ -112,6 +125,115 @@ public static class SpellDiceRulesTests
         stats.CurrentHP = stats.TotalMaxHP - damageTaken;
         return stats;
     }
+
+    // ========== METAMAGIC ON THE DICE (batch 11 step 19, SPL-038, SPL-097) ==========
+
+    private static MetamagicData Meta(params MetamagicFeatId[] feats)
+    {
+        var mm = new MetamagicData();
+        foreach (MetamagicFeatId feat in feats)
+            mm.AppliedMetamagic.Add(feat);
+        return mm;
+    }
+
+    /// <summary>
+    /// SpellDiceRules.RollWith over a die source that always rolls 3, counting the dice rolled: PHB p.93 Empower (the
+    /// result x1.5, rounded down, PHB p.304), p.97 Maximize (every die at its maximum, none rolled), p.97-98 both (the
+    /// maximum plus half of a normally rolled result), and a result with no die, which neither changes.
+    /// </summary>
+    private static void TestMetamagicDiceRule()
+    {
+        int rolled = 0;
+        Func<int, int> threes = sides => { rolled++; return 3; };
+        SpellDice tenD6 = SpellDice.Of(10, 6);
+
+        rolled = 0;
+        SpellDiceRoll plain = SpellDiceRules.RollWith(tenD6, null, threes);
+        Assert(plain.Total == 30 && rolled == 10 && plain.EmpowerBonus == 0, "SPL-097: plain 10d6 at 3 = 30, ten dice rolled", $"{plain.Total}, {rolled} rolled");
+
+        rolled = 0;
+        SpellDiceRoll emp = SpellDiceRules.RollWith(tenD6, Meta(MetamagicFeatId.EmpowerSpell), threes);
+        Assert(emp.Total == 45 && emp.EmpowerBonus == 15 && rolled == 10, "SPL-097: Empower 10d6 = 30 + 15 (PHB p.93)", $"{emp.Total}, +{emp.EmpowerBonus}, {rolled} rolled");
+
+        rolled = 0;
+        SpellDiceRoll max = SpellDiceRules.RollWith(tenD6, Meta(MetamagicFeatId.MaximizeSpell), threes);
+        Assert(max.Total == 60 && rolled == 0 && max.Rolls.Length == 10 && max.Rolls[0] == 6, "SPL-097: Maximize 10d6 = 60 with no die rolled (PHB p.97)", $"{max.Total}, {rolled} rolled");
+
+        rolled = 0;
+        SpellDiceRoll both = SpellDiceRules.RollWith(tenD6, Meta(MetamagicFeatId.EmpowerSpell, MetamagicFeatId.MaximizeSpell), threes);
+        Assert(both.Total == 75 && both.EmpowerBonus == 15 && rolled == 10 && both.NormalRolls.Length == 10,
+            "SPL-097: Empower and Maximize 10d6 = the maximum 60 + half of a normal roll of 30 (PHB p.97-98), not 60 x 1.5", $"{both.Total}, {rolled} rolled");
+
+        // The fixed term is part of the result Empower multiplies (PHB p.93: a magic missile's 1d4+1 x1.5), rounded down.
+        SpellDiceRoll missile = SpellDiceRules.RollWith(SpellDice.Of(1, 4, 1), Meta(MetamagicFeatId.EmpowerSpell), sides => 2);
+        Assert(missile.Total == 4 && missile.EmpowerBonus == 1, "Empower 1d4+1 at 2: 3 + 1 (half of 3, rounded down)", $"{missile.Total}");
+        SpellDiceRoll missileBoth = SpellDiceRules.RollWith(SpellDice.Of(1, 4, 1), Meta(MetamagicFeatId.EmpowerSpell, MetamagicFeatId.MaximizeSpell), sides => 2);
+        Assert(missileBoth.Total == 6, "Empower and Maximize 1d4+1 at 2: the maximum 5 + half of 3", $"{missileBoth.Total}");
+
+        // No die, no random variable: neither feat changes a flat result (PHB p.93, p.97).
+        SpellDiceRoll flat = SpellDiceRules.RollWith(SpellDice.Of(0, 0, 10), Meta(MetamagicFeatId.EmpowerSpell, MetamagicFeatId.MaximizeSpell), threes);
+        Assert(flat.Total == 10 && flat.EmpowerBonus == 0, "A flat 10 with no die stays 10 under Empower and Maximize", $"{flat.Total}");
+
+        // The fallback: the cast's metamagic, else the one stamped on its spell clone.
+        SpellData clone = Spell(SpellNames.FIREBALL);
+        MetamagicData stamped = Meta(MetamagicFeatId.EmpowerSpell);
+        SpellCaster.ApplyMetamagicToSpellData(clone, stamped);
+        MetamagicData other = Meta(MetamagicFeatId.MaximizeSpell);
+        MetamagicData empty = new MetamagicData();
+        Assert(ReferenceEquals(SpellDiceRules.MetamagicOf(clone), stamped) && ReferenceEquals(SpellDiceRules.MetamagicOf(clone, other), other)
+            && ReferenceEquals(SpellDiceRules.MetamagicOf(clone, empty), stamped)
+            && ReferenceEquals(SpellDiceRules.MetamagicOf(Spell(SpellNames.FIREBALL), empty), empty)
+            && SpellDiceRules.MetamagicOf(null) == null,
+            "SpellDiceRules.MetamagicOf: the cast's metamagic when it has a feat, else the clone's stamp (an empty request never hides it)");
+    }
+
+    /// <summary>
+    /// SpellCaster.Cast's generic dice through SpellDiceRules.Roll (every die 3, every d20 20, saves failed): Burning
+    /// Hands at CL 5 (5d4 = 15) Empowered 22, Maximized 20, both 20 + 7 = 27 (SPL-097; before, max x1.5 = 30); Magic
+    /// Missile at CL 3 (two missiles of 1d4+1 = 4) Empowered per missile 6 + 6; Cure Light Wounds at CL 3 on a living
+    /// target (1d8+3 = 6) Empowered 9; the metamagic stamped on the clone applies when the call passes none.
+    /// </summary>
+    private static void TestCastMetamagicDice()
+    {
+        CharacterStats wiz5 = Caster("Wizard", 5);
+        CharacterStats wiz3 = Caster("Wizard", 3);
+        CharacterStats cleric3 = Caster("Cleric", 3);
+
+        CharacterStats t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(Spell(SpellNames.BURNING_HANDS), wiz5, t), out _), 15, "Burning Hands CL 5, every d4 at 3: 15");
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(Spell(SpellNames.BURNING_HANDS), wiz5, t, Meta(MetamagicFeatId.EmpowerSpell)), out SpellResult emp), 22,
+            "Empowered Burning Hands: 15 + 7 (PHB p.93)");
+        Assert(emp.EmpowerBonus == 7, "The result records Empower's +7", $"+{emp.EmpowerBonus}");
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(Spell(SpellNames.BURNING_HANDS), wiz5, t, Meta(MetamagicFeatId.MaximizeSpell)), out _), 20,
+            "Maximized Burning Hands: 5d4 at 4 = 20 (PHB p.97)");
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(Spell(SpellNames.BURNING_HANDS), wiz5, t, Meta(MetamagicFeatId.EmpowerSpell, MetamagicFeatId.MaximizeSpell)), out _), 27,
+            "SPL-097: Empowered Maximized Burning Hands: 20 + half of the normal 15 = 27, not 30");
+
+        SpellData stampedClone = Spell(SpellNames.BURNING_HANDS);
+        SpellCaster.ApplyMetamagicToSpellData(stampedClone, Meta(MetamagicFeatId.MaximizeSpell));
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(stampedClone, wiz5, t), out _), 20,
+            "SPL-038: a clone stamped with Maximize deals 20 when the call passes no metamagic");
+        SpellData stampedClone2 = Spell(SpellNames.BURNING_HANDS);
+        SpellCaster.ApplyMetamagicToSpellData(stampedClone2, Meta(MetamagicFeatId.MaximizeSpell));
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(stampedClone2, wiz5, t, new MetamagicData()), out _), 20,
+            "SPL-038: a clone stamped with Maximize deals 20 when the call passes an empty metamagic (the scroll, wand and F12 paths)");
+
+        t = Target("Target", "Humanoid", -30);
+        AssertEq(Taken(t, () => SpellCaster.Cast(Spell(SpellNames.MAGIC_MISSILE), wiz3, t, Meta(MetamagicFeatId.EmpowerSpell)), out SpellResult mm), 12,
+            "Empowered Magic Missile at CL 3: two missiles of 1d4+1 = 4, each x1.5 = 6 (PHB p.93)");
+        Assert(mm.MissileDamages != null && mm.MissileDamages.Length == 2 && mm.MissileDamages[0] == 6 && mm.EmpowerBonus == 4,
+            "Each missile is empowered on its own", mm.MissileDamages != null ? string.Join(",", mm.MissileDamages) : "none");
+
+        CharacterStats hurt = Target("Hurt", "Humanoid", -30, damageTaken: 50);
+        AssertEq(-Taken(hurt, () => SpellCaster.Cast(Spell(SpellNames.CURE_LIGHT_WOUNDS), cleric3, hurt, Meta(MetamagicFeatId.EmpowerSpell), true, true), out _), 9,
+            "Empowered Cure Light Wounds at CL 3: 1d8+3 = 6, x1.5 = 9 (PHB p.93: cures half again as many hit points)");
+    }
+
 
     // ========== PURE RULES ==========
 

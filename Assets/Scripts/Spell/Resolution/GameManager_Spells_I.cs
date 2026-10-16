@@ -822,15 +822,10 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll 3d6 bludgeoning
-                int bludgeoningDamage = 0;
-                for (int i = 0; i < 3; i++)
-                    bludgeoningDamage += DiceRoller.D6();
-
-                // Roll 2d6 cold
-                int coldDamage = 0;
-                for (int i = 0; i < 2; i++)
-                    coldDamage += DiceRoller.D6();
+                // Roll 3d6 bludgeoning, then 2d6 cold, each with the cast's metamagic (SpellDiceRules; batch 11 step 19,
+                // SPL-038): Empower and Maximize change each part's dice.
+                int bludgeoningDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
+                int coldDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormCold());
 
                 int totalDamage = bludgeoningDamage + coldDamage;
 
@@ -895,10 +890,8 @@ public partial class GameManager
                     continue;
 
                 // 3d6 bludgeoning + 2d6 cold (no save for objects)
-                int wallBludg = 0;
-                for (int i = 0; i < 3; i++) wallBludg += DiceRoller.D6();
-                int wallCold = 0;
-                for (int i = 0; i < 2; i++) wallCold += DiceRoller.D6();
+                int wallBludg = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
+                int wallCold = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormCold());
                 int wallTotal = wallBludg + wallCold;
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

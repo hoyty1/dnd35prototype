@@ -3,7 +3,8 @@ using UnityEngine;
 /// <summary>
 /// The one spell duration computation (SPL-002). Most cast paths, PC and NPC, reach it through
 /// <see cref="ActiveSpellEffect.CalculateDurationRounds"/> (the tracked effect), <see cref="SpellCastingHelper.CalculateDuration(SpellData, int)"/>
-/// and the handlers that set their own effect data. A few handlers still compute their own rounds (listed in SPL-038).
+/// and the handlers that set their own effect data from the cast's spell clone, so Extend doubles them. A duration a handler
+/// computes itself (a rolled or fixed part) goes through <see cref="Extended"/> (batch 11 step 19, SPL-038).
 ///
 /// Rules (PHB p.176, "Duration"): a timed duration is a number of rounds, minutes, hours or days, often per caster level;
 /// 1 round = 6 seconds, so 1 minute = 10 rounds, 1 hour = 600 rounds and 1 day = 14,400 rounds (PHB p.138). An
@@ -78,6 +79,43 @@ public static class SpellDurationRules
     /// <summary>True when a timed duration (not instantaneous, permanent or concentration) is set.</summary>
     public static bool IsTimed(SpellData spell)
         => spell != null && Rounds(spell, 1) > 0;
+
+    /// <summary>
+    /// Whether Extend Spell changes the spell (PHB p.94: a spell with a duration of concentration, instantaneous or
+    /// permanent is not affected): any other duration type, a rolled one (Hypnotism's 2d4 rounds) included, and the timed
+    /// part of a compound duration line: the timed part of an "Instantaneous/..." duration
+    /// (<see cref="SpellData.HasTimedAftereffect"/>, Death Knell's 10 minutes per HD) and the "+N rounds" a
+    /// "Concentration + N rounds" spell keeps going after the concentration ends (<see cref="SpellData.ConcentrationTailRounds"/>:
+    /// Rainbow Pattern, Hypnotic Pattern, Summon Swarm; PHB p.176 calls that tail the given length of time the spell keeps
+    /// going), while the concentration part is unchanged (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1). The one
+    /// test of the offer (MetamagicData.CanExtend) and the effect (SpellCaster.ApplyMetamagicToSpellData) (batch 11
+    /// step 19, SPL-095).
+    /// </summary>
+    public static bool IsExtendable(SpellData spell)
+    {
+        if (spell == null)
+            return false;
+        if (spell.HasTimedAftereffect)
+            return true;
+        if (spell.DurationType == DurationType.Concentration && spell.ConcentrationTailRounds > 0)
+            return true;
+        return spell.DurationType != DurationType.Instantaneous
+               && spell.DurationType != DurationType.Permanent
+               && spell.DurationType != DurationType.Concentration;
+    }
+
+    /// <summary>True when the cast's spell clone carries Extend Spell (stamped by SpellCaster.ApplyMetamagicToSpellData) and Extend changes it.</summary>
+    public static bool IsExtended(SpellData spell)
+        => spell != null && spell.MetamagicDataRef != null && spell.MetamagicDataRef.Has(MetamagicFeatId.ExtendSpell) && IsExtendable(spell);
+
+    /// <summary>
+    /// A duration a handler computes itself, not from the spell's duration fields (a rolled duration such as Cause Fear's
+    /// 1d4 rounds, a fixed part such as Scare's 1 round on a save, Death Knell's 10 minutes per HD): doubled when the
+    /// cast is extended (PHB p.94; batch 11 step 19, SPL-038). A duration from <see cref="Rounds"/> must not pass here:
+    /// ApplyMetamagicToSpellData has already doubled the clone's DurationValue.
+    /// </summary>
+    public static int Extended(SpellData spell, int rounds)
+        => rounds > 0 && IsExtended(spell) ? rounds * 2 : rounds;
 
     /// <summary>
     /// The caster level a duration uses: the cast's caster level (CasterLevelRules.ForCaster: a scroll's or wand's own,

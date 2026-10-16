@@ -36,6 +36,10 @@ public struct SpellDice
     public float Average => (HasDice ? Count * (Sides + 1) * 0.5f : 0f) + Bonus;
     public int Maximum => (HasDice ? Count * Sides : 0) + Bonus;
 
+    /// <summary>Count d Sides + Bonus (a custom resolver's dice: Fireball's 1d6 per level is Of(n, 6)).</summary>
+    public static SpellDice Of(int count, int sides, int bonus = 0)
+        => new SpellDice { Count = count, Sides = sides, Bonus = bonus };
+
     public override string ToString()
     {
         if (!HasDice)
@@ -44,6 +48,30 @@ public struct SpellDice
             return Count + "d" + Sides;
         return Count + "d" + Sides + (Bonus > 0 ? "+" : "") + Bonus;
     }
+}
+
+/// <summary>
+/// One roll of a spell's dice with the cast's metamagic (<see cref="SpellDiceRules.Roll(SpellDice, MetamagicData, string)"/>).
+/// The result of the dice is the dice plus the spell's own fixed term (<see cref="SpellDice.Bonus"/>), as PHB p.93
+/// multiplies a magic missile's whole 1d4+1.
+/// </summary>
+public struct SpellDiceRoll
+{
+    /// <summary>The dice as they count: every die at its maximum when maximized, else the dice rolled.</summary>
+    public int[] Rolls;
+    /// <summary>The dice actually rolled: the same as <see cref="Rolls"/> without Maximize; with Maximize and Empower the normal roll whose half Empower adds; empty when maximized only.</summary>
+    public int[] NormalRolls;
+    public int Bonus;
+    /// <summary>The result before Empower: the dice that count plus the bonus, at least 0.</summary>
+    public int Base;
+    /// <summary>Empower's addition: half of the normally rolled result (rounded down, PHB p.304), 0 without Empower.</summary>
+    public int EmpowerBonus;
+    /// <summary>The roll's final result: <see cref="Base"/> + <see cref="EmpowerBonus"/>.</summary>
+    public int Total;
+    public bool Maximized;
+    public bool Empowered;
+
+    public static implicit operator int(SpellDiceRoll roll) => roll.Total;
 }
 
 /// <summary>
@@ -129,16 +157,89 @@ public static class SpellDiceRules
     public static SpellDice Effect(SpellData spell, int casterLevel)
         => spell != null && spell.EffectType == SpellEffectType.Healing ? Healing(spell, casterLevel) : Damage(spell, casterLevel);
 
-    /// <summary>Rolls the dice (each die through DiceService with <paramref name="context"/>, so a scenario can force it); maximized dice take their highest face.</summary>
-    public static int[] Roll(SpellDice dice, bool maximize, string context)
-    {
-        if (!dice.HasDice)
-            return new int[0];
+    // ========== METAMAGIC ON THE DICE (batch 11 step 19, SPL-038, SPL-097) ==========
 
-        var rolls = new int[dice.Count];
-        for (int i = 0; i < dice.Count; i++)
-            rolls[i] = maximize ? dice.Sides : DiceService.RollDie(dice.Sides, context);
-        return rolls;
+    /// <summary>
+    /// The metamagic a cast's dice use: the cast's own (<paramref name="metamagic"/>) when it applies any feat, else the
+    /// one stamped on the cast's spell clone (<see cref="SpellData.MetamagicDataRef"/>: SpellCaster.ApplyMetamagicToSpellData
+    /// stamps it, a prepared metamagic slot's spell carries its slot's), else the (empty or null) request metamagic. An
+    /// empty request metamagic (the scroll, wand and F12 paths pass one) never hides the stamp, so every reader agrees:
+    /// SpellSaveDCRules and CastComponentRules use this fallback too.
+    /// </summary>
+    public static MetamagicData MetamagicOf(SpellData spell, MetamagicData metamagic = null)
+        => metamagic != null && metamagic.HasAnyMetamagic ? metamagic : (spell?.MetamagicDataRef ?? metamagic);
+
+    /// <summary>
+    /// Rolls a spell's dice with the cast's metamagic, the one dice rule of every cast path and custom resolver:
+    /// each die rolled is one DiceService.RollDie with <paramref name="context"/> (so a scenario can force it, and a
+    /// plain cast draws exactly the dice it drew before this rule). Maximize (PHB p.97): every die at its maximum, none
+    /// rolled. Empower (PHB p.93): the result (dice + <see cref="SpellDice.Bonus"/>) increased by one-half, rounded down
+    /// (PHB p.304). Both (PHB p.97-98, SPL-097): the maximum result plus one-half of the normally rolled result, so the
+    /// dice are rolled for the Empower half. That Empower multiplies the fixed term with the dice and that a result with
+    /// no die is unchanged is a delegated RAW reading 2026-10-14 (RULES_COVERAGE 4.1).
+    /// </summary>
+    public static SpellDiceRoll Roll(SpellDice dice, MetamagicData metamagic, string context)
+        => RollWith(dice, metamagic, sides => DiceService.RollDie(sides, context));
+
+    /// <summary>
+    /// As <see cref="Roll(SpellDice, MetamagicData, string)"/>, for the few spell dice that have always been drawn
+    /// straight from UnityEngine.Random without the scenario filter (Black Tentacles' grapple damage, Spike Stones):
+    /// the same draws, so their plain casts keep their traces.
+    /// </summary>
+    public static SpellDiceRoll RollUnfiltered(SpellDice dice, MetamagicData metamagic)
+        => RollWith(dice, metamagic, sides => UnityEngine.Random.Range(1, sides + 1));
+
+    /// <summary>The cast's dice for <paramref name="spell"/>: <see cref="Roll(SpellDice, MetamagicData, string)"/> with the metamagic stamped on the spell.</summary>
+    public static SpellDiceRoll RollFor(SpellData spell, SpellDice dice, string context = null)
+        => Roll(dice, MetamagicOf(spell), context);
+
+    /// <summary>
+    /// The pure rule of <see cref="Roll(SpellDice, MetamagicData, string)"/> over a die source (static tests use it without
+    /// DiceService). Empower multiplies the fixed term with the dice, and a dieless result is unchanged (delegated RAW
+    /// reading 2026-10-14, RULES_COVERAGE 4.1).
+    /// </summary>
+    public static SpellDiceRoll RollWith(SpellDice dice, MetamagicData metamagic, System.Func<int, int> rollDie)
+    {
+        bool maximize = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
+        bool empower = metamagic != null && metamagic.Has(MetamagicFeatId.EmpowerSpell);
+
+        // A result with no die has no random variable, which neither feat changes (PHB p.93, p.97).
+        if (!dice.HasDice)
+        {
+            maximize = false;
+            empower = false;
+        }
+
+        var roll = new SpellDiceRoll { Bonus = dice.Bonus, Maximized = maximize, Empowered = empower };
+        int count = dice.HasDice ? dice.Count : 0;
+
+        // The dice rolled: every die without Maximize; with Maximize only when Empower needs the normal roll.
+        int[] normal = new int[maximize && !empower ? 0 : count];
+        for (int i = 0; i < normal.Length; i++)
+            normal[i] = rollDie(dice.Sides);
+        roll.NormalRolls = normal;
+
+        int normalResult = dice.Bonus;
+        for (int i = 0; i < normal.Length; i++)
+            normalResult += normal[i];
+        normalResult = Mathf.Max(0, normalResult);
+
+        if (maximize)
+        {
+            roll.Rolls = new int[count];
+            for (int i = 0; i < count; i++)
+                roll.Rolls[i] = dice.Sides;
+            roll.Base = Mathf.Max(0, (count > 0 ? count * dice.Sides : 0) + dice.Bonus);
+        }
+        else
+        {
+            roll.Rolls = normal;
+            roll.Base = normalResult;
+        }
+
+        roll.EmpowerBonus = empower ? normalResult / 2 : 0;
+        roll.Total = roll.Base + roll.EmpowerBonus;
+        return roll;
     }
 
     /// <summary>Average of a spell's own dice at a caster level (AI estimates).</summary>

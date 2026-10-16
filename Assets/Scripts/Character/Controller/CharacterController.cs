@@ -2365,7 +2365,7 @@ public class CharacterController : MonoBehaviour
         return true;
     }
 
-    public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster)
+    public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster, MetamagicData metamagic = null)
     {
         int rounds = Mathf.Max(0, remainingDamageRounds);
         if (rounds <= 0)
@@ -2380,6 +2380,7 @@ public class CharacterController : MonoBehaviour
         ActiveMelfsAcidArrowEffect.IsActive = true;
         ActiveMelfsAcidArrowEffect.RemainingDamageRounds = rounds;
         ActiveMelfsAcidArrowEffect.SetCaster(caster);
+        ActiveMelfsAcidArrowEffect.Metamagic = metamagic;
     }
 
     public void UpdateMelfsAcidArrowDuration(int remainingDamageRounds)

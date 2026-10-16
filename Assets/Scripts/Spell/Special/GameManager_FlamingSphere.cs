@@ -559,7 +559,9 @@ public partial class GameManager
         if (caster == null || target == null || spell == null || caster.Stats == null || target.Stats == null)
             return null;
 
-        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, null, false, false, caster, target);
+        // The sphere's spell is the cast's clone, so every impact, the creation one and every later ram, takes the cast's
+        // Empower and Maximize (SpellDiceRules; batch 11 step 19, SPL-038).
+        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, SpellDiceRules.MetamagicOf(spell), false, false, caster, target);
 
         if (result != null)
         {

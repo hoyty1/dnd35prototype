@@ -213,7 +213,8 @@ public partial class GameManager
 
         // Rage duration: Concentration + 1 round/level (max 10 rounds after concentration ends)
         // For simplicity in combat, we use caster level rounds (max 10)
-        int rageRounds = Mathf.Clamp(casterLevel, 1, 10);
+        // Extend doubles the rounds after concentration (SpellDurationRules.Extended; delegated RAW reading 2026-10-14, batch 11 step 19).
+        int rageRounds = SpellDurationRules.Extended(spell, Mathf.Clamp(casterLevel, 1, 10));
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
@@ -361,7 +362,9 @@ public partial class GameManager
         int hdAffected = 0;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level after concentration ends
+        // 1 round/level after concentration ends, from the cast's clone so Extend doubles it (ConcentrationRules.TailRounds;
+        // delegated RAW reading 2026-10-14, batch 11 step 19).
+        int durationRounds = Mathf.Max(1, ConcentrationRules.TailRounds(spell, casterLevel));
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

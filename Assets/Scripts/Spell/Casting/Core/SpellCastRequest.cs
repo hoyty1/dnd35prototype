@@ -55,7 +55,8 @@ public sealed class SpellCastRequest
 
     /// <summary>
     /// The clone a cast works on. It keeps the template's MetamagicDataRef reference (a prepared metamagic spell's
-    /// record, which SpellData.Clone drops), so the cast reads exactly what it read when it held the instance itself.
+    /// record, which SpellData.Clone drops) and its prepared-slot flag (SpellData.IsPreparedMetamagicSlotSpell), so the
+    /// cast reads exactly what it read when it held the instance itself.
     /// </summary>
     public static SpellData CloneForCast(SpellData spell)
     {
@@ -63,6 +64,7 @@ public sealed class SpellCastRequest
             return null;
         SpellData clone = spell.Clone();
         clone.MetamagicDataRef = spell.MetamagicDataRef;
+        clone.IsPreparedMetamagicSlotSpell = spell.IsPreparedMetamagicSlotSpell;
         return clone;
     }
 
@@ -210,7 +212,7 @@ public sealed class SpellCastRequest
 
     /// <summary>
     /// An NPC (AI-run) cast of <paramref name="spell"/> at <paramref name="target"/>: no metamagic (the NPC path has
-    /// none, SPL-038), a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy quirks
+    /// none, AI-001; batch 11 step 21 lets it cast a prepared slot's metamagic), a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy quirks
     /// (<see cref="LegacyCastQuirkSets.AiPath"/>, batch 11 step 8) and <see cref="AiCastDecider"/>, which fills the
     /// caster's choices when the cast core asks (the Legality stage).
     /// </summary>

@@ -6716,37 +6716,10 @@ public partial class GameManager : MonoBehaviour
                         metamagic.HeightenToLevel = mmEffLevel; // Legacy fallback
                 }
             }
-            // Apply pre-cast modifications (Extend, Enlarge, Widen, Silent, Still, Quicken)
+            // Apply pre-cast modifications (Extend, Enlarge, Widen, Silent, Still, Quicken) and stamp the metamagic on the
+            // clone: Empower and Maximize apply where the dice are rolled (RollHealingFromSpell, SpellCaster.Cast through
+            // SpellDiceRules; batch 11 step 19, SPL-038, SPL-097), no longer as flat bonuses baked into the clone.
             SpellCaster.ApplyMetamagicToSpellData(spell, metamagic);
-
-            // Maximize: set dice counts to max values (replace variable dice with flat bonus)
-            if (metamagic.Has(MetamagicFeatId.MaximizeSpell))
-            {
-                if (spell.DamageCount > 0 && spell.DamageDice > 0)
-                {
-                    spell.BonusDamage += spell.DamageCount * spell.DamageDice;
-                    spell.DamageCount = 0;
-                }
-                if (spell.HealCount > 0 && spell.HealDice > 0)
-                {
-                    spell.BonusHealing += spell.HealCount * spell.HealDice;
-                    spell.HealCount = 0;
-                }
-            }
-
-            // Empower: multiply all variable numeric effects by 1.5
-            if (metamagic.Has(MetamagicFeatId.EmpowerSpell))
-            {
-                if (spell.DamageCount > 0)
-                    spell.BonusDamage += (spell.DamageCount * (spell.DamageDice + 1)) / 4; // avg×0.5
-                if (spell.HealCount > 0)
-                    spell.BonusHealing += (spell.HealCount * (spell.HealDice + 1)) / 4;
-                // For already-maximized values, multiply flat bonus
-                if (spell.DamageCount == 0 && spell.BonusDamage > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
-                    spell.BonusDamage = (int)(spell.BonusDamage * 1.5f);
-                if (spell.HealCount == 0 && spell.BonusHealing > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
-                    spell.BonusHealing = (int)(spell.BonusHealing * 1.5f);
-            }
 
             Debug.Log($"[Scroll Metamagic] Applied {mmFeats.Count} metamagic feat(s) to {spell.Name}");
         }
@@ -6767,33 +6740,7 @@ public partial class GameManager : MonoBehaviour
                         metamagic.HeightenToLevel = htl;
                 }
             }
-            SpellCaster.ApplyMetamagicToSpellData(spell, metamagic);
-
-            if (metamagic.Has(MetamagicFeatId.MaximizeSpell))
-            {
-                if (spell.DamageCount > 0 && spell.DamageDice > 0)
-                {
-                    spell.BonusDamage += spell.DamageCount * spell.DamageDice;
-                    spell.DamageCount = 0;
-                }
-                if (spell.HealCount > 0 && spell.HealDice > 0)
-                {
-                    spell.BonusHealing += spell.HealCount * spell.HealDice;
-                    spell.HealCount = 0;
-                }
-            }
-
-            if (metamagic.Has(MetamagicFeatId.EmpowerSpell))
-            {
-                if (spell.DamageCount > 0)
-                    spell.BonusDamage += (spell.DamageCount * (spell.DamageDice + 1)) / 4;
-                if (spell.HealCount > 0)
-                    spell.BonusHealing += (spell.HealCount * (spell.HealDice + 1)) / 4;
-                if (spell.DamageCount == 0 && spell.BonusDamage > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
-                    spell.BonusDamage = (int)(spell.BonusDamage * 1.5f);
-                if (spell.HealCount == 0 && spell.BonusHealing > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
-                    spell.BonusHealing = (int)(spell.BonusHealing * 1.5f);
-            }
+            SpellCaster.ApplyMetamagicToSpellData(spell, metamagic); // Empower and Maximize where the dice are rolled (batch 11 step 19)
 
             Debug.Log($"[Wand Metamagic] Applied {wandMmFeats.Count} metamagic feat(s) to {spell.Name}");
         }
@@ -6830,14 +6777,10 @@ public partial class GameManager : MonoBehaviour
     {
         if (spell == null) return 0;
 
+        // The item's dice with the metamagic stamped on its spell (a scroll's or wand's Empower and Maximize; SpellDiceRules,
+        // batch 11 step 19, SPL-038, SPL-097); a plain item draws the same dice as before.
         if (spell.HealCount > 0 && spell.HealDice > 0)
-        {
-            int total = 0;
-            for (int i = 0; i < spell.HealCount; i++)
-                total += DiceService.RollDie(spell.HealDice, "Spell healing die");
-            total += spell.BonusHealing;
-            return Mathf.Max(0, total);
-        }
+            return SpellDiceRules.RollFor(spell, SpellDice.Of(spell.HealCount, spell.HealDice, spell.BonusHealing), SpellDiceRules.HealingDieContext);
 
         return Mathf.Max(0, spell.BonusHealing);
     }

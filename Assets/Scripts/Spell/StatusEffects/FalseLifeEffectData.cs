@@ -149,12 +149,18 @@ public class FalseLifeEffectData
 
     /// <summary>
     /// Factory: Creates a False Life spell effect with randomly rolled temp HP.
-    /// PHB p.229: 1d10 + min(CL, 10) temp HP, 1 hour/level duration.
+    /// PHB p.229: 1d10 + min(CL, 10) temp HP, 1 hour/level duration. With the cast's spell clone
+    /// (<paramref name="castSpell"/>), the roll takes its Empower and Maximize (SpellDiceRules.RollFor) and the duration
+    /// its Extend (SpellDurationRules.Rounds) (batch 11 step 19, SPL-038).
     /// </summary>
-    public static FalseLifeEffectData CreateFalseLife(int casterLevel, CharacterController caster)
+    public static FalseLifeEffectData CreateFalseLife(int casterLevel, CharacterController caster, SpellData castSpell = null)
     {
-        int tempHP = CalculateTempHP(casterLevel);
-        int durationRounds = casterLevel * 600; // 1 hour/level = 600 rounds/level
+        int tempHP = castSpell != null
+            ? SpellDiceRules.RollFor(castSpell, CustomSpellDice.FalseLife(casterLevel))
+            : CalculateTempHP(casterLevel);
+        int durationRounds = castSpell != null
+            ? SpellDurationRules.Rounds(castSpell, casterLevel)
+            : casterLevel * 600; // 1 hour/level = 600 rounds/level
 
         var data = new FalseLifeEffectData
         {

@@ -165,9 +165,10 @@ public class ScareEffectData
     /// Factory: Creates a Scare effect for a frightened target (failed Will save).
     /// Duration: 1 round/caster level.
     /// </summary>
-    public static ScareEffectData CreateFrightened(int casterLevel, CharacterController caster)
+    public static ScareEffectData CreateFrightened(int casterLevel, CharacterController caster, int durationRounds = -1)
     {
-        int duration = Mathf.Max(1, casterLevel);
+        // The cast's duration when given (SpellDurationRules.Rounds on the cast's clone, Extend included; batch 11 step 19).
+        int duration = durationRounds > 0 ? durationRounds : Mathf.Max(1, casterLevel);
 
         var data = new ScareEffectData
         {
@@ -189,12 +190,12 @@ public class ScareEffectData
     /// Factory: Creates a Scare effect for a shaken target (successful Will save).
     /// Duration: 1 round.
     /// </summary>
-    public static ScareEffectData CreateShaken(CharacterController caster)
+    public static ScareEffectData CreateShaken(CharacterController caster, int durationRounds = 1)
     {
         var data = new ScareEffectData
         {
             CurrentFearLevel = FearLevel.Shaken,
-            DurationRemainingRounds = 1,
+            DurationRemainingRounds = Mathf.Max(1, durationRounds),
             IsActive = true,
             AttackPenalty = -2,
             SavePenalty = -2,

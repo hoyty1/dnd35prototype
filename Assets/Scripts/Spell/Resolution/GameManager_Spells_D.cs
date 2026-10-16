@@ -356,11 +356,13 @@ public partial class GameManager
         // Calculate buff duration: 10 min/HD of slain creature
         // 10 minutes = 100 rounds; per HD of the killed creature
         int targetHD = target.Stats.GetHitDice();
-        int buffRounds = targetHD * 100; // 10 min * 10 rounds/min * HD
+        // 10 min * 10 rounds/min * HD, doubled by Extend (the timed part of "Instantaneous/10 minutes per HD", PHB p.217;
+        // SpellData.HasTimedAftereffect, delegated RAW reading 2026-10-14; batch 11 step 19, SPL-038)
+        int buffRounds = SpellDurationRules.Extended(spell, targetHD * 100);
 
         // Caster gains 1d8 temporary HP, +2 enhancement to STR and +1 caster level. A second Death Knell while the first
         // lasts refreshes it and adds no more STR (the same spell's enhancement bonus does not stack; SPL-003).
-        int tempHP = DiceService.D8("Death Knell temp HP 1d8");
+        int tempHP = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 8), "Death Knell temp HP 1d8"); // the cast's metamagic (batch 11 step 19)
         int cl = CasterLevelRules.ForCaster(caster, spell);
         bool newlyApplied = EffectService.ApplyDeathKnellBonus(caster, spell, cl, buffRounds, tempHP);
         if (!newlyApplied)
@@ -752,6 +754,7 @@ public partial class GameManager
         tentaclesObj.transform.position = centerWorldPos;
 
         BlackTentaclesAreaEffect tentaclesEffect = tentaclesObj.AddComponent<BlackTentaclesAreaEffect>();
+        tentaclesEffect.Metamagic = SpellDiceRules.MetamagicOf(spell); // the cast's Empower and Maximize for the crush (batch 11 step 19)
         tentaclesEffect.CenterPosition = centerWorldPos;
         tentaclesEffect.RoundsRemaining = durationRounds;
         tentaclesEffect.CasterLevel = casterLevel;

@@ -34,7 +34,7 @@ public static class CastComponentRules
     {
         if (spell == null || !spell.HasVerbalComponent)
             return false;
-        MetamagicData applied = metamagic ?? spell.MetamagicDataRef;
+        MetamagicData applied = SpellDiceRules.MetamagicOf(spell, metamagic);
         return applied == null || !applied.Has(MetamagicFeatId.SilentSpell);
     }
 
@@ -43,7 +43,7 @@ public static class CastComponentRules
     {
         if (spell == null || !spell.HasSomaticComponent)
             return false;
-        MetamagicData applied = metamagic ?? spell.MetamagicDataRef;
+        MetamagicData applied = SpellDiceRules.MetamagicOf(spell, metamagic);
         return applied == null || !applied.Has(MetamagicFeatId.StillSpell);
     }
 

@@ -15,6 +15,9 @@ public class MelfsAcidArrowEffectData
     [System.NonSerialized] public CharacterController Caster;
     public string CasterName;
 
+    /// <summary>The cast's metamagic: Empower and Maximize change every later round's dice (batch 11 step 19, SPL-038).</summary>
+    [System.NonSerialized] public MetamagicData Metamagic;
+
     public void SetCaster(CharacterController caster)
     {
         Caster = caster;

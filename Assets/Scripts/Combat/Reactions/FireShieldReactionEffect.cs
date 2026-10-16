@@ -66,7 +66,10 @@ public class FireShieldReactionEffect : IMeleeReactionEffect
         // Calculate retribution damage: 1d6 + CL (max +15)
         int casterLevel = defender.Stats.FireShieldCasterLevel;
         int clBonus = Mathf.Min(casterLevel, 15);
-        int damage = DiceRoller.D6() + clBonus;
+        // With the metamagic the shield was cast with (its tracked effect's spell clone; batch 11 step 19, SPL-038):
+        // Empower and Maximize change the retribution's 1d6 + CL (PHB p.93, p.97).
+        int damage = SpellDiceRules.Roll(CustomSpellDice.FireShieldRetribution(casterLevel),
+            GameManager.ActiveSpellMetamagic(defender, DND35e.Identifiers.SpellNames.FIRE_SHIELD), null);
 
         bool isWarm = defender.Stats.FireShieldIsWarm;
         string dmgType = isWarm ? "fire" : "cold";

@@ -478,13 +478,32 @@ public static class SpellBuffDispatchTests
             "Barkskin at CL 13: AC +5, and the AC breakdowns' natural armor enhancement term shows it", $"AC {acBefore} -> {fighter.Stats.ArmorClass}");
     }
 
-    /// <summary>Disintegrate's handler applies the cast's metamagic (PHB p.93 Empower, p.97 Maximize).</summary>
+    /// <summary>
+    /// Disintegrate's handler applies the cast's metamagic (PHB p.93 Empower, p.97 Maximize); with both, the maximum plus
+    /// half of a normal roll (PHB p.97-98, SPL-097): every die rolled is forced to 3 here.
+    /// </summary>
     private static void TestDisintegrateMetamagic()
     {
-        int maxed = GameManager.RollDisintegrateDamage(24, true, false, out int noBonus);
-        int both = GameManager.RollDisintegrateDamage(24, true, true, out int empowerBonus);
-        Assert(maxed == 144 && noBonus == 0 && both == 216 && empowerBonus == 72,
-            "Disintegrate: Maximize makes 24d6 144; Empower adds half (as SpellCaster does)", $"{maxed}, {both} (+{empowerBonus})");
+        var maximizeOnly = new MetamagicData();
+        maximizeOnly.AppliedMetamagic.Add(MetamagicFeatId.MaximizeSpell);
+        var maximizeEmpower = new MetamagicData();
+        maximizeEmpower.AppliedMetamagic.Add(MetamagicFeatId.MaximizeSpell);
+        maximizeEmpower.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
+        System.Func<int, string, int, int> previousFilter = ScenarioHooks.RollFilter;
+        ScenarioHooks.RollFilter = (sides, c, natural) => System.Math.Min(3, sides);
+        int maxed, both, noBonus, empowerBonus;
+        try
+        {
+            maxed = GameManager.RollDisintegrateDamage(24, maximizeOnly, out noBonus);
+            both = GameManager.RollDisintegrateDamage(24, maximizeEmpower, out empowerBonus);
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = previousFilter;
+        }
+        Assert(maxed == 144 && noBonus == 0 && both == 180 && empowerBonus == 36,
+            "Disintegrate: Maximize makes 24d6 144; Empower and Maximize add half of a normal roll (24d6 at 3 = 72, +36; SPL-097)",
+            $"{maxed}, {both} (+{empowerBonus})");
 
         CharacterController wizard = Actor("Wizard", "Wizard", 12, 1, intelligence: 18);
         CharacterController target = Actor("Target", "Fighter", 5, 2);

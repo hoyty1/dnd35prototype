@@ -43,7 +43,8 @@ public class SpikeStoneAreaEffect : PersistentAreaEffect
         // Deal damage on entry (1d8 for moving into a square)
         if (!isInitial) // Only on movement, not initial placement
         {
-            int damage = Random.Range(1, MovementDamageDie + 1);
+            // 1d8 with the cast's metamagic, drawn as before (straight from UnityEngine.Random; batch 11 step 19, SPL-038)
+            int damage = SpellDiceRules.RollUnfiltered(SpellDice.Of(1, MovementDamageDie), Metamagic);
 
             // Reflex save for half
             int reflexRoll = DiceRoller.D20();

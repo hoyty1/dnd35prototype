@@ -124,7 +124,7 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
         LegacyCastQuirk.NpcRefusesArea,                          // AI-001
-        LegacyCastQuirk.NpcNullMetamagic,                        // AI-001, SPL-038
+        LegacyCastQuirk.NpcNullMetamagic,                        // AI-001
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
@@ -969,6 +969,7 @@ public static class CastCoreStageOrderTests
             caster.Actions.Reset();
             SpellData silentSpell = shield.Clone();
             silentSpell.MetamagicDataRef = Metamagic(MetamagicFeatId.SilentSpell);
+            silentSpell.IsPreparedMetamagicSlotSpell = true; // the prepared slot's spell, as the menu builds it (batch 11 step 19)
             cast = gm.RunCastSync(SpellCastRequest.ForAI(caster, caster, silentSpell), out o);
             Assert(cast && o.Kind == CastOutcomeKind.Resolved && preparedSilent.IsUsed,
                 "Step 13: a silenced AI caster casts its prepared Silent Spell Shield", "" + o);

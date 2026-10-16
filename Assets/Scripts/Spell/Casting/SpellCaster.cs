@@ -61,6 +61,10 @@ public static class SpellCaster
         var parsedSpellDamageTypes = DamageTextUtils.ParseDamageTypes(spell.DamageType);
         result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(parsedSpellDamageTypes);
         result.Success = true;
+        // The cast's metamagic, else the one stamped on the cast's spell clone (SpellCaster.ApplyMetamagicToSpellData,
+        // a prepared metamagic slot's spell): one fallback with SpellSaveDCRules and every custom resolver's dice
+        // (SpellDiceRules.MetamagicOf; batch 11 step 19, SPL-038).
+        metamagic = SpellDiceRules.MetamagicOf(spell, metamagic);
         result.Metamagic = metamagic;
 
         bool isEmpowered = metamagic != null && metamagic.Has(MetamagicFeatId.EmpowerSpell);
@@ -496,26 +500,25 @@ public static class SpellCaster
                 result.MissileDamages = new int[missileCount];
                 int totalDmg = 0;
 
+                // Each missile is its own roll of the spell's die + bonus; Empower multiplies each missile's result by
+                // one-half (PHB p.93: "roll 1d4+1 and multiply the result by 1-1/2 for each missile"), Maximize sets
+                // its die to the maximum (SpellDiceRules.Roll; SPL-097).
+                SpellDice missileDice = SpellDice.Of(1, spell.DamageDice, spell.BonusDamage);
+                int empowerTotal = 0;
                 for (int i = 0; i < missileCount; i++)
                 {
-                    int missileDmg;
-                    if (isMaximized)
-                        missileDmg = spell.DamageDice + spell.BonusDamage; // Max die value
-                    else
-                        missileDmg = DiceService.RollDie(spell.DamageDice, SpellDiceRules.DamageDieContext) + spell.BonusDamage;
+                    SpellDiceRoll missile = SpellDiceRules.Roll(missileDice, metamagic, SpellDiceRules.DamageDieContext);
+                    int missileDmg = missile.Total;
+                    empowerTotal += missile.EmpowerBonus;
 
                     result.MissileDamages[i] = missileDmg;
                     totalDmg += missileDmg;
                 }
 
-                // Empower: multiply total by 1.5
                 if (isEmpowered)
                 {
-                    int preDmg = totalDmg;
-                    int empowerBonus = Mathf.RoundToInt(totalDmg * 0.5f);
-                    result.EmpowerBonus = empowerBonus;
-                    totalDmg += empowerBonus;
-                    Debug.Log($"[Metamagic] Empower Spell (missiles): base damage {preDmg} + {empowerBonus} (×1.5) = {totalDmg}");
+                    result.EmpowerBonus = empowerTotal;
+                    Debug.Log($"[Metamagic] Empower Spell (missiles): +{empowerTotal} (each missile x1.5) = {totalDmg}");
                 }
 
                 result.DamageRolled = totalDmg;
@@ -528,22 +531,14 @@ public static class SpellCaster
                 result.DiceSides = dice.Sides;
                 result.DiceBonus = dice.Bonus;
 
-                int[] rolls = SpellDiceRules.Roll(dice, isMaximized, SpellDiceRules.DamageDieContext);
-                int dmg = 0;
-                for (int i = 0; i < rolls.Length; i++)
-                    dmg += rolls[i];
-                result.DamageRolls = rolls;
-                dmg += dice.Bonus;
-                int baseDmg = Mathf.Max(0, dmg);
+                SpellDiceRoll roll = SpellDiceRules.Roll(dice, metamagic, SpellDiceRules.DamageDieContext);
+                result.DamageRolls = roll.Rolls;
+                int baseDmg = roll.Total;
 
-                // Empower: multiply variable portion by 1.5
                 if (isEmpowered)
                 {
-                    int preDmg = baseDmg;
-                    int empowerBonus = Mathf.RoundToInt(baseDmg * 0.5f);
-                    result.EmpowerBonus = empowerBonus;
-                    baseDmg += empowerBonus;
-                    Debug.Log($"[Metamagic] Empower Spell: base damage {preDmg} + {empowerBonus} (×1.5) = {baseDmg}");
+                    result.EmpowerBonus = roll.EmpowerBonus;
+                    Debug.Log($"[Metamagic] Empower Spell: base damage {roll.Base} + {roll.EmpowerBonus} (half of the normal roll) = {baseDmg}");
                 }
                 if (isMaximized)
                     Debug.Log($"[Metamagic] Maximize Spell: all {dice.Count}d{dice.Sides} dice set to max ({dice.Sides} each)");
@@ -605,23 +600,19 @@ public static class SpellCaster
             result.DiceSides = dice.Sides;
             result.DiceBonus = dice.Bonus;
 
-            int[] healRolls = SpellDiceRules.Roll(dice, isMaximized, SpellDiceRules.HealingDieContext);
-            int healRoll = 0;
-            for (int i = 0; i < healRolls.Length; i++)
-                healRoll += healRolls[i];
-            result.HealRolls = healRolls;
-            result.HealRolled = healRoll;
+            SpellDiceRoll healRoll = SpellDiceRules.Roll(dice, metamagic, SpellDiceRules.HealingDieContext);
+            result.HealRolls = healRoll.Rolls;
+            int healDice = 0;
+            for (int i = 0; i < healRoll.Rolls.Length; i++)
+                healDice += healRoll.Rolls[i];
+            result.HealRolled = healDice;
 
-            int totalHeal = healRoll + dice.Bonus;
+            int totalHeal = healRoll.Total;
 
-            // Empower: multiply total by 1.5
             if (isEmpowered)
             {
-                int preHeal = totalHeal;
-                int empowerBonus = Mathf.RoundToInt(totalHeal * 0.5f);
-                result.EmpowerBonus = empowerBonus;
-                totalHeal += empowerBonus;
-                Debug.Log($"[Metamagic] Empower Spell: base healing {preHeal} + {empowerBonus} (×1.5) = {totalHeal}");
+                result.EmpowerBonus = healRoll.EmpowerBonus;
+                Debug.Log($"[Metamagic] Empower Spell: base healing {healRoll.Base} + {healRoll.EmpowerBonus} (half of the normal roll) = {totalHeal}");
             }
             if (isMaximized)
                 Debug.Log($"[Metamagic] Maximize Spell: all {dice.Count}d{dice.Sides} heal dice set to max ({dice.Sides} each)");
@@ -849,8 +840,9 @@ public static class SpellCaster
     /// Apply metamagic modifications to a cloned SpellData before casting.
     /// Call this on a Clone() of the spell - do NOT modify the original.
     /// Handles: Enlarge (double range), Extend (double duration), Widen (double area),
-    /// Quicken (change action type).
-    /// Empower/Maximize/Heighten are handled during Cast() resolution.
+    /// Quicken (change action type), and stamps the metamagic on the clone (<see cref="SpellData.MetamagicDataRef"/>).
+    /// Empower/Maximize are applied to the dice where they are rolled (SpellDiceRules.Roll) and Heighten where a level
+    /// is read (SpellSaveDCRules.GetEffectiveSpellLevel).
     /// </summary>
     public static void ApplyMetamagicToSpellData(SpellData spell, MetamagicData metamagic)
     {
@@ -884,11 +876,17 @@ public static class SpellCaster
         // D&D 3.5e PHB p.91: Does NOT affect instantaneous, concentration, or permanent durations.
         if (metamagic.Has(MetamagicFeatId.ExtendSpell))
         {
-            bool canExtend = spell.DurationType != DurationType.Instantaneous &&
-                             spell.DurationType != DurationType.Permanent &&
-                             spell.DurationType != DurationType.Concentration;
+            // The one Extend test, also MetamagicData.CanExtend's offer (SpellDurationRules.IsExtendable; SPL-095).
+            bool canExtend = SpellDurationRules.IsExtendable(spell);
 
-            if (canExtend)
+            if (canExtend && spell.DurationType == DurationType.Concentration)
+            {
+                // "Concentration + N rounds": only the rounds after the concentration ends double (PHB p.94, p.176;
+                // delegated RAW reading 2026-10-14, SpellDurationRules.IsExtendable); ConcentrationRules.TailRounds reads them.
+                spell.ConcentrationTailRounds *= 2;
+                Debug.Log($"[Metamagic] Extend Spell: rounds after concentration doubled to {spell.ConcentrationTailRounds}{(spell.ConcentrationTailScalesWithLevel ? "/level" : "")}");
+            }
+            else if (canExtend)
             {
                 // New duration system: double the DurationValue
                 if (spell.DurationValue > 0)
@@ -945,6 +943,13 @@ public static class SpellCaster
             spell.HasSomaticComponent = false;
             Debug.Log("[Metamagic] Still Spell: somatic component removed");
         }
+
+        // The clone carries its metamagic (batch 11 step 19, SPL-038), so every custom resolver that gets the cast's
+        // spell reads Empower and Maximize for its dice (SpellDiceRules.RollFor), Extend for the rounds it computes itself
+        // (SpellDurationRules.Extended) and Heighten for its level (SpellSaveDCRules, the globe test). It is not a
+        // prepared metamagic slot's spell (SpellData.IsPreparedMetamagicSlotSpell stays false), so the slot counts of the
+        // spell menu never read it (SpellcastingComponent.CountAvailablePreparedSpell).
+        spell.MetamagicDataRef = metamagic;
     }
 
     private static string GetActiveAlignmentProtectionSourceName(CharacterController targetController)

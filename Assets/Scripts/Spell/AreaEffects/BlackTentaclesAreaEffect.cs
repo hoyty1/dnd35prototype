@@ -297,7 +297,8 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
         if (creature == null || creature.Stats == null || creature.Stats.IsDead)
             return;
 
-        int damage = Random.Range(1, DamageDie + 1) + DamageBonus;
+        // 1d6+4 with the cast's metamagic, drawn as before (straight from UnityEngine.Random; batch 11 step 19, SPL-038)
+        int damage = SpellDiceRules.RollUnfiltered(SpellDice.Of(1, DamageDie, DamageBonus), Metamagic);
         int previousHp = creature.Stats.CurrentHP;
         // Spell damage: temporary hit points, resistance and death handling apply; damage reduction does not
         // (MM p.307; SPL-004). Death is at -10 HP (PHB p.145), not at 0.

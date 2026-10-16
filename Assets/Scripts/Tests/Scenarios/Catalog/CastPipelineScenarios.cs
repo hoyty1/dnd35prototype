@@ -67,6 +67,7 @@ namespace Tests.Scenarios
             yield return S("concentration-lapse-unmaintained-npc", () => LapseUnmaintained(ui: false));
             yield return S("concentration-ai-maintains", AiMaintains);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
+            yield return S("cast-globe-heightened", GlobeHeightened);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("sleep-spell-penetration", SleepSpellPenetration);
             yield return S("spell-save-bonus-custom-handler", SpellSaveBonusCustomHandler);
@@ -2121,14 +2122,16 @@ namespace Tests.Scenarios
         /// <summary>
         /// SPL-038 (PHB p.93, Empower Spell: all variable numeric effects are increased by one-half). A Ui wizard 9 with
         /// Empower Spell casts an empowered Fireball (from an added 5th-level slot, SPL-041) at a dummy that fails its save; every d6 is 3, so
-        /// 9d6 = 27 and empowered 40. Today Fireball's custom handler (TryResolveScaledAoEDamageSpell) rolls plain dice.
+        /// 9d6 = 27 and empowered 27 + 13 = 40 (half rounded down, PHB p.304). Fixed in batch 11 step 19: the cast's clone carries
+        /// its metamagic (SpellCaster.ApplyMetamagicToSpellData) and Fireball's custom handler (TryResolveScaledAoEDamageSpell)
+        /// rolls through SpellDiceRules.Roll with it; before, it rolled plain dice and the dummy lost 27.
         /// </summary>
         private static ScenarioDef EmpoweredFireball()
         {
             var empower = new MetamagicData();
             empower.Toggle(MetamagicFeatId.EmpowerSpell);
-            return Rules("rules/cast-empowered-fireball", "An empowered Fireball deals unempowered damage (SPL-038, pinned)")
-                .Covers("SPL-038", "PHB p.93", "PHB p.231")
+            return Rules("rules/cast-empowered-fireball", "An empowered Fireball deals one and a half times its damage (PHB p.93; SPL-038)")
+                .Covers("SPL-038", "PHB p.93", "PHB p.231", "batch 11 step 19")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Empower Spell")), 2, 10, Control.Ui)
                 .Npc("d1", "target_dummy", 10, 10, Control.Idle)
@@ -2142,7 +2145,58 @@ namespace Tests.Scenarios
                     Step.Assert("after", ctx => { FactHpLost(ctx, "fireball", "d1"); FactSlotsSpent(ctx, "spent", "wizard"); return true; }))
                 .Expect("The empowered cast ran and spent a 5th-level slot (PHB p.93: +2 levels)", Expect.All(
                     Expect.StepStatus("wizard", 1, "Cast", 0, "done"), FactIs("spent", "L5+1")))
-                .ExpectKnown("SPL-038", "Today the empowered Fireball deals the plain 9d6 = 27, not 40 (SPL-038)", FactIs("fireball.lost.d1", 27))
+                .Expect("The empowered Fireball deals 9d6 = 27 plus half, 40 (PHB p.93)", FactIs("fireball.lost.d1", 40))
+                .Build();
+        }
+
+        // ── rules/cast-globe-heightened (SPL-141) ───────────────────────
+
+        /// <summary>
+        /// SPL-141's Heighten part, fixed in batch 11 step 19 (PHB p.95: a heightened spell's ability to penetrate a lesser
+        /// globe of invulnerability is calculated at its heightened level; p.236: the lesser globe stops spells of 3rd level
+        /// and lower). The warded dummy raises a Lesser Globe of Invulnerability on itself in round 1. The Ui wizard 7 with
+        /// Heighten Spell casts a plain Magic Missile at it in round 1 (stopped: 1st level) and in round 2 one heightened to
+        /// 4th from an added 4th-level slot, which the globe no longer stops: every d4 is 4, so four missiles of 1d4+1 deal 20.
+        /// Before, LesserGlobeOfInvulnerabilityAreaEffect compared SpellData.SpellLevel, which Heighten never changes.
+        /// </summary>
+        private static ScenarioDef GlobeHeightened()
+        {
+            var heighten = new MetamagicData();
+            heighten.Toggle(MetamagicFeatId.HeightenSpell);
+            heighten.HeightenToLevel = 4;
+            return Rules("rules/cast-globe-heightened", "A Magic Missile heightened to 4th passes a lesser globe of invulnerability (PHB p.95, p.236; SPL-141)")
+                .Covers("SPL-141", "PHB p.95", "PHB p.236", "PHB p.251", "batch 11 step 19")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Heighten Wizard", 7, "Heighten Spell")), 2, 10, Control.Ui)
+                .Npc("warded", "target_dummy", 8, 10, Control.Scripted)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 4, SpellNames.MAGIC_MISSILE); })
+                .Tweak("warded", Sturdy)
+                .Initiative("warded", "wizard")
+                .Force(4, 4, null, -1)
+                .Turn("warded", 1, RaiseLesserGlobe("warded"))
+                .Turn("warded", 2, Step.Pass())
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordHp(ctx, "warded");
+                        SpellData plain = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE).Clone();
+                        SpellData heightened = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE).Clone();
+                        SpellCaster.ApplyMetamagicToSpellData(heightened, heighten);
+                        Fact(ctx, "blocks.plain", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(plain, ctx.Get("warded")));
+                        Fact(ctx, "blocks.heightened", LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(heightened, ctx.Get("warded")));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "warded"),
+                    Step.Assert("after plain", ctx => { FactHpLost(ctx, "plain", "warded"); RecordHp(ctx, "warded"); return true; }))
+                .Turn("wizard", 2,
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "warded", heighten),
+                    Step.Assert("after heightened", ctx => { FactHpLost(ctx, "heightened", "warded"); return true; }))
+                .Expect("Both Ui casts ran", Expect.All(
+                    Expect.StepStatus("wizard", 1, "Cast", 0, "done"), Expect.StepStatus("wizard", 2, "Cast", 0, "done")))
+                .Expect("The lesser globe stops the 1st-level missile and not the one heightened to 4th (PHB p.95, p.236)",
+                    FactsAre(("globe.raised", true), ("blocks.plain", true), ("blocks.heightened", false)))
+                .Expect("The plain missile does nothing; the heightened one deals four missiles of 1d4+1 at 4 = 20 (PHB p.251)",
+                    FactsAre(("plain.lost.warded", 0), ("heightened.lost.warded", 20)))
                 .Build();
         }
 
@@ -2382,6 +2436,9 @@ namespace Tests.Scenarios
                         MetamagicData record = new MetamagicData();
                         record.Toggle(MetamagicFeatId.SilentSpell);
                         spell.MetamagicDataRef = record;
+                        // A prepared metamagic slot's spell, as SpellcastingComponent.GetUniqueAvailableSpells builds it: only
+                        // such a spell counts its metamagic slot (batch 11 step 19; a cast's stamped clone counts as plain).
+                        spell.IsPreparedMetamagicSlotSpell = true;
                         Fact(ctx, "npcsilent.cast", ctx.Gm.TryNPCPerformSpellCastForAI(ctx.Get("npcsilent"), ctx.Get("dummy3"), spell));
                         FactHpLost(ctx, "npcsilent", "dummy3");
                         return true;

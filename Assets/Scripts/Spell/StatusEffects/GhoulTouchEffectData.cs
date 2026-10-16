@@ -208,11 +208,15 @@ public class GhoulTouchEffectData
 
     /// <summary>
     /// Factory: Creates a Ghoul Touch effect with randomly rolled paralysis duration.
-    /// PHB p.235: 1d6+2 rounds paralysis + stench aura.
+    /// PHB p.235: 1d6+2 rounds paralysis + stench aura. With the cast's spell clone (<paramref name="castSpell"/>), the
+    /// roll takes its Empower and Maximize (PHB p.93, p.97; SpellDiceRules.RollFor) and Extend doubles it (PHB p.94;
+    /// SpellDurationRules.Extended) (batch 11 step 19, SPL-038).
     /// </summary>
-    public static GhoulTouchEffectData CreateGhoulTouch(CharacterController caster, CharacterController target)
+    public static GhoulTouchEffectData CreateGhoulTouch(CharacterController caster, CharacterController target, SpellData castSpell = null)
     {
-        int duration = RollParalysisDuration();
+        int duration = castSpell != null
+            ? SpellDurationRules.Extended(castSpell, SpellDiceRules.RollFor(castSpell, SpellDice.Of(1, 6, 2)))
+            : RollParalysisDuration();
 
         var data = new GhoulTouchEffectData
         {

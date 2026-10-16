@@ -218,12 +218,15 @@ public class SpectralHandEffectData
     }
 
     /// <summary>
-    /// Factory: Creates a Spectral Hand effect with a specific HP value (for testing).
+    /// Factory: Creates a Spectral Hand effect with a specific HP value (for testing). <paramref name="durationRounds"/> is
+    /// the cast's duration (SpellDurationRules.Rounds on the cast's spell clone, so Extend doubles it; batch 11 step 19);
+    /// without it, 1 min./level.
     /// </summary>
-    public static SpectralHandEffectData CreateWithHP(int handHP, int casterLevel, int casterIntModifier, CharacterController caster)
+    public static SpectralHandEffectData CreateWithHP(int handHP, int casterLevel, int casterIntModifier, CharacterController caster, int durationRounds = -1)
     {
         int clampedHP = Mathf.Clamp(handHP, 1, 4);
-        int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
+        if (durationRounds < 0)
+            durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
 
         var data = new SpectralHandEffectData
         {

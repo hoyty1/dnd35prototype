@@ -89,7 +89,7 @@ public partial class GameManager
             int cloudDuration = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.284: 1 round/level (SPL-002)
             int saveDc = GetSpellSaveDC(caster, spell);
             Vector3 cloudCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-            CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster);
+            CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell));
 
             var cloudLog = new StringBuilder();
             cloudLog.AppendLine("═══════════════════════════════════");
@@ -284,7 +284,7 @@ public partial class GameManager
         sleet.Caster = caster;
     }
 
-    public void CreateStinkingCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster)
+    public void CreateStinkingCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null)
     {
         GameObject cloudObject = new GameObject("StinkingCloud_Area");
         cloudObject.transform.position = centerPosition;
@@ -295,6 +295,7 @@ public partial class GameManager
         cloud.CasterLevel = Mathf.Max(1, casterLevel);
         cloud.SaveDC = Mathf.Max(1, saveDc);
         cloud.Caster = caster;
+        cloud.Metamagic = metamagic; // the cast's Empower and Maximize for the lingering nausea (batch 11 step 19)
     }
 
     public void CreateSolidFogArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
@@ -429,7 +430,7 @@ public partial class GameManager
         int saveDc = GetSpellSaveDC(caster, spell);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-        CreateWebArea(centerPosition, durationRounds, casterLevel, saveDc, caster);
+        CreateWebArea(centerPosition, durationRounds, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell));
 
         int totalTargets = 0;
         int entangledTargets = 0;
@@ -469,7 +470,7 @@ public partial class GameManager
         return true;
     }
 
-    public void CreateWebArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster)
+    public void CreateWebArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null)
     {
         GameObject webObject = new GameObject("Web_Area");
         webObject.transform.position = centerPosition;
@@ -480,5 +481,6 @@ public partial class GameManager
         web.CasterLevel = Mathf.Max(1, casterLevel);
         web.SaveDC = Mathf.Max(1, saveDc);
         web.Caster = caster;
+        web.Metamagic = metamagic; // the cast's Empower and Maximize for a burning web's fire (batch 11 step 19)
     }
 }

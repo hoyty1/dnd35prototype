@@ -31,19 +31,15 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Rolls <paramref name="diceCount"/>d6 of Disintegrate damage with the cast's metamagic, through the same dice
-    /// rule as SpellCaster.Cast (SpellDiceRules.Roll): Maximize sets every die to 6 (PHB p.97), Empower adds half the
-    /// total (PHB p.93), as SpellCaster does.
+    /// Rolls <paramref name="diceCount"/>d6 of Disintegrate damage with the cast's metamagic, through the one spell dice
+    /// rule (SpellDiceRules.Roll, batch 11 step 19): Maximize sets every die to 6 (PHB p.97), Empower adds half of the
+    /// normally rolled result (PHB p.93), both give the maximum plus half of a normal roll (SPL-097).
     /// </summary>
-    public static int RollDisintegrateDamage(int diceCount, bool maximized, bool empowered, out int empowerBonus)
+    public static int RollDisintegrateDamage(int diceCount, MetamagicData metamagic, out int empowerBonus)
     {
-        var dice = new SpellDice { Count = diceCount, Sides = 6 };
-        int[] rolls = SpellDiceRules.Roll(dice, maximized, SpellDiceRules.DamageDieContext);
-        int damage = 0;
-        for (int i = 0; i < rolls.Length; i++)
-            damage += rolls[i];
-        empowerBonus = empowered ? Mathf.RoundToInt(damage * 0.5f) : 0;
-        return damage + empowerBonus;
+        SpellDiceRoll roll = SpellDiceRules.Roll(SpellDice.Of(diceCount, 6), metamagic, SpellDiceRules.DamageDieContext);
+        empowerBonus = roll.EmpowerBonus;
+        return roll.Total;
     }
 
     private ActiveSpellEffect ApplyDisintegrateEffect(
@@ -95,11 +91,11 @@ public partial class GameManager
 
         // Metamagic from the cast (PHB p.93 Empower: variable numeric effects x1.5; p.97 Maximize: dice at their
         // maximum), applied as SpellCaster.Cast applies it to every other damage spell.
-        MetamagicData metamagic = castResult?.Metamagic;
+        MetamagicData metamagic = SpellDiceRules.MetamagicOf(spell, castResult?.Metamagic);
         bool maximized = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
         bool empowered = metamagic != null && metamagic.Has(MetamagicFeatId.EmpowerSpell);
         int diceCount = DisintegrateDiceCount(casterLevel, saved);
-        int damage = RollDisintegrateDamage(diceCount, maximized, empowered, out int empowerBonus);
+        int damage = RollDisintegrateDamage(diceCount, metamagic, out int empowerBonus);
         if (castResult != null)
             castResult.EmpowerBonus = empowerBonus;
         string metamagicNote = (maximized ? " maximized" : "") + (empowered ? $", empowered +{empowerBonus}" : "");
@@ -178,11 +174,11 @@ public partial class GameManager
 
                 // Determine damage dice: undead get 1d6/CL (max 25d6), others 6d6
                 bool isUndead = SpellTargetingService.IsUndead(target);
-                int diceCount = isUndead ? Mathf.Clamp(casterLevel, 1, 25) : 6;
+                SpellDice sunDice = CustomSpellDice.Sunburst(casterLevel, isUndead);
+                int diceCount = sunDice.Count;
 
-                int damage = 0;
-                for (int i = 0; i < diceCount; i++)
-                    damage += DiceRoller.D6();
+                // With the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+                int damage = SpellDiceRules.RollFor(spell, sunDice);
                 sb.AppendLine($"    Damage roll: {diceCount}d6 = {damage}{(isUndead ? " (Undead)" : "")}");
 
                 // Reflex save + Evasion
@@ -267,7 +263,7 @@ public partial class GameManager
                     sb.AppendLine($"    🔻 Knocked PRONE!");
 
                     // Debris damage: simplified (structures collapse for 8d6 in PHB, minor outdoors)
-                    int debrisDmg = DiceRoller.D6();
+                    int debrisDmg = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6)); // the cast's metamagic (batch 11 step 19)
                     DamageResolutionResult dealt = DealDamage(target, debrisDmg, DamagePackets.Spell(spell.Name, DamageType.Bludgeoning));
                     sb.AppendLine($"    Debris: {dealt.FinalDamage} bludgeoning damage{DescribeMitigation(dealt)}");
 
@@ -397,7 +393,7 @@ public partial class GameManager
 
         target = caster; // Self-only
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int turningLevels = DiceRoller.D4() + 6; // 1d4+6
+        int turningLevels = SpellDiceRules.RollFor(spell, CustomSpellDice.SpellTurningLevels()); // 1d4+6, with the cast's metamagic (batch 11 step 19)
         string casterName = caster.Stats.CharacterName;
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
@@ -691,7 +687,7 @@ public partial class GameManager
 
         target = caster; // Self-only
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel; // 1 round/level
+        int durationRounds = SpellDurationRules.Rounds(spell, casterLevel); // 1 round/level, Extend included (batch 11 step 19)
         string casterName = caster.Stats.CharacterName;
 
         var sb = new StringBuilder();

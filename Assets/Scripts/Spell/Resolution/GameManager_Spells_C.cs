@@ -103,6 +103,8 @@ public partial class GameManager
             string damageReport = "";
             foreach (AbilityDamageEffect dmgEffect in diseaseData.DamageEffects)
             {
+                // The disease's own damage, not the spell's effect: Empower and Maximize do not change it (delegated RAW
+                // reading 2026-10-14, RULES_COVERAGE 4.1; batch 11 step 19).
                 int damage = dmgEffect.RollDamage();
                 if (damage > 0)
                 {

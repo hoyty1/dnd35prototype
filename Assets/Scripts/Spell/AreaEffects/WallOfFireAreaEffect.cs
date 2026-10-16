@@ -293,9 +293,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             + $"AffectedCells.Count={AffectedCells.Count}");
 
         int clBonus = Mathf.Min(CasterLevel, 20);
-        int d1 = DiceRoller.D6();
-        int d2 = DiceRoller.D6();
-        int baseDamage = d1 + d2 + clBonus; // 2d6 + CL
+        // 2d6 + CL with the cast's Empower and Maximize (SpellDiceRules; batch 11 step 19, SPL-038)
+        SpellDiceRoll passRoll = SpellDiceRules.Roll(CustomSpellDice.WallOfFirePassThrough(clBonus), Metamagic, null);
+        int d1 = passRoll.Rolls[0];
+        int d2 = passRoll.Rolls[1];
+        int baseDamage = passRoll.Total; // 2d6 + CL
 
         // Undead take double damage from Wall of Fire (PHB 3.5e p.298)
         bool isUndead = IsCreatureUndead(character);
@@ -951,17 +953,20 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         if (band == 1)
         {
-            int d1 = DiceRoller.D4();
-            int d2 = DiceRoller.D4();
-            damage = d1 + d2; // 2d4
+            // The heat bands' dice with the cast's Empower and Maximize (SpellDiceRules; batch 11 step 19, SPL-038)
+            SpellDiceRoll heat = SpellDiceRules.Roll(SpellDice.Of(2, 4), Metamagic, null);
+            int d1 = heat.Rolls[0];
+            int d2 = heat.Rolls[1];
+            damage = heat.Total; // 2d4
             bandLabel = "within 10 ft";
             diceLabel = "2d4";
             diceRolls = $"{d1}+{d2}";
         }
         else
         {
-            int d1 = DiceRoller.D4();
-            damage = d1; // 1d4
+            SpellDiceRoll heat = SpellDiceRules.Roll(SpellDice.Of(1, 4), Metamagic, null);
+            int d1 = heat.Rolls[0];
+            damage = heat.Total; // 1d4
             bandLabel = "10-20 ft";
             diceLabel = "1d4";
             diceRolls = $"{d1}";

@@ -383,7 +383,12 @@ public partial class GameManager
         }
     }
 
-    private int RollSummonCreatureCount(int spellLevel, int selectedListLevel, out string rollLog)
+    /// <summary>
+    /// The number of creatures a summon monster or summon nature's ally brings from a lower list (PHB p.285): 1d3 from the
+    /// next lower list, 1d4+1 from a list two or more lower. A variable effect the cast's Empower and Maximize change
+    /// (PHB p.93: "affects half again as many targets"; SpellDiceRules.RollFor, batch 11 step 19, SPL-038).
+    /// </summary>
+    private int RollSummonCreatureCount(int spellLevel, int selectedListLevel, out string rollLog, SpellData castSpell = null)
     {
         SummonCreatureCountInfo info = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
 
@@ -395,9 +400,17 @@ public partial class GameManager
 
         if (info.LevelDifference == 1)
         {
-            int d3Roll = DiceService.Roll(1, 3, "Summon creature count 1d3");
+            int d3Roll = SpellDiceRules.RollFor(castSpell, SpellDice.Of(1, 3), "Summon creature count 1d3");
             rollLog = $"Rolling for creature count: 1d3 = {d3Roll}";
             return d3Roll;
+        }
+
+        MetamagicData countMetamagic = SpellDiceRules.MetamagicOf(castSpell);
+        if (countMetamagic != null && (countMetamagic.Has(MetamagicFeatId.EmpowerSpell) || countMetamagic.Has(MetamagicFeatId.MaximizeSpell)))
+        {
+            int changed = SpellDiceRules.Roll(SpellDice.Of(1, 4, 1), countMetamagic, "Summon creature count 1d4");
+            rollLog = $"Rolling for creature count: 1d4+1 with {countMetamagic.GetDisplayName()} = {changed}";
+            return changed;
         }
 
         int d4Roll = DiceService.D4("Summon creature count 1d4");
@@ -657,7 +670,7 @@ public partial class GameManager
         int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId);
         int selectedListLevel = choices.SummonListLevel > 0 ? choices.SummonListLevel : spellLevel;
         SummonCreatureCountInfo countInfo = choices.SummonCountInfo ?? SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
-        int creatureCount = RollSummonCreatureCount(spellLevel, selectedListLevel, out string rollLog);
+        int creatureCount = RollSummonCreatureCount(spellLevel, selectedListLevel, out string rollLog, spell);
         creatureCount = Mathf.Max(1, creatureCount);
 
         string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
@@ -2698,8 +2711,10 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = GetSpellSaveDC(caster, _pendingSpell);
-        int hdPool = DiceService.RollMultiple(2, 4, "Hypnotism HD pool 2d4"); // 2d4
-        int fascinatedRounds = DiceService.RollMultiple(2, 4, "Fascinated rounds 2d4"); // 2d4
+        // 2d4 HD and 2d4 rounds, variable effects the cast's Empower and Maximize change (PHB p.93, p.97); Extend doubles
+        // the rounds (PHB p.94) (ctx.RollSpellDice, SpellDurationRules.Extended; batch 11 step 19, SPL-038)
+        int hdPool = ctx.RollSpellDice(CustomSpellDice.HypnotismHitDice(), "Hypnotism HD pool 2d4"); // 2d4
+        int fascinatedRounds = SpellDurationRules.Extended(_pendingSpell, ctx.RollSpellDice(CustomSpellDice.HypnotismRounds(), "Fascinated rounds 2d4")); // 2d4
 
         List<CharacterController> candidates = new List<CharacterController>();
         for (int i = 0; i < targets.Count; i++)
@@ -3097,7 +3112,7 @@ public partial class GameManager
                 continue;
             }
 
-            ColorSprayEffectData effectData = BuildColorSprayEffectData(caster, targetHd);
+            ColorSprayEffectData effectData = BuildColorSprayEffectData(caster, targetHd, _pendingSpell);
             ApplyColorSprayStageConditions(target, effectData, _pendingSpell);
             affectedCount++;
 
@@ -3119,7 +3134,12 @@ public partial class GameManager
         return logBuilder.ToString();
     }
 
-    private ColorSprayEffectData BuildColorSprayEffectData(CharacterController caster, int targetHd)
+    /// <summary>
+    /// Color Spray's staged durations by the target's Hit Dice (PHB p.210). The rolled ones (2d4, 1d4) are variable effects
+    /// the cast's Empower and Maximize change (PHB p.93, p.97; SpellDiceRules.RollFor, batch 11 step 19, SPL-038); Extend
+    /// does not, the spell being instantaneous (PHB p.94, p.210).
+    /// </summary>
+    private ColorSprayEffectData BuildColorSprayEffectData(CharacterController caster, int targetHd, SpellData castSpell = null)
     {
         int hd = Mathf.Max(1, targetHd);
 
@@ -3131,14 +3151,14 @@ public partial class GameManager
         if (hd <= 2)
         {
             hdTier = 1;
-            stage1Duration = DiceService.RollMultiple(2, 4, "Disease stage 1 duration 2d4"); // 2d4
-            stage2Duration = DiceService.D4("Disease stage 2 duration 1d4"); // 1d4
+            stage1Duration = SpellDiceRules.RollFor(castSpell, SpellDice.Of(2, 4), "Disease stage 1 duration 2d4"); // 2d4
+            stage2Duration = SpellDiceRules.RollFor(castSpell, SpellDice.Of(1, 4), "Disease stage 2 duration 1d4"); // 1d4
             stage3Duration = 1;
         }
         else if (hd <= 4)
         {
             hdTier = 2;
-            stage1Duration = DiceService.D4("Disease stage 1 duration 1d4"); // 1d4
+            stage1Duration = SpellDiceRules.RollFor(castSpell, SpellDice.Of(1, 4), "Disease stage 1 duration 1d4"); // 1d4
             stage2Duration = 1;
             stage3Duration = 0;
         }
@@ -3412,7 +3432,8 @@ public partial class GameManager
 
         if (result != null && result.RequiredSave && result.SaveSucceeded)
         {
-            const int shakenRounds = 1;
+            // 1 round, doubled by Extend (PHB p.94; SpellDurationRules.Extended, batch 11 step 19, SPL-038)
+            int shakenRounds = SpellDurationRules.Extended(spell, 1);
             if (_conditionService != null)
             {
                 _conditionService.ApplyCondition(
@@ -3430,12 +3451,14 @@ public partial class GameManager
             }
 
             result.BuffApplied = true;
-            result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Cause Fear).";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Cause Fear and is shaken for 1 round."));
+            result.BuffDescription = $"Debuff: Shaken for {SpellDurationRules.DescribeRounds(shakenRounds)} (successful Will save reduces Cause Fear).";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Cause Fear and is shaken for {SpellDurationRules.DescribeRounds(shakenRounds)}."));
             return true;
         }
 
-        int frightenedRounds = DiceService.D4("Frightened duration 1d4");
+        // 1d4 rounds (PHB p.208), with the cast's metamagic: Empower and Maximize change the roll (PHB p.93, p.97), Extend
+        // doubles it (PHB p.94) (batch 11 step 19, SPL-038)
+        int frightenedRounds = SpellDurationRules.Extended(spell, SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4), "Frightened duration 1d4"));
         var fearData = new FrightenedConditionData
         {
             Caster = caster,
@@ -3538,7 +3561,7 @@ public partial class GameManager
         }
 
         // Failed save: apply paralysis + stench
-        GhoulTouchEffectData ghoulEffect = GhoulTouchEffectData.CreateGhoulTouch(caster, target);
+        GhoulTouchEffectData ghoulEffect = GhoulTouchEffectData.CreateGhoulTouch(caster, target, spell);
 
         // Apply paralysis via CharacterController
         target.ApplyGhoulTouchEffect(ghoulEffect);
@@ -3698,8 +3721,9 @@ public partial class GameManager
         // Will save partial
         if (result != null && result.RequiredSave && result.SaveSucceeded)
         {
-            // Successful save: shaken for 1 round
-            ScareEffectData shakenEffect = ScareEffectData.CreateShaken(caster);
+            // Successful save: shaken for 1 round, doubled by Extend (PHB p.94; batch 11 step 19, SPL-038)
+            int shakenRounds = SpellDurationRules.Extended(spell, 1);
+            ScareEffectData shakenEffect = ScareEffectData.CreateShaken(caster, shakenRounds);
             target.ApplyScareEffect(shakenEffect);
 
             if (_conditionService != null)
@@ -3707,7 +3731,7 @@ public partial class GameManager
                 _conditionService.ApplyCondition(
                     target,
                     CombatConditionType.Shaken,
-                    1,
+                    shakenRounds,
                     source: caster,
                     sourceNameOverride: spell.Name,
                     sourceCategory: "Spell",
@@ -3717,16 +3741,17 @@ public partial class GameManager
             if (result != null)
             {
                 result.BuffApplied = true;
-                result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Scare).";
+                result.BuffDescription = $"Debuff: Shaken for {SpellDurationRules.DescribeRounds(shakenRounds)} (successful Will save reduces Scare).";
             }
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Scare and is shaken for 1 round (-2 to attacks, saves, checks)."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Scare and is shaken for {SpellDurationRules.DescribeRounds(shakenRounds)} (-2 to attacks, saves, checks)."));
             return true;
         }
 
-        // Failed save: frightened for 1 round/level
-        int frightenedRounds = Mathf.Max(1, casterLevel);
-        ScareEffectData frightenedEffect = ScareEffectData.CreateFrightened(casterLevel, caster);
+        // Failed save: frightened for 1 round/level, the cast's duration (SpellDurationRules.Rounds on the cast's clone, so
+        // Extend doubles it; batch 11 step 19, SPL-038)
+        int frightenedRounds = SpellDurationRules.Rounds(spell, casterLevel);
+        ScareEffectData frightenedEffect = ScareEffectData.CreateFrightened(casterLevel, caster, frightenedRounds);
         target.ApplyScareEffect(frightenedEffect);
 
         var fearData = new FrightenedConditionData
@@ -3845,13 +3870,14 @@ public partial class GameManager
 
             if (saveSuccess)
             {
-                // Successful save: Shaken for 1 round
+                // Successful save: Shaken for 1 round, doubled by Extend (PHB p.94; batch 11 step 19, SPL-038)
+                int fearShakenRounds = SpellDurationRules.Extended(_pendingSpell, 1);
                 if (_conditionService != null)
                 {
                     _conditionService.ApplyCondition(
                         target,
                         CombatConditionType.Shaken,
-                        1,
+                        fearShakenRounds,
                         source: caster,
                         sourceNameOverride: _pendingSpell.Name,
                         sourceCategory: "Spell",
@@ -3859,16 +3885,16 @@ public partial class GameManager
                 }
                 else
                 {
-                    target.ApplyCondition(CombatConditionType.Shaken, 1, casterName);
+                    target.ApplyCondition(CombatConditionType.Shaken, fearShakenRounds, casterName);
                 }
 
                 shakenCount++;
-                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {fearWillMod} = {saveTotal} ≥ DC {saveDc} — Shaken for 1 round.");
+                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {fearWillMod} = {saveTotal} ≥ DC {saveDc} — Shaken for {SpellDurationRules.DescribeRounds(fearShakenRounds)}.");
             }
             else
             {
                 // Failed save: Panicked for 1 round/level
-                int panickedRounds = Mathf.Max(1, casterLevel);
+                int panickedRounds = SpellDurationRules.Rounds(_pendingSpell, casterLevel); // the cast's duration, Extend included (batch 11 step 19)
 
                 var fearData = new FrightenedConditionData
                 {
@@ -3931,12 +3957,17 @@ public partial class GameManager
     }
 
     private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
+        => RollRayOfEnfeeblementPenalty(caster, null);
+
+    /// <summary>The Strength penalty, 1d6 + 1 per two caster levels (max +5), with the cast's metamagic (<paramref name="castSpell"/>'s stamp).</summary>
+    private static int RollRayOfEnfeeblementPenalty(CharacterController caster, SpellData castSpell)
     {
         // The cast's caster level (CasterLevelRules: a scroll's or wand's own, the casting class's; SPL-016, SPL-017).
         int casterLevel = CasterLevelRules.ForCaster(caster, SpellDatabase.GetSpell(SpellNames.RAY_OF_ENFEEBLEMENT));
         int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
-        int d6 = DiceService.D6("Enervation damage");
-        return d6 + levelBonus;
+        // 1d6 + the level bonus, a variable effect the cast's Empower and Maximize change (PHB p.93, p.97; SpellDiceRules,
+        // batch 11 step 19, SPL-038).
+        return SpellDiceRules.RollFor(castSpell, SpellDice.Of(1, 6, levelBonus), "Enervation damage");
     }
 
     private bool TryResolveRayOfEnfeeblementSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
@@ -3950,7 +3981,7 @@ public partial class GameManager
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRayOfEnfeeblementSpellEffect));
 
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, CasterLevelRules.ForCaster(caster, spell)));
-        int penalty = CalculateRayOfEnfeeblementPenalty(caster);
+        int penalty = RollRayOfEnfeeblementPenalty(caster, spell);
 
         EnfeebledConditionData previousEffect = target.ActiveEnfeeblementEffect;
         int previousPenalty = previousEffect != null ? Mathf.Max(0, previousEffect.StrengthPenaltyAmount) : 0;
@@ -3999,9 +4030,10 @@ public partial class GameManager
         int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
-        int intDamage = DiceService.D6("Touch of Idiocy INT damage");
-        int wisDamage = DiceService.D6("Touch of Idiocy WIS damage");
-        int chaDamage = DiceService.D6("Touch of Idiocy CHA damage");
+        // 1d6 to each score, each a variable effect the cast's Empower and Maximize change (PHB p.93, p.97; batch 11 step 19)
+        int intDamage = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6), "Touch of Idiocy INT damage");
+        int wisDamage = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6), "Touch of Idiocy WIS damage");
+        int chaDamage = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6), "Touch of Idiocy CHA damage");
 
         TouchOfIdiocyConditionData previous = target.ActiveTouchOfIdiocyEffect;
         if (previous != null)
@@ -4069,9 +4101,11 @@ public partial class GameManager
         int initialDamage = Mathf.Max(0, result.DamageDealt);
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"Melf's Acid Arrow hits for {initialDamage} damage"));
 
-        int lingeringRounds = CalculateMelfsAcidArrowAdditionalRounds(caster);
+        // The duration is 1 round + 1 round per three levels; Extend doubles the whole of it (PHB p.94, p.253), and the
+        // later rounds' 2d4 take the cast's Empower and Maximize (batch 11 step 19, SPL-038).
+        int lingeringRounds = SpellDurationRules.Extended(spell, CalculateMelfsAcidArrowAdditionalRounds(caster) + 1) - 1;
         if (lingeringRounds > 0)
-            target.ApplyMelfsAcidArrowEffect(lingeringRounds, caster);
+            target.ApplyMelfsAcidArrowEffect(lingeringRounds, caster, SpellDiceRules.MetamagicOf(spell));
         else
             target.ClearMelfsAcidArrowEffect();
 
@@ -4089,9 +4123,8 @@ public partial class GameManager
 
         int diceCount = Mathf.Max(1, effectData.DamageDiceCount);
         int diceSides = Mathf.Max(2, effectData.DamageDiceSides);
-        int rolledDamage = 0;
-        for (int i = 0; i < diceCount; i++)
-            rolledDamage += DiceService.RollDie(diceSides, "Spectral Hand damage die");
+        // The arrow's 2d4 with its cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038). The dice keep their old label.
+        int rolledDamage = SpellDiceRules.Roll(SpellDice.Of(diceCount, diceSides), effectData.Metamagic, "Spectral Hand damage die");
 
         var packet = new DamagePacket
         {
@@ -4294,17 +4327,20 @@ public partial class GameManager
 
             int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             bool isIntelligent = target.IsIntelligentUndead();
+            // 1 day/level from the cast's clone, so an extended cast lasts 2 days/level (PHB p.94, p.211; batch 11 step 19).
+            int commandRounds = SpellDurationRules.Rounds(spell, casterLevel);
+            int commandDays = Mathf.Max(1, commandRounds / SpellDurationRules.RoundsPerDay);
 
             CommandUndeadEffectData effectData;
             if (isIntelligent)
             {
-                effectData = CommandUndeadEffectData.CreateForIntelligent(caster, target, casterLevel);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (intelligent undead — Friendly attitude, {casterLevel} day(s))"));
+                effectData = CommandUndeadEffectData.CreateForIntelligent(caster, target, casterLevel, commandRounds);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (intelligent undead — Friendly attitude, {commandDays} day(s))"));
             }
             else
             {
-                effectData = CommandUndeadEffectData.CreateForNonintelligent(caster, target, casterLevel);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (mindless undead — full obedience, {casterLevel} day(s))"));
+                effectData = CommandUndeadEffectData.CreateForNonintelligent(caster, target, casterLevel, commandRounds);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (mindless undead — full obedience, {commandDays} day(s))"));
             }
 
             target.ApplyCommandUndeadEffect(effectData);
@@ -4427,7 +4463,7 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.ENERVATION)
         {
             string sourceName = spell.Name;
-            int negativeLevels = DiceService.D4("Enervation negative levels 1d4");
+            int negativeLevels = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4), "Enervation negative levels 1d4"); // the cast's metamagic (batch 11 step 19)
             int total = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, sourceName);
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("☠", $"{target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total})."));
             return null;
@@ -5018,7 +5054,8 @@ public partial class GameManager
             int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
             int intMod = recipient.Stats.INTMod;
 
-            // Roll 1d4 for HP loss / hand HP
+            // Roll 1d4 for HP loss / hand HP. A price the caster pays, not a variable effect of the spell, so Empower and
+            // Maximize leave it (delegated RAW reading 2026-10-14, batch 11 step 19; PHB p.93 raises what the spell does).
             int handHP = SpectralHandEffectData.RollHandHP();
 
             // Check if caster has enough HP (must have at least 1 HP after loss)
@@ -5029,7 +5066,8 @@ public partial class GameManager
             }
 
             // Create the effect data
-            SpectralHandEffectData spectralHandEffect = SpectralHandEffectData.CreateWithHP(handHP, casterLevel, intMod, recipient);
+            SpectralHandEffectData spectralHandEffect = SpectralHandEffectData.CreateWithHP(handHP, casterLevel, intMod, recipient,
+                SpellDurationRules.Rounds(spell, casterLevel)); // the cast's duration, Extend included (batch 11 step 19)
 
             // Track via StatusEffectManager for duration and dispel
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
@@ -5074,7 +5112,8 @@ public partial class GameManager
 
             // Create the attribute enhancement effect data
             AttributeEnhancementEffectData enhancementEffect = AttributeEnhancementEffectData.Create(
-                spell.SpellId, casterLevel, targetHD, caster);
+                spell.SpellId, casterLevel, targetHD, caster,
+                SpellDurationRules.Rounds(spell, casterLevel)); // the cast's duration, Extend included (batch 11 step 19)
 
             // Track via StatusEffectManager for duration and dispel (handles stat bonus apply/reverse)
             StatusEffectManager targetStatusMgr = target.StatusEffectManager;
@@ -5131,7 +5170,7 @@ public partial class GameManager
             int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
 
             // Roll temp HP: 1d10 + min(CL, 10)
-            FalseLifeEffectData falseLifeEffect = FalseLifeEffectData.CreateFalseLife(casterLevel, recipient);
+            FalseLifeEffectData falseLifeEffect = FalseLifeEffectData.CreateFalseLife(casterLevel, recipient, spell); // the cast's metamagic (batch 11 step 19)
 
             // Track via StatusEffectManager for duration and dispel
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
@@ -6535,7 +6574,10 @@ public partial class GameManager
                 continue;
 
             SpellData source = string.IsNullOrEmpty(summon.SourceSpellId) ? null : SpellDatabase.GetSpell(summon.SourceSpellId);
-            int tail = Mathf.Max(1, source != null ? ConcentrationRules.TailRounds(source, CasterLevelRules.ForCaster(caster, source)) : summon.TotalDurationRounds);
+            // The tail BeginSummonSwarmConcentration set from the cast's clone (an extended cast's doubled tail, batch 11
+            // step 19), else the template's.
+            int tail = Mathf.Max(1, summon.TotalDurationRounds > 0 ? summon.TotalDurationRounds
+                : source != null ? ConcentrationRules.TailRounds(source, CasterLevelRules.ForCaster(caster, source)) : 0);
             summon.HasEnteredPostConcentrationDuration = true;
             summon.RemainingRounds = tail;
             summon.TotalDurationRounds = tail;

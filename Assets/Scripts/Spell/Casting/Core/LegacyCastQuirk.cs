@@ -101,7 +101,10 @@ public enum LegacyCastQuirk : long
     NpcRefusesArea = 1 << 17,
 
     /// <summary>
-    /// The cast runs without metamagic whatever the request carries: the Legality stage drops it (AI-001, SPL-038).
+    /// The cast runs without metamagic whatever the request carries: the Legality stage drops it (AI-001). A
+    /// prepared metamagic slot's spell still carries its metamagic on its clone (SpellData.MetamagicDataRef), which the save DC,
+    /// the components and since batch 11 step 19 the dice read (SpellDiceRules.MetamagicOf); the AI's candidates are the slots'
+    /// plain spells, so no NPC cast has one today.
     /// Batch 11 step 21 (metamagic-legality-and-slots) casts a prepared metamagic slot's spell with its metamagic.
     /// </summary>
     NpcNullMetamagic = 1 << 18,

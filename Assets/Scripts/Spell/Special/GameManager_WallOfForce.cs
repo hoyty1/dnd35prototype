@@ -138,8 +138,8 @@ public partial class GameManager
     {
         int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level (SPL-016, SPL-017)
 
-        // Duration: 1 round per caster level
-        int durationRounds = Mathf.Max(1, casterLevel);
+        // Duration: 1 round per caster level, from the cast's spell clone so Extend doubles it (batch 11 step 19, SPL-038)
+        int durationRounds = SpellDurationRules.Rounds(spell, casterLevel);
 
         // Compute center and direction from AoE cells
         Vector2Int centerCell = aoeCells.Count > 0 ? aoeCells.ElementAt(aoeCells.Count / 2) : Vector2Int.zero;

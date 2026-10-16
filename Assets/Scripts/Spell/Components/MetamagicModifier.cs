@@ -143,6 +143,7 @@ public static class MetamagicSystem
         modified.AppliedMetamagics = new List<MetamagicFeatId>(appliedTypes);
         modified.HasRodMetamagic = hasRodMetamagic;
         modified.MetamagicDataRef = metamagicData;
+        modified.IsPreparedMetamagicSlotSpell = true; // a prepared metamagic spell (SpellcastingComponent.CountAvailablePreparedSpell)
 
         Debug.Log($"[MetamagicSystem] Prepared {baseSpell.Name}: " +
                   $"Lv{baseSpell.SpellLevel} → Lv{effectiveLevel} " +

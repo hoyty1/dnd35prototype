@@ -286,7 +286,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will", // If targeted on a creature
-                    BuffDurationRounds = 3, // legacy marker only: MetamagicData.CanExtend reads a nonzero value as "has a duration"; the duration is the fields below
+                    BuffDurationRounds = 3, // legacy field only; the duration is the fields below (Extend reads them, SpellDurationRules.IsExtendable)
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true, // 1 min./level (D), PHB p.279 (owner interpretation 2026-10-11, SPL-003: the owner's PHB line, not the SRD's 1 round/level the code used before)

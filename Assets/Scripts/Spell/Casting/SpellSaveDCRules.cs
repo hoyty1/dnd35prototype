@@ -133,7 +133,7 @@ public static class SpellSaveDCRules
 
         string resolvedClass = ResolveCastingClass(caster, spell, castingClass);
         result.CastingClass = resolvedClass;
-        result.SpellLevel = GetEffectiveSpellLevel(spell, resolvedClass, metamagic ?? spell.MetamagicDataRef);
+        result.SpellLevel = GetEffectiveSpellLevel(spell, resolvedClass, SpellDiceRules.MetamagicOf(spell, metamagic));
         result.AbilityModifier = GetKeyAbilityModifier(caster, resolvedClass, out result.Ability);
         result.SpellFocusBonus = FeatManager.GetSpellFocusDCBonus(caster, spell.School);
         result.RacialBonus = GetRacialDCBonus(caster, spell);

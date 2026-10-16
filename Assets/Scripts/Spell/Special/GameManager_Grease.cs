@@ -252,13 +252,14 @@ public partial class GameManager
 
     /// <summary>
     /// The save DC of a spell resolved by a GameManager handler, through the one DC rule
-    /// (<see cref="SpellSaveDCRules"/>, SPL-001). When <paramref name="spell"/> is the pending PC cast, its metamagic
-    /// (<c>_pendingMetamagic</c>) is passed so a heightened spell uses the heightened level (PHB p.95).
+    /// (<see cref="SpellSaveDCRules"/>, SPL-001). The metamagic is the one on the cast's own spell clone
+    /// (<see cref="SpellData.MetamagicDataRef"/>, stamped by SpellCaster.ApplyMetamagicToSpellData; batch 11 step 19), which
+    /// SpellSaveDCRules.Compute reads, so a heightened spell uses the heightened level (PHB p.95) for every caster and
+    /// path, whether or not the spell is the open PC cast.
     /// </summary>
     private int GetSpellSaveDC(CharacterController caster, SpellData spell)
     {
-        MetamagicData metamagic = spell != null && ReferenceEquals(spell, _pendingSpell) ? _pendingMetamagic : null;
-        return SpellSaveDCRules.Compute(caster, spell, metamagic);
+        return SpellSaveDCRules.Compute(caster, spell, null);
     }
 
     /// <summary>Grease lasts 1 round per caster level (PHB p.237), at the caster level of the cast's own spell.</summary>

@@ -1353,11 +1353,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 153,
+      "passed": 177,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 11 step 12 (2026-10-15): the phase 6 tests check the live action-cost rule CastActionRules instead of the dormant class-based MetamagicSystem.GetMetamagicCastingAction: a spontaneous metamagic cast (spell per day, cleric conversion, hold of a spontaneous spell) is a full-round action and a prepared one keeps its standard action, decided by the cast's source (PHB p.88), and a spontaneous metamagic Feather Fall is a full-round action, not the round's free-action spell (delegated RAW reading 2026-10-14); scrolls and wands charge the item's action (SPL-163; the spell's casting time is ITM-086) and a scroll of Feather Fall is not the round's free-action spell (ITM-086); CastSource.SlotKindFor gives a caster with no spellcasting a prepared slot; Quicken Spell is refused on a spontaneous cast (PHB p.98) and is a free action and the round's quickened spell on a prepared one; Sleep, Deep Slumber, Hypnotism, Call Lightning, Summon Monster I, Summon Nature's Ally I and Enlarge Person are full-round casts (PHB p.174, SPL-162); Feather Fall is a free action that counts toward the quickened-spell limit (PHB p.174, p.229). 131 before, 153 since (149 before the step 12 review)."
+      "notes": "Batch 11 step 12 (2026-10-15): the phase 6 tests check the live action-cost rule CastActionRules instead of the dormant class-based MetamagicSystem.GetMetamagicCastingAction: a spontaneous metamagic cast (spell per day, cleric conversion, hold of a spontaneous spell) is a full-round action and a prepared one keeps its standard action, decided by the cast's source (PHB p.88), and a spontaneous metamagic Feather Fall is a full-round action, not the round's free-action spell (delegated RAW reading 2026-10-14); scrolls and wands charge the item's action (SPL-163; the spell's casting time is ITM-086) and a scroll of Feather Fall is not the round's free-action spell (ITM-086); CastSource.SlotKindFor gives a caster with no spellcasting a prepared slot; Quicken Spell is refused on a spontaneous cast (PHB p.98) and is a free action and the round's quickened spell on a prepared one; Sleep, Deep Slumber, Hypnotism, Call Lightning, Summon Monster I, Summon Nature's Ally I and Enlarge Person are full-round casts (PHB p.174, SPL-162); Feather Fall is a free action that counts toward the quickened-spell limit (PHB p.174, p.229). 131 before, 153 since (149 before the step 12 review). Batch 11 step 19 (2026-10-16): SpellCaster.ApplyMetamagicToSpellData stamps the metamagic on the clone (SPL-038) and SpellCastRequest.CloneForCast keeps it with the prepared-slot flag; Empower with Maximize is the maximum plus half of a normal roll (SPL-097, PHB p.97-98); the Extend offer MetamagicData.CanExtend is its effect's test SpellDurationRules.IsExtendable for every spell (SPL-095: Blur, Divine Power, Hypnotism and Death Knell's timed part offered; permanent, instantaneous and concentration spells not); after the step 19 review a \"Concentration + N rounds\" spell is offered Extend and doubles only its tail (Rainbow Pattern CL 5: 5 to 10 rounds after concentration, Summon Swarm offered; delegated RAW reading 2026-10-14, PHB p.94, p.176) and an extended Command Undead lasts 2 days per level; 153 before, 172 after step 19, 177 after its review."
     },
     {
       "type": "Tests.Magic.SpellRangeCategoryTests",
@@ -1452,11 +1452,33 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 119,
+      "passed": 137,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "SPL-005: SpellDiceRules dice at a caster level (Burning Hands, Shocking Grasp and Flame Strike 1 die per level with their caps; Cure and Inflict Light to Critical Wounds +1 per level, max +5/+10/+15/+20; Cure and Inflict Minor Wounds 1 point, Inflict Minor Will negates), the energy outcome on living, undead and construct targets, and SpellCaster.Cast with every die at its maximum: scaled damage, cure and inflict on the living, a cure harming an undead (touch attack, Will half that a willing undead still rolls, positive damage, spell resistance), an inflict spell curing an undead (no attack roll, no save), no effect on a construct, BakeForCasterLevel for item caster levels without touching the template, the combat scroll and wand pipelines rolling at the item's caster level (GameManager.BuildScrollPipelineSpell/BuildWandPipelineSpell, DMG p.213, p.237), and factory potion and wand heal dice (Cure Minor Wounds a flat 1 point) (PHB p.207, p.215-216, p.231, p.244, p.279; MM p.307)"
+      "notes": "SPL-005: SpellDiceRules dice at a caster level (Burning Hands, Shocking Grasp and Flame Strike 1 die per level with their caps; Cure and Inflict Light to Critical Wounds +1 per level, max +5/+10/+15/+20; Cure and Inflict Minor Wounds 1 point, Inflict Minor Will negates), the energy outcome on living, undead and construct targets, and SpellCaster.Cast with every die at its maximum: scaled damage, cure and inflict on the living, a cure harming an undead (touch attack, Will half that a willing undead still rolls, positive damage, spell resistance), an inflict spell curing an undead (no attack roll, no save), no effect on a construct, BakeForCasterLevel for item caster levels without touching the template, the combat scroll and wand pipelines rolling at the item's caster level (GameManager.BuildScrollPipelineSpell/BuildWandPipelineSpell, DMG p.213, p.237), and factory potion and wand heal dice (Cure Minor Wounds a flat 1 point) (PHB p.207, p.215-216, p.231, p.244, p.279; MM p.307); batch 11 step 19 (2026-10-16, SPL-038, SPL-097): SpellDiceRules.Roll with metamagic (Empower the result x1.5 rounded down, Maximize every die at its maximum and none rolled, both the maximum plus half of a normal roll, a dieless result unchanged, the fixed term multiplied as PHB p.93's magic missile) and SpellCaster.Cast through it (Burning Hands plain 15, Empowered 22, Maximized 20, both 27; a clone stamped with Maximize; Magic Missile empowered per missile; an Empowered Cure Light Wounds); after the step 19 review SpellDiceRules.MetamagicOf prefers the request only when it applies a feat, so a Maximize-stamped clone cast with an empty MetamagicData still deals its maximum; 119 before, 136 after step 19, 137 after its review"
+    },
+    {
+      "type": "Tests.Magic.CustomSpellDiceTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 195,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 19 (2026-10-16, SPL-038, SPL-097): the dice spec of every custom resolver that rolls its own spell dice (CustomSpellDice: Fireball and Lightning Bolt, Call Lightning, Ice Storm's two parts, Shout and its deafness, Cone of Cold, Chain Lightning, Circle of Death, Sunburst, Searing Light as the handler rolls it (SPL-177), Vampiric Touch, Melf's Acid Arrow's later rounds, Produce Flame, Heat Metal, the alignment bursts, Disintegrate, Phantasmal Killer, Spiritual Weapon, Calm Animals, Hypnotism, Fire Shield, Wall of Fire, Black Tentacles, False Life, Spell Turning) against the PHB, each rolled through SpellDiceRules.RollWith plain, Empowered, Maximized and with both over a die source rolling 3: plain draws one die per die of the spec, Maximize none. Pure; 195/195 in edit mode on its first run."
+    },
+    {
+      "type": "Tests.Magic.MetamagicOnSpellTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 18,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 19 (2026-10-16, SPL-038, SPL-141): the metamagic stamped on a cast's clone never changes the spell menu's counts: only a prepared metamagic slot's spell (SpellData.IsPreparedMetamagicSlotSpell) counts its metamagic slots in SpellcastingComponent.CountAvailablePreparedSpell, CanCast and CanCastSpell; an Empower- or Maximize-stamped clone counts as the plain spell (a wizard 5 with two plain Magic Missiles and a Silent one); CloneForCast keeps the slot spell's count; a globe compares the heightened level (LesserGlobeOfInvulnerabilityAreaEffect.EffectiveSpellLevel, PHB p.95, p.236), not Empower's slot. Builds a wizard GameObject; 18/18 in edit mode on its first run."
     },
     {
       "type": "Tests.Magic.SpellDurationRulesTests",

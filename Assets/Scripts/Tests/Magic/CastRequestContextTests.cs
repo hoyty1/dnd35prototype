@@ -102,7 +102,8 @@ public static class CastRequestContextTests
         Assert(enlarged.Spell.RangeSquares == templateRange * 2 && missile.RangeSquares == templateRange,
             "ForUi with Enlarge Spell: the clone's range doubles and the template's does not (PHB p.94)",
             "clone " + enlarged.Spell.RangeSquares + ", template " + missile.RangeSquares + ", was " + templateRange);
-        Assert(enlarged.Spell.MetamagicDataRef == null, "ForUi with metamagic: a plain clone, as the spell menu made it");
+        Assert(ReferenceEquals(enlarged.Spell.MetamagicDataRef, enlarge) && !enlarged.Spell.IsPreparedMetamagicSlotSpell,
+            "ForUi with metamagic: a plain clone stamped with the cast's metamagic, not a prepared-slot spell (batch 11 step 19, SPL-038)");
 
         SpellData prebuilt = missile.Clone();
         SpellCastRequest item = SpellCastRequest.ForUiPrebuilt(null, prebuilt, null, new CastSource { Kind = CastSourceKind.Wand });

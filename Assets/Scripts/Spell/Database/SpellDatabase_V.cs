@@ -52,6 +52,7 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = false,
                     SpellResistanceApplies = true,
                     DurationType = DurationType.Instantaneous,
+                    HasTimedAftereffect = true, // PHB p.298: Instantaneous/1 hour; Extend doubles the temporary hit points' hour (SpellDurationRules.IsExtendable)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     HasVerbalComponent = true,

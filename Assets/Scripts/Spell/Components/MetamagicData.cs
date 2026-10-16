@@ -163,11 +163,12 @@ public class MetamagicData
     }
 
     /// <summary>
-    /// Check if Extend can be applied (spell must have a duration).
+    /// Check if Extend can be applied: the same test as its effect in SpellCaster.ApplyMetamagicToSpellData
+    /// (SpellDurationRules.IsExtendable; PHB p.94: not a concentration, instantaneous or permanent duration; SPL-095).
     /// </summary>
     public static bool CanExtend(SpellData spell)
     {
-        return spell.BuffDurationRounds != 0; // Has some duration (rounds or hours/level)
+        return SpellDurationRules.IsExtendable(spell);
     }
 
     /// <summary>

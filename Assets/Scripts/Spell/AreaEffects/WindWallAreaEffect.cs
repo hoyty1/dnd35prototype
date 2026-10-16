@@ -179,7 +179,7 @@ public class WindWallAreaEffect : PersistentAreaEffect
         if (!isTinyOrSmaller)
             return;
 
-        int dmg = DiceRoller.D6() + DiceRoller.D6() + DiceRoller.D6(); // 3d6
+        int dmg = SpellDiceRules.Roll(SpellDice.Of(3, 6), Metamagic, null); // 3d6, the cast's Empower and Maximize (batch 11 step 19)
         character.Stats.ApplyNonlethalDamage(dmg);
         LogEffect($"  💨 {character.Stats.CharacterName} ({size}) is buffeted: {dmg} nonlethal damage.");
     }

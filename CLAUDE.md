@@ -101,7 +101,7 @@ Where to look first:
 ## Current state
 
 - **Branch `docs/cleanup-2026-10` (unmerged, 2026-10-07)** on top of 0dd8e76: docs rebuild, `.meta` tracking, the tactics inventory (`docs/systems/tactics/`) and AI roadmap step 1, rules fixes for shared actions (CMB-001, AI-034, SPL-007, CMB-005/073/076, SPL-006, CMB-074, CMB-014, CMB-043/002). Next is step 2, tags v2 (`docs/designs/enemy_ai_knowledge_and_personalities.md`). The Unity MCP is attached to this project (check console paths before trusting it).
-- **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-038, SPL-040, SPL-064.
+- **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-040, SPL-064 (SPL-038, metamagic in custom resolvers, fixed in batch 11 step 19).
 - **Repo hygiene (2026-10-03):** `.meta` files tracked; `.abacus.donotdelete` untracked (history purge only on request, REPO-012); creature token art kept for later (REPO-015); TMP re-import pending (REPO-002).
 - **Docs:** rebuilt 2026-10-03. All old docs are retired (`docs/archive/INDEX.md`); every finding is filed in `docs/issues/`; `docs/designs/` holds unbuilt plans with status headers, including the batch 11 cast-core plan (`cast_core_batch11.md`, 2026-10-15).
 

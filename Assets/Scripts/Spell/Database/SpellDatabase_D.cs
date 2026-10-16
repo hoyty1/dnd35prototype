@@ -137,6 +137,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 0, DamageCount = 0, BonusDamage = 10, // kills dying creature
                     DamageType = "negative",
+                    HasTimedAftereffect = true, // PHB p.217: Instantaneous/10 minutes per HD of subject; Extend doubles the bonus (SpellDurationRules.IsExtendable)
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     SaveHalves = false,
