@@ -326,13 +326,7 @@ public partial class GameManager
                 }
 
                 // Get targets in ring area
-                bool casterIsPC = caster.Team == CharacterTeam.Player;
-                CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-                List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
-                List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
-                List<CharacterController> targets = AoESystem.GetTargetsInArea(
-                    ringCells, caster, allyTeam, enemyTeam,
-                    _pendingSpell.AoEFilter, casterIsPC, Grid);
+                List<CharacterController> targets = AoESystem.GetTargetsInArea(ringCells, caster, _pendingSpell.AoEFilter, Grid);
 
                 Debug.Log($"[WallOfFire] Ring mode: center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={ringCells.Count}, targets={targets.Count}");
 

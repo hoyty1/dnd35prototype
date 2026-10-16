@@ -97,8 +97,13 @@ public partial class GameManager
     // ================================================================
 
     /// <summary>
-    /// Resolves Calm Animals AoE: calms 2d4+CL HD of animals in the area.
-    /// Each animal gets a Will save. Calmed animals won't attack.
+    /// Resolves Calm Animals AoE: calms 2d4+CL HD of animals in the area (the hostile animals in a 15-ft.-radius burst at
+    /// Close range, a delegated RAW reading 2026-10-14 of "animals within 30 ft. of each other", PHB p.207; reachable since
+    /// batch 11 step 23, SPL-042). The 2d4 + caster level Hit Dice cap which animals are the spell's subjects, chosen in
+    /// the aim's order before any roll, so an animal that resists or saves still uses its Hit Dice (delegated RAW reading
+    /// 2026-10-14, RULES_COVERAGE 4.1: PHB p.207 makes Calm Animals a Targets spell whose subjects are the animals "you can
+    /// affect" within that total). Each subject rolls the caster's spell resistance check (PHB p.207: SR yes) and a Will
+    /// save. Calmed animals won't attack. Who may save, the same-kind rule and the threat that breaks the calm are SPL-187.
     /// </summary>
     private bool TryResolveCalmAnimalsSpell(
         CharacterController caster,
@@ -156,6 +161,19 @@ public partial class GameManager
                 sb.AppendLine($"  {target.Stats.CharacterName} ({targetHD} HD) — skipped (insufficient HD budget remaining: {hdBudget - hdSpent})");
                 continue;
             }
+            // The animal is one of the subjects: its Hit Dice count against the total whether or not it resists or saves
+            // (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1; review of batch 11 step 23).
+            hdSpent += targetHD;
+
+            // Spell resistance (PHB p.207: Spell Resistance: Yes; batch 11 step 23): a resisting animal is not calmed.
+            SRResult sr = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            sr.AppendToLog(sb);
+            if (!sr.Overcame)
+            {
+                sb.AppendLine($"  {target.Stats.CharacterName} resists Calm Animals via Spell Resistance.");
+                sb.AppendLine();
+                continue;
+            }
 
             // Will save: the spell save (RollSpellSave: the voluntary save, PHB p.177, and the spell-and-caster bonuses, SPL-018)
             SaveResult will = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
@@ -167,8 +185,6 @@ public partial class GameManager
 
             if (!savePassed)
             {
-                hdSpent += targetHD;
-
                 // Apply calmed condition — target won't attack
                 if (_conditionService != null)
                 {

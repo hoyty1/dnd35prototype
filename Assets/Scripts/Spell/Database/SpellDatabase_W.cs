@@ -306,25 +306,32 @@ public static partial class SpellDatabase
                 IsPlaceholder = false
             });
 
-        // ── Wall of Thorns (PHB p.301) ──────────────────────────────────
+        // ── Wall of Thorns (PHB p.300) ──────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.WALL_OF_THORNS,
                     Name = "Wall of Thorns",
                     Description = "Conjuration (Creation). A wall of thorny brush springs into existence. Any creature forced "
-                        + "into or attempting to move through the wall takes 25 points of damage minus the creature's AC "
-                        + "(minimum 1). The wall is 10 ft thick. Creatures can hack through with slashing weapons "
-                        + "(HP per 5-ft section = 1/inch thickness × area). Duration 10 min/level. PHB p.301",
+                        + "into or attempting to move through the wall takes slashing damage equal to 25 minus its AC without "
+                        + "Dexterity and dodge bonuses (none at 25 or more); a creature in the area when it is cast is caught "
+                        + "inside. Duration 10 min/level. PHB p.300",
                     SpellLevel = 5,
                     School = "Conjuration",
                     AvailableFor = new List<SpellAvailability>
                     {
                         new SpellAvailability("Druid", 5)
                     },
+                    // PHB p.300: Effect: wall of thorny brush, up to one 10-ft. cube/level (S), at Medium range. One 10-ft.
+                    // cube placed at a point in range (the smallest wall the caster may make; the other cubes and the shaping
+                    // are SPL-188; batch 11 step 23, SPL-042)
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Cube,
+                    AoESizeSquares = 2,
+                    AoERangeSquares = 0, // the spell's Medium range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Wall,
-                    DamageType = "piercing",
+                    DamageType = "slashing", // PHB p.300
                     AllowsSavingThrow = false, // No save, damage applied on passage
                     SpellResistanceApplies = false,
                     DurationType = DurationType.Minutes,

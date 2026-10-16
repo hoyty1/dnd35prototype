@@ -7656,7 +7656,8 @@ namespace Tests.Scenarios
         /// invoked by reflection on dRes (a 50 HP target dummy, true neutral, saves made to fail with -30, its HP restored
         /// before each call) under a roll filter of every d20 at 20 and every other die at 3: Lightning Bolt
         /// (TryResolveScaledAoEDamageSpell), Cone of Cold, Chain Lightning's primary bolt, Ice Storm, Shout, Sunburst (on a
-        /// living creature), Vampiric Touch, Produce Flame and Holy Smite (ResolveAlignmentBurstSpell, half on a neutral
+        /// living creature), Vampiric Touch, Produce Flame and Holy Smite (TryResolveAlignmentBurstAoE, an area handler since
+        /// batch 11 step 23, half on a neutral
         /// creature) each deal their spec's maximum (CustomSpellDice) at the caster level of arcane_missile_adept, not the
         /// 3s the filter rolls. One Maximize row per resolver proves the stamp reaches it (a dropped RollFor or the template
         /// passed instead of the clone deals the 3s); CustomSpellDiceTests checks the specs and the dice rule.
@@ -7719,8 +7720,8 @@ namespace Tests.Scenarios
                     CustomSpellDice.VampiricTouch(Cl(DND35e.Identifiers.SpellNames.VAMPIRIC_TOUCH)).Maximum, false);
                 ok &= Check("Produce Flame", "TryResolveProduceFlameSpellEffect", DND35e.Identifiers.SpellNames.PRODUCE_FLAME,
                     CustomSpellDice.ProduceFlame(Cl(DND35e.Identifiers.SpellNames.PRODUCE_FLAME)).Maximum, false);
-                ok &= Check("Holy Smite", "TryResolveHolySmiteSpellEffect", DND35e.Identifiers.SpellNames.HOLY_SMITE,
-                    Mathf.Max(1, CustomSpellDice.AlignmentBurst(Cl(DND35e.Identifiers.SpellNames.HOLY_SMITE)).Maximum / 2), false);
+                ok &= Check("Holy Smite", "TryResolveAlignmentBurstAoE", DND35e.Identifiers.SpellNames.HOLY_SMITE,
+                    CustomSpellDice.AlignmentBurst(Cl(DND35e.Identifiers.SpellNames.HOLY_SMITE)).Maximum / 2, true);
                 dummy.Stats.CurrentHP = dummy.Stats.TotalMaxHP;
             }
             finally

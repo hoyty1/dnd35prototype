@@ -35,7 +35,7 @@ public static partial class SpellDatabase
         // School: Evocation [Evil]
         // Level: Cleric 4 (Evil domain 4)
         // Range: Medium
-        // Area: 20-ft-radius burst
+        // Area: 20-ft.-radius spread
         // Duration: Instantaneous (1d4 rounds for sicken)
         // Saving Throw: Will partial
         // Spell Resistance: Yes
@@ -49,6 +49,12 @@ public static partial class SpellDatabase
                     // Evil 4 only (PHB p.297): no class list; DomainDatabase gives the Evil domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    // PHB p.297: Area: 20-ft.-radius spread, at a point in Medium range (batch 11 step 23, SPL-046); a spread
+                    // is placed as a burst here (the grid has no spread around corners yet)
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Medium range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

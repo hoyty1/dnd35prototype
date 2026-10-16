@@ -596,6 +596,10 @@ public partial class GameManager
         // Inert test hook: every MoveToCell, MoveAlongPath (segment) and grapple reposition lands here.
         ScenarioHooks.Moved?.Invoke(mover, previousPosition, currentPosition, movementType);
 
+        // An undead creature entering or leaving a Consecrate or Desecrate area gains or loses its modifiers (PHB p.212,
+        // p.218; batch 11 step 23, SPL-042).
+        UpdateHolyAreaEffectsForCharacter(mover);
+
         // An Improved Grab hold with one body part: a moving holder carries the held creature along while it can drag its
         // weight, else the hold ends (MM p.310, PHB p.162; CMB-163).
         string holdEnded = CharacterController.CheckImprovedGrabHoldReach(mover, previousPosition, currentPosition);

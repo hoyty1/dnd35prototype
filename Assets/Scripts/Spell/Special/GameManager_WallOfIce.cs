@@ -255,13 +255,7 @@ public partial class GameManager
                 }
 
                 // Get targets in circle area
-                bool casterIsPC = caster.Team == CharacterTeam.Player;
-                CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-                List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
-                List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
-                List<CharacterController> targets = AoESystem.GetTargetsInArea(
-                    circleCells, caster, allyTeam, enemyTeam,
-                    _pendingSpell.AoEFilter, casterIsPC, Grid);
+                List<CharacterController> targets = AoESystem.GetTargetsInArea(circleCells, caster, _pendingSpell.AoEFilter, Grid);
 
                 Debug.Log($"[WallOfIce] Circle mode: center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={circleCells.Count}, targets={targets.Count}");
 

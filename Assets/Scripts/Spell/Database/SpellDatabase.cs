@@ -205,7 +205,6 @@ public static partial class SpellDatabase
         SetDescriptor(SpellNames.AID, SpellDescriptor.Good);
 
         // === [Evil] descriptor spells ===
-        SetDescriptor(SpellNames.BANE, SpellDescriptor.Evil);
         SetDescriptor(SpellNames.DESECRATE, SpellDescriptor.Evil);
         SetDescriptor("desecrate", SpellDescriptor.Evil);
         SetDescriptor("unholy_blight", SpellDescriptor.Evil);
@@ -281,6 +280,9 @@ public static partial class SpellDatabase
 
         // === [Fear] / [Mind-Affecting] ===
         SetDescriptor(SpellNames.DOOM, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
+        // Bane is Enchantment (Compulsion) [Fear, Mind-Affecting], with no alignment descriptor (PHB p.203; it was
+        // listed [Evil] until the batch 11 step 23 review).
+        SetDescriptor(SpellNames.BANE, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
         SetDescriptor(SpellNames.COMMAND, SpellDescriptor.MindAffecting);
         SetDescriptor(SpellNames.HOLD_PERSON, SpellDescriptor.MindAffecting);
         SetDescriptor(SpellNames.CHARM_PERSON, SpellDescriptor.MindAffecting);

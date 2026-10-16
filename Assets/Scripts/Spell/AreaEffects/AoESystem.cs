@@ -15,7 +15,9 @@ public enum AoEShape
     Burst,      // Circular burst centered on a point (e.g., Bless, Fireball)
     Cone,       // Cone emanating from caster (e.g., Burning Hands, Cone of Cold)
     Line,       // Line from caster (e.g., Lightning Bolt) — click endpoint targeting
-    Ring        // Ring / circle perimeter (e.g., Wall of Fire ring mode) — choose center + radius
+    Ring,       // Ring / circle perimeter (e.g., Wall of Fire ring mode) — choose center + radius
+    Cube        // Cube placed at a point within range: AoESizeSquares is its side (Order's Wrath's 30-ft cube, PHB p.258;
+                // Wall of Thorns' 10-ft cube, Persistent Image's 20-ft cube, PHB p.301, p.260; batch 11 step 23, SPL-042, SPL-046)
 }
 
 /// <summary>
@@ -35,6 +37,64 @@ public enum AoETargetFilter
 /// </summary>
 public static class AoESystem
 {
+    // ========== ROUTING (batch 11 step 23) ==========
+
+    /// <summary>
+    /// True when a cast of <paramref name="spell"/> resolves over an area (the area targeting and the cast core's area
+    /// Resolve stage): an Area target type or an area shape (Prayer, a Self spell with a burst). The PC targeting
+    /// (GameManager.BeginPendingSpellTargeting), a scroll's or wand's targeting test and the spell routing golden suite
+    /// read it (batch 11 step 23, SPL-042, SPL-046). Every spell it routes has a shape (Tests.Magic.AreaRoutingTests);
+    /// Summon Swarm, an Area spell that places a swarm, is routed to its placement first.
+    /// </summary>
+    public static bool RoutesToArea(SpellData spell)
+        => spell != null && (spell.TargetType == SpellTargetType.Area || spell.AoEShapeType != AoEShape.None);
+
+    /// <summary>
+    /// True for the shapes placed at a point the caster picks within range (a burst and a cube): their targeting shows the
+    /// placement range, the hovered square is the area's point, and their line of effect runs from the area's centre.
+    /// </summary>
+    public static bool IsPlacedShape(AoEShape shape) => shape == AoEShape.Burst || shape == AoEShape.Cube;
+
+    /// <summary>
+    /// The squares of a placed area (<see cref="IsPlacedShape"/>) at <paramref name="point"/>: a burst of
+    /// <c>AoESizeSquares</c> radius or a cube of that side (<see cref="GetCubeCells"/>). Empty for any other shape.
+    /// </summary>
+    public static HashSet<Vector2Int> GetPlacedAreaCells(SpellData spell, Vector2Int point, SquareGrid grid)
+    {
+        if (spell == null || grid == null)
+            return new HashSet<Vector2Int>();
+        if (spell.AoEShapeType == AoEShape.Burst)
+            return GetBurstCells(point, spell.AoESizeSquares, grid);
+        if (spell.AoEShapeType == AoEShape.Cube)
+            return GetCubeCells(point, spell.AoESizeSquares, grid);
+        return new HashSet<Vector2Int>();
+    }
+
+    // ========== CUBE ==========
+
+    /// <summary>
+    /// The squares of a cube of <paramref name="sideSquares"/> squares a side placed at <paramref name="point"/>: an odd
+    /// side is centred on the square, an even side has the square as the lower-left of its four central squares (its
+    /// centre is that square's upper-right corner, a grid intersection). Squares off the grid are left out.
+    /// </summary>
+    public static HashSet<Vector2Int> GetCubeCells(Vector2Int point, int sideSquares, SquareGrid grid)
+    {
+        var cells = new HashSet<Vector2Int>();
+        int side = Mathf.Max(1, sideSquares);
+        int low = (side - 1) / 2;
+        int high = side / 2;
+        for (int x = point.x - low; x <= point.x + high; x++)
+        {
+            for (int y = point.y - low; y <= point.y + high; y++)
+            {
+                var pos = new Vector2Int(x, y);
+                if (grid == null || grid.GetCell(pos) != null)
+                    cells.Add(pos);
+            }
+        }
+        return cells;
+    }
+
     // ========== BURST (RADIUS) ==========
 
     /// <summary>
@@ -574,68 +634,55 @@ public static class AoESystem
     // ========== TARGET FILTERING ==========
 
     /// <summary>
-    /// Filter characters in AoE cells based on the target filter and caster's faction.
+    /// The living creatures in <paramref name="cellPositions"/> that <paramref name="filter"/> lets the spell affect,
+    /// judged relative to <paramref name="caster"/> with TeamUtility (SPL-119, batch 11 step 23): All takes every creature
+    /// (the caster too); AlliesOnly the caster and its allies (TeamUtility.IsAlly; Bless, PHB p.205: "the caster and all
+    /// allies"); EnemiesOnly the caster's enemies (TeamUtility.IsEnemy; Bane, PHB p.203); Self only the caster. The same
+    /// for a Player-team and an Enemy-team caster. A creature that fills several squares of the area counts once.
     /// </summary>
-    /// <param name="cellPositions">Set of grid positions in the AoE</param>
-    /// <param name="caster">The character casting the spell</param>
-    /// <param name="allPCs">All player characters</param>
-    /// <param name="allNPCs">All NPC enemies</param>
-    /// <param name="filter">Target filter (All, AlliesOnly, EnemiesOnly)</param>
-    /// <param name="casterIsPC">Whether the caster is a PC</param>
-    /// <param name="grid">Reference to the game grid</param>
-    /// <returns>List of characters affected by the AoE</returns>
     public static List<CharacterController> GetTargetsInArea(
         HashSet<Vector2Int> cellPositions,
         CharacterController caster,
-        List<CharacterController> allPCs,
-        List<CharacterController> allNPCs,
         AoETargetFilter filter,
-        bool casterIsPC,
         SquareGrid grid)
     {
         var targets = new List<CharacterController>();
         var seenTargets = new HashSet<CharacterController>();
+        if (cellPositions == null || grid == null)
+            return targets;
 
         foreach (Vector2Int pos in cellPositions)
         {
             SquareCell cell = grid.GetCell(pos);
-            if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant.Stats.IsDead)
+            if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead)
                 continue;
 
             CharacterController occupant = cell.Occupant;
-            bool includeTarget = false;
-
-            switch (filter)
-            {
-                case AoETargetFilter.All:
-                    // All creatures in the area (can include caster)
-                    includeTarget = true;
-                    break;
-
-                case AoETargetFilter.AlliesOnly:
-                    // Only allies (same faction as caster)
-                    includeTarget = (casterIsPC && allPCs.Contains(occupant))
-                        || (!casterIsPC && allNPCs.Contains(occupant));
-                    break;
-
-                case AoETargetFilter.EnemiesOnly:
-                    // Only enemies (opposite faction from caster)
-                    includeTarget = (casterIsPC && allNPCs.Contains(occupant))
-                        || (!casterIsPC && allPCs.Contains(occupant));
-                    break;
-
-                case AoETargetFilter.Self:
-                    includeTarget = occupant == caster;
-                    break;
-            }
-
-            // Large/Huge creatures can occupy multiple cells in the AoE.
-            // They should only be affected once per spell cast.
-            if (includeTarget && seenTargets.Add(occupant))
+            if (IncludedByFilter(caster, occupant, filter) && seenTargets.Add(occupant))
                 targets.Add(occupant);
         }
 
         return targets;
+    }
+
+    /// <summary>Whether <paramref name="filter"/> lets an area spell of <paramref name="caster"/> affect <paramref name="creature"/> (<see cref="GetTargetsInArea"/>).</summary>
+    public static bool IncludedByFilter(CharacterController caster, CharacterController creature, AoETargetFilter filter)
+    {
+        if (creature == null)
+            return false;
+        switch (filter)
+        {
+            case AoETargetFilter.All:
+                return true;
+            case AoETargetFilter.AlliesOnly:
+                return creature == caster || TeamUtility.IsAlly(caster, creature);
+            case AoETargetFilter.EnemiesOnly:
+                return TeamUtility.IsEnemy(caster, creature);
+            case AoETargetFilter.Self:
+                return creature == caster;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

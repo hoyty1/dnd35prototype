@@ -147,6 +147,16 @@ public static class SpellTargetingService
     }
 
     /// <summary>
+    /// Returns <c>true</c> if the creature's type is "Outsider" (PHB p.313; MM p.313): the alignment bursts deal their
+    /// larger damage to an outsider of the opposed alignment (PHB p.208, p.241, p.258, p.297).
+    /// </summary>
+    public static bool IsOutsider(CharacterController target)
+    {
+        if (target?.Stats == null) return false;
+        return string.Equals((target.Stats.CreatureType ?? "").Trim(), "Outsider", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Returns <c>true</c> if the creature's type is "Outsider" or "Extraplanar".
     /// <para><b>PHB 3.5e p.313 (Outsider type):</b> An outsider is at least partially
     /// composed of the essence of a plane other than the Material Plane.

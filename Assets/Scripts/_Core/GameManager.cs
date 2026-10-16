@@ -678,19 +678,6 @@ public partial class GameManager : MonoBehaviour
     private bool IsAllyTeam(CharacterController source, CharacterController target)
         => TeamUtility.IsAlly(source, target);
 
-    private List<CharacterController> GetTeamMembers(CharacterTeam teamFilter)
-    {
-        var team = new List<CharacterController>();
-        foreach (var c in GetAllCharacters())
-        {
-            if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == teamFilter)
-                team.Add(c);
-        }
-
-        return team;
-    }
-
     private bool IsAdjacent(CharacterController a, CharacterController b)
     {
         if (a == null || b == null || a.Stats == null || b.Stats == null || a.Stats.IsDead || b.Stats.IsDead)
@@ -870,6 +857,7 @@ public partial class GameManager : MonoBehaviour
             AreaEffectManager.Instance.ClearAllEffects();
         if (WindEffectManager.HasInstance)
             WindEffectManager.Instance.ClearAllWindEffects();
+        ClearAllHolyAreas(); // Consecrate and Desecrate (batch 11 step 23, SPL-042)
 
         // Despawn any lingering summoned creatures from the finished combat.
         for (int i = _activeSummons.Count - 1; i >= 0; i--)
@@ -1078,6 +1066,7 @@ public partial class GameManager : MonoBehaviour
             AreaEffectManager.Instance.ClearAllEffects();
         if (WindEffectManager.HasInstance)
             WindEffectManager.Instance.ClearAllWindEffects();
+        ClearAllHolyAreas(); // Consecrate and Desecrate (batch 11 step 23, SPL-042)
 
         Debug.Log($"[BattlefieldReset] Battlefield cleared | context={safeContext}");
     }
@@ -5944,8 +5933,8 @@ public partial class GameManager : MonoBehaviour
             scrollSpell.EffectType == SpellEffectType.Utility ||
             scrollSpell.TargetType == SpellTargetType.SingleEnemy ||
             scrollSpell.TargetType == SpellTargetType.SingleAlly ||
-            scrollSpell.TargetType == SpellTargetType.Area ||
-            scrollSpell.TargetType == SpellTargetType.Touch);
+            scrollSpell.TargetType == SpellTargetType.Touch ||
+            AoESystem.RoutesToArea(scrollSpell)); // an Area target type or an area shape (Prayer), batch 11 step 23
 
         if (needsTargeting && IsCombatEncounterRunning())
         {
@@ -6349,8 +6338,8 @@ public partial class GameManager : MonoBehaviour
             wandSpell.EffectType == SpellEffectType.Utility ||
             wandSpell.TargetType == SpellTargetType.SingleEnemy ||
             wandSpell.TargetType == SpellTargetType.SingleAlly ||
-            wandSpell.TargetType == SpellTargetType.Area ||
-            wandSpell.TargetType == SpellTargetType.Touch);
+            wandSpell.TargetType == SpellTargetType.Touch ||
+            AoESystem.RoutesToArea(wandSpell)); // an Area target type or an area shape (Prayer), batch 11 step 23
 
         // A wand use does not end the user's concentration (SPL-114), but it takes the standard action that maintaining
         // the spell needs, so the spell ends at the end of the turn (decision D2): the player is told first.

@@ -122,8 +122,10 @@ internal sealed class AreaHandlerEntry
 /// but its own, and no spell id is claimed by two handlers (checked by Tests.Magic.SpellHandlerRegistryTests). So for a
 /// given spell at most one handler can do anything, every flag of every other handler is false, and the cascade reduces
 /// to: find the handler for the spell's id, check its gate, call it, and the cast is claimed when it returned true
-/// (Shield Other and the Sound Burst stun excepted: they continue to the buff step). The table keeps the old chain
-/// order so a later overlap would still resolve in that order.
+/// (Shield Other excepted: it continues to the buff step; so did the Sound Burst stun until batch 11 step 23 made Sound
+/// Burst an area spell). The table keeps the old chain order so a later overlap would still resolve in that order. Since
+/// step 23 (SPL-046) the table has 46 entries: the four alignment bursts and the Sound Burst stun moved to the area
+/// registry.
 ///
 /// <see cref="RunSingleTargetHandlers"/> is the handler step of single-target casts: PerformSpellCast (PC, since step 5)
 /// and TryNPCPerformSpellCast (NPC, since step 6, which replaced the NPC path's own 19-handler chain; SPL-054), and since
@@ -160,7 +162,7 @@ public partial class GameManager
         const HandlerGate Ok = HandlerGate.Success;
         const HandlerGate OkKept = HandlerGate.SuccessNotNegated;
 
-        var list = new List<SpellHandlerEntry>(51);
+        var list = new List<SpellHandlerEntry>(46);
         void Add(string name, HandlerGate gate, Func<CharacterController, CharacterController, SpellData, SpellResult, bool> resolve, params string[] ids)
             => list.Add(new SpellHandlerEntry { Name = name, Gate = gate, Resolve = resolve, SpellIds = new HashSet<string>(ids, StringComparer.Ordinal) });
         void AddContinuing(string name, HandlerGate gate, Func<CharacterController, CharacterController, SpellData, SpellResult, bool> resolve, params string[] ids)
@@ -197,8 +199,6 @@ public partial class GameManager
         Add(nameof(TryResolveDeathKnellSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveDeathKnellSpellEffect(c, t, s, r), SpellNames.DEATH_KNELL);
         AddContinuing(nameof(TryResolveShieldOtherSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveShieldOtherSpellEffect(c, t, s, r), SpellNames.SHIELD_OTHER);
         Add(nameof(TryResolveSilenceSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveSilenceSpellEffect(c, t, s, r), SpellNames.SILENCE);
-        // Gate Success (batch 11 step 11, SPL-142): a Sound Burst that failed (spell resistance, a deafened caster) stuns no one.
-        AddContinuing(nameof(TryResolveSoundBurstStunEffect), Ok, (c, t, s, r) => gm.TryResolveSoundBurstStunEffect(c, t, s, r), SpellNames.SOUND_BURST);
         Add(nameof(TryResolveSpiritualWeaponSpellEffect), Ok, (c, t, s, r) => gm.TryResolveSpiritualWeaponSpellEffect(c, t, s, r), SpellNames.SPIRITUAL_WEAPON);
         Add(nameof(TryResolveAlignWeaponSpellEffect), OkKept, (c, t, s, r) => gm.TryResolveAlignWeaponSpellEffect(c, t, s, r), SpellNames.ALIGN_WEAPON);
         Add(nameof(TryResolveSearingLightSpellEffect), Ok, (c, t, s, r) => gm.TryResolveSearingLightSpellEffect(c, t, s, r), SpellNames.SEARING_LIGHT);
@@ -207,11 +207,8 @@ public partial class GameManager
         Add(nameof(TryResolvePrayerSpellEffect), Ok, (c, t, s, r) => gm.TryResolvePrayerSpellEffect(c, t, s, r), SpellNames.PRAYER);
         Add(nameof(TryResolveRemoveBlindnessDeafnessSpellEffect), Ok, (c, t, s, r) => gm.TryResolveRemoveBlindnessDeafnessSpellEffect(c, t, s, r), SpellNames.REMOVE_BLINDNESS_DEAFNESS);
 
-        // Old group 3: 4th-level cleric spells.
-        Add(nameof(TryResolveChaosHammerSpellEffect), Ok, (c, t, s, r) => gm.TryResolveChaosHammerSpellEffect(c, t, s, r), SpellNames.CHAOS_HAMMER);
-        Add(nameof(TryResolveHolySmiteSpellEffect), Ok, (c, t, s, r) => gm.TryResolveHolySmiteSpellEffect(c, t, s, r), SpellNames.HOLY_SMITE);
-        Add(nameof(TryResolveOrdersWrathSpellEffect), Ok, (c, t, s, r) => gm.TryResolveOrdersWrathSpellEffect(c, t, s, r), SpellNames.ORDERS_WRATH);
-        Add(nameof(TryResolveUnholyBlightSpellEffect), Ok, (c, t, s, r) => gm.TryResolveUnholyBlightSpellEffect(c, t, s, r), SpellNames.UNHOLY_BLIGHT);
+        // Old group 3: 4th-level cleric spells. (Chaos Hammer, Holy Smite, Order's Wrath and Unholy Blight are area spells
+        // since batch 11 step 23, SPL-046: the area registry's TryResolveAlignmentBurstAoE.)
         Add(nameof(TryResolveDeathWardSpellEffect), Ok, (c, t, s, r) => gm.TryResolveDeathWardSpellEffect(c, t, s, r), SpellNames.DEATH_WARD);
         Add(nameof(TryResolveDivinePowerSpellEffect), Ok, (c, t, s, r) => gm.TryResolveDivinePowerSpellEffect(c, t, s, r), SpellNames.DIVINE_POWER);
         Add(nameof(TryResolveFreedomOfMovementSpellEffect), Ok, (c, t, s, r) => gm.TryResolveFreedomOfMovementSpellEffect(c, t, s, r), SpellNames.FREEDOM_OF_MOVEMENT);
@@ -290,7 +287,7 @@ public partial class GameManager
     /// The handler step of a single-target cast: runs the registered handler for <paramref name="spell"/>'s id when its
     /// gate passes. Returns true when the cast is claimed, i.e. the handler returned true and is not a ContinueToBuff
     /// entry; a claimed cast skips the generic ApplySpellBuff step. <paramref name="continueToBuff"/> is true when a
-    /// ContinueToBuff entry (Shield Other, the Sound Burst stun) ran.
+    /// ContinueToBuff entry (Shield Other) ran.
     /// </summary>
     private bool RunSingleTargetHandlers(CharacterController caster, CharacterController target, SpellData spell,
         SpellResult result, bool negated, out bool continueToBuff)
@@ -337,7 +334,7 @@ public partial class GameManager
     /// </summary>
     private static List<AreaHandlerEntry> BuildAreaHandlers(GameManager gm)
     {
-        var list = new List<AreaHandlerEntry>(41);
+        var list = new List<AreaHandlerEntry>(44);
         AreaHandlerEntry Add(string name, string combatEnd, Func<CastContext, AreaHandlerResult> resolve, params string[] ids)
         {
             var entry = new AreaHandlerEntry
@@ -483,6 +480,16 @@ public partial class GameManager
         Add(nameof(TryResolveBlackTentaclesAoECast), null,
             ctx => Claim(gm.TryResolveBlackTentaclesAoECast(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.Cells, out string log), log),
             SpellNames.EVARDS_BLACK_TENTACLES);
+        // Batch 11 step 23 (SPL-046): the six burst spells that used to resolve against one clicked creature.
+        Add(nameof(TryResolveAlignmentBurstAoE), "AlignmentBurst",
+            ctx => Claim(gm.TryResolveAlignmentBurstAoE(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, out string log), log),
+            SpellNames.CHAOS_HAMMER, SpellNames.HOLY_SMITE, SpellNames.ORDERS_WRATH, SpellNames.UNHOLY_BLIGHT);
+        Add(nameof(TryResolveSoundBurstAoE), "SoundBurst",
+            ctx => Claim(gm.TryResolveSoundBurstAoE(ctx, out string log), log),
+            SpellNames.SOUND_BURST);
+        Add(nameof(ResolveBaneAoE), null,
+            ctx => AreaHandlerResult.Claimed(gm.ResolveBaneAoE(ctx)),
+            SpellNames.BANE);
 
         // The fallback: the generic per-target loop takes every area spell no handler claimed.
         list.Add(new AreaHandlerEntry

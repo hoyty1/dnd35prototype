@@ -13,7 +13,7 @@ namespace Tests.Magic
 /// Batch 11 step 5 (docs/designs/cast_core_batch11.md, handler-registry-pc): GameManager's single-target spell handler
 /// registry (GameManager.SpellHandlerRegistry.cs), which PerformSpellCast runs in place of its old cascade of handled
 /// flags. Checks, on the registry's table (GameManager.DescribeSingleTargetHandlers, no instance needed):
-/// every private GameManager method named TryResolve*SpellEffect, plus TryResolveSoundBurstStunEffect, found by
+/// every private GameManager method named TryResolve*SpellEffect, found by
 /// reflection, is registered exactly once with the handler signature, and the table names no other method; no spell id
 /// is claimed by two entries (the condition under which the registry equals the old flag groups); every spell id exists
 /// in SpellDatabase; and the order, gates, ContinueToBuff flags and spell ids equal the manifest below, re-derived on 2026-10-15
@@ -25,6 +25,10 @@ namespace Tests.Magic
 /// combat-end contexts, log-prefix and async flags and cast-stage mark placement equal <see cref="AreaManifest"/>, read
 /// on 2026-10-15 from the old PerformAoESpellCast blocks; the generic per-target loop is the one fallback and comes last;
 /// every wrapped method exists on GameManager; no spell id is claimed twice; every id exists in SpellDatabase.
+///
+/// Batch 11 step 23 (area-routing-data, SPL-046): the four alignment bursts and Sound Burst are area spells, so their
+/// single-target entries (and the Sound Burst stun, which was the one handler outside the TryResolve*SpellEffect names)
+/// are gone; the area registry gained TryResolveAlignmentBurstAoE, TryResolveSoundBurstAoE and ResolveBaneAoE.
 /// Runs in edit or Play mode.
 /// </summary>
 public static class SpellHandlerRegistryTests
@@ -40,10 +44,9 @@ public static class SpellHandlerRegistryTests
     /// The old PC chain (GameManager.SpellCasting.cs before batch 11 step 5), in order: handler, the guard it had
     /// besides the handled flags (None: no result check; Success: result.Success; SuccessNotNegated: result.Success
     /// and !effectNegatedBySave), and whether returning true still let ApplySpellBuff run (Shield Other, left out of
-    /// anyClericHandled; the Sound Burst stun, which always returns false), and the one spell id its own guard (an id check
-    /// or an Is*Spell predicate) accepts, read from each method on 2026-10-15. One gate has changed since by a RAW fix:
-    /// the Sound Burst stun is Success (batch 11 step 11, SPL-142: a failed cast stuns no one); Animate Rope stays None
-    /// (its missed throw drops the rope) and tests a failed cast itself.
+    /// anyClericHandled), and the one spell id its own guard (an id check or an Is*Spell predicate) accepts, read from each
+    /// method on 2026-10-15. Animate Rope stays None (its missed throw drops the rope) and tests a failed cast itself. The
+    /// Sound Burst stun and the four alignment bursts left the table in batch 11 step 23 (area spells, SPL-046).
     /// </summary>
     private static readonly (string name, string gate, bool continueToBuff, string id)[] Manifest =
     {
@@ -71,7 +74,6 @@ public static class SpellHandlerRegistryTests
         ("TryResolveDeathKnellSpellEffect", OkKept, false, SpellNames.DEATH_KNELL),
         ("TryResolveShieldOtherSpellEffect", OkKept, true, SpellNames.SHIELD_OTHER),
         ("TryResolveSilenceSpellEffect", OkKept, false, SpellNames.SILENCE),
-        ("TryResolveSoundBurstStunEffect", Ok, true, SpellNames.SOUND_BURST),        // gate Success since batch 11 step 11 (SPL-142)
         ("TryResolveSpiritualWeaponSpellEffect", Ok, false, SpellNames.SPIRITUAL_WEAPON),
         ("TryResolveAlignWeaponSpellEffect", OkKept, false, SpellNames.ALIGN_WEAPON),
         ("TryResolveSearingLightSpellEffect", Ok, false, SpellNames.SEARING_LIGHT),
@@ -79,10 +81,6 @@ public static class SpellHandlerRegistryTests
         ("TryResolveRemoveDiseaseSpellEffect", Ok, false, SpellNames.REMOVE_DISEASE),
         ("TryResolvePrayerSpellEffect", Ok, false, SpellNames.PRAYER),
         ("TryResolveRemoveBlindnessDeafnessSpellEffect", Ok, false, SpellNames.REMOVE_BLINDNESS_DEAFNESS),
-        ("TryResolveChaosHammerSpellEffect", Ok, false, SpellNames.CHAOS_HAMMER),
-        ("TryResolveHolySmiteSpellEffect", Ok, false, SpellNames.HOLY_SMITE),
-        ("TryResolveOrdersWrathSpellEffect", Ok, false, SpellNames.ORDERS_WRATH),
-        ("TryResolveUnholyBlightSpellEffect", Ok, false, SpellNames.UNHOLY_BLIGHT),
         ("TryResolveDeathWardSpellEffect", Ok, false, SpellNames.DEATH_WARD),
         ("TryResolveDivinePowerSpellEffect", Ok, false, SpellNames.DIVINE_POWER),
         ("TryResolveFreedomOfMovementSpellEffect", Ok, false, SpellNames.FREEDOM_OF_MOVEMENT),
@@ -149,6 +147,10 @@ public static class SpellHandlerRegistryTests
         ("TryResolveEarthquakeSpell", "Earthquake", false, false, "after", new[] { SpellNames.EARTHQUAKE }),
         ("TryResolveShieldOfLawSpell", null, false, false, "after", new[] { SpellNames.SHIELD_OF_LAW }),
         ("TryResolveBlackTentaclesAoECast", null, false, false, "after", new[] { SpellNames.EVARDS_BLACK_TENTACLES }),
+        // Batch 11 step 23 (SPL-046): the six burst spells that used to resolve against one clicked creature.
+        ("TryResolveAlignmentBurstAoE", "AlignmentBurst", false, false, "after", new[] { SpellNames.CHAOS_HAMMER, SpellNames.HOLY_SMITE, SpellNames.ORDERS_WRATH, SpellNames.UNHOLY_BLIGHT }),
+        ("TryResolveSoundBurstAoE", "SoundBurst", false, false, "after", new[] { SpellNames.SOUND_BURST }),
+        ("ResolveBaneAoE", null, false, false, "after", new[] { SpellNames.BANE }),
     };
 
     public static void RunAll()
@@ -261,7 +263,7 @@ public static class SpellHandlerRegistryTests
         var methods = new List<MethodInfo>();
         foreach (MethodInfo m in typeof(GameManager).GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
         {
-            if (HandlerName.IsMatch(m.Name) || m.Name == "TryResolveSoundBurstStunEffect")
+            if (HandlerName.IsMatch(m.Name))
                 methods.Add(m);
         }
         Assert(methods.Count > 0, "reflection finds the handler methods", "found " + methods.Count);

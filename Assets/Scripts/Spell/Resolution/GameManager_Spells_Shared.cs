@@ -45,151 +45,184 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  ALIGNMENT BURST SPELLS — shared helper
+    //  ALIGNMENT BURST SPELLS — area handler (batch 11 step 23, SPL-046)
     // ================================================================
-    // Chaos Hammer, Holy Smite, Order's Wrath, Unholy Blight all share
-    // the same basic structure:
-    //   • 20-ft burst (4 squares), Medium range
-    //   • 1d8 per 2 CL (max 5d8) vs creatures of the opposing alignment
-    //   • Half damage to neutral creatures on the relevant axis
-    //   • Will save: halves damage, negates secondary condition
-    //   • Secondary condition varies per spell
+    // Chaos Hammer (PHB p.208), Holy Smite (p.241), Order's Wrath (p.258) and Unholy Blight (p.297):
+    //   • an area at a point in Medium range (a 20-ft.-radius burst or spread; Order's Wrath a burst that fills a 30-ft.
+    //     cube), every creature in it, the alignment deciding the effect
+    //   • 1d8 per two caster levels (max 5d8) to a creature of the opposed alignment, 1d6 per caster level (max 10d6) to an
+    //     outsider of that alignment; half to a creature neutral on the axis; the caster's own side of the axis unharmed
+    //   • a successful Will save halves the damage (a neutral creature's half again, down to one quarter of the roll) and
+    //     negates the secondary condition, which only a creature of the opposed alignment suffers
+    //   • spell resistance per creature; the damage rolled once for the area (one roll for the creatures, one for the
+    //     outsiders: AreaDamageRoll, decision D6, batch 11 step 20)
 
-    private bool TryResolveChaosHammerSpellEffect(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result)
+    /// <summary>What one of the four alignment bursts does: its harmed alignments and its secondary condition.</summary>
+    private sealed class AlignmentBurstSpec
     {
-        if (spell == null || spell.SpellId != SpellNames.CHAOS_HAMMER) return false;
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveChaosHammerSpellEffect));
-        return ResolveAlignmentBurstSpell(caster, target, spell, result,
-            "Chaos Hammer", "chaotic", "⚡🌀",
-            a => AlignmentHelper.IsLawful(a),
-            a => AlignmentHelper.IsNeutralLC(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Staggered, rounds, "Slow"); }, // Slowed = Staggered for simplicity
-            () => SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6)) // 1d6 rounds, a variable effect Empower and Maximize change (PHB p.93)
-        );
+        public string Descriptor;
+        public string Emoji;
+        public Func<Alignment, bool> IsFullDamage;
+        public Func<Alignment, bool> IsHalfDamage;
+        public CombatConditionType Condition;
+        public string ConditionName;
+        /// <summary>The condition's rounds for one creature (a rolled duration is a variable effect Empower and Maximize change, PHB p.93).</summary>
+        public Func<SpellData, int> ConditionRounds;
     }
 
-    private bool TryResolveHolySmiteSpellEffect(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result)
+    /// <summary>The alignment burst <paramref name="spellId"/> names, or null for any other spell.</summary>
+    private static AlignmentBurstSpec AlignmentBurstSpecFor(string spellId)
     {
-        if (spell == null || spell.SpellId != SpellNames.HOLY_SMITE) return false;
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveHolySmiteSpellEffect));
-        return ResolveAlignmentBurstSpell(caster, target, spell, result,
-            "Holy Smite", "good", "⚡✨",
-            a => AlignmentHelper.IsEvil(a),
-            a => AlignmentHelper.IsNeutralGE(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Blinded, rounds, "Blindness"); },
-            () => 1 // 1 round blindness
-        );
-    }
-
-    private bool TryResolveOrdersWrathSpellEffect(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result)
-    {
-        if (spell == null || spell.SpellId != SpellNames.ORDERS_WRATH) return false;
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveOrdersWrathSpellEffect));
-        return ResolveAlignmentBurstSpell(caster, target, spell, result,
-            "Order's Wrath", "lawful", "⚡⚖",
-            a => AlignmentHelper.IsChaotic(a),
-            a => AlignmentHelper.IsNeutralLC(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Dazed, rounds, "Daze"); },
-            () => 1 // 1 round daze
-        );
-    }
-
-    private bool TryResolveUnholyBlightSpellEffect(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result)
-    {
-        if (spell == null || spell.SpellId != SpellNames.UNHOLY_BLIGHT) return false;
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveUnholyBlightSpellEffect));
-        return ResolveAlignmentBurstSpell(caster, target, spell, result,
-            "Unholy Blight", "evil", "⚡💀",
-            a => AlignmentHelper.IsGood(a),
-            a => AlignmentHelper.IsNeutralGE(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Sickened, rounds, "Sicken"); },
-            () => SpellDiceRules.RollFor(spell, SpellDice.Of(1, 4)) // 1d4 rounds, a variable effect Empower and Maximize change (PHB p.93)
-        );
+        switch (spellId)
+        {
+            case SpellNames.CHAOS_HAMMER:
+                // Slowed (PHB p.208) is applied as Staggered, a labelled simplification (RULES_COVERAGE 4.1).
+                return new AlignmentBurstSpec
+                {
+                    Descriptor = "chaotic", Emoji = "⚡🌀",
+                    IsFullDamage = AlignmentHelper.IsLawful, IsHalfDamage = AlignmentHelper.IsNeutralLC,
+                    Condition = CombatConditionType.Staggered, ConditionName = "slowed (staggered)",
+                    ConditionRounds = s => SpellDiceRules.RollFor(s, SpellDice.Of(1, 6)) // 1d6 rounds
+                };
+            case SpellNames.HOLY_SMITE:
+                return new AlignmentBurstSpec
+                {
+                    Descriptor = "good", Emoji = "⚡✨",
+                    IsFullDamage = AlignmentHelper.IsEvil, IsHalfDamage = AlignmentHelper.IsNeutralGE,
+                    Condition = CombatConditionType.Blinded, ConditionName = "blinded",
+                    ConditionRounds = s => 1
+                };
+            case SpellNames.ORDERS_WRATH:
+                return new AlignmentBurstSpec
+                {
+                    Descriptor = "lawful", Emoji = "⚡⚖",
+                    IsFullDamage = AlignmentHelper.IsChaotic, IsHalfDamage = AlignmentHelper.IsNeutralLC,
+                    Condition = CombatConditionType.Dazed, ConditionName = "dazed",
+                    ConditionRounds = s => 1
+                };
+            case SpellNames.UNHOLY_BLIGHT:
+                return new AlignmentBurstSpec
+                {
+                    Descriptor = "evil", Emoji = "⚡💀",
+                    IsFullDamage = AlignmentHelper.IsGood, IsHalfDamage = AlignmentHelper.IsNeutralGE,
+                    Condition = CombatConditionType.Sickened, ConditionName = "sickened",
+                    ConditionRounds = s => SpellDiceRules.RollFor(s, SpellDice.Of(1, 4)) // 1d4 rounds
+                };
+            default:
+                return null;
+        }
     }
 
     /// <summary>
-    /// Shared resolution for the four alignment burst spells.
-    /// These are AoE spells centered on the target (clicked cell).
-    /// Since the system dispatches per-target, we resolve damage for the
-    /// single target that was passed in.
+    /// The four alignment bursts over their area (the area handler registry, GameManager.SpellHandlerRegistry.cs): each
+    /// creature in the aim (after line of effect and the cast core's Globe stage) is judged by its alignment, then rolls
+    /// its own spell resistance and Will save against the area's one damage roll (outsiders of the opposed alignment
+    /// against the area's one 1d6-per-level roll). Damage goes through DealDamage (mitigation, concentration, death); the
+    /// core runs the combat-end check. Halves round down (PHB p.177, p.304; SPL-182). The same for every caster.
     /// </summary>
-    private bool ResolveAlignmentBurstSpell(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result,
-        string spellName, string alignmentDescriptor, string emoji,
-        System.Func<Alignment, bool> isFullDamageAlignment,
-        System.Func<Alignment, bool> isHalfDamageAlignment,
-        System.Action<CharacterController, int> applyCondition,
-        System.Func<int> rollConditionDuration)
+    private bool TryResolveAlignmentBurstAoE(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
     {
-        if (caster == null || caster.Stats == null || target == null || target.Stats == null)
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+        AlignmentBurstSpec spec = AlignmentBurstSpecFor(spell.SpellId);
+        if (spec == null)
             return false;
 
-        if (!result.Success)
-            return true;
-
-        string casterName = caster.Stats.CharacterName ?? "Unknown";
-        string targetName = target.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
+        SpellDice dice = CustomSpellDice.AlignmentBurst(casterLevel);
+        SpellDice outsiderDice = CustomSpellDice.AlignmentBurstOutsider(casterLevel);
+        string shapeStr = spell.AoEShapeType == AoEShape.Cube ? $"{spell.AoESizeSquares * 5}-ft. cube" : $"{spell.AoESizeSquares * 5}-ft.-radius burst";
 
-        Alignment targetAlignment = target.Stats.CharacterAlignment;
-        bool fullDamage = isFullDamageAlignment(targetAlignment);
-        bool halfDamage = isHalfDamageAlignment(targetAlignment);
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"{spec.Emoji} {caster.Stats.CharacterName} casts {spell.Name}! ({shapeStr})");
+        sb.AppendLine($"  Damage: {dice} ({outsiderDice} to outsiders) to the opposed alignment, half to neutral | Will DC {saveDc} partial");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
+        sb.AppendLine();
 
-        if (!fullDamage && !halfDamage)
+        var areaRoll = new AreaDamageRoll();
+        var outsiderRoll = new AreaDamageRoll();
+        int targetIndex = 0;
+        if (targets != null)
         {
-            // Target's alignment is same as or not affected by this spell
-            CombatUI?.ShowCombatLog(CombatLogHelper.NoEffect(emoji, spellName, targetName, $"alignment: {targetAlignment}"));
-            return true;
+            foreach (CharacterController target in targets)
+            {
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                targetIndex++;
+                string targetName = target.Stats.CharacterName;
+                sb.AppendLine($"  --- Target {targetIndex}: {targetName} ---");
+
+                Alignment alignment = target.Stats.CharacterAlignment;
+                bool full = spec.IsFullDamage(alignment);
+                bool half = !full && spec.IsHalfDamage(alignment);
+                if (!full && !half)
+                {
+                    sb.AppendLine($"  Unharmed: {spell.Name} harms only the opposed alignment and the neutral (alignment {alignment}).");
+                    sb.AppendLine();
+                    continue;
+                }
+
+                SRResult sr = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                sr.AppendToLog(sb);
+                if (!sr.Overcame)
+                {
+                    sb.AppendLine($"  {targetName} resists {spell.Name} via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
+                }
+
+                bool outsider = full && SpellTargetingService.IsOutsider(target);
+                int damage = outsider
+                    ? outsiderRoll.RollAndLog(spell, outsiderDice, sb, "outsiders")
+                    : areaRoll.RollAndLog(spell, dice, sb);
+                if (half)
+                    damage /= 2; // only half damage to a creature neutral on the axis
+
+                SaveResult save = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
+                save.AppendHalfDamageLog(sb);
+                if (save.Saved)
+                    damage /= 2; // half again: one quarter of the roll for a neutral creature
+                // A blinking creature takes half damage from area attacks (PHB p.206), as in the other area handlers.
+                damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
+
+                int hpBefore = target.Stats.CurrentHP;
+                DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, save.Saved));
+                sb.AppendLine($"  Damage: {dealt.FinalDamage} {spec.Descriptor} ({(outsider ? "outsider, " : "")}{(half ? "half, neutral" : "full")}){DescribeMitigation(dealt)}");
+                sb.AppendLine($"  {targetName}: {hpBefore} → {target.Stats.CurrentHP} HP");
+
+                if (target.Stats.IsDead)
+                {
+                    sb.AppendLine($"  💀 {targetName} has been slain!");
+                }
+                else if (full && !save.Saved)
+                {
+                    int rounds = spec.ConditionRounds(spell);
+                    if (_conditionService != null)
+                        _conditionService.ApplyCondition(target, spec.Condition, rounds, source: caster, sourceNameOverride: spell.Name,
+                            sourceCategory: "Spell", sourceId: spell.SpellId);
+                    else
+                        target.ApplyCondition(spec.Condition, rounds, spell.Name);
+                    sb.AppendLine($"  {targetName} is {spec.ConditionName} for {rounds} round(s).");
+                }
+
+                Debug.Log($"[{spell.Name}] {caster.Stats.CharacterName} -> {targetName}: {dealt.FinalDamage} damage, save {save.Total} vs DC {saveDc}, alignment={alignment}");
+                sb.AppendLine();
+            }
         }
 
-        // Roll damage: 1d8 per 2 CL, max 5d8, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
-        SpellDice burstDice = CustomSpellDice.AlignmentBurst(casterLevel);
-        int numDice = burstDice.Count;
-        int damage = SpellDiceRules.RollFor(spell, burstDice);
-
-        // Half damage for neutral creatures on the relevant axis
-        if (halfDamage)
-            damage = Mathf.Max(1, damage / 2);
-
-        // Will save at the spell's DC (Clr 4 or domain 4; SpellSaveDCRules, SPL-001, SPL-031)
-        int saveDC = GetSpellSaveDC(caster, spell);
-        var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, saveDC);
-        bool saveSuccess = saveResult.Saved;
-
-        if (saveSuccess)
-            damage = Mathf.Max(1, damage / 2);
-
-        // Apply damage: untyped divine (holy/unholy/order's/chaos) damage through the mitigation pipeline (SPL-004).
-        // The single-target pipeline runs concentration, death and the combat-end check from result.
-        DamageResolutionResult dealt = ApplyDamagePacket(target, damage, DamagePackets.Spell(spellName, DamageType.Untyped));
-        damage = dealt.FinalDamage;
-        result.DamageDealt = damage;
-        result.TargetKilled |= target.Stats.IsDead;
-
-        // Apply condition only if save failed and full damage alignment
-        int conditionDuration = 0;
-        string conditionMsg = "";
-        if (!saveSuccess && fullDamage)
-        {
-            conditionDuration = rollConditionDuration();
-            applyCondition(target, conditionDuration);
-            conditionMsg = $" + condition {conditionDuration} rd";
-        }
-
-        string saveStr = saveSuccess ? $"<color=#88FF88>saved (DC {saveDC})</color>" : $"<color=#FF8888>failed save (DC {saveDC})</color>";
-        string alignStr = halfDamage ? "half (neutral)" : "full";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Special(emoji, $"{spellName}! {casterName} blasts {targetName} for {numDice}d8 = {damage} {alignmentDescriptor} damage ({alignStr}), {saveStr}{conditionMsg}!"));
-        Debug.Log($"[{spellName}] {casterName} -> {targetName}: {damage} damage, save {saveResult.Total} vs DC {saveDC}, alignment={targetAlignment}");
-
+        if (targetIndex == 0)
+            sb.AppendLine("  No valid targets in area!");
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
         return true;
     }
 

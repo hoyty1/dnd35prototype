@@ -206,13 +206,7 @@ public partial class GameManager
         if (greaseCells.Count == 0)
             return true;
 
-        bool casterIsPC = caster.Team == CharacterTeam.Player;
-        CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-        List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
-        List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
-        List<CharacterController> targets = AoESystem.GetTargetsInArea(
-            greaseCells, caster, allyTeam, enemyTeam,
-            AoETargetFilter.All, casterIsPC, Grid);
+        List<CharacterController> targets = AoESystem.GetTargetsInArea(greaseCells, caster, AoETargetFilter.All, Grid);
 
         _isAoETargeting = false;
         _currentAoECells = null;

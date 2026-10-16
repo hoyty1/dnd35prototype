@@ -199,6 +199,8 @@ namespace DND35.AI.Profiles
                     return AoESystem.GetBurstCells(primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
                 case AoEShape.Cone:
                     return AoESystem.GetConeCells(caster.GridPosition, primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
+                case AoEShape.Cube:
+                    return AoESystem.GetCubeCells(primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
                 default:
                     // Fallback for area-target spells without detailed shape metadata.
                     if (spell.TargetType == SpellTargetType.Area)

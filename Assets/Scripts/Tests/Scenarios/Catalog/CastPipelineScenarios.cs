@@ -28,6 +28,11 @@ namespace Tests.Scenarios
             yield return S("cast-ui-fireball", UiFireball);
             yield return S("cast-ui-cone-line", UiConeLine);
             yield return S("area-damage-one-roll", AreaDamageOneRoll);
+            yield return S("sound-burst-area", SoundBurstArea);
+            yield return S("cast-pair-alignment-burst", AlignmentBurstUi);
+            yield return S("consecrate-area", ConsecrateArea);
+            yield return S("holy-area-overlap", HolyAreaOverlap);
+            yield return S("bane-area", BaneArea);
             yield return S("cast-ui-sleep", UiSleep);
             yield return S("cast-ui-sleep-quickened", UiSleepQuickened);
             yield return S("cast-scroll-ui", () => ItemCast(scroll: true));
@@ -508,6 +513,330 @@ namespace Tests.Scenarios
 
         // ── rules/area-damage-one-roll (batch 11 step 20, D6) ───────────
 
+        // ── rules/sound-burst-area, rules/cast-pair-alignment-burst, rules/consecrate-area (batch 11 step 23) ──
+
+        /// <summary>A domain slot of <paramref name="level"/> holding <paramref name="spellId"/> (a Ui cleric's domain spell).</summary>
+        private static void AddDomainSlot(CharacterController c, int level, string spellId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting to add a domain slot to");
+            var slot = new SpellSlot(level, true, "Cleric");
+            slot.PrepareWithMetamagic(SpellDatabase.GetSpell(spellId).Clone(), null);
+            sc.SpellSlots.Add(slot);
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        private static readonly string[] SoundBurstKeys = { "fails", "saves", "deaf", "resists", "silenced", "outside" };
+
+        /// <summary>
+        /// SPL-046 (batch 11 step 23): Sound Burst is an area spell (PHB p.281: Area 10-ft.-radius spread, Close range). A Ui
+        /// cleric 7 aims it at "fails"; the spread takes every creature within 10 ft. of that square: "fails" fails its
+        /// Fortitude save (8 sonic, stunned), "saves" makes it (8, not stunned), "deaf" fails it but cannot hear (8, not
+        /// stunned), "resists" has spell resistance 100 (d20 19 + CL 7 fails: nothing), "silenced" is under a Silence (PHB
+        /// p.279: nothing); "outside", 15 ft. away, is not in the area. One d8 is drawn for the whole area (decision D6), and
+        /// the slot is spent. Replaces the single-target pairs rules/cast-pair-sound-burst, -saved, -deaf, -silenced and
+        /// rules/sound-burst-failed (SPL-142's facts, now on one area cast; the NPC side waits for step 25, AI-001).
+        /// </summary>
+        private static ScenarioDef SoundBurstArea()
+        {
+            return Rules("rules/sound-burst-area", "A Ui Sound Burst affects every creature in its 10-ft. spread: one 1d8, each creature's own spell resistance, Silence and stun save (PHB p.281)")
+                .Covers("SPL-046", "SPL-142", "SPL-180", "PHB p.281", "PHB p.279", "PHB p.177", "batch 11 step 23")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => Cleric("Burst Cleric", 7)), 3, 10, Control.Ui)
+                .Npc("fails", "target_dummy", 9, 10, Control.Idle)
+                .Npc("saves", "target_dummy", 10, 10, Control.Idle)
+                .Npc("deaf", "target_dummy", 8, 10, Control.Idle)
+                .Npc("resists", "target_dummy", 9, 11, Control.Idle)
+                .Npc("silenced", "target_dummy", 9, 9, Control.Idle)
+                .Npc("outside", "target_dummy", 12, 10, Control.Idle)
+                .Tweak("cleric", c => Prepare(c, 2, SpellNames.SOUND_BURST))
+                .Tweak("fails", Fails).Tweak("saves", Saves)
+                .Tweak("deaf", c => { Fails(c); c.ApplyCondition(CombatConditionType.Deafened, 100, "scenario"); })
+                .Tweak("resists", c => { Fails(c); c.Stats.SpellResistance = 100; })
+                .Tweak("silenced", c => { Fails(c); c.Stats.SilenceActive = true; c.Stats.SilenceRoundsRemaining = 100; })
+                .Tweak("outside", Fails)
+                .Initiative("cleric", "fails", "saves", "deaf", "resists", "silenced", "outside")
+                .Force(20, 19, null, -1)
+                .Force(8, 8, null, -1)
+                .Turn("cleric", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, SoundBurstKeys); Fact(ctx, "slots.before", Slots(ctx.Get("cleric"))); return true; }),
+                    Step.Cast(SpellNames.SOUND_BURST, "fails"),
+                    Step.Assert("after the burst", ctx =>
+                    {
+                        FactHpLost(ctx, "burst", SoundBurstKeys);
+                        foreach (string k in SoundBurstKeys)
+                            Fact(ctx, k + ".stunned", ctx.Get(k).HasCondition(CombatConditionType.Stunned));
+                        Fact(ctx, "slots.after", Slots(ctx.Get("cleric")));
+                        return true;
+                    }))
+                .Expect("The Ui cast ran", Expect.StepStatus("cleric", 1, "Cast", 0, "done"))
+                .Expect("8 sonic damage to each creature the spread affects; none through spell resistance, a Silence or outside the area (PHB p.281, p.279)",
+                    FactsAre(("burst.lost.fails", 8), ("burst.lost.saves", 8), ("burst.lost.deaf", 8), ("burst.lost.resists", 0), ("burst.lost.silenced", 0), ("burst.lost.outside", 0)))
+                .Expect("Only the creature that fails its Fortitude save and can hear is stunned (PHB p.281)",
+                    FactsAre(("fails.stunned", true), ("saves.stunned", false), ("deaf.stunned", false), ("resists.stunned", false), ("silenced.stunned", false), ("outside.stunned", false)))
+                .Expect("One d8 is drawn for the whole area (decision D6)", Expect.Count("dice", e => e.Int("sides") == 8, 1, 1))
+                .Expect("The 2nd-level slot is spent", v =>
+                {
+                    string before = FactOf(v, "slots.before"), after = FactOf(v, "slots.after");
+                    if (before == null || after == null)
+                        return ExpectResult.Inconclusive("missing slot facts");
+                    return before.Contains("L2:0/") && after.Contains("L2:1/") ? ExpectResult.Pass(before + " -> " + after) : ExpectResult.Fail(before + " -> " + after);
+                })
+                .Build();
+        }
+
+        private static readonly string[] AlignmentBurstKeys = { "evilFails", "evilSaves", "neutralFails", "neutralSaves", "good", "fiend", "blinker", "outside" };
+
+        /// <summary>
+        /// SPL-046 (batch 11 step 23): Holy Smite is an area spell (PHB p.241: Area 20-ft.-radius burst, Medium range),
+        /// resolved per creature by TryResolveAlignmentBurstAoE. A Ui neutral good cleric 7 casts it from a domain slot at
+        /// "evilFails": 3d8 (every d8 is 8: 24) to an evil creature, blinded 1 round on a failed Will save; 12 and no
+        /// blindness on a save; half (12) to a neutral creature, a quarter (6) when it saves, never blinded; nothing to a good
+        /// creature; 7d6 (every d6 is 6: 42) to an evil outsider ("fiend", a dummy made an outsider), blinded; nothing
+        /// outside the area; an evil creature under Blink that fails its save takes half, 12 (PHB p.206: half damage from
+        /// area attacks; the step 23 review), and is blinded. One roll of 3d8 and one of 7d6 for the whole area (decision
+        /// D6). Ui only: NPC area casting waits for batch 11 step 25 (AI-001).
+        /// </summary>
+        private static ScenarioDef AlignmentBurstUi()
+        {
+            Action<CharacterController> Align(Alignment a, Action<CharacterController> saves)
+                => c => { saves(c); c.Stats.CharacterAlignment = a; };
+            return Rules("rules/cast-pair-alignment-burst", "A Ui Holy Smite judges every creature in its 20-ft. burst by alignment: full, half and none, one roll for the area (PHB p.241)")
+                .Covers("SPL-046", "SPL-180", "SPL-182", "PHB p.241", "PHB p.177", "batch 11 step 23")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => { CharacterStats s = Cleric("Smite Cleric", 7); s.CharacterAlignment = Alignment.NeutralGood; return s; }), 3, 10, Control.Ui)
+                .Npc("evilFails", "target_dummy", 10, 10, Control.Idle)
+                .Npc("evilSaves", "target_dummy", 11, 10, Control.Idle)
+                .Npc("neutralFails", "target_dummy", 9, 10, Control.Idle)
+                .Npc("neutralSaves", "target_dummy", 10, 11, Control.Idle)
+                .Npc("good", "target_dummy", 10, 9, Control.Idle)
+                .Npc("fiend", "target_dummy", 11, 11, Control.Idle)
+                .Npc("blinker", "target_dummy", 9, 11, Control.Idle)
+                .Npc("outside", "target_dummy", 16, 10, Control.Idle)
+                .Tweak("cleric", c => AddDomainSlot(c, 4, SpellNames.HOLY_SMITE))
+                .Tweak("evilFails", Align(Alignment.NeutralEvil, Fails))
+                .Tweak("evilSaves", Align(Alignment.NeutralEvil, Saves))
+                .Tweak("neutralFails", Align(Alignment.TrueNeutral, Fails))
+                .Tweak("neutralSaves", Align(Alignment.TrueNeutral, Saves))
+                .Tweak("good", Align(Alignment.LawfulGood, Fails))
+                .Tweak("fiend", c => { Align(Alignment.ChaoticEvil, Fails)(c); c.Stats.CreatureType = "Outsider"; })
+                .Tweak("blinker", c =>
+                {
+                    Align(Alignment.NeutralEvil, Fails)(c);
+                    c.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.BLINK).Clone(), "Blink Wizard", 5, 10);
+                })
+                .Tweak("outside", Align(Alignment.NeutralEvil, Fails))
+                .Initiative("cleric", "evilFails", "evilSaves", "neutralFails", "neutralSaves", "good", "fiend", "blinker", "outside")
+                .Force(20, 10, null, -1)
+                .Force(8, 8, null, -1)
+                .Force(6, 6, null, -1)
+                .Turn("cleric", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordHp(ctx, AlignmentBurstKeys);
+                        Fact(ctx, "blinker.blinking", ctx.Get("blinker").HasActiveBlinkEffect);
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.HOLY_SMITE, "evilFails"),
+                    Step.Assert("after the smite", ctx =>
+                    {
+                        FactHpLost(ctx, "smite", AlignmentBurstKeys);
+                        foreach (string k in AlignmentBurstKeys)
+                            Fact(ctx, k + ".blinded", ctx.Get(k).HasCondition(CombatConditionType.Blinded));
+                        return true;
+                    }))
+                .Expect("The Ui cast ran", Expect.StepStatus("cleric", 1, "Cast", 0, "done"))
+                .Expect("Evil 24, saved 12; neutral 12, saved 6; good none; an evil outsider 42; outside none (PHB p.241)",
+                    FactsAre(("smite.lost.evilFails", 24), ("smite.lost.evilSaves", 12), ("smite.lost.neutralFails", 12), ("smite.lost.neutralSaves", 6),
+                        ("smite.lost.good", 0), ("smite.lost.fiend", 42), ("smite.lost.outside", 0)))
+                .Expect("A blinking evil creature takes half of the 24 from the area spell (PHB p.206)",
+                    FactsAre(("blinker.blinking", true), ("smite.lost.blinker", 12)))
+                .Expect("Only the evil creatures that fail their Will save are blinded (PHB p.241)",
+                    FactsAre(("evilFails.blinded", true), ("evilSaves.blinded", false), ("neutralFails.blinded", false), ("neutralSaves.blinded", false),
+                        ("good.blinded", false), ("fiend.blinded", true), ("blinker.blinded", true), ("outside.blinded", false)))
+                .Expect("One 3d8 and one 7d6 for the whole area (decision D6)",
+                    Expect.All(Expect.Count("dice", e => e.Int("sides") == 8, 3, 3), Expect.Count("dice", e => e.Int("sides") == 6, 7, 7)))
+                .Build();
+        }
+
+        private static readonly string[] BaneKeys = { "fails", "saves", "resists", "skeleton", "ally", "far" };
+
+        /// <summary>
+        /// SPL-046, SPL-119 (batch 11 step 23): Bane is an area spell (PHB p.203: all enemies within 50 ft.), a 50-ft. burst
+        /// centred on the caster with the enemies filter (a delegated RAW reading 2026-10-14: Bless's burst, PHB p.205). A Ui
+        /// cleric 7 casts it and confirms the self-centred preview; each enemy gets the single-target cast's tests through
+        /// SpellCaster.Cast (`ResolveBaneAoE`): "fails" fails its Will save (-1 on attack rolls), "saves" makes it, "resists"
+        /// has SR 100 (d20 10 + CL 7 fails), a skeleton is immune to mind-affecting effects; an ally in the burst ("ally",
+        /// a Player-team creature) is not an enemy, and "far" is 55 ft. away. Every d20 is 10.
+        /// </summary>
+        private static ScenarioDef BaneArea()
+        {
+            return Rules("rules/bane-area", "A Ui Bane takes the caster's enemies within 50 ft.: each its own spell resistance, Will save and mind-affecting immunity (PHB p.203)")
+                .Covers("SPL-046", "SPL-119", "SPL-027", "PHB p.203", "PHB p.205", "batch 11 step 23")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => { CharacterStats s = Cleric("Bane Cleric", 7); s.CharacterAlignment = Alignment.NeutralGood; return s; }), 5, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => Cleric("Bane Ally", 1)), 6, 11, Control.Idle)
+                .Npc("fails", "target_dummy", 9, 10, Control.Idle)
+                .Npc("saves", "target_dummy", 9, 11, Control.Idle)
+                .Npc("resists", "target_dummy", 9, 9, Control.Idle)
+                .Npc("skeleton", "skeleton_warrior", 10, 10, Control.Idle)
+                .Npc("far", "target_dummy", 16, 10, Control.Idle)
+                .Tweak("cleric", c => Prepare(c, 1, SpellNames.BANE))
+                .Tweak("fails", Fails).Tweak("saves", Saves)
+                .Tweak("resists", c => { Fails(c); c.Stats.SpellResistance = 100; })
+                .Tweak("skeleton", c => SaveTweak(c, -30))
+                .Tweak("ally", c => SaveTweak(c, -30))
+                .Tweak("far", Fails)
+                .Initiative("cleric", "ally", "fails", "saves", "resists", "skeleton", "far")
+                .Force(20, 10, null, -1)
+                .Turn("cleric", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        foreach (string k in BaneKeys)
+                            Numbers(ctx)["atk|" + k] = ctx.Get(k).Stats.Bonuses.Total(BonusTarget.AttackRoll);
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.BANE, "fails"),
+                    Step.Assert("after bane", ctx =>
+                    {
+                        foreach (string k in BaneKeys)
+                            Fact(ctx, "bane." + k, ctx.Get(k).Stats.Bonuses.Total(BonusTarget.AttackRoll) - Numbers(ctx)["atk|" + k]);
+                        return true;
+                    }))
+                .Expect("The Ui cast ran", Expect.StepStatus("cleric", 1, "Cast", 0, "done"))
+                .Expect("Only the enemy that fails its Will save takes -1 on attack rolls; saved, resisting, mind-affecting-immune, allied and distant creatures none (PHB p.203)",
+                    FactsAre(("bane.fails", -1), ("bane.saves", 0), ("bane.resists", 0), ("bane.skeleton", 0), ("bane.ally", 0), ("bane.far", 0)))
+                .Build();
+        }
+        /// <summary>
+        /// SPL-042 (batch 11 step 23): Consecrate has its area (PHB p.212: 20-ft.-radius emanation, Close range), so its area
+        /// handler runs. A Ui neutral good cleric 7 casts it at a skeleton: the undead in the area takes -1 on attack rolls,
+        /// weapon damage rolls and saves (the bonus ledger, HolyAreaRules); a living dummy in the area does not. The
+        /// skeleton (Scripted) then walks out of the area and loses the penalty (UpdateHolyAreaEffectsForCharacter, called
+        /// for every move).
+        /// </summary>
+        private static ScenarioDef ConsecrateArea()
+        {
+            // The ledger totals' change since the cast's start (the dummy has its own -10 on saves), and the flag.
+            void RecordLedger(ScenarioContext ctx, string tag)
+            {
+                foreach (string k in new[] { "skel", "living" })
+                {
+                    CharacterStats s = ctx.Get(k).Stats;
+                    int attack = s.Bonuses.Total(BonusTarget.AttackRoll), damage = s.Bonuses.Total(BonusTarget.WeaponDamage), saves = s.Bonuses.Total(BonusTarget.AllSaves);
+                    if (tag == "before")
+                    {
+                        Numbers(ctx)["atk|" + k] = attack;
+                        Numbers(ctx)["dmg|" + k] = damage;
+                        Numbers(ctx)["sav|" + k] = saves;
+                    }
+                    Fact(ctx, tag + "." + k, (attack - Numbers(ctx)["atk|" + k]) + "/" + (damage - Numbers(ctx)["dmg|" + k]) + "/"
+                        + (saves - Numbers(ctx)["sav|" + k]) + "/" + (s.ConsecrateActive ? "in" : "out"));
+                }
+            }
+            return Rules("rules/consecrate-area", "A Ui Consecrate gives the undead in its 20-ft. area -1 on attacks, damage and saves until it leaves (PHB p.212)")
+                .Covers("SPL-042", "SPL-050", "PHB p.212", "batch 11 step 23")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => { CharacterStats s = Cleric("Consecrating Cleric", 7); s.CharacterAlignment = Alignment.NeutralGood; return s; }), 3, 10, Control.Ui)
+                .Npc("skel", "skeleton_warrior", 8, 10, Control.Scripted)
+                .Npc("living", "target_dummy", 8, 12, Control.Idle)
+                .Tweak("cleric", c => Prepare(c, 2, SpellNames.CONSECRATE))
+                .Initiative("cleric", "skel", "living")
+                .Turn("cleric", 1,
+                    Step.Assert("record", ctx => { RecordLedger(ctx, "before"); return true; }),
+                    Step.Cast(SpellNames.CONSECRATE, "skel"),
+                    Step.Assert("after the cast", ctx => { RecordLedger(ctx, "cast"); return true; }))
+                .Turn("skel", 1,
+                    Step.Move(13, 10),
+                    Step.Assert("after leaving", ctx =>
+                    {
+                        RecordLedger(ctx, "left");
+                        Fact(ctx, "skel.pos", ctx.Get("skel").GridPosition.x + "," + ctx.Get("skel").GridPosition.y);
+                        return true;
+                    }))
+                .Expect("The Ui cast ran", Expect.StepStatus("cleric", 1, "Cast", 0, "done"))
+                .Expect("The skeleton walked out of the area", FactIs("skel.pos", "13,10"))
+                .Expect("Before the cast neither creature has a modifier", FactsAre(("before.skel", "0/0/0/out"), ("before.living", "0/0/0/out")))
+                .Expect("In the area the undead takes -1 on attacks, damage and saves; the living creature nothing (PHB p.212)",
+                    FactsAre(("cast.skel", "-1/-1/-1/in"), ("cast.living", "0/0/0/out")))
+                .Expect("Out of the area the undead loses the penalty (PHB p.212: undead entering the area)",
+                    FactsAre(("left.skel", "0/0/0/out"), ("left.living", "0/0/0/out")))
+                .Build();
+        }
+        /// <summary>
+        /// SPL-042 (the batch 11 step 23 review): which undead are in a Desecrate area, and what happens when a Consecrate
+        /// dispels one of two. Round 1: a Ui neutral evil cleric 7 desecrates around (7,10) (area A). Round 2: it desecrates
+        /// around (13,10) (area B), so the skeleton at (10,10) stands in both; a Large skeleton owlbear (2x2) walks from
+        /// (17,5), wholly outside B, to (16,6), where its own square is still outside but (16,7) is inside: any occupied
+        /// square in the area puts it in, so it gains the +1 profane bonus (PHB p.218). Then a Ui neutral good cleric 7
+        /// consecrates around (1,10), overlapping A but not B: A is dispelled (PHB p.212), and the skeleton keeps its +1
+        /// because it is still in B, as does the owlbear.
+        /// </summary>
+        private static ScenarioDef HolyAreaOverlap()
+        {
+            // The +1 on attack rolls, weapon damage rolls and saves since the start, and the flag, for each undead.
+            void RecordLedger(ScenarioContext ctx, string tag)
+            {
+                foreach (string k in new[] { "skel", "owl" })
+                {
+                    CharacterStats s = ctx.Get(k).Stats;
+                    int attack = s.Bonuses.Total(BonusTarget.AttackRoll), damage = s.Bonuses.Total(BonusTarget.WeaponDamage), saves = s.Bonuses.Total(BonusTarget.AllSaves);
+                    if (tag == "before")
+                    {
+                        Numbers(ctx)["atk|" + k] = attack;
+                        Numbers(ctx)["dmg|" + k] = damage;
+                        Numbers(ctx)["sav|" + k] = saves;
+                    }
+                    Fact(ctx, tag + "." + k, (attack - Numbers(ctx)["atk|" + k]) + "/" + (damage - Numbers(ctx)["dmg|" + k]) + "/"
+                        + (saves - Numbers(ctx)["sav|" + k]) + "/" + (s.DesecrateActive ? "in" : "out"));
+                }
+            }
+            // Whether the owlbear's own square, and any of its squares, is in area B (the precondition of the multi-square case).
+            void RecordOwlInB(ScenarioContext ctx, string tag)
+            {
+                HashSet<UnityEngine.Vector2Int> b = AoESystem.GetPlacedAreaCells(SpellDatabase.GetSpell(SpellNames.DESECRATE), new UnityEngine.Vector2Int(13, 10), SquareGrid.Instance);
+                CharacterController owl = ctx.Get("owl");
+                bool any = false;
+                foreach (UnityEngine.Vector2Int sq in owl.GetOccupiedSquares())
+                    any |= b.Contains(sq);
+                Fact(ctx, tag + ".owlsquares", owl.GetOccupiedSquares().Count + "/" + (b.Contains(owl.GridPosition) ? "base-in" : "base-out") + "/" + (any ? "part-in" : "all-out"));
+            }
+            return Rules("rules/holy-area-overlap", "A Desecrate area takes an undead creature in any of its squares, and a Consecrate dispelling one of two Desecrate areas leaves the other's bonus (PHB p.212, p.218)")
+                .Covers("SPL-042", "SPL-050", "PHB p.212", "PHB p.218", "batch 11 step 23")
+                .MaxRounds(2)
+                .Pc("evil", ActorSource.Stats(() => { CharacterStats s = Cleric("Desecrating Cleric", 7); s.CharacterAlignment = Alignment.NeutralEvil; return s; }), 10, 14, Control.Ui)
+                .Pc("good", ActorSource.Stats(() => { CharacterStats s = Cleric("Consecrating Cleric", 7); s.CharacterAlignment = Alignment.NeutralGood; return s; }), 1, 14, Control.Ui)
+                .Npc("skel", "skeleton_warrior", 10, 10, Control.Idle)
+                .Npc("owl", "skeleton_owlbear", 17, 5, Control.Scripted)
+                .Tweak("evil", c => Prepare(c, 2, SpellNames.DESECRATE, 2))
+                .Tweak("good", c => Prepare(c, 2, SpellNames.CONSECRATE))
+                .Initiative("evil", "owl", "good", "skel")
+                .Turn("evil", 1,
+                    Step.Assert("record", ctx => { RecordLedger(ctx, "before"); return true; }),
+                    Step.CastAt(SpellNames.DESECRATE, 7, 10),
+                    Step.Assert("after area A", ctx => { RecordLedger(ctx, "a"); return true; }))
+                .Turn("evil", 2,
+                    Step.CastAt(SpellNames.DESECRATE, 13, 10),
+                    Step.Assert("after area B", ctx => { RecordLedger(ctx, "b"); RecordOwlInB(ctx, "b"); return true; }))
+                .Turn("owl", 2,
+                    Step.Move(16, 6),
+                    Step.Assert("after the owlbear's move", ctx => { RecordLedger(ctx, "moved"); RecordOwlInB(ctx, "moved"); return true; }))
+                .Turn("good", 2,
+                    Step.CastAt(SpellNames.CONSECRATE, 1, 10),
+                    Step.Assert("after the Consecrate", ctx => { RecordLedger(ctx, "consecrated"); return true; }))
+                .Expect("The Ui casts ran", Expect.StepStatus("evil", 1, "Cast", 0, "done"))
+                .Expect("The second Desecrate ran", Expect.StepStatus("evil", 2, "Cast", 0, "done"))
+                .Expect("The Consecrate ran", Expect.StepStatus("good", 2, "Cast", 0, "done"))
+                .Expect("Area A takes the skeleton only; area B adds nothing for it (one source, PHB p.171) and the owlbear is still wholly outside",
+                    FactsAre(("before.skel", "0/0/0/out"), ("a.skel", "1/1/1/in"), ("a.owl", "0/0/0/out"), ("b.skel", "1/1/1/in"), ("b.owl", "0/0/0/out"),
+                        ("b.owlsquares", "4/base-out/all-out")))
+                .Expect("The owlbear's own square is outside B but another of its squares is inside, so it gains the +1 (PHB p.218)",
+                    FactsAre(("moved.owlsquares", "4/base-out/part-in"), ("moved.owl", "1/1/1/in")))
+                .Expect("The Consecrate dispels A only: the skeleton and the owlbear, still in B, keep the +1 (PHB p.212)",
+                    FactsAre(("consecrated.skel", "1/1/1/in"), ("consecrated.owl", "1/1/1/in")))
+                .Build();
+        }
         /// <summary>
         /// Decision D6 of the batch 11 design (delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180): an area damage
         /// effect rolls its damage once and every creature in the area takes that one total before its own save (PHB p.231:
@@ -1053,35 +1382,9 @@ namespace Tests.Scenarios
                         ("scripted.target.dead", true), ("scripted.caster.thp", 0), ("scripted.caster.dk", "0"))) };
             yield return new PairSpec { Family = "silence", SpellId = SpellNames.SILENCE, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
                 Title = "Silence on a creature (PHB p.279)", Covers = new[] { "PHB p.279" } };
-            // Sound Burst (PHB p.281, Fortitude partial; batch 11 step 11, SPL-142): the 1d8 (8) sonic damage always lands, the
-            // cast's one Fortitude save decides the stun, and a creature that cannot hear is not stunned.
-            yield return new PairSpec { Family = "sound-burst", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst (PHB p.281)", Covers = new[] { "PHB p.281" },
-                SharedPins = b => b.Expect("A failed Fortitude save: 8 sonic damage and stunned (PHB p.281)",
-                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && t.Contains("Stunned") ? null : "expected hp=142 and Stunned", "L2:1/")) };
-            yield return new PairSpec { Family = "sound-burst-failed", Id = "rules/sound-burst-failed", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst stopped by spell resistance (PHB p.281, p.177)", Covers = new[] { "PHB p.281", "PHB p.177", "SPL-142" },
-                // SR 100: the caster level check (d20 19 + CL 7 = 26) fails, so the spell has no effect at all.
-                TargetTweak = c => c.Stats.SpellResistance = 100,
-                SharedPins = b => b.Expect("Spell resistance stops the spell: no damage and no stun on either target, the slot spent (SPL-142)",
-                    PairTargets(t => t.StartsWith("hp=150 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=150 and no Stunned", "L2:1/")) };
-            yield return new PairSpec { Family = "sound-burst-saved", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst on a creature that saves (PHB p.281)", Covers = new[] { "PHB p.281", "SPL-142" },
-                TargetTweak = c => SaveTweak(c, 30),
-                SharedPins = b => b.Expect("A successful Fortitude save avoids only the stun: 8 sonic damage, not stunned (PHB p.281; SPL-142)",
-                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=142 and no Stunned", "L2:1/")) };
-            yield return new PairSpec { Family = "sound-burst-deaf", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst on a deafened creature (PHB p.281)", Covers = new[] { "PHB p.281", "SPL-142" },
-                TargetTweak = c => c.ApplyCondition(CombatConditionType.Deafened, 100, "scenario"),
-                SharedPins = b => b.Expect("A creature that cannot hear is not stunned but still takes the 8 sonic damage (PHB p.281; SPL-142)",
-                    PairTargets(t => t.StartsWith("hp=142 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=142 and no Stunned", "L2:1/")) };
-            // Silence (PHB p.279): a defense against sonic attacks, so a Sound Burst has no effect on a creature under it,
-            // neither the damage nor the stun (delegated RAW reading 2026-10-14; SPL-142).
-            yield return new PairSpec { Family = "sound-burst-silenced", SpellId = SpellNames.SOUND_BURST, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
-                Title = "Sound Burst on a creature under a Silence (PHB p.281, p.279)", Covers = new[] { "PHB p.281", "PHB p.279", "SPL-142" },
-                TargetTweak = c => { c.Stats.SilenceActive = true; c.Stats.SilenceRoundsRemaining = 100; },
-                SharedPins = b => b.Expect("Silence keeps the sonic spell out: no damage and no stun on either target, the slot spent (PHB p.279)",
-                    PairTargets(t => t.StartsWith("hp=150 ", StringComparison.Ordinal) && !t.Contains("Stunned") ? null : "expected hp=150 and no Stunned", "L2:1/")) };
+            // Sound Burst is an area spell since batch 11 step 23 (SPL-046): its five pairs (failed save, spell resistance,
+            // saved, deafened, silenced) became the one Ui area scenario rules/sound-burst-area; the NPC side waits for step 25
+            // (AI-001: NPC area casting).
             yield return new PairSpec { Family = "searing-light", SpellId = SpellNames.SEARING_LIGHT, Caster = cleric, SlotLevel = 3, TargetNpc = "target_dummy",
                 Title = "Searing Light (PHB p.275)", Covers = new[] { "PHB p.275" } };
             yield return new PairSpec { Family = "death-ward", SpellId = SpellNames.DEATH_WARD, Caster = cleric, SlotLevel = 4,

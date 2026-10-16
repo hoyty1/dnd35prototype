@@ -17,12 +17,21 @@ public static partial class SpellDatabase
                     Description = "Enemies take –1 on attack rolls and saves vs fear. 1 min/level. Will save negates. PHB p.203",
                     SpellLevel = 1, School = "Enchantment",
                     ClassList = new[] { "Cleric" },
-                    TargetType = SpellTargetType.SingleEnemy, // Simplified from area
-                    RangeSquares = 10,
+                    // PHB p.203: Range: 50 ft.; Area: all enemies within 50 ft. A 50-ft. burst centred on the caster that takes
+                    // its enemies, Bless's area with the other side (PHB p.205; batch 11 step 23, SPL-046; delegated RAW reading
+                    // 2026-10-14: "within 50 ft." is measured from the caster, as Bless's burst is centred on it)
+                    TargetType = SpellTargetType.Area,
+                    RangeSquares = 0, // Self-centered burst
                     AreaRadius = 10,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 10, // 50 ft radius = 10 squares
+                    AoERangeSquares = 0, // Self-centered burst (centered on caster)
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
+                    SpellResistanceApplies = true, // PHB p.203: Spell Resistance: Yes (batch 11 step 23)
+                    IsMindAffecting = true, // PHB p.203: [Fear, Mind-Affecting] (batch 11 step 23)
                     BuffAttackBonus = -1,
                     BuffSaveBonus = -1,
                     BuffDurationRounds = 30,

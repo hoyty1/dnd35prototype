@@ -337,7 +337,8 @@ public partial class GameManager
         if (req == null || req.Spell == null || req.Caster == null)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-cast");
         // Only a single-target cast has a target creature to test. An area cast's creatures are the ones in the aimed area
-        // (the area path never had a target test; step 23 gives area aims their own legality); a summon aims at a square
+        // (the area path never had a target test; the area aim's origin and line of effect are batch 11 step 24's,
+        // raw-area-origin-intersections, and SPL-006's); a summon aims at a square
         // and Grease at an area or an object, both picked from the targeting highlight (PerformSummonMonsterCast,
         // PerformSummonSwarmCast and PerformGreaseCast never had a target test either); a hold has no target until its
         // delivery, which has its own cast and test.
@@ -1271,7 +1272,7 @@ public partial class GameManager
 
     /// <summary>
     /// Handlers: the SpellId registry (GameManager.SpellHandlerRegistry.cs) runs the handler registered for the spell when
-    /// its gate passes. A claimed cast skips the Buff stage; Shield Other and the Sound Burst stun go on to it. A failed
+    /// its gate passes. A claimed cast skips the Buff stage; Shield Other goes on to it. A failed
     /// cast (spell resistance, a deafened caster's verbal failure, a missed touch) lands no handler's effect: the gate, or
     /// for the gate-None handlers (Cause Fear, Ghoul Touch, Scare, Animate Rope) the handler's own test (SPL-142).
     /// </summary>
@@ -1404,8 +1405,8 @@ public partial class GameManager
 
     /// <summary>
     /// The area's line of effect (PHB p.176): the squares and creatures the origin cannot reach are dropped from the
-    /// request's aim, in place (the lists the UI passed, as before). The origin is the centre of a burst's squares, else
-    /// the caster's square (cones, lines and the rest), and is recorded on the aim.
+    /// request's aim, in place (the lists the UI passed, as before). The origin is the centre of a burst's or a cube's
+    /// squares, else the caster's square (cones, lines and the rest), and is recorded on the aim.
     /// </summary>
     private static void FilterAreaAimByLineOfEffect(SpellCastRequest req)
     {
@@ -1416,9 +1417,9 @@ public partial class GameManager
             return;
 
         Vector2Int loeOrigin;
-        if (spell.AoEShapeType == AoEShape.Burst)
+        if (AoESystem.IsPlacedShape(spell.AoEShapeType))
         {
-            // For bursts, the centre of the area's squares.
+            // For bursts and cubes, the centre of the area's squares.
             int sumX = 0, sumY = 0, count = 0;
             foreach (Vector2Int c in aoeCells)
             {

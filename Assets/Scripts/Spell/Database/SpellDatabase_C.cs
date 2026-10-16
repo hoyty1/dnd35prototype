@@ -31,9 +31,17 @@ public static partial class SpellDatabase
                     SpellLevel = 1,
                     School = "Enchantment",
                     ClassList = new string[] { "Cleric" },
+                    // PHB p.207: Targets: animals within 30 ft. of each other, at Close range. Chosen here as the hostile
+                    // animals in a 15-ft.-radius burst, which keeps every two of them within 30 ft. of each other (batch 11
+                    // step 23, SPL-042; delegated RAW reading 2026-10-14: the caster picks the targets, so a burst of half the
+                    // spread with the enemies filter stands for that choice)
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Close,
-                    AreaRadius = 2,
+                    AreaRadius = 3,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 3,
+                    AoERangeSquares = 0, // the spell's Close range
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
                     EffectType = SpellEffectType.Debuff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
@@ -297,6 +305,11 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Close,
                     RangeSquares = 5,
                     AreaRadius = 4,
+                    // PHB p.212: Area: 20-ft.-radius emanation, at a point in Close range (batch 11 step 23, SPL-042)
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Close range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
                     DurationType = DurationType.Hours,
@@ -536,6 +549,12 @@ public static partial class SpellDatabase
                     // Chaos 4 only (PHB p.208): no class list; DomainDatabase gives the Chaos domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    // PHB p.208: Area: 20-ft.-radius burst, at a point in Medium range; every creature in it, the alignment
+                    // deciding the effect (batch 11 step 23, SPL-046)
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Medium range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

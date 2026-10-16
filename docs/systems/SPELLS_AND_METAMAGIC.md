@@ -44,18 +44,18 @@ Each spell was classified by whether its ID (constant or literal, aliases resolv
 
 | Kind | Meaning | Spells | Of which placeholders |
 |---|---|---|---|
-| Bespoke | ID referenced by effect code, or a summon spell (summons are detected by ID pattern) | 214 | 2 (Summon Monster I, II; they work, SPL-021) |
-| Data-driven | no ID reference; dice (`SpellCaster.Cast`) or `Buff*` fields (`StatusEffectManager.AddEffect`) carry the effect | 33 | 2 (Glyph of Warding, Lesser Restoration: generic dice only, SPL-044) |
+| Bespoke | ID referenced by effect code, or a summon spell (summons are detected by ID pattern) | 215 | 2 (Summon Monster I, II; they work, SPL-021) |
+| Data-driven | no ID reference; dice (`SpellCaster.Cast`) or `Buff*` fields (`StatusEffectManager.AddEffect`) carry the effect | 32 | 2 (Glyph of Warding, Lesser Restoration: generic dice only, SPL-044) |
 | No effect | neither | 45 | 43 |
 
-Data-driven, not placeholder (31): Acid Splash, Cure Minor Wounds, Guidance, Inflict Minor Wounds, Ray of Frost, Resistance, Virtue; Bane, Bless, Bless Weapon, Burning Hands, Chill Touch, Cure Light Wounds, Divine Favor, Inflict Light Wounds, Longstrider; Acid Arrow, Acid Fog, Cure Moderate Wounds, Flame Strike, Inflict Moderate Wounds, Scorching Ray, Shatter, and the three test spells (`test_cone_30` Flame Jet, `test_cone_60` Glacial Blast, `test_line_60` Lightning Lance); Cure Serious Wounds, Heroism, Inflict Serious Wounds; Cure Critical Wounds, Inflict Critical Wounds. Burning Hands, Shocking Grasp, Flame Strike and the Cure and Inflict spells scale with caster level and Cure/Inflict invert on undead through `SpellDiceRules` (SPL-005, 2026-10-09); Scorching Ray still fires one ray (SPL-125), Shatter hits any creature at 1d6 (SPL-126) and Chill Touch is one touch whose save negates its damage (SPL-127); the `Buff*` attack, weapon damage, save and skill bonuses keep their own bonus type and stack by the PHB rules (`CharacterStats.Bonuses`, 2026-10-09; Magic Fang still reaches every attack, SPL-133).
+Data-driven, not placeholder (30; Bane has an area handler since batch 11 step 23, `ResolveBaneAoE`): Acid Splash, Cure Minor Wounds, Guidance, Inflict Minor Wounds, Ray of Frost, Resistance, Virtue; Bless, Bless Weapon, Burning Hands, Chill Touch, Cure Light Wounds, Divine Favor, Inflict Light Wounds, Longstrider; Acid Arrow, Acid Fog, Cure Moderate Wounds, Flame Strike, Inflict Moderate Wounds, Scorching Ray, Shatter, and the three test spells (`test_cone_30` Flame Jet, `test_cone_60` Glacial Blast, `test_line_60` Lightning Lance); Cure Serious Wounds, Heroism, Inflict Serious Wounds; Cure Critical Wounds, Inflict Critical Wounds. Burning Hands, Shocking Grasp, Flame Strike and the Cure and Inflict spells scale with caster level and Cure/Inflict invert on undead through `SpellDiceRules` (SPL-005, 2026-10-09); Scorching Ray still fires one ray (SPL-125), Shatter hits any creature at 1d6 (SPL-126) and Chill Touch is one touch whose save negates its damage (SPL-127); the `Buff*` attack, weapon damage, save and skill bonuses keep their own bonus type and stack by the PHB rules (`CharacterStats.Bonuses`, 2026-10-09; Magic Fang still reaches every attack, SPL-133).
 
 No effect, not placeholder (2): Command and Hypnotic Pattern (SPL-045).
 
 | Class | Bespoke | Data-driven | No effect |
 |---|---|---|---|
 | Wizard/Sorcerer | 144 | 13 | 32 |
-| Cleric | 98 | 21 | 21 |
+| Cleric | 99 | 20 | 21 |
 | Druid | 39 | 4 | 5 |
 | Bard | 60 | 7 | 6 |
 | Ranger | 13 | 1 | 4 |
@@ -91,7 +91,6 @@ Levels and lists below are from the PHB spell lists (Chapter 11), checked from m
 | Bard | Bull's Strength, Bear's Endurance, Owl's Wisdom at 2; Hideous Laughter at 1 and 2 (SPL-102) | not on the Bard list; Hideous Laughter Brd 1 only |
 | Cleric general list | Protection from Arrows at 2 (SPL-102); the level 3-4 domain-only and druid spells (Holy Smite, Order's Wrath, Chaos Hammer, Unholy Blight, Command Plants, Spike Stones, Dominate Animal, Plant Growth) were taken off on 2026-10-14 (CRE-062) | Sor/Wiz |
 | Formerly `domain_*` spells | Calm Animals, Detect Secret Doors, Longstrider, Magic Stone (Clr 1); Heat Metal, Hold Animal, Produce Flame, Soften Earth and Stone (Clr 2), all from `ClassList = { "Cleric" }` (SPL-105) | see section 2, "Duplicates history" |
-| Bane, Sound Burst; Chaos Hammer, Holy Smite, Order's Wrath, Unholy Blight | Bane and Sound Burst are `SingleEnemy` (SPL-048); the four alignment bursts are `TargetType.Area` but resolve against one clicked target (SPL-046) | area spells |
 | Display names | "See Invisible", "Floating Disk" (SPL-106) | See Invisibility, Tenser's Floating Disk |
 
 ### Notable PHB spells missing at levels 0-5
@@ -272,7 +271,7 @@ Data: `Character/Religion/DomainDatabase.cs` (22 PHB domains, `DomainData` with 
 | Death | Cause Fear / Death Knell | death touch 1/day | unreachable: `ActivateDomainPowerByName` only sets `_pendingDomainPower`, and `ResolveDomainPowerOnTarget` has no caller; because the use is never spent, a cleric with Death listed first can never use the other domain's power (CHR-060) |
 | Destruction | Inflict Light Wounds / Shatter | smite: +4 attack, +cleric level damage, 1/day | +4 attack and +cleric level damage (CHR-005 fixed 2026-10-09, not verified in Play mode); melee attacks only, so a ranged attack neither gains nor uses it (PHB p.186, 2026-10-09) |
 | Earth | Magic Stone / Soften Earth and Stone | turn air, rebuke earth | wrong, as Air |
-| Evil | Protection from Good / Desecrate (Desecrate unreachable, SPL-042) | evil spells at +1 CL | works |
+| Evil | Protection from Good / Desecrate (an area since batch 11 step 23; SPL-050 lists what it lacks) | evil spells at +1 CL | works |
 | Fire | Burning Hands / Produce Flame | turn water, rebuke fire | wrong, as Air |
 | Good | Protection from Evil / Aid | good spells at +1 CL | works; Flame Strike is wrongly tagged Good (SPL-107) |
 | Healing | Cure Light / Cure Moderate Wounds | healing spells at +1 CL | works |

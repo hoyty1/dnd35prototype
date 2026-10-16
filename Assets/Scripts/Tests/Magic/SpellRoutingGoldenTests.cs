@@ -121,7 +121,9 @@ public static class SpellRoutingGoldenTests
     /// <summary>
     /// The branch of GameManager.BeginPendingSpellTargeting for this spell's data, in that method's order (the Resilient
     /// Sphere and grapple refusals depend on the caster, and the choice prompts for Disguise Self, Resist Energy,
-    /// Protection from Energy, Fire Shield and the wall modes come back to the same method or cast on the caster).
+    /// Protection from Energy, Fire Shield and the wall modes come back to the same method or cast on the caster). Since
+    /// batch 11 step 23 the summons come before the area spells, which are routed by geometry (AoESystem.RoutesToArea:
+    /// an Area target type or an area shape).
     /// </summary>
     public static string PcRoutingBranch(SpellData spell)
     {
@@ -129,12 +131,12 @@ public static class SpellRoutingGoldenTests
             return "grease";
         if (string.Equals(spell.SpellId, SpellNames.DISGUISE_SELF, StringComparison.Ordinal))
             return "self";
-        if (spell.AoEShapeType != AoEShape.None)
-            return "aoe";
         if (SummoningService.IsSummonMonsterSpell(spell))
             return "summon";
         if (SummoningService.IsSummonSwarmSpell(spell))
             return "swarm";
+        if (AoESystem.RoutesToArea(spell))
+            return "aoe";
         if (string.Equals(spell.SpellId, SpellNames.WISH, StringComparison.Ordinal))
             return "wish";
         return spell.TargetType == SpellTargetType.Self ? "self" : "single";

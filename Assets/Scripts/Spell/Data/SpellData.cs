@@ -681,6 +681,8 @@ public class SpellData
             aoeStr = $" | AoE: {AoESizeSquares * 5}-ft cone";
         else if (AoEShapeType == AoEShape.Line)
             aoeStr = $" | AoE: {AoESizeSquares * 5}-ft line";
+        else if (AoEShapeType == AoEShape.Cube)
+            aoeStr = $" | AoE: {AoESizeSquares * 5}-ft cube";
 
         // Duration info: the PHB line (SpellDurationRules.Describe); nothing shown for an instantaneous spell.
         string durStr = DurationType == DurationType.Instantaneous && string.IsNullOrEmpty(DurationText)

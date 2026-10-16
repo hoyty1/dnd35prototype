@@ -676,10 +676,30 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  WALL OF THORNS — PHB p.301
-    //  Conjuration (Creation). Creatures passing through take
-    //  25 - AC damage (min 1). Duration: 10 min/level.
+    //  WALL OF THORNS — PHB p.300
+    //  Conjuration (Creation). A creature in the area when the wall
+    //  appears is caught inside and takes slashing damage equal to 25
+    //  minus its AC without Dexterity and dodge bonuses (none at 25 or
+    //  more); a creature that moves through undergrowth unhindered
+    //  (Woodland Stride; delegated RAW reading 2026-10-14, RULES_COVERAGE
+    //  4.1) takes none. Duration: 10 min/level. Reachable
+    //  since batch 11 step 23 (SPL-042); the wall's later rounds (moving
+    //  through it, forcing a way out) and its other cubes are SPL-188.
     // ================================================================
+
+    /// <summary>
+    /// The slashing damage a wall of thorns deals a creature caught in it (PHB p.300): 25 minus its AC without Dexterity and
+    /// dodge bonuses (<see cref="CharacterStats.ArmorClassWithoutDexAndDodge"/>), 0 at an AC of 25 or more; 0 for a creature
+    /// with Woodland Stride, which passes through overgrown areas unhindered (PHB p.300, p.36, p.48). Delegated RAW reading
+    /// 2026-10-14 (RULES_COVERAGE 4.1): Woodland Stride excepts magically manipulated thorns, but Wall of Thorns' own clause
+    /// is the specific rule for this exact case, and the wall is conjured brush, not manipulated undergrowth.
+    /// </summary>
+    internal static int WallOfThornsDamage(CharacterStats stats)
+    {
+        if (stats == null || stats.HasWoodlandStride)
+            return 0;
+        return Mathf.Max(0, 25 - stats.ArmorClassWithoutDexAndDodge);
+    }
 
     private bool TryResolveWallOfThornsSpell(
         CharacterController caster,
@@ -701,7 +721,7 @@ public partial class GameManager
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"🌿 {caster.Stats.CharacterName} casts Wall of Thorns!");
         sb.AppendLine($"  School: Conjuration (Creation) | Level: 5 | Duration: {durationRounds} rounds");
-        sb.AppendLine($"  Creatures forced through take 25 - AC damage (min 1).");
+        sb.AppendLine($"  Creatures caught in it take 25 - AC (without Dexterity and dodge bonuses) slashing damage.");
         sb.AppendLine();
 
         if (targets != null)
@@ -710,13 +730,23 @@ public partial class GameManager
             {
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
 
-                int thornDmg = Mathf.Max(1, 25 - target.Stats.ArmorClass);
+                int thornAc = target.Stats.ArmorClassWithoutDexAndDodge;
+                int thornDmg = WallOfThornsDamage(target.Stats);
+                if (thornDmg <= 0)
+                {
+                    // Woodland Stride passes through unhurt: delegated RAW reading 2026-10-14 (RULES_COVERAGE 4.1).
+                    sb.AppendLine(target.Stats.HasWoodlandStride
+                        ? $"  🌿 {target.Stats.CharacterName} moves through the thorns unhindered (Woodland Stride): no damage."
+                        : $"  🌿 {target.Stats.CharacterName} is caught in the thorns, but its AC {thornAc} (without Dexterity and dodge) is 25 or more: no damage.");
+                    sb.AppendLine();
+                    continue;
+                }
 
                 int hpBefore = target.Stats.CurrentHP;
                 DamageResolutionResult dealt = DealDamage(target, thornDmg, DamagePackets.Spell(spell.Name, DamageType.Slashing)); // slashing, PHB p.300
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({target.Stats.ArmorClass}) = {thornDmg} slashing damage{DescribeMitigation(dealt)}.");
+                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({thornAc}, without Dexterity and dodge) = {thornDmg} slashing damage{DescribeMitigation(dealt)}.");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
                 if (target.Stats.IsDead)

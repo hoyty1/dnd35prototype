@@ -778,7 +778,7 @@ public partial class GameManager
         }
 
         // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests.PcRoutingBranch) mirrors the decision order from
-        // here down (Grease, Disguise Self, AoE shape, summon, swarm, Wish, self or single): keep them in step.
+        // here down (Grease, Disguise Self, summon, swarm, area, Wish, self or single): keep them in step.
         if (IsPendingGreaseAreaCast())
         {
             EnterGreaseAreaTargetingMode(caster, _pendingSpell);
@@ -829,13 +829,6 @@ public partial class GameManager
             return;
         }
 
-        // ===== AoE SPELLS: Enter AoE targeting mode =====
-        if (_pendingSpell.AoEShapeType != AoEShape.None)
-        {
-            EnterAoETargetingMode(caster, _pendingSpell);
-            return;
-        }
-
         // Summon Monster spells: choose creature first, then select destination tile.
         if (IsSummonMonsterSpell(_pendingSpell))
         {
@@ -843,10 +836,20 @@ public partial class GameManager
             return;
         }
 
-        // Summon Swarm: choose swarm type first, then place in range (occupied squares allowed).
+        // Summon Swarm: choose swarm type first, then place in range (occupied squares allowed). An Area spell that places a
+        // swarm rather than affecting an area, so it is routed before the area spells.
         if (IsSummonSwarmSpell(_pendingSpell))
         {
             ShowSummonSwarmSelectionMenu(caster, _pendingSpell);
+            return;
+        }
+
+        // ===== AREA SPELLS: Enter AoE targeting mode =====
+        // By geometry (batch 11 step 23, SPL-042, SPL-046): an Area target type or an area shape (AoESystem.RoutesToArea),
+        // so an Area spell is never resolved against one clicked creature.
+        if (AoESystem.RoutesToArea(_pendingSpell))
+        {
+            EnterAoETargetingMode(caster, _pendingSpell);
             return;
         }
 
@@ -1461,6 +1464,15 @@ public partial class GameManager
     /// </summary>
     private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
     {
+        // Every spell routed here has a shape (AoESystem.RoutesToArea; Tests.Magic.AreaRoutingTests checks the data): a
+        // spell without one has no area to aim, so the cast is cancelled rather than resolved against a guess.
+        if (spell.AoEShapeType == AoEShape.None)
+        {
+            Debug.LogError($"[AoE] {spell.Name} is routed to an area but has no area shape; the cast is cancelled.");
+            CancelAoETargeting();
+            return;
+        }
+
         // The placement range at the cast's caster level (CasterLevelRules, SPL-017: a scroll's or wand's own).
         int placementRange = spell.AoERangeSquares > 0
             ? spell.AoERangeSquares
@@ -1498,14 +1510,8 @@ public partial class GameManager
                 }
             }
 
-            // Get all valid targets
-            bool casterIsPC = caster.Team == CharacterTeam.Player;
-            CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-            List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
-            List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
-            List<CharacterController> targets = AoESystem.GetTargetsInArea(
-                aoeCells, caster, allyTeam, enemyTeam,
-                spell.AoEFilter, casterIsPC, Grid);
+            // Get all valid targets (relative to the caster's side, SPL-119)
+            List<CharacterController> targets = AoESystem.GetTargetsInArea(aoeCells, caster, spell.AoEFilter, Grid);
 
             Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets — awaiting confirmation");
 
@@ -1533,8 +1539,8 @@ public partial class GameManager
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        // For burst spells with range > 0, show the valid placement range
-        if (spell.AoEShapeType == AoEShape.Burst)
+        // For burst and cube spells with range > 0, show the valid placement range
+        if (AoESystem.IsPlacedShape(spell.AoEShapeType))
         {
             int range = placementRange;
             if (range <= 0) range = 1;
@@ -1554,7 +1560,9 @@ public partial class GameManager
             }
             else
             {
-                string sizeStr = $"{spell.AoESizeSquares * 5}-ft radius burst";
+                string sizeStr = spell.AoEShapeType == AoEShape.Cube
+                    ? $"{spell.AoESizeSquares * 5}-ft cube"
+                    : $"{spell.AoESizeSquares * 5}-ft radius burst";
                 CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Range: {rangeStr} | Move mouse to preview, click to cast | Right-click to cancel");
             }
         }
@@ -1914,9 +1922,9 @@ public partial class GameManager
         {
             Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
 
-            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+            if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
             {
-                // Burst preview only depends on hovered grid cell center.
+                // Burst and cube previews only depend on the hovered grid cell.
                 if (gridPos == _lastAoEHoverPos) return;
                 _lastAoEHoverPos = gridPos;
 
@@ -1927,7 +1935,7 @@ public partial class GameManager
                     : CasterLevelRules.RangeSquares(pc, _pendingSpell);
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
                     return;
-                aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
+                aoeCells = AoESystem.GetPlacedAreaCells(_pendingSpell, gridPos, Grid);
             }
             else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
             {
@@ -1959,9 +1967,9 @@ public partial class GameManager
         // player sees only the squares that will actually be affected.
         {
             Vector2Int loeOrigin;
-            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+            if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
             {
-                // For bursts the origin is the burst center (hovered grid cell)
+                // For bursts and cubes the origin is the hovered grid cell (the burst's centre, the cube's central square)
                 Vector2Int gridPosForOrigin = SquareGridUtils.WorldToGrid(GetMouseWorldPosition());
                 loeOrigin = gridPosForOrigin;
             }
@@ -2023,8 +2031,8 @@ public partial class GameManager
             SquareCell cell = Grid.GetCell(cellPos);
             if (cell == null) continue;
 
-            // Restore base range highlights (burst and line), otherwise clear.
-            if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Burst)
+            // Restore base range highlights (burst, cube and line), otherwise clear.
+            if (_pendingSpell != null && AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
             {
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
@@ -2071,8 +2079,8 @@ public partial class GameManager
 
         Vector2Int targetPos = clickedCell.Coords;
 
-        // Validate range for burst and line spells
-        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        // Validate range for burst, cube and line spells
+        if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
         {
             int range = _pendingSpell.AoERangeSquares > 0
                 ? _pendingSpell.AoERangeSquares
@@ -2172,13 +2180,7 @@ public partial class GameManager
                         }
 
                         // Get targets
-                        bool casterIsPC2 = caster.Team == CharacterTeam.Player;
-                        CharacterTeam enemyTeamType2 = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-                        List<CharacterController> allyTeam2 = GetTeamMembers(caster.Team);
-                        List<CharacterController> enemyTeam2 = GetTeamMembers(enemyTeamType2);
-                        List<CharacterController> targets2 = AoESystem.GetTargetsInArea(
-                            wallCells, caster, allyTeam2, enemyTeam2,
-                            _pendingSpell.AoEFilter, casterIsPC2, Grid);
+                        List<CharacterController> targets2 = AoESystem.GetTargetsInArea(wallCells, caster, _pendingSpell.AoEFilter, Grid);
 
                         // Enter heat wave direction selection phase (PHB p.298)
                         // Player must choose which side of the wall radiates heat
@@ -2281,13 +2283,7 @@ public partial class GameManager
                         }
 
                         // Get targets
-                        bool casterIsPC3 = caster.Team == CharacterTeam.Player;
-                        CharacterTeam enemyTeamType3 = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-                        List<CharacterController> allyTeam3 = GetTeamMembers(caster.Team);
-                        List<CharacterController> enemyTeam3 = GetTeamMembers(enemyTeamType3);
-                        List<CharacterController> targets3 = AoESystem.GetTargetsInArea(
-                            wallCells, caster, allyTeam3, enemyTeam3,
-                            _pendingSpell.AoEFilter, casterIsPC3, Grid);
+                        List<CharacterController> targets3 = AoESystem.GetTargetsInArea(wallCells, caster, _pendingSpell.AoEFilter, Grid);
 
                         // No direction selection for Wall of Ice — proceed directly to cast
                         _isAoETargeting = false;
@@ -2329,9 +2325,9 @@ public partial class GameManager
         HashSet<Vector2Int> aoeCells = null;
         Vector2 worldPoint = GetMouseWorldPosition();
 
-        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
         {
-            aoeCells = AoESystem.GetBurstCells(targetPos, _pendingSpell.AoESizeSquares, Grid);
+            aoeCells = AoESystem.GetPlacedAreaCells(_pendingSpell, targetPos, Grid);
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
         {
@@ -2357,14 +2353,8 @@ public partial class GameManager
             return;
         }
 
-        // Get all valid targets in the AoE
-        bool casterIsPC = caster.Team == CharacterTeam.Player;
-        CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
-        List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
-        List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
-        List<CharacterController> targets = AoESystem.GetTargetsInArea(
-            aoeCells, caster, allyTeam, enemyTeam,
-            _pendingSpell.AoEFilter, casterIsPC, Grid);
+        // Get all valid targets in the AoE (relative to the caster's side, SPL-119)
+        List<CharacterController> targets = AoESystem.GetTargetsInArea(aoeCells, caster, _pendingSpell.AoEFilter, Grid);
 
         Debug.Log($"[AoE] {_pendingSpell.Name}: {aoeCells.Count} cells, {targets.Count} targets");
 
@@ -2585,7 +2575,8 @@ public partial class GameManager
         // Build the combat log header
         var logBuilder = new System.Text.StringBuilder();
         string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
-                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
+                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" :
+                          _pendingSpell.AoEShapeType == AoEShape.Cube ? "cube" : "line";
         logBuilder.AppendLine($"═══════════════════════════════════");
         logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
         logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
@@ -2700,6 +2691,78 @@ public partial class GameManager
         }
 
         return logBuilder.ToString();
+    }
+
+    /// <summary>
+    /// Bane over its area (PHB p.203; batch 11 step 23, SPL-046): every enemy of the caster within 50 ft. (the aim's
+    /// creatures after the EnemiesOnly filter, line of effect and the cast core's Globe stage) gets the single-target cast's
+    /// own tests through SpellCaster.Cast, its spell resistance, its Will save (negates) and the mind-affecting immunity,
+    /// and an affected creature gets the tracked effect (ApplySpellBuff: -1 on attack rolls and on saves against fear),
+    /// exactly as a single-target Bane gave it. Returns the cast's log. The same for every caster. (The generic loop
+    /// would apply the effect with no save or spell resistance, SPL-027.)
+    /// </summary>
+    private string ResolveBaneAoE(CastContext ctx)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"✨ {caster.Stats.CharacterName} casts {spell.Name}! (enemies within {spell.AoESizeSquares * 5} ft.)");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
+        sb.AppendLine();
+
+        int targetIndex = 0;
+        if (targets != null)
+        {
+            foreach (CharacterController target in targets)
+            {
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                targetIndex++;
+                string targetName = target.Stats.CharacterName;
+                sb.AppendLine($"  --- Target {targetIndex}: {targetName} ---");
+
+                SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, false, ctx.TargetForgoesSave(target), caster, target);
+                if (ScenarioHooks.CastStage != null)
+                    CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + targetName);
+
+                if (result.MindAffectingImmunityBlocked)
+                {
+                    sb.AppendLine($"  {targetName} is immune to mind-affecting effects.");
+                }
+                else if (!result.Success)
+                {
+                    string why = !result.SpellResistancePassed
+                        ? $"spell resistance (d20 {result.SpellResistanceRoll}, total {result.SpellResistanceTotal} vs SR {result.SpellResistanceValue})"
+                        : (result.NoEffectReason ?? "no effect");
+                    sb.AppendLine($"  {targetName} is unaffected: {why}.");
+                }
+                else if (SpellUtilities.IsEffectNegatedBySave(spell, result, !target.IsIntelligentUndead()))
+                {
+                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - SAVED (negates).");
+                }
+                else
+                {
+                    if (result.RequiredSave)
+                        sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - FAILED.");
+                    ActiveSpellEffect applied = ApplySpellBuff(caster, target, spell, ctx.SpellComp, result);
+                    if (ScenarioHooks.CastStage != null)
+                        CastStageTrace.Mark(caster, spell, CastStageTrace.Buff, (applied != null ? "applied " : "no-effect ") + targetName);
+                    sb.AppendLine(applied != null
+                        ? $"  DEBUFF APPLIED! {targetName}: -1 on attack rolls and on saves against fear."
+                        : $"  {targetName}: no effect.");
+                }
+                sb.AppendLine();
+            }
+        }
+
+        if (targetIndex == 0)
+            sb.AppendLine("  No valid targets in area!");
+        sb.Append("═══════════════════════════════════");
+        return sb.ToString();
     }
 
     /// <summary>

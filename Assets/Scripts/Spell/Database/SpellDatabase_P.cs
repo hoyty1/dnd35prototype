@@ -389,7 +389,10 @@ public static partial class SpellDatabase
                         new SpellAvailability("Sorcerer", 5),
                         new SpellAvailability("Wizard", 5)
                     },
-                    TargetType = SpellTargetType.Area,
+                    // PHB p.259: Range: Touch; Effect: an opening in a wooden, plaster or stone wall. It affects no creature
+                    // and no area, so it is cast with no target (the opening is logged; the grid has no such walls), not
+                    // routed to the area targeting (batch 11 step 23)
+                    TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Utility,
                     AllowsSavingThrow = false,
@@ -421,8 +424,14 @@ public static partial class SpellDatabase
                         new SpellAvailability("Sorcerer", 5),
                         new SpellAvailability("Wizard", 5)
                     },
+                    // PHB p.260: Effect: a figment that cannot extend beyond a 20-ft. cube + one 10-ft. cube/level (S), at Long
+                    // range. The 20-ft. cube placed at a point in range (batch 11 step 23, SPL-042; the figment itself is SPL-189)
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Long,
+                    AoEShapeType = AoEShape.Cube,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Long range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Illusion,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

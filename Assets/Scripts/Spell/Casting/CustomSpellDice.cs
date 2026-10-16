@@ -77,6 +77,9 @@ public static class CustomSpellDice
     /// <summary>Chaos Hammer, Holy Smite, Order's Wrath and Unholy Blight: 1d8 per two caster levels, max 5d8 (PHB p.208, p.241, p.258, p.297).</summary>
     public static SpellDice AlignmentBurst(int casterLevel) => SpellDice.Of(Mathf.Clamp(casterLevel / 2, 1, 5), 8);
 
+    /// <summary>The four alignment bursts against an outsider of the opposed alignment: 1d6 per caster level, max 10d6 (PHB p.208, p.241, p.258, p.297).</summary>
+    public static SpellDice AlignmentBurstOutsider(int casterLevel) => SpellDice.Of(Mathf.Clamp(casterLevel, 1, 10), 6);
+
     /// <summary>Disintegrate: 2d6 per caster level, max 40d6; 5d6 after a successful save (PHB p.222).</summary>
     public static SpellDice Disintegrate(int casterLevel, bool saved) => SpellDice.Of(GameManager.DisintegrateDiceCount(casterLevel, saved), 6);
 

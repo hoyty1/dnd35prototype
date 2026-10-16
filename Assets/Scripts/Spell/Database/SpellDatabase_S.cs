@@ -585,9 +585,15 @@ public static partial class SpellDatabase
                     Description = "Deals 1d8 sonic damage in 10-ft radius. Fortitude save or stunned for 1 round. PHB p.281",
                     SpellLevel = 2, School = "Evocation",
                     ClassList = new[] { "Cleric" },
-                    TargetType = SpellTargetType.SingleEnemy, // Simplified from area
+                    // PHB p.281: Area: 10-ft.-radius spread, at a point in Close range; every creature in it (batch 11 step 23,
+                    // SPL-046; a spread is placed as a burst here, the grid has no spread around corners yet)
+                    TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Close,
                     AreaRadius = 2,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 2,
+                    AoERangeSquares = 0, // the spell's Close range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 8, DamageCount = 1,
                     DamageType = "sonic",

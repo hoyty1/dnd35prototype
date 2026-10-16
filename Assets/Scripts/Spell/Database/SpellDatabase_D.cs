@@ -205,6 +205,11 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Close,
                     RangeSquares = 4,
                     AreaRadius = 4,
+                    // PHB p.218: Area: 20-ft.-radius emanation, at a point in Close range (batch 11 step 23, SPL-042)
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Close range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Debuff,
                     BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
                     DurationType = DurationType.Hours,

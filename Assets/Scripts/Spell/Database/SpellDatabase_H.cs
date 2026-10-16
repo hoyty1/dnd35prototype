@@ -482,6 +482,11 @@ public static partial class SpellDatabase
                     // Good 4 only (PHB p.241): no class list; DomainDatabase gives the Good domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    // PHB p.241: Area: 20-ft.-radius burst, at a point in Medium range (batch 11 step 23, SPL-046)
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 0, // the spell's Medium range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

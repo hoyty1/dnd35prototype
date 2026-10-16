@@ -11,6 +11,45 @@ using System.Text;
 using UnityEngine;
 using DND35e.Identifiers;
 
+/// <summary>
+/// The modifiers Consecrate and Desecrate give an undead creature in their area, through the bonus ledger
+/// (CharacterStats.Bonuses; batch 11 step 23, SPL-042): Consecrate a -1 penalty (untyped) on attack rolls, damage rolls and
+/// saving throws (PHB p.212), Desecrate a +1 profane bonus on the same (PHB p.218). Built on attack rolls, weapon damage
+/// rolls and saves; the undead creature's other damage rolls (spells, spell-like abilities) are SPL-050. Each is one
+/// source, so two overlapping areas of the same spell do not stack (PHB p.171). The flags on CharacterStats show them on
+/// the status indicator. An undead creature already in the area at the casting counts as entering it, and any occupied
+/// square in the area puts it in (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1).
+/// </summary>
+public static class HolyAreaRules
+{
+    public const string ConsecrateSource = "consecrate";
+    public const string DesecrateSource = "desecrate";
+
+    /// <summary>Gives (<paramref name="on"/>) or takes away Consecrate's -1 on attack rolls, damage rolls and saves.</summary>
+    public static void SetConsecrated(CharacterStats stats, bool on)
+    {
+        if (stats == null)
+            return;
+        stats.ConsecrateActive = on;
+        int value = on ? -1 : 0;
+        stats.Bonuses.Set(ConsecrateSource, BonusTarget.AttackRoll, BonusType.Untyped, value, "Consecrate");
+        stats.Bonuses.Set(ConsecrateSource, BonusTarget.WeaponDamage, BonusType.Untyped, value, "Consecrate");
+        stats.Bonuses.Set(ConsecrateSource, BonusTarget.AllSaves, BonusType.Untyped, value, "Consecrate");
+    }
+
+    /// <summary>Gives (<paramref name="on"/>) or takes away Desecrate's +1 profane bonus on attack rolls, damage rolls and saves.</summary>
+    public static void SetDesecrated(CharacterStats stats, bool on)
+    {
+        if (stats == null)
+            return;
+        stats.DesecrateActive = on;
+        int value = on ? 1 : 0;
+        stats.Bonuses.Set(DesecrateSource, BonusTarget.AttackRoll, BonusType.Profane, value, "Desecrate");
+        stats.Bonuses.Set(DesecrateSource, BonusTarget.WeaponDamage, BonusType.Profane, value, "Desecrate");
+        stats.Bonuses.Set(DesecrateSource, BonusTarget.AllSaves, BonusType.Profane, value, "Desecrate");
+    }
+}
+
 public partial class GameManager
 {
     // ================================================================
@@ -66,7 +105,8 @@ public partial class GameManager
         };
         _activeHolyAreas.Add(area);
 
-        // Apply effects to undead currently in the area
+        // Apply effects to undead currently in the area: they count as entering it (delegated RAW reading 2026-10-14,
+        // RULES_COVERAGE 4.1).
         int affectedCount = 0;
         StringBuilder sb = new StringBuilder();
         sb.Append($"<color=#FFFF99>✨ {caster.Stats.CharacterName} casts Consecrate! Positive energy fills the area.</color>\n");
@@ -129,7 +169,8 @@ public partial class GameManager
         };
         _activeHolyAreas.Add(area);
 
-        // Apply effects to undead currently in the area
+        // Apply effects to undead currently in the area: they count as entering it (delegated RAW reading 2026-10-14,
+        // RULES_COVERAGE 4.1).
         int affectedCount = 0;
         StringBuilder sb = new StringBuilder();
         sb.Append($"<color=#CC66FF>💀 {caster.Stats.CharacterName} casts Desecrate! Negative energy fills the area.</color>\n");
@@ -163,67 +204,97 @@ public partial class GameManager
     private void ApplyConsecrateDebuffs(CharacterController target)
     {
         if (target?.Stats == null) return;
-        target.Stats.ConsecrateActive = true;
-        // The penalties are tracked via the flag; attack/damage/save code checks ConsecrateActive
+        HolyAreaRules.SetConsecrated(target.Stats, true);
     }
 
     /// <summary>Removes Consecrate debuffs from a character.</summary>
     private void RemoveConsecrateDebuffs(CharacterController target)
     {
         if (target?.Stats == null) return;
-        target.Stats.ConsecrateActive = false;
+        HolyAreaRules.SetConsecrated(target.Stats, false);
     }
 
     /// <summary>Applies Desecrate buffs to an undead character: +1 attacks, damage, saves.</summary>
     private void ApplyDesecrateBuffs(CharacterController target)
     {
         if (target?.Stats == null) return;
-        target.Stats.DesecrateActive = true;
-        // The bonuses are tracked via the flag; attack/damage/save code checks DesecrateActive
+        HolyAreaRules.SetDesecrated(target.Stats, true);
     }
 
     /// <summary>Removes Desecrate buffs from a character.</summary>
     private void RemoveDesecrateBuffs(CharacterController target)
     {
         if (target?.Stats == null) return;
-        target.Stats.DesecrateActive = false;
+        HolyAreaRules.SetDesecrated(target.Stats, false);
     }
 
-    /// <summary>Removes overlapping holy areas of a given type from the active list.</summary>
-    private void RemoveOverlappingHolyAreas(HashSet<Vector2Int> newCells, string spellIdToRemove)
+    /// <summary>
+    /// Ends every Consecrate and Desecrate area and takes their modifiers from every creature (batch 11 step 23, SPL-042):
+    /// called with the other area effects when the battlefield is cleared and after a fight, so no area or modifier
+    /// outlives its encounter (the grid and the creature slots are reused, CRE-046).
+    /// </summary>
+    private void ClearAllHolyAreas()
     {
-        for (int i = _activeHolyAreas.Count - 1; i >= 0; i--)
-        {
-            if (_activeHolyAreas[i].SpellId != spellIdToRemove) continue;
-
-            // Check if any cells overlap
-            bool overlaps = _activeHolyAreas[i].AffectedCells.Overlaps(newCells);
-            if (overlaps)
-            {
-                // Remove buffs/debuffs from characters in the removed area
-                CleanupHolyAreaCharacters(_activeHolyAreas[i]);
-                _activeHolyAreas.RemoveAt(i);
-                Debug.Log($"[HolyArea] Removed overlapping {spellIdToRemove} area");
-            }
-        }
-    }
-
-    /// <summary>Removes Consecrate/Desecrate effects from all characters in a holy area.</summary>
-    private void CleanupHolyAreaCharacters(HolyAreaEffect area)
-    {
+        _activeHolyAreas.Clear();
         var allChars = GetAllCharacters();
         if (allChars == null) return;
-
         foreach (var ch in allChars)
         {
             if (ch?.Stats == null) continue;
-            if (!area.AffectedCells.Contains(ch.GridPosition)) continue;
-
-            if (area.IsConsecrate)
-                RemoveConsecrateDebuffs(ch);
-            else
-                RemoveDesecrateBuffs(ch);
+            if (ch.Stats.ConsecrateActive) RemoveConsecrateDebuffs(ch);
+            if (ch.Stats.DesecrateActive) RemoveDesecrateBuffs(ch);
         }
+    }
+
+    /// <summary>
+    /// Removes the areas of <paramref name="spellIdToRemove"/> that the new area overlaps (each spell counters and dispels
+    /// the other, PHB p.212, p.218), then re-judges every creature that had that spell's modifier against the areas that
+    /// remain (<see cref="UpdateHolyAreaEffectsForCharacter"/>), so a creature still standing in another area of the
+    /// removed spell keeps its modifier (review of batch 11 step 23).
+    /// </summary>
+    private void RemoveOverlappingHolyAreas(HashSet<Vector2Int> newCells, string spellIdToRemove)
+    {
+        bool removedAny = false;
+        for (int i = _activeHolyAreas.Count - 1; i >= 0; i--)
+        {
+            if (_activeHolyAreas[i].SpellId != spellIdToRemove) continue;
+            if (!_activeHolyAreas[i].AffectedCells.Overlaps(newCells)) continue;
+
+            _activeHolyAreas.RemoveAt(i);
+            removedAny = true;
+            Debug.Log($"[HolyArea] Removed overlapping {spellIdToRemove} area");
+        }
+
+        if (!removedAny)
+            return;
+        var allChars = GetAllCharacters();
+        if (allChars == null) return;
+        foreach (var ch in allChars)
+        {
+            if (ch?.Stats == null) continue;
+            bool hadModifier = spellIdToRemove == SpellNames.CONSECRATE ? ch.Stats.ConsecrateActive : ch.Stats.DesecrateActive;
+            if (hadModifier)
+                UpdateHolyAreaEffectsForCharacter(ch);
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="character"/> is in <paramref name="area"/>: any square it occupies is one of the area's,
+    /// so a Large creature partly inside is in it, as the cast's own target list counts it (AoESystem.GetTargetsInArea).
+    /// </summary>
+    private static bool IsInHolyArea(CharacterController character, HolyAreaEffect area)
+    {
+        if (character == null || area?.AffectedCells == null)
+            return false;
+        List<Vector2Int> squares = character.GetOccupiedSquares();
+        if (squares == null || squares.Count == 0)
+            return area.AffectedCells.Contains(character.GridPosition);
+        foreach (Vector2Int square in squares)
+        {
+            if (area.AffectedCells.Contains(square))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -234,19 +305,23 @@ public partial class GameManager
         => SpellTargetingService.IsUndead(character);
 
     /// <summary>
-    /// Called when a character moves to update Consecrate/Desecrate area effects.
-    /// Should be called after any character movement.
+    /// Called when a character moves to update Consecrate/Desecrate area effects: an undead creature entering an area
+    /// gains its modifiers and one leaving it loses them (PHB p.212, p.218). NotifyCharacterMovement calls it after every
+    /// move (batch 11 step 23, SPL-042).
     /// </summary>
     public void UpdateHolyAreaEffectsForCharacter(CharacterController character)
     {
-        if (character?.Stats == null || _activeHolyAreas.Count == 0) return;
+        if (character?.Stats == null) return;
+        // With no area left, only a creature still holding a modifier needs judging (an overlapped area was dispelled).
+        if (_activeHolyAreas.Count == 0 && !character.Stats.ConsecrateActive && !character.Stats.DesecrateActive) return;
 
         bool inConsecrate = false;
         bool inDesecrate = false;
 
         foreach (var area in _activeHolyAreas)
         {
-            if (area.AffectedCells.Contains(character.GridPosition))
+            // Any occupied square in the area (IsInHolyArea), the same membership the cast's targets use.
+            if (IsInHolyArea(character, area))
             {
                 if (area.IsConsecrate)
                     inConsecrate = true;

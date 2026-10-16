@@ -4241,6 +4241,13 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// <see cref="ArmorClass"/> without the Dexterity bonus and the dodge bonuses (a Dexterity penalty stays): the AC a
+    /// wall of thorns compares (PHB p.300: "Dexterity and dodge bonuses to AC do not count"; batch 11 step 23, SPL-042).
+    /// </summary>
+    public int ArmorClassWithoutDexAndDodge
+        => ArmorClass - Mathf.Max(0, DexToArmorClass) - DodgeACBonus - Mathf.Max(0, RacialDodgeACBonus);
+
+    /// <summary>
     /// Touch AC for attacks that ignore armor, shield, and natural armor.
     /// Includes DEX (subject to max DEX cap), size, deflection, and other non-physical AC modifiers.
     /// </summary>

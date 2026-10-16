@@ -166,7 +166,7 @@ public static partial class SpellDatabase
         // School: Evocation [Lawful]
         // Level: Cleric 4 (Law domain 4)
         // Range: Medium
-        // Area: 20-ft-radius burst
+        // Area: Nonlawful creatures within a burst that fills a 30-ft. cube
         // Duration: Instantaneous (1 round for daze)
         // Saving Throw: Will partial
         // Spell Resistance: Yes
@@ -180,6 +180,12 @@ public static partial class SpellDatabase
                     // Law 4 only (PHB p.258): no class list; DomainDatabase gives the Law domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    // PHB p.258: Area: nonlawful creatures within a burst that fills a 30-ft. cube, at a point in Medium
+                    // range (batch 11 step 23, SPL-046); the alignment decides the effect, so the area takes every creature
+                    AoEShapeType = AoEShape.Cube,
+                    AoESizeSquares = 6,
+                    AoERangeSquares = 0, // the spell's Medium range
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

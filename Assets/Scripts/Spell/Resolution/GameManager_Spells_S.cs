@@ -446,52 +446,120 @@ public partial class GameManager
     // ================================================================
     //  SOUND BURST — PHB p.281
     //  Evocation [Sonic]. Brd 2, Clr 2. V, S, F/DF.
-    //  Range: Close. Area: 10-ft-radius spread (single target here, SPL-046).
+    //  Range: Close. Area: 10-ft-radius spread (an area since batch 11
+    //  step 23, SPL-046; placed as a burst, the grid has no spread yet).
     //  Duration: Instantaneous.
     //  Saving Throw: Fortitude partial. Spell Resistance: Yes.
     //  1d8 sonic damage to every creature in the area; a failed Fortitude
     //  save also stuns it for 1 round. A creature that cannot hear is not
     //  stunned but is still damaged (a deafened one); a creature under a
     //  Silence takes no effect at all (PHB p.279, SpellCaster.Cast).
-    //  The damage is SpellCaster.Cast's, which the save does not reduce
-    //  (SpellData.DamageUnaffectedBySave); this handler adds the stun from
-    //  that same save (batch 11 step 11, SPL-142).
+    //  Each creature's spell resistance, damage and save are SpellCaster.Cast's
+    //  (the save does not reduce the damage, SpellData.DamageUnaffectedBySave),
+    //  the 1d8 rolled once for the area (AreaDamageRoll, decision D6); the
+    //  stun follows from that same save (batch 11 step 11, SPL-142).
     // ================================================================
 
     /// <summary>
-    /// Sound Burst's stun (PHB p.281): the cast's one Fortitude save (rolled by SpellCaster.Cast) decides it; a failed
-    /// save stuns the target for 1 round unless it cannot hear: a deafened creature (delegated RAW reading 2026-10-14).
-    /// A forgone save counts as failed, but no target gives up its save against this damage spell (PHB p.177; batch 11
-    /// step 18, SPL-149), so an ally or the caster rolls it too. Registered with gate Success, so a
-    /// failed cast (spell resistance, a deafened caster's verbal failure, a Silence on the target, PHB p.279) stuns no
-    /// one; returns false so the cast goes on to the buff step, as before.
+    /// Sound Burst over its area (the area handler registry, GameManager.SpellHandlerRegistry.cs): each creature in the aim
+    /// (after line of effect and the cast core's Globe stage) gets SpellCaster.Cast with the area's one damage roll (its
+    /// spell resistance, a Silence on it, the 1d8 sonic damage and its Fortitude save), then the stun
+    /// (<see cref="ApplySoundBurstStun"/>). No creature gives up its save against this damage spell (PHB p.177). Returns
+    /// the cast's log; the core runs the combat-end check. The same for every caster.
     /// </summary>
-    private bool TryResolveSoundBurstStunEffect(
-        CharacterController caster, CharacterController target,
-        SpellData spell, SpellResult result)
+    private bool TryResolveSoundBurstAoE(CastContext ctx, out string log)
     {
-        if (spell == null || spell.SpellId != SpellNames.SOUND_BURST)
+        log = string.Empty;
+        CharacterController caster = ctx?.Request?.Caster;
+        SpellData spell = ctx?.Request?.Spell;
+        List<CharacterController> targets = ctx?.Request?.Aim?.AreaTargets;
+        if (caster == null || caster.Stats == null || spell == null || spell.SpellId != SpellNames.SOUND_BURST)
             return false;
 
-        if (caster == null || caster.Stats == null || target == null || target.Stats == null || result == null || !result.Success)
-            return false;
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"🔔 {caster.Stats.CharacterName} casts {spell.Name}! ({spell.AoESizeSquares * 5}-ft.-radius spread)");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
+        sb.AppendLine();
 
-        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveSoundBurstStunEffect) + " (continues)");
+        var areaDamageRoll = new AreaDamageRoll();
+        int targetIndex = 0;
+        if (targets != null)
+        {
+            foreach (CharacterController target in targets)
+            {
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
 
+                targetIndex++;
+                string targetName = target.Stats.CharacterName;
+                sb.AppendLine($"  --- Target {targetIndex}: {targetName} ---");
+
+                // The request's metamagic and save rule, not the _pendingMetamagic forwarding property (whichever cast
+                // is on top of the stack), so the entry serves every caster alike (review of batch 11 step 23).
+                SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, false, ctx.TargetForgoesSave(target), caster, target,
+                    areaDamageRoll: areaDamageRoll);
+                if (ScenarioHooks.CastStage != null)
+                    CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + targetName);
+
+                if (!result.Success)
+                {
+                    string why = result.SonicBlockedBySilence ? "a Silence keeps the sound out (PHB p.279)"
+                        : !result.SpellResistancePassed ? $"spell resistance (d20 {result.SpellResistanceRoll}, total {result.SpellResistanceTotal} vs SR {result.SpellResistanceValue})"
+                        : (result.NoEffectReason ?? "no effect");
+                    sb.AppendLine($"  {targetName} is unaffected: {why}.");
+                    sb.AppendLine();
+                    continue;
+                }
+
+                if (result.RequiredSave)
+                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {(result.SaveSucceeded ? "SAVED" : "FAILED")}!");
+                sb.AppendLine($"  Damage: {result.DamageDealt} sonic");
+                sb.AppendLine($"  {targetName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+                if (result.DamageDealt > 0)
+                    CheckConcentrationOnDamage(target, result.DamageDealt);
+
+                if (result.TargetKilled)
+                {
+                    target.OnDeath();
+                    HandleSummonDeathCleanup(target);
+                    sb.AppendLine($"  💀 {targetName} has been slain!");
+                }
+                else
+                {
+                    sb.AppendLine("  " + ApplySoundBurstStun(caster, target, spell, result));
+                }
+                sb.AppendLine();
+            }
+        }
+
+        if (targetIndex == 0)
+            sb.AppendLine("  No valid targets in area!");
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    /// <summary>
+    /// Sound Burst's stun on one creature the spell affected (PHB p.281): the cast's one Fortitude save for that creature
+    /// (rolled by SpellCaster.Cast) decides it; a failed save stuns it for 1 round unless it cannot hear: a deafened
+    /// creature (delegated RAW reading 2026-10-14). A forgone save counts as failed, but no creature gives up its save
+    /// against this damage spell (PHB p.177; batch 11 step 18, SPL-149). Returns the log line.
+    /// </summary>
+    private string ApplySoundBurstStun(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
         string targetName = target.Stats.CharacterName;
         if (target.HasCondition(CombatConditionType.Deafened))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{targetName} cannot hear Sound Burst's cacophony and is not stunned (PHB p.281)."));
             Debug.Log($"[SoundBurst] {targetName} cannot hear: not stunned");
-            return false;
+            return $"{targetName} cannot hear Sound Burst's cacophony and is not stunned (PHB p.281).";
         }
 
         string saveText = result.RequiredSave ? $"Fort {result.SaveTotal} vs DC {result.SaveDC}" : "no save";
         if (result.RequiredSave && result.SaveSucceeded)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{targetName} resists Sound Burst's stun ({saveText})."));
             Debug.Log($"[SoundBurst] {targetName} resisted the stun ({saveText})");
-            return false;
+            return $"{targetName} resists Sound Burst's stun ({saveText}).";
         }
 
         // Failed (or forgone) save: stunned for 1 round.
@@ -511,9 +579,8 @@ public partial class GameManager
             target.ApplyCondition(CombatConditionType.Stunned, 1, caster.Stats.CharacterName);
         }
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {targetName} is stunned by Sound Burst! ({saveText})"));
         Debug.Log($"[SoundBurst] {targetName} STUNNED for 1 round ({saveText})");
-        return false; // a continuing entry: the buff step follows
+        return $"💥 {targetName} is stunned by Sound Burst! ({saveText})";
     }
 
     // ================================================================

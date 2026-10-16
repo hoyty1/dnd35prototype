@@ -17,7 +17,7 @@ public static class SpellEffectRouting
 {
     private static readonly HashSet<string> HandlerOwnedSpellIds = new HashSet<string>(StringComparer.Ordinal)
     {
-        // Utility (Passwall is Area with no AoE shape, so it takes the single-target flow, as SPL-042 describes)
+        // Utility (Passwall, an opening in a wall with no creature or area, is cast with no target since batch 11 step 23)
         SpellNames.CONTINUAL_FLAME,
         SpellNames.SHRINK_ITEM,
         SpellNames.DANCING_LIGHTS,
