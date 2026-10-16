@@ -219,13 +219,18 @@ public sealed class SpellCastRequest
     /// <summary>
     /// The metamagic an NPC (AI-run) cast of <paramref name="spell"/> carries without a choice of its own: the preparation
     /// metamagic of a prepared metamagic slot's spell (SpellData.IsPreparedMetamagicSlotSpell, which
-    /// SpellcastingComponent.GetCastablePreparedSpells lists for the AI as the spell menu lists it for a PC), else none.
-    /// The AI's spell choice and the NPC cast read the same (batch 11 step 21); the AI still chooses no metamagic itself
-    /// (AI-001, batch 11 step 28).
+    /// SpellcastingComponent.GetCastablePreparedSpells lists for the AI as the spell menu lists it for a PC), or the
+    /// metamagic the AI chose for a spontaneous cast (SpellData.AiChosenMetamagic, on the AI's candidate clone of a known
+    /// spell, AiMetamagicPlanner; batch 11 step 28, AI-001), else none. The AI's spell choice, its legality probes and the
+    /// NPC cast read the same (batch 11 step 21).
     /// </summary>
     public static MetamagicData AiMetamagicFor(SpellData spell)
     {
-        return spell != null && spell.IsPreparedMetamagicSlotSpell && spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic
+        if (spell == null)
+            return null;
+        if (spell.AiChosenMetamagic != null && spell.AiChosenMetamagic.HasAnyMetamagic)
+            return spell.AiChosenMetamagic;
+        return spell.IsPreparedMetamagicSlotSpell && spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic
             ? spell.MetamagicDataRef
             : null;
     }

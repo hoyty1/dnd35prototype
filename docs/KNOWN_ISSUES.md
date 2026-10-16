@@ -37,10 +37,10 @@ Entries per section:
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 34 | 62 | CRE-073 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 37 | 42 | 79 | ITM-088 |
-| [AI](issues/AI.md) | AI | 1 | 24 | 42 | 67 | AI-072 |
+| [AI](issues/AI.md) | AI | 0 | 24 | 42 | 66 | AI-073 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 40 | 52 | UI-054 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-042 |
-| **All** | | 2 | 289 | 423 | 714 | |
+| **All** | | 1 | 289 | 423 | 713 | |
 
 ## Top issues
 
@@ -48,4 +48,4 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [AI-001](issues/AI.md) | High | AI | NPCs never choose a metamagic feat (they cast area spells since batch 11 step 25) | Yes |
+| [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |

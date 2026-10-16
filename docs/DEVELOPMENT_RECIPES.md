@@ -146,7 +146,7 @@ Files: `Character/Creatures/NPCDatabase_<X>.cs`, `Character/Creatures/DragonData
 Pitfalls:
 - Reflection tests bypass the dispatch chains and cannot catch dispatch bugs (unreachable `ApplySpellBuff` branches, reclassified `EffectType`, missing NPC wiring); a rules scenario that casts through both paths can (`rules/spell-buff-dispatch`). Add one F12 check and one NPC encounter.
 - An NPC that has the spell but stays on a melee routine never casts it, and nothing logs why. Check the archetype and `AIBehavior` (step 2) before debugging spell selection.
-- NPCs never choose metamagic ([AI-001](issues/AI.md); they cast area spells since batch 11 step 25). AI Quicken scoring looks for `ActionType` Swift (`AISpellcastingStrategist.cs:962-963`) but `ApplyMetamagicToSpellData` sets Free (`SpellCaster.cs:854-858`), so that bonus never fires.
+- The AI chooses metamagic since batch 11 step 28 (`AI/Spellcasting/AiMetamagicPlanner.cs`: candidates and `Value`; AI-001 closed). A new metamagic feat needs a value term there (and its `CouldMatter` filter), or the AI only uses it when the plain spell cannot be cast; a new custom damage resolver whose data dice are a placeholder needs its dice in `CustomSpellDice.TryDamageEstimate`, or the AI misjudges its damage and its Empower value.
 - Placeholder spells are filtered out of template NPCs but not out of hand-written `NPCDatabase` entries.
 - A `PreparedSpellSlotIds` list that is not aligned with the slot order fails quietly: each misplaced entry only logs `Ignored invalid prepared spell ... for slot index N`, and because an explicit list skips auto-preparation (`SpellcastingComponent.cs:445-449`) the slot stays empty ([SPL-015](issues/SPL.md)). `arcane_missile_adept` itself loses its first four Magic Missiles to its four cantrip slots and prepares three. Check the `[GameManager] Initialized NPC spellcasting for ...` slot summary (`GameManager.NPCSetup.cs:965`) after spawning.
 - Test classes compile into Assembly-CSharp and ship in the player build.
@@ -166,7 +166,7 @@ Files: `Spell/Components/MetamagicData.cs`, `Character/Feats/FeatDefinitions.cs`
 
 Pitfalls:
 - Missing switch cases fail silently: level adjustments default to 0 (a free feat), `IsApplicable` to false (never offered), `GetDisplayName` to "Unknown" (`HasFeat` never matches).
-- Metamagic reaches every resolver through the cast's clone (`SpellData.MetamagicDataRef`, batch 11 step 19) and `SpellDiceRules.Roll`. NPCs cast prepared metamagic slots and Scripted steps' metamagic (batch 11 step 21) but the AI chooses no feat itself (AI-001).
+- Metamagic reaches every resolver through the cast's clone (`SpellData.MetamagicDataRef`, batch 11 step 19) and `SpellDiceRules.Roll`. NPCs cast prepared metamagic slots and Scripted steps' metamagic (batch 11 step 21), and the AI chooses a feat for a spontaneous cast (batch 11 step 28, `AiMetamagicPlanner`).
 - Only Heighten changes the save DC (PHB p.95). `SpellSaveDCRules` reads it from the `MetamagicData` passed in, else from `spell.MetamagicDataRef`; a handler outside the pending PC cast must pass the metamagic itself.
 - Static `GetDisplayName(feat)` and instance `GetDisplayName()` both exist (167daee fixed 13 call sites). The instance one joins `GetAdjective` values sorted by enum int and is used as a matching key; keep adjectives unique.
 - Append, never insert: `ScrollData.MetamagicFeats`, `ItemData.ScrollMetamagicFeats` and `WandData` store `MetamagicFeatId` values.

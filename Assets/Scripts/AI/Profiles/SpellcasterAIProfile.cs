@@ -271,14 +271,19 @@ namespace DND35.AI.Profiles
             return 1f;
         }
 
-        /// <summary>Average damage at the caster's caster level (SpellDiceRules, SPL-005).</summary>
+        /// <summary>
+        /// Average damage at the caster's caster level (SpellDiceRules, SPL-005); a custom resolver's dice where the spell's
+        /// data dice are a placeholder (CustomSpellDice.TryDamageEstimate, as AISpellcastingStrategist's estimate; batch 11
+        /// step 28 review: Fireball's 1d6 per level, read as 1d6 before).
+        /// </summary>
         private static int EstimateAverageDamage(SpellData spell, CharacterController caster)
         {
             if (spell == null)
                 return 0;
 
             int casterLevel = SpellDiceRules.CasterLevelFor(caster != null ? caster.Stats : null, spell);
-            int diceAverage = Mathf.FloorToInt(SpellDiceRules.Damage(spell, casterLevel).Average);
+            SpellDice damage = CustomSpellDice.TryDamageEstimate(spell, casterLevel, out SpellDice custom) ? custom : SpellDiceRules.Damage(spell, casterLevel);
+            int diceAverage = Mathf.FloorToInt(damage.Average);
 
             int missileAverage = 0;
             if (spell.AutoHit && spell.MissileCount > 0)

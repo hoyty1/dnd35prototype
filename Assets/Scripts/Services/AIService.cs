@@ -2779,7 +2779,7 @@ public class AIService : MonoBehaviour
         if (bestSpell == null)
             return 0;
 
-        int rangeSquares = CasterLevelRules.RangeSquares(caster, bestSpell);
+        int rangeSquares = AiMetamagicPlanner.RangeSquaresFor(caster, bestSpell);
         return Mathf.Max(1, rangeSquares);
     }
 
@@ -2798,6 +2798,9 @@ public class AIService : MonoBehaviour
     /// Door is cast to escape when the caster is in danger, and a hostile melee touch spell whose foes are out of reach is
     /// cast and held when a foe can be reached this turn (GameManager.TryNPCHoldTouchChargeForAI; the move and the touch
     /// close the turn, ExecuteNPCTurn; SPL-115). Imbue with Spell Ability stays out (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive).
+    /// Since batch 11 step 28 (AI-001) a candidate may carry the metamagic a spontaneous caster chose
+    /// (AiMetamagicPlanner; SpellData.AiChosenMetamagic), which its legality probes and its cast take with it; the cap is
+    /// the same.
     /// </summary>
     /// <param name="allow">Optional filter on the candidate spells (the dragon turn's cast-first step, AI-037); null allows all.</param>
     /// <param name="minScore">A candidate must score above this to be chosen; the default keeps the old no-floor choice.</param>
@@ -2864,22 +2867,22 @@ public class AIService : MonoBehaviour
             {
                 // An area the AI aimed (batch 11 step 25): the same cast core as a PC's area cast.
                 AreaPlacement aim = candidate.Placement;
-                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name} as an area at {aim}, castablePrepared={castableCount}");
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {AiMetamagicPlanner.Describe(spell)} as an area at {aim}, castablePrepared={castableCount}");
                 if (!_gameManager.TryNPCPerformAreaSpellCastForAI(caster, spell, aim))
                 {
                     Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} at {aim} (refused, nothing spent); trying the next candidate.");
                     return false;
                 }
-                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} at {aim}");
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {AiMetamagicPlanner.Describe(spell)} at {aim}");
                 return true;
             }
 
             CharacterController spellTarget = candidate.Target;
             int targetDistance = CasterLevelRules.DistanceToTarget(caster, spellTarget);
-            int spellRange = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
+            int spellRange = Mathf.Max(1, AiMetamagicPlanner.RangeSquaresFor(caster, spell));
             bool isAllyTargeted = AISpellcastingStrategist.IsAllyTargetedSpell(spell);
             string targetRelation = isAllyTargeted ? "ally" : "enemy";
-            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {AiMetamagicPlanner.Describe(spell)}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
 
             if (!_gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell))
             {
@@ -2887,7 +2890,7 @@ public class AIService : MonoBehaviour
                 return false;
             }
 
-            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} on {spellTarget.Stats.CharacterName}");
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {AiMetamagicPlanner.Describe(spell)} on {spellTarget.Stats.CharacterName}");
             return true;
         }, out int tries);
 
@@ -2943,7 +2946,7 @@ public class AIService : MonoBehaviour
                     continue;
                 }
 
-                int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
+                int rangeSquares = Mathf.Max(1, AiMetamagicPlanner.RangeSquaresFor(caster, spell));
                 Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no legal target ({rangeSquares} squares).");
                 continue;
             }
@@ -2957,7 +2960,8 @@ public class AIService : MonoBehaviour
     /// the spell may touch but that is out of reach now (the cast core's legality on the NPC cast refuses it only as
     /// "out-of-range"), that the caster can reach with a move this turn (AiCastDecider.TouchDeliveryFor answers
     /// HoldCharge), and for which the hold itself is legal (GameManager.CheckHoldLegalityForAI): <paramref name="preferred"/>
-    /// when it qualifies, else the nearest. Null otherwise.
+    /// when it qualifies, else the nearest. Null otherwise, and null for a cast that takes the full round (a spontaneous
+    /// metamagic candidate, PHB p.88), which leaves no move to approach with.
     /// </summary>
     private CharacterController SelectHoldChargeTarget(CharacterController caster, SpellData spell, CharacterController preferred)
     {
@@ -2965,6 +2969,11 @@ public class AIService : MonoBehaviour
             || !AISpellcastingStrategist.IsEnemyTargetedSpell(spell) || AISpellcastingStrategist.IsAllyTargetedSpell(spell))
             return null;
         if (caster.Actions == null || !caster.Actions.HasMoveAction)
+            return null;
+        // The cast must leave the move that approaches (PHB p.141: the move comes before, between or after the cast and
+        // the touch): a spontaneous metamagic cast takes the full round (PHB p.88), so no hold is planned for it (batch 11
+        // step 28 review); the plain spell's candidate still is.
+        if (CastActionRules.CastingAction(spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) == CastActionCost.FullRound)
             return null;
         if (_gameManager.CheckHoldLegalityForAI(caster, spell).Kind == CastOutcomeKind.Refused)
             return null;
@@ -3217,6 +3226,10 @@ public class AIService : MonoBehaviour
     /// step 22, the same CheckLegality the cast runs), and an area spell with no legal, worthwhile aim
     /// (<see cref="FindAreaPlacementForAI"/>, batch 11 step 25), whose aim is kept with its score. An area spell is scored
     /// on the clone its cast uses (a prepared metamagic slot's metamagic applied), the one its aim was searched on.
+    /// Since batch 11 step 28 (AI-001) the candidates also include a spontaneous caster's metamagic choices
+    /// (AiMetamagicPlanner.SpontaneousCandidates: each known spell with each metamagic feat the rules let it apply now),
+    /// and every candidate's metamagic, chosen or prepared, adds AiMetamagicPlanner.Value to its score (what Empower,
+    /// Maximize, Extend, Heighten or Quicken gains, less a spontaneous choice's higher spell per day and full-round action).
     /// <paramref name="logAreaSkips"/>: log why an area spell is no candidate (the cast's walk only).
     /// </summary>
     private List<AiScoredSpell> ScoreCastableSpells(CharacterController caster, CharacterController target,
@@ -3227,12 +3240,12 @@ public class AIService : MonoBehaviour
             return result;
 
         SpellcastingComponent spellcasting = caster.Spellcasting;
-        if (spellcasting == null || !spellcasting.CanCastSpells || !spellcasting.HasAnyCastablePreparedSpell())
+        if (spellcasting == null || !spellcasting.CanCastSpells)
             return result;
 
-        List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
-        if (castable == null || castable.Count == 0)
-            return result;
+        // No plain spell left can still leave a spontaneous metamagic one (a 1st-level spell known, only 3rd-level spells
+        // per day left: an empowered cast spends one, PHB p.88), so an empty list does not end the choice here.
+        List<SpellData> castable = spellcasting.GetCastablePreparedSpells() ?? new List<SpellData>();
 
         if (IsMagicMissileOnlyCaster(caster))
         {
@@ -3259,9 +3272,17 @@ public class AIService : MonoBehaviour
         // Cache StatusEffectManager for buff-already-active checks (prevents wasting spell slots).
         StatusEffectManager statusMgr = caster.StatusEffectManager;
 
-        for (int i = 0; i < castable.Count; i++)
+        // The metamagic dimension (batch 11 step 28, AI-001): a spontaneous caster's known spells with each metamagic feat
+        // it may apply now (AiMetamagicPlanner.SpontaneousCandidates, each a clone carrying its choice), after the plain
+        // and prepared candidates, so an equal score keeps the plain spell first. Each passes the same tests below.
+        var candidates = new List<SpellData>(castable);
+        candidates.AddRange(AiMetamagicPlanner.SpontaneousCandidates(caster, allCombatants));
+        if (candidates.Count == 0)
+            return result;
+
+        for (int i = 0; i < candidates.Count; i++)
         {
-            SpellData spell = castable[i];
+            SpellData spell = candidates[i];
             if (spell == null)
                 continue;
             if (allow != null && !allow(spell))
@@ -3361,6 +3382,16 @@ public class AIService : MonoBehaviour
                 // ── Comprehensive scoring for non-profile casters (Tiers 1–4) ──
                 score = AISpellcastingStrategist.ScoreSpellComprehensive(
                     scoredSpell, caster, target, allCombatants, _gameManager);
+            }
+
+            // The metamagic the candidate carries, a prepared slot's or a spontaneous choice (batch 11 step 28, AI-001):
+            // what it adds less what a spontaneous choice costs (AiMetamagicPlanner.Value, on the candidate as listed).
+            float metamagicValue = AiMetamagicPlanner.Value(caster, spell, target, allCombatants, placement);
+            if (metamagicValue != 0f)
+            {
+                score += metamagicValue;
+                if (logAreaSkips)
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: {AiMetamagicPlanner.Describe(spell)} scores {score:F1} (metamagic {metamagicValue:+0.0;-0.0}).");
             }
 
             if (score > minScore)

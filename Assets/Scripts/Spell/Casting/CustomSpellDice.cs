@@ -115,4 +115,44 @@ public static class CustomSpellDice
 
     /// <summary>Spell Turning: 1d4+6 spell levels (PHB p.282).</summary>
     public static SpellDice SpellTurningLevels() => SpellDice.Of(1, 4, 6);
+
+    /// <summary>
+    /// The damage dice a custom resolver rolls against one ordinary creature, for estimates (the AI's expected damage and
+    /// its metamagic value, batch 11 step 28): the specs above for the damage spells whose data dice are a placeholder
+    /// (Fireball's DamageCount is 1; the resolver rolls 1d6 per caster level). Ice Storm's two rolls are summed (3d6 + 2d6
+    /// as 5d6: the same mean and maximum). False for a spell not listed: its data dice (SpellDiceRules.Damage) are its dice.
+    /// </summary>
+    public static bool TryDamageEstimate(SpellData spell, int casterLevel, out SpellDice dice)
+    {
+        dice = default;
+        if (spell == null)
+            return false;
+        switch (spell.SpellId)
+        {
+            case DND35e.Identifiers.SpellNames.FIREBALL:
+            case DND35e.Identifiers.SpellNames.LIGHTNING_BOLT:
+                dice = FireballOrLightningBolt(casterLevel); return true;
+            case DND35e.Identifiers.SpellNames.CALL_LIGHTNING:
+                dice = CallLightningBolt(); return true;
+            case DND35e.Identifiers.SpellNames.ICE_STORM:
+                dice = SpellDice.Of(IceStormBludgeoning().Count + IceStormCold().Count, 6); return true;
+            case DND35e.Identifiers.SpellNames.SHOUT:
+                dice = Shout(); return true;
+            case DND35e.Identifiers.SpellNames.CONE_OF_COLD:
+                dice = ConeOfCold(casterLevel); return true;
+            case DND35e.Identifiers.SpellNames.SEARING_LIGHT:
+                dice = SearingLight(casterLevel, false); return true;
+            case DND35e.Identifiers.SpellNames.VAMPIRIC_TOUCH:
+                dice = VampiricTouch(casterLevel); return true;
+            case DND35e.Identifiers.SpellNames.HOLY_SMITE:
+            case DND35e.Identifiers.SpellNames.UNHOLY_BLIGHT:
+            case DND35e.Identifiers.SpellNames.CHAOS_HAMMER:
+            case DND35e.Identifiers.SpellNames.ORDERS_WRATH:
+                dice = AlignmentBurst(casterLevel); return true;
+            case DND35e.Identifiers.SpellNames.PRODUCE_FLAME:
+                dice = ProduceFlame(casterLevel); return true;
+            default:
+                return false;
+        }
+    }
 }

@@ -171,6 +171,11 @@ public static class AreaAimSearch
             Mix(caster != null ? caster.GridPosition.x * 7919 + caster.GridPosition.y : 0);
             Mix(spell.SpellId != null ? spell.SpellId.GetHashCode() : 0);
             Mix(spell.AoESizeSquares * 131 + spell.AoERangeSquares);
+            // A Widened or Enlarged clone (its AreaRadius and range doubled, SpellCaster.ApplyMetamagicToSpellData) is
+            // another search than the plain spell's (batch 11 step 28: the AI weighs both in one decision).
+            Mix(spell.AreaRadius * 977 + spell.RangeSquares * 31 + spell.RangeIncreaseSquares);
+            // A Heightened clone gets through globes the plain spell does not (WouldAffect, IsWastedOnGlobe; PHB p.95, p.236).
+            Mix(LesserGlobeOfInvulnerabilityAreaEffect.EffectiveSpellLevel(spell));
             Mix((long)(allyWeight * 1000f));
             if (all != null)
             {

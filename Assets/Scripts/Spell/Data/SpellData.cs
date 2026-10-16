@@ -603,6 +603,16 @@ public class SpellData
     public bool IsPreparedMetamagicSlotSpell;
 
     /// <summary>
+    /// The metamagic the AI chose to apply when it casts this spell spontaneously (batch 11 step 28, AI-001): set only on
+    /// the AI's candidate clone of a known spell (AiMetamagicPlanner.CandidateFor), never on a database template, so the
+    /// AI's legality probes, target choice and cast all carry the choice through SpellCastRequest.AiMetamagicFor, as a
+    /// prepared metamagic slot's spell carries its slot's (<see cref="IsPreparedMetamagicSlotSpell"/>). The rules code never
+    /// reads it: the cast's request takes the metamagic and its spell is a fresh clone. <see cref="Clone"/> clears it.
+    /// </summary>
+    [NonSerialized]
+    public MetamagicData AiChosenMetamagic;
+
+    /// <summary>
     /// The duration line is "Instantaneous/..." with a timed part after the instantaneous effect (Death Knell, PHB p.217:
     /// Instantaneous/10 minutes per HD of subject): Extend Spell doubles that timed part (SpellDurationRules.IsExtendable;
     /// delegated RAW reading 2026-10-14).
@@ -634,6 +644,7 @@ public class SpellData
             : new List<MetamagicFeatId>();
         clone.MetamagicDataRef = null; // Don't share mutable reference
         clone.IsPreparedMetamagicSlotSpell = false;
+        clone.AiChosenMetamagic = null;
         return clone;
     }
 

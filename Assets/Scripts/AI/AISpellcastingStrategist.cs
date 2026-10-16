@@ -82,9 +82,6 @@ public static class AISpellcastingStrategist
     // profile's ScoreSpell adds 3 per enemy hit itself).
     private const float AREA_PLACEMENT_VALUE = 3f;
 
-    // T3.5: Metamagic
-    private const float QUICKEN_BONUS = 8f;
-
     // T4 class bonuses
     private const float DOMAIN_SPELL_BONUS = 6f;
     private const float SCHOOL_SPEC_BONUS = 5f;
@@ -170,7 +167,7 @@ public static class AISpellcastingStrategist
         bool isAllySpell = IsAllyTargetedSpell(spell);
         bool isEnemySpell = IsEnemyTargetedSpell(spell);
 
-        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
+        int rangeSquares = AiMetamagicPlanner.RangeSquaresFor(caster, spell); // an Enlarged candidate's doubled range (batch 11 step 28 review)
         if (rangeSquares <= 0) rangeSquares = 1;
 
         for (int i = 0; i < allCombatants.Count; i++)
@@ -286,7 +283,7 @@ public static class AISpellcastingStrategist
     {
         if (allCombatants == null) return caster;
 
-        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
+        int rangeSquares = AiMetamagicPlanner.RangeSquaresFor(caster, spell); // an Enlarged candidate's doubled range (batch 11 step 28 review)
         if (rangeSquares <= 0) rangeSquares = 1;
 
         CharacterController bestTarget = null;
@@ -414,7 +411,7 @@ public static class AISpellcastingStrategist
     {
         if (allCombatants == null) return fallbackTarget;
 
-        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
+        int rangeSquares = AiMetamagicPlanner.RangeSquaresFor(caster, spell); // an Enlarged candidate's doubled range (batch 11 step 28 review)
         if (rangeSquares <= 0) rangeSquares = 1;
 
         CharacterController bestTarget = null;
@@ -575,7 +572,7 @@ public static class AISpellcastingStrategist
             int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int srPenBonus = FeatManager.GetSpellPenetrationBonus(caster.Stats);
             int effectiveCL = casterLevel + srPenBonus;
-            float srChance = Mathf.Clamp01((float)(effectiveCL + 1 - enemy.Stats.SpellResistance) / 20f);
+            float srChance = SpellResistanceSuccessChance(effectiveCL, enemy.Stats.SpellResistance);
             if (srChance < 0.5f) score -= 15f;
             else if (srChance < 0.75f) score -= 5f;
         }
@@ -1118,16 +1115,16 @@ public static class AISpellcastingStrategist
     //  T3.5: METAMAGIC INTEGRATION
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Score bonus for metamagic considerations.</summary>
-    public static float GetMetamagicScore(CharacterController caster, SpellData spell)
+    /// <summary>
+    /// Score bonus for the spell's own components in the caster's situation (the part of the old metamagic score that was
+    /// never about metamagic; batch 11 step 28 moved the metamagic value to AiMetamagicPlanner.Value): a grappling caster
+    /// prefers a spell without a somatic component (PHB p.156), and a spell without a verbal one gets a point.
+    /// </summary>
+    public static float GetComponentSituationScore(CharacterController caster, SpellData spell)
     {
         if (spell == null || caster == null || caster.Stats == null) return 0f;
 
         float score = 0f;
-
-        // Quickened spells are very valuable (extra action)
-        if (spell.ActionType == SpellActionType.Swift)
-            score += QUICKEN_BONUS;
 
         // Grappled casters: prefer spells without somatic components
         if (caster.IsGrappling() && !spell.HasSomaticComponent)
@@ -1138,6 +1135,19 @@ public static class AISpellcastingStrategist
             score += 1f;
 
         return score;
+    }
+
+    /// <summary>
+    /// The chance that a caster level check beats spell resistance <paramref name="spellResistance"/> (PHB p.177: 1d20 +
+    /// caster level at least equal to the spell resistance): (21 + <paramref name="effectiveCasterLevel"/> - SR) / 20,
+    /// clamped to 0..1; <paramref name="effectiveCasterLevel"/> includes Spell Penetration. AI-046 (batch 11 step 28): the
+    /// estimate was (CL + 1 - SR) / 20, 20 points too low.
+    /// </summary>
+    public static float SpellResistanceSuccessChance(int effectiveCasterLevel, int spellResistance)
+    {
+        if (spellResistance <= 0)
+            return 1f;
+        return Mathf.Clamp01((21f + effectiveCasterLevel - spellResistance) / 20f);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1342,8 +1352,10 @@ public static class AISpellcastingStrategist
         // ── T3.4: Counterspell bonus ──
         score += GetCounterspellScore(caster, spell, allCombatants);
 
-        // ── T3.5: Metamagic ──
-        score += GetMetamagicScore(caster, spell);
+        // ── T3.5: The spell's components in the caster's situation ──
+        // The metamagic a candidate carries is valued by the planner (AIService.ScoreCastableSpells adds
+        // AiMetamagicPlanner.Value; batch 11 step 28, AI-001).
+        score += GetComponentSituationScore(caster, spell);
 
         // ── T4.1: Spell Focus / School specialization ──
         score += GetSpellFocusDCScore(caster, spell);
@@ -1666,12 +1678,17 @@ public static class AISpellcastingStrategist
         return Mathf.FloorToInt(SpellDiceRules.Healing(spell, casterLevel).Average);
     }
 
-    /// <summary>Average damage at the caster's caster level (SpellDiceRules, SPL-005); Magic Missile counts its listed missiles.</summary>
+    /// <summary>
+    /// Average damage at the caster's caster level (SpellDiceRules, SPL-005); a custom resolver's dice where the spell's data
+    /// dice are a placeholder (CustomSpellDice.TryDamageEstimate, batch 11 step 28: Fireball's 1d6 per level, which this
+    /// estimate read as 1d6 before); Magic Missile counts its listed missiles.
+    /// </summary>
     private static int EstimateAverageDamage(SpellData spell, CharacterController caster)
     {
         if (spell == null) return 0;
         int casterLevel = SpellDiceRules.CasterLevelFor(caster?.Stats, spell);
-        int diceAvg = Mathf.FloorToInt(SpellDiceRules.Damage(spell, casterLevel).Average);
+        SpellDice damage = CustomSpellDice.TryDamageEstimate(spell, casterLevel, out SpellDice custom) ? custom : SpellDiceRules.Damage(spell, casterLevel);
+        int diceAvg = Mathf.FloorToInt(damage.Average);
         int missileAvg = 0;
         if (spell.AutoHit && spell.MissileCount > 0)
             missileAvg = spell.MissileCount * ((spell.DamageDice + 1) / 2 + spell.BonusDamage);

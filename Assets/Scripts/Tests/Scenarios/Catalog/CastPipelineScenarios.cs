@@ -104,6 +104,9 @@ namespace Tests.Scenarios
             yield return S("cast-slot-failure-refund", SlotFailureRefund);
             yield return S("metamagic-cast-paths", MetamagicCastPaths);
             yield return S("npc-cast-prepared-metamagic", NpcCastPreparedMetamagic);
+            yield return S("ai-metamagic-choice", () => AiMetamagicChoice(threeFoes: true));
+            yield return S("ai-metamagic-choice-one-foe", () => AiMetamagicChoice(threeFoes: false));
+            yield return S("ai-metamagic-hold-plain", AiMetamagicHoldPlain);
             yield return S("stale-cast-state-energy", StaleEnergyChoice);
             yield return S("stale-cast-state-fire-shield", FireShieldChoicePerCast);
             yield return S("stale-cast-state-wand-asf", StaleWandFlag);
@@ -4494,6 +4497,149 @@ namespace Tests.Scenarios
                     FactsAre(("plain.lost.d2", 0), ("plain.spent", "none"), ("plain.actions", "smf")))
                 .Expect("The Scripted wizard's step Empower casts the Empowered Magic Missile from its slot: 21 (PHB p.88, p.93)",
                     FactsAre(("empowered.lost.d2", 21), ("empowered.spent", "L3+1")))
+                .Build();
+        }
+
+        // ── rules/ai-metamagic-choice, -one-foe (batch 11 step 28, AI-001) ──
+
+        /// <summary>Clears every spell the sorcerer knows and makes <paramref name="spellId"/> its one known spell, of <paramref name="level"/>.</summary>
+        private static void KnowsOnly(CharacterController c, string spellId, int level)
+        {
+            SpontaneousCastingData known = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+            if (known == null || !c.Spellcasting.IsSpontaneousCaster)
+                throw new InvalidOperationException(c.Stats.CharacterName + " is not a spontaneous caster");
+            for (int l = 0; l < known.SpellsKnownByLevel.Length; l++)
+                known.SpellsKnownByLevel[l]?.Clear();
+            if (!known.LearnSpell(spellId, level))
+                throw new InvalidOperationException(c.Stats.CharacterName + " could not learn " + spellId);
+        }
+
+        /// <summary>A spontaneous caster's spells per day left at 3rd and 5th level, such as "L3:7 L5:3".</summary>
+        private static string SpellsPerDay35(CharacterController c)
+        {
+            SpontaneousCastingData d = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+            return d == null ? "none" : "L3:" + d.GetSlotsRemaining(3) + " L5:" + d.GetSlotsRemaining(5);
+        }
+
+        /// <summary>
+        /// AI-001 (batch 11 step 28, ai-metamagic-choice): the AI chooses metamagic for a spontaneous cast. An AI-run sorcerer
+        /// 10 (CHA 16) with Empower Spell knows only Fireball (PHB p.231: 10d6 at caster level 10, Reflex half). Every d6 is
+        /// 6 and the dummies fail their saves.
+        /// - <paramref name="threeFoes"/>: three dummies stand together; the AI's planner (AiMetamagicPlanner.Value) weighs
+        ///   17.5 more expected damage on each of three foes against a 5th-level spell per day and the full-round action
+        ///   (PHB p.88), and casts an Empowered Fireball: each dummy loses 60 + 30 = 90 (PHB p.93), a 5th-level spell per day
+        ///   is spent, not a 3rd, and no action is left.
+        /// - one dummy: the plain Fireball stays first (one foe's 17.5 does not pay for the full round and the higher spell):
+        ///   60, a 3rd-level spell per day, the move action left.
+        /// </summary>
+        private static ScenarioDef AiMetamagicChoice(bool threeFoes)
+        {
+            string id = threeFoes ? "rules/ai-metamagic-choice" : "rules/ai-metamagic-choice-one-foe";
+            string title = threeFoes
+                ? "An AI sorcerer empowers its Fireball when the burst takes three foes (AI-001; PHB p.88, p.93)"
+                : "An AI sorcerer casts Fireball plain against one foe (AI-001; PHB p.88)";
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("AI-001", "PHB p.88", "PHB p.93", "PHB p.231", "batch 11 step 28")
+                .MaxRounds(1)
+                .Pc("sorc", ActorSource.Stats(() => Sorcerer("AI Empower Sorcerer", 10, "Empower Spell")), 2, 10, Control.Ai)
+                .Npc("obs", "target_dummy", 2, 2, Control.Scripted, CharacterTeam.Player)
+                .Npc("d1", "target_dummy", 10, 10, Control.Scripted)
+                .Tweak("sorc", c => KnowsOnly(c, SpellNames.FIREBALL, 3))
+                .Profile("sorc", () => UnityEngine.ScriptableObject.CreateInstance<DND35.AI.Profiles.EvokerAIProfile>())
+                .Tweak("d1", Fails)
+                .Force(6, 6, null, -1);
+            if (threeFoes)
+            {
+                b = b.Npc("d2", "target_dummy", 11, 10, Control.Scripted)
+                     .Npc("d3", "target_dummy", 10, 11, Control.Scripted)
+                     .Tweak("d2", Fails).Tweak("d3", Fails)
+                     .Initiative("obs", "sorc", "d1", "d2", "d3");
+            }
+            else
+            {
+                b = b.Initiative("obs", "sorc", "d1");
+            }
+            string[] foes = threeFoes ? new[] { "d1", "d2", "d3" } : new[] { "d1" };
+            b = b.Turn("obs", 1, Step.Assert("record", ctx =>
+                {
+                    RecordHp(ctx, foes);
+                    Fact(ctx, "perday.before", SpellsPerDay35(ctx.Get("sorc")));
+                    return true;
+                }))
+                .Turn("d1", 1, Step.Assert("after", ctx =>
+                {
+                    FactHpLost(ctx, "fireball", foes);
+                    CharacterController sorc = ctx.Get("sorc");
+                    Fact(ctx, "perday.after", SpellsPerDay35(sorc));
+                    Fact(ctx, "sorc.actions", Actions(sorc));
+                    return true;
+                }))
+                .Expect("The AI sorcerer casts Fireball once", CastEvents("sorc", SpellNames.FIREBALL, 1));
+            if (threeFoes)
+            {
+                b = b.Expect("Each dummy takes the empowered 10d6: 60 + 30 = 90 (PHB p.93)",
+                        FactsAre(("fireball.lost.d1", 90), ("fireball.lost.d2", 90), ("fireball.lost.d3", 90)))
+                     .Expect("A 5th-level spell per day is spent, not a 3rd (PHB p.88)", FactsAre(("perday.before", "L3:7 L5:3"), ("perday.after", "L3:7 L5:2")))
+                     .Expect("The spontaneous metamagic cast took the full round (PHB p.88)", FactIs("sorc.actions", "---"));
+            }
+            else
+            {
+                b = b.Expect("The dummy takes the plain 10d6: 60", FactIs("fireball.lost.d1", 60))
+                     .Expect("A 3rd-level spell per day is spent, no 5th", FactsAre(("perday.before", "L3:7 L5:3"), ("perday.after", "L3:6 L5:3")))
+                     .Expect("The plain Fireball is a standard action: the move is left", FactIs("sorc.actions", "-m-"));
+            }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Batch 11 step 28 review (AI-001; PHB p.88, p.141): an AI-run sorcerer 6 (CHA 16, the Evoker profile) with Empower Spell knows only
+        /// Shocking Grasp (5d6 at caster level 6, PHB p.279); a target dummy with 20 hit points stands 3 squares away. The
+        /// empowered average (26.25) would drop it and the plain one (17.5) would not, so the planner values the Empowered
+        /// spell first, but its spontaneous cast takes the full round (PHB p.88) and leaves no move to reach the dummy, so it
+        /// is no hold candidate (AIService.SelectHoldChargeTarget). The AI casts the plain spell, holds the charge, moves
+        /// beside the dummy and touches it (PHB p.141): d20 19 hits, every d6 is 1, so 5 damage; a 1st-level spell per day is
+        /// spent, no 3rd.
+        /// </summary>
+        private static ScenarioDef AiMetamagicHoldPlain()
+        {
+            return Rules("rules/ai-metamagic-hold-plain", "An AI sorcerer holds a plain Shocking Grasp to move and touch, not a full-round Empowered one (AI-001; PHB p.88, p.141)")
+                .Covers("AI-001", "PHB p.88", "PHB p.141", "PHB p.279", "batch 11 step 28")
+                .MaxRounds(1)
+                .Pc("sorc", ActorSource.Stats(() => Sorcerer("AI Grasp Sorcerer", 6, "Empower Spell")), 5, 10, Control.Ai)
+                .Npc("obs", "target_dummy", 2, 2, Control.Scripted, CharacterTeam.Player)
+                .Npc("dummy", "target_dummy", 8, 10, Control.Scripted)
+                .Tweak("sorc", c => KnowsOnly(c, SpellNames.SHOCKING_GRASP, 1))
+                // The caster's turn shell (a profile caster takes the ranged turn, which casts first; as rules/ai-metamagic-choice).
+                .Profile("sorc", () => UnityEngine.ScriptableObject.CreateInstance<DND35.AI.Profiles.EvokerAIProfile>())
+                .Tweak("dummy", c => c.Stats.CurrentHP = UnityEngine.Mathf.Min(c.Stats.CurrentHP, 20))
+                .Initiative("obs", "sorc", "dummy")
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 1, null, -1)
+                .Turn("obs", 1, Step.Assert("record", ctx =>
+                {
+                    CharacterController s = ctx.Get("sorc");
+                    RecordHp(ctx, "dummy");
+                    Numbers(ctx)["perday|1"] = s.Spellcasting.SpontaneousData.GetSlotsRemaining(1);
+                    Numbers(ctx)["perday|3"] = s.Spellcasting.SpontaneousData.GetSlotsRemaining(3);
+                    Fact(ctx, "dummy.hp", ctx.Get("dummy").Stats.CurrentHP);
+                    return true;
+                }))
+                .Turn("dummy", 1, Step.Assert("after the sorcerer's turn", ctx =>
+                {
+                    CharacterController s = ctx.Get("sorc"), d = ctx.Get("dummy");
+                    SpontaneousCastingData data = s.Spellcasting.SpontaneousData;
+                    Fact(ctx, "held", s.Spellcasting.HasHeldTouchCharge);
+                    Fact(ctx, "beside", CasterLevelRules.DistanceToTarget(s, d) <= 1);
+                    FactHpLost(ctx, "grasp", "dummy");
+                    Fact(ctx, "perday.spent", "L1:" + (Numbers(ctx)["perday|1"] - data.GetSlotsRemaining(1))
+                                               + " L3:" + (Numbers(ctx)["perday|3"] - data.GetSlotsRemaining(3)));
+                    return true;
+                }))
+                .Expect("The dummy starts at 20 hit points", FactIs("dummy.hp", 20))
+                .Expect("The AI casts Shocking Grasp once (the hold); the delivery is no cast", CastEvents("sorc", SpellNames.SHOCKING_GRASP, 1))
+                .Expect("It moves beside the dummy and the plain touch hits for 5d6 of 1s = 5, spending the charge (PHB p.141, p.279)",
+                    FactsAre(("beside", true), ("grasp.lost.dummy", 5), ("held", false)))
+                .Expect("A 1st-level spell per day is spent, no 3rd: the plain spell, not the Empowered one (PHB p.88)", FactIs("perday.spent", "L1:1 L3:0"))
                 .Build();
         }
 

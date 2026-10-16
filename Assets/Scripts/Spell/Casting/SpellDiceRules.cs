@@ -245,6 +245,26 @@ public static class SpellDiceRules
     /// <summary>Average of a spell's own dice at a caster level (AI estimates).</summary>
     public static float AverageEffect(SpellData spell, int casterLevel) => Effect(spell, casterLevel).Average;
 
+    /// <summary>
+    /// The expected result of <paramref name="dice"/> rolled with <paramref name="metamagic"/> by <see cref="RollWith"/>'s
+    /// rule (AI estimates; batch 11 step 28): the average; with Maximize the maximum (PHB p.97); with Empower one and a half
+    /// times the average (PHB p.93); with both the maximum plus half the average (PHB p.97-98). The rounding down of the
+    /// Empower half and the floor at 0 are left out, so it is the mean to within half a point. A result with no die is
+    /// unchanged by either feat.
+    /// </summary>
+    public static float ExpectedTotal(SpellDice dice, MetamagicData metamagic)
+    {
+        float average = dice.Average;
+        if (!dice.HasDice || metamagic == null)
+            return average;
+        bool maximize = metamagic.Has(MetamagicFeatId.MaximizeSpell);
+        bool empower = metamagic.Has(MetamagicFeatId.EmpowerSpell);
+        float total = maximize ? dice.Maximum : average;
+        if (empower)
+            total += average * 0.5f;
+        return total;
+    }
+
     /// <summary>The spell's dice for display: "1d8 +1/level (max +5)", "1d4/level (max 5d4)", "2d6".</summary>
     public static string Describe(SpellData spell)
     {

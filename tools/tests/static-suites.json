@@ -84,6 +84,17 @@
       "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
+      "type": "Tests.AI.AiMetamagicPlannerTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 38,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 28 (2026-10-16, ai-metamagic-choice; AI-001, AI-046): the AI's metamagic dimension (AiMetamagicPlanner). SpellDiceRules.ExpectedTotal (10d6: 35, 52.5 empowered, 60 maximized, 77.5 both); a sorcerer 10's spontaneous candidates (Empowered Fireball and Magic Missile as clones carrying the choice, the template untouched, no quickened or extended Fireball, none without a 5th-level spell per day, none without a feat; the AI request carries Empower, a spontaneous source and a full-round action); Empowered Fireball outranks plain Fireball when its burst takes three foes and not one (the full round decides); a finishing blow; Extend's rounds within the horizon, Heighten's DC, the Heighten and Silent filters; a prepared Quickened slot worth the action; AI-046's (21 + CL - SR) / 20. Controllers without Init, so either mode. Added 2026-10-16."
+    },
+    {
       "type": "Tests.AI.AreaAimSearchTests",
       "needs": "play",
       "skip": "",

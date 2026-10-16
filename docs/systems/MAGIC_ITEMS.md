@@ -182,7 +182,7 @@ Ring bugs: a ring's energy resistance can overwrite an active Resist Energy spel
 1. Offer held, applicable rods at cast time (spell level within the rod's maximum, uses left), apply through `MetamagicRodActivation.ApplyRodToSpell`, and spend a use only when the cast resolves.
 2. Compute slot level with `MetamagicData.GetEffectiveSpellLevelWithRods`. `CastWizardSpellWithMetamagic` uses `GetEffectiveSpellLevel`; `MetamagicSystem.ValidateMetamagicApplication` (the live legality rule since batch 11 step 21) already skips a rod's feat in the feat test and the 9th-level cap (`MetamagicData.IsFromRod`, `GetFeatOnlyLevelAdjustment`).
 3. Rules to keep: one rod per spell; the rod plus the caster's own feat is legal and only the feat raises the slot; a spontaneous caster still takes a full-round action unless the rod is Quicken; the rod must be held.
-4. Reset rod uses on rest, and let the AI use rods (AI-001 covers NPC metamagic in general).
+4. Reset rod uses on rest, and let the AI use rods (the AI chooses metamagic feats since batch 11 step 28, `AiMetamagicPlanner`; rods are not among its candidates).
 
 ## 7. Staves
 

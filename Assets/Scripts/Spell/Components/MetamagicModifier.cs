@@ -83,8 +83,9 @@ public class MetamagicModifier
 ///   sends the reader to each feat's list of the spells it can't modify, the "not affected" spells of Empower (p.93),
 ///   Extend and Enlarge (p.94), Maximize (p.97) and Widen (p.102); the test is MetamagicData.IsApplicable, the same
 ///   test the metamagic panel and the preparation screen offer by, so a Scripted or AI cast is refused what a PC is
-///   never offered (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1). IsApplicable does not yet test Silent or
-///   Still on a spell without that component (PHB p.100, p.101) or Silent on a bard spell (PHB p.100) (SPL-184).
+///   never offered (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1). Silent Spell is refused on a bard spell (PHB
+///   p.100, Special; <see cref="IsBardSpell"/>, since the batch 11 step 28 review). IsApplicable does not yet test Silent
+///   or Still on a spell without that component (PHB p.100, p.101) (SPL-184).
 ///   Quicken's casting-time limit (PHB p.98) is not tested yet (SPL-098).
 /// - Items and the F12 panel: a scroll or wand carries the metamagic it was made with (DMG p.238, p.245; its maker had
 ///   the feat), so its cast is not tested; a held charge's delivery was tested at the hold (no casting, PHB p.141); the
@@ -141,6 +142,12 @@ public static class MetamagicSystem
                 return RefusalNotApplicable;
         }
 
+        // PHB p.100 (Silent Spell, Special): a bard spell cannot be enhanced by Silent Spell. A bard spell is a spontaneous
+        // cast whose casting class is Bard (SpellSaveDCRules.ResolveCastingClass, the class its save DC uses; the source
+        // carries no class yet, SPL-159). Batch 11 step 28 review (2026-10-16), SPL-184 item 1 in part.
+        if (metamagic.Has(MetamagicFeatId.SilentSpell) && IsBardSpell(spell, casterStats, source))
+            return RefusalNotApplicable;
+
         bool featsSupplied = source != null && source.Kind == CastSourceKind.TestPanel;
         if (casterStats != null && !featsSupplied)
         {
@@ -156,6 +163,19 @@ public static class MetamagicSystem
         if (spell.SpellLevel + metamagic.GetFeatOnlyLevelAdjustment(spell.SpellLevel) > MaxSpellLevel)
             return RefusalAboveNinth;
         return null;
+    }
+
+    /// <summary>
+    /// True when this cast of <paramref name="spell"/> is a bard spell (PHB p.100, Silent Spell): a cast from a spontaneous
+    /// spell per day (or a charge held from one) by a caster whose casting class for the spell is Bard. False without the
+    /// caster's stats or the source.
+    /// </summary>
+    public static bool IsBardSpell(SpellData spell, CharacterStats casterStats, CastSource source)
+    {
+        if (spell == null || casterStats == null || source == null || !source.IsSpontaneous
+            || source.Kind == CastSourceKind.SpontaneousConversion)
+            return false;
+        return string.Equals(SpellSaveDCRules.ResolveCastingClass(casterStats, spell), "Bard", System.StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
