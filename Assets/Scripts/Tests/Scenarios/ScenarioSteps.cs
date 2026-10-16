@@ -15,7 +15,7 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -61,6 +61,8 @@ namespace Tests.Scenarios
         /// the first option (the Resist Energy type, the Magic Weapon weapon). Null for every other step.
         /// </summary>
         public string[] Choices { get; private set; }
+        /// <summary>The level of the prepared spell a <see cref="Convert"/> step gives up (the Convert button's row).</summary>
+        public int ConvertLevel { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
@@ -208,12 +210,21 @@ namespace Tests.Scenarios
         }
         /// <summary>
         /// Casts a prepared spell at <paramref name="target"/>. Scripted: TryNPCPerformSpellCastForAI with a clone of the
-        /// database spell (never the template); no metamagic on that path. Ui: the cast menu with the first unused
-        /// prepared slot holding that spell, then the target square (or, for a self-centered burst such as Prayer, the
-        /// preview's confirmation).
+        /// database spell (never the template) and <paramref name="metamagic"/> (batch 11 step 21: the NPC path casts it as
+        /// the PC menu does). Ui: the cast menu with the first unused prepared slot holding that spell, with
+        /// <paramref name="metamagic"/> as the menu passes it (a prepared slot's, or a spontaneous caster's panel choice),
+        /// then the target square (or, for a self-centered burst such as Prayer, the preview's confirmation).
         /// </summary>
         public static Step Cast(string spellId, string target, MetamagicData metamagic = null)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Metamagic = metamagic };
+        /// <summary>
+        /// Ui only: a cleric's spontaneous conversion (PHB p.32): the spell menu's Convert button on the prepared
+        /// <paramref name="sacrificedSpellId"/> of <paramref name="level"/>, the metamagic panel's choice
+        /// (<paramref name="metamagic"/>, null for none; PHB p.88), then the cure or inflict spell's target, as
+        /// <see cref="Cast"/> (GameManager.Harness_SelectSpontaneousConversion; batch 11 step 21).
+        /// </summary>
+        public static Step Convert(string sacrificedSpellId, int level, string target, MetamagicData metamagic = null)
+            => new Step(StepKind.Convert) { SpellId = sacrificedSpellId, ConvertLevel = level, Target = target, Metamagic = metamagic };
         /// <summary>
         /// Ui only: <see cref="Cast"/>, answering each selection list the cast opens (the Resist Energy type after the spell
         /// is picked, the Magic Weapon weapon after the target is clicked) with <paramref name="choices"/> in order: an
@@ -290,6 +301,8 @@ namespace Tests.Scenarios
                 case StepKind.Cast:
                     return "Cast(" + SpellId + "," + (HasCell ? Cell.x + "," + Cell.y : Target) + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "")
                         + (Choices != null ? ",choose=" + string.Join("|", Choices) : "") + ")";
+                case StepKind.Convert:
+                    return "Convert(" + SpellId + ",L" + ConvertLevel + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "") + ")";
                 case StepKind.CastHeld:
                     return "CastHeld(" + SpellId + ")";
                 case StepKind.DeliverHeld:
@@ -324,7 +337,7 @@ namespace Tests.Scenarios
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
-                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld;
+                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
@@ -332,7 +345,7 @@ namespace Tests.Scenarios
                 return Describe() + ": square off the grid";
             if (Kind == StepKind.GrappleAction && Array.IndexOf(GrappleKinds, GrappleKind) < 0)
                 return Describe() + ": unknown grapple action (" + string.Join(", ", GrappleKinds) + ")";
-            if ((Kind == StepKind.Cast || Kind == StepKind.CastHeld) && string.IsNullOrEmpty(SpellId))
+            if ((Kind == StepKind.Cast || Kind == StepKind.CastHeld || Kind == StepKind.Convert) && string.IsNullOrEmpty(SpellId))
                 return Kind + " without a spell id";
             if (Kind == StepKind.UseItem && string.IsNullOrEmpty(ItemId))
                 return "UseItem without an item id";
@@ -355,14 +368,13 @@ namespace Tests.Scenarios
             if (control != Control.Ui)
             {
                 if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
-                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld)
+                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 if (Kind == StepKind.Cast && HasCell)
                     return Describe() + ": a cast aimed at a square is Ui only (the NPC path casts at an actor)";
                 if (Kind == StepKind.Cast && Choices != null)
                     return Describe() + ": selection-list choices are Ui only (the NPC path makes its own)";
-                if (Kind == StepKind.Cast && Metamagic != null && Metamagic.HasAnyMetamagic)
-                    return Describe() + ": the NPC cast path takes no metamagic";
+
                 if ((Kind == StepKind.FullAttack || Kind == StepKind.Charge) && !string.IsNullOrEmpty(NaturalAttackName))
                     return Describe() + ": the Haste pick is Ui only (the AI path picks with NaturalAttackChoice)";
             }
@@ -666,7 +678,9 @@ namespace Tests.Scenarios
                         SpellData template = SpellDatabase.GetSpell(s.SpellId);
                         if (template == null || target == null) { ok = false; note = template == null ? "unknown spell" : "no target"; break; }
                         string preC = Preconditions(a, null);
-                        ok = gm.TryNPCPerformSpellCastForAI(a, target, template.Clone());
+                        // The step's metamagic goes with the cast (batch 11 step 21): the NPC path applies it as the PC menu
+                        // does and spends the slot or spell per day the metamagic spell takes.
+                        ok = gm.TryNPCPerformSpellCastForAI(a, target, template.Clone(), s.Metamagic);
                         if (ok == false) note = "executor returned false (" + preC + ")";
                         yield return null;
                         break;
@@ -1127,12 +1141,25 @@ namespace Tests.Scenarios
                         _awaitNote = "no destination selection opened (the check failed or the move is not offered)";
                     break;
                 case StepKind.Cast:
+                case StepKind.Convert:
                 {
                     if (target == null && !s.HasCell) { _awaitNote = "no target"; break; }
-                    SpellData spell = FindPreparedSpell(_actor, s.SpellId);
-                    if (spell == null) { _awaitNote = "no unused prepared slot holds " + s.SpellId; break; }
-                    gm.OnCastSpellButtonPressed();
-                    gm.Harness_SelectSpell(spell, s.Metamagic);
+                    if (s.Kind == StepKind.Convert)
+                    {
+                        gm.OnCastSpellButtonPressed();
+                        if (!gm.Harness_SelectSpontaneousConversion(_actor, s.ConvertLevel, s.SpellId, s.Metamagic))
+                        {
+                            _awaitNote = "no convertible prepared " + s.SpellId + " of level " + s.ConvertLevel;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        SpellData spell = FindPreparedSpell(_actor, s.SpellId);
+                        if (spell == null) { _awaitNote = "no unused prepared slot holds " + s.SpellId; break; }
+                        gm.OnCastSpellButtonPressed();
+                        gm.Harness_SelectSpell(spell, s.Metamagic);
+                    }
                     // A melee touch spell first asks Cast Now or Discharge Later; the step casts now, as a player would.
                     if (gm.Harness_PendingPrompt() == "touch-spell")
                         _awaitNote = gm.Harness_AnswerTouchSpellPromptCastNow()

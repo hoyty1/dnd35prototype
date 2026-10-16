@@ -1271,12 +1271,12 @@ public partial class GameManager
     /// slot, out of range, an area spell) or its slot could not be spent; true once the slot is spent, whatever came of
     /// the spell. TryNPCPerformSpellCastForAI runs the combat-end check after a true return.
     /// </summary>
-    private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell)
+    private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell, MetamagicData metamagic = null)
     {
         if (npc == null || target == null || spell == null || npc.Stats == null || target.Stats == null)
             return false;
 
-        SpellCastRequest request = SpellCastRequest.ForAI(npc, target, spell);
+        SpellCastRequest request = SpellCastRequest.ForAI(npc, target, spell, metamagic);
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSpellCast));
         return RunCastSync(request, out _);
     }

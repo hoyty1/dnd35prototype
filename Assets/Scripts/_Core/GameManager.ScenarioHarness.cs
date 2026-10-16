@@ -462,6 +462,24 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The spell menu's Convert button for a cleric's prepared <paramref name="sacrificedSpellId"/> of
+    /// <paramref name="level"/>, then the metamagic panel's choice (<paramref name="metamagic"/>, null for none), as if the
+    /// player picked them: the cure or inflict spell of that level goes to the spell callback as a spontaneous conversion
+    /// (CombatUI.BeginSpontaneousConversion; batch 11 step 21). False when the caster has no such spell to convert.
+    /// </summary>
+    internal bool Harness_SelectSpontaneousConversion(CharacterController caster, int level, string sacrificedSpellId, MetamagicData metamagic)
+    {
+        SpellcastingComponent sc = caster != null ? caster.Spellcasting : null;
+        SpellData sacrificed = SpellDatabase.GetSpell(sacrificedSpellId);
+        SpellData converted = sc != null ? sc.GetSpontaneousSpell(level) : null;
+        if (CombatUI == null || sacrificed == null || converted == null || !sc.CanConvertSpellToSpontaneous(sacrificed))
+            return false;
+        CombatUI.BeginSpontaneousConversion(level, sacrificedSpellId);
+        OnSpellSelectedWithMetamagic(converted, metamagic);
+        return true;
+    }
+
+    /// <summary>
     /// Sets the pending cast's spell and metamagic directly, with no menu, targeting or other side effect (TST-006: replaces
     /// reflection on <c>_pendingSpell</c> and <c>_pendingMetamagic</c>, which batch 11 step 4 made forwarding properties onto
     /// the open cast's context). Pass a clone, never a database template. With no cast open, a spell opens a scratch Ui

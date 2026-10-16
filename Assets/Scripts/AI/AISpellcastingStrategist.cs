@@ -566,6 +566,11 @@ public static class AISpellcastingStrategist
     {
         if (spell == null || caster == null || caster.Stats == null) return 0;
 
+        // A quickened cast provokes no attack of opportunity (PHB p.88, p.98), as the cast core rules for every caster
+        // (CastActionRules.IsQuickened): the AI's prepared Quickened candidate is cast normally (batch 11 step 21).
+        if (CastActionRules.IsQuickened(SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
+            return 2;
+
         bool threatened = HasAdjacentEnemy(caster, allCombatants);
         if (!threatened) return 2; // Safe to cast normally
 

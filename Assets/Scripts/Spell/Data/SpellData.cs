@@ -550,13 +550,13 @@ public class SpellData
     // ========== METAMAGIC TRACKING ==========
     /// <summary>
     /// Original spell level before metamagic adjustments.
-    /// Set by MetamagicSystem when preparing a metamagic spell.
+    /// Set on a prepared metamagic slot's spell (SpellcastingComponent.GetUniqueAvailableSpells, GetCastablePreparedSpells).
     /// </summary>
     public int BaseSpellLevel;
 
     /// <summary>
     /// Effective spell level after metamagic adjustments (capped at 9).
-    /// This is the slot level consumed. Set by MetamagicSystem.
+    /// This is the slot level consumed. Set on a prepared metamagic slot's spell (the slot's level).
     /// </summary>
     public int EffectiveSpellLevel;
 
@@ -570,15 +570,15 @@ public class SpellData
     public bool HasRodMetamagic;
 
     /// <summary>
-    /// Reference to the MetamagicData used for this casting (for SpellCaster resolution).
-    /// Set by MetamagicSystem during preparation.
+    /// Reference to the MetamagicData used for this casting (for SpellCaster resolution): a prepared metamagic slot's
+    /// metamagic, or the metamagic SpellCaster.ApplyMetamagicToSpellData stamped on a cast's clone (batch 11 step 19).
     /// </summary>
     [NonSerialized]
     public MetamagicData MetamagicDataRef;
 
     /// <summary>
-    /// True on the spell of a prepared metamagic slot (SpellcastingComponent.GetUniqueAvailableSpells,
-    /// MetamagicSystem.PrepareMetamagicSpell): only such a spell counts against metamagic slots of its metamagic
+    /// True on the spell of a prepared metamagic slot (SpellcastingComponent.GetUniqueAvailableSpells and
+    /// GetCastablePreparedSpells, the AI's list since batch 11 step 21): only such a spell counts against metamagic slots of its metamagic
     /// (SpellcastingComponent.CountAvailablePreparedSpell). A cast's clone stamped by SpellCaster.ApplyMetamagicToSpellData
     /// carries its metamagic in <see cref="MetamagicDataRef"/> without this flag, so the spell menu's counts never read it
     /// (batch 11 step 19). <see cref="Clone"/> clears it with the reference; SpellCastRequest.CloneForCast keeps both.

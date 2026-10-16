@@ -74,7 +74,7 @@ Where to look first:
 6. **String IDs:** `SpellNames.X`, `ItemIDs.X` (`[Obsolete]` string overloads still the norm), snake_case NPC ids, free-string feats (`HasFeat("Power Attack")`).
 7. **Static databases** with lazy `Init()`; rings, rods, wondrous items join `ItemDatabase` only via `RegisterAll*` (ITM-032).
 8. **UI is built in code** and wired by `SceneBootstrap`; `WaitingFor*` flags block world input.
-9. **Dormant:** `CommandProcessor`, `CombatStateMachine`, `BaseCombatManeuver` shells, unused service copies, most of `MetamagicSystem` (SPL-055, SPL-056).
+9. **Dormant:** `CommandProcessor`, `CombatStateMachine`, `BaseCombatManeuver` shells, unused service copies (SPL-056). `MetamagicSystem` is the live metamagic rule of every cast since batch 11 step 21.
 10. **Conditions:** apply with `GameManager.ApplyCondition` (wraps `ConditionService.ApplyCondition`, which records source and data); `ConditionManager` stores them in `CharacterStats.ActiveConditions`. Spell buffs live in `StatusEffectManager`, unlinked to the conditions they impose (CMB-034). Both tick at the initiative count of the creature whose turn it was when they were created (`Combat/Core/TurnDurations.cs`, PHB p.138, CMB-006); unanchored ones at the round boundary.
 11. **Logging:** `CombatUI?.ShowCombatLog(CombatLogHelper.<Semantic>(...))`, never raw `<color>`; diagnostics `Debug.Log("[Tag] ...")`.
 12. **Dice:** unseeded `UnityEngine.Random`; `DiceRoller.Roll(count, sides)` is NdS, `DiceService.Roll(min, max)` is a range.
@@ -101,7 +101,7 @@ Where to look first:
 ## Current state
 
 - **Branch `docs/cleanup-2026-10` (unmerged, 2026-10-07)** on top of 0dd8e76: docs rebuild, `.meta` tracking, the tactics inventory (`docs/systems/tactics/`) and AI roadmap step 1, rules fixes for shared actions (CMB-001, AI-034, SPL-007, CMB-005/073/076, SPL-006, CMB-074, CMB-014, CMB-043/002). Next is step 2, tags v2 (`docs/designs/enemy_ai_knowledge_and_personalities.md`). The Unity MCP is attached to this project (check console paths before trusting it).
-- **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-040, SPL-064 (SPL-038, metamagic in custom resolvers, fixed in batch 11 step 19).
+- **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-064 (SPL-038, metamagic in custom resolvers, fixed in batch 11 step 19; SPL-040, spontaneous metamagic, in step 21).
 - **Repo hygiene (2026-10-03):** `.meta` files tracked; `.abacus.donotdelete` untracked (history purge only on request, REPO-012); creature token art kept for later (REPO-015); TMP re-import pending (REPO-002).
 - **Docs:** rebuilt 2026-10-03. All old docs are retired (`docs/archive/INDEX.md`); every finding is filed in `docs/issues/`; `docs/designs/` holds unbuilt plans with status headers, including the batch 11 cast-core plan (`cast_core_batch11.md`, 2026-10-15).
 

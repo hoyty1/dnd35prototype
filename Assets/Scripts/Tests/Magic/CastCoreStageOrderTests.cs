@@ -117,14 +117,15 @@ public static class CastCoreStageOrderTests
 
     /// <summary>
     /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
-    /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017).
+    /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017;
+    /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic).
     /// </summary>
     private static readonly LegacyCastQuirk[] AiPathDifferences =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
         LegacyCastQuirk.NpcRefusesArea,                          // AI-001
-        LegacyCastQuirk.NpcNullMetamagic,                        // AI-001
+
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
@@ -339,6 +340,10 @@ public static class CastCoreStageOrderTests
             ally = TestHelpers.CreateCharacter("CastCoreAlly", "Fighter", level: 20, con: 30, bab: 20, gridPosition: new Vector2Int(1, 0));
             caster.SetTeam(CharacterTeam.Player);
             ally.SetTeam(CharacterTeam.Player);
+            // The metamagic feats the silent and quickened casts below apply (MetamagicSystem.ValidateMetamagicApplication,
+            // the cast core's Legality stage since batch 11 step 21: a caster needs the feat, PHB p.88).
+            caster.Stats.Feats.Add("Silent Spell");
+            caster.Stats.Feats.Add("Quicken Spell");
             SpellcastingComponent sc = caster.gameObject.AddComponent<SpellcastingComponent>();
             sc.Init(caster.Stats);
             sc.SpellSlots.Clear();
@@ -920,9 +925,10 @@ public static class CastCoreStageOrderTests
             Assert(logs.Exists(l => l != null && l.Contains("inside a Silence")), "Step 13: the PC refusal is logged", string.Join(" | ", logs));
             sc.SpellSlots.Remove(slot);
 
-            // PC: Silent Shield (a 2nd-level slot) is cast.
+            // PC: Silent Shield (a 2nd-level slot prepared with Silent Spell, PHB p.88; batch 11 step 21, SPL-012) is cast.
             SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
-            var silentSlot = new SpellSlot(2, shield.Clone(), false, "Wizard");
+            var silentSlot = new SpellSlot(2, false, "Wizard");
+            silentSlot.PrepareWithMetamagic(shield.Clone(), Metamagic(MetamagicFeatId.SilentSpell));
             sc.SpellSlots.Add(silentSlot);
             caster.Actions.Reset();
             events = new List<string>();
@@ -962,7 +968,7 @@ public static class CastCoreStageOrderTests
                 "Step 13: a silenced AI caster is refused a verbal spell (false, nothing spent, no log as the NPC path's other refusals)", "" + o);
             sc.SpellSlots.Remove(slot);
 
-            // AI: a prepared Silent Spell Shield is cast (the NPC path drops a cast's metamagic, not the prepared record).
+            // AI: a prepared Silent Spell Shield is cast with its slot's metamagic (SpellCastRequest.ForAI, batch 11 step 21).
             var preparedSilent = new SpellSlot(2, false, "Wizard");
             preparedSilent.PrepareWithMetamagic(shield.Clone(), Metamagic(MetamagicFeatId.SilentSpell));
             sc.SpellSlots.Add(preparedSilent);
@@ -1397,7 +1403,9 @@ public static class CastCoreStageOrderTests
             metamagic.AppliedMetamagic.Add(MetamagicFeatId.QuickenSpell);
             slotLevel = metamagic.GetEffectiveSpellLevel(template.SpellLevel);
         }
-        var slot = new SpellSlot(slotLevel, template.Clone(), false, "Wizard");
+        // A quickened cast spends the slot prepared with Quicken Spell (PHB p.88; batch 11 step 21, SPL-012).
+        var slot = new SpellSlot(slotLevel, false, "Wizard");
+        slot.PrepareWithMetamagic(template.Clone(), metamagic);
         sc.SpellSlots.Add(slot);
         caster.Actions.Reset();
         sc.ResetQuickenedSpellTracking();

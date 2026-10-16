@@ -69,7 +69,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Ranger favored enemy (weapon damage, Bluff/Sense Motive in a feint, Spot and Listen pinpointing) and combat style feats | Auto (passive, `RangerRules`, since 2026-10-14); the AI's target choice ignores favored types, and the style's Rapid Shot and two-weapon fighting stay unused by NPCs (AI-055) | | Yes (passive; the PC uses Rapid Shot and two-weapon fighting) | CHR-020, AI-055 |
 | Paladin detect evil, remove disease | Never | no spell-like ability system | No | CHR-083, CRE-015 |
 | Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | AI-046 |
-| Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |
+| Area spells, metamagic choice | Never (an NPC casts a prepared metamagic slot with its metamagic since batch 11 step 21; it never chooses a feat) | area refused at cast | Yes | AI-001; 11.8.2 |
 | Heal, buff | Partial | adjacent or self only; no cure for an undead or construct ally, no cure on an unhurt caster; when its one spell pick fails a Healer paces 4 squares from an enemy instead of reaching the hurt ally or attacking | Yes | AI-047, AI-063; 11.8.6 |
 | Inflict to heal an undead ally, cure to hurt an undead enemy | Never | the AI only avoids the wrong use (SPL-005) | Yes | AI-062; 11.8.6 |
 | Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:199) | Yes | 11.8.6 |

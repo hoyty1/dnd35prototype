@@ -44,6 +44,9 @@ public static class SpontaneousCastAvailabilityTests
         TestWizardCantripsSpent();
         TestClericOrisonConversionSpent();
         TestDruidOrisonsPerDay();
+        TestSorcererMetamagicSpend();
+        TestClericMetamagicConversion();
+        TestClericPreparedMetamagicRow();
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
     }
@@ -64,13 +67,13 @@ public static class SpontaneousCastAvailabilityTests
 
     // ========== HELPERS ==========
 
-    private static CharacterController CreateCaster(string cls, int level, int intelligence, int cha, List<string> known)
+    private static CharacterController CreateCaster(string cls, int level, int intelligence, int cha, List<string> known, int wis = 10)
     {
         var go = new GameObject($"SpontaneousCastTest_{cls}{level}");
         var controller = go.AddComponent<CharacterController>();
         var stats = new CharacterStats(
             name: cls + " " + level, level: level, characterClass: cls,
-            str: 10, dex: 14, con: 12, wis: 10, intelligence: intelligence, cha: cha,
+            str: 10, dex: 14, con: 12, wis: wis, intelligence: intelligence, cha: cha,
             bab: level / 2, armorBonus: 0, shieldBonus: 0,
             damageDice: 4, damageCount: 1, bonusDamage: 0,
             baseSpeed: 6, atkRange: 1, baseHitDieHP: 4 * level, raceName: "Human");
@@ -483,6 +486,146 @@ public static class SpontaneousCastAvailabilityTests
             {
                 Cleanup(druid);
             }
+        }
+    }
+
+    /// <summary>
+    /// SPL-040 (batch 11 step 21; PHB p.88, Sorcerers and Bards: a spontaneous caster applies the feat when casting, and
+    /// the spell uses a spell slot of the adjusted level): a sorcerer 6 knowing Magic Missile, with Empower Spell, spends a
+    /// 3rd-level spell per day for an empowered Magic Missile (SpellcastingComponent.CastWizardSpellWithMetamagic), and the
+    /// combat metamagic panel's slot check (HasSlotAtLevel) reads its spells per day; an unknown spell or a spent level is
+    /// refused.
+    /// </summary>
+    private static void TestSorcererMetamagicSpend()
+    {
+        CharacterController sorc = null;
+        try
+        {
+            sorc = CreateCaster("Sorcerer", 6, 10, 16, new List<string> { SpellNames.MAGIC_MISSILE });
+            sorc.Stats.Feats.Add("Empower Spell");
+            SpellcastingComponent sc = sorc.Spellcasting;
+            Assert(sc != null && sc.IsSpontaneousCaster, "Sorcerer 6 is a spontaneous caster");
+            if (sc == null || !sc.IsSpontaneousCaster)
+                return;
+            var empower = new MetamagicData();
+            empower.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
+
+            int l1 = sc.SpontaneousData.GetSlotsRemaining(1), l3 = sc.SpontaneousData.GetSlotsRemaining(3);
+            Assert(l3 > 0 && sc.HasSlotAtLevel(3) && sc.CanCastWithMetamagic(Spell(SpellNames.MAGIC_MISSILE), empower),
+                "SPL-040: the panel's slot check sees the sorcerer's 3rd-level spells per day", $"L3 {l3}");
+            Assert(sc.CastWizardSpellWithMetamagic(Spell(SpellNames.MAGIC_MISSILE).Clone(), empower)
+                   && sc.SpontaneousData.GetSlotsRemaining(3) == l3 - 1 && sc.SpontaneousData.GetSlotsRemaining(1) == l1,
+                "SPL-040: an empowered Magic Missile spends a 3rd-level spell per day, not a 1st (PHB p.88)");
+            Assert(!sc.CastWizardSpellWithMetamagic(Spell(SpellNames.SHIELD).Clone(), empower),
+                "SPL-040: an unknown spell is refused with metamagic too");
+            while (sc.SpontaneousData.GetSlotsRemaining(3) > 0)
+                sc.SpontaneousData.SpendSlot(3);
+            Assert(!sc.HasSlotAtLevel(3) && !sc.CanCastWithMetamagic(Spell(SpellNames.MAGIC_MISSILE), empower)
+                   && !sc.CastWizardSpellWithMetamagic(Spell(SpellNames.MAGIC_MISSILE).Clone(), empower) && sc.SpontaneousData.GetSlotsRemaining(1) == l1,
+                "SPL-040: with every 3rd-level spell per day spent the empowered cast is refused and no 1st-level one is spent");
+        }
+        finally
+        {
+            Cleanup(sorc);
+        }
+    }
+
+    /// <summary>
+    /// SPL-148 (batch 11 step 21; PHB p.88, Spontaneous Casting and Metamagic Feats: a cleric may cast a metamagic version
+    /// of a spontaneous cure or inflict spell, giving up a prepared spell of the adjusted level): a good cleric 5 with
+    /// Empower Spell turns a prepared 3rd-level spell into an empowered Cure Light Wounds (SpontaneousCastFromSlot with the
+    /// metamagic), and a plain conversion still gives up a 1st-level spell; a locked slot is never given up (SPL-012).
+    /// </summary>
+    private static void TestClericMetamagicConversion()
+    {
+        CharacterController cleric = null;
+        try
+        {
+            cleric = CreateCaster("Cleric", 5, 10, 10, null, wis: 16);
+            SpellcastingComponent sc = cleric.Spellcasting;
+            if (sc == null)
+            {
+                Assert(false, "Cleric 5 has a SpellcastingComponent");
+                return;
+            }
+            cleric.Stats.SpontaneousCasting = SpontaneousCastingType.Cure;
+            cleric.Stats.Feats.Add("Empower Spell");
+            var empower = new MetamagicData();
+            empower.AppliedMetamagic.Add(MetamagicFeatId.EmpowerSpell);
+
+            Assert(sc.CanSpontaneousCast(1, empower) && sc.HasConvertibleSlotAtLevel(3),
+                "SPL-148: a cleric 5 can give up a 3rd-level spell for an empowered Cure Light Wounds (PHB p.88)");
+            int used3 = sc.SpellSlots.Count(s => s != null && s.Level == 3 && s.IsUsed);
+            int used1 = sc.SpellSlots.Count(s => s != null && s.Level == 1 && s.IsUsed);
+            Assert(sc.SpontaneousCastFromSlot(1, empower)
+                   && sc.SpellSlots.Count(s => s != null && s.Level == 3 && s.IsUsed) == used3 + 1
+                   && sc.SpellSlots.Count(s => s != null && s.Level == 1 && s.IsUsed) == used1,
+                "SPL-148: the empowered conversion gives up a 3rd-level prepared spell, not a 1st-level one");
+            Assert(sc.SpontaneousCastFromSlot(1) && sc.SpellSlots.Count(s => s != null && s.Level == 1 && s.IsUsed) == used1 + 1,
+                "A plain conversion still gives up a 1st-level prepared spell (PHB p.32)");
+
+            foreach (SpellSlot s in sc.SpellSlots.Where(s => s != null && s.Level == 3 && !s.IsUsed))
+                s.LockedByImbue = true;
+            Assert(!sc.HasConvertibleSlotAtLevel(3) && !sc.CanSpontaneousCast(1, empower) && !sc.SpontaneousCastFromSlot(1, empower),
+                "SPL-012: a slot locked by Imbue with Spell Ability is not given up for a conversion (PHB p.243)");
+        }
+        finally
+        {
+            Cleanup(cleric);
+        }
+    }
+
+    /// <summary>
+    /// SPL-012 (batch 11 step 21 review): a cleric 5 with a plain Bless in a 1st-level slot and an Extended Bless in a
+    /// 2nd-level slot. The spell menu's 2nd-level entry is the Extended Bless (a prepared metamagic slot's spell); casting
+    /// it with its metamagic (what its button passes, CombatUI.CreateSpellButtonWithConvert) spends the 2nd-level slot,
+    /// not the plain one; its Convert button stands for the 2nd-level slot (SpellcastingComponent.ConversionSlotLevel):
+    /// a 2nd-level cure, giving up that slot (PHB p.32, p.88).
+    /// </summary>
+    private static void TestClericPreparedMetamagicRow()
+    {
+        CharacterController cleric = null;
+        try
+        {
+            cleric = CreateCaster("Cleric", 5, 10, 10, null, wis: 16);
+            SpellcastingComponent sc = cleric.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+            {
+                Assert(false, "Cleric 5 has prepared spell slots");
+                return;
+            }
+            cleric.Stats.SpontaneousCasting = SpontaneousCastingType.Cure;
+            cleric.Stats.Feats.Add("Extend Spell");
+            SpellData bless = Spell(SpellNames.BLESS);
+            var extend = new MetamagicData();
+            extend.AppliedMetamagic.Add(MetamagicFeatId.ExtendSpell);
+            sc.SpellSlots.Clear();
+            var plain = new SpellSlot(1, bless.Clone(), false, "Cleric");
+            var extended = new SpellSlot(2, false, "Cleric");
+            extended.PrepareWithMetamagic(bless.Clone(), extend);
+            sc.SpellSlots.AddRange(new[] { plain, extended });
+
+            SpellData row = sc.GetUniqueAvailableSpells(2).FirstOrDefault(sp => sp != null && sp.SpellId == SpellNames.BLESS);
+            Assert(row != null && row.IsPreparedMetamagicSlotSpell && row.MetamagicDataRef != null && row.MetamagicDataRef.Has(MetamagicFeatId.ExtendSpell)
+                   && SpellcastingComponent.ConversionSlotLevel(row) == 2,
+                "The 2nd-level menu entry is the Extended Bless of the 2nd-level slot");
+            if (row == null)
+                return;
+            Assert(sc.CanConvertSpellToSpontaneous(row) && sc.GetSpontaneousSpell(SpellcastingComponent.ConversionSlotLevel(row)) != null
+                   && sc.GetSpontaneousSpell(SpellcastingComponent.ConversionSlotLevel(row)).SpellId == SpellNames.CURE_MODERATE_WOUNDS,
+                "The Extended Bless entry converts to Cure Moderate Wounds, the cure of its slot's level (PHB p.32)");
+            Assert(sc.CastWizardSpellWithMetamagic(SpellCastRequest.CloneForCast(row), row.MetamagicDataRef) && extended.IsUsed && !plain.IsUsed,
+                "SPL-012: casting the Extended Bless with its metamagic spends its 2nd-level slot, not the plain Bless");
+
+            extended.IsUsed = false;
+            Assert(sc.SpontaneousCastFromSpecificSpell(SpellNames.BLESS, SpellcastingComponent.ConversionSlotLevel(row)) && extended.IsUsed && !plain.IsUsed,
+                "The entry's Convert button gives up the 2nd-level Extended Bless, not the plain one (PHB p.32, p.88)");
+            Assert(sc.CanConvertSpellToSpontaneous(bless) && SpellcastingComponent.ConversionSlotLevel(bless) == 1,
+                "The plain Bless still converts at 1st level");
+        }
+        finally
+        {
+            Cleanup(cleric);
         }
     }
 }

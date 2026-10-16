@@ -217,7 +217,8 @@ public partial class GameManager
     /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
     /// target test (IsValidTargetForSpell), the range at the cast's caster level (CasterLevelRules, SPL-017), with the NPC
     /// bit the area refusal, and
-    /// the casting action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
+    /// the metamagic (MetamagicSystem, since batch 11 step 21; <see cref="CheckCastMetamagicLegality"/>), the casting
+    /// action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
     /// component test (the pouch, a divine focus, a priced focus or material component, PHB p.174 and p.130;
     /// SpellComponentRules, one rule for every caster since batch 11 step 17; skipped for the F12 panel's Components
     /// bypass, scrolls and wands), and for a hold the grapple test (<see cref="CheckHoldChargeLegality"/>, since step 15). No side
@@ -228,7 +229,8 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
-                              ?? CheckCastRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastSpeechLegality(req)
+                              ?? CheckCastRangeAndAreaLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
+                              ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
     }
@@ -256,7 +258,10 @@ public partial class GameManager
     /// <summary>
     /// The NPC path's own caster tests, in its old order (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160):
     /// a standard action left, a living target, a caster that can cast spells, a slot for the spell. Null when the
-    /// request does not carry the bit or passes.
+    /// request does not carry the bit or passes. The standard-action test is skipped for a cast that costs a free or
+    /// swift action (CastActionRules.CastingAction: a quickened spell, PHB p.98, now reachable for NPCs through prepared
+    /// metamagic slots and Scripted steps, batch 11 step 21), as the PC side asks it; the shared casting-action test
+    /// (<see cref="CheckCastActionLegality"/>) then holds it to the swift action and the one quickened spell a round.
     /// </summary>
     private static CastOutcome CheckNpcCasterLegality(SpellCastRequest req)
     {
@@ -265,14 +270,17 @@ public partial class GameManager
 
         CharacterController caster = req.Caster;
         CharacterController target = req.Aim != null ? req.Aim.Target : null;
-        if (caster.Actions == null || !caster.Actions.HasStandardAction)
+        CastActionCost cost = CastActionRules.CastingAction(req.Spell, req.Metamagic, req.Source);
+        bool needsStandard = cost != CastActionCost.Free && cost != CastActionCost.Swift;
+        if (caster.Actions == null || (needsStandard && !caster.Actions.HasStandardAction))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-standard-action");
         if (target != null && target.Stats != null && target.Stats.IsDead)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "target-dead");
         SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-spellcasting");
-        if (!spellComp.CanCast(req.Spell))
+        // A slot or spell per day for the spell with the cast's metamagic: the one the spend takes (batch 11 step 21).
+        if (!spellComp.CanCastWithMetamagic(req.Spell, req.Metamagic))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "cannot-cast");
         return null;
     }
@@ -318,16 +326,30 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The casting action's rules (CastActionRules.Refusal, batch 11 step 12), the same for every caster and path: no
-    /// Quicken Spell on a spontaneous cast (PHB p.98 Special), one quickened spell per round (PHB p.98; Feather Fall
-    /// counts, PHB p.174, p.229), and a full-round or swift casting action the caster still has (PHB p.174, p.88). Null when the
-    /// cast may go on. With <see cref="LegacyCastQuirk.NpcNullMetamagic"/> the stage has already dropped the metamagic.
+    /// The metamagic's rules (MetamagicSystem.ValidateMetamagicApplication, batch 11 step 21, SPL-055), the same for every
+    /// caster and path: no Quicken Spell on a spontaneous cast (PHB p.98 Special), only a feat the caster has (a feat that
+    /// does not change the spell is not refused), a Heighten that raises the level (PHB p.95), at most 9th level. An NPC's
+    /// prepared metamagic spell carries its slot's metamagic in the request (SpellCastRequest.ForAI). Null when the cast
+    /// may go on.
+    /// </summary>
+    private static CastOutcome CheckCastMetamagicLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+        string refusal = MetamagicSystem.ValidateMetamagicApplication(req.Spell, req.Metamagic, req.Caster.Stats, req.Source);
+        return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, refusal);
+    }
+
+    /// <summary>
+    /// The casting action's rules (CastActionRules.ActionRefusal, batch 11 step 12), the same for every caster and path:
+    /// one quickened spell per round (PHB p.98; Feather Fall counts, PHB p.174, p.229), and a full-round or swift casting
+    /// action the caster still has (PHB p.174, p.88). Null when the cast may go on.
     /// </summary>
     private static CastOutcome CheckCastActionLegality(SpellCastRequest req)
     {
         if (req == null || req.Caster == null || req.Spell == null)
             return null;
-        string refusal = CastActionRules.Refusal(req.Caster, req.Spell, req.Metamagic, req.Source);
+        string refusal = CastActionRules.ActionRefusal(req.Caster, req.Spell, req.Metamagic, req.Source);
         return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, refusal);
     }
 
@@ -335,8 +357,7 @@ public partial class GameManager
     /// Silence (PHB p.279; batch 11 step 13, SPL-092), the same for every caster and path: a caster under a Silence cannot
     /// cast a spell with a verbal component, unless Silent Spell removed it (PHB p.100), nor use a wand, whose trigger word
     /// must be spoken (DMG p.213; delegated RAW reading 2026-10-14). CastComponentRules.SilenceBlocks decides; a held-charge
-    /// delivery is no casting. With <see cref="LegacyCastQuirk.NpcNullMetamagic"/> the stage has already dropped the
-    /// metamagic, so only a prepared silent spell's own record counts. Null when the cast may go on.
+    /// delivery is no casting. Null when the cast may go on.
     /// </summary>
     private static CastOutcome CheckCastSpeechLegality(SpellCastRequest req)
     {
@@ -376,9 +397,10 @@ public partial class GameManager
     /// <summary>
     /// Legality: the target, the range at the cast's caster level (every caster, SPL-017), then the caster's choices (the
     /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. With
-    /// the NPC bits: no metamagic (<see cref="LegacyCastQuirk.NpcNullMetamagic"/>), the NPC path's own caster tests before
-    /// the target and its unlogged target and range refusals (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the
-    /// area refusal after the range.
+    /// the NPC bits: the NPC path's own caster tests before the target and its unlogged target and range refusals
+    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the area refusal after the range. Since batch 11 step 21 an
+    /// NPC cast keeps its metamagic (a prepared metamagic slot's, SpellCastRequest.ForAI) and meets the same metamagic
+    /// rules (MetamagicSystem).
     /// </summary>
     private void CastStageLegality(CastContext ctx)
     {
@@ -386,10 +408,6 @@ public partial class GameManager
         SpellCastRequest req = ctx.Request;
         CharacterController caster = req.Caster;
         SpellData spell = req.Spell;
-
-        // The NPC path casts without metamagic (AI-001; step 21 removes the bit).
-        if (req.HasQuirk(LegacyCastQuirk.NpcNullMetamagic))
-            req.Metamagic = null;
 
         // An area reaches only the squares and creatures its origin has line of effect to (PHB p.176).
         if (req.ResolveKind == CastResolveKind.Area)
@@ -437,14 +455,16 @@ public partial class GameManager
             return;
         }
 
-        // The casting action (batch 11 step 12): Quicken on a spontaneous cast, a second quickened spell this round, a
-        // full-round or swift action the caster no longer has. The NPC path's refusals log nothing, as its others.
-        refusal = CheckCastActionLegality(req);
+        // The metamagic (MetamagicSystem, batch 11 step 21): Quicken on a spontaneous cast, a feat the caster lacks,
+        // a Heighten that raises nothing, an adjusted level above 9th. Then the casting action
+        // (batch 11 step 12): a second quickened spell this round, a full-round or swift action the caster no longer has.
+        // The NPC path's refusals log nothing, as its others.
+        refusal = CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
             if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name)));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name, req.Metamagic)));
             FinishCast(ctx, refusal);
             return;
         }
@@ -521,8 +541,11 @@ public partial class GameManager
         // step 12): the item's own action for a scroll or wand (SPL-163), a free action for a quickened spell or a
         // free-action spell, a full round for a 1-round casting time (PHB p.174, SPL-162) or a spontaneous metamagic
         // cast (PHB p.88, by the source, SPL-159), else a standard action. Legality has already refused a full-round or
-        // swift cost the caster cannot pay.
-        CastActionCost actionCost = CastActionRules.CastingAction(spell, metamagic, req.Source);
+        // swift cost the caster cannot pay. A casting's action with its metamagic is MetamagicSystem's rule (batch 11 step
+        // 21, SPL-055), the one CastActionRules.CastingAction gives the PC menu and the AI.
+        CastActionCost actionCost = isScrollCast || isWandCast || isDeliveringHeldCharge
+            ? CastActionCost.ItemOrDelivery
+            : MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, req.Source);
         if (isScrollCast || isWandCast)
         {
             // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
@@ -585,9 +608,6 @@ public partial class GameManager
         // Convert button (batch 11 step 4), so a cancelled conversion cannot make a later cast spontaneous. A hold of the
         // converted spell spends the sacrificed spell too (PHB p.32, p.141; batch 11 step 14, SPL-154).
         bool isSpontaneous = !isDeliveringHeldCharge && sourceKind == CastSourceKind.SpontaneousConversion;
-        ctx.IsSpontaneousConversion = isSpontaneous;
-        ctx.SpontaneousLevel = isSpontaneous ? req.Source.ConversionLevel : -1;
-        ctx.SpontaneousSacrificedSpellId = isSpontaneous ? req.Source.SacrificedSpellId : null;
 
         // The slot to spend; 0-level spells spend a slot too (SPL-138).
         int slotLevelToConsume = spell.SpellLevel;
@@ -600,6 +620,15 @@ public partial class GameManager
         }
         ctx.HasMetamagicApplied = hasMetamagicApplied;
         ctx.SlotLevelToConsume = slotLevelToConsume;
+
+        // A metamagic conversion gives up a prepared spell of the adjusted level (PHB p.88: an empowered cure critical
+        // wounds for a prepared 6th-level spell; batch 11 step 21, SPL-148): the spell the Convert button named is kept as
+        // the sacrifice only when it is of that level, else any convertible spell of that level is given up.
+        ctx.IsSpontaneousConversion = isSpontaneous;
+        ctx.SpontaneousLevel = isSpontaneous ? req.Source.ConversionLevel : -1;
+        ctx.SpontaneousSacrificedSpellId = isSpontaneous && (!hasMetamagicApplied || req.Source.ConversionLevel == slotLevelToConsume)
+            ? req.Source.SacrificedSpellId
+            : null;
 
         // The result log's quickened and spontaneous prefixes, built once (SPL-063): quickened first, then spontaneous.
         string prefix = "";

@@ -2851,8 +2851,8 @@ public class AIService : MonoBehaviour
             if (allow != null && !allow(spell)) continue; // AI-037
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell)) continue; // SPL-091
-            if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null) continue; // batch 11 step 12
-            if (CastComponentRules.SilenceBlocks(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell))) continue; // batch 11 step 13, SPL-092
+            if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null) continue; // batch 11 steps 12 and 21
+            if (CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell))) continue; // batch 11 step 13, SPL-092
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
@@ -2968,13 +2968,14 @@ public class AIService : MonoBehaviour
 
             // A casting action the caster cannot take now: a 1-round casting time without a full-round action left, a
             // second quickened or free-action spell this round (CastActionRules, the cast core's Legality rule; batch 11
-            // step 12, PHB p.174, p.98, p.229).
-            if (CastActionRules.Refusal(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)) != null)
+            // step 12, PHB p.174, p.98, p.229); a prepared metamagic spell's metamagic the rules refuse (MetamagicSystem,
+            // batch 11 step 21: the NPC cast carries it, SpellCastRequest.AiMetamagicFor).
+            if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null)
                 continue;
 
             // A verbal spell the caster cannot cast inside a Silence (PHB p.279; the cast core's Legality rule,
-            // CastComponentRules.SilenceBlocks; batch 11 step 13, SPL-092). The NPC path casts without metamagic.
-            if (CastComponentRules.SilenceBlocks(caster, spell, null, SpellCastRequest.AiSourceFor(caster, spell)))
+            // CastComponentRules.SilenceBlocks; batch 11 step 13, SPL-092), with the prepared metamagic the cast carries.
+            if (CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
                 continue;
 
             // ── Buff-already-active check ──

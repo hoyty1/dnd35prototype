@@ -10,7 +10,7 @@ using UnityEngine;
 //
 //  Integration points:
 //  - MetamagicData.ApplyFromRod() — marks metamagic as rod-sourced
-//  - MetamagicSystem.PrepareMetamagicSpell() — handles rod modifiers
+//  - MetamagicSystem.ValidateMetamagicApplication() — a rod's feat needs no feat and raises no level
 //  - SpellCaster.ApplyMetamagicToSpellData() — applies effects
 //
 //  Validation:

@@ -2008,15 +2008,17 @@ public class SpellcastingComponent : MonoBehaviour
         // cast (SpellCaster.ApplyMetamagicToSpellData, batch 11 step 19) counts as the plain spell it was before.
         if (spell.IsPreparedMetamagicSlotSpell && spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
         {
-            string metamagicKey = spell.MetamagicDataRef.GetDisplayName();
+            // The slot key includes a Heighten's target level (MetamagicData.GetSlotKey), as the spend matches it.
+            string metamagicKey = spell.MetamagicDataRef.GetSlotKey();
             return SpellSlots.Count(s => s.PreparedSpell != null &&
-                s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel &&
-                s.HasMetamagic && s.AppliedMetamagic.GetDisplayName() == metamagicKey);
+                s.PreparedSpell.SpellId == spell.SpellId && s.CanCast &&
+                s.HasMetamagic && s.AppliedMetamagic.GetSlotKey() == metamagicKey);
         }
 
-        // Normal spell: count only non-metamagic slots
+        // Normal spell: count only non-metamagic slots that can be cast (SpellSlot.CanCast: an Imbue lock too; the slots
+        // CastSpellFromSlot spends, batch 11 step 21, SPL-012)
         return SpellSlots.Count(s => s.PreparedSpell != null &&
-                                     s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel &&
+                                     s.PreparedSpell.SpellId == spell.SpellId && s.CanCast &&
                                      !s.HasMetamagic);
     }
 
@@ -2048,39 +2050,42 @@ public class SpellcastingComponent : MonoBehaviour
             if (!slot.CanCast) continue; // 0-level slots too (SPL-138)
 
             // D&D 3.5e: Metamagic-enhanced prepared spells are distinct from their base versions.
-            // Use SpellId + metamagic display name as the unique key to differentiate them.
-            string metamagicKey = slot.HasMetamagic ? slot.AppliedMetamagic.GetDisplayName() : "";
+            // Use SpellId + the metamagic's slot key (its feats and a Heighten's target level) to differentiate them.
+            string metamagicKey = slot.HasMetamagic ? slot.AppliedMetamagic.GetSlotKey() : "";
             string uniqueKey = slot.PreparedSpell.SpellId + "|" + metamagicKey;
 
             if (!seen.Contains(uniqueKey))
             {
                 seen.Add(uniqueKey);
-
-                if (slot.HasMetamagic)
-                {
-                    // Clone the SpellData and attach metamagic info for combat UI display
-                    var metamagicSpell = slot.PreparedSpell.Clone();
-                    metamagicSpell.MetamagicDataRef = slot.AppliedMetamagic.Clone();
-                    metamagicSpell.IsPreparedMetamagicSlotSpell = true;
-                    metamagicSpell.BaseSpellLevel = slot.BaseSpellLevel;
-                    metamagicSpell.EffectiveSpellLevel = slot.Level;
-                    if (metamagicSpell.AppliedMetamagics == null)
-                        metamagicSpell.AppliedMetamagics = new System.Collections.Generic.List<MetamagicFeatId>();
-                    foreach (var feat in slot.AppliedMetamagic.AppliedMetamagic)
-                    {
-                        if (!metamagicSpell.AppliedMetamagics.Contains(feat))
-                            metamagicSpell.AppliedMetamagics.Add(feat);
-                    }
-                    result.Add(metamagicSpell);
-                }
-                else
-                {
-                    result.Add(slot.PreparedSpell);
-                }
+                result.Add(slot.HasMetamagic ? BuildPreparedMetamagicSlotSpell(slot) : slot.PreparedSpell);
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The spell a slot prepared with metamagic holds, as the spell menu and the AI's candidate list show it: a clone of the
+    /// prepared spell carrying the slot's metamagic (MetamagicDataRef) and the prepared-slot flag
+    /// (SpellData.IsPreparedMetamagicSlotSpell, so it counts that slot, CountAvailablePreparedSpell). A cast of it carries
+    /// that metamagic (CombatUI passes it to the cast callback; SpellCastRequest.ForAI takes it for an NPC, batch 11
+    /// step 21) and spends that slot (CastWizardSpellWithMetamagic).
+    /// </summary>
+    private static SpellData BuildPreparedMetamagicSlotSpell(SpellSlot slot)
+    {
+        var metamagicSpell = slot.PreparedSpell.Clone();
+        metamagicSpell.MetamagicDataRef = slot.AppliedMetamagic.Clone();
+        metamagicSpell.IsPreparedMetamagicSlotSpell = true;
+        metamagicSpell.BaseSpellLevel = slot.BaseSpellLevel;
+        metamagicSpell.EffectiveSpellLevel = slot.Level;
+        if (metamagicSpell.AppliedMetamagics == null)
+            metamagicSpell.AppliedMetamagics = new System.Collections.Generic.List<MetamagicFeatId>();
+        foreach (var feat in slot.AppliedMetamagic.AppliedMetamagic)
+        {
+            if (!metamagicSpell.AppliedMetamagics.Contains(feat))
+                metamagicSpell.AppliedMetamagics.Add(feat);
+        }
+        return metamagicSpell;
     }
 
     /// <summary>Backward compat alias — calls GetUniqueAvailableSpells.</summary>
@@ -2187,12 +2192,13 @@ public class SpellcastingComponent : MonoBehaviour
         // ── Prepared caster: original slot-based logic ──
         string preferredClass = GetPreferredCastingClassForSpell(spell);
 
-        // Every spell, 0-level included, consumes a prepared slot (SPL-138). A 0-level slot disabled by negative
-        // levels is skipped as before; for level 1+ that check is still missing (SPL-012).
+        // Every spell, 0-level included, consumes a prepared slot (SPL-138). Only a slot that can be cast (SpellSlot.CanCast:
+        // unused, not lost to a negative level, DMG p.293, not locked by Imbue with Spell Ability, PHB p.243) and that
+        // holds the plain spell: a slot prepared with metamagic holds a different, higher-level spell (PHB p.88), which a
+        // plain cast does not spend (batch 11 step 21, SPL-012).
         var slot = SpellSlots.FirstOrDefault(s =>
             s.PreparedSpell != null &&
-            s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed &&
-            (s.Level > 0 || !s.DisabledByNegativeLevel) &&
+            s.PreparedSpell.SpellId == spell.SpellId && s.CanCast && !s.HasMetamagic &&
             (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
 
         if (slot == null)
@@ -2219,9 +2225,10 @@ public class SpellcastingComponent : MonoBehaviour
     /// Whether this cleric can spontaneously cast at the given spell level.
     /// Requires: is a cleric, has spontaneous casting type set, has an unused slot at that level,
     /// and a valid spontaneous spell exists at that level.
-    /// At 0 level an unused orison slot is spent for Cure or Inflict Minor Wounds (PHB p.32; SPL-138).
+    /// At 0 level an unused orison slot is spent for Cure or Inflict Minor Wounds (PHB p.32; SPL-138). With
+    /// <paramref name="metamagic"/> the slot is one of the adjusted level (PHB p.88; batch 11 step 21, SPL-148).
     /// </summary>
-    public bool CanSpontaneousCast(int spellLevel)
+    public bool CanSpontaneousCast(int spellLevel, MetamagicData metamagic = null)
     {
         if (Stats == null || !Stats.IsCleric) return false;
         if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
@@ -2232,8 +2239,23 @@ public class SpellcastingComponent : MonoBehaviour
         SpellData spontSpell = SpellDatabase.GetSpell(spontSpellId);
         if (spontSpell == null) return false;
 
-        // Need at least one unused non-domain slot at this level, 0-level included (SPL-138).
-        return SpellSlots.Any(s => IsConvertibleClericSlot(s) && s.Level == spellLevel);
+        // Need at least one convertible slot at the (adjusted) level, 0-level included (SPL-138).
+        return HasConvertibleSlotAtLevel(MetamagicSlotLevel(spellLevel, metamagic));
+    }
+
+    /// <summary>
+    /// True when this cleric has a prepared spell of <paramref name="slotLevel"/> it may give up for a spontaneous cure or
+    /// inflict spell (PHB p.32): the combat metamagic panel asks it for a conversion's adjusted level (PHB p.88).
+    /// </summary>
+    public bool HasConvertibleSlotAtLevel(int slotLevel)
+    {
+        return slotLevel >= 0 && SpellSlots.Any(s => IsConvertibleClericSlot(s) && s.Level == slotLevel);
+    }
+
+    /// <summary>The slot level a spell of <paramref name="spellLevel"/> takes with <paramref name="metamagic"/> (PHB p.88), or the spell's level.</summary>
+    private static int MetamagicSlotLevel(int spellLevel, MetamagicData metamagic)
+    {
+        return metamagic != null && metamagic.HasAnyMetamagic ? metamagic.GetEffectiveSpellLevel(spellLevel) : spellLevel;
     }
 
     /// <summary>
@@ -2252,23 +2274,26 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Perform a spontaneous cast: consume any unused slot at the given level and
-    /// cast the corresponding cure/inflict spell instead.
+    /// Perform a spontaneous cast: consume a convertible slot (<see cref="IsConvertibleClericSlot"/>) and cast the cure or
+    /// inflict spell of <paramref name="spellLevel"/> instead. With <paramref name="metamagic"/> the slot given up is one of
+    /// the adjusted level (PHB p.88: an 11th-level cleric gives up a prepared 6th-level spell for an empowered cure critical
+    /// wounds; batch 11 step 21, SPL-148).
     /// Returns true if successful.
     /// </summary>
-    public bool SpontaneousCastFromSlot(int spellLevel)
+    public bool SpontaneousCastFromSlot(int spellLevel, MetamagicData metamagic = null)
     {
-        if (!CanSpontaneousCast(spellLevel))
+        if (!CanSpontaneousCast(spellLevel, metamagic))
         {
             Debug.LogWarning($"[Spellcasting] Cannot spontaneously cast at level {spellLevel}!");
             return false;
         }
 
-        // Consume an unused non-domain slot at this level, an orison slot included (SPL-138).
-        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.Level == spellLevel);
+        // Consume a convertible slot at the (adjusted) level, an orison slot included (SPL-138).
+        int slotLevel = MetamagicSlotLevel(spellLevel, metamagic);
+        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.Level == slotLevel);
         if (slot == null)
         {
-            Debug.LogWarning($"[Spellcasting] No available slot at level {spellLevel} for spontaneous casting!");
+            Debug.LogWarning($"[Spellcasting] No available slot at level {slotLevel} for spontaneous casting!");
             return false;
         }
 
@@ -2280,8 +2305,8 @@ public class SpellcastingComponent : MonoBehaviour
         SyncPreparedSpellsFromSlots();
 
         Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously converted {replacedSpell} → {spontSpell2?.Name} " +
-                  $"(Lv{spellLevel}). Remaining at Lv{spellLevel}: " +
-                  $"{GetAvailableSlotsForLevel(spellLevel).Count}/{GetSlotsForLevel(spellLevel).Count}");
+                  $"(Lv{spellLevel}, slot Lv{slotLevel}). Remaining at Lv{slotLevel}: " +
+                  $"{GetAvailableSlotsForLevel(slotLevel).Count}/{GetSlotsForLevel(slotLevel).Count}");
 
         return true;
     }
@@ -2290,17 +2315,20 @@ public class SpellcastingComponent : MonoBehaviour
     /// Perform a spontaneous cast by sacrificing a SPECIFIC prepared spell slot.
     /// D&D 3.5e: Clerics can convert a specific prepared spell (except domain spells)
     /// into a cure/inflict spell of the same level.
-    /// Finds a slot with the given spell ID and consumes it.
+    /// Finds a convertible slot with the given spell ID, of <paramref name="slotLevel"/> when it is 0 or more (the
+    /// conversion's level, or its adjusted level with metamagic, PHB p.88; so a cleric's Bless prepared plain and extended
+    /// gives up the slot of the level the cast needs), and consumes it.
     /// Returns true if successful.
     /// </summary>
-    public bool SpontaneousCastFromSpecificSpell(string sacrificedSpellId)
+    public bool SpontaneousCastFromSpecificSpell(string sacrificedSpellId, int slotLevel = -1)
     {
         if (Stats == null || !Stats.IsCleric) return false;
         if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
         if (string.IsNullOrEmpty(sacrificedSpellId)) return false;
 
         // Find the specific slot with this spell that is unused
-        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.PreparedSpell.SpellId == sacrificedSpellId);
+        var slot = SpellSlots.FirstOrDefault(s => IsConvertibleClericSlot(s) && s.PreparedSpell.SpellId == sacrificedSpellId
+                                                  && (slotLevel < 0 || s.Level == slotLevel));
 
         if (slot == null)
         {
@@ -2328,7 +2356,9 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Check if a specific prepared spell can be spontaneously converted.
     /// Domain spell slots cannot be converted (D&D 3.5e cleric spontaneous casting rule).
-    /// The spell must have an available (unused) slot.
+    /// The spell must have an available (unused) slot. The level is the slot's (<see cref="ConversionSlotLevel"/>): a
+    /// prepared metamagic slot's spell (an Extended Bless in a 2nd-level slot) gives up that slot for a cure or inflict
+    /// spell of the slot's level (PHB p.32, p.88), and a plain spell its plain slot of the spell's level.
     /// </summary>
     public bool CanConvertSpellToSpontaneous(SpellData spell)
     {
@@ -2336,29 +2366,43 @@ public class SpellcastingComponent : MonoBehaviour
         if (Stats == null || !Stats.IsCleric) return false;
         if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
 
+        int slotLevel = ConversionSlotLevel(spell);
+
         // Check that a spontaneous spell exists at this level
-        SpellData spontSpell = GetSpontaneousSpell(spell.SpellLevel);
+        SpellData spontSpell = GetSpontaneousSpell(slotLevel);
         if (spontSpell == null) return false;
 
         // Domain slots cannot be converted (D&D 3.5e rule).
         // If the same spell appears in both regular and domain slots, conversion is allowed only when
         // at least one regular prepared slot exists and is unused; 0-level slots too (SPL-138).
         return SpellSlots.Any(s =>
-            IsConvertibleClericSlot(s) && s.Level == spell.SpellLevel &&
+            IsConvertibleClericSlot(s) && s.Level == slotLevel &&
             s.PreparedSpell.SpellId == spell.SpellId);
     }
 
     /// <summary>
-    /// An unused, non-domain cleric slot holding a spell, which spontaneous casting may spend (PHB p.32). A 0-level
-    /// slot disabled by negative levels is excluded as before SPL-138; for level 1+ that check is still missing
-    /// (SPL-012).
+    /// The level of the slot a spell-menu entry stands for: a prepared metamagic slot's spell
+    /// (SpellData.IsPreparedMetamagicSlotSpell) its slot's level (SpellData.EffectiveSpellLevel), any other spell its own
+    /// level. The Convert button converts and gives up a slot of this level (CombatUI.CreateSpellButtonWithConvert).
+    /// </summary>
+    public static int ConversionSlotLevel(SpellData spell)
+    {
+        if (spell == null) return -1;
+        return spell.IsPreparedMetamagicSlotSpell && spell.EffectiveSpellLevel > spell.SpellLevel
+            ? spell.EffectiveSpellLevel
+            : spell.SpellLevel;
+    }
+
+    /// <summary>
+    /// A cleric slot holding a prepared spell that spontaneous casting may spend (PHB p.32: any prepared spell but a
+    /// domain spell, a metamagic one included): a slot that can be cast (SpellSlot.CanCast: unused, not lost to a
+    /// negative level, DMG p.293, not locked by Imbue with Spell Ability, PHB p.243; batch 11 step 21, SPL-012).
     /// </summary>
     private static bool IsConvertibleClericSlot(SpellSlot s)
     {
         return s != null &&
                string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
-               s.HasSpell && !s.IsUsed && !s.IsDomainSlot &&
-               (s.Level > 0 || !s.DisabledByNegativeLevel);
+               s.CanCast && !s.IsDomainSlot;
     }
 
     /// <summary>Backward compat alias — calls CastSpellFromSlot.</summary>
@@ -2368,8 +2412,12 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Cast a wizard spell with metamagic by consuming a slot at the effective level.
-    /// The spell occupies the slot at its effective (metamagic-adjusted) level.
+    /// Cast a spell with metamagic, spending what the metamagic spell takes (batch 11 step 21; PHB p.88):
+    /// - a spontaneous caster (sorcerer, bard) spends a spell per day of the effective (adjusted) level for a spell it
+    ///   knows (SpontaneousData; SPL-040);
+    /// - a prepared caster spends the slot it prepared that spell in with that metamagic (SpellSlot.AppliedMetamagic, at
+    ///   the effective level, and a slot that can be cast: SpellSlot.CanCast). A plain slot of the spell, or another
+    ///   spell's slot of the effective level, is not a metamagic spell and is never spent for one (SPL-012).
     /// Returns true if successful.
     /// </summary>
     public bool CastWizardSpellWithMetamagic(SpellData spell, MetamagicData metamagic)
@@ -2381,31 +2429,31 @@ public class SpellcastingComponent : MonoBehaviour
         int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
         string metamagicKey = metamagic.GetDisplayName();
 
-        // D&D 3.5e: Prefer finding the specifically prepared metamagic slot
-        // (matches spell ID AND metamagic display name for exact match)
+        // ── Spontaneous caster: a known spell, a spell per day of the adjusted level (PHB p.88, p.54) ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            if (!SpontaneousData.IsSpellKnown(spell.SpellId, spell.SpellLevel) || SpontaneousData.GetSlotsRemaining(effectiveLevel) <= 0)
+            {
+                Debug.LogWarning($"[Spellcasting] {Stats.CharacterName} cannot cast {metamagicKey} {spell.Name} — not known or no level {effectiveLevel} spell per day left!");
+                return false;
+            }
+            RecordCastClass(spell.SpellId, SpontaneousData.CasterClassName);
+            SpontaneousData.SpendSlot(effectiveLevel);
+            SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast {metamagicKey} {spell.Name} (spontaneous, effective Lv{effectiveLevel}). " +
+                      $"Remaining at Lv{effectiveLevel}: {SpontaneousData.GetSlotsRemaining(effectiveLevel)}/{SpontaneousData.GetMaxSlots(effectiveLevel)}");
+            return true;
+        }
+
+        // ── Prepared caster: the slot prepared with this spell and this metamagic ──
         var slot = SpellSlots.FirstOrDefault(s =>
-            s.Level == effectiveLevel && !s.IsUsed && s.HasSpell
+            s.Level == effectiveLevel && s.CanCast
             && s.PreparedSpell.SpellId == spell.SpellId
-            && s.HasMetamagic && s.AppliedMetamagic.GetDisplayName() == metamagicKey);
-
-        // Fallback: find any available slot at the effective level with this spell
-        if (slot == null)
-        {
-            slot = SpellSlots.FirstOrDefault(s =>
-                s.Level == effectiveLevel && !s.IsUsed && s.HasSpell
-                && s.PreparedSpell.SpellId == spell.SpellId);
-        }
-
-        // Last resort: any available slot at the effective level
-        if (slot == null)
-        {
-            slot = SpellSlots.FirstOrDefault(s =>
-                s.Level == effectiveLevel && !s.IsUsed && s.HasSpell);
-        }
+            && s.HasMetamagic && SameMetamagic(s.AppliedMetamagic, metamagic));
 
         if (slot == null)
         {
-            Debug.LogWarning($"[Spellcasting] No available level {effectiveLevel} slot for metamagic {spell.Name}!");
+            Debug.LogWarning($"[Spellcasting] No level {effectiveLevel} slot prepared with {metamagicKey} {spell.Name}!");
             return false;
         }
 
@@ -2418,6 +2466,19 @@ public class SpellcastingComponent : MonoBehaviour
                   $"(effective Lv{effectiveLevel}) from slot.");
 
         return true;
+    }
+
+    /// <summary>
+    /// True when a slot's preparation metamagic is the cast's: the same feats, and for Heighten the same target level
+    /// (the slot's level already matches the effective level).
+    /// </summary>
+    private static bool SameMetamagic(MetamagicData prepared, MetamagicData cast)
+    {
+        if (prepared == null || cast == null)
+            return false;
+        if (!prepared.AppliedMetamagic.SetEquals(cast.AppliedMetamagic))
+            return false;
+        return !cast.Has(MetamagicFeatId.HeightenSpell) || prepared.HeightenToLevel == cast.HeightenToLevel;
     }
 
     /// <summary>
@@ -2674,6 +2735,9 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         // ── Prepared caster: check slot system ──
+        // One entry per spell and preparation metamagic, as the spell menu lists them (GetUniqueAvailableSpells): a slot
+        // prepared with metamagic gives its metamagic spell (BuildPreparedMetamagicSlotSpell), which the AI casts with that
+        // metamagic and that slot (batch 11 step 21); a plain slot gives the plain spell.
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             var seen = new HashSet<string>();
@@ -2681,11 +2745,12 @@ public class SpellcastingComponent : MonoBehaviour
             {
                 if (!slot.HasSpell) continue;
 
-                if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId) // 0-level slots too (SPL-138)
+                string key = slot.PreparedSpell.SpellId + "|" + (slot.HasMetamagic ? slot.AppliedMetamagic.GetSlotKey() : "");
+                if (slot.CanCast && !seen.Contains(key) // 0-level slots too (SPL-138)
                     && !IsBlockedByWildShape(slot.PreparedSpell, slot.AppliedMetamagic))
                 {
-                    seen.Add(slot.PreparedSpell.SpellId);
-                    castable.Add(slot.PreparedSpell);
+                    seen.Add(key);
+                    castable.Add(slot.HasMetamagic ? BuildPreparedMetamagicSlotSpell(slot) : slot.PreparedSpell);
                 }
             }
         }
@@ -2765,20 +2830,23 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if the character can cast a spell with metamagic applied
-    /// (has a slot at the required effective level).
+    /// Check if the character can cast a spell with metamagic applied: what CastWizardSpellWithMetamagic would spend
+    /// (batch 11 step 21): a spontaneous caster's known spell with a spell per day of the effective level left (SPL-040),
+    /// or a prepared slot holding the spell with that metamagic (SPL-012).
     /// </summary>
     public bool CanCastWithMetamagic(SpellData spell, MetamagicData metamagic)
     {
-        if (spell == null || SlotsRemaining == null) return false;
+        if (spell == null) return false;
         if (metamagic == null || !metamagic.HasAnyMetamagic)
             return CanCast(spell);
+        if (IsBlockedByWildShape(spell, metamagic)) return false;
 
         int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
-        if (effectiveLevel >= SlotsRemaining.Length) return false;
+        if (IsSpontaneousCaster && SpontaneousData != null)
+            return SpontaneousData.IsSpellKnown(spell.SpellId, spell.SpellLevel) && SpontaneousData.GetSlotsRemaining(effectiveLevel) > 0;
 
-        // Cantrips with metamagic still need higher level slots
-        return SlotsRemaining[effectiveLevel] > 0;
+        return SpellSlots.Any(s => s.Level == effectiveLevel && s.CanCast && s.PreparedSpell.SpellId == spell.SpellId
+                                   && s.HasMetamagic && SameMetamagic(s.AppliedMetamagic, metamagic));
     }
 
     /// <summary>
@@ -2802,12 +2870,17 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if a slot at a specific level is available.
+    /// Check if a slot at a specific level is available: a spontaneous caster's spell per day of that level
+    /// (SpontaneousData, the slots its metamagic casts spend, PHB p.88; batch 11 step 21, SPL-040), else a prepared slot
+    /// that can be cast. The combat metamagic panel asks it for the effective level.
     /// </summary>
     public bool HasSlotAtLevel(int level)
     {
         if (level < 0)
             return false;
+
+        if (IsSpontaneousCaster && SpontaneousData != null)
+            return SpontaneousData.GetSlotsRemaining(level) > 0;
 
         return SpellSlots.Any(s => s != null && s.Level == level && s.CanCast);
     }
@@ -3275,111 +3348,5 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (metamagic == null || !metamagic.HasAnyMetamagic) return spell.SpellLevel;
         return metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
-    }
-
-    // ========================================================================
-    // METAMAGIC VALIDATION & SPONTANEOUS CASTER SUPPORT
-    // ========================================================================
-
-    /// <summary>
-    /// Check if this caster is a prepared caster (Wizard/Cleric/Druid/Paladin/Ranger).
-    /// Prepared casters apply metamagic during preparation with no casting time change.
-    /// </summary>
-    public bool IsPreparedCaster()
-    {
-        return MetamagicSystem.IsPreparedCaster(Stats);
-    }
-
-    /// <summary>
-    /// Get the casting action type for a metamagic spell, considering this caster's type.
-    /// D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action.
-    /// </summary>
-    public SpellActionType GetMetamagicCastingAction(SpellData spell, MetamagicData metamagic)
-    {
-        return MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, Stats);
-    }
-
-    /// <summary>
-    /// Full validation of whether this caster can apply metamagic to a spell.
-    /// Checks: has feat(s), spell compatibility, slot availability, 9th-level cap.
-    /// Returns null if valid, or error message string.
-    /// </summary>
-    public string ValidateMetamagicCast(SpellData spell, MetamagicData metamagic)
-    {
-        if (spell == null) return "Spell is null.";
-        if (metamagic == null || !metamagic.HasAnyMetamagic) return null;
-
-        // Basic validation (feat ownership, spell compatibility, level cap)
-        string error = MetamagicSystem.ValidateMetamagicApplication(spell, metamagic, Stats);
-        if (error != null) return error;
-
-        // Check slot availability at effective level
-        int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
-        if (SlotsRemaining == null || effectiveLevel >= SlotsRemaining.Length)
-            return $"No spell slot capacity at level {effectiveLevel}.";
-        if (SlotsRemaining[effectiveLevel] <= 0)
-            return $"No available spell slots at level {effectiveLevel}.";
-
-        // Check quicken limit (one quickened spell per round)
-        if (metamagic.Has(MetamagicFeatId.QuickenSpell) && !CanUseQuickenSpell())
-            return "Already cast a quickened spell this round.";
-
-        return null; // Valid
-    }
-
-    /// <summary>
-    /// Get available metamagic feats this caster can apply to a specific spell.
-    /// Considers: feat ownership, spell compatibility, slot availability, 9th-level cap.
-    /// </summary>
-    public List<MetamagicFeatId> GetAvailableMetamagicsForSpell(SpellData spell, MetamagicData currentMetamagic = null)
-    {
-        return MetamagicSystem.GetAvailableMetamagics(spell, Stats, currentMetamagic);
-    }
-
-    /// <summary>
-    /// Cast a spell with metamagic through the full MetamagicSystem pipeline.
-    /// Handles both prepared and spontaneous casters.
-    /// Returns the modified spell ready for SpellCaster.Cast(), or null if failed.
-    /// </summary>
-    public SpellData PrepareAndConsumeMetamagicSpell(SpellData spell, MetamagicData metamagic)
-    {
-        if (spell == null) return null;
-        if (metamagic == null || !metamagic.HasAnyMetamagic)
-        {
-            // No metamagic - just cast normally
-            return spell.Clone();
-        }
-
-        // Validate
-        string error = ValidateMetamagicCast(spell, metamagic);
-        if (error != null)
-        {
-            Debug.LogWarning($"[Spellcasting] Metamagic validation failed for {spell.Name}: {error}");
-            return null;
-        }
-
-        // Prepare through MetamagicSystem pipeline
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, metamagic);
-        if (!result.IsSuccess)
-        {
-            Debug.LogWarning($"[Spellcasting] Metamagic preparation failed: {result.ErrorMessage}");
-            return null;
-        }
-
-        // Consume the spell slot at the effective level
-        bool consumed = CastWizardSpellWithMetamagic(spell, metamagic);
-        if (!consumed)
-        {
-            Debug.LogWarning($"[Spellcasting] Failed to consume slot for metamagic {spell.Name}");
-            return null;
-        }
-
-        // Track quickened spell usage
-        if (metamagic.Has(MetamagicFeatId.QuickenSpell))
-        {
-            MarkQuickenedSpellCast();
-        }
-
-        return result.ModifiedSpell;
     }
 }

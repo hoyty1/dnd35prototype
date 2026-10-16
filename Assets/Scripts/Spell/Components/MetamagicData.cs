@@ -259,6 +259,18 @@ public class MetamagicData
     }
 
     /// <summary>
+    /// The key a prepared metamagic slot is listed, counted and spent by: <see cref="GetDisplayName()"/> plus, with
+    /// Heighten Spell, its target level ("Heightened@4"), so a spell heightened to 3rd and to 4th are two entries
+    /// (SpellcastingComponent.GetUniqueAvailableSpells, GetCastablePreparedSpells, CountAvailablePreparedSpell; the spend
+    /// matches the same, CastWizardSpellWithMetamagic). "" when no metamagic is applied.
+    /// </summary>
+    public string GetSlotKey()
+    {
+        string name = GetDisplayName();
+        return Has(MetamagicFeatId.HeightenSpell) ? name + "@" + HeightenToLevel : name;
+    }
+
+    /// <summary>
     /// Get short effect description for a metamagic feat.
     /// </summary>
     public static string GetShortEffect(MetamagicFeatId feat)

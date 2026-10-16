@@ -100,14 +100,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcRefusesArea = 1 << 17,
 
-    /// <summary>
-    /// The cast runs without metamagic whatever the request carries: the Legality stage drops it (AI-001). A
-    /// prepared metamagic slot's spell still carries its metamagic on its clone (SpellData.MetamagicDataRef), which the save DC,
-    /// the components and since batch 11 step 19 the dice read (SpellDiceRules.MetamagicOf); the AI's candidates are the slots'
-    /// plain spells, so no NPC cast has one today.
-    /// Batch 11 step 21 (metamagic-legality-and-slots) casts a prepared metamagic slot's spell with its metamagic.
-    /// </summary>
-    NpcNullMetamagic = 1 << 18,
+    // Bit 18 is unused: NpcNullMetamagic (AI-001) was removed by batch 11 step 21 (metamagic-legality-and-slots); an NPC
+    // cast carries its prepared metamagic slot's metamagic (SpellCastRequest.ForAI) or a Scripted step's, and meets the
+    // same metamagic rules (MetamagicSystem). The AI still chooses no metamagic of its own (AI-001, batch 11 step 28).
 
     // Bit 19 is unused: NpcNoComponentCheck (SPL-114) was removed by batch 11 step 17 (raw-components-all-casters,
     // decision D3); every caster makes the one component test (SpellComponentRules) and NPC casters carry the pouch and
@@ -253,7 +248,6 @@ public static class LegacyCastQuirkSets
         (UiPath & ~LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
         | LegacyCastQuirk.NpcOwnLegalityChecks
         | LegacyCastQuirk.NpcRefusesArea
-        | LegacyCastQuirk.NpcNullMetamagic
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;

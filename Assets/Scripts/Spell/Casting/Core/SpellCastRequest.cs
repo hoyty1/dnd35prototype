@@ -211,22 +211,43 @@ public sealed class SpellCastRequest
     }
 
     /// <summary>
-    /// An NPC (AI-run) cast of <paramref name="spell"/> at <paramref name="target"/>: no metamagic (the NPC path has
-    /// none, AI-001; batch 11 step 21 lets it cast a prepared slot's metamagic), a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy quirks
-    /// (<see cref="LegacyCastQuirkSets.AiPath"/>, batch 11 step 8) and <see cref="AiCastDecider"/>, which fills the
+    /// The metamagic an NPC (AI-run) cast of <paramref name="spell"/> carries without a choice of its own: the preparation
+    /// metamagic of a prepared metamagic slot's spell (SpellData.IsPreparedMetamagicSlotSpell, which
+    /// SpellcastingComponent.GetCastablePreparedSpells lists for the AI as the spell menu lists it for a PC), else none.
+    /// The AI's spell choice and the NPC cast read the same (batch 11 step 21); the AI still chooses no metamagic itself
+    /// (AI-001, batch 11 step 28).
+    /// </summary>
+    public static MetamagicData AiMetamagicFor(SpellData spell)
+    {
+        return spell != null && spell.IsPreparedMetamagicSlotSpell && spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic
+            ? spell.MetamagicDataRef
+            : null;
+    }
+
+    /// <summary>
+    /// An NPC (AI-run) or Scripted cast of <paramref name="spell"/> at <paramref name="target"/>: with
+    /// <paramref name="metamagic"/> when the caller gives one (a Scripted cast step's), else the prepared metamagic slot's
+    /// (<see cref="AiMetamagicFor"/>; batch 11 step 21: the NPC path casts metamagic as the PC menu does, a clone with the
+    /// metamagic's pre-cast changes, SpellCaster.ApplyMetamagicToSpellData, and spends the slot or spell per day the
+    /// metamagic spell takes); a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy
+    /// quirks (<see cref="LegacyCastQuirkSets.AiPath"/>, batch 11 step 8) and <see cref="AiCastDecider"/>, which fills the
     /// caster's choices when the cast core asks (the Legality stage).
     /// </summary>
-    public static SpellCastRequest ForAI(CharacterController caster, CharacterController target, SpellData spell)
+    public static SpellCastRequest ForAI(CharacterController caster, CharacterController target, SpellData spell, MetamagicData metamagic = null)
     {
+        MetamagicData castMetamagic = metamagic != null && metamagic.HasAnyMetamagic ? metamagic : AiMetamagicFor(spell);
+        bool hasMetamagic = castMetamagic != null;
         var request = new SpellCastRequest
         {
             Caster = caster,
-            Spell = CloneForCast(spell),
-            Metamagic = null,
+            Spell = spell == null ? null : hasMetamagic ? spell.Clone() : CloneForCast(spell),
+            Metamagic = hasMetamagic ? castMetamagic.Clone() : null,
             Source = AiSourceFor(caster, spell),
             Decider = AiCastDecider.Instance,
             Quirks = LegacyCastQuirkSets.AiPath
         };
+        if (request.Spell != null && hasMetamagic)
+            SpellCaster.ApplyMetamagicToSpellData(request.Spell, request.Metamagic);
         request.Aim.Target = target;
         return request;
     }

@@ -29,17 +29,17 @@ public enum CastActionCost
 /// The action-cost rules of a cast (batch 11 step 12, raw-action-cost-provocation; docs/designs/cast_core_batch11.md),
 /// one rule for every caster and path: the cast core's Legality and Cost stages read it, the PC spell menu checks it
 /// before targeting and the AI's spell choice skips what it refuses (AIService.SelectSpell), so PCs and NPCs are bound
-/// alike (docs/systems/PC_NPC_PARITY.md). Pure: no side effects.
+/// alike (docs/systems/PC_NPC_PARITY.md). Pure: no side effects. Since batch 11 step 21 the metamagic rules live in
+/// MetamagicSystem (Spell/Components/MetamagicModifier.cs, SPL-055): <see cref="CastingAction"/> asks
+/// MetamagicSystem.GetMetamagicCastingAction for every source but an item or a delivery, and <see cref="Refusal"/> asks
+/// MetamagicSystem.ValidateMetamagicApplication before its own action tests (<see cref="ActionRefusal"/>).
 ///
 /// RAW applied:
 /// - PHB p.98 (Quicken Spell): a quickened spell is a free action and does not provoke; one quickened spell per round;
-///   the feat cannot be applied to a spell cast spontaneously.
+///   the feat cannot be applied to a spell cast spontaneously (MetamagicSystem).
 /// - PHB p.88 (Casting Time; Spontaneous Casting and Metamagic Feats): a spontaneous cast with a metamagic feat takes a
-///   full-round action for a 1-action spell; the source of the cast decides, not the caster's classes (delegated RAW
-///   reading 2026-10-14; the source is still picked per caster, CastSource.SlotKindFor, SPL-159). A 1-action spell
-///   includes one whose casting time is a free or swift action (delegated RAW reading 2026-10-14: PHB p.88 says the
-///   spontaneous caster must take more time for any metamagic spell, and p.98 that the metamagic raises the casting
-///   time to a full-round action), so such a cast is a full-round action and no longer the round's free-action spell.
+///   full-round action for a 1-action spell, a free- or swift-action spell included; the source of the cast decides, not
+///   the caster's classes (delegated RAW readings 2026-10-14; MetamagicSystem.GetMetamagicCastingAction holds the rule).
 ///   A spell with a longer casting time takes an extra full-round action, which the game cannot express (SPL-167): it
 ///   costs the full-round action.
 /// - PHB p.174 (Casting Time): SpellData.ActionType gives the casting time; a 1-round casting time is a full-round
@@ -52,16 +52,15 @@ public enum CastActionCost
 /// </summary>
 public static class CastActionRules
 {
-    public const string RefusalQuickenSpontaneous = "quicken-spontaneous";
+    public const string RefusalQuickenSpontaneous = MetamagicSystem.RefusalQuickenSpontaneous;
     public const string RefusalQuickenOncePerRound = "quicken-once-per-round";
     public const string RefusalNoFullRoundAction = "no-full-round-action";
     public const string RefusalNoSwiftAction = "no-swift-action";
 
-    /// <summary>True when <paramref name="metamagic"/> quickens the cast (a held charge's delivery is not a casting, PHB p.141).</summary>
+    /// <summary>True when <paramref name="metamagic"/> quickens the cast (MetamagicSystem.IsQuickened; a held charge's delivery is not a casting, PHB p.141).</summary>
     public static bool IsQuickened(MetamagicData metamagic, CastSource source)
     {
-        return metamagic != null && metamagic.Has(MetamagicFeatId.QuickenSpell)
-               && (source == null || source.Kind != CastSourceKind.HeldChargeDelivery);
+        return MetamagicSystem.IsQuickened(metamagic, source);
     }
 
     /// <summary>
@@ -78,47 +77,46 @@ public static class CastActionRules
         return CastingAction(spell, metamagic, source) == CastActionCost.Free;
     }
 
-    /// <summary>The action the cast charges (see <see cref="CastActionCost"/>).</summary>
+    /// <summary>
+    /// The action the cast charges (see <see cref="CastActionCost"/>): the item's own action for a scroll or wand and
+    /// none for a held charge's delivery, else the casting action with the cast's metamagic
+    /// (MetamagicSystem.GetMetamagicCastingAction, batch 11 step 21).
+    /// </summary>
     public static CastActionCost CastingAction(SpellData spell, MetamagicData metamagic, CastSource source)
     {
         CastSourceKind kind = source != null ? source.Kind : CastSourceKind.PreparedSlot;
         if (kind == CastSourceKind.HeldChargeDelivery || kind == CastSourceKind.Scroll || kind == CastSourceKind.Wand)
             return CastActionCost.ItemOrDelivery;
-        if (IsQuickened(metamagic, source))
-            return CastActionCost.Free;
-
-        // PHB p.88: a metamagic spell cast spontaneously takes a full-round action, a free- or swift-action spell too
-        // (delegated RAW reading 2026-10-14, see the class summary); for a 1-round spell an extra full round, which
-        // costs the full round here (SPL-167).
-        if (metamagic != null && metamagic.HasAnyMetamagic && source != null && source.IsSpontaneous)
-            return CastActionCost.FullRound;
-
-        SpellActionType dataAction = spell != null ? spell.ActionType : SpellActionType.Standard;
-        if (dataAction == SpellActionType.Free)
-            return CastActionCost.Free;
-        if (dataAction == SpellActionType.Swift)
-            return CastActionCost.Swift;
-        return dataAction == SpellActionType.FullRound ? CastActionCost.FullRound : CastActionCost.Standard;
+        return MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, source);
     }
 
     /// <summary>
-    /// Why the cast may not be made as it stands, or null: Quicken Spell on a spontaneous cast (PHB p.98 Special), a
-    /// second quickened or free-action spell this round (PHB p.98; PHB p.174, p.229 for Feather Fall), or a full-round
-    /// or swift casting action the caster no longer has (PHB p.138, p.174). A caster limited to a single action
-    /// (disabled, staggered) is refused a full-round casting outright: PHB p.142 (Start/Complete Full-Round Action)
-    /// would let it start the casting this round and finish it next round, which the game cannot do yet (SPL-168). The F12 test panel's casts are not refused for a spent action (the
-    /// panel casts out of turn); the quicken rules bind them too. A standard action is not tested here: the PC menu
-    /// offers casting only with one, and the NPC path's own test refuses without one (LegacyCastQuirk.NpcOwnLegalityChecks;
-    /// batch 11 step 22 moves it here).
+    /// Why the cast may not be made as it stands, or null: first the metamagic rules
+    /// (MetamagicSystem.ValidateMetamagicApplication, batch 11 step 21: Quicken Spell on a spontaneous cast, PHB p.98
+    /// Special; a feat that cannot modify the spell, PHB p.88; a feat the caster lacks; a Heighten that raises nothing;
+    /// an adjusted level above 9th), then the casting action (<see cref="ActionRefusal"/>). The PC spell menu and the AI's spell choice
+    /// ask this; the cast core's Legality stage asks the two in turn (GameManager.CheckCastMetamagicLegality,
+    /// CheckCastActionLegality).
     /// </summary>
     public static string Refusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
     {
-        if (spell == null)
-            return null;
+        string metamagicRefusal = MetamagicSystem.ValidateMetamagicApplication(spell, metamagic, caster != null ? caster.Stats : null, source);
+        return metamagicRefusal ?? ActionRefusal(caster, spell, metamagic, source);
+    }
 
-        if (IsQuickened(metamagic, source) && source != null && source.IsSpontaneous)
-            return RefusalQuickenSpontaneous;
-        if (caster == null)
+    /// <summary>
+    /// Why the casting action cannot be taken now, or null: a second quickened or free-action spell this round (PHB p.98;
+    /// PHB p.174, p.229 for Feather Fall), or a full-round or swift casting action the caster no longer has (PHB p.138,
+    /// p.174). A caster limited to a single action (disabled, staggered) is refused a full-round casting outright: PHB
+    /// p.142 (Start/Complete Full-Round Action) would let it start the casting this round and finish it next round, which
+    /// the game cannot do yet (SPL-168). The F12 test panel's casts are not refused for a spent action (the panel casts
+    /// out of turn); the quicken rules bind them too. A standard action is not tested here: the PC menu offers casting
+    /// only with one, and the NPC path's own test refuses without one unless the cast costs a free or swift action
+    /// (LegacyCastQuirk.NpcOwnLegalityChecks; batch 11 step 22 moves it here).
+    /// </summary>
+    public static string ActionRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
+    {
+        if (spell == null || caster == null)
             return null;
 
         SpellcastingComponent spellComp = caster.Spellcasting;
@@ -142,13 +140,14 @@ public static class CastActionRules
         }
     }
 
-    /// <summary>The player-facing text of a <see cref="Refusal"/> code.</summary>
-    public static string DescribeRefusal(string refusal, string casterName, string spellName)
+    /// <summary>The player-facing text of a <see cref="Refusal"/> code (a metamagic one through MetamagicSystem.DescribeRefusal).</summary>
+    public static string DescribeRefusal(string refusal, string casterName, string spellName, MetamagicData metamagic = null)
     {
+        string metamagicText = MetamagicSystem.DescribeRefusal(refusal, casterName, spellName, metamagic);
+        if (metamagicText != null)
+            return metamagicText;
         switch (refusal)
         {
-            case RefusalQuickenSpontaneous:
-                return $"{casterName} cannot quicken {spellName}: Quicken Spell cannot be applied to a spell cast spontaneously (PHB p.98).";
             case RefusalQuickenOncePerRound:
                 return $"{casterName} has already cast a quickened spell this round and cannot cast {spellName} as one (PHB p.98).";
             case RefusalNoFullRoundAction:

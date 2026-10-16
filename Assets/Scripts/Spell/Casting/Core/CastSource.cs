@@ -76,7 +76,7 @@ public sealed class CastSource
     /// <summary>
     /// True when the spell is cast spontaneously (PHB p.88 and p.98): a spontaneous caster's spell per day, a cleric's
     /// cure or inflict conversion, or a hold of a spontaneous caster's spell. The source decides, not the caster's
-    /// classes (delegated RAW reading 2026-10-14): CastActionRules makes such a metamagic cast a full-round action and
+    /// classes (delegated RAW reading 2026-10-14): MetamagicSystem makes such a metamagic cast a full-round action and
     /// refuses Quicken Spell on it. The slot kind itself is still picked per caster (<see cref="SlotKindFor"/>, SPL-159).
     /// </summary>
     public bool IsSpontaneous => Kind == CastSourceKind.SpontaneousSlot || Kind == CastSourceKind.SpontaneousConversion

@@ -69,9 +69,13 @@ public partial class GameManager
 
         if (isSpontaneous)
         {
+            // A cleric's conversion gives up a prepared spell of the cast's level, the adjusted level with metamagic (PHB
+            // p.32, p.88; batch 11 step 21, SPL-148): the named sacrifice of that level, else any convertible one.
             bool spentSpontaneous = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                ? spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId)
-                : spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+                ? spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId, hasMetamagicApplied ? slotLevelToConsume : spontaneousLevel)
+                : hasMetamagicApplied
+                    ? spellComp.SpontaneousCastFromSlot(spell.SpellLevel, metamagic)
+                    : spellComp.SpontaneousCastFromSlot(spontaneousLevel);
             MarkCastSpend(spellComp, spell, spentSpontaneous ? "spontaneous-slot" : "not-spent");
             return spentSpontaneous;
         }

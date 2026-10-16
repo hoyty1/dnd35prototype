@@ -1123,7 +1123,7 @@ public class SpellTestingPanel : MonoBehaviour
         ApplyAbilityBoost(caster);
 
         // Ensure the spell is available (known, prepared, has slot)
-        EnsureSpellAvailable(caster, spell);
+        EnsureSpellAvailable(caster, spell, _metamagicState);
 
         string abilityInfo = $"{_boostedAbility} boosted +4 ({_originalAbilityScore}→{_originalAbilityScore + 4})";
         string casterNote = _temporaryCasterSetup ? " (temp Wizard CL10)" : "";
@@ -1155,7 +1155,7 @@ public class SpellTestingPanel : MonoBehaviour
         }
     }
 
-    private void EnsureSpellAvailable(CharacterController caster, SpellData spell)
+    private void EnsureSpellAvailable(CharacterController caster, SpellData spell, MetamagicData metamagic = null)
     {
         if (caster == null) return;
 
@@ -1200,10 +1200,23 @@ public class SpellTestingPanel : MonoBehaviour
             }
         }
 
-        // ── Spontaneous caster: keep a slot of the spell's level, 0-level included (dev bypass; SPL-138) ──
+        // ── With the panel's metamagic: a slot prepared with it at the effective level (dev bypass). A metamagic cast spends
+        //    only such a slot since batch 11 step 21 (SPL-012); a spontaneous caster spends a spell per day of that level. ──
+        bool withMetamagic = metamagic != null && metamagic.HasAnyMetamagic;
+        int effectiveLevel = withMetamagic ? metamagic.GetEffectiveSpellLevel(spell.SpellLevel) : spell.SpellLevel;
+        if (withMetamagic && !spellComp.IsSpontaneousCaster && spellComp.SpellSlots != null
+            && !spellComp.CanCastWithMetamagic(spell, metamagic))
+        {
+            var metamagicSlot = new SpellSlot(effectiveLevel);
+            metamagicSlot.PrepareWithMetamagic(spell.Clone(), metamagic);
+            spellComp.SpellSlots.Add(metamagicSlot);
+            Debug.Log($"[SpellTestPanel] Added SpellSlot for {metamagic.GetDisplayName()} {spell.Name} at level {effectiveLevel}");
+        }
+
+        // ── Spontaneous caster: keep a slot of the spell's (effective) level, 0-level included (dev bypass; SPL-138) ──
         if (spellComp.IsSpontaneousCaster)
         {
-            int lvl = spell.SpellLevel;
+            int lvl = effectiveLevel;
             SpontaneousCastingData sd = spellComp.SpontaneousData;
             if (lvl >= 0 && lvl < sd.SlotsRemaining.Length && sd.SlotsRemaining[lvl] < 1)
             {

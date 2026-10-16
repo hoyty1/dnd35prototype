@@ -2673,8 +2673,11 @@ public class CombatUI : MonoBehaviour
             : 0;
         string asfWarn = asfChance > 0 ? $" ⚠ASF {asfChance}%" : "";
 
-        string spellLabel = $"{spell.Name}{countStr}{asfWarn} ({rangeStr}){effectStr}";
-        string prefix = hasMetamagic ? "⚡ " : "";
+        // A prepared metamagic slot's spell shows its metamagic, as CreateSpellButton does.
+        bool hasPreparedMetamagic = spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic;
+        string metamagicTag = hasPreparedMetamagic ? $" [{spell.MetamagicDataRef.GetDisplayName()}]" : "";
+        string spellLabel = $"{spell.Name}{metamagicTag}{countStr}{asfWarn} ({rangeStr}){effectStr}";
+        string prefix = hasMetamagic ? "⚡ " : (hasPreparedMetamagic ? "✦ " : "");
 
         GameObject spellBtnObj = new GameObject($"SpellBtn_{spell.SpellId}");
         spellBtnObj.transform.SetParent(rowObj.transform, false);
@@ -2718,12 +2721,15 @@ public class CombatUI : MonoBehaviour
         }
         else
         {
+            // A prepared metamagic slot's spell is cast with that metamagic, which spends that slot (as CreateSpellButton;
+            // CastWizardSpellWithMetamagic, SPL-012); a plain spell with none.
             SpellData capturedSpell = spell;
+            MetamagicData capturedMeta = hasPreparedMetamagic ? spell.MetamagicDataRef : null;
             spellBtn.onClick.AddListener(() =>
             {
                 HideSpellSelection();
                 if (_onSpellSelectedWithMetamagic != null)
-                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell, null);
+                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell, capturedMeta);
                 else
                     _onSpellSelected?.Invoke(capturedSpell);
             });
@@ -2735,7 +2741,10 @@ public class CombatUI : MonoBehaviour
             ? new Color(0.2f, 0.45f, 0.25f, 1f)    // green for cure
             : new Color(0.45f, 0.15f, 0.35f, 1f);   // dark purple for inflict
 
-        SpellData spontSpell = spellComp.GetSpontaneousSpell(spell.SpellLevel);
+        // The row's slot level: a prepared metamagic slot's (an Extended Bless in a 2nd-level slot converts to the 2nd-level
+        // cure or inflict spell and gives up that slot, PHB p.32, p.88), else the spell's.
+        int conversionLevel = SpellcastingComponent.ConversionSlotLevel(spell);
+        SpellData spontSpell = spellComp.GetSpontaneousSpell(conversionLevel);
         string convertLabel = isCure ? "⟳ Convert\nto Cure" : "⟳ Convert\nto Inflict";
 
         GameObject convertBtnObj = new GameObject($"ConvertBtn_{spell.SpellId}");
@@ -2769,22 +2778,58 @@ public class CombatUI : MonoBehaviour
         convertTxt.text = convertLabel;
         convertTxt.fontStyle = FontStyle.BoldAndItalic;
 
-        // Wire convert button click handler — sacrifices this specific spell
+        // Wire convert button click handler — sacrifices this specific spell. A cleric with a metamagic feat chooses the
+        // metamagic first (PHB p.88: a metamagic cure or inflict spell, giving up a prepared spell of the adjusted level, as
+        // a full-round action; batch 11 step 21, SPL-148): the metamagic panel opens in conversion mode, and the chosen
+        // metamagic goes to the cast callback; the cast core gives up a convertible spell of the adjusted level.
         SpellData capturedSpontSpell = spontSpell;
         string capturedSacrificeId = spell.SpellId;
-        int capturedLevel = spell.SpellLevel;
+        int capturedLevel = conversionLevel;
+        bool convertWithMetamagic = HasConversionMetamagicChoice(spontSpell, spellComp);
         convertBtn.onClick.AddListener(() =>
         {
-            HideSpellSelection();
             // Mark as spontaneous cast with the specific spell being sacrificed
-            _isSpontaneousCast = true;
-            _spontaneousCastLevel = capturedLevel;
-            _spontaneousSacrificedSpellId = capturedSacrificeId;
+            BeginSpontaneousConversion(capturedLevel, capturedSacrificeId);
+            if (convertWithMetamagic)
+            {
+                ShowMetamagicPanel(capturedSpontSpell, spellComp);
+                return;
+            }
+            HideSpellSelection();
             if (_onSpellSelectedWithMetamagic != null)
                 _onSpellSelectedWithMetamagic.Invoke(capturedSpontSpell, null);
             else
                 _onSpellSelected?.Invoke(capturedSpontSpell);
         });
+    }
+
+    /// <summary>
+    /// True when the metamagic panel has something to offer a conversion to <paramref name="spontSpell"/>: a metamagic feat
+    /// the cleric has that can modify the spell (MetamagicData.IsApplicable, PHB p.88), other than Quicken Spell, which is
+    /// never applied to a spontaneous cast (PHB p.98). Otherwise the Convert button casts at once with no metamagic.
+    /// </summary>
+    private static bool HasConversionMetamagicChoice(SpellData spontSpell, SpellcastingComponent spellComp)
+    {
+        if (spontSpell == null || spellComp == null)
+            return false;
+        foreach (MetamagicFeatId feat in spellComp.GetKnownMetamagicFeats())
+        {
+            if (feat != MetamagicFeatId.QuickenSpell && MetamagicData.IsApplicable(feat, spontSpell))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Marks the next spell selection as a cleric's spontaneous conversion of the prepared spell
+    /// <paramref name="sacrificedSpellId"/> of <paramref name="level"/> (the Convert button; GameManager.BuildSpellMenuCastSource
+    /// reads and clears it). The scenario harness calls it as the button does.
+    /// </summary>
+    public void BeginSpontaneousConversion(int level, string sacrificedSpellId)
+    {
+        _isSpontaneousCast = true;
+        _spontaneousCastLevel = level;
+        _spontaneousSacrificedSpellId = sacrificedSpellId;
     }
 
     /// <summary>Whether the last spell selection was a spontaneous cast.</summary>
@@ -2911,7 +2956,7 @@ public class CombatUI : MonoBehaviour
         {
             // PHB p.98 (Quicken Spell, Special): the feat cannot be applied to a spell cast spontaneously, so the panel
             // does not offer it for a spontaneous caster's spell or a cleric's conversion (the cast core's Legality stage
-            // refuses it too; CastActionRules, batch 11 step 12).
+            // refuses it too; MetamagicSystem.ValidateMetamagicApplication, batch 11 steps 12 and 21).
             if (mmId == MetamagicFeatId.QuickenSpell && MetamagicPanelCastIsSpontaneous(spellComp, spell))
                 continue;
 
@@ -2971,9 +3016,10 @@ public class CombatUI : MonoBehaviour
                 return;
             }
 
-            // Check if caster has a slot at the effective level
+            // Check if caster has a slot at the effective level (a spell per day for a sorcerer or bard, a convertible
+            // prepared spell for a cleric's conversion; batch 11 step 21, SPL-040, SPL-148)
             int effectiveLevel = _tempMetamagic.GetEffectiveSpellLevel(capturedSpell2.SpellLevel);
-            if (!capturedComp.HasSlotAtLevel(effectiveLevel))
+            if (!MetamagicPanelHasSlot(capturedComp, effectiveLevel))
             {
                 Debug.Log($"[Metamagic] No slot available at level {effectiveLevel}!");
                 // Flash info text red
@@ -2999,7 +3045,64 @@ public class CombatUI : MonoBehaviour
         backBtn.onClick.AddListener(() =>
         {
             if (_metamagicPanel != null) Destroy(_metamagicPanel);
+            // Backing out of a conversion's metamagic choice ends the conversion: the next pick is a plain spell.
+            if (_isSpontaneousCast)
+                ClearSpontaneousCastState();
         });
+    }
+
+    /// <summary>
+    /// True when the caster can pay a metamagic cast of <paramref name="effectiveLevel"/> from the panel: a cleric's
+    /// conversion needs a convertible prepared spell of that level (PHB p.88), a sorcerer or bard a spell per day of it
+    /// (SpellcastingComponent.HasSlotAtLevel reads SpontaneousData for a spontaneous caster; batch 11 step 21, SPL-040).
+    /// </summary>
+    private bool MetamagicPanelHasSlot(SpellcastingComponent spellComp, int effectiveLevel)
+    {
+        return _isSpontaneousCast ? spellComp.HasConvertibleSlotAtLevel(effectiveLevel) : spellComp.HasSlotAtLevel(effectiveLevel);
+    }
+
+    /// <summary>The highest slot level the panel's caster can spend: a spell per day of a spontaneous caster, else a prepared slot.</summary>
+    private int MetamagicPanelHighestSlotLevel(SpellcastingComponent spellComp)
+    {
+        return !_isSpontaneousCast && spellComp.IsSpontaneousCaster && spellComp.SpontaneousData != null
+            ? spellComp.SpontaneousData.GetHighestCastableLevel()
+            : spellComp.GetHighestSlotLevel();
+    }
+
+    /// <summary>
+    /// The Heighten Spell stepper (PHB p.95: the caster chooses the higher level; batch 11 step 21, SPL-040): each click
+    /// raises the target level by one, from the spell's level + 1 up to the highest level the caster can spend, then
+    /// clears the feat. The button shows the chosen level.
+    /// </summary>
+    private void StepHeighten(SpellData spell, SpellcastingComponent spellComp, int toggleIdx)
+    {
+        int maxLevel = Mathf.Min(MetamagicSystem.MaxSpellLevel, MetamagicPanelHighestSlotLevel(spellComp));
+        if (!_tempMetamagic.Has(MetamagicFeatId.HeightenSpell))
+        {
+            if (spell.SpellLevel + 1 > maxLevel)
+                return;
+            _tempMetamagic.AppliedMetamagic.Add(MetamagicFeatId.HeightenSpell);
+            _tempMetamagic.HeightenToLevel = spell.SpellLevel + 1;
+        }
+        else if (_tempMetamagic.HeightenToLevel < maxLevel)
+        {
+            _tempMetamagic.HeightenToLevel++;
+        }
+        else
+        {
+            _tempMetamagic.AppliedMetamagic.Remove(MetamagicFeatId.HeightenSpell);
+            _tempMetamagic.HeightenToLevel = -1;
+        }
+
+        bool active = _tempMetamagic.Has(MetamagicFeatId.HeightenSpell);
+        RefreshMetamagicToggle(toggleIdx, active);
+        if (toggleIdx >= 0 && toggleIdx < _metamagicToggleTexts.Count)
+        {
+            string label = MetamagicData.GetDisplayName(MetamagicFeatId.HeightenSpell);
+            _metamagicToggleTexts[toggleIdx].text = active
+                ? $"[✓] {label}: to level {_tempMetamagic.HeightenToLevel} (click to raise; past {maxLevel} clears)"
+                : $"[ ] {label}: {MetamagicData.GetShortEffect(MetamagicFeatId.HeightenSpell)}";
+        }
     }
 
     private void CreateMetamagicToggleButton(GameObject parent, MetamagicFeatId mmId,
@@ -3073,8 +3176,13 @@ public class CombatUI : MonoBehaviour
             int capturedIdx = toggleIdx;
             btn.onClick.AddListener(() =>
             {
-                _tempMetamagic.Toggle(capturedId);
-                RefreshMetamagicToggle(capturedIdx, _tempMetamagic.Has(capturedId));
+                if (capturedId == MetamagicFeatId.HeightenSpell)
+                    StepHeighten(capturedSpell, capturedComp, capturedIdx);
+                else
+                {
+                    _tempMetamagic.Toggle(capturedId);
+                    RefreshMetamagicToggle(capturedIdx, _tempMetamagic.Has(capturedId));
+                }
                 UpdateMetamagicInfoText(capturedSpell, capturedComp);
             });
         }
@@ -3118,15 +3226,15 @@ public class CombatUI : MonoBehaviour
 
         int baseLvl = spell.SpellLevel;
         int effectiveLvl = _tempMetamagic.GetEffectiveSpellLevel(baseLvl);
-        bool hasSlot = spellComp.HasSlotAtLevel(effectiveLvl);
-        int maxSlot = spellComp.GetHighestSlotLevel();
+        bool hasSlot = MetamagicPanelHasSlot(spellComp, effectiveLvl);
+        int maxSlot = MetamagicPanelHighestSlotLevel(spellComp);
 
         string slotStatus = hasSlot
             ? $"<color=#80ff80>Slot Available (Lv{effectiveLvl})</color>"
             : $"<color=#ff6060>No Lv{effectiveLvl} Slot! (Max: Lv{maxSlot})</color>";
 
         // D&D 3.5e PHB p.88: a spontaneous cast with metamagic takes a full-round action (decided by the cast's source,
-        // CastActionRules; Quicken is never offered for one, PHB p.98)
+        // MetamagicSystem.GetMetamagicCastingAction; Quicken is never offered for one, PHB p.98)
         bool isSpontaneous = MetamagicPanelCastIsSpontaneous(spellComp, spell);
         string castTimeWarning = "";
         if (isSpontaneous && _tempMetamagic.HasAnyMetamagic)

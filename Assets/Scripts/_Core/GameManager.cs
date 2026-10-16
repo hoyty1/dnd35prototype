@@ -9654,13 +9654,14 @@ public partial class GameManager : MonoBehaviour
         // left open, as the old reset list here overwrote its fields.
         CastSource menuSource = BuildSpellMenuCastSource(pc, spell);
 
-        // The casting action's rules before any targeting or placement (the cast core's Legality stage tests them again;
-        // CastActionRules, batch 11 step 12): no Quicken on a spontaneous cast, one quickened spell per round, a
-        // 1-round casting time needs the full-round action.
+        // The metamagic's and the casting action's rules before any targeting or placement (the cast core's Legality stage
+        // tests them again; CastActionRules.Refusal, batch 11 steps 12 and 21): no Quicken on a spontaneous cast, only a
+        // metamagic feat the PC has, a Heighten that raises the level, at most 9th level (MetamagicSystem); one quickened spell
+        // per round, a 1-round casting time or spontaneous metamagic needs the full-round action.
         string actionRefusal = CastActionRules.Refusal(pc, spell, metamagic, menuSource);
         if (actionRefusal != null)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(actionRefusal, pc.Stats?.CharacterName, spell != null ? spell.Name : "the spell")));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(actionRefusal, pc.Stats?.CharacterName, spell != null ? spell.Name : "the spell", metamagic)));
             ShowActionChoices();
             return;
         }
@@ -11184,8 +11185,15 @@ public partial class GameManager : MonoBehaviour
         => NPCPerformAttack(npc, target, tryStepManeuver);
 
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
+        => TryNPCPerformSpellCastForAI(npc, target, spell, null);
+
+    /// <summary>
+    /// The NPC cast with <paramref name="metamagic"/> (a Scripted cast step's; null: the spell's own prepared metamagic,
+    /// SpellCastRequest.ForAI; batch 11 step 21).
+    /// </summary>
+    public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell, MetamagicData metamagic)
     {
-        bool cast = TryNPCPerformSpellCast(npc, target, spell);
+        bool cast = TryNPCPerformSpellCast(npc, target, spell, metamagic);
         // A spell that drops the last creature of a side ends the combat now, as the PC cast sites do (CORE-011).
         if (cast && EvaluateCombatEnd("TryNPCPerformSpellCast"))
             CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSpellCast");

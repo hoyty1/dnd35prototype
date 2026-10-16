@@ -7,7 +7,8 @@ namespace Tests.Magic
 /// <summary>
 /// Comprehensive tests for the D&D 3.5e Metamagic System (Phases 1-8).
 /// Tests all 9 PHB metamagic feats, stacking, validation, spontaneous/prepared
-/// caster differences, rod integration, and the MetamagicSystem pipeline.
+/// caster differences, rod integration, and the live MetamagicSystem rules (batch 11 step 21, SPL-055:
+/// ValidateMetamagicApplication, the cast core's Legality rule, and GetMetamagicCastingAction, its Cost rule).
 /// Run via MetamagicSystemTests.RunAll() from a runtime test hook.
 /// </summary>
 public static class MetamagicSystemTests
@@ -34,8 +35,6 @@ public static class MetamagicSystemTests
         TestMetamagicData9thLevelCap();
         TestMetamagicDataExceedsMaxSpellLevel();
         TestMetamagicModifierCreation();
-        TestMetamagicSystemPipeline();
-        TestMetamagicSystemPipelineLevelCap();
 
         // Phase 2: Numeric Modifiers
         TestEmpowerSpellDamageIncrease();
@@ -64,8 +63,6 @@ public static class MetamagicSystemTests
         TestHeightenSpellIncreaseDC();
 
         // Phase 6: Spontaneous vs Prepared
-        TestSpontaneousCasterDetection();
-        TestPreparedCasterDetection();
         TestSpontaneousCasterFullRoundAction();
         TestPreparedCasterStandardAction();
         TestQuickenRefusedOnSpontaneousCast();
@@ -73,20 +70,17 @@ public static class MetamagicSystemTests
 
         // Phase 7: Stacking & Validation
         TestMultipleMetamagicStackAdditively();
-        TestNoDuplicateMetamagicValidation();
         TestSpellCompatibilityValidation();
         TestFeatOwnershipValidation();
         TestLevelCapValidation();
         TestFireballEmpoweredWidenedSlotLevel();
 
         // Phase 8: Rod Integration
-        TestRodAppliedMetamagicNoSlotIncrease();
-        TestRodPlusFeatStacking();
+        TestRodMetamagicValidation();
         TestRodTrackingInMetamagicData();
         TestMetamagicDataClone();
 
         // SpellData extensions
-        TestSpellDataMetamagicTracking();
         TestSpellDataClonePreservesMetamagic();
 
         // Feat definitions
@@ -96,6 +90,11 @@ public static class MetamagicSystemTests
         TestApplyMetamagicStampsTheClone();
         TestEmpowerPlusMaximizeIsMaximumPlusHalfANormalRoll();
         TestExtendOfferMatchesItsEffect();
+
+        // Batch 11 step 21: MetamagicSystem is the live legality and casting-action rule (SPL-055)
+        TestValidationExemptions();
+        TestHeightenMustRaiseTheLevel();
+        TestMetamagicCastingActionIsTheCostRule();
 
         Debug.Log($"========== METAMAGIC TESTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -289,36 +288,6 @@ public static class MetamagicSystemTests
         Assert(heighten.HeightenToLevel == 5, "Heighten target level is 5");
     }
 
-    private static void TestMetamagicSystemPipeline()
-    {
-        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6, 40, 4);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3)
-        };
-
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, mods);
-        Assert(result.IsSuccess, "MetamagicSystem pipeline succeeds for Empowered Fireball");
-        Assert(result.EffectiveSpellLevel == 5, $"Empowered Fireball effective level is 5 (got {result.EffectiveSpellLevel})");
-        Assert(result.ModifiedSpell.BaseSpellLevel == 3, "Modified spell tracks base level 3");
-        Assert(result.ModifiedSpell.EffectiveSpellLevel == 5, "Modified spell tracks effective level 5");
-        Assert(result.AppliedMetamagics.Contains(MetamagicFeatId.EmpowerSpell), "Applied metamagics includes Empower");
-    }
-
-    private static void TestMetamagicSystemPipelineLevelCap()
-    {
-        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.MaximizeSpell, 3),  // +3 → 6
-            new MetamagicModifier(MetamagicFeatId.QuickenSpell, 3),   // +4 → 10
-        };
-
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, mods);
-        Assert(!result.IsSuccess, "Pipeline rejects Maximized+Quickened Fireball (level 10 > 9)");
-        Assert(result.ErrorMessage.Contains("exceeds maximum"),
-            $"Error message mentions level cap: {result.ErrorMessage}");
-    }
 
     // ========================================================================
     // PHASE 2: NUMERIC MODIFIERS
@@ -599,31 +568,9 @@ public static class MetamagicSystemTests
     // PHASE 6: SPONTANEOUS VS PREPARED
     // ========================================================================
 
-    private static void TestSpontaneousCasterDetection()
-    {
-        var sorcerer = CreateTestCasterStats("TestSorcerer", "Sorcerer");
-        var bard = CreateTestCasterStats("TestBard", "Bard");
-        var wizard = CreateTestCasterStats("TestWizard", "Wizard");
-
-        Assert(MetamagicSystem.IsSpontaneousCaster(sorcerer), "Sorcerer is spontaneous caster");
-        Assert(MetamagicSystem.IsSpontaneousCaster(bard), "Bard is spontaneous caster");
-        Assert(!MetamagicSystem.IsSpontaneousCaster(wizard), "Wizard is NOT spontaneous caster");
-    }
-
-    private static void TestPreparedCasterDetection()
-    {
-        var wizard = CreateTestCasterStats("TestWizard", "Wizard");
-        var cleric = CreateTestCasterStats("TestCleric", "Cleric");
-        var sorcerer = CreateTestCasterStats("TestSorcerer", "Sorcerer");
-
-        Assert(MetamagicSystem.IsPreparedCaster(wizard), "Wizard is prepared caster");
-        Assert(MetamagicSystem.IsPreparedCaster(cleric), "Cleric is prepared caster");
-        Assert(!MetamagicSystem.IsPreparedCaster(sorcerer), "Sorcerer is NOT prepared caster");
-    }
-
-    // The live action-cost rule is CastActionRules (batch 11 step 12): the cast's source decides the spontaneous
-    // full round (PHB p.88; delegated RAW reading 2026-10-14), not the caster's classes. The class-based
-    // MetamagicSystem.GetMetamagicCastingAction is dormant (step 21 makes MetamagicSystem the live legality rule).
+    // The live action-cost rule: CastActionRules.CastingAction, which since batch 11 step 21 asks
+    // MetamagicSystem.GetMetamagicCastingAction for every source but an item or a delivery; the cast's source decides
+    // the spontaneous full round (PHB p.88; delegated RAW reading 2026-10-14), not the caster's classes.
 
     private static CastSource Source(CastSourceKind kind) => new CastSource { Kind = kind };
 
@@ -732,64 +679,57 @@ public static class MetamagicSystemTests
         Assert(effective == 8, $"Fireball Lv3 + Empower + Widen = Lv8 slot (got {effective})");
     }
 
-    private static void TestNoDuplicateMetamagicValidation()
+    private static MetamagicData Mm(params MetamagicFeatId[] feats)
     {
-        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3),
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3) // Duplicate!
-        };
-
-        string error = MetamagicSystem.ValidateMetamagicApplication(spell, mods);
-        Assert(error != null && error.Contains("twice"),
-            $"Validation rejects duplicate metamagic: {error}");
+        var mm = new MetamagicData();
+        foreach (MetamagicFeatId feat in feats)
+            mm.AppliedMetamagic.Add(feat);
+        return mm;
     }
 
     private static void TestSpellCompatibilityValidation()
     {
         var buffSpell = CreateTestBuffSpell("Shield", 1);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 1) // Can't empower a buff
-        };
-
-        string error = MetamagicSystem.ValidateMetamagicApplication(buffSpell, mods);
-        Assert(error != null && error.Contains("cannot be applied"),
-            $"Validation rejects incompatible metamagic: {error}");
+        string error = MetamagicSystem.ValidateMetamagicApplication(buffSpell, Mm(MetamagicFeatId.EmpowerSpell));
+        Assert(error == MetamagicSystem.RefusalNotApplicable && !MetamagicData.IsApplicable(MetamagicFeatId.EmpowerSpell, buffSpell),
+            $"A feat that cannot modify the spell is refused, as it is never offered (MetamagicData.IsApplicable; PHB p.88, p.93; delegated RAW reading 2026-10-14): {error}");
+        SpellData cure = SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS);
+        Assert(cure != null && MetamagicSystem.ValidateMetamagicApplication(cure, Mm(MetamagicFeatId.ExtendSpell), null, Source(CastSourceKind.SpontaneousConversion)) == MetamagicSystem.RefusalNotApplicable
+               && MetamagicSystem.ValidateMetamagicApplication(cure, Mm(MetamagicFeatId.EmpowerSpell), null, Source(CastSourceKind.SpontaneousConversion)) == null,
+            "A cleric's conversion: Extend cannot modify an instantaneous Cure Light Wounds (PHB p.94), Empower can (PHB p.88, p.93)");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(buffSpell, null) == null
+               && MetamagicSystem.ValidateMetamagicApplication(buffSpell, new MetamagicData()) == null,
+            "No metamagic is always valid");
     }
 
     private static void TestFeatOwnershipValidation()
     {
         var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
         var stats = CreateTestCasterStats("NoFeats", "Wizard"); // No metamagic feats
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3)
-        };
+        MetamagicData empower = Mm(MetamagicFeatId.EmpowerSpell);
 
-        string error = MetamagicSystem.ValidateMetamagicApplication(spell, mods, stats);
-        Assert(error != null && error.Contains("does not have"),
-            $"Validation rejects missing feat: {error}");
+        string error = MetamagicSystem.ValidateMetamagicApplication(spell, empower, stats, Source(CastSourceKind.PreparedSlot));
+        Assert(error == MetamagicSystem.RefusalMissingFeat,
+            $"Validation rejects a feat the caster lacks (PHB p.88): {error}");
 
         // With feat it should pass
         var statsWithFeat = CreateTestCasterStats("HasFeat", "Wizard", "Empower Spell");
-        string errorWithFeat = MetamagicSystem.ValidateMetamagicApplication(spell, mods, statsWithFeat);
+        string errorWithFeat = MetamagicSystem.ValidateMetamagicApplication(spell, empower, statsWithFeat, Source(CastSourceKind.PreparedSlot));
         Assert(errorWithFeat == null, "Validation passes when character has the feat");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, empower) == null,
+            "Without the caster's stats the feat is not tested");
     }
 
     private static void TestLevelCapValidation()
     {
         var spell = CreateTestDamageSpell("TestSpell", 4, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.MaximizeSpell, 4),  // +3 → 7
-            new MetamagicModifier(MetamagicFeatId.QuickenSpell, 4),   // +4 → 11
-        };
-
-        string error = MetamagicSystem.ValidateMetamagicApplication(spell, mods);
-        Assert(error != null && error.Contains("exceeds maximum"),
-            $"Validation rejects level cap violation: {error}");
+        // +3 +4 = 11th level
+        string error = MetamagicSystem.ValidateMetamagicApplication(spell, Mm(MetamagicFeatId.MaximizeSpell, MetamagicFeatId.QuickenSpell));
+        Assert(error == MetamagicSystem.RefusalAboveNinth,
+            $"Validation rejects an adjusted level above 9th: {error}");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(CreateTestDamageSpell("TestSpell", 2, 10, 6),
+                   Mm(MetamagicFeatId.MaximizeSpell, MetamagicFeatId.QuickenSpell)) == null,
+            "A 2nd-level spell maximized and quickened (9th) is valid");
     }
 
     private static void TestFireballEmpoweredWidenedSlotLevel()
@@ -813,35 +753,34 @@ public static class MetamagicSystemTests
     // PHASE 8: ROD INTEGRATION
     // ========================================================================
 
-    private static void TestRodAppliedMetamagicNoSlotIncrease()
+    /// <summary>
+    /// DMG p.233 (metamagic rods): a rod's feat needs no feat of the caster's and raises no level, so the feat test and the
+    /// level cap skip it (MetamagicSystem.ValidateMetamagicApplication; rods are data only, ITM-018).
+    /// </summary>
+    private static void TestRodMetamagicValidation()
     {
         var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3, true) // Rod-applied
-        };
+        var noFeats = CreateTestCasterStats("NoFeats", "Wizard");
+        var rod = new MetamagicData();
+        rod.ApplyFromRod(MetamagicFeatId.EmpowerSpell);
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, rod, noFeats, Source(CastSourceKind.PreparedSlot)) == null,
+            "A rod's Empower needs no Empower Spell feat");
+        Assert(rod.GetEffectiveSpellLevelWithRods(3) == 3, "A rod's Empower does not raise the slot level");
 
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, mods);
-        Assert(result.IsSuccess, "Rod-applied metamagic succeeds");
-        Assert(result.EffectiveSpellLevel == 3,
-            $"Rod-applied Empower does not increase slot level (got {result.EffectiveSpellLevel}, expected 3)");
-        Assert(result.HasRodMetamagic, "Result tracks rod metamagic");
-    }
+        var rodPlusFeat = new MetamagicData();
+        rodPlusFeat.ApplyFromRod(MetamagicFeatId.EmpowerSpell);
+        rodPlusFeat.AppliedMetamagic.Add(MetamagicFeatId.MaximizeSpell);
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, rodPlusFeat, noFeats, Source(CastSourceKind.PreparedSlot)) == MetamagicSystem.RefusalMissingFeat,
+            "A feat applied with a rod's still needs the caster's own feat");
+        Assert(rodPlusFeat.GetEffectiveSpellLevelWithRods(3) == 6, "Fireball + rod Empower (+0) + feat Maximize (+3) = 6th");
 
-    private static void TestRodPlusFeatStacking()
-    {
-        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3, true),  // Rod: +0
-            new MetamagicModifier(MetamagicFeatId.MaximizeSpell, 3, false), // Feat: +3
-        };
-
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, mods);
-        Assert(result.IsSuccess, "Rod+feat combination succeeds");
-        Assert(result.EffectiveSpellLevel == 6,
-            $"Fireball + Rod Empower (+0) + Feat Maximize (+3) = Lv6 (got {result.EffectiveSpellLevel})");
-        Assert(result.HasRodMetamagic, "Result tracks rod metamagic");
+        var high = CreateTestDamageSpell("High", 5, 10, 6);
+        var rodHigh = new MetamagicData();
+        rodHigh.ApplyFromRod(MetamagicFeatId.QuickenSpell);
+        rodHigh.AppliedMetamagic.Add(MetamagicFeatId.SilentSpell);
+        Assert(MetamagicSystem.ValidateMetamagicApplication(high, Mm(MetamagicFeatId.QuickenSpell, MetamagicFeatId.SilentSpell)) == MetamagicSystem.RefusalAboveNinth
+               && MetamagicSystem.ValidateMetamagicApplication(high, rodHigh) == null,
+            "The 9th-level cap counts only the feats' levels, not a rod's (5 + 4 + 1 refused; 5 + rod + 1 allowed)");
     }
 
     private static void TestRodTrackingInMetamagicData()
@@ -882,25 +821,6 @@ public static class MetamagicSystemTests
     // ========================================================================
     // SPELLDATA EXTENSIONS
     // ========================================================================
-
-    private static void TestSpellDataMetamagicTracking()
-    {
-        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
-        var mods = new List<MetamagicModifier>
-        {
-            new MetamagicModifier(MetamagicFeatId.EmpowerSpell, 3),
-            new MetamagicModifier(MetamagicFeatId.WidenSpell, 3)
-        };
-
-        var result = MetamagicSystem.PrepareMetamagicSpell(spell, mods);
-        Assert(result.IsSuccess, "Pipeline succeeds");
-        Assert(result.ModifiedSpell.HasMetamagic, "Modified spell has metamagic flag");
-        Assert(result.ModifiedSpell.HasMetamagicType(MetamagicFeatId.EmpowerSpell), "Tracks Empower");
-        Assert(result.ModifiedSpell.HasMetamagicType(MetamagicFeatId.WidenSpell), "Tracks Widen");
-        Assert(!result.ModifiedSpell.HasMetamagicType(MetamagicFeatId.QuickenSpell), "Does not track unapplied Quicken");
-        Assert(result.ModifiedSpell.BaseSpellLevel == 3, "BaseSpellLevel is 3");
-        Assert(result.ModifiedSpell.EffectiveSpellLevel == 8, "EffectiveSpellLevel is 8");
-    }
 
     // ========================================================================
     // BATCH 11 STEP 19 (SPL-038, SPL-097, SPL-095)
@@ -1065,6 +985,82 @@ public static class MetamagicSystemTests
             }
         }
         Assert(found == 9, $"All 9 metamagic feats registered in FeatDefinitions ({found}/9)");
+    }
+
+    // ========================================================================
+    // BATCH 11 STEP 21 (SPL-055): MetamagicSystem is the live rule
+    // ========================================================================
+
+    /// <summary>
+    /// The sources whose metamagic is not tested at the cast: a scroll or wand carries what its maker applied (DMG p.238,
+    /// p.245), a held charge's delivery was tested at the hold (PHB p.141), the F12 panel's toggles stand in for the feats;
+    /// Quicken on a spontaneous cast is refused whatever the caster's feats (PHB p.98 Special), a hold of a spontaneous
+    /// spell included.
+    /// </summary>
+    private static void TestValidationExemptions()
+    {
+        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
+        var noFeats = CreateTestCasterStats("NoFeats", "Wizard");
+        MetamagicData empower = Mm(MetamagicFeatId.EmpowerSpell);
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, empower, noFeats, Source(CastSourceKind.Scroll)) == null
+               && MetamagicSystem.ValidateMetamagicApplication(spell, empower, noFeats, Source(CastSourceKind.Wand)) == null,
+            "A scroll's or wand's metamagic needs no feat of the reader's (DMG p.238, p.245)");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, empower, noFeats, Source(CastSourceKind.HeldChargeDelivery)) == null,
+            "A held charge's delivery is not tested again (PHB p.141)");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, empower, noFeats, Source(CastSourceKind.TestPanel)) == null
+               && MetamagicSystem.ValidateMetamagicApplication(CreateTestDamageSpell("High", 7, 10, 6), Mm(MetamagicFeatId.MaximizeSpell), noFeats, Source(CastSourceKind.TestPanel)) == MetamagicSystem.RefusalAboveNinth,
+            "The F12 panel's toggles stand in for the feats; the level cap still binds it");
+
+        var quickenFeat = CreateTestCasterStats("Quickener", "Sorcerer", "Quicken Spell");
+        MetamagicData quicken = Mm(MetamagicFeatId.QuickenSpell);
+        Assert(MetamagicSystem.ValidateMetamagicApplication(spell, quicken, quickenFeat, Source(CastSourceKind.SpontaneousSlot)) == MetamagicSystem.RefusalQuickenSpontaneous
+               && MetamagicSystem.ValidateMetamagicApplication(spell, quicken, quickenFeat, new CastSource { Kind = CastSourceKind.HeldChargeHold, HeldFromSpontaneousSlot = true }) == MetamagicSystem.RefusalQuickenSpontaneous
+               && MetamagicSystem.ValidateMetamagicApplication(spell, quicken, quickenFeat, Source(CastSourceKind.PreparedSlot)) == null,
+            "Quicken Spell is refused on a spontaneous cast and a hold of one even with the feat, allowed on a prepared spell (PHB p.98)");
+        Assert(CastActionRules.DescribeRefusal(MetamagicSystem.RefusalMissingFeat, "Ann", "Fireball", empower).Contains("Empower")
+               && CastActionRules.DescribeRefusal(CastActionRules.RefusalNoFullRoundAction, "Ann", "Sleep").Contains("full-round"),
+            "CastActionRules.DescribeRefusal gives the metamagic refusals' text and its own");
+    }
+
+    /// <summary>PHB p.95 (Heighten Spell): a heightened spell has a higher spell level than normal; no raise, no Heighten.</summary>
+    private static void TestHeightenMustRaiseTheLevel()
+    {
+        var missile = CreateTestDamageSpell("Missile", 1, 1, 4);
+        var heighten = Mm(MetamagicFeatId.HeightenSpell);
+        heighten.HeightenToLevel = 1;
+        Assert(MetamagicSystem.ValidateMetamagicApplication(missile, heighten) == MetamagicSystem.RefusalHeightenNoRaise,
+            "Heighten to the spell's own level is refused (PHB p.95)");
+        heighten.HeightenToLevel = -1;
+        Assert(MetamagicSystem.ValidateMetamagicApplication(missile, heighten) == MetamagicSystem.RefusalHeightenNoRaise,
+            "Heighten with no level chosen is refused");
+        heighten.HeightenToLevel = 4;
+        var withFeat = CreateTestCasterStats("Heightener", "Wizard", "Heighten Spell");
+        Assert(MetamagicSystem.ValidateMetamagicApplication(missile, heighten, withFeat, Source(CastSourceKind.PreparedSlot)) == null
+               && heighten.GetEffectiveSpellLevel(1) == 4,
+            "Heighten to 4th is valid and takes a 4th-level slot");
+    }
+
+    /// <summary>
+    /// The cast core's Cost stage charges MetamagicSystem.GetMetamagicCastingAction (batch 11 step 21), the rule
+    /// CastActionRules.CastingAction gives the PC menu and the AI: the same answer for every slot source.
+    /// </summary>
+    private static void TestMetamagicCastingActionIsTheCostRule()
+    {
+        var spell = CreateTestDamageSpell("Fireball", 3, 10, 6);
+        MetamagicData empower = Mm(MetamagicFeatId.EmpowerSpell);
+        MetamagicData quicken = Mm(MetamagicFeatId.QuickenSpell);
+        Assert(MetamagicSystem.GetMetamagicCastingAction(spell, empower, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.FullRound
+               && MetamagicSystem.GetMetamagicCastingAction(spell, empower, Source(CastSourceKind.SpontaneousConversion)) == CastActionCost.FullRound
+               && MetamagicSystem.GetMetamagicCastingAction(spell, empower, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Standard
+               && MetamagicSystem.GetMetamagicCastingAction(spell, quicken, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Free
+               && MetamagicSystem.GetMetamagicCastingAction(spell, null, Source(CastSourceKind.SpontaneousSlot)) == CastActionCost.Standard,
+            "GetMetamagicCastingAction: spontaneous metamagic a full round, prepared metamagic its casting time, quickened a free action (PHB p.88, p.98)");
+        bool same = true;
+        foreach (CastSourceKind kind in new[] { CastSourceKind.PreparedSlot, CastSourceKind.SpontaneousSlot, CastSourceKind.SpontaneousConversion,
+                     CastSourceKind.HeldChargeHold, CastSourceKind.TestPanel })
+            foreach (MetamagicData mm in new[] { null, empower, quicken })
+                same &= MetamagicSystem.GetMetamagicCastingAction(spell, mm, Source(kind)) == CastActionRules.CastingAction(spell, mm, Source(kind));
+        Assert(same, "CastActionRules.CastingAction is GetMetamagicCastingAction for every slot, hold and F12 source");
     }
 }
 }

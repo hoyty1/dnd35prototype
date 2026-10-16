@@ -1,19 +1,11 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 // ============================================================================
 // D&D 3.5 Metamagic System - MetamagicModifier & MetamagicSystem
 // ============================================================================
-// Provides the formal spell modification pipeline:
-//   1. Clone original spell
-//   2. Apply each metamagic modifier
-//   3. Track effective spell level (base + increases from feats, not rods)
-//   4. Cap at 9th level maximum
-//   5. Track which metamagics applied (feat vs rod)
-//
-// Integrates with existing MetamagicData, SpellCaster, SpellcastingComponent.
+// MetamagicSystem: the live metamagic legality and casting-action rule of every cast (batch 11 step 21, SPL-055).
+// MetamagicModifier: one feat applied by a feat or a rod, used by MetamagicRodActivation (rods are data only, ITM-018).
 // ============================================================================
 
 /// <summary>
@@ -66,364 +58,156 @@ public class MetamagicModifier
 }
 
 /// <summary>
-/// Orchestrates the complete metamagic spell modification pipeline.
-/// Central entry point for applying metamagic to spells with full validation.
+/// The metamagic rules of a cast, one for every caster and path (batch 11 step 21, metamagic-legality-and-slots;
+/// docs/designs/cast_core_batch11.md; SPL-055): the cast core's Legality stage asks <see cref="ValidateMetamagicApplication"/>
+/// (GameManager.CheckCastMetamagicLegality) and its Cost stage charges <see cref="GetMetamagicCastingAction"/> (through
+/// CastActionRules.CastingAction, which adds the item and held-charge costs); the PC spell menu checks the same rules before
+/// targeting (CastActionRules.Refusal) and the AI's spell choice skips what they refuse, so PCs and NPCs are bound alike
+/// (docs/systems/PC_NPC_PARITY.md). Pure: no side effects. The metamagic's data changes are
+/// SpellCaster.ApplyMetamagicToSpellData's; the slot it spends is SpellcastingComponent's (CastWizardSpellWithMetamagic,
+/// SpontaneousCastFromSlot).
+///
+/// RAW applied:
+/// - PHB p.88 (Metamagic Feats: Wizards and Divine Spellcasters; Sorcerers and Bards; Spontaneous Casting and Metamagic
+///   Feats): a prepared metamagic spell is cast in its normal casting time; a spontaneous caster, or a cleric converting
+///   to a cure or inflict spell, takes a full-round action for a 1-action metamagic spell. The cast's source decides,
+///   not the caster's classes (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1; the source is still picked per
+///   caster, CastSource.SlotKindFor, SPL-159), and a free- or swift-action spell cast spontaneously with metamagic is a
+///   full-round action too (delegated RAW reading 2026-10-14). A longer casting time takes an extra full round, which
+///   the game cannot express (SPL-167): it costs the full round.
+/// - PHB p.98 (Quicken Spell): a quickened spell is a free action; the feat cannot be applied to a spell cast
+///   spontaneously (Special).
+/// - PHB p.88 and the feats' entries (PHB p.93-101): the caster needs the feat; the adjusted level is at most 9th; a
+///   heightened spell has a higher level than normal (PHB p.95), so a Heighten that raises nothing is refused. A feat
+///   cannot be applied to a spell it cannot modify: PHB p.88 says metamagic feats cannot be used with all spells and
+///   sends the reader to each feat's list of the spells it can't modify, the "not affected" spells of Empower (p.93),
+///   Extend and Enlarge (p.94), Maximize (p.97) and Widen (p.102); the test is MetamagicData.IsApplicable, the same
+///   test the metamagic panel and the preparation screen offer by, so a Scripted or AI cast is refused what a PC is
+///   never offered (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1). IsApplicable does not yet test Silent or
+///   Still on a spell without that component (PHB p.100, p.101) or Silent on a bard spell (PHB p.100) (SPL-184).
+///   Quicken's casting-time limit (PHB p.98) is not tested yet (SPL-098).
+/// - Items and the F12 panel: a scroll or wand carries the metamagic it was made with (DMG p.238, p.245; its maker had
+///   the feat), so its cast is not tested; a held charge's delivery was tested at the hold (no casting, PHB p.141); the
+///   F12 panel's toggles stand in for the feats (a developer tool, docs/TESTING.md 4.2), the other rules bind it.
+/// - Metamagic rods (DMG p.233) apply a feat the caster lacks without raising the level
+///   (MetamagicData.RodAppliedMetamagic): the feat test and the level cap skip a rod's feat; no cast path uses a rod yet
+///   (ITM-018).
 /// </summary>
 public static class MetamagicSystem
 {
     /// <summary>Maximum effective spell level in D&D 3.5e.</summary>
     public const int MaxSpellLevel = 9;
 
-    // ========================================================================
-    // MAIN PIPELINE
-    // ========================================================================
+    public const string RefusalQuickenSpontaneous = "quicken-spontaneous";
+    public const string RefusalMissingFeat = "metamagic-missing-feat";
+    public const string RefusalAboveNinth = "metamagic-above-9th";
+    public const string RefusalHeightenNoRaise = "metamagic-heighten-no-raise";
+    public const string RefusalNotApplicable = "metamagic-not-applicable";
 
-    /// <summary>
-    /// Apply metamagic modifiers to a spell through the full pipeline.
-    /// Returns a modified clone of the spell with all metamagic effects applied.
-    /// The original spell is never modified.
-    /// </summary>
-    /// <param name="baseSpell">Original spell data (not modified).</param>
-    /// <param name="modifiers">List of metamagic modifiers to apply.</param>
-    /// <returns>Modified spell clone, or null if validation fails.</returns>
-    public static MetamagicSpellResult PrepareMetamagicSpell(SpellData baseSpell, List<MetamagicModifier> modifiers)
+    /// <summary>True when <paramref name="metamagic"/> quickens the cast (a held charge's delivery is not a casting, PHB p.141).</summary>
+    public static bool IsQuickened(MetamagicData metamagic, CastSource source)
     {
-        if (baseSpell == null)
-            return MetamagicSpellResult.Failure("Base spell is null.");
-
-        if (modifiers == null || modifiers.Count == 0)
-            return MetamagicSpellResult.Success(baseSpell.Clone(), baseSpell.SpellLevel, new List<MetamagicFeatId>(), false);
-
-        // Step 1: Clone the spell
-        SpellData modified = baseSpell.Clone();
-
-        // Step 2: Build MetamagicData for the existing SpellCaster pipeline
-        var metamagicData = new MetamagicData();
-        var appliedTypes = new List<MetamagicFeatId>();
-        int totalFeatSlotIncrease = 0;
-        bool hasRodMetamagic = false;
-
-        foreach (var mod in modifiers)
-        {
-            metamagicData.AppliedMetamagic.Add(mod.Type);
-            appliedTypes.Add(mod.Type);
-
-            if (mod.Type == MetamagicFeatId.HeightenSpell && mod.HeightenToLevel > 0)
-            {
-                metamagicData.HeightenToLevel = mod.HeightenToLevel;
-            }
-
-            if (!mod.AppliedByRod)
-            {
-                totalFeatSlotIncrease += mod.SlotIncrease;
-            }
-            else
-            {
-                hasRodMetamagic = true;
-            }
-        }
-
-        // Step 3: Calculate effective spell level (only feat-based increases count)
-        int effectiveLevel = baseSpell.SpellLevel + totalFeatSlotIncrease;
-
-        // Step 4: Enforce 9th-level cap
-        if (effectiveLevel > MaxSpellLevel)
-        {
-            return MetamagicSpellResult.Failure(
-                $"Effective spell level {effectiveLevel} exceeds maximum ({MaxSpellLevel}). " +
-                $"Base level {baseSpell.SpellLevel} + metamagic adjustment {totalFeatSlotIncrease} = {effectiveLevel}.");
-        }
-
-        // Step 5: Apply pre-cast modifications via existing SpellCaster pipeline
-        SpellCaster.ApplyMetamagicToSpellData(modified, metamagicData);
-
-        // Step 6: Set tracking fields on the modified spell
-        modified.BaseSpellLevel = baseSpell.SpellLevel;
-        modified.EffectiveSpellLevel = effectiveLevel;
-        modified.AppliedMetamagics = new List<MetamagicFeatId>(appliedTypes);
-        modified.HasRodMetamagic = hasRodMetamagic;
-        modified.MetamagicDataRef = metamagicData;
-        modified.IsPreparedMetamagicSlotSpell = true; // a prepared metamagic spell (SpellcastingComponent.CountAvailablePreparedSpell)
-
-        Debug.Log($"[MetamagicSystem] Prepared {baseSpell.Name}: " +
-                  $"Lv{baseSpell.SpellLevel} → Lv{effectiveLevel} " +
-                  $"({string.Join(", ", appliedTypes.Select(t => MetamagicData.GetDisplayName(t)))}" +
-                  $"{(hasRodMetamagic ? " [rod]" : "")})");
-
-        return MetamagicSpellResult.Success(modified, effectiveLevel, appliedTypes, hasRodMetamagic);
+        return metamagic != null && metamagic.Has(MetamagicFeatId.QuickenSpell)
+               && (source == null || source.Kind != CastSourceKind.HeldChargeDelivery);
     }
 
     /// <summary>
-    /// Simplified pipeline: apply metamagic from a MetamagicData instance.
-    /// Used for backward compatibility with existing code paths.
+    /// Why <paramref name="metamagic"/> may not be applied to this cast of <paramref name="spell"/>, or null (see the class
+    /// summary): Quicken Spell on a spontaneous cast, a Heighten that raises nothing, a feat that cannot modify the spell
+    /// (PHB p.88), a feat the caster lacks (tested only when <paramref name="casterStats"/> is given), an adjusted level
+    /// above 9th.
+    /// No metamagic, a scroll, a wand and a held charge's delivery always pass.
     /// </summary>
-    public static MetamagicSpellResult PrepareMetamagicSpell(SpellData baseSpell, MetamagicData metamagicData)
+    public static string ValidateMetamagicApplication(SpellData spell, MetamagicData metamagic,
+        CharacterStats casterStats = null, CastSource source = null)
     {
-        if (metamagicData == null || !metamagicData.HasAnyMetamagic)
-            return MetamagicSpellResult.Success(baseSpell.Clone(), baseSpell.SpellLevel, new List<MetamagicFeatId>(), false);
+        if (spell == null || metamagic == null || !metamagic.HasAnyMetamagic)
+            return null;
+        if (source != null && (source.IsItem || source.Kind == CastSourceKind.HeldChargeDelivery))
+            return null;
 
-        var modifiers = new List<MetamagicModifier>();
-        foreach (var mmId in metamagicData.AppliedMetamagic)
+        if (IsQuickened(metamagic, source) && source != null && source.IsSpontaneous)
+            return RefusalQuickenSpontaneous;
+
+        if (metamagic.Has(MetamagicFeatId.HeightenSpell) && metamagic.HeightenToLevel <= spell.SpellLevel)
+            return RefusalHeightenNoRaise;
+
+        // PHB p.88: a feat cannot be used with a spell its entry says it cannot modify (delegated RAW reading 2026-10-14).
+        // The cast's clone already carries the metamagic's changes (SpellCaster.ApplyMetamagicToSpellData), which leave
+        // every input of IsApplicable's tests as it was (effect type, duration kind, range, area).
+        foreach (MetamagicFeatId feat in metamagic.AppliedMetamagic)
         {
-            var mod = new MetamagicModifier(mmId, baseSpell.SpellLevel);
-            if (mmId == MetamagicFeatId.HeightenSpell)
-                mod.HeightenToLevel = metamagicData.HeightenToLevel;
-            modifiers.Add(mod);
+            if (!MetamagicData.IsApplicable(feat, spell))
+                return RefusalNotApplicable;
         }
 
-        return PrepareMetamagicSpell(baseSpell, modifiers);
-    }
-
-    // ========================================================================
-    // VALIDATION
-    // ========================================================================
-
-    /// <summary>
-    /// Validate whether a set of metamagic modifiers can be applied to a spell.
-    /// Returns null if valid, or an error message string if invalid.
-    /// </summary>
-    public static string ValidateMetamagicApplication(
-        SpellData spell,
-        List<MetamagicModifier> modifiers,
-        CharacterStats casterStats = null)
-    {
-        if (spell == null) return "Spell is null.";
-        if (modifiers == null || modifiers.Count == 0) return null; // No metamagic = always valid
-
-        // Check for duplicate metamagic types (D&D 3.5e: same metamagic can't be applied twice)
-        var seenTypes = new HashSet<MetamagicFeatId>();
-        foreach (var mod in modifiers)
+        bool featsSupplied = source != null && source.Kind == CastSourceKind.TestPanel;
+        if (casterStats != null && !featsSupplied)
         {
-            if (mod.Type == MetamagicFeatId.None) continue;
-            if (!seenTypes.Add(mod.Type))
-                return $"Cannot apply {MetamagicData.GetDisplayName(mod.Type)} twice to the same spell.";
-        }
-
-        // Check spell compatibility for each metamagic
-        foreach (var mod in modifiers)
-        {
-            if (!MetamagicData.IsApplicable(mod.Type, spell))
-                return $"{MetamagicData.GetDisplayName(mod.Type)} cannot be applied to {spell.Name}.";
-        }
-
-        // Check character has the required feats (if caster stats provided)
-        if (casterStats != null)
-        {
-            foreach (var mod in modifiers)
+            foreach (MetamagicFeatId feat in metamagic.AppliedMetamagic)
             {
-                if (mod.AppliedByRod) continue; // Rod metamagics don't require feats
-                string featName = MetamagicData.GetFeatName(mod.Type);
-                if (!casterStats.HasFeat(featName))
-                    return $"Character does not have the {featName} feat.";
+                if (metamagic.IsFromRod(feat))
+                    continue;
+                if (!casterStats.HasFeat(MetamagicData.GetFeatName(feat)))
+                    return RefusalMissingFeat;
             }
         }
 
-        // Calculate effective level and check 9th-level cap
-        int totalFeatIncrease = 0;
-        foreach (var mod in modifiers)
+        if (spell.SpellLevel + metamagic.GetFeatOnlyLevelAdjustment(spell.SpellLevel) > MaxSpellLevel)
+            return RefusalAboveNinth;
+        return null;
+    }
+
+    /// <summary>
+    /// The action a cast of <paramref name="spell"/> from a slot, a conversion, a hold or the F12 panel takes with
+    /// <paramref name="metamagic"/> (see the class summary): a free action when quickened (PHB p.98); a full-round action
+    /// for any metamagic cast whose source is spontaneous (PHB p.88); else the spell's casting time (SpellData.ActionType,
+    /// PHB p.174). A scroll, a wand and a held charge's delivery cost their own action: CastActionRules.CastingAction
+    /// answers for them and asks this for every other source.
+    /// </summary>
+    public static CastActionCost GetMetamagicCastingAction(SpellData spell, MetamagicData metamagic, CastSource source)
+    {
+        if (IsQuickened(metamagic, source))
+            return CastActionCost.Free;
+
+        // PHB p.88: a metamagic spell cast spontaneously takes a full-round action, a free- or swift-action spell too
+        // (delegated RAW reading 2026-10-14); for a 1-round spell an extra full round, which costs the full round here
+        // (SPL-167).
+        if (metamagic != null && metamagic.HasAnyMetamagic && source != null && source.IsSpontaneous)
+            return CastActionCost.FullRound;
+
+        SpellActionType dataAction = spell != null ? spell.ActionType : SpellActionType.Standard;
+        if (dataAction == SpellActionType.Free)
+            return CastActionCost.Free;
+        if (dataAction == SpellActionType.Swift)
+            return CastActionCost.Swift;
+        return dataAction == SpellActionType.FullRound ? CastActionCost.FullRound : CastActionCost.Standard;
+    }
+
+    /// <summary>The player-facing text of a <see cref="ValidateMetamagicApplication"/> code, or null for another code.</summary>
+    public static string DescribeRefusal(string refusal, string casterName, string spellName, MetamagicData metamagic)
+    {
+        string feats = "metamagic";
+        if (metamagic != null && metamagic.HasAnyMetamagic)
         {
-            if (!mod.AppliedByRod)
-                totalFeatIncrease += mod.SlotIncrease;
+            var ordered = new System.Collections.Generic.List<MetamagicFeatId>(metamagic.AppliedMetamagic);
+            ordered.Sort((a, b) => ((int)a).CompareTo((int)b));
+            feats = string.Join(" and ", ordered.ConvertAll(MetamagicData.GetDisplayName));
         }
-        int effectiveLevel = spell.SpellLevel + totalFeatIncrease;
-        if (effectiveLevel > MaxSpellLevel)
-            return $"Effective spell level {effectiveLevel} exceeds maximum ({MaxSpellLevel}).";
-
-        return null; // Valid
-    }
-
-    /// <summary>
-    /// Validate using MetamagicData (backward compatible).
-    /// </summary>
-    public static string ValidateMetamagicApplication(SpellData spell, MetamagicData metamagicData, CharacterStats casterStats = null)
-    {
-        if (metamagicData == null || !metamagicData.HasAnyMetamagic) return null;
-
-        var modifiers = new List<MetamagicModifier>();
-        foreach (var mmId in metamagicData.AppliedMetamagic)
+        switch (refusal)
         {
-            var mod = new MetamagicModifier(mmId, spell.SpellLevel);
-            if (mmId == MetamagicFeatId.HeightenSpell)
-            {
-                mod.HeightenToLevel = metamagicData.HeightenToLevel;
-                mod.SlotIncrease = Mathf.Max(0, metamagicData.HeightenToLevel - spell.SpellLevel);
-            }
-            modifiers.Add(mod);
+            case RefusalQuickenSpontaneous:
+                return $"{casterName} cannot quicken {spellName}: Quicken Spell cannot be applied to a spell cast spontaneously (PHB p.98).";
+            case RefusalMissingFeat:
+                return $"{casterName} cannot cast {spellName} with {feats}: the caster does not have the metamagic feat (PHB p.88).";
+            case RefusalNotApplicable:
+                return $"{casterName} cannot cast {spellName} with {feats}: the feat cannot modify this spell (PHB p.88 and the feat's entry).";
+            case RefusalHeightenNoRaise:
+                return $"{casterName} cannot heighten {spellName} without raising its level (PHB p.95).";
+            case RefusalAboveNinth:
+                return $"{casterName} cannot cast {spellName} with {feats}: its adjusted level would be above 9th (PHB p.88).";
+            default:
+                return null;
         }
-
-        return ValidateMetamagicApplication(spell, modifiers, casterStats);
-    }
-
-    // ========================================================================
-    // SPONTANEOUS VS PREPARED CASTER RULES
-    // ========================================================================
-
-    /// <summary>
-    /// Determine if a caster is a spontaneous caster (Sorcerer, Bard).
-    /// Spontaneous casters apply metamagic on-the-fly and take a full-round action
-    /// (instead of standard action) when using metamagic.
-    /// </summary>
-    public static bool IsSpontaneousCaster(CharacterStats stats)
-    {
-        if (stats == null) return false;
-        return stats.HasClass("Sorcerer") || stats.HasClass("Bard");
-    }
-
-    /// <summary>
-    /// Determine if a caster is a prepared caster (Wizard, Cleric, Druid, Paladin, Ranger).
-    /// Prepared casters choose metamagic during preparation; casting time is unchanged.
-    /// </summary>
-    public static bool IsPreparedCaster(CharacterStats stats)
-    {
-        if (stats == null) return false;
-        return stats.IsWizard || stats.IsCleric ||
-               stats.HasClass("Druid") || stats.IsPaladin || stats.HasClass("Ranger");
-    }
-
-    /// <summary>
-    /// Get the casting action type for a metamagic spell, considering caster type.
-    /// D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
-    /// (instead of standard action). Exception: Quicken Spell still results in a free action.
-    /// Dormant, and not the live rule: no cast path calls it. The cast core charges the action by
-    /// CastActionRules.CastingAction, which decides the spontaneous full round by the cast's source, not the caster's
-    /// classes, and refuses Quicken on a spontaneous cast (PHB p.88, p.98; batch 11 step 12, SPL-159).
-    /// </summary>
-    public static SpellActionType GetMetamagicCastingAction(
-        SpellData spell,
-        MetamagicData metamagic,
-        CharacterStats casterStats)
-    {
-        if (metamagic == null || !metamagic.HasAnyMetamagic)
-            return spell.ActionType;
-
-        // Quicken Spell always makes casting a free action, regardless of caster type
-        if (metamagic.Has(MetamagicFeatId.QuickenSpell))
-            return SpellActionType.Free;
-
-        // Spontaneous casters (Sorcerer/Bard): metamagic → full-round action
-        if (IsSpontaneousCaster(casterStats))
-        {
-            // Standard action spells become full-round
-            if (spell.ActionType == SpellActionType.Standard)
-                return SpellActionType.FullRound;
-
-            // Full-round action spells become full-round + standard (not implemented as separate type;
-            // in practice this means they take longer but we keep FullRound for now)
-            return spell.ActionType;
-        }
-
-        // Prepared casters: no change to casting time (metamagic is applied during preparation)
-        return spell.ActionType;
-    }
-
-    // ========================================================================
-    // UTILITY METHODS
-    // ========================================================================
-
-    /// <summary>
-    /// Get the maximum base spell level that can have a specific metamagic applied
-    /// while still fitting in a 9th-level slot.
-    /// </summary>
-    public static int GetMaxBaseSpellLevel(MetamagicFeatId feat)
-    {
-        int adjustment = MetamagicData.GetStandardLevelAdjustment(feat);
-        return MaxSpellLevel - adjustment;
-    }
-
-    /// <summary>
-    /// Get available metamagic feats a character can apply to a specific spell.
-    /// Filters by: character has feat, spell is compatible, result fits in 9th-level slot.
-    /// </summary>
-    public static List<MetamagicFeatId> GetAvailableMetamagics(
-        SpellData spell,
-        CharacterStats stats,
-        MetamagicData currentMetamagic = null)
-    {
-        var available = new List<MetamagicFeatId>();
-        if (spell == null || stats == null) return available;
-
-        int currentIncrease = currentMetamagic?.GetTotalLevelAdjustment(spell.SpellLevel) ?? 0;
-
-        foreach (var mmId in MetamagicData.AllMetamagicFeats)
-        {
-            // Skip if character doesn't have the feat
-            string featName = MetamagicData.GetFeatName(mmId);
-            if (!stats.HasFeat(featName)) continue;
-
-            // Skip if already applied (no duplicates)
-            if (currentMetamagic != null && currentMetamagic.Has(mmId)) continue;
-
-            // Skip if not applicable to this spell
-            if (!MetamagicData.IsApplicable(mmId, spell)) continue;
-
-            // Skip if adding this would exceed 9th level
-            int additionalIncrease = MetamagicData.GetStandardLevelAdjustment(mmId);
-            if (spell.SpellLevel + currentIncrease + additionalIncrease > MaxSpellLevel) continue;
-
-            available.Add(mmId);
-        }
-
-        return available;
-    }
-
-    /// <summary>
-    /// Calculate the total slot level increase for a set of metamagic modifiers,
-    /// excluding rod-applied metamagics.
-    /// </summary>
-    public static int CalculateTotalSlotIncrease(List<MetamagicModifier> modifiers)
-    {
-        if (modifiers == null) return 0;
-        int total = 0;
-        foreach (var mod in modifiers)
-        {
-            if (!mod.AppliedByRod)
-                total += mod.SlotIncrease;
-        }
-        return total;
-    }
-}
-
-/// <summary>
-/// Result of a metamagic spell preparation through MetamagicSystem.
-/// </summary>
-public class MetamagicSpellResult
-{
-    /// <summary>Whether the preparation succeeded.</summary>
-    public bool IsSuccess;
-
-    /// <summary>Error message if preparation failed.</summary>
-    public string ErrorMessage;
-
-    /// <summary>The modified spell data (clone of original with metamagic applied).</summary>
-    public SpellData ModifiedSpell;
-
-    /// <summary>The effective spell level (for slot consumption).</summary>
-    public int EffectiveSpellLevel;
-
-    /// <summary>List of applied metamagic types.</summary>
-    public List<MetamagicFeatId> AppliedMetamagics;
-
-    /// <summary>Whether any metamagic was applied by a rod.</summary>
-    public bool HasRodMetamagic;
-
-    public static MetamagicSpellResult Success(SpellData spell, int effectiveLevel, List<MetamagicFeatId> applied, bool hasRod)
-    {
-        return new MetamagicSpellResult
-        {
-            IsSuccess = true,
-            ModifiedSpell = spell,
-            EffectiveSpellLevel = effectiveLevel,
-            AppliedMetamagics = applied,
-            HasRodMetamagic = hasRod
-        };
-    }
-
-    public static MetamagicSpellResult Failure(string error)
-    {
-        return new MetamagicSpellResult
-        {
-            IsSuccess = false,
-            ErrorMessage = error
-        };
     }
 }

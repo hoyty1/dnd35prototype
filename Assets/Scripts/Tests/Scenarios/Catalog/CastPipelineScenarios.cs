@@ -77,6 +77,8 @@ namespace Tests.Scenarios
             yield return S("npc-cast-without-divine-focus", NpcCastWithoutDivineFocus);
             yield return S("cast-deafened-area", DeafenedArea);
             yield return S("cast-slot-failure-refund", SlotFailureRefund);
+            yield return S("metamagic-cast-paths", MetamagicCastPaths);
+            yield return S("npc-cast-prepared-metamagic", NpcCastPreparedMetamagic);
             yield return S("stale-cast-state-energy", StaleEnergyChoice);
             yield return S("stale-cast-state-fire-shield", FireShieldChoicePerCast);
             yield return S("stale-cast-state-wand-asf", StaleWandFlag);
@@ -147,15 +149,18 @@ namespace Tests.Scenarios
         /// <summary>
         /// Adds a wizard slot of <paramref name="level"/> holding a clone of <paramref name="spellId"/>. The prototype's
         /// wizard table stops at 2nd-level slots from wizard 4 on (SPL-041), so a scenario that needs a wizard's 3rd-,
-        /// 4th- or 5th-level slot (PHB p.55) adds the one it casts from; the slot spend matches the spell (or, with
-        /// metamagic, the effective level), not the class table.
+        /// 4th- or 5th-level slot (PHB p.55) adds the one it casts from; the slot spend matches the spell, not the class
+        /// table. With <paramref name="metamagic"/> the slot holds the spell prepared with it (PHB p.88: a prepared caster
+        /// applies metamagic when preparing, and a metamagic cast spends only such a slot since batch 11 step 21, SPL-012).
         /// </summary>
-        private static void AddWizardSlot(CharacterController c, int level, string spellId)
+        private static void AddWizardSlot(CharacterController c, int level, string spellId, MetamagicData metamagic = null)
         {
             SpellcastingComponent sc = c.Spellcasting;
             if (sc == null || sc.SpellSlots == null)
                 throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting to add a slot to");
-            sc.SpellSlots.Add(new SpellSlot(level, SpellDatabase.GetSpell(spellId).Clone(), false, "Wizard"));
+            var slot = new SpellSlot(level, false, "Wizard");
+            slot.PrepareWithMetamagic(SpellDatabase.GetSpell(spellId).Clone(), metamagic);
+            sc.SpellSlots.Add(slot);
             sc.SyncPreparedSpellsFromSlots();
         }
 
@@ -433,7 +438,7 @@ namespace Tests.Scenarios
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Quicken Spell")), 2, 10, Control.Ui)
                 .Npc("g1", "goblin", 8, 10, Control.Idle)
                 .Npc("g2", "goblin", 9, 10, Control.Idle)
-                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.SLEEP))
+                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.SLEEP, quicken))
                 .Tweak("g1", Fails).Tweak("g2", Fails)
                 .Initiative("wizard", "g1", "g2")
                 .Force(4, 4, null, -1)
@@ -1751,7 +1756,7 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Quicken Spell")), 5, 10, Control.Ui)
                 .Npc("gob", "goblin", 6, 10, Control.Idle)
-                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE))
+                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE, quicken))
                 .Tweak("gob", c => { AttackTweak(c, -30); Sturdy(c); })
                 .Initiative("gob", "wizard")
                 .Force(4, 4, null, -1)
@@ -1773,11 +1778,11 @@ namespace Tests.Scenarios
         /// PHB p.98 (Quicken Spell: only one quickened spell per round) and PHB p.229 (Feather Fall: a free action, like a
         /// quickened spell, that counts toward that limit), one rule for a Ui and a Scripted caster (CastActionRules, the
         /// cast core's Legality stage; batch 11 step 12). The Ui wizard 9 (Quicken Spell; two added 5th-level slots with
-        /// Magic Missile, SPL-041; a Feather Fall) casts a quickened Magic Missile at a distant goblin in round 1: a free
+        /// Magic Missile prepared quickened, SPL-041; a Feather Fall) casts a quickened Magic Missile at a distant goblin in round 1: a free
         /// action, so every other action is left. A second quickened Magic Missile and a Feather Fall the same round are
         /// refused at the spell menu with a log line and spend nothing. The Scripted wizard 3 casts Feather Fall (two
         /// prepared) on the Ui wizard: a free action through the NPC cast path; the second the same round is refused (the
-        /// NPC path takes no metamagic yet, AI-001, so Feather Fall is how a Scripted caster meets the limit). In round 2 the
+        /// Scripted wizard has no Quicken Spell, so Feather Fall is how it meets the limit). In round 2 the
         /// limit is reset and each casts again.
         /// </summary>
         private static ScenarioDef QuickenOncePerRound()
@@ -1791,7 +1796,7 @@ namespace Tests.Scenarios
                 .Pc("ui", ActorSource.Stats(() => Wizard("Quicken Ui Wizard", 9, "Quicken Spell")), 3, 10, Control.Ui)
                 .Pc("scripted", ActorSource.Stats(() => Wizard("Quicken Scripted Wizard", 3)), 5, 10, Control.Scripted)
                 .Npc("gob", "goblin", 14, 10, Control.Idle)
-                .Tweak("ui", c => { AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE); Prepare(c, 1, SpellNames.FEATHER_FALL); })
+                .Tweak("ui", c => { AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE, quicken); AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE, quicken); Prepare(c, 1, SpellNames.FEATHER_FALL); })
                 .Tweak("scripted", c => Prepare(c, 1, SpellNames.FEATHER_FALL, 2))
                 .Tweak("gob", Sturdy)
                 .Initiative("ui", "scripted", "gob")
@@ -2190,7 +2195,7 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Empower Spell")), 2, 10, Control.Ui)
                 .Npc("d1", "target_dummy", 10, 10, Control.Idle)
-                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.FIREBALL))
+                .Tweak("wizard", c => AddWizardSlot(c, 5, SpellNames.FIREBALL, empower))
                 .Tweak("d1", Fails)
                 .Initiative("wizard", "d1")
                 .Force(6, 3, null, -1)
@@ -2224,7 +2229,7 @@ namespace Tests.Scenarios
                 .MaxRounds(2)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Heighten Wizard", 7, "Heighten Spell")), 2, 10, Control.Ui)
                 .Npc("warded", "target_dummy", 8, 10, Control.Scripted)
-                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 4, SpellNames.MAGIC_MISSILE); })
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 4, SpellNames.MAGIC_MISSILE, heighten); })
                 .Tweak("warded", Sturdy)
                 .Initiative("warded", "wizard")
                 .Force(4, 4, null, -1)
@@ -2447,8 +2452,8 @@ namespace Tests.Scenarios
         /// wizard 5 casts Magic Missile and is refused at the cast core's Legality stage (nothing spent, one log line), then
         /// casts it with Silent Spell from a 2nd-level slot: the three missiles hit (every d4 at 4: 15). The Scripted wizard
         /// is refused its plain Magic Missile (the AI path, no log line, as its other refusals), and the second Scripted
-        /// wizard casts its prepared Silent Spell Magic Missile (the prepared record counts; the NPC path drops only a cast's
-        /// own metamagic). A fourth, Ui wizard is not silenced at first: it holds a Shocking Grasp charge (Discharge Later),
+        /// wizard casts its prepared Silent Spell Magic Missile (since batch 11 step 21 the NPC cast carries the slot's
+        /// metamagic and spends that slot). A fourth, Ui wizard is not silenced at first: it holds a Shocking Grasp charge (Discharge Later),
         /// is then put under the Silence and picks Magic Missile: the spell menu refuses it before the cast begins, so the
         /// held charge, which a new spell would end, is kept and nothing is spent (batch 11 step 13 review).
         /// </summary>
@@ -2466,7 +2471,7 @@ namespace Tests.Scenarios
                 .Npc("dummy2", "target_dummy", 9, 16, Control.Idle)
                 .Npc("dummy3", "target_dummy", 9, 13, Control.Idle)
                 .Pc("holder", ActorSource.Stats(() => Wizard("Pin Holder", 5)), 5, 7, Control.Ui)
-                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddWizardSlot(c, 2, SpellNames.MAGIC_MISSILE); Silence(c); })
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddSilentSlot(c, SpellNames.MAGIC_MISSILE); Silence(c); })
                 .Tweak("holder", c => { Prepare(c, 1, SpellNames.SHOCKING_GRASP); AddWizardSlot(c, 1, SpellNames.MAGIC_MISSILE); })
                 .Tweak("npc", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); Silence(c); })
                 .Tweak("npcsilent", c => { AddSilentSlot(c, SpellNames.MAGIC_MISSILE); Silence(c); })
@@ -2941,6 +2946,301 @@ namespace Tests.Scenarios
                 .Expect("No spell: the dummy is untouched and the slot kept", Expect.All(FactIs("missile.lost.dummy", 0), FactsEqual("slots.before", "slots.after")))
                 .Expect("Every action is left: a cast that never happens costs nothing (PHB p.141, p.143)", FactIs("actions", "smf"))
                 .Build();
+        }
+
+        // ── rules/metamagic-cast-paths, rules/npc-cast-prepared-metamagic (batch 11 step 21) ──
+
+        /// <summary>A Human sorcerer (CHA 16) knowing Magic Missile at 1st level, with <paramref name="feats"/>.</summary>
+        private static CharacterStats Sorcerer(string name, int level, params string[] feats)
+        {
+            CharacterStats s = Caster(name, "Sorcerer", level, wis: 10, intelligence: 10, feats);
+            s.CHA = 16;
+            return s;
+        }
+
+        /// <summary>Makes Magic Missile one of the sorcerer's known 1st-level spells (PHB p.54).</summary>
+        private static void KnowsMagicMissile(CharacterController c)
+        {
+            SpontaneousCastingData known = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+            if (known == null || !c.Spellcasting.IsSpontaneousCaster)
+                throw new InvalidOperationException(c.Stats.CharacterName + " is not a spontaneous caster");
+            if (known.IsSpellKnown(SpellNames.MAGIC_MISSILE, 1))
+                return;
+            if (known.SpellsKnownByLevel[1] != null && known.SpellsKnownByLevel[1].Count > 0)
+                known.SpellsKnownByLevel[1].RemoveAt(0);
+            if (!known.LearnSpell(SpellNames.MAGIC_MISSILE, 1))
+                throw new InvalidOperationException(c.Stats.CharacterName + " could not learn Magic Missile");
+        }
+
+        /// <summary>A spontaneous caster's spells per day left at 1st and 3rd level, such as "L1:6 L3:4".</summary>
+        private static string SpellsPerDay(CharacterController c)
+        {
+            SpontaneousCastingData d = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+            return d == null ? "none" : "L1:" + d.GetSlotsRemaining(1) + " L3:" + d.GetSlotsRemaining(3);
+        }
+
+        /// <summary>
+        /// Batch 11 step 21 (metamagic-legality-and-slots; MetamagicSystem is the live rule, SPL-055, SPL-040, SPL-148,
+        /// SPL-012). Four casters, every d4 at 4 and every d8 at 4:
+        /// - the Ui sorcerer 6 (Empower Spell, Quicken Spell) first picks a quickened Magic Missile: refused at the spell menu
+        ///   with a log line, nothing spent (PHB p.98 Special: no Quicken on a spontaneous cast); then an empowered one at d1:
+        ///   a full-round action (PHB p.88) that spends a 3rd-level spell per day, not a 1st (SPL-040), and deals three
+        ///   missiles of (4 + 1) x 1.5 = 7, 21 (PHB p.93);
+        /// - the Ui wizard 5 (Silent Spell) with a plain 1st-level and a Silent 2nd-level Magic Missile casts the plain one at
+        ///   d2: it spends the 1st-level slot, not the Silent one (SPL-012), and a standard action;
+        /// - the Scripted sorcerer 6 (Empower Spell) casts an empowered Magic Missile at d3 through the NPC cast path (the
+        ///   step's metamagic goes with the cast): full round, a 3rd-level spell per day, 21;
+        /// - the Ui cleric 5 (Empower Spell, Extend Spell, Quicken Spell; spontaneous cure; 30 hit points down) converts its
+        ///   prepared Bless on itself. Round 1: a quickened Cure Light Wounds is refused, nothing spent (PHB p.98 Special: a
+        ///   conversion is a spontaneous cast); an extended one is refused too, nothing spent: Extend cannot modify an
+        ///   instantaneous spell (PHB p.88: a feat cannot be used with the spells its entry says it cannot modify; p.94;
+        ///   delegated RAW reading 2026-10-14). Round 2: an empowered one gives up a prepared 3rd-level spell, not the Bless
+        ///   (PHB p.88: a prepared spell of the adjusted level; SPL-148), as a full-round action and heals
+        ///   (4 + 5) x 1.5 = 13 (PHB p.93).
+        /// </summary>
+        private static ScenarioDef MetamagicCastPaths()
+        {
+            var empower = new MetamagicData();
+            empower.Toggle(MetamagicFeatId.EmpowerSpell);
+            var quicken = new MetamagicData();
+            quicken.Toggle(MetamagicFeatId.QuickenSpell);
+            var extend = new MetamagicData();
+            extend.Toggle(MetamagicFeatId.ExtendSpell);
+            return Rules("rules/metamagic-cast-paths", "Metamagic on every cast path: spontaneous, prepared, Scripted and a cleric's conversion (PHB p.88)")
+                .Covers("SPL-055", "SPL-040", "SPL-148", "SPL-012", "PHB p.88", "PHB p.93", "PHB p.98", "batch 11 step 21")
+                .MaxRounds(2)
+                .Pc("sorc", ActorSource.Stats(() => Sorcerer("Empower Sorcerer", 6, "Empower Spell", "Quicken Spell")), 3, 4, Control.Ui)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Silent Wizard", 5, "Silent Spell")), 3, 8, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Sorcerer("Scripted Sorcerer", 6, "Empower Spell")), 3, 12, Control.Scripted)
+                .Pc("cleric", ActorSource.Stats(() => Caster("Convert Cleric", "Cleric", 5, wis: 16, intelligence: 10, "Empower Spell", "Extend Spell", "Quicken Spell")), 3, 16, Control.Ui)
+                .Npc("d1", "target_dummy", 8, 4, Control.Idle)
+                .Npc("d2", "target_dummy", 8, 8, Control.Idle)
+                .Npc("d3", "target_dummy", 8, 12, Control.Idle)
+                .Tweak("sorc", KnowsMagicMissile)
+                .Tweak("scripted", KnowsMagicMissile)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE); AddSilentSlot(c, SpellNames.MAGIC_MISSILE); })
+                .Tweak("cleric", c =>
+                {
+                    c.Stats.SpontaneousCasting = SpontaneousCastingType.Cure;
+                    Prepare(c, 1, SpellNames.BLESS);
+                    Prepare(c, 2, SpellNames.BULLS_STRENGTH);
+                    Prepare(c, 3, SpellNames.PRAYER);
+                    c.Stats.CurrentHP = Math.Max(1, c.Stats.TotalMaxHP - 30);
+                })
+                .Tweak("d1", Sturdy).Tweak("d2", Sturdy).Tweak("d3", Sturdy)
+                .Initiative("sorc", "wizard", "scripted", "cleric", "d1", "d2", "d3")
+                .Force(4, 4, null, -1)
+                .Force(8, 4, null, -1)
+                .Turn("sorc", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d1"); Fact(ctx, "sorc.before", SpellsPerDay(ctx.Get("sorc"))); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d1", quicken),
+                    Step.Assert("after quicken", ctx =>
+                    {
+                        Fact(ctx, "sorc.quicken", SpellsPerDay(ctx.Get("sorc")));
+                        Fact(ctx, "sorc.quicken.actions", Actions(ctx.Get("sorc")));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d1", empower),
+                    Step.Assert("after empower", ctx =>
+                    {
+                        FactHpLost(ctx, "sorc", "d1");
+                        Fact(ctx, "sorc.after", SpellsPerDay(ctx.Get("sorc")));
+                        Fact(ctx, "sorc.actions", Actions(ctx.Get("sorc")));
+                        return true;
+                    }))
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d2"); RecordSlots(ctx, "wizard"); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d2"),
+                    Step.Assert("after", ctx =>
+                    {
+                        FactHpLost(ctx, "wizard", "d2");
+                        FactSlotsSpent(ctx, "wizard.spent", "wizard");
+                        Fact(ctx, "wizard.actions", Actions(ctx.Get("wizard")));
+                        return true;
+                    }))
+                .Turn("scripted", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d3"); Fact(ctx, "scripted.before", SpellsPerDay(ctx.Get("scripted"))); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d3", empower),
+                    Step.Assert("after", ctx =>
+                    {
+                        FactHpLost(ctx, "scripted", "d3");
+                        Fact(ctx, "scripted.after", SpellsPerDay(ctx.Get("scripted")));
+                        Fact(ctx, "scripted.actions", Actions(ctx.Get("scripted")));
+                        return true;
+                    }))
+                .Turn("cleric", 1,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "cleric"); Numbers(ctx)["hp|cleric.self"] = ctx.Get("cleric").Stats.CurrentHP; return true; }),
+                    Step.Convert(SpellNames.BLESS, 1, "cleric", quicken),
+                    Step.Assert("after quicken", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "cleric.quicken.spent", "cleric");
+                        Fact(ctx, "cleric.quicken.actions", Actions(ctx.Get("cleric")));
+                        return true;
+                    }),
+                    Step.Convert(SpellNames.BLESS, 1, "cleric", extend),
+                    Step.Assert("after extend", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "cleric.extend.spent", "cleric");
+                        Fact(ctx, "cleric.extend.actions", Actions(ctx.Get("cleric")));
+                        Fact(ctx, "cleric.extend.healed", ctx.Get("cleric").Stats.CurrentHP - Numbers(ctx)["hp|cleric.self"]);
+                        return true;
+                    }))
+                .Turn("cleric", 2,
+                    Step.Assert("record", ctx => { RecordSlots(ctx, "cleric"); Numbers(ctx)["hp|cleric.self"] = ctx.Get("cleric").Stats.CurrentHP; return true; }),
+                    Step.Convert(SpellNames.BLESS, 1, "cleric", empower),
+                    Step.Assert("after empower", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "cleric.spent", "cleric");
+                        Fact(ctx, "cleric.actions", Actions(ctx.Get("cleric")));
+                        Fact(ctx, "cleric.healed", ctx.Get("cleric").Stats.CurrentHP - Numbers(ctx)["hp|cleric.self"]);
+                        Fact(ctx, "cleric.bless.kept", ctx.Get("cleric").Spellcasting.CanConvertSpellToSpontaneous(SpellDatabase.GetSpell(SpellNames.BLESS)));
+                        return true;
+                    }))
+                .Expect("Sorcerer: Quicken Spell is refused on a spontaneous cast with a log line and nothing spent (PHB p.98 Special)", Expect.All(
+                    FactsEqual("sorc.before", "sorc.quicken"), FactIs("sorc.quicken.actions", "smf"),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("cannot quicken Magic Missile"), 1, 1)))
+                .Expect("Sorcerer: the empowered Magic Missile is a full-round action that spends a 3rd-level spell per day (PHB p.88; SPL-040)", v =>
+                {
+                    string before = FactValue(v, "sorc.before"), after = FactValue(v, "sorc.after"), actions = FactValue(v, "sorc.actions");
+                    if (before == null || after == null || actions == null)
+                        return ExpectResult.Inconclusive("missing facts");
+                    return OneLess(before, after, "L3") && Same(before, after, "L1") && actions == "---"
+                        ? ExpectResult.Pass(before + " -> " + after + ", actions " + actions)
+                        : ExpectResult.Fail(before + " -> " + after + ", actions " + actions);
+                })
+                .Expect("Sorcerer: three empowered missiles of 7 deal 21 (PHB p.93, p.251)", FactIs("sorc.lost.d1", 21))
+                .Expect("Wizard: the plain Magic Missile spends the 1st-level slot, not the Silent one, as a standard action (SPL-012)",
+                    FactsAre(("wizard.spent", "L1+1"), ("wizard.actions", "-m-"), ("wizard.lost.d2", 15)))
+                .Expect("Scripted sorcerer: the step's Empower goes with the NPC cast: full round, a 3rd-level spell per day, 21", v =>
+                {
+                    string before = FactValue(v, "scripted.before"), after = FactValue(v, "scripted.after"), actions = FactValue(v, "scripted.actions");
+                    string lost = FactValue(v, "scripted.lost.d3");
+                    if (before == null || after == null || actions == null || lost == null)
+                        return ExpectResult.Inconclusive("missing facts");
+                    return OneLess(before, after, "L3") && Same(before, after, "L1") && actions == "---" && lost == "21"
+                        ? ExpectResult.Pass(before + " -> " + after + ", actions " + actions + ", lost " + lost)
+                        : ExpectResult.Fail(before + " -> " + after + ", actions " + actions + ", lost " + lost);
+                })
+                .Expect("Scripted sorcerer: the cast ran", Expect.StepStatus("scripted", 1, "Cast", 0, "done"))
+                .Expect("Cleric: a quickened conversion is refused with a log line, nothing spent (PHB p.98 Special)", Expect.All(
+                    FactsAre(("cleric.quicken.spent", "none"), ("cleric.quicken.actions", "smf")),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("cannot quicken Cure Light Wounds"), 1, 1)))
+                .Expect("Cleric: an extended conversion is refused with a log line, nothing spent: Extend cannot modify an instantaneous cure (PHB p.88, p.94; delegated RAW reading 2026-10-14)", Expect.All(
+                    FactsAre(("cleric.extend.spent", "none"), ("cleric.extend.actions", "smf"), ("cleric.extend.healed", 0)),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("cannot cast Cure Light Wounds with Extend Spell"), 1, 1)))
+                .Expect("Cleric: the empowered conversion gives up a 3rd-level prepared spell (not the Bless) as a full-round action and heals 13 (PHB p.88, p.93; SPL-148)",
+                    FactsAre(("cleric.spent", "L3+1"), ("cleric.actions", "---"), ("cleric.healed", 13), ("cleric.bless.kept", true)))
+                .Build();
+        }
+
+        /// <summary>The value of the fact <paramref name="key"/> (the last one written), or null.</summary>
+        private static string FactValue(TraceView v, string key)
+        {
+            string prefix = FactPrefix + key + "=";
+            string value = null;
+            foreach (TraceEvent e in v.Of("note"))
+            {
+                string text = e.Str("text");
+                if (text != null && text.StartsWith(prefix, StringComparison.Ordinal))
+                    value = text.Substring(prefix.Length);
+            }
+            return value;
+        }
+
+        /// <summary>The count of <paramref name="level"/> ("L3") in a <see cref="SpellsPerDay"/> string.</summary>
+        private static int PerDay(string perDay, string level)
+        {
+            foreach (string part in perDay.Split(' '))
+                if (part.StartsWith(level + ":", StringComparison.Ordinal) && int.TryParse(part.Substring(level.Length + 1), out int n))
+                    return n;
+            return int.MinValue;
+        }
+
+        private static bool OneLess(string before, string after, string level) => PerDay(after, level) == PerDay(before, level) - 1;
+        private static bool Same(string before, string after, string level) => PerDay(after, level) == PerDay(before, level);
+
+        /// <summary>
+        /// Batch 11 step 21: an NPC casts a prepared metamagic slot's spell with its metamagic (SpellCastRequest.ForAI takes the
+        /// slot's metamagic; LegacyCastQuirk.NpcNullMetamagic removed), and a plain NPC cast never spends a metamagic slot
+        /// (SPL-012). Every d4 at 4.
+        /// - The AI-run wizard 5 (Empower Spell) whose only unspent slot is an added 3rd-level Empowered Magic Missile (PHB
+        ///   p.88; SPL-041 for the slot) casts it on its own choice at d1: three missiles of 7, 21 (PHB p.93), the 3rd-level
+        ///   slot spent, a standard action.
+        /// - The Scripted wizard 5 (Empower Spell) whose only Magic Missile is the same Empowered slot is refused a plain
+        ///   Magic Missile (no plain slot holds it: nothing spent), then casts it with the step's Empower at d2: 21, the slot
+        ///   spent.
+        /// </summary>
+        private static ScenarioDef NpcCastPreparedMetamagic()
+        {
+            var empower = new MetamagicData();
+            empower.Toggle(MetamagicFeatId.EmpowerSpell);
+            return Rules("rules/npc-cast-prepared-metamagic", "An NPC casts its prepared metamagic spell with its metamagic; a plain cast spends no metamagic slot (batch 11 step 21)")
+                .Covers("AI-001", "SPL-012", "PHB p.88", "PHB p.93", "PC_NPC_PARITY", "batch 11 step 21")
+                .MaxRounds(1)
+                .Pc("ai", ActorSource.Stats(() => Wizard("AI Empower Wizard", 5, "Empower Spell")), 3, 6, Control.Ai)
+                .Pc("scripted", ActorSource.Stats(() => Wizard("Scripted Empower Wizard", 5, "Empower Spell")), 3, 12, Control.Scripted)
+                .Npc("d1", "target_dummy", 9, 6, Control.Idle)
+                .Npc("d2", "target_dummy", 9, 12, Control.Idle)
+                .Tweak("ai", c => OnlyEmpoweredMissile(c, empower))
+                .Tweak("scripted", c => OnlyEmpoweredMissile(c, empower))
+                .Tweak("d1", Sturdy).Tweak("d2", Sturdy)
+                .Initiative("ai", "scripted", "d1", "d2")
+                .Force(4, 4, null, -1)
+                .Turn("scripted", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        // The AI wizard's turn has ended: its Empowered slot and its actions.
+                        CharacterController ai = ctx.Get("ai");
+                        Fact(ctx, "ai.empowered.used", ai.Spellcasting.SpellSlots.Any(s => s != null && s.Level == 3 && s.HasMetamagic && s.IsUsed));
+                        Fact(ctx, "ai.actions", Actions(ai));
+                        RecordHp(ctx, "d2");
+                        RecordSlots(ctx, "scripted");
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d2"),
+                    Step.Assert("after plain", ctx =>
+                    {
+                        FactHpLost(ctx, "plain", "d2");
+                        FactSlotsSpent(ctx, "plain.spent", "scripted");
+                        Fact(ctx, "plain.actions", Actions(ctx.Get("scripted")));
+                        RecordHp(ctx, "d2");
+                        RecordSlots(ctx, "scripted");
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d2", empower),
+                    Step.Assert("after empower", ctx =>
+                    {
+                        FactHpLost(ctx, "empowered", "d2");
+                        FactSlotsSpent(ctx, "empowered.spent", "scripted");
+                        return true;
+                    }))
+                .Expect("The AI wizard casts its Empowered Magic Missile once", CastEvents("ai", SpellNames.MAGIC_MISSILE, 1))
+                .Expect("It deals three empowered missiles of 7: 150 -> 129 (PHB p.93)", v =>
+                {
+                    int hp = FinalHp(v, "d1");
+                    if (hp == int.MinValue)
+                        return ExpectResult.Inconclusive("no final hit points for d1");
+                    return hp == 129 ? ExpectResult.Pass("d1 hp 129") : ExpectResult.Fail("d1 hp " + hp + ", expected 129");
+                })
+                .Expect("The AI wizard's 3rd-level Empowered slot is spent (PHB p.88)",
+                    FactIs("ai.empowered.used", true))
+                .Expect("The Scripted wizard's plain Magic Missile is refused and spends nothing: no plain slot holds it (SPL-012)",
+                    FactsAre(("plain.lost.d2", 0), ("plain.spent", "none"), ("plain.actions", "smf")))
+                .Expect("The Scripted wizard's step Empower casts the Empowered Magic Missile from its slot: 21 (PHB p.88, p.93)",
+                    FactsAre(("empowered.lost.d2", 21), ("empowered.spent", "L3+1")))
+                .Build();
+        }
+
+        /// <summary>Adds a 3rd-level slot with an Empowered Magic Missile (PHB p.88) and spends every other slot.</summary>
+        private static void OnlyEmpoweredMissile(CharacterController c, MetamagicData empower)
+        {
+            AddWizardSlot(c, 3, SpellNames.MAGIC_MISSILE, empower);
+            SpellcastingComponent sc = c.Spellcasting;
+            SpellSlot kept = sc.SpellSlots[sc.SpellSlots.Count - 1];
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null && slot != kept)
+                    slot.IsUsed = true;
+            sc.SyncPreparedSpellsFromSlots();
         }
     }
 }
