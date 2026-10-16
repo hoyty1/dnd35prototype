@@ -164,8 +164,14 @@ public partial class GameManager
         if (!AoESystem.IsWithinCastingRange(caster.GridPosition, anchor, range))
             return true;
 
+        // The preview shows what the cast takes: an origin (the 10-ft. square's centre) in the caster's line of effect, and
+        // the squares that origin has line of effect to, as the Legality stage filters them (batch 11 step 24, SPL-006).
+        GridIntersection origin = GridIntersection.NorthEastCornerOf(anchor);
+        if (!AoESystem.HasLineOfEffectToOrigin(caster.GridPosition, caster.GetCurrentSpaceSquares(), origin))
+            return true;
         HashSet<Vector2Int> greaseCells = GetGreaseAreaCells(anchor);
         greaseCells = FilterToExistingCells(greaseCells);
+        AoESystem.FilterCellsByLineOfEffect(greaseCells, origin);
         if (greaseCells.Count == 0)
             return true;
 
@@ -202,6 +208,10 @@ public partial class GameManager
         if (!AoESystem.IsWithinCastingRange(caster.GridPosition, anchor, range))
             return true;
 
+        // The caster needs line of effect to the area's origin, the 10-ft. square's centre (PHB p.176; the Legality stage
+        // refuses it too, batch 11 step 24).
+        if (!AoESystem.HasLineOfEffectToOrigin(caster.GridPosition, caster.GetCurrentSpaceSquares(), GridIntersection.NorthEastCornerOf(anchor)))
+            return true;
         HashSet<Vector2Int> greaseCells = FilterToExistingCells(GetGreaseAreaCells(anchor));
         if (greaseCells.Count == 0)
             return true;
@@ -214,7 +224,9 @@ public partial class GameManager
         _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
-        PerformGreaseCast(caster, null, targets, greaseCells);
+        // The 10-ft. square's point of origin is its centre, the north-east corner of the clicked square, from which the
+        // Legality stage traces line of effect (PHB p.176; batch 11 step 24, SPL-006).
+        PerformGreaseCast(caster, null, targets, greaseCells, GridIntersection.NorthEastCornerOf(anchor));
         return true;
     }
 
@@ -271,7 +283,7 @@ public partial class GameManager
     /// (SpellCastRequest.ForUiGrease, the Grease resolve, <see cref="ResolveGreaseCast"/>).
     /// </summary>
     private void PerformGreaseCast(CharacterController caster, CharacterController objectHolder,
-        List<CharacterController> areaTargets, HashSet<Vector2Int> greaseCells)
+        List<CharacterController> areaTargets, HashSet<Vector2Int> greaseCells, GridIntersection? areaOrigin = null)
     {
         GreaseCastMode mode = _pendingGreaseCastMode;
         bool missingHolder = mode == GreaseCastMode.Object ? objectHolder == null
@@ -288,7 +300,7 @@ public partial class GameManager
 
         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Begin, nameof(PerformGreaseCast) + ":" + mode);
         CurrentSubPhase = PlayerSubPhase.Animating;
-        SpellCastRequest.ForUiGrease(ctx.Request, objectHolder, areaTargets, greaseCells);
+        SpellCastRequest.ForUiGrease(ctx.Request, objectHolder, areaTargets, greaseCells, areaOrigin);
         ExecuteCast(ctx, null);
     }
 
@@ -345,7 +357,7 @@ public partial class GameManager
             log.AppendLine($"  Creatures currently in area: {uniqueTargets}");
         }
 
-        CreateGreaseArea(GetGreaseCenterWorldPosition(greaseCells), durationRounds, saveDC, caster, spell);
+        CreateGreaseArea(GetGreaseCenterWorldPosition(greaseCells), durationRounds, saveDC, caster, spell, footprint: greaseCells);
 
         log.AppendLine("  Ground is now greased (difficult movement, Balance DC 10 to stay upright).");
         log.Append("═══════════════════════════════════");
@@ -376,13 +388,14 @@ public partial class GameManager
     /// <summary>
     /// Creates a grease area through the reusable persistent area-effect system.
     /// </summary>
-    public void CreateGreaseArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster, SpellData spell)
+    public void CreateGreaseArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster, SpellData spell, HashSet<Vector2Int> footprint = null)
     {
         GameObject greaseObj = new GameObject("Grease_Area");
         greaseObj.transform.position = centerPosition;
 
         GreaseAreaEffect grease = greaseObj.AddComponent<GreaseAreaEffect>();
         grease.CenterPosition = centerPosition;
+        grease.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         grease.RoundsRemaining = Mathf.Max(1, duration);
         grease.SaveDC = saveDC;
         grease.Caster = caster;

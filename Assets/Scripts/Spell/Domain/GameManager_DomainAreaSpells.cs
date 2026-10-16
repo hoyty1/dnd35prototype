@@ -47,7 +47,7 @@ public partial class GameManager
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
 
         // Create area effect
-        CreateEntangleArea(centerPos, durationRounds, saveDc, caster);
+        CreateEntangleArea(centerPos, durationRounds, saveDc, caster, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -61,12 +61,13 @@ public partial class GameManager
     }
 
     /// <summary>Creates an EntangleAreaEffect at the specified position.</summary>
-    public void CreateEntangleArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster)
+    public void CreateEntangleArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         var go = new GameObject("EntangleArea");
         go.transform.position = centerPosition;
         var effect = go.AddComponent<EntangleAreaEffect>();
         effect.CenterPosition = centerPosition;
+        effect.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         effect.RoundsRemaining = duration;
         effect.SaveDC = saveDC;
         effect.CasterLevel = CasterLevelRules.ForCaster(caster, _pendingSpell);
@@ -97,7 +98,7 @@ public partial class GameManager
 
         // Instantaneous but lasts rest of combat (999 rounds)
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
-        CreateSoftenEarthArea(centerPos, 999, caster, casterLevel);
+        CreateSoftenEarthArea(centerPos, 999, caster, casterLevel, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -111,12 +112,13 @@ public partial class GameManager
     }
 
     /// <summary>Creates a SoftenEarthAreaEffect at the specified position.</summary>
-    public void CreateSoftenEarthArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel)
+    public void CreateSoftenEarthArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel, HashSet<Vector2Int> footprint = null)
     {
         var go = new GameObject("SoftenEarthArea");
         go.transform.position = centerPosition;
         var effect = go.AddComponent<SoftenEarthAreaEffect>();
         effect.CenterPosition = centerPosition;
+        effect.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         effect.RoundsRemaining = duration;
         effect.CasterLevel = casterLevel;
 
@@ -146,7 +148,7 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
-        CreateSpikeStoneArea(centerPos, durationRounds, caster, casterLevel, SpellDiceRules.MetamagicOf(spell));
+        CreateSpikeStoneArea(centerPos, durationRounds, caster, casterLevel, SpellDiceRules.MetamagicOf(spell), footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -159,12 +161,13 @@ public partial class GameManager
     }
 
     /// <summary>Creates a SpikeStoneAreaEffect at the specified position.</summary>
-    public void CreateSpikeStoneArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel, MetamagicData metamagic = null)
+    public void CreateSpikeStoneArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel, MetamagicData metamagic = null, HashSet<Vector2Int> footprint = null)
     {
         var go = new GameObject("SpikeStoneArea");
         go.transform.position = centerPosition;
         var effect = go.AddComponent<SpikeStoneAreaEffect>();
         effect.CenterPosition = centerPosition;
+        effect.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         effect.RoundsRemaining = duration;
         effect.CasterLevel = casterLevel;
         effect.Metamagic = metamagic; // the cast's Empower and Maximize for the spikes' dice (batch 11 step 19)
@@ -195,7 +198,7 @@ public partial class GameManager
 
         // Instantaneous but persists for rest of combat
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
-        CreatePlantGrowthArea(centerPos, 999, caster, casterLevel);
+        CreatePlantGrowthArea(centerPos, 999, caster, casterLevel, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -209,12 +212,13 @@ public partial class GameManager
     }
 
     /// <summary>Creates a PlantGrowthAreaEffect at the specified position.</summary>
-    public void CreatePlantGrowthArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel)
+    public void CreatePlantGrowthArea(Vector3 centerPosition, int duration, CharacterController caster, int casterLevel, HashSet<Vector2Int> footprint = null)
     {
         var go = new GameObject("PlantGrowthArea");
         go.transform.position = centerPosition;
         var effect = go.AddComponent<PlantGrowthAreaEffect>();
         effect.CenterPosition = centerPosition;
+        effect.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         effect.RoundsRemaining = duration;
         effect.CasterLevel = casterLevel;
 

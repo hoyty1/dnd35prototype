@@ -198,7 +198,7 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-        CreateDaylightArea(centerPosition, durationRounds, casterLevel, caster);
+        CreateDaylightArea(centerPosition, durationRounds, casterLevel, caster, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -228,13 +228,14 @@ public partial class GameManager
     /// <summary>
     /// Creates a DaylightAreaEffect at the specified position.
     /// </summary>
-    public void CreateDaylightArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateDaylightArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject daylightObject = new GameObject("Daylight_Area");
         daylightObject.transform.position = centerPosition;
 
         DaylightAreaEffect daylight = daylightObject.AddComponent<DaylightAreaEffect>();
         daylight.CenterPosition = centerPosition;
+        daylight.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         daylight.RoundsRemaining = Mathf.Max(1, durationRounds);
         daylight.CasterLevel = Mathf.Max(1, casterLevel);
         daylight.Caster = caster;
@@ -756,6 +757,7 @@ public partial class GameManager
         BlackTentaclesAreaEffect tentaclesEffect = tentaclesObj.AddComponent<BlackTentaclesAreaEffect>();
         tentaclesEffect.Metamagic = SpellDiceRules.MetamagicOf(spell); // the cast's Empower and Maximize for the crush (batch 11 step 19)
         tentaclesEffect.CenterPosition = centerWorldPos;
+        tentaclesEffect.CastFootprint = new HashSet<Vector2Int>(aoeCells); // the cast's squares (batch 11 step 24)
         tentaclesEffect.RoundsRemaining = durationRounds;
         tentaclesEffect.CasterLevel = casterLevel;
         tentaclesEffect.Caster = caster;

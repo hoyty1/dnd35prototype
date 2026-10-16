@@ -1484,46 +1484,23 @@ public partial class GameManager
         // and must still prompt for target selection.
         if (spell.AoEShapeType == AoEShape.Burst && placementRange <= 0)
         {
-            Debug.Log($"[AoE] Self-centered burst: {spell.Name} — showing preview at ({caster.GridPosition.x},{caster.GridPosition.y})");
+            // The area is centred on the caster: its point of origin is the intersection at, or nearest, the centre of the
+            // caster's space (decision D5 (3), delegated RAW reading 2026-10-14), one of the four corners of a Small or
+            // Medium caster's square, which the cursor picks (UpdateSelfAoEPreview); the north-east one is shown first.
+            GridIntersection origin = AoESystem.GetCreatureCentredOrigins(caster)[0];
+            Debug.Log($"[AoE] Self-centered burst: {spell.Name} — showing preview from {origin}");
 
-            // Calculate AoE cells centered on caster
-            HashSet<Vector2Int> aoeCells = AoESystem.GetBurstCells(caster.GridPosition, spell.AoESizeSquares, Grid);
+            ShowSelfAoEPreview(caster, spell, origin);
 
-            // Filter out cells blocked by line-of-effect blockers (walls, spheres, etc.)
-            AoESystem.FilterCellsByLineOfEffect(aoeCells, caster.GridPosition);
-
-            // Visual preview — highlight affected area
-            Grid.ClearAllHighlights();
-            foreach (Vector2Int cellPos in aoeCells)
-            {
-                SquareCell cell = Grid.GetCell(cellPos);
-                if (cell == null) continue;
-
-                if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
-                {
-                    bool isAlly = TeamUtility.IsAlly(caster, cell.Occupant);
-                    cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
-                }
-                else
-                {
-                    cell.SetHighlight(HighlightType.AoEPreview);
-                }
-            }
-
-            // Get all valid targets (relative to the caster's side, SPL-119)
-            List<CharacterController> targets = AoESystem.GetTargetsInArea(aoeCells, caster, spell.AoEFilter, Grid);
-
-            Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets — awaiting confirmation");
+            Debug.Log($"[AoE] Self-centered {spell.Name}: {_pendingSelfAoECells.Count} cells, {_pendingSelfAoETargets.Count} targets — awaiting confirmation");
 
             // Store state for confirmation
             _isConfirmingSelfAoE = true;
-            _pendingSelfAoECells = aoeCells;
-            _pendingSelfAoETargets = targets;
             CurrentSubPhase = PlayerSubPhase.ConfirmingSelfAoE;
             CombatUI.SetActionButtonsVisible(false);
 
             // Show turn indicator with confirm/cancel instructions
-            CombatUI.SetTurnIndicator($"Casting {spell.Name} — Left-click to confirm, Right-click to cancel");
+            CombatUI.SetTurnIndicator($"Casting {spell.Name} — Move the mouse to pick the corner it is centred on, Left-click to confirm, Right-click to cancel");
             return;
         }
 
@@ -1545,10 +1522,12 @@ public partial class GameManager
             int range = placementRange;
             if (range <= 0) range = 1;
 
-            List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
+            // The squares with a corner the area may originate at (IsAreaPlacementSquareInRange, the aim rule's range test).
+            List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range + caster.GetCurrentSpaceSquares() + 1);
             foreach (var cell in rangeCells)
             {
-                cell.SetHighlight(HighlightType.SpellRange);
+                if (cell != null && IsAreaPlacementSquareInRange(caster, spell, cell.Coords, range))
+                    cell.SetHighlight(HighlightType.SpellRange);
             }
             // Also highlight the caster's full occupied footprint as valid.
             HighlightCharacterFootprint(caster, HighlightType.SpellRange);
@@ -1682,11 +1661,170 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Shows the self-centred area of <paramref name="spell"/> from the point of origin <paramref name="origin"/> (one of the
+    /// caster's creature-centred origins, AoESystem.GetCreatureCentredOrigins): its squares after line of effect from the
+    /// origin, highlighted, and records them, their creatures and the origin for the confirmation (batch 11 step 24).
+    /// </summary>
+    private void ShowSelfAoEPreview(CharacterController caster, SpellData spell, GridIntersection origin)
+    {
+        HashSet<Vector2Int> aoeCells = AoESystem.GetCreatureCentredBurstCells(caster.GridPosition, caster.GetCurrentSpaceSquares(),
+            origin, spell.AoESizeSquares, Grid);
+        AoESystem.FilterCellsByLineOfEffect(aoeCells, origin);
+
+        Grid.ClearAllHighlights();
+        foreach (Vector2Int cellPos in aoeCells)
+        {
+            SquareCell cell = Grid.GetCell(cellPos);
+            if (cell == null) continue;
+
+            if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
+            {
+                bool isAlly = TeamUtility.IsAlly(caster, cell.Occupant);
+                cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
+            }
+            else
+            {
+                cell.SetHighlight(HighlightType.AoEPreview);
+            }
+        }
+
+        _pendingSelfAoEOrigin = origin;
+        _pendingSelfAoECells = aoeCells;
+        // The creatures in it, relative to the caster's side (SPL-119).
+        _pendingSelfAoETargets = AoESystem.GetTargetsInArea(aoeCells, caster, spell.AoEFilter, Grid);
+    }
+
+    /// <summary>
+    /// Every frame of a self-centred area's confirmation: the creature-centred origin nearest the cursor becomes the area's
+    /// point of origin (the caster's choice among the four corners of a Small or Medium caster's square; a Large caster
+    /// has one), and the preview follows it (batch 11 step 24).
+    /// </summary>
+    private void UpdateSelfAoEPreview()
+    {
+        if (!_isConfirmingSelfAoE || _pendingSpell == null)
+            return;
+        CharacterController caster = ActivePC;
+        if (caster == null || Grid == null)
+            return;
+        List<GridIntersection> origins = AoESystem.GetCreatureCentredOrigins(caster);
+        if (origins.Count < 2)
+            return;
+        GridIntersection origin = AoESystem.NearestOf(origins, GetMouseGridPoint());
+        if (origin == _pendingSelfAoEOrigin)
+            return;
+        ShowSelfAoEPreview(caster, _pendingSpell, origin);
+    }
+
+    /// <summary>
+    /// True when the placement range highlight of a placed area (a burst or cube) covers <paramref name="square"/>: one of
+    /// its four corners is a point of origin within <paramref name="range"/> of the caster's space, the test the aim rule
+    /// makes (AoESystem.IsOriginWithinRange, TryBuildUiAreaAim); for a one-square effect the square itself is within range
+    /// (batch 11 step 24 review).
+    /// </summary>
+    private static bool IsAreaPlacementSquareInRange(CharacterController caster, SpellData spell, Vector2Int square, int range)
+    {
+        if (caster == null)
+            return false;
+        if (AoESystem.IsSingleSquarePlacement(spell))
+            return AoESystem.IsWithinCastingRange(caster.GridPosition, square, range);
+        int size = caster.GetCurrentSpaceSquares();
+        for (int dx = 0; dx <= 1; dx++)
+        {
+            for (int dy = 0; dy <= 1; dy++)
+            {
+                if (AoESystem.IsOriginWithinRange(caster.GridPosition, size, new GridIntersection(square.x + dx, square.y + dy), range))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The cursor's position in grid units (a square's centre is its coordinates).</summary>
+    private Vector2 GetMouseGridPoint() => GetMouseWorldPosition() / SquareGridUtils.CellSize;
+
+    /// <summary>
+    /// The point a click on <paramref name="square"/> aims at, in grid units: the cursor when it lies in that square, else
+    /// the square's centre (a click with no cursor over the square, as the scenario harness makes; its centre gives the
+    /// square's north-east corner as the nearest intersection).
+    /// </summary>
+    private Vector2 GetAimGridPointForClick(Vector2Int square)
+    {
+        Vector2 p = GetMouseGridPoint();
+        if (SquareGridUtils.WorldToGrid(p * SquareGridUtils.CellSize) == square)
+            return p;
+        return new Vector2(square.x, square.y);
+    }
+
+    /// <summary>
+    /// The area the PC aims at <paramref name="gridPoint"/> (grid units) with <paramref name="spell"/>, the one rule the
+    /// cursor's preview and the click share (batch 11 step 24, decision D5, PHB p.175):
+    /// a burst or cube has its point of origin at the intersection nearest the point, within the spell's range of the
+    /// caster's space (AoESystem.IsOriginWithinRange) and in its line of effect (AoESystem.HasLineOfEffectToOrigin, PHB
+    /// p.176); a one-square effect (Flaming Sphere, Call Lightning) takes the square
+    /// under the point, within range, and has no intersection origin; a cone starts at the intersection on the edge of the
+    /// caster's space nearest the point and points the way of the point (AoESystem.TryAimCone); a line starts there and runs
+    /// through the point (AoESystem.TryAimLine). False when the point gives no legal aim.
+    /// </summary>
+    private bool TryBuildUiAreaAim(CharacterController caster, SpellData spell, Vector2 gridPoint,
+        out HashSet<Vector2Int> cells, out GridIntersection? origin)
+    {
+        cells = null;
+        origin = null;
+        if (caster == null || spell == null || Grid == null)
+            return false;
+        int size = caster.GetCurrentSpaceSquares();
+        int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(caster, spell);
+
+        if (AoESystem.IsSingleSquarePlacement(spell))
+        {
+            Vector2Int square = SquareGridUtils.WorldToGrid(gridPoint * SquareGridUtils.CellSize);
+            if (Grid.GetCell(square) == null || !AoESystem.IsWithinCastingRange(caster.GridPosition, square, range))
+                return false;
+            cells = new HashSet<Vector2Int> { square };
+            return true;
+        }
+
+        if (AoESystem.IsPlacedShape(spell.AoEShapeType))
+        {
+            GridIntersection point = GridIntersection.NearestToGridPoint(gridPoint);
+            if (!AoESystem.IsOriginWithinRange(caster.GridPosition, size, point, range)
+                || !AoESystem.HasLineOfEffectToOrigin(caster.GridPosition, size, point))
+                return false;
+            cells = AoESystem.GetPlacedAreaCells(spell, point, Grid);
+            origin = point;
+            return cells.Count > 0;
+        }
+
+        if (spell.AoEShapeType == AoEShape.Cone)
+        {
+            bool ok = AoESystem.TryAimCone(caster.GridPosition, size, gridPoint, spell.AoESizeSquares, Grid,
+                out GridIntersection start, out _, out cells);
+            origin = start;
+            return ok;
+        }
+
+        if (spell.AoEShapeType == AoEShape.Line)
+        {
+            bool ok = AoESystem.TryAimLine(caster.GridPosition, size, gridPoint, spell.AoESizeSquares, Grid,
+                out GridIntersection start, out cells);
+            origin = start;
+            return ok;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Get the current mouse position in world coordinates.
     /// Used by AoE targeting previews (including line spell endpoint selection).
     /// </summary>
     private Vector2 GetMouseWorldPosition()
     {
+#if UNITY_EDITOR
+        // A scenario's click aims at the point it names, not wherever the editor's cursor is (batch 11 step 24).
+        if (Harness_AimPoint.HasValue)
+            return Harness_AimPoint.Value * SquareGridUtils.CellSize;
+#endif
         if (_inputService != null)
             return _inputService.GetMouseWorldPosition();
 
@@ -1715,6 +1853,7 @@ public partial class GameManager
             return;
 
         HashSet<Vector2Int> aoeCells = null;
+        GridIntersection? aimOrigin = null;
 
         // ===== LINE SPELLS: click endpoint targeting =====
         // Player picks an endpoint cell within range; preview draws the line
@@ -1909,75 +2048,80 @@ public partial class GameManager
                 aoeCells = new HashSet<Vector2Int> { gridPos };
             }
             // ── Normal line spell (Lightning Bolt, etc.) ──
+            // From the intersection on the edge of the caster's space nearest the hovered square, through its centre
+            // (TryBuildUiAreaAim; batch 11 step 24, PHB p.175).
             else
             {
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares))
                     return;
 
-                aoeCells = AoESystem.GetLineCellsToTarget(
-                    pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+                if (!TryBuildUiAreaAim(pc, _pendingSpell, new Vector2(gridPos.x, gridPos.y), out aoeCells, out aimOrigin))
+                    return;
             }
         }
         else
         {
-            Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+            Vector2 gridPoint = worldPoint / SquareGridUtils.CellSize;
 
             if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
             {
-                // Burst and cube previews only depend on the hovered grid cell.
-                if (gridPos == _lastAoEHoverPos) return;
-                _lastAoEHoverPos = gridPos;
+                // A burst or cube snaps to the intersection nearest the cursor, its point of origin (a one-square
+                // effect to the hovered square); the preview depends only on that.
+                Vector2Int hoverKey;
+                if (AoESystem.IsSingleSquarePlacement(_pendingSpell))
+                {
+                    hoverKey = SquareGridUtils.WorldToGrid(worldPoint);
+                }
+                else
+                {
+                    GridIntersection snapped = GridIntersection.NearestToGridPoint(gridPoint);
+                    hoverKey = new Vector2Int(snapped.X, snapped.Y);
+                }
+                if (hoverKey == _lastAoEHoverPos) return;
+                _lastAoEHoverPos = hoverKey;
 
                 ClearAoEPreviewHighlights();
 
-                int range = _pendingSpell.AoERangeSquares > 0
-                    ? _pendingSpell.AoERangeSquares
-                    : CasterLevelRules.RangeSquares(pc, _pendingSpell);
-                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
+                if (!TryBuildUiAreaAim(pc, _pendingSpell, gridPoint, out aoeCells, out aimOrigin))
                     return;
-                aoeCells = AoESystem.GetPlacedAreaCells(_pendingSpell, gridPos, Grid);
             }
             else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
             {
-                // Cone preview depends on both target cell (direction snap) and
-                // precise mouse position (cardinal first-row tilt), so track both.
-                Vector2Int coneHoverKey = new Vector2Int(
-                    Mathf.RoundToInt(worldPoint.x * 4f),
-                    Mathf.RoundToInt(worldPoint.y * 4f));
+                // A cone starts at the intersection on the edge of the caster's space nearest the cursor and points the
+                // way of the cursor (AoESystem.TryAimCone): the preview depends on that start and direction.
+                bool aimed = AoESystem.TryAimCone(pc.GridPosition, pc.GetCurrentSpaceSquares(), gridPoint,
+                    _pendingSpell.AoESizeSquares, Grid, out GridIntersection coneStart, out int coneDir, out HashSet<Vector2Int> coneCells);
+                Vector2Int coneHoverKey = aimed
+                    ? new Vector2Int(coneStart.X * 8 + coneDir, coneStart.Y)
+                    : new Vector2Int(int.MinValue + 1, int.MinValue + 1);
 
-                if (gridPos == _lastAoEHoverPos && coneHoverKey == _lastConeHoverKey) return;
-
-                _lastAoEHoverPos = gridPos;
+                if (coneHoverKey == _lastConeHoverKey) return;
                 _lastConeHoverKey = coneHoverKey;
 
                 ClearAoEPreviewHighlights();
-                aoeCells = AoESystem.GetConeCells(
-                    pc.GridPosition,
-                    gridPos,
-                    _pendingSpell.AoESizeSquares,
-                    Grid,
-                    worldPoint);
+                if (!aimed)
+                    return;
+                aoeCells = coneCells;
+                aimOrigin = coneStart;
             }
         }
 
         if (aoeCells == null || aoeCells.Count == 0) return;
 
-        // ── Wall of Ice Line-of-Effect filtering for AoE PREVIEW ──
-        // Remove cells that are blocked by an intact Wall of Ice so the
-        // player sees only the squares that will actually be affected.
+        // ── Line-of-effect filtering for the PREVIEW ──
+        // The squares the area's point of origin (a burst's or cube's intersection, a cone's or line's starting
+        // intersection) has no line of effect to are dropped, so the player sees the squares that will be affected; the
+        // cast core's Legality stage filters the cast from the same origin (batch 11 step 24, PHB p.176). Walls and
+        // one-square effects keep their square-based origin.
+        if (aimOrigin.HasValue)
         {
-            Vector2Int loeOrigin;
-            if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
-            {
-                // For bursts and cubes the origin is the hovered grid cell (the burst's centre, the cube's central square)
-                Vector2Int gridPosForOrigin = SquareGridUtils.WorldToGrid(GetMouseWorldPosition());
-                loeOrigin = gridPosForOrigin;
-            }
-            else
-            {
-                // Cone / Line: origin is caster position
-                loeOrigin = pc.GridPosition;
-            }
+            AoESystem.FilterCellsByLineOfEffect(aoeCells, aimOrigin.Value);
+        }
+        else
+        {
+            Vector2Int loeOrigin = AoESystem.IsSingleSquarePlacement(_pendingSpell)
+                ? SquareGridUtils.WorldToGrid(worldPoint)
+                : pc.GridPosition;
             AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
         }
 
@@ -2037,8 +2181,7 @@ public partial class GameManager
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
                     : CasterLevelRules.RangeSquares(pc, _pendingSpell);
-                int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
-                if (dist <= range)
+                if (pc != null && IsAreaPlacementSquareInRange(pc, _pendingSpell, cellPos, Mathf.Max(1, range)))
                     cell.SetHighlight(HighlightType.SpellRange);
                 else
                     cell.SetHighlight(HighlightType.None);
@@ -2079,19 +2222,8 @@ public partial class GameManager
 
         Vector2Int targetPos = clickedCell.Coords;
 
-        // Validate range for burst, cube and line spells
-        if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
-        {
-            int range = _pendingSpell.AoERangeSquares > 0
-                ? _pendingSpell.AoERangeSquares
-                : CasterLevelRules.RangeSquares(caster, _pendingSpell);
-            if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, range))
-            {
-                Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");
-                return; // Don't cancel, just ignore out-of-range clicks
-            }
-        }
-        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
+        // Validate range for line spells (a burst's or cube's point of origin is checked by TryBuildUiAreaAim below)
+        if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
             // ── Wall of Fire: use spell range (Medium) instead of AoESizeSquares ──
             if (IsPendingWallOfFire())
@@ -2321,37 +2453,20 @@ public partial class GameManager
             }
         }
 
-        // Calculate the final AoE cells
-        HashSet<Vector2Int> aoeCells = null;
-        Vector2 worldPoint = GetMouseWorldPosition();
-
-        if (AoESystem.IsPlacedShape(_pendingSpell.AoEShapeType))
+        // Calculate the final AoE cells and the area's point of origin, by the rule the preview uses (TryBuildUiAreaAim;
+        // batch 11 step 24): a burst or cube at the intersection nearest the click, a cone or line from the intersection on
+        // the edge of the caster's space nearest it. Wall of Fire and Wall of Ice are handled above and return early.
+        // A line aims through the centre of the clicked square, as its preview does.
+        Vector2 aimPoint = _pendingSpell.AoEShapeType == AoEShape.Line
+            ? new Vector2(targetPos.x, targetPos.y)
+            : GetAimGridPointForClick(targetPos);
+        if (!TryBuildUiAreaAim(caster, _pendingSpell, aimPoint, out HashSet<Vector2Int> aoeCells, out GridIntersection? aimOrigin)
+            || aoeCells == null || aoeCells.Count == 0)
         {
-            aoeCells = AoESystem.GetPlacedAreaCells(_pendingSpell, targetPos, Grid);
+            Debug.Log($"[AoE] No legal area at ({targetPos.x},{targetPos.y}) (out of range, or a cone or line that would cover the caster)");
+            return; // Don't cancel, just ignore the click
         }
-        else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
-        {
-            aoeCells = AoESystem.GetConeCells(
-                caster.GridPosition,
-                targetPos,
-                _pendingSpell.AoESizeSquares,
-                Grid,
-                worldPoint);
-        }
-        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
-        {
-            // Line spells: click endpoint targeting from caster to selected cell.
-            // (Wall of Fire is handled above and returns early)
-            aoeCells = AoESystem.GetLineCellsToTarget(
-                caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
-            Debug.Log($"[AoE] Line endpoint ({targetPos.x},{targetPos.y}) → {aoeCells.Count} cells");
-        }
-
-        if (aoeCells == null || aoeCells.Count == 0)
-        {
-            Debug.Log("[AoE] No cells in AoE area");
-            return;
-        }
+        Debug.Log($"[AoE] {_pendingSpell.Name} aimed from {(aimOrigin.HasValue ? aimOrigin.Value.ToString() : "its square")} → {aoeCells.Count} cells");
 
         // Get all valid targets in the AoE (relative to the caster's side, SPL-119)
         List<CharacterController> targets = AoESystem.GetTargetsInArea(aoeCells, caster, _pendingSpell.AoEFilter, Grid);
@@ -2366,7 +2481,7 @@ public partial class GameManager
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
         // Execute the AoE spell
-        PerformAoESpellCast(caster, targets, aoeCells);
+        PerformAoESpellCast(caster, targets, aoeCells, aimOrigin);
     }
 
     /// <summary>
@@ -2475,11 +2590,12 @@ public partial class GameManager
         // Cache before clearing state
         var targets = _pendingSelfAoETargets;
         var cells = _pendingSelfAoECells;
+        GridIntersection origin = _pendingSelfAoEOrigin;
 
         ClearSelfAoEState();
 
         // Now execute the spell (the cast core's Legality stage filters the area by line of effect)
-        PerformAoESpellCast(caster, targets, cells);
+        PerformAoESpellCast(caster, targets, cells, origin);
     }
 
     /// <summary>
@@ -2515,8 +2631,12 @@ public partial class GameManager
     /// request into an area request (SpellCastRequest.ForUiArea, which sets the area path's legacy quirks); the core then
     /// filters the area by line of effect, spends the cast, runs the area handler registry (GameManager.SpellHandlerRegistry.cs)
     /// and finishes in FinishAreaCast. The UI follow-up comes from UiCastDecider.OnCastFinished (GameManager.CastDeciders.cs).
+    /// <paramref name="origin"/> is the area's point of origin, a grid intersection (a burst's or cube's, a cone's or line's
+    /// starting one; batch 11 step 24), recorded on the aim so line of effect is traced from it; the walls pass none and
+    /// keep the caster's square.
     /// </summary>
-    private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells,
+        GridIntersection? origin = null)
     {
         // A cast whose run waits for the AoO prompt's answer is not re-entered: its aim and run state stay.
         if (RejectCastReentry(CurrentCast, nameof(PerformAoESpellCast)))
@@ -2544,7 +2664,7 @@ public partial class GameManager
                 Debug.LogWarning($"[AoE] PerformAoESpellCast: the cast's caster {req.Caster.Stats?.CharacterName} is replaced by {caster?.Stats?.CharacterName}.");
             req.Caster = caster;
         }
-        SpellCastRequest.ForUiArea(req, targets, aoeCells);
+        SpellCastRequest.ForUiArea(req, targets, aoeCells, origin);
 
         ExecuteCast(ctx, null);
     }

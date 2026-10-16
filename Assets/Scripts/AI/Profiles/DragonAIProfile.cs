@@ -183,13 +183,13 @@ namespace DND35.AI.Profiles
 
                 for (int i = 0; i < enemies.Count; i++)
                 {
-                    if (cells.Contains(enemies[i].GridPosition))
+                    if (AoESystem.IsCreatureInCells(cells, enemies[i]))
                         enemyHits++;
                 }
 
                 for (int i = 0; i < allies.Count; i++)
                 {
-                    if (cells.Contains(allies[i].GridPosition))
+                    if (AoESystem.IsCreatureInCells(cells, allies[i]))
                         allyHits++;
                 }
 
@@ -432,7 +432,7 @@ namespace DND35.AI.Profiles
                 {
                     CharacterController aimTarget = enemies[e];
                     HashSet<Vector2Int> cells = GetBreathCellsFromPosition(
-                        candidatePos, aimTarget.GridPosition, bw, rangeSquares, gameManager);
+                        self, candidatePos, aimTarget, bw, rangeSquares, gameManager);
 
                     if (cells == null || cells.Count == 0)
                         continue;
@@ -442,13 +442,13 @@ namespace DND35.AI.Profiles
 
                     for (int i = 0; i < enemies.Count; i++)
                     {
-                        if (cells.Contains(enemies[i].GridPosition))
+                        if (AoESystem.IsCreatureInCells(cells, enemies[i]))
                             enemyHits++;
                     }
 
                     for (int i = 0; i < allies.Count; i++)
                     {
-                        if (cells.Contains(allies[i].GridPosition))
+                        if (AoESystem.IsCreatureInCells(cells, allies[i]))
                             allyHits++;
                     }
 
@@ -501,38 +501,31 @@ namespace DND35.AI.Profiles
         // ── Helpers ────────────────────────────────────────────────────
 
         /// <summary>
-        /// Get breath weapon cells from an arbitrary origin position (not necessarily self's position).
-        /// Used by tactical positioning to simulate breath from candidate positions.
+        /// The squares of <paramref name="self"/>'s breath fired from <paramref name="basePosition"/> (its own square or a
+        /// square it could move to) at <paramref name="aimTarget"/>: the best of the cones or lines that start at an
+        /// intersection on the edge of its space and cover the target (AoESystem.BestDirectedAimAt; MM p.69: a breath starts
+        /// at an intersection adjacent to the creature; batch 11 step 24, decision D5). NPCExecuteBreathWeaponForAI fires
+        /// the same aim, so the breath the AI scores is the breath it uses. Null when no aim covers the target.
         /// </summary>
         private static HashSet<Vector2Int> GetBreathCellsFromPosition(
-            Vector2Int origin,
-            Vector2Int aimTargetPos,
+            CharacterController self,
+            Vector2Int basePosition,
+            CharacterController aimTarget,
             BreathWeaponDefinition bw,
             int rangeSquares,
             GameManager gameManager)
         {
-            if (gameManager == null || gameManager.Grid == null)
+            if (gameManager == null || gameManager.Grid == null || bw == null)
                 return null;
 
-            switch (bw.Shape)
-            {
-                case BreathWeaponShape.Cone:
-                    return AoESystem.GetConeCells(
-                        origin,
-                        aimTargetPos,
-                        rangeSquares,
-                        gameManager.Grid);
+            AoEShape shape = bw.Shape == BreathWeaponShape.Cone ? AoEShape.Cone
+                : bw.Shape == BreathWeaponShape.Line ? AoEShape.Line
+                : AoEShape.None;
+            if (shape == AoEShape.None)
+                return null;
 
-                case BreathWeaponShape.Line:
-                    return AoESystem.GetLineCellsToTarget(
-                        origin,
-                        aimTargetPos,
-                        rangeSquares,
-                        gameManager.Grid);
-
-                default:
-                    return null;
-            }
+            AreaAim aim = AoESystem.BestDirectedAimAt(self, basePosition, shape, rangeSquares, aimTarget, gameManager.Grid);
+            return aim != null ? aim.Cells : null;
         }
 
         private static HashSet<Vector2Int> GetBreathCells(
@@ -543,7 +536,7 @@ namespace DND35.AI.Profiles
             GameManager gameManager)
         {
             return GetBreathCellsFromPosition(
-                self.GridPosition, aimTarget.GridPosition, bw, rangeSquares, gameManager);
+                self, self.GridPosition, aimTarget, bw, rangeSquares, gameManager);
         }
 
         private static bool IsCasterOrHealer(CharacterController target)

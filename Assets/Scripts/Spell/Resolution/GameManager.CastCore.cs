@@ -332,16 +332,53 @@ public partial class GameManager
         return null;
     }
 
+    /// <summary>
+    /// A burst's or cube's point of origin, the grid intersection the aim recorded (<see cref="CastAim.AreaOrigin"/>), must
+    /// be within the spell's range of the caster's space, counted intersection to intersection (PHB p.175;
+    /// AoESystem.IsOriginWithinRange, the test the PC cursor makes), and in the caster's line of effect (PHB p.176: "You
+    /// must have a clear line of effect to the point of origin of any spell you cast"; AoESystem.HasLineOfEffectToOrigin):
+    /// "origin-out-of-range" or "origin-no-line-of-effect" otherwise (batch 11 step 24, delegated RAW reading 2026-10-14 in
+    /// RULES_COVERAGE 4.1). A Grease area's origin, its 10-ft. square's centre, meets the line of effect test. The same
+    /// for every caster. Nothing to test for a cone or line (it starts at the caster), an area centred on the caster (no
+    /// range, its origin on the caster's space), a one-square effect or an aim with no recorded origin (the walls).
+    /// </summary>
+    private static CastOutcome CheckAreaOriginLegality(SpellCastRequest req)
+    {
+        SpellData spell = req.Spell;
+        GridIntersection? origin = req.Aim != null ? req.Aim.AreaOrigin : null;
+        if (!origin.HasValue)
+            return null;
+        Vector2Int casterBase = req.Caster.GridPosition;
+        int casterSize = req.Caster.GetCurrentSpaceSquares();
+        if (req.ResolveKind == CastResolveKind.Grease)
+            return AoESystem.HasLineOfEffectToOrigin(casterBase, casterSize, origin.Value)
+                ? null
+                : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-no-line-of-effect");
+        if (!AoESystem.IsPlacedShape(spell.AoEShapeType) || AoESystem.IsSingleSquarePlacement(spell))
+            return null;
+        int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(req);
+        if (range <= 0)
+            return null;
+        if (!AoESystem.IsOriginWithinRange(casterBase, casterSize, origin.Value, range))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-out-of-range");
+        if (!AoESystem.HasLineOfEffectToOrigin(casterBase, casterSize, origin.Value))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-no-line-of-effect");
+        return null;
+    }
+
     private CastOutcome CheckCastTargetLegality(SpellCastRequest req)
     {
         if (req == null || req.Spell == null || req.Caster == null)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-cast");
-        // Only a single-target cast has a target creature to test. An area cast's creatures are the ones in the aimed area
-        // (the area path never had a target test; the area aim's origin and line of effect are batch 11 step 24's,
-        // raw-area-origin-intersections, and SPL-006's); a summon aims at a square
+        // Only a single-target cast has a target creature to test. An area cast's creatures are the ones in the aimed area;
+        // its point of origin must be within the spell's range and the caster's line of effect (CheckAreaOriginLegality; the
+        // area's own line of effect is filtered at the start of the stage; batch 11 step 24); a summon aims at a square
         // and Grease at an area or an object, both picked from the targeting highlight (PerformSummonMonsterCast,
         // PerformSummonSwarmCast and PerformGreaseCast never had a target test either); a hold has no target until its
         // delivery, which has its own cast and test.
+        if (req.ResolveKind == CastResolveKind.Area
+            || (req.ResolveKind == CastResolveKind.Grease && req.Choices != null && req.Choices.GreaseMode == GreaseCastMode.Area))
+            return CheckAreaOriginLegality(req);
         if (req.ResolveKind != CastResolveKind.Single)
             return null;
         if (!IsValidTargetForSpell(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell))
@@ -433,8 +470,10 @@ public partial class GameManager
         CharacterController caster = req.Caster;
         SpellData spell = req.Spell;
 
-        // An area reaches only the squares and creatures its origin has line of effect to (PHB p.176).
-        if (req.ResolveKind == CastResolveKind.Area)
+        // An area reaches only the squares and creatures its origin has line of effect to (PHB p.176): an area cast, and a
+        // Grease cast on a 10-ft. square (batch 11 step 24, SPL-006).
+        if (req.ResolveKind == CastResolveKind.Area
+            || (req.ResolveKind == CastResolveKind.Grease && req.Choices != null && req.Choices.GreaseMode == GreaseCastMode.Area))
             FilterAreaAimByLineOfEffect(req);
 
         CastOutcome refusal = CheckNpcCasterLegality(req);
@@ -1404,9 +1443,13 @@ public partial class GameManager
     private static bool IsAreaCast(CastContext ctx) => ctx.Request.ResolveKind == CastResolveKind.Area;
 
     /// <summary>
-    /// The area's line of effect (PHB p.176): the squares and creatures the origin cannot reach are dropped from the
-    /// request's aim, in place (the lists the UI passed, as before). The origin is the centre of a burst's or a cube's
-    /// squares, else the caster's square (cones, lines and the rest), and is recorded on the aim.
+    /// The area's line of effect (PHB p.176: an area affects what its origin has line of effect to): the squares and
+    /// creatures the area's point of origin cannot reach are dropped from the request's aim, in place (the lists the UI
+    /// passed, as before). The origin is the grid intersection the builder recorded (<see cref="CastAim.AreaOrigin"/>: a
+    /// burst's or cube's point, a cone's or line's start, the self-centred area's corner, a Grease square's centre; batch 11
+    /// step 24, decision D5), so the cast drops exactly the squares the preview dropped. An area with no recorded origin
+    /// keeps a square-based origin: a burst or cube the intersection nearest the centre of its squares, a one-square effect
+    /// its square, anything else (the walls) the caster's square.
     /// </summary>
     private static void FilterAreaAimByLineOfEffect(SpellCastRequest req)
     {
@@ -1416,25 +1459,37 @@ public partial class GameManager
         if (spell == null || caster == null || aoeCells == null || aoeCells.Count == 0)
             return;
 
-        Vector2Int loeOrigin;
-        if (AoESystem.IsPlacedShape(spell.AoEShapeType))
+        GridIntersection? origin = req.Aim.AreaOrigin;
+        if (!origin.HasValue && AoESystem.IsPlacedShape(spell.AoEShapeType) && !AoESystem.IsSingleSquarePlacement(spell))
         {
-            // For bursts and cubes, the centre of the area's squares.
-            int sumX = 0, sumY = 0, count = 0;
+            // No recorded origin (a caller that predates step 24): the intersection nearest the centre of the squares.
+            float sumX = 0f, sumY = 0f;
             foreach (Vector2Int c in aoeCells)
             {
                 sumX += c.x;
                 sumY += c.y;
-                count++;
             }
-            loeOrigin = count > 0 ? new Vector2Int(sumX / count, sumY / count) : caster.GridPosition;
-        }
-        else
-        {
-            loeOrigin = caster.GridPosition;
+            origin = GridIntersection.NearestToGridPoint(new Vector2(sumX / aoeCells.Count, sumY / aoeCells.Count));
+            req.Aim.AreaOrigin = origin;
         }
 
-        req.Aim.Origin = loeOrigin;
+        if (origin.HasValue)
+        {
+            AoESystem.FilterCellsByLineOfEffect(aoeCells, origin.Value);
+            AoESystem.FilterTargetsByLineOfEffect(req.Aim.AreaTargets, origin.Value);
+            return;
+        }
+
+        // A one-square effect keeps its own square (as before step 24); the walls the caster's square.
+        Vector2Int loeOrigin = caster.GridPosition;
+        if (AoESystem.IsSingleSquarePlacement(spell))
+        {
+            foreach (Vector2Int c in aoeCells)
+            {
+                loeOrigin = c;
+                break;
+            }
+        }
         AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
         AoESystem.FilterTargetsByLineOfEffect(req.Aim.AreaTargets, loeOrigin);
     }

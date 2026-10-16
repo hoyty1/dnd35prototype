@@ -15,8 +15,8 @@ namespace Tests.Magic
 /// <item>SPL-119: AoESystem.GetTargetsInArea filters with TeamUtility relative to the caster, the same for a Player-team
 /// and an Enemy-team caster: AlliesOnly is the caster and its allies (Bless, PHB p.205), EnemiesOnly its enemies (Bane,
 /// PHB p.203), All every living creature, Self the caster; a dead creature is never taken.</item>
-/// <item>AoESystem.GetCubeCells: a cube of an odd side is centred on its square, of an even side has the square as the
-/// lower-left of its four central squares; squares off the grid are left out.</item>
+/// <item>AoESystem.GetCubeCells: a cube is centred on its point of origin, a grid intersection (batch 11 step 24); an odd
+/// side lies half a square north-east of it; squares off the grid are left out.</item>
 /// <item>Routing (AoESystem.RoutesToArea): every spell it routes to the area targeting has an area shape (Summon Swarm,
 /// an Area spell that places a swarm, is routed to its placement first), so no Area spell resolves against one clicked
 /// creature; the eleven spells of SPL-046 and SPL-042 carry their PHB areas and ranges, and Passwall (no area, no
@@ -142,29 +142,33 @@ public static class AreaRoutingTests
             grid.Height = 12;
             grid.GenerateGrid();
 
-            HashSet<Vector2Int> two = AoESystem.GetCubeCells(new Vector2Int(5, 5), 2, grid);
+            // A cube is centred on its point of origin, a grid intersection (batch 11 step 24, PHB p.175): +(6,6) is the
+            // north-east corner of square (5,5).
+            var centre = new GridIntersection(6, 6);
+            HashSet<Vector2Int> two = AoESystem.GetCubeCells(centre, 2, grid);
             Assert(two.Count == 4 && two.Contains(new Vector2Int(5, 5)) && two.Contains(new Vector2Int(6, 5))
                    && two.Contains(new Vector2Int(5, 6)) && two.Contains(new Vector2Int(6, 6)),
-                "a 10-ft. cube (2 squares) has the square as its lower-left (Wall of Thorns, PHB p.300)", "count " + two.Count);
+                "a 10-ft. cube (2 squares) is the four squares around its intersection (Wall of Thorns, PHB p.300)", "count " + two.Count);
 
-            HashSet<Vector2Int> six = AoESystem.GetCubeCells(new Vector2Int(5, 5), 6, grid);
+            HashSet<Vector2Int> six = AoESystem.GetCubeCells(centre, 6, grid);
             bool sixSpan = six.Count == 36 && six.Contains(new Vector2Int(3, 3)) && six.Contains(new Vector2Int(8, 8))
                            && !six.Contains(new Vector2Int(2, 5)) && !six.Contains(new Vector2Int(9, 5));
-            Assert(sixSpan, "a 30-ft. cube (6 squares) spans x and y 3..8 around square 5 (Order's Wrath, PHB p.258)", "count " + six.Count);
+            Assert(sixSpan, "a 30-ft. cube (6 squares) spans x and y 3..8 around intersection (6,6) (Order's Wrath, PHB p.258)", "count " + six.Count);
 
-            HashSet<Vector2Int> three = AoESystem.GetCubeCells(new Vector2Int(5, 5), 3, grid);
-            Assert(three.Count == 9 && three.Contains(new Vector2Int(4, 4)) && three.Contains(new Vector2Int(6, 6)),
-                "a cube of an odd side is centred on its square", "count " + three.Count);
+            HashSet<Vector2Int> three = AoESystem.GetCubeCells(centre, 3, grid);
+            Assert(three.Count == 9 && three.Contains(new Vector2Int(5, 5)) && three.Contains(new Vector2Int(7, 7)) && !three.Contains(new Vector2Int(4, 4)),
+                "a cube of an odd side (no spell has one) lies half a square north-east of its intersection", "count " + three.Count);
 
-            HashSet<Vector2Int> corner = AoESystem.GetCubeCells(new Vector2Int(0, 0), 6, grid);
+            HashSet<Vector2Int> corner = AoESystem.GetCubeCells(new GridIntersection(1, 1), 6, grid);
             Assert(corner.Count == 16, "squares off the grid are left out (a 30-ft. cube at the corner keeps 4 by 4)", "count " + corner.Count);
 
             SpellData ordersWrath = SpellDatabase.GetSpell(SpellNames.ORDERS_WRATH);
-            Assert(AoESystem.GetPlacedAreaCells(ordersWrath, new Vector2Int(5, 5), grid).SetEquals(six),
+            Assert(AoESystem.GetPlacedAreaCells(ordersWrath, centre, grid).SetEquals(six),
                 "GetPlacedAreaCells gives Order's Wrath its 30-ft. cube");
             SpellData holySmite = SpellDatabase.GetSpell(SpellNames.HOLY_SMITE);
-            Assert(AoESystem.GetPlacedAreaCells(holySmite, new Vector2Int(5, 5), grid).SetEquals(AoESystem.GetBurstCells(new Vector2Int(5, 5), 4, grid)),
-                "GetPlacedAreaCells gives Holy Smite its 20-ft.-radius burst");
+            HashSet<Vector2Int> smite = AoESystem.GetPlacedAreaCells(holySmite, centre, grid);
+            Assert(smite.SetEquals(AoESystem.GetBurstCells(centre, 4, grid)) && smite.Count == 44,
+                "GetPlacedAreaCells gives Holy Smite its 20-ft.-radius burst (44 squares)", "count " + smite.Count);
             Assert(AoESystem.IsPlacedShape(AoEShape.Burst) && AoESystem.IsPlacedShape(AoEShape.Cube) && !AoESystem.IsPlacedShape(AoEShape.Cone)
                    && !AoESystem.IsPlacedShape(AoEShape.Line) && !AoESystem.IsPlacedShape(AoEShape.None),
                 "bursts and cubes are placed at a point; cones and lines are aimed from the caster");

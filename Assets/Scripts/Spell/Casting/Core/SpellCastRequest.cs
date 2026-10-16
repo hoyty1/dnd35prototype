@@ -113,9 +113,12 @@ public sealed class SpellCastRequest
     /// <see cref="ForUi"/> or <see cref="ForUiPrebuilt"/> when the spell, scroll, wand or F12 cast was chosen) into an area
     /// cast aimed at <paramref name="cells"/> with the creatures in them, <paramref name="targets"/> (the core's Legality
     /// stage filters both by line of effect), with no single target, and gives it the PC area path's legacy quirks
-    /// (<see cref="LegacyCastQuirkSets.UiAreaPath"/>). Returns the request.
+    /// (<see cref="LegacyCastQuirkSets.UiAreaPath"/>). <paramref name="origin"/> is the area's point of origin, the grid
+    /// intersection the UI aimed it from (<see cref="CastAim.AreaOrigin"/>; batch 11 step 24), null for the walls. Returns
+    /// the request.
     /// </summary>
-    public static SpellCastRequest ForUiArea(SpellCastRequest request, List<CharacterController> targets, HashSet<Vector2Int> cells)
+    public static SpellCastRequest ForUiArea(SpellCastRequest request, List<CharacterController> targets, HashSet<Vector2Int> cells,
+        GridIntersection? origin = null)
     {
         if (request == null)
             return null;
@@ -125,6 +128,7 @@ public sealed class SpellCastRequest
         request.Aim.Target = null;
         request.Aim.AreaTargets = targets;
         request.Aim.Cells = cells;
+        request.Aim.AreaOrigin = origin;
         request.Quirks = LegacyCastQuirkSets.UiAreaPath;
         return request;
     }
@@ -155,10 +159,11 @@ public sealed class SpellCastRequest
     /// the 10-ft square's <paramref name="cells"/> and the creatures in it, <paramref name="areaTargets"/>; an object or
     /// armor cast records the creature holding or wearing the object, <paramref name="objectHolder"/> (the spell's target
     /// is the object). No target creature; the Grease path's legacy quirks (<see cref="LegacyCastQuirkSets.UiGreasePath"/>).
-    /// Returns the request.
+    /// An area cast records its square's centre, <paramref name="areaOrigin"/>, as its point of origin, from which the
+    /// Legality stage traces line of effect (batch 11 step 24, SPL-006). Returns the request.
     /// </summary>
     public static SpellCastRequest ForUiGrease(SpellCastRequest request, CharacterController objectHolder,
-        List<CharacterController> areaTargets, HashSet<Vector2Int> cells)
+        List<CharacterController> areaTargets, HashSet<Vector2Int> cells, GridIntersection? areaOrigin = null)
     {
         if (request == null)
             return null;
@@ -169,6 +174,7 @@ public sealed class SpellCastRequest
         request.Aim.ObjectHolder = objectHolder;
         request.Aim.AreaTargets = areaTargets;
         request.Aim.Cells = cells;
+        request.Aim.AreaOrigin = areaOrigin;
         request.Quirks = LegacyCastQuirkSets.UiGreasePath;
         return request;
     }

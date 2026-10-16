@@ -235,8 +235,8 @@ public static partial class NPCDatabase
     /// MM 3.5e p.14. 3d10+12 HP (28), bite 2d6+7 + 1d4 acid.
     /// Spit acid 30-ft line once every 6 hours: 4d4 acid (Ref DC 14 half).
     /// Improved grab on bite. Burrows 20 ft.
-    /// NOTE: Acid spit uses BreathWeapon system (line shape). Existing AoESystem.GetLineCellsToTarget
-    /// handles line targeting. BreathWeaponDefinition supports Line shape natively.
+    /// NOTE: Acid spit uses BreathWeapon system (line shape): the line starts at an intersection on the edge of the
+    /// creature's space (AoESystem.BestDirectedAimAt / GetLineCells; batch 11 step 24). BreathWeaponDefinition supports Line shape natively.
     /// </summary>
     private static void RegisterAnkheg()
     {

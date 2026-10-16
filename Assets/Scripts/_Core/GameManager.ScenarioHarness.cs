@@ -455,6 +455,31 @@ public partial class GameManager
         OnSpecialAttackSelected(type, offHand);
     }
 
+    /// <summary>
+    /// The cursor position, in grid units (a square's centre is its coordinates), that the area targeting reads while it is
+    /// set (GetMouseWorldPosition), so a scripted click aims where the scenario says rather than wherever the editor's
+    /// cursor is; null in play. The scenario steps set it to the clicked square's centre around each click (batch 11 step
+    /// 24: a burst then originates at that square's north-east corner, a cone or line starts at the caster's corner nearest
+    /// it). Writes no game state.
+    /// </summary>
+    internal Vector2? Harness_AimPoint;
+
+    /// <summary>
+    /// The PC area aim rule (TryBuildUiAreaAim, the rule the cursor's preview and the click share; batch 11 step 24) for
+    /// <paramref name="caster"/> casting <paramref name="spell"/> at <paramref name="gridPoint"/> (grid units), for the
+    /// static tests. Writes no game state.
+    /// </summary>
+    internal bool Harness_BuildUiAreaAim(CharacterController caster, SpellData spell, Vector2 gridPoint,
+        out HashSet<Vector2Int> cells, out GridIntersection? origin)
+        => TryBuildUiAreaAim(caster, spell, gridPoint, out cells, out origin);
+
+    /// <summary>
+    /// The Legality stage's area line of effect filter (FilterAreaAimByLineOfEffect: the aim's squares and creatures that
+    /// its recorded origin cannot reach are dropped, in place) on <paramref name="req"/>, for the static tests (batch 11
+    /// step 24, SPL-006). Changes only the request.
+    /// </summary>
+    internal static void Harness_FilterAreaAimByLineOfEffect(SpellCastRequest req) => FilterAreaAimByLineOfEffect(req);
+
     /// <summary>The spell menu callback, as if the player picked <paramref name="spell"/> with <paramref name="metamagic"/>.</summary>
     internal void Harness_SelectSpell(SpellData spell, MetamagicData metamagic)
     {
@@ -534,6 +559,19 @@ public partial class GameManager
     {
         if (CurrentSubPhase != PlayerSubPhase.ConfirmingSelfAoE)
             return false;
+        // The corner is the scenario's, not wherever the editor's cursor left it (UpdateSelfAoEPreview reads the real mouse
+        // every frame): the caster's creature-centred origin nearest Harness_AimPoint when set, else the default (north-east)
+        // one, so a scripted Bless, Bane or Prayer always originates at the same corner (batch 11 step 24 review).
+        CharacterController caster = ActivePC;
+        if (caster != null && _pendingSpell != null && Grid != null)
+        {
+            List<GridIntersection> origins = AoESystem.GetCreatureCentredOrigins(caster);
+            if (origins.Count > 0)
+            {
+                GridIntersection origin = Harness_AimPoint.HasValue ? AoESystem.NearestOf(origins, Harness_AimPoint.Value) : origins[0];
+                ShowSelfAoEPreview(caster, _pendingSpell, origin);
+            }
+        }
         OnSelfAoEConfirmed();
         return true;
     }

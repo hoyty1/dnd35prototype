@@ -542,6 +542,12 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         int radiusSquares = Mathf.Max(1, casterLevel); // 5 ft/level = 1 square/level
+        // The emanation is centred on the caster: its point of origin is a corner of the caster's square, the caster's choice
+        // (decision D5 (3), delegated RAW reading 2026-10-14), here the one its caster would choose, PC or NPC: the most
+        // invisible enemies revealed less invisible allies, the first corner on a tie; a square is in it when its far edge is
+        // (PHB p.175; batch 11 step 24). Only this purge at the casting is counted so; the lasting emanation is SPL-192.
+        GridIntersection origin = AoESystem.BestCreatureCentredOrigin(caster, radiusSquares, Grid,
+            c => !c.HasCondition(CombatConditionType.Invisible) ? 0 : TeamUtility.IsEnemy(caster, c) ? 1 : TeamUtility.IsAlly(caster, c) ? -1 : 0);
 
         // Set caster state
         caster.Stats.InvisibilityPurgeActive = true;
@@ -564,8 +570,7 @@ public partial class GameManager
             if (ch == null || ch.Stats == null || ch.Stats.IsDead) continue;
             if (ch == caster) continue;
 
-            int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
-            if (dist > radiusSquares) continue;
+            if (!AoESystem.IsCreatureInBurst(origin, radiusSquares, ch)) continue;
 
             // The emanation does not include a globe of invulnerability that excludes the purge (PHB p.236): a creature
             // inside one keeps its invisibility (batch 11 step 11, SPL-141; later entries are SPL-141's open part).

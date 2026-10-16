@@ -55,7 +55,7 @@ public partial class GameManager
         {
             int sleetDuration = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.280: 1 round/level (SPL-002)
             Vector3 sleetCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-            CreateSleetStormArea(sleetCenter, sleetDuration, casterLevel, caster);
+            CreateSleetStormArea(sleetCenter, sleetDuration, casterLevel, caster, footprint: aoeCells);
 
             var sleetLog = new StringBuilder();
             sleetLog.AppendLine("═══════════════════════════════════");
@@ -89,7 +89,7 @@ public partial class GameManager
             int cloudDuration = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.284: 1 round/level (SPL-002)
             int saveDc = GetSpellSaveDC(caster, spell);
             Vector3 cloudCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-            CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell));
+            CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell), footprint: aoeCells);
 
             var cloudLog = new StringBuilder();
             cloudLog.AppendLine("═══════════════════════════════════");
@@ -124,7 +124,7 @@ public partial class GameManager
             if (solidFogDuration <= 0)
                 solidFogDuration = Mathf.Max(1, casterLevel * 10); // 1 min/level = 10 rounds/level fallback
             Vector3 solidFogCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-            CreateSolidFogArea(solidFogCenter, solidFogDuration, casterLevel, caster);
+            CreateSolidFogArea(solidFogCenter, solidFogDuration, casterLevel, caster, footprint: aoeCells);
 
             var solidFogLog = new StringBuilder();
             solidFogLog.AppendLine("═══════════════════════════════════");
@@ -167,11 +167,11 @@ public partial class GameManager
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
 
         if (isObscuringMist)
-            CreateObscuringMistArea(centerPosition, durationRounds, casterLevel, caster);
+            CreateObscuringMistArea(centerPosition, durationRounds, casterLevel, caster, footprint: aoeCells);
         else if (isFogCloud)
-            CreateFogCloudArea(centerPosition, durationRounds, casterLevel, caster);
+            CreateFogCloudArea(centerPosition, durationRounds, casterLevel, caster, footprint: aoeCells);
         else
-            CreateDarknessArea(centerPosition, durationRounds, casterLevel, caster);
+            CreateDarknessArea(centerPosition, durationRounds, casterLevel, caster, footprint: aoeCells);
 
         var sb = new StringBuilder();
         string spellName = isObscuringMist ? "Obscuring Mist" : (isFogCloud ? "Fog Cloud" : "Darkness");
@@ -212,37 +212,40 @@ public partial class GameManager
         return true;
     }
 
-    public void CreateObscuringMistArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateObscuringMistArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject mistObject = new GameObject("ObscuringMist_Area");
         mistObject.transform.position = centerPosition;
 
         ObscuringMistAreaEffect mist = mistObject.AddComponent<ObscuringMistAreaEffect>();
         mist.CenterPosition = centerPosition;
+        mist.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         mist.RoundsRemaining = Mathf.Max(1, durationRounds);
         mist.CasterLevel = Mathf.Max(1, casterLevel);
         mist.Caster = caster;
     }
 
-    public void CreateFogCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateFogCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject fogObject = new GameObject("FogCloud_Area");
         fogObject.transform.position = centerPosition;
 
         FogCloudAreaEffect fog = fogObject.AddComponent<FogCloudAreaEffect>();
         fog.CenterPosition = centerPosition;
+        fog.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         fog.RoundsRemaining = Mathf.Max(1, durationRounds);
         fog.CasterLevel = Mathf.Max(1, casterLevel);
         fog.Caster = caster;
     }
 
-    public void CreateDarknessArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateDarknessArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject darknessObject = new GameObject("Darkness_Area");
         darknessObject.transform.position = centerPosition;
 
         DarknessAreaEffect darkness = darknessObject.AddComponent<DarknessAreaEffect>();
         darkness.CenterPosition = centerPosition;
+        darkness.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         darkness.RoundsRemaining = Mathf.Max(1, durationRounds);
         darkness.CasterLevel = Mathf.Max(1, casterLevel);
         darkness.Caster = caster;
@@ -272,25 +275,27 @@ public partial class GameManager
         return SquareGridUtils.GridToWorld(centerX, centerY);
     }
 
-    public void CreateSleetStormArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateSleetStormArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject sleetObject = new GameObject("SleetStorm_Area");
         sleetObject.transform.position = centerPosition;
 
         SleetStormAreaEffect sleet = sleetObject.AddComponent<SleetStormAreaEffect>();
         sleet.CenterPosition = centerPosition;
+        sleet.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         sleet.RoundsRemaining = Mathf.Max(1, durationRounds);
         sleet.CasterLevel = Mathf.Max(1, casterLevel);
         sleet.Caster = caster;
     }
 
-    public void CreateStinkingCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null)
+    public void CreateStinkingCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null, HashSet<Vector2Int> footprint = null)
     {
         GameObject cloudObject = new GameObject("StinkingCloud_Area");
         cloudObject.transform.position = centerPosition;
 
         StinkingCloudAreaEffect cloud = cloudObject.AddComponent<StinkingCloudAreaEffect>();
         cloud.CenterPosition = centerPosition;
+        cloud.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         cloud.RoundsRemaining = Mathf.Max(1, durationRounds);
         cloud.CasterLevel = Mathf.Max(1, casterLevel);
         cloud.SaveDC = Mathf.Max(1, saveDc);
@@ -298,13 +303,14 @@ public partial class GameManager
         cloud.Metamagic = metamagic; // the cast's Empower and Maximize for the lingering nausea (batch 11 step 19)
     }
 
-    public void CreateSolidFogArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateSolidFogArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject fogObject = new GameObject("SolidFog_Area");
         fogObject.transform.position = centerPosition;
 
         SolidFogAreaEffect fog = fogObject.AddComponent<SolidFogAreaEffect>();
         fog.CenterPosition = centerPosition;
+        fog.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         fog.RoundsRemaining = Mathf.Max(1, durationRounds);
         fog.CasterLevel = Mathf.Max(1, casterLevel);
         fog.Caster = caster;
@@ -321,7 +327,7 @@ public partial class GameManager
         int saveDc = GetSpellSaveDC(caster, spell);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-        CreateGlitterdustArea(centerPosition, durationRounds, casterLevel, caster);
+        CreateGlitterdustArea(centerPosition, durationRounds, casterLevel, caster, footprint: aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -407,13 +413,14 @@ public partial class GameManager
         return true;
     }
 
-    public void CreateGlitterdustArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    public void CreateGlitterdustArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster, HashSet<Vector2Int> footprint = null)
     {
         GameObject glitterObj = new GameObject("Glitterdust_Area");
         glitterObj.transform.position = centerPosition;
 
         GlitterdustAreaEffect glitter = glitterObj.AddComponent<GlitterdustAreaEffect>();
         glitter.CenterPosition = centerPosition;
+        glitter.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         glitter.RoundsRemaining = Mathf.Max(1, durationRounds);
         glitter.CasterLevel = Mathf.Max(1, casterLevel);
         glitter.Caster = caster;
@@ -430,7 +437,7 @@ public partial class GameManager
         int saveDc = GetSpellSaveDC(caster, spell);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
-        CreateWebArea(centerPosition, durationRounds, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell));
+        CreateWebArea(centerPosition, durationRounds, casterLevel, saveDc, caster, SpellDiceRules.MetamagicOf(spell), footprint: aoeCells);
 
         int totalTargets = 0;
         int entangledTargets = 0;
@@ -470,13 +477,14 @@ public partial class GameManager
         return true;
     }
 
-    public void CreateWebArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null)
+    public void CreateWebArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster, MetamagicData metamagic = null, HashSet<Vector2Int> footprint = null)
     {
         GameObject webObject = new GameObject("Web_Area");
         webObject.transform.position = centerPosition;
 
         WebAreaEffect web = webObject.AddComponent<WebAreaEffect>();
         web.CenterPosition = centerPosition;
+        web.CastFootprint = footprint != null ? new HashSet<Vector2Int>(footprint) : null; // the cast's squares (batch 11 step 24)
         web.RoundsRemaining = Mathf.Max(1, durationRounds);
         web.CasterLevel = Mathf.Max(1, casterLevel);
         web.SaveDC = Mathf.Max(1, saveDc);

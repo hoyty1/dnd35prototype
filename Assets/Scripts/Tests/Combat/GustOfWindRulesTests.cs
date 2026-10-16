@@ -92,44 +92,49 @@ namespace Tests.Combat
                 grid.Height = 35;
                 grid.GenerateGrid();
 
-                Vector2Int origin = new Vector2Int(12, 12);
-
+                // A 60-ft. line starts at the corner of the caster's square nearest the square aimed at, runs through that
+                // square's centre and extends to its full length (PHB p.175; batch 11 step 24, decision D5).
+                Vector2Int caster = new Vector2Int(12, 12);
                 Vector2Int endpoint = new Vector2Int(20, 13);
-                HashSet<Vector2Int> lineCells = AoESystem.GetLineCellsToTarget(origin, endpoint, 12, grid);
+                bool aimed = AoESystem.TryAimLine(caster, 1, new Vector2(endpoint.x, endpoint.y), 12, grid,
+                    out GridIntersection start, out HashSet<Vector2Int> lineCells);
 
+                Assert(aimed && start == new GridIntersection(13, 13),
+                    "Line starts at the caster's corner nearest the aimed square", $"aimed={aimed} start={start}");
                 Assert(lineCells.Contains(endpoint),
                     "Line targeting includes clicked endpoint cell");
+                Assert(!lineCells.Contains(caster),
+                    "Line never covers the caster's own square");
 
-                bool hasEastOnlySnap = lineCells.Contains(new Vector2Int(13, 12)) && !lineCells.Contains(new Vector2Int(13, 13));
-                Assert(!hasEastOnlySnap,
-                    "Line targeting no longer snaps to 8 fixed directions");
-
-                int furthestDistance = 0;
+                int furthestCount = 0;
                 foreach (Vector2Int cell in lineCells)
-                    furthestDistance = Mathf.Max(furthestDistance, SquareGridUtils.GetDistance(origin, cell));
-
-                Assert(furthestDistance == 12,
+                    furthestCount = Mathf.Max(furthestCount, AoESystem.CountToFarCorner(start, cell));
+                Assert(furthestCount == 12,
                     "Line targeting extends to the full 60-ft length from trajectory",
-                    $"furthestDistance={furthestDistance}");
+                    $"furthestCount={furthestCount}");
 
-                int clickedDistance = SquareGridUtils.GetDistance(origin, endpoint);
                 bool hasCellsBeyondClickedPoint = false;
                 foreach (Vector2Int cell in lineCells)
                 {
-                    if (SquareGridUtils.GetDistance(origin, cell) > clickedDistance)
+                    if (cell.x > endpoint.x)
                     {
                         hasCellsBeyondClickedPoint = true;
                         break;
                     }
                 }
-
                 Assert(hasCellsBeyondClickedPoint,
                     "Line targeting affects cells beyond the clicked square when endpoint is closer than 60 ft");
 
-                Vector2Int outOfRangeEndpoint = new Vector2Int(30, 12);
-                HashSet<Vector2Int> outOfRangeCells = AoESystem.GetLineCellsToTarget(origin, outOfRangeEndpoint, 12, grid);
-                Assert(outOfRangeCells.Count == 0,
-                    "Line targeting rejects endpoints outside 60-ft range");
+                // Aimed at a square 90 ft. away the line still covers its first 60 ft.: 12 squares of row 12.
+                HashSet<Vector2Int> farCells = AoESystem.GetLineCells(new GridIntersection(13, 13), new Vector2(30f, 12f), 12, grid);
+                bool allRow12 = true;
+                foreach (Vector2Int cell in farCells)
+                    allRow12 &= cell.y == 12 && cell.x >= 13 && cell.x <= 24;
+                Assert(farCells.Count == 12 && allRow12,
+                    "A line aimed beyond 60 ft. covers its full 60 ft. (12 squares)", $"count={farCells.Count}");
+
+                Assert(!AoESystem.TryAimLine(caster, 1, new Vector2(12.2f, 11.9f), 12, grid, out _, out _),
+                    "A line cannot be aimed at a point inside the caster's square");
             }
             finally
             {

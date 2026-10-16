@@ -152,6 +152,14 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     /// </summary>
     protected bool IsGridHighlightApplied => gridHighlightApplied;
 
+    /// <summary>
+    /// The squares of the cast that made this area, as the caster aimed it (the cast's aim after line of effect: a burst
+    /// counted from its grid intersection, PHB p.175, with its metamagic size). When set before <c>Start</c>, the area
+    /// covers exactly these squares instead of a shape computed around <see cref="CenterPosition"/>, so the lasting area is
+    /// the area the cast previewed and resolved (batch 11 step 24, decision D5; SPL-029). Walls compute their own squares.
+    /// </summary>
+    public HashSet<Vector2Int> CastFootprint { get; set; }
+
     public HashSet<Vector2Int> AffectedCells { get; protected set; }
     public HashSet<CharacterController> CharactersInArea { get; protected set; }
     public GameObject VisualIndicator { get; protected set; }
@@ -249,35 +257,42 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         int baseX = anchor.x;
         int baseY = anchor.y;
 
-        switch (Shape)
+        if (CastFootprint != null && CastFootprint.Count > 0)
         {
-            case AreaShape.Square:
-                CalculateSquareArea(baseX, baseY);
-                break;
+            AffectedCells.UnionWith(CastFootprint);
+        }
+        else
+        {
+            switch (Shape)
+            {
+                case AreaShape.Square:
+                    CalculateSquareArea(baseX, baseY);
+                    break;
 
-            case AreaShape.Rectangle:
-                CalculateRectangleArea(baseX, baseY);
-                break;
+                case AreaShape.Rectangle:
+                    CalculateRectangleArea(baseX, baseY);
+                    break;
 
-            case AreaShape.Circle:
-                CalculateCircleArea(baseX, baseY);
-                break;
+                case AreaShape.Circle:
+                    CalculateCircleArea(baseX, baseY);
+                    break;
 
-            case AreaShape.Line:
-                CalculateLineArea(baseX, baseY);
-                break;
+                case AreaShape.Line:
+                    CalculateLineArea(baseX, baseY);
+                    break;
 
-            case AreaShape.Cone:
-                CalculateConeArea(baseX, baseY);
-                break;
+                case AreaShape.Cone:
+                    CalculateConeArea(baseX, baseY);
+                    break;
 
-            case AreaShape.Cylinder:
-                CalculateCircleArea(baseX, baseY);
-                break;
+                case AreaShape.Cylinder:
+                    CalculateCircleArea(baseX, baseY);
+                    break;
 
-            default:
-                CalculateSquareArea(baseX, baseY);
-                break;
+                default:
+                    CalculateSquareArea(baseX, baseY);
+                    break;
+            }
         }
 
         if (gameManager != null && gameManager.Grid != null)

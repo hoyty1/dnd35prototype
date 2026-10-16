@@ -900,20 +900,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 13,
-      "failed": 2,
+      "passed": 17,
+      "failed": 0,
       "flakyFailures": 0,
-      "knownFailures": [
-        {
-          "match": "Line targeting no longer snaps to 8 fixed directions",
-          "issue": "TST-030"
-        },
-        {
-          "match": "Line targeting rejects endpoints outside 60-ft range",
-          "issue": "TST-030"
-        }
-      ],
-      "notes": ""
+      "knownFailures": [],
+      "notes": "Batch 11 step 24 (2026-10-16) rewrote TestLineTargetingUsesClickedEndpoint for a line that starts at the corner of the caster's square nearest the aimed square (PHB p.175; AoESystem.TryAimLine, GetLineCells): 17/17 in its first Play pass (20261016T110234Z-play); its two TST-030 known failures, which encoded the old centre-of-square line, are gone."
     },
     {
       "type": "Tests.Combat.HypnotismRulesTests",
@@ -1435,6 +1426,17 @@
       "flakyFailures": 0,
       "knownFailures": [],
       "notes": "Batch 11 step 20 (2026-10-16, decision D6, SPL-180, SPL-090): an area damage effect rolls its damage once and every creature takes that one total before its own SR, save and Evasion. AreaDamageRoll rolls on first use only; Fireball (TryResolveScaledAoEDamageSpell) by a wizard 5 over three creatures draws one 5d6 (not three), the failing creature takes 15, the saving one 7, a saving rogue 3 none (Evasion, PHB p.50); a creature whose SR stops it draws no die and a cast whose every creature resists draws none; an empowered Fireball gives both creatures 15 + 7 (PHB p.93); SpellCaster.Cast with a shared AreaDamageRoll (the generic area loop; Burning Hands) draws one 5d4 for four creatures, a saving rogue takes none (EvasionNote) and a failing monk 9 half (Improved Evasion, PHB p.42), and without one rolls per call; Cone of Cold, Ice Storm (both parts), Shout, Sunburst and Earthquake's debris draw one roll for two creatures; a Wall of Ice section in a Fireball takes the creature's same 15 and the log shows the one roll; a Wall of Fire evoked onto two creatures rolls one 2d6 + CL for both and a later pass its own; Improved Evasion halves 1 point to 0 (ApplyEvasion and SpellCaster.Cast, whose log's raw line shows 0). Every non-d20 die forced to a rising sequence, every d20 to 10. Play only (the scene GameManager's handlers, by reflection). 48/48 in its first Play pass; 79/79 after the step 20 review checks."
+    },
+    {
+      "type": "Tests.Magic.AreaOriginTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 68,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 24 (2026-10-16, raw-area-origin-intersections; decision D5, PHB p.175-176): golden footprints counted from a grid intersection (bursts of 4 to 172 squares, the 20-ft. burst's rows, the far-edge rule), cones diagonally and along a grid line (the delegated symmetric pattern), a 15-ft. cone from each corner in each of 8 directions, a 60-ft. line straight and diagonal, creature-centred origins and edge intersections, the range to an origin, the candidate aims, line of effect from an intersection with a test blocker (44 checks, edit mode too); in Play mode the AI's Fireball corner that spares an ally, a breath's corner, the PC aim rule (Harness_BuildUiAreaAim), the cast core's origin range refusal and Prayer's corner. Added 2026-10-16; 53/53 in its first Play pass (20261016T110234Z-play). The step 24 review added an origin on a wall's face, the caster's line of effect to an origin (AI candidates, PC aim, the cast core for a burst and a Grease area), a Large ally's squares in ally sparing, a scored creature-centred corner and the Web and Fog Cloud footprints (SPL-029): 51 in edit mode, 68/68 in Play (20261016T112840Z-play)."
     },
     {
       "type": "Tests.Magic.AreaRoutingTests",

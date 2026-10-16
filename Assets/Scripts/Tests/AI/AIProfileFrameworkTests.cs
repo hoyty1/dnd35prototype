@@ -662,6 +662,7 @@ namespace Tests.AI
                     AoEShapeType = AoEShape.Burst,
                     AoESizeSquares = 2,
                     AreaRadius = 2,
+                    AoERangeSquares = 20, // placed within range (a range of 0 is a burst centred on the caster)
                     DamageCount = 6,
                     DamageDice = 6,
                     BonusDamage = 0,

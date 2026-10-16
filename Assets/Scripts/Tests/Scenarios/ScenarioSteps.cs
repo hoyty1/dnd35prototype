@@ -1297,8 +1297,26 @@ namespace Tests.Scenarios
                 gm.Harness_CancelToActionChoices();
                 return;
             }
-            gm.OnCellClicked(c);
+            ClickAt(gm, c);
             CancelIfStillSelecting(gm, expected);
+        }
+
+        /// <summary>
+        /// Clicks <paramref name="c"/> with the area targeting's cursor on the square's centre (GameManager.Harness_AimPoint),
+        /// so an aim does not depend on where the editor's cursor is: a burst originates at the square's north-east corner,
+        /// a cone or a line starts at the caster's corner nearest it (batch 11 step 24).
+        /// </summary>
+        private static void ClickAt(GameManager gm, SquareCell c)
+        {
+            gm.Harness_AimPoint = new UnityEngine.Vector2(c.Coords.x, c.Coords.y);
+            try
+            {
+                gm.OnCellClicked(c);
+            }
+            finally
+            {
+                gm.Harness_AimPoint = null;
+            }
         }
 
         private void CancelIfStillSelecting(GameManager gm, params GameManager.PlayerSubPhase[] selecting)
@@ -1495,7 +1513,7 @@ namespace Tests.Scenarios
                 gm.Harness_CancelToActionChoices();
                 return true;
             }
-            gm.OnCellClicked(c);
+            ClickAt(gm, c);
             CancelIfStillSelecting(gm, sub);
             return true;
         }

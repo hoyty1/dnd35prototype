@@ -93,7 +93,11 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
-        int radiusSquares = 8; // 40 ft = 8 squares
+        int radiusSquares = Mathf.Max(1, spell.AoESizeSquares); // 40 ft = 8 squares (PHB p.264), doubled by Widen
+        // The 40-ft. burst is centred on the caster: its point of origin is a corner of the caster's square (decision D5 (3),
+        // delegated RAW reading 2026-10-14), here the one that takes in the most creatures; a square is in the burst when
+        // its far edge is (PHB p.175; batch 11 step 24). The PC's area cast of Prayer picks the corner with the cursor.
+        GridIntersection origin = AoESystem.BestCreatureCentredOrigin(caster, radiusSquares, Grid);
 
         List<CharacterController> allChars = GetAllCharacters();
         int allyCount = 0;
@@ -103,9 +107,8 @@ public partial class GameManager
         {
             if (ch == null || ch.Stats == null || ch.Stats.IsDead) continue;
 
-            // Check distance from caster
-            int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
-            if (dist > radiusSquares) continue;
+            // In the burst: the caster always, anyone else with a square of its space in it.
+            if (ch != caster && !AoESystem.IsCreatureInBurst(origin, radiusSquares, ch)) continue;
 
             // The burst does not include a globe of invulnerability that excludes Prayer (PHB p.236): a creature inside one,
             // the caster included, gets neither the bonus nor the penalty (batch 11 step 11, SPL-141).

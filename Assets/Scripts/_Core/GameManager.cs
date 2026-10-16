@@ -408,6 +408,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isConfirmingSelfAoE;                     // Waiting for user to confirm self-centered AoE
     private HashSet<Vector2Int> _pendingSelfAoECells;      // AoE cells for preview
     private List<CharacterController> _pendingSelfAoETargets; // Targets that will be affected
+    private GridIntersection _pendingSelfAoEOrigin;         // The self-centred area's point of origin (batch 11 step 24)
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
@@ -2230,6 +2231,8 @@ public partial class GameManager : MonoBehaviour
         // Update AoE preview during AoE targeting phase (runs every frame)
         if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget)
             UpdateAoEPreview();
+        else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+            UpdateSelfAoEPreview();
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
             UpdateChargeHoverPreview();

@@ -27,6 +27,8 @@ namespace Tests.Scenarios
         {
             yield return S("cast-ui-fireball", UiFireball);
             yield return S("cast-ui-cone-line", UiConeLine);
+            yield return S("area-origin-fireball-ui", AreaOriginFireballUi);
+            yield return S("area-origin-breath-ai", AreaOriginBreathAi);
             yield return S("area-damage-one-roll", AreaDamageOneRoll);
             yield return S("sound-burst-area", SoundBurstArea);
             yield return S("cast-pair-alignment-burst", AlignmentBurstUi);
@@ -511,6 +513,86 @@ namespace Tests.Scenarios
                 .Build();
         }
 
+        // ── rules/area-origin-fireball-ui, rules/area-origin-breath-ai (batch 11 step 24, decision D5) ──
+
+        /// <summary>
+        /// A Ui Fireball aimed by clicking d1's square: its point of origin is that square's north-east corner, the
+        /// intersection +(11,11) (PHB p.175: the point of origin of a spell is always a grid intersection; the scenario click
+        /// aims at the square's centre, which snaps to that corner). A square is in the 20-ft. burst when its far corner is
+        /// within 4 squares of the origin, counted like movement: d1 (10,10), dWest (7,10) and dNorthEast (13,13) are in it;
+        /// dSouth (10,6) and dSouthWest (7,7), both inside the old burst centred on d1's square, are not. Every d6 is 6
+        /// (5d6 = 30) and every dummy fails its Reflex save. Batch 11 step 24.
+        /// </summary>
+        private static ScenarioDef AreaOriginFireballUi()
+        {
+            return Rules("rules/area-origin-fireball-ui", "A Ui Fireball originates at a grid intersection and covers the squares whose far corner is within 20 ft. (PHB p.175)")
+                .Covers("PHB p.175", "PHB p.231", "batch 11 step 24")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Aiming Wizard", 5)), 2, 10, Control.Ui)
+                .Npc("d1", "target_dummy", 10, 10, Control.Idle)
+                .Npc("dWest", "target_dummy", 7, 10, Control.Idle)
+                .Npc("dNorthEast", "target_dummy", 13, 13, Control.Idle)
+                .Npc("dSouth", "target_dummy", 10, 6, Control.Idle)
+                .Npc("dSouthWest", "target_dummy", 7, 7, Control.Idle)
+                .Tweak("wizard", c => AddWizardSlot(c, 3, SpellNames.FIREBALL))
+                .Tweak("d1", Fails).Tweak("dWest", Fails).Tweak("dNorthEast", Fails).Tweak("dSouth", Fails).Tweak("dSouthWest", Fails)
+                .Initiative("wizard", "d1", "dWest", "dNorthEast", "dSouth", "dSouthWest")
+                .Force(6, 6, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "d1", "dWest", "dNorthEast", "dSouth", "dSouthWest"); return true; }),
+                    Step.Cast(SpellNames.FIREBALL, "d1"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "fireball", "d1", "dWest", "dNorthEast", "dSouth", "dSouthWest"); return true; }))
+                .Expect("The Ui cast ran", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("The burst from +(11,11) takes d1, dWest (far corner 4 squares away) and dNorthEast (3 diagonals = 4) (PHB p.175)",
+                    FactsAre(("fireball.lost.d1", 30), ("fireball.lost.dWest", 30), ("fireball.lost.dNorthEast", 30)))
+                .Expect("dSouth (far corner 5 squares away) and dSouthWest (4 diagonals = 6) are outside it",
+                    FactsAre(("fireball.lost.dSouth", 0), ("fireball.lost.dSouthWest", 0)))
+                .Build();
+        }
+
+        /// <summary>
+        /// The AI's breath aim (AoESystem.BestDirectedAimAt, the aim DragonAIProfile scores and NPCExecuteBreathWeaponForAI
+        /// fires): a Scripted hell hound at (5,10) breathes its 10-ft. cone (MM p.151) at hero1 (7,10). The cone starts at a
+        /// corner of the hound's square (PHB p.175; MM p.69); from the north-east corner it would take hero1 and the hound's
+        /// kobold ally at (7,11), from the south-east corner hero1 and hero2 (6,9), so the AI takes the south-east corner:
+        /// both heroes take the 2d6 (forced to 12) on failed saves and the kobold takes nothing. The old cone from the hound's
+        /// square (one square, then three) took the kobold and missed hero2. Batch 11 step 24.
+        /// </summary>
+        private static ScenarioDef AreaOriginBreathAi()
+        {
+            return Rules("rules/area-origin-breath-ai", "An AI breath cone starts at the corner of the creature's square that takes the most foes and spares its ally (PHB p.175, MM p.69)")
+                .Covers("PHB p.175", "MM p.69", "MM p.151", "batch 11 step 24")
+                .MaxRounds(1)
+                .Npc("hound", "hell_hound", 5, 10, Control.Scripted)
+                .Pc("hero1", ActorSource.Stats(() => Wizard("First Hero", 1)), 7, 10, Control.Idle)
+                .Pc("hero2", ActorSource.Stats(() => Wizard("Second Hero", 1)), 6, 9, Control.Idle)
+                .Npc("kobold", "kobold_warrior", 7, 11, Control.Idle)
+                .Tweak("hero1", Fails).Tweak("hero2", Fails).Tweak("kobold", Fails)
+                .Initiative("hound", "hero1", "hero2", "kobold")
+                .Force(6, 6, "Breath weapon damage", -1)
+                .Script("hound", HoundBreathAtHero)
+                .Expect("The hound breathed", FactIs("breath", "used"))
+                .Expect("The cone from the south-east corner takes both heroes (2d6 = 12, failed saves)",
+                    FactsAre(("breath.lost.hero1", 12), ("breath.lost.hero2", 12)))
+                .Expect("The kobold, the hound's ally, is not in the cone", FactIs("breath.lost.kobold", 0))
+                .Build();
+        }
+
+        /// <summary>The hound's script: one breath at hero1 through the AI's breath executor, with the hit points around it.</summary>
+        private static System.Collections.IEnumerator HoundBreathAtHero(ScenarioContext ctx, CharacterController hound)
+        {
+            CharacterController hero = ctx.Get("hero1");
+            if (hound == null || hero == null || !hound.HasBreathWeapon || !hound.IsBreathWeaponReady)
+            {
+                Fact(ctx, "breath", "not-ready");
+                yield break;
+            }
+            RecordHp(ctx, "hero1", "hero2", "kobold");
+            Fact(ctx, "breath", "used");
+            yield return ctx.Gm.StartCoroutine(ctx.Gm.NPCExecuteBreathWeaponForAI(hound, hero));
+            FactHpLost(ctx, "breath", "hero1", "hero2", "kobold");
+        }
+
         // ── rules/area-damage-one-roll (batch 11 step 20, D6) ───────────
 
         // ── rules/sound-burst-area, rules/cast-pair-alignment-burst, rules/consecrate-area (batch 11 step 23) ──
@@ -768,10 +850,12 @@ namespace Tests.Scenarios
         /// SPL-042 (the batch 11 step 23 review): which undead are in a Desecrate area, and what happens when a Consecrate
         /// dispels one of two. Round 1: a Ui neutral evil cleric 7 desecrates around (7,10) (area A). Round 2: it desecrates
         /// around (13,10) (area B), so the skeleton at (10,10) stands in both; a Large skeleton owlbear (2x2) walks from
-        /// (17,5), wholly outside B, to (16,6), where its own square is still outside but (16,7) is inside: any occupied
+        /// (17,5), wholly outside B, to (14,6), where its own square is still outside but (14,7) is inside: any occupied
         /// square in the area puts it in, so it gains the +1 profane bonus (PHB p.218). Then a Ui neutral good cleric 7
         /// consecrates around (1,10), overlapping A but not B: A is dispelled (PHB p.212), and the skeleton keeps its +1
-        /// because it is still in B, as does the owlbear.
+        /// because it is still in B, as does the owlbear. Since batch 11 step 24 each click aims at the clicked square's
+        /// north-east corner (area A from +(8,11), B from +(14,11), the Consecrate from +(2,11); PHB p.175), so the owlbear's
+        /// destination moved from (16,6) to (14,6) to keep the same case.
         /// </summary>
         private static ScenarioDef HolyAreaOverlap()
         {
@@ -795,7 +879,7 @@ namespace Tests.Scenarios
             // Whether the owlbear's own square, and any of its squares, is in area B (the precondition of the multi-square case).
             void RecordOwlInB(ScenarioContext ctx, string tag)
             {
-                HashSet<UnityEngine.Vector2Int> b = AoESystem.GetPlacedAreaCells(SpellDatabase.GetSpell(SpellNames.DESECRATE), new UnityEngine.Vector2Int(13, 10), SquareGrid.Instance);
+                HashSet<UnityEngine.Vector2Int> b = AoESystem.GetPlacedAreaCells(SpellDatabase.GetSpell(SpellNames.DESECRATE), GridIntersection.NorthEastCornerOf(new UnityEngine.Vector2Int(13, 10)), SquareGrid.Instance); // a click on (13,10) aims at its north-east corner (batch 11 step 24)
                 CharacterController owl = ctx.Get("owl");
                 bool any = false;
                 foreach (UnityEngine.Vector2Int sq in owl.GetOccupiedSquares())
@@ -820,7 +904,7 @@ namespace Tests.Scenarios
                     Step.CastAt(SpellNames.DESECRATE, 13, 10),
                     Step.Assert("after area B", ctx => { RecordLedger(ctx, "b"); RecordOwlInB(ctx, "b"); return true; }))
                 .Turn("owl", 2,
-                    Step.Move(16, 6),
+                    Step.Move(14, 6),
                     Step.Assert("after the owlbear's move", ctx => { RecordLedger(ctx, "moved"); RecordOwlInB(ctx, "moved"); return true; }))
                 .Turn("good", 2,
                     Step.CastAt(SpellNames.CONSECRATE, 1, 10),

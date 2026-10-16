@@ -136,6 +136,17 @@ namespace DND35.AI.Profiles
             return score;
         }
 
+        /// <summary>
+        /// How an area cast of <paramref name="spell"/> aimed at <paramref name="primaryTarget"/> would land: the best of the
+        /// aims the caster has at that creature (batch 11 step 24, decision D5; AoESystem.GetCandidateAimsAt, the same choices
+        /// the PC cursor offers): a burst or cube at each intersection of the target's space (the four corners of a Small or
+        /// Medium creature's square) within range, a cone or line from each corner of the caster's space toward it, a
+        /// self-centred area from each of the caster's creature-centred origins, a one-square effect on the target's square.
+        /// The best is a safe aim first, then the most enemies, then the fewest ally casualties, then the first found.
+        /// Each footprint keeps only the squares its origin has line of effect to, and a burst's or cube's origin must be in
+        /// the caster's line of effect (AoESystem.GetCandidateAimsAt, the cast's own tests); a creature counts when any
+        /// square of its space is in the footprint (AoESystem.IsCreatureInCells). Ally sparing (AOECasting) is unchanged.
+        /// </summary>
         public virtual SpellAOEEvaluation EvaluateAOECast(
             SpellData spell,
             CharacterController caster,
@@ -146,10 +157,35 @@ namespace DND35.AI.Profiles
             if (spell == null || caster == null || primaryTarget == null || gameManager == null || gameManager.Grid == null)
                 return new SpellAOEEvaluation(false, 0, 0, 999f);
 
-            HashSet<Vector2Int> cells = CalculateSpellCells(spell, caster, primaryTarget, gameManager);
-            if (cells == null || cells.Count == 0)
-                return new SpellAOEEvaluation(false, 0, 0, 999f);
+            List<HashSet<Vector2Int>> footprints = CalculateCandidateFootprints(spell, caster, primaryTarget, gameManager);
+            bool found = false;
+            SpellAOEEvaluation best = new SpellAOEEvaluation(false, 0, 0, 999f);
+            foreach (HashSet<Vector2Int> cells in footprints)
+            {
+                if (cells == null || cells.Count == 0)
+                    continue;
+                SpellAOEEvaluation eval = EvaluateFootprint(spell, caster, cells, allCombatants, gameManager);
+                if (!found || IsBetterAim(eval, best))
+                {
+                    best = eval;
+                    found = true;
+                }
+            }
+            return best;
+        }
 
+        private static bool IsBetterAim(SpellAOEEvaluation a, SpellAOEEvaluation b)
+        {
+            if (a.IsSafe != b.IsSafe)
+                return a.IsSafe;
+            if (a.EnemiesHit != b.EnemiesHit)
+                return a.EnemiesHit > b.EnemiesHit;
+            return a.EffectiveAllyCasualties < b.EffectiveAllyCasualties;
+        }
+
+        private SpellAOEEvaluation EvaluateFootprint(SpellData spell, CharacterController caster, HashSet<Vector2Int> cells,
+            List<CharacterController> allCombatants, GameManager gameManager)
+        {
             int enemiesHit = 0;
             int alliesHit = 0;
             float effectiveCasualties = 0f;
@@ -165,7 +201,9 @@ namespace DND35.AI.Profiles
                 if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                     continue;
 
-                if (!cells.Contains(candidate.GridPosition))
+                // Any square of its space, as the area's resolution counts it (AoESystem.GetTargetsInArea; a Large ally
+                // covered only by its other squares is still hit; batch 11 step 24 review).
+                if (!AoESystem.IsCreatureInCells(cells, candidate))
                     continue;
 
                 bool isEnemy = gameManager.IsEnemyTeamForAI(caster, candidate);
@@ -191,22 +229,52 @@ namespace DND35.AI.Profiles
             return new SpellAOEEvaluation(safe, enemiesHit, alliesHit, effectiveCasualties);
         }
 
-        private HashSet<Vector2Int> CalculateSpellCells(SpellData spell, CharacterController caster, CharacterController primaryTarget, GameManager gameManager)
+        /// <summary>The footprints of every aim the caster has at <paramref name="primaryTarget"/> (see <see cref="EvaluateAOECast"/>).</summary>
+        private static List<HashSet<Vector2Int>> CalculateCandidateFootprints(SpellData spell, CharacterController caster,
+            CharacterController primaryTarget, GameManager gameManager)
         {
-            switch (spell.AoEShapeType)
+            var footprints = new List<HashSet<Vector2Int>>();
+            SquareGrid grid = gameManager.Grid;
+            AoEShape shape = spell.AoEShapeType;
+            int size = spell.AoESizeSquares;
+            if (shape == AoEShape.None && spell.TargetType == SpellTargetType.Area)
             {
-                case AoEShape.Burst:
-                    return AoESystem.GetBurstCells(primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
-                case AoEShape.Cone:
-                    return AoESystem.GetConeCells(caster.GridPosition, primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
-                case AoEShape.Cube:
-                    return AoESystem.GetCubeCells(primaryTarget.GridPosition, Mathf.Max(1, spell.AoESizeSquares), gameManager.Grid);
-                default:
-                    // Fallback for area-target spells without detailed shape metadata.
-                    if (spell.TargetType == SpellTargetType.Area)
-                        return AoESystem.GetBurstCells(primaryTarget.GridPosition, Mathf.Max(1, spell.AreaRadius), gameManager.Grid);
-                    return new HashSet<Vector2Int> { primaryTarget.GridPosition };
+                // Area-target spells without shape metadata: a burst of their area radius (no shipped spell; AreaRoutingTests).
+                shape = AoEShape.Burst;
+                size = spell.AreaRadius;
             }
+
+            if (AoESystem.IsSingleSquarePlacement(spell))
+            {
+                footprints.Add(new HashSet<Vector2Int> { primaryTarget.GridPosition });
+                return footprints;
+            }
+
+            int casterSize = caster.GetCurrentSpaceSquares();
+            int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(caster, spell);
+            if (shape == AoEShape.Burst && range <= 0)
+            {
+                // Centred on the caster: one footprint per creature-centred origin (the caster's choice of corner).
+                // Each keeps the squares its origin has line of effect to, as the cast's Legality stage filters them.
+                foreach (GridIntersection origin in AoESystem.GetCreatureCentredOrigins(caster))
+                {
+                    HashSet<Vector2Int> cells = AoESystem.GetCreatureCentredBurstCells(caster.GridPosition, casterSize, origin, size, grid);
+                    AoESystem.FilterCellsByLineOfEffect(cells, origin);
+                    footprints.Add(cells);
+                }
+                return footprints;
+            }
+
+            if (AoESystem.IsPlacedShape(shape) || shape == AoEShape.Cone || shape == AoEShape.Line)
+            {
+                foreach (AreaAim aim in AoESystem.GetCandidateAimsAt(shape, Mathf.Max(1, size), caster.GridPosition, casterSize,
+                             primaryTarget.GridPosition, primaryTarget.GetCurrentSpaceSquares(), range, grid))
+                    footprints.Add(aim.Cells);
+                return footprints;
+            }
+
+            footprints.Add(new HashSet<Vector2Int> { primaryTarget.GridPosition });
+            return footprints;
         }
 
         private float GetAllyCasualtyWeight(CharacterController ally, DamageType damageType, int estimatedDamage)

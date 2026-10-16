@@ -1297,7 +1297,10 @@ public partial class GameManager
         if (distanceSquares > 2)
             return false;
 
-        HashSet<Vector2Int> coneCells = AoESystem.GetConeCells(npc.GridPosition, primaryTarget.GridPosition, 2, Grid);
+        // The 10-ft. cone (MM p.285) starts at a corner of the beetle's square and covers the target, the best such aim for
+        // its side (AoESystem.BestDirectedAimAt; PHB p.175, batch 11 step 24).
+        AreaAim sprayAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition, AoEShape.Cone, 2, primaryTarget, Grid);
+        HashSet<Vector2Int> coneCells = sprayAim != null ? sprayAim.Cells : null;
         if (coneCells == null || coneCells.Count == 0)
             return false;
 
@@ -1779,12 +1782,12 @@ public partial class GameManager
         int rangeSquares = Mathf.Max(1, bw.RangeFeet / 5);
         string shapeName = bw.Shape == BreathWeaponShape.Cone ? "cone" : "line";
 
-        // Compute affected cells
-        HashSet<Vector2Int> cells;
-        if (bw.Shape == BreathWeaponShape.Cone)
-            cells = AoESystem.GetConeCells(npc.GridPosition, aimTarget.GridPosition, rangeSquares, Grid);
-        else
-            cells = AoESystem.GetLineCellsToTarget(npc.GridPosition, aimTarget.GridPosition, rangeSquares, Grid);
+        // Compute affected cells: the cone or line starts at an intersection on the edge of the creature's space (MM p.69,
+        // PHB p.175) and covers the aim target, the best such aim for its side, the one DragonAIProfile scored
+        // (AoESystem.BestDirectedAimAt; batch 11 step 24, decision D5).
+        AreaAim breathAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition,
+            bw.Shape == BreathWeaponShape.Cone ? AoEShape.Cone : AoEShape.Line, rangeSquares, aimTarget, Grid);
+        HashSet<Vector2Int> cells = breathAim != null ? breathAim.Cells : null;
 
         if (cells == null || cells.Count == 0)
         {
@@ -1807,7 +1810,8 @@ public partial class GameManager
             CharacterController c = allChars[i];
             if (c == null || c.Stats == null || c.Stats.IsDead || c == npc)
                 continue;
-            if (cells.Contains(c.GridPosition))
+            // Any square of its space, as BestDirectedAimAt counted it (batch 11 step 24 review).
+            if (AoESystem.IsCreatureInCells(cells, c))
                 targets.Add(c);
         }
 
