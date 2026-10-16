@@ -316,6 +316,22 @@ public class SpellData
     }
 
     /// <summary>
+    /// A touch spell that touches several targets (Chill Touch, one touch per caster level, PHB p.209). PHB p.176: such a
+    /// spell's charge cannot be held; every target must be touched in the round the casting is finished
+    /// (<see cref="CanHoldCharge"/>; batch 11 step 27).
+    /// </summary>
+    public bool TouchesMultipleTargets;
+
+    /// <summary>
+    /// Whether this spell's charge can be held (PHB p.141, p.176): a melee touch spell with no area that is not cast on
+    /// the caster alone and does not touch several targets (<see cref="TouchesMultipleTargets"/>). The cast core's hold
+    /// legality (GameManager.CheckHoldChargeLegality), its missed-touch hold (MissedTouchHoldsCharge), the PC touch prompt
+    /// and the AI's hold choice all read it.
+    /// </summary>
+    public bool CanHoldCharge()
+        => IsMeleeTouchSpell() && AoEShapeType == AoEShape.None && TargetType != SpellTargetType.Self && !TouchesMultipleTargets;
+
+    /// <summary>
     /// Returns true if this spell should use a ranged touch attack roll.
     /// Falls back to simple range heuristic for backward compatibility.
     /// </summary>

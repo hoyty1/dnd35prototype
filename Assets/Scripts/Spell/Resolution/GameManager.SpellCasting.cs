@@ -198,8 +198,11 @@ public partial class GameManager
 
         InitializeNPCFromDefinition(summon, summonDef, cell, alive, dead);
 
+        // The summoned creature fights for its caster's side and follows its caster's control (batch 11 step 27): the
+        // player commands a player-controlled caster's creature, the AI runs an AI-run caster's (an enemy's, or an AI-run
+        // party member's in a scenario), whose turn would otherwise wait for a player who is not there.
         bool alliedToPlayer = caster.Team == CharacterTeam.Player;
-        summon.ConfigureTeamControl(alliedToPlayer ? CharacterTeam.Player : CharacterTeam.Enemy, controllable: alliedToPlayer);
+        summon.ConfigureTeamControl(alliedToPlayer ? CharacterTeam.Player : CharacterTeam.Enemy, controllable: alliedToPlayer && caster.IsControllable);
 
         if (summon.Stats != null)
         {
@@ -446,6 +449,10 @@ public partial class GameManager
                 if (casterDistance > maxRangeFromCaster)
                     continue;
             }
+
+            // In the caster's line of effect (PHB p.176), as the cast core's summon test (SummonPlacementRefusal).
+            if (caster != null && !AoESystem.HasLineOfEffectToSpace(caster.GridPosition, caster.GetCurrentSpaceSquares(), cell.Coords, summonSizeSquares))
+                continue;
 
             int distanceFromPrimary = SquareGridUtils.GetDistance(preferredOrigin, cell.Coords);
             int distanceFromCaster = caster != null ? SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords) : 0;
@@ -1101,13 +1108,9 @@ public partial class GameManager
             optionButtonColorOverride: new Color(0.8f, 0.3f, 0.1f, 1f));
     }
 
+    /// <summary>The Cast Now / Discharge Later prompt only for a spell whose charge can be held (SpellData.CanHoldCharge).</summary>
     private bool ShouldShowTouchSpellPrompt(SpellData spell)
-    {
-        if (spell == null) return false;
-        if (spell.AoEShapeType != AoEShape.None) return false;
-        if (!spell.IsMeleeTouchSpell()) return false;
-        return spell.TargetType != SpellTargetType.Self;
-    }
+        => spell != null && spell.CanHoldCharge();
 
     /// <summary>Legacy callback for backward compat (no metamagic).</summary>
     private void OnSpellSelected(SpellData spell)
@@ -1125,15 +1128,6 @@ public partial class GameManager
         ResetPendingWallOfFireMode();
         ResetPendingWallOfIceMode();
         ShowActionChoices();
-    }
-
-    private bool IsHoldableMeleeTouchSpell(SpellData spell)
-    {
-        if (spell == null) return false;
-        if (spell.AoEShapeType != AoEShape.None) return false;
-        if (!spell.IsMeleeTouchSpell()) return false;
-        if (spell.TargetType == SpellTargetType.Self) return false;
-        return true;
     }
 
     private bool IsFriendlyTarget(CharacterController caster, CharacterController target)

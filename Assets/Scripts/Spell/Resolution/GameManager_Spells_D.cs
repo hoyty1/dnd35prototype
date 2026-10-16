@@ -393,11 +393,11 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Resolves Dimension Door: self-target teleportation spell.
-    /// Checks TeleportationBlocker, validates destination, moves caster,
-    /// and ends the caster's turn (no further actions).
-    /// For PC casters: selects a random valid cell within range (future: UI selection).
-    /// For NPC casters: attempts to teleport to a tactically useful position.
+    /// Resolves Dimension Door (PHB p.221): self-target teleportation spell. Checks TeleportationBlocker, moves the caster
+    /// to the square it chose (CastChoices.Destination, which the cast's decider filled: the UI decider and the AI decider
+    /// both through <see cref="ChooseDimensionDoorDestination"/>; batch 11 step 27, SPL-091), after testing that the
+    /// square is still within range and free, and ends the caster's turn (no further actions). The same for every caster:
+    /// the handler never asks who controls the caster.
     /// </summary>
     private bool TryResolveDimensionDoorSpellEffect(
         CharacterController caster, CharacterController target,
@@ -435,10 +435,9 @@ public partial class GameManager
 
         // ── Calculate range ──
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int rangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
-        if (rangeSquares <= 0) rangeSquares = 80 + (casterLevel * 8); // fallback: 400ft + 40ft/level = 80sq + 8sq/level
+        int rangeSquares = DimensionDoorRangeSquares(spell, casterLevel);
 
-        // ── Find valid destination ──
+        // ── The caster's chosen destination ──
         SquareGrid grid = Grid;
         if (grid == null)
         {
@@ -449,10 +448,14 @@ public partial class GameManager
         Vector2Int casterPos = caster.GridPosition;
         int casterSize = caster.GetVisualSquaresOccupied();
 
-        // For this prototype: auto-select best destination
-        // PC: find an empty cell at max range away from enemies (escape)
-        // NPC: find an empty cell near a suitable target
-        Vector2Int? destination = FindDimensionDoorDestination(caster, casterPos, rangeSquares, casterSize, grid);
+        // The square the cast's decider chose (PHB p.221: the caster chooses; batch 11 step 27): it must still be within
+        // range and free when the spell takes effect.
+        CastContext cast = CurrentCast;
+        Vector2Int? destination = cast != null && cast.Request.Choices != null ? cast.Request.Choices.Destination : null;
+        if (destination.HasValue
+            && (SquareGridUtils.ChebyshevDistance(casterPos, destination.Value) > rangeSquares
+                || !grid.CanPlaceCreature(destination.Value, casterSize, caster)))
+            destination = null;
 
         if (!destination.HasValue)
         {
@@ -500,37 +503,33 @@ public partial class GameManager
         return true;
     }
 
-    /// <summary>
-    /// Find the best destination for Dimension Door based on character context.
-    /// PCs: try to teleport away from nearest enemy (escape) or to a flanking position.
-    /// NPCs: try to teleport adjacent to their preferred target.
-    /// Returns null if no valid destination found.
-    /// </summary>
-    private Vector2Int? FindDimensionDoorDestination(
-        CharacterController caster, Vector2Int casterPos, int maxRange,
-        int casterSize, SquareGrid grid)
+    /// <summary>The range of Dimension Door in squares at <paramref name="casterLevel"/> (long range, PHB p.221, p.174).</summary>
+    private static int DimensionDoorRangeSquares(SpellData spell, int casterLevel)
     {
-        // Known PC/NPC fork (SPL-091, docs/systems/PC_NPC_PARITY.md): RAW the caster picks the destination (PHB p.221),
-        // which should come with the cast as a caster choice; until then the control picks escape or aggression. The AI
-        // never selects Dimension Door (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive), so only a Ui, Scripted
-        // or charmed cast reaches this.
-        bool isPC = caster.Stats != null && !!caster.IsPlayerControlled;
-
-        if (isPC)
-        {
-            // PC: find a safe position away from enemies (escape teleport)
-            return FindDimensionDoorEscapeDestination(caster, casterPos, maxRange, casterSize, grid);
-        }
-        else
-        {
-            // NPC: find a position adjacent to a target
-            return FindDimensionDoorAggressiveDestination(caster, casterPos, maxRange, casterSize, grid);
-        }
+        int rangeSquares = spell != null ? spell.GetRangeSquaresForCasterLevel(casterLevel) : 0;
+        if (rangeSquares <= 0) rangeSquares = 80 + (casterLevel * 8); // fallback: 400ft + 40ft/level = 80sq + 8sq/level
+        return rangeSquares;
     }
 
     /// <summary>
-    /// PC escape destination: find a valid empty cell that maximizes distance
-    /// from the nearest enemy while staying within range.
+    /// The destination Dimension Door's caster chooses (PHB p.221; batch 11 step 27, SPL-091): the escape square
+    /// (<see cref="FindDimensionDoorEscapeDestination"/>) within the spell's range at the cast's caster level. Both
+    /// deciders call it to fill CastChoices.Destination: the UI decider for the player (the square the game picked for a
+    /// PC before; a square picker is UI-053) and the AI decider, which casts Dimension Door to escape
+    /// (AISpellcastingStrategist.GetEscapeScore). Null when no square is free.
+    /// </summary>
+    internal Vector2Int? ChooseDimensionDoorDestination(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || caster.Stats == null || spell == null || Grid == null)
+            return null;
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        return FindDimensionDoorEscapeDestination(caster, caster.GridPosition, DimensionDoorRangeSquares(spell, casterLevel),
+            caster.GetVisualSquaresOccupied(), Grid);
+    }
+
+    /// <summary>
+    /// The escape square: a free square within range, at least 2 squares away, that maximizes the distance from the
+    /// nearest foe (team allegiance, TeamUtility.IsEnemy) and prefers one beside no foe. Null when there is none.
     /// </summary>
     private Vector2Int? FindDimensionDoorEscapeDestination(
         CharacterController caster, Vector2Int casterPos, int maxRange,
@@ -603,64 +602,6 @@ public partial class GameManager
                 if (score > bestScore)
                 {
                     bestScore = score;
-                    bestDest = candidate;
-                }
-            }
-        }
-
-        return bestDest;
-    }
-
-    /// <summary>
-    /// NPC aggressive destination: find a position adjacent to the best PC target.
-    /// </summary>
-    private Vector2Int? FindDimensionDoorAggressiveDestination(
-        CharacterController caster, Vector2Int casterPos, int maxRange,
-        int casterSize, SquareGrid grid)
-    {
-        // Find best target (lowest HP PC)
-        CharacterController bestTarget = null;
-        int lowestHP = int.MaxValue;
-
-        var allChars = GetAllCharacters();
-        if (allChars != null)
-        {
-            foreach (var ch in allChars)
-            {
-                if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                if (!TeamUtility.IsEnemy(caster, ch)) continue; // not a foe (team allegiance, not control)
-
-                if (ch.Stats.CurrentHP < lowestHP)
-                {
-                    lowestHP = ch.Stats.CurrentHP;
-                    bestTarget = ch;
-                }
-            }
-        }
-
-        if (bestTarget == null) return null;
-
-        // Find valid cell adjacent to target
-        Vector2Int targetPos = bestTarget.GridPosition;
-        int[] offsets = { -1, 0, 1 };
-        Vector2Int? bestDest = null;
-        int bestDist = int.MaxValue;
-
-        foreach (int ox in offsets)
-        {
-            foreach (int oy in offsets)
-            {
-                if (ox == 0 && oy == 0) continue;
-                Vector2Int candidate = new Vector2Int(targetPos.x + ox, targetPos.y + oy);
-                int distFromCaster = SquareGridUtils.ChebyshevDistance(casterPos, candidate);
-
-                if (distFromCaster > maxRange) continue;
-                if (!grid.CanPlaceCreature(candidate, casterSize, caster)) continue;
-
-                // Prefer closer to where we already are (energy efficiency)
-                if (distFromCaster < bestDist)
-                {
-                    bestDist = distFromCaster;
                     bestDest = candidate;
                 }
             }

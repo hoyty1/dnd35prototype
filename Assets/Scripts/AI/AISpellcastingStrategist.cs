@@ -222,14 +222,13 @@ public static class AISpellcastingStrategist
     /// <summary>
     /// A spell whose shared handler needs a caster choice the AI cannot give yet, so the AI leaves it out of its
     /// candidates (a selection exclusion, not a rule fork: the handler resolves the same for every caster; batch 11
-    /// step 6, SPL-091): Dimension Door (PHB p.221; the caster picks the destination, which
-    /// <c>TryResolveDimensionDoorSpellEffect</c> fills only from the caster's control) and Imbue with Spell Ability
-    /// (PHB p.243; the caster picks the prepared spells to transfer in a UI panel that only a player can answer).
+    /// step 6; AI-071): Imbue with Spell Ability (PHB p.243; the caster picks the prepared spells to transfer in a UI
+    /// panel that only a player can answer). Dimension Door left the list in batch 11 step 27: its destination is a cast
+    /// choice the AI decider fills (CastChoices.Destination, GameManager.ChooseDimensionDoorDestination).
     /// </summary>
     public static bool NeedsCasterChoiceAiCannotGive(SpellData spell)
     {
-        return spell != null
-            && (spell.SpellId == SpellNames.DIMENSION_DOOR || spell.SpellId == SpellNames.IMBUE_WITH_SPELL_ABILITY);
+        return spell != null && spell.SpellId == SpellNames.IMBUE_WITH_SPELL_ABILITY;
     }
 
     /// <summary>Is this a spell that should target allies?</summary>
@@ -484,6 +483,30 @@ public static class AISpellcastingStrategist
         if (target.HasActiveInvisibilityEffect && caster.CanSeeInvisible(target))
             return true;
         return caster.CanSee(target, spell.IsRangedTouchSpell());
+    }
+
+    /// <summary>
+    /// Whether <paramref name="spell"/> is worth landing on <paramref name="target"/> (batch 11 step 27 review): the
+    /// target-worth tests the single-target choice applies (<see cref="SelectBestEnemyTarget"/>,
+    /// <see cref="SelectBestAllyTarget"/>), without range or legality: not a creature a globe shields from it
+    /// (<see cref="IsWastedOnGlobe"/>); for a foe, a spell that harms it (an inflict spell cures an undead and does nothing
+    /// to a construct, SpellDiceRules.Harms; ScoreEnemyTarget); for the caster or an ally, a spell that helps it (a cure
+    /// that heals it and has damage to heal, a buff it lacks; ScoreAllyTarget) and, for a weapon spell, a weapon to
+    /// enchant. The held-charge choices (AIService.SelectHoldChargeTarget, TryDeliverHeldChargeTurn) use it.
+    /// </summary>
+    public static bool IsWorthwhileSpellTarget(CharacterController caster, SpellData spell, CharacterController target, GameManager gm)
+    {
+        if (caster == null || spell == null || target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+        if (IsWastedOnGlobe(spell, target))
+            return false;
+        if (TeamUtility.IsEnemy(caster, target))
+            return !float.IsNegativeInfinity(ScoreEnemyTarget(caster, target, spell, gm));
+        if (target != caster && !TeamUtility.IsAlly(caster, target))
+            return false;
+        if (AiCastChoiceHeuristics.IsWeaponChoiceSpell(spell) && AiCastChoiceHeuristics.ChooseWeapon(target, spell, caster) == null)
+            return false;
+        return !float.IsNegativeInfinity(ScoreAllyTarget(caster, target, spell));
     }
 
     /// <summary>

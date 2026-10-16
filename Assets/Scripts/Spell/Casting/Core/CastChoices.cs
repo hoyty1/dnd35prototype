@@ -1,3 +1,5 @@
+using UnityEngine;
+
 /// <summary>Grease's three forms (PHB p.237): an area, a held object or worn armor.</summary>
 public enum GreaseCastMode
 {
@@ -74,6 +76,13 @@ public sealed class CastChoices
 
     /// <summary>The swarm a Summon Swarm cast places (PHB p.289).</summary>
     public string SummonSwarmNpcId;
+
+    /// <summary>
+    /// The square Dimension Door brings its caster to (PHB p.221: the caster chooses the destination; batch 11 step 27,
+    /// SPL-091). The deciders fill it (GameManager.ChooseDimensionDoorDestination, for the UI decider and the AI decider
+    /// alike); the handler reads it and never asks who controls the caster. Null: no square was found, and the spell fails.
+    /// </summary>
+    public Vector2Int? Destination;
 
     /// <summary>
     /// A shallow copy (the chosen items are shared references, as on the request): a held touch charge keeps the choices

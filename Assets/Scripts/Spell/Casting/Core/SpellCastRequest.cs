@@ -281,6 +281,68 @@ public sealed class SpellCastRequest
     }
 
     /// <summary>
+    /// An NPC (AI-run) or Scripted summon cast of a Summon Monster or Summon Nature's Ally spell (PHB p.285-288; batch 11
+    /// step 27, SPL-091): the <see cref="ForAI"/> request (the clone with its metamagic, the slot source, the AI decider)
+    /// turned into a summon cast with no target creature and the NPC summon path's legacy quirks
+    /// (<see cref="LegacyCastQuirkSets.AiSummonPath"/>). The creature, its list level and count rule and the square it
+    /// appears on are the caster's choices, which the AI decider fills at the Legality stage (AiCastDecider.FillChoices,
+    /// GameManager.AiFillSummonChoices), unless the caller set them (<paramref name="destination"/>). The core's Summon
+    /// resolve then places the creatures exactly as for a PC.
+    /// </summary>
+    public static SpellCastRequest ForAISummon(CharacterController caster, SpellData spell, Vector2Int? destination = null, MetamagicData metamagic = null)
+    {
+        SpellCastRequest request = ForAI(caster, null, spell, metamagic);
+        request.ResolveKind = CastResolveKind.Summon;
+        request.Aim.Target = null;
+        request.Aim.Destination = destination;
+        request.Quirks = LegacyCastQuirkSets.AiSummonPath;
+        return request;
+    }
+
+    /// <summary>
+    /// An NPC (AI-run) hold of a melee touch spell's charge (PHB p.141, p.176; batch 11 step 27, SPL-115): the
+    /// <see cref="ForAI"/> request turned into a hold exactly as <see cref="ForUiHoldCharge"/> turns a PC's (a prepared or
+    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>), with no target creature and the
+    /// NPC hold path's legacy quirks (<see cref="LegacyCastQuirkSets.AiHoldPath"/>). The AI holds only when its target is
+    /// out of reach and it can move into reach this turn (AiCastDecider.TouchDeliveryFor).
+    /// </summary>
+    public static SpellCastRequest ForAIHoldCharge(CharacterController caster, SpellData spell, MetamagicData metamagic = null)
+    {
+        SpellCastRequest request = ForUiHoldCharge(ForAI(caster, null, spell, metamagic));
+        request.Decider = AiCastDecider.Instance;
+        request.Quirks = LegacyCastQuirkSets.AiHoldPath;
+        return request;
+    }
+
+    /// <summary>
+    /// The delivery of the charge <paramref name="caster"/> holds (SpellcastingComponent.HeldTouchSpell) to
+    /// <paramref name="target"/> by an NPC (AI-run) caster (batch 11 step 27, SPL-115): the same request as the PC's
+    /// Discharge button builds (GameManager.BuildHeldChargeDeliveryRequest: a clone of the held spell as it was cast, a
+    /// held-charge-delivery source, a copy of the choices made at the hold), with the AI decider and the NPC path's legacy
+    /// quirks (<see cref="LegacyCastQuirkSets.AiPath"/>, which keep the delivery free as the PC's is, SPL-156). A missed
+    /// touch keeps the charge for every caster (PHB p.141; the PostCast stage). Null with no charge held.
+    /// </summary>
+    public static SpellCastRequest ForAIHeldChargeDelivery(CharacterController caster, CharacterController target)
+    {
+        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
+        if (spellComp == null || spellComp.HeldTouchSpell == null)
+            return null;
+        var request = new SpellCastRequest
+        {
+            Caster = caster,
+            Spell = CloneForCast(spellComp.HeldTouchSpell),
+            Metamagic = spellComp.HeldTouchMetamagic,
+            Source = new CastSource { Kind = CastSourceKind.HeldChargeDelivery },
+            Decider = AiCastDecider.Instance,
+            Quirks = LegacyCastQuirkSets.AiPath
+        };
+        if (spellComp.HeldTouchChoices != null)
+            request.Choices = spellComp.HeldTouchChoices.Clone();
+        request.Aim.Target = target;
+        return request;
+    }
+
+    /// <summary>
     /// An NPC (AI-run) Grease on a 10-ft. square (PHB p.237; batch 11 step 25): the <see cref="ForAI"/> request turned into
     /// a Grease cast in its area form (CastChoices.GreaseMode Area, the only form the AI decider can fill,
     /// AiCastDecider.CanFill) on <paramref name="cells"/>, whose point of origin is the square's centre,

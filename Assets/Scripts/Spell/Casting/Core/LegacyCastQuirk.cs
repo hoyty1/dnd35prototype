@@ -11,7 +11,9 @@ using System;
 /// <see cref="LegacyCastQuirkSets.UiGreasePath"/> and <see cref="LegacyCastQuirkSets.UiHoldPath"/>, and
 /// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one, and
 /// <see cref="SpellCastRequest.ForAIArea"/> and <see cref="SpellCastRequest.ForAIGrease"/> the NPC area and Grease ones,
-/// <see cref="LegacyCastQuirkSets.AiAreaPath"/> and <see cref="LegacyCastQuirkSets.AiGreasePath"/>); only the cast core's stage
+/// <see cref="LegacyCastQuirkSets.AiAreaPath"/> and <see cref="LegacyCastQuirkSets.AiGreasePath"/>, and
+/// <see cref="SpellCastRequest.ForAISummon"/> and <see cref="SpellCastRequest.ForAIHoldCharge"/> the NPC summon and hold
+/// ones, <see cref="LegacyCastQuirkSets.AiSummonPath"/> and <see cref="LegacyCastQuirkSets.AiHoldPath"/>); only the cast core's stage
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
@@ -229,7 +231,7 @@ public enum LegacyCastQuirk : long
     EffectResolveSkipsCombatEndCheck = 1L << 53,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9, 10 and 25; trimmed by steps 11 to 18 and 25).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9, 10, 25 and 27; trimmed by steps 11 to 18 and 25).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
@@ -313,4 +315,23 @@ public static class LegacyCastQuirkSets
     /// </summary>
     public const LegacyCastQuirk UiHoldPath =
         UiEffectPathShared;
+
+    /// <summary>
+    /// The NPC summon path (batch 11 step 27, SpellCastRequest.ForAISummon: a Summon Monster or Summon Nature's Ally whose
+    /// creature and square the AI decider chose, through the same Summon resolve as the PC's): the PC summon path's bits
+    /// plus the NPC path's own caster tests (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160).
+    /// Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk AiSummonPath =
+        UiSummonPath
+        | LegacyCastQuirk.NpcOwnLegalityChecks;
+
+    /// <summary>
+    /// The NPC hold of a touch charge (batch 11 step 27, SpellCastRequest.ForAIHoldCharge, through the same HoldCharge
+    /// resolve as the PC's Discharge Later): the PC hold path's bits plus the NPC path's own caster tests
+    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk AiHoldPath =
+        UiHoldPath
+        | LegacyCastQuirk.NpcOwnLegalityChecks;
 }

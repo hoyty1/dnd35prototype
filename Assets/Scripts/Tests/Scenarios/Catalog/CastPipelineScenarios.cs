@@ -58,7 +58,14 @@ namespace Tests.Scenarios
                 yield return S(p.Id != null ? p.Id.Substring("rules/".Length) : "cast-pair-" + p.Family, () => PairScenario(p));
             }
             yield return S("cast-ai-spiritual-weapon", AiSpiritualWeapon);
-            yield return S("cast-ai-skips-dimension-door", AiSkipsDimensionDoor);
+            yield return S("npc-dimension-door", NpcDimensionDoor);
+            yield return S("npc-summon-monster", NpcSummonMonster);
+            yield return S("npc-held-touch", NpcHeldTouch);
+            yield return S("npc-hold-charge-approach", NpcHoldChargeApproach);
+            yield return S("ui-touch-miss-holds-charge", UiTouchMissHoldsCharge);
+            yield return S("held-charge-dissipates-ui", UiHeldChargeDissipates);
+            yield return S("held-charge-dissipates-npc", NpcHeldChargeDissipates);
+            yield return S("held-charge-wand-keeps", UiHeldChargeWandKeeps);
             yield return S("npc-resist-energy-choice", () => NpcResistEnergyChoice("rules/npc-resist-energy-choice", "dragon_red_wyrmling", "red dragon", "Fire"));
             yield return S("npc-resist-energy-choice-cold", () => NpcResistEnergyChoice("rules/npc-resist-energy-choice-cold", "dragon_white_wyrmling", "white dragon", "Cold"));
             yield return S("npc-magic-weapon", NpcMagicWeapon);
@@ -1586,6 +1593,11 @@ namespace Tests.Scenarios
             public Action<CharacterController> TargetTweak;
             /// <summary>A setup of the far anchor dummy, an enemy both casters see (an energy attack the AI's choice reads).</summary>
             public Action<CharacterController> AnchorTweak;
+            /// <summary>
+            /// A further caster state both sides record after the casts as the facts "ui.extra" and "scripted.extra" (only
+            /// the families that set it, so the other pairs keep their traces): Mirror Image's figure count.
+            /// </summary>
+            public Func<CharacterController, string> CasterFact;
         }
 
         private static IEnumerable<PairSpec> Pairs()
@@ -1659,6 +1671,12 @@ namespace Tests.Scenarios
                             ? ExpectResult.Pass("both resist cold")
                             : ExpectResult.Fail("ui " + ui + "; scripted " + ai + ", expected cold resistance on both");
                     }) };
+            // Batch 11 step 27 (step 26 made Mirror Image one RAW model for both sides, SPL-117): the NPC caster casts it like
+            // any buff. Wizard 5: 1d4 (4) + 5/3 = 5 images (PHB p.254), 5 minutes (50 rounds) on both.
+            yield return new PairSpec { Family = "mirror-image", SpellId = SpellNames.MIRROR_IMAGE, Caster = wizard, SlotLevel = 2,
+                Title = "Mirror Image on the caster (PHB p.254)", Covers = new[] { "PHB p.254", "SPL-117" },
+                CasterFact = c => "images=" + MirrorImageRules.ImagesOf(c),
+                SharedPins = b => b.Expect("Both casters get 1d4 (4) + 5/3 = 5 images (PHB p.254; SPL-117)", FactsAre(("ui.extra", "images=5"), ("scripted.extra", "images=5"))) };
             yield return new PairSpec { Family = "magic-weapon", SpellId = SpellNames.MAGIC_WEAPON, Caster = wizard, SlotLevel = 1, Choices = new[] { "*" },
                 Title = "Magic Weapon on the caster's weapon (PHB p.251)", Covers = new[] { "PHB p.251", "SPL-113" },
                 // The PC prompt picks the only weapon; the AI picks the recipient's wielded weapon (batch 11 step 22, SPL-113).
@@ -1731,6 +1749,11 @@ namespace Tests.Scenarios
                     {
                         Fact(ctx, "ui", PairState(ctx.Get("ui"), ctx.Get(uiTarget)));
                         Fact(ctx, "scripted", PairState(ctx.Get("scripted"), ctx.Get(aiTarget)));
+                        if (p.CasterFact != null)
+                        {
+                            Fact(ctx, "ui.extra", p.CasterFact(ctx.Get("ui")));
+                            Fact(ctx, "scripted.extra", p.CasterFact(ctx.Get("scripted")));
+                        }
                         foreach (string side in new[] { "ui", "scripted" })
                         {
                             CharacterController caster = ctx.Get(side), target = ctx.Get(side == "ui" ? uiTarget : aiTarget);
@@ -1936,23 +1959,331 @@ namespace Tests.Scenarios
                 .Build();
         }
 
-        /// <summary>
-        /// The selection exclusion of step 6 (SPL-091): an AI-run wizard 7 whose only unspent slot holds Dimension Door, a
-        /// goblin beside it (-30 on attacks, 100 more hit points), two rounds. Dimension Door's destination is the caster's
-        /// choice (PHB p.221), which the AI cannot give yet, so AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive keeps
-        /// it out of the AI's spell candidates (AIService.ScoreCastableSpells): the wizard never casts it.
-        /// </summary>
-        private static ScenarioDef AiSkipsDimensionDoor()
+        // ── Batch 11 step 27: NPC summons, Dimension Door and held charges (SPL-091, SPL-115) ──
+
+        /// <summary>The living summoned creatures on the field (GameManager.IsSummonedCreature).</summary>
+        private static List<CharacterController> LivingSummons()
         {
-            return Rules("rules/cast-ai-skips-dimension-door", "The AI does not select Dimension Door, whose destination it cannot choose yet (SPL-091)")
-                .Covers("SPL-091", "PHB p.221", "batch 11 step 6")
-                .MaxRounds(2)
+            GameManager gm = GameManager.Instance;
+            return gm == null
+                ? new List<CharacterController>()
+                : gm.Combat_GetAllCharacters().Where(c => c != null && c.Stats != null && !c.Stats.IsDead && gm.IsSummonedCreature(c)).ToList();
+        }
+
+        /// <summary>The position of <paramref name="c"/> in the initiative order (TurnService.InitiativeOrder), or -1.</summary>
+        private static int InitiativeIndex(CharacterController c)
+        {
+            TurnService turns = GameManager.Instance != null ? GameManager.Instance.GetComponent<TurnService>() : null;
+            if (turns == null || c == null)
+                return -1;
+            IReadOnlyList<TurnService.InitiativeEntry> order = turns.InitiativeOrder;
+            for (int i = 0; i < order.Count; i++)
+                if (order[i].Character == c)
+                    return i;
+            return -1;
+        }
+
+        /// <summary>
+        /// SPL-091 (PHB p.285-286; batch 11 step 27): a Scripted Enemy-team cleric (human_cleric, Cleric 5, neutral good)
+        /// casts Summon Monster II through the NPC summon cast, the AI decider choosing the creature (the list II creature
+        /// of the highest challenge rating it may call, AiCastChoiceHeuristics.ChooseSummonOption) and its square (beside
+        /// the hero, 4 squares away, within close range). One 2nd-level slot is spent and one creature appears (a list of
+        /// the spell's own level: one creature, PHB p.285), fights for the cleric's side under the AI, is inserted into the
+        /// initiative right after the cleric (as a PC's summon, SPL-164) and takes its turn before the hero's.
+        /// </summary>
+        private static ScenarioDef NpcSummonMonster()
+        {
+            return Rules("rules/npc-summon-monster", "A Scripted NPC cleric's Summon Monster II brings a creature that joins the initiative on its side and acts (PHB p.285; SPL-091)")
+                .Covers("SPL-091", "PHB p.285", "PHB p.286", "SPL-164", "AI-015", "batch 11 step 27")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Summon Target", 1)), 10, 10, Control.Scripted)
+                .Npc("cleric", "human_cleric", 6, 10, Control.Scripted)
+                .Tweak("cleric", c => Prepare(c, 2, SpellNames.SUMMON_MONSTER_2))
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero")
+                .Turn("cleric", 1,
+                    RecordCaster("cleric"),
+                    Step.Cast(SpellNames.SUMMON_MONSTER_2, "hero"),
+                    FactCaster("cast", "cleric"),
+                    Step.Assert("the summoned creature", ctx =>
+                    {
+                        CharacterController cleric = ctx.Get("cleric");
+                        List<CharacterController> summons = LivingSummons();
+                        if (summons.Count == 0)
+                            return true;
+                        CharacterController m = summons[0];
+                        GameManager gm = GameManager.Instance;
+                        SummonMonsterOption expected = AiCastChoiceHeuristics.ChooseSummonOption(
+                            SummonMonsterLists.GetFilteredOptionsForListLevel(2, cleric.Stats));
+                        Fact(ctx, "summon.aiChoice", expected != null && m.Stats.CharacterName.StartsWith(expected.BuildUiLabel(), StringComparison.Ordinal));
+                        Fact(ctx, "summon.team", m.Team);
+                        Fact(ctx, "summon.controllable", m.IsControllable);
+                        Fact(ctx, "summon.caster", gm.GetSummonCasterForAI(m) == cleric);
+                        Fact(ctx, "summon.afterCaster", InitiativeIndex(m) == InitiativeIndex(cleric) + 1);
+                        Fact(ctx, "summon.besideHero", CasterLevelRules.DistanceToTarget(m, ctx.Get("hero")) <= 1);
+                        return true;
+                    }))
+                .Turn("hero", 1, Step.Assert("after the summon's turn", ctx =>
+                {
+                    List<CharacterController> summons = LivingSummons();
+                    if (summons.Count > 0)
+                    {
+                        ActionEconomy a = summons[0].Actions;
+                        Fact(ctx, "summon.acted", !(a.HasStandardAction && a.HasMoveAction && a.HasFullRoundAction));
+                    }
+                    return true;
+                }))
+                .Expect("The summon is in the trace once (ScenarioHooks.SpellCast)", CastEvents("cleric", SpellNames.SUMMON_MONSTER_2, 1))
+                .Expect("It spends one 2nd-level slot and the full-round action and brings one creature (PHB p.285, p.174)",
+                    FactsAre(("summons.before", 0), ("cast.spent", "L2+1"), ("cast.summons", 1), ("cast.actions", "---")))
+                .Expect("The creature is the AI's pick, beside the hero, on the cleric's side and run by the AI",
+                    FactsAre(("summon.aiChoice", true), ("summon.besideHero", true), ("summon.team", "Enemy"), ("summon.controllable", false), ("summon.caster", true)))
+                .Expect("Pinned (SPL-164, SPL-162): today the cast resolves in the casting turn and the creature joins the initiative right after the cleric, acting before the hero; RAW it appears just before the cleric's next turn and acts at once",
+                    FactsAre(("summon.afterCaster", true), ("summon.acted", true)))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-091 (PHB p.221; batch 11 step 27): an AI-run wizard 7 at 5 hit points of 42 (12%, in danger:
+        /// AISpellcastingStrategist.GetEscapeScore) beside a goblin (-30 on attacks, 100 more hit points), its only unspent
+        /// slot holding Dimension Door. The AI casts it, the AI decider choosing the destination as the PC's escape square
+        /// (GameManager.ChooseDimensionDoorDestination: the free square farthest from the nearest foe, at least 2 squares
+        /// away), and the wizard can take no other action that turn (PHB p.221). Replaces rules/cast-ai-skips-dimension-door,
+        /// which pinned step 6's selection exclusion. The slot test reads the class table, which stops at 2nd-level wizard
+        /// slots (SPL-041), so the scenario widens it through the editor-only seam, as rules/npc-cast-fireball does.
+        /// </summary>
+        private static ScenarioDef NpcDimensionDoor()
+        {
+            return Rules("rules/npc-dimension-door", "An AI-run wizard in danger casts Dimension Door to the escape square it chose (PHB p.221; SPL-091)")
+                .Covers("SPL-091", "PHB p.221", "batch 11 step 27")
+                .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 7)), 3, 10, Control.Ai)
-                .Npc("goblin", "goblin", 4, 10, Control.Idle)
-                .Tweak("wizard", c => { AddWizardSlot(c, 4, SpellNames.DIMENSION_DOOR); SpendAllBut(c, SpellNames.DIMENSION_DOOR); })
+                .Npc("goblin", "goblin", 4, 10, Control.Scripted)
+                .Hp("wizard", 5)
+                .Tweak("wizard", c => { AddWizardSlot(c, 4, SpellNames.DIMENSION_DOOR); SpendAllBut(c, SpellNames.DIMENSION_DOOR); WidenNpcSlotTable(c, 4); })
                 .Tweak("goblin", c => { AttackTweak(c, -30); Sturdy(c); })
-                .Initiative("goblin", "wizard")
-                .Expect("The AI wizard never casts Dimension Door", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.DIMENSION_DOOR, 0, 0))
+                .Initiative("wizard", "goblin")
+                .Turn("goblin", 1, Step.Assert("after the wizard's turn", ctx =>
+                {
+                    CharacterController w = ctx.Get("wizard");
+                    Fact(ctx, "away", CasterLevelRules.DistanceToTarget(w, ctx.Get("goblin")) >= 2);
+                    Fact(ctx, "moved", w.GridPosition != new UnityEngine.Vector2Int(3, 10));
+                    Fact(ctx, "actions", Actions(w));
+                    return true;
+                }))
+                .Expect("The AI wizard casts Dimension Door once", CastEvents("wizard", SpellNames.DIMENSION_DOOR, 1))
+                .Expect("It teleports away from the goblin, to a square at least 2 squares from it", FactsAre(("moved", true), ("away", true)))
+                .Expect("After Dimension Door it can take no other action that turn (PHB p.221)", FactIs("actions", "---"))
+                .Expect("The move is a teleport", Expect.Count("move", e => e.Str("actor") == "wizard" && e.Str("type") == "teleport", 1, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-115 (PHB p.141, p.176; batch 11 step 27): an AI-run wizard 5 whose only unspent slot holds Shocking Grasp,
+        /// beside a target dummy (100 more hit points). Round 1: the AI casts it now (the dummy is within reach,
+        /// AiCastDecider.TouchDeliveryFor), the touch misses (d20 1), and the spell is not discharged: the wizard holds the
+        /// charge (delegated RAW reading 2026-10-14; before, a missed touch spent the spell). Round 2: the AI delivers the
+        /// held charge at its turn's start through the PC's delivery request (the touch d20 19 hits; 5d6 = 30, PHB p.279),
+        /// which clears it. The delivery is no cast (one cast event) and costs no action today on both sides (SPL-156).
+        /// </summary>
+        private static ScenarioDef NpcHeldTouch()
+        {
+            return Rules("rules/npc-held-touch", "An AI wizard's missed Shocking Grasp keeps its charge and is delivered the next round (PHB p.141; SPL-115)")
+                .Covers("SPL-115", "PHB p.141", "PHB p.176", "PHB p.279", "SPL-156", "batch 11 step 27")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 5)), 5, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 6, 10, Control.Scripted)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.SHOCKING_GRASP); SpendAllBut(c, SpellNames.SHOCKING_GRASP); })
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("dummy", 1, Step.Assert("after round 1", ctx =>
+                {
+                    CharacterController d = ctx.Get("dummy");
+                    Fact(ctx, "held.r1", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge);
+                    Fact(ctx, "lost.r1", d.Stats.TotalMaxHP - d.Stats.CurrentHP);
+                    return true;
+                }))
+                .Turn("dummy", 2, Step.Assert("after round 2", ctx => { Fact(ctx, "held.r2", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); return true; }))
+                .Expect("The AI casts Shocking Grasp once; the delivery is no cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Expect("The missed touch deals nothing and the wizard holds the charge (PHB p.141)", FactsAre(("held.r1", true), ("lost.r1", 0)))
+                .Expect("Round 2: the held charge hits for 5d6 = 30 (PHB p.279)",
+                    v => v.Of("hp").Any(e => e.Round == 2 && e.Str("actor") == "dummy" && e.Int("old") - e.Int("new") == 30)
+                        ? ExpectResult.Pass("the dummy lost 30 in round 2")
+                        : ExpectResult.Fail("no 30-point loss of the dummy in round 2"))
+                .Expect("The delivered charge is gone", FactIs("held.r2", false))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-115 (PHB p.141; batch 11 step 27): an AI-run wizard 5 whose only unspent slot holds Shocking Grasp, a target
+        /// dummy 3 squares away (100 more hit points). The dummy is out of reach but a move reaches it, so the AI casts the
+        /// spell and holds the charge (AiCastDecider.TouchDeliveryFor answers HoldCharge; the hold is the PC's Discharge
+        /// Later through the cast core), moves beside the dummy and touches it in the same turn (PHB p.141: in the casting
+        /// round the caster may move between casting and touching): d20 19 hits, 5d6 = 30.
+        /// </summary>
+        private static ScenarioDef NpcHoldChargeApproach()
+        {
+            return Rules("rules/npc-hold-charge-approach", "An AI wizard holds Shocking Grasp, moves into reach and touches in the same turn (PHB p.141; SPL-115)")
+                .Covers("SPL-115", "PHB p.141", "PHB p.279", "batch 11 step 27")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 5)), 5, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 8, 10, Control.Scripted)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.SHOCKING_GRASP); SpendAllBut(c, SpellNames.SHOCKING_GRASP); })
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("dummy", 1, Step.Assert("after the wizard's turn", ctx =>
+                {
+                    CharacterController w = ctx.Get("wizard"), d = ctx.Get("dummy");
+                    Fact(ctx, "held", w.Spellcasting.HasHeldTouchCharge);
+                    Fact(ctx, "beside", CasterLevelRules.DistanceToTarget(w, d) <= 1);
+                    Fact(ctx, "lost", d.Stats.TotalMaxHP - d.Stats.CurrentHP);
+                    return true;
+                }))
+                .Expect("The AI casts Shocking Grasp once (the hold); the delivery is no cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Expect("It moves beside the dummy and the touch hits for 5d6 = 30, spending the charge (PHB p.141, p.279)",
+                    FactsAre(("beside", true), ("lost", 30), ("held", false)))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-115 (PHB p.141, p.176; batch 11 step 27), the PC side of rules/npc-held-touch: a Ui wizard 5 casts Shocking
+        /// Grasp with Cast Now (the Cast step's answer to the touch prompt) at an adjacent dummy; the touch misses (d20 1), so
+        /// the spell is not discharged and the wizard holds the charge (the same cast-core rule as an NPC's,
+        /// MissedTouchHoldsCharge; delegated RAW reading 2026-10-14). Round 2: the Discharge button delivers it (d20 19 hits,
+        /// 5d6 = 30, PHB p.279). One slot, one cast event.
+        /// </summary>
+        private static ScenarioDef UiTouchMissHoldsCharge()
+        {
+            return Rules("rules/ui-touch-miss-holds-charge", "A Ui wizard's missed Cast Now Shocking Grasp holds its charge; the next round's delivery hits (PHB p.141; SPL-115)")
+                .Covers("SPL-115", "PHB p.141", "PHB p.176", "PHB p.279", "batch 11 step 27")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SHOCKING_GRASP))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "dummy"); RecordSlots(ctx, "wizard"); return true; }),
+                    Step.Cast(SpellNames.SHOCKING_GRASP, "dummy"),
+                    Step.Assert("after the miss", ctx =>
+                    {
+                        Fact(ctx, "held.miss", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge);
+                        FactSlotsSpent(ctx, "spent.cast", "wizard");
+                        FactHpLost(ctx, "miss", "dummy");
+                        return true;
+                    }))
+                .Turn("wizard", 2,
+                    Step.DeliverHeld("dummy"),
+                    Step.Assert("after the hit", ctx =>
+                    {
+                        Fact(ctx, "held.hit", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge);
+                        FactHpLost(ctx, "hit", "dummy");
+                        return true;
+                    }))
+                .Expect("The Cast Now spends one 1st-level slot; the missed touch deals nothing and the charge is held (PHB p.141)",
+                    FactsAre(("spent.cast", "L1+1"), ("miss.lost.dummy", 0), ("held.miss", true)))
+                .Expect("Round 2: the held charge hits for 5d6 = 30 and is spent (PHB p.279)", FactsAre(("hit.lost.dummy", 30), ("held.hit", false)))
+                .Expect("One cast; the delivery is no cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Build();
+        }
+
+        /// <summary>Gives <paramref name="c"/> a held Shocking Grasp charge (a clone, never the template), as a hold leaves it.</summary>
+        private static bool GiveHeldShockingGrasp(CharacterController c)
+        {
+            c.Spellcasting.SetHeldTouchCharge(SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP).Clone(), null);
+            return c.Spellcasting.HasHeldTouchCharge;
+        }
+
+        private const string HeldChargeDissipatedLog = "held touch charge dissipates";
+
+        /// <summary>
+        /// Batch 11 step 27 (PHB p.141, p.176: casting another spell dissipates a held touch spell): a threatened Ui wizard 3
+        /// holding a Shocking Grasp charge picks Magic Missile and cancels at the AoO prompt: nothing is cast, so the charge
+        /// is kept (the spell menu only warns, ConcentrationRules.HeldChargeCastWarning); it casts Magic Missile again and
+        /// goes on: the cast core's ConcentrationOnCast step (DissipateHeldChargeForCasting) ends the charge once, the same
+        /// step as for an NPC (rules/held-charge-dissipates-npc).
+        /// </summary>
+        private static ScenarioDef UiHeldChargeDissipates()
+        {
+            return Rules("rules/held-charge-dissipates-ui", "A Ui caster's held charge survives a cast cancelled at the AoO prompt and dissipates when another spell is cast (PHB p.141, p.176)")
+                .Covers("PHB p.141", "PHB p.176", "SPL-115", "batch 11 step 27")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Held Ui Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.MAGIC_MISSILE, 2); Sturdy(c); })
+                .Tweak("gob", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("gob", "wizard")
+                .Turn("wizard", 1,
+                    Step.Assert("hold", ctx => GiveHeldShockingGrasp(ctx.Get("wizard"))),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
+                    Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("after the cancel", ctx => { Fact(ctx, "held.cancel", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); return true; }),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
+                    Step.AnswerAoO(AoOAnswer.Proceed),
+                    Step.Assert("after the cast", ctx => { Fact(ctx, "held.cast", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); return true; }))
+                .Expect("The first cast reached the AoO prompt and was cancelled; the second went on", Expect.All(
+                    Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"),
+                    Expect.StepStatus("wizard", 1, "AnswerAoO(Proceed)", 0, "done")))
+                .Expect("A cancelled cast keeps the charge; a cast that goes on dissipates it (PHB p.141, p.176)",
+                    FactsAre(("held.cancel", true), ("held.cast", false)))
+                .Expect("The charge dissipates once", Expect.Count("log", e => (e.Str("text") ?? "").Contains(HeldChargeDissipatedLog), 1, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// The NPC side of rules/held-charge-dissipates-ui (batch 11 step 27): a Scripted wizard 3 holding a Shocking Grasp
+        /// charge casts Magic Missile at a dummy; the same cast-core step ends the charge once.
+        /// </summary>
+        private static ScenarioDef NpcHeldChargeDissipates()
+        {
+            return Rules("rules/held-charge-dissipates-npc", "A Scripted caster's held charge dissipates when it casts another spell (PHB p.141, p.176)")
+                .Covers("PHB p.141", "PHB p.176", "SPL-115", "batch 11 step 27")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Held Scripted Wizard", 3)), 5, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Turn("wizard", 1,
+                    Step.Assert("hold", ctx => GiveHeldShockingGrasp(ctx.Get("wizard"))),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "dummy"),
+                    Step.Assert("after the cast", ctx => { Fact(ctx, "held.cast", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); return true; }))
+                .Expect("The Scripted cast ran", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("The cast dissipates the held charge (PHB p.141, p.176)", FactIs("held.cast", false))
+                .Expect("The charge dissipates once", Expect.Count("log", e => (e.Str("text") ?? "").Contains(HeldChargeDissipatedLog), 1, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 11 step 27 (delegated RAW reading 2026-10-14, SPL-114): a wand use is not casting a spell (DMG p.213 sets
+        /// spell trigger activation apart from spell completion), so a Ui wizard 5 holding a Shocking Grasp charge who uses a
+        /// wand of magic missile keeps the charge.
+        /// </summary>
+        private static ScenarioDef UiHeldChargeWandKeeps()
+        {
+            return Rules("rules/held-charge-wand-keeps", "A wand use does not dissipate a held charge (DMG p.213; SPL-114)")
+                .Covers("DMG p.213", "PHB p.141", "SPL-114", "batch 11 step 27")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Held Wand Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("wizard", c => GiveItem(c, WandId))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Turn("wizard", 1,
+                    Step.Assert("hold", ctx => GiveHeldShockingGrasp(ctx.Get("wizard"))),
+                    Step.UseItem(WandId, "dummy"),
+                    Step.Assert("after the wand", ctx => { Fact(ctx, "held.wand", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge); return true; }))
+                .Expect("The wand use ran", Expect.StepStatus("wizard", 1, "UseItem", 0, "done"))
+                .Expect("The wizard still holds the charge", FactIs("held.wand", true))
+                .Expect("Nothing dissipates", Expect.Count("log", e => (e.Str("text") ?? "").Contains(HeldChargeDissipatedLog), 0, 0))
                 .Build();
         }
 
@@ -2031,12 +2362,14 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// AI-063 (single-target part; batch 11 step 22). An AI-run wizard 5 (the Evoker profile) holds only Shocking Grasp
-        /// (touch, PHB p.279) and Ray of Frost (close range, 35 ft at CL 5, PHB p.269); the only enemy is a wolf 20 ft away.
+        /// (touch, PHB p.279) and Ray of Frost (close range, 35 ft at CL 5, PHB p.269); the only enemy is a wolf 35 ft away.
         /// The AI's best-scored spell is Shocking Grasp (recorded through AIService.SelectSpell, which tests no target or
         /// range), which has no legal target: the AI's legality filter (GameManager.CheckLegalityForAI: out of range) drops
         /// it before any cast is tried, so it costs no try, and the wizard casts its next candidate, Ray of Frost, where the
-        /// old single pick found no target and gave up its spellcasting for the turn. A cast refused after it was tried is
-        /// rules/ai-spell-retry-refused.
+        /// old single pick found no target and gave up its spellcasting for the turn. Since batch 11 step 27 the AI also holds
+        /// a touch charge when a move this turn reaches the foe (SPL-115, rules/npc-hold-charge-approach), so the wizard's
+        /// speed is cut to 20 ft. (4 squares), short of the wolf, to keep Shocking Grasp without a candidate. A cast refused
+        /// after it was tried is rules/ai-spell-retry-refused.
         /// </summary>
         private static ScenarioDef AiSpellRetry()
         {
@@ -2044,12 +2377,13 @@ namespace Tests.Scenarios
                 .Covers("AI-063", "PHB p.279", "PHB p.269", "batch 11 step 22")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 5)), 3, 10, Control.Ai)
-                .Npc("wolf", "wolf", 7, 10, Control.Scripted)
+                .Npc("wolf", "wolf", 10, 10, Control.Scripted)
                 .Tweak("wizard", c =>
                 {
                     AddWizardSlot(c, 1, SpellNames.SHOCKING_GRASP);
                     AddWizardSlot(c, 0, SpellNames.RAY_OF_FROST);
                     SpendAllBut(c, SpellNames.SHOCKING_GRASP, SpellNames.RAY_OF_FROST);
+                    c.Stats.BaseSpeed = 4; // no move this turn reaches the wolf, so no held-charge candidate (batch 11 step 27)
                 })
                 .Tweak("wolf", c => { AttackTweak(c, -30); Sturdy(c); })
                 .Initiative("wolf", "wizard")
@@ -2063,7 +2397,7 @@ namespace Tests.Scenarios
                         Fact(ctx, "top.legal", top != null ? ctx.Gm.CheckLegalityForAI(wizard, wolf, top).Reason : "none");
                         return true;
                     }))
-                .Expect("The AI's first pick is Shocking Grasp, refused against the wolf 20 ft away (out-of-range)", FactsAre(("top", SpellNames.SHOCKING_GRASP), ("top.legal", "out-of-range")))
+                .Expect("The AI's first pick is Shocking Grasp, refused against the wolf 35 ft away (out-of-range)", FactsAre(("top", SpellNames.SHOCKING_GRASP), ("top.legal", "out-of-range")))
                 .Expect("The wizard casts Ray of Frost, its second candidate", CastEvents("wizard", SpellNames.RAY_OF_FROST, 1))
                 .Expect("The wizard never casts Shocking Grasp", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.SHOCKING_GRASP, 0, 0))
                 .Build();

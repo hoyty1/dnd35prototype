@@ -47,9 +47,12 @@ public static class ConcentrationRules
 
     /// <summary>
     /// Whether a cast from <paramref name="source"/> is casting a spell, which ends the caster's concentration first
-    /// (D1): a slot, a spontaneous spell or conversion, a hold of the charge, a scroll (DMG p.213) and the F12 panel's
-    /// cast. Not the delivery of a held charge (the spell was cast at the hold), and not a wand, an open delegated
-    /// question (SPL-114).
+    /// (D1) and dissipates a held touch charge (PHB p.141, p.176; GameManager.DissipateHeldChargeForCasting): a slot, a
+    /// spontaneous spell or conversion, a hold of the charge, a scroll (DMG p.213: spell completion items are treated
+    /// like spells in combat) and the F12 panel's cast. Not the delivery of a held charge (the spell was cast at the
+    /// hold), and not a wand: delegated RAW reading 2026-10-14 (SPL-114, RULES_COVERAGE 4.1), DMG p.213 sets spell
+    /// trigger activation apart from spell completion ("by contrast, spell completion items are treated like spells"),
+    /// so a wand use is an item activation, not the casting of a spell.
     /// </summary>
     public static bool CastEndsConcentration(CastSource source)
     {
@@ -143,6 +146,20 @@ public static class ConcentrationRules
         string after = tail > 0 ? $" it lasts {tail} more round{(tail == 1 ? "" : "s")}" : " it ends";
         string what = newSpell != null ? newSpell.Name : "a spell";
         return $"Casting {what} ends {caster.Stats.CharacterName}'s concentration on {conc.ConcentrationSpellName}:{after} (PHB p.176: no casting while concentrating).";
+    }
+
+    /// <summary>
+    /// The warning a PC gets before a cast dissipates the touch charge it holds (PHB p.141, p.176; batch 11 step 27), or
+    /// null when it holds none or the cast is not a casting (<see cref="CastEndsConcentration"/>). The charge ends once the
+    /// cast goes ahead (the cast core's ConcentrationOnCast step), not when the spell is picked.
+    /// </summary>
+    public static string HeldChargeCastWarning(CharacterController caster, SpellData newSpell, CastSource source)
+    {
+        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
+        if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null || !CastEndsConcentration(source))
+            return null;
+        string what = newSpell != null ? newSpell.Name : "a spell";
+        return $"Casting {what} dissipates {caster.Stats.CharacterName}'s held {spellComp.HeldTouchSpell.Name} charge (PHB p.141).";
     }
 
     /// <summary>

@@ -177,6 +177,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     IsTouch = true,
                     IsMeleeTouch = true,
+                    TouchesMultipleTargets = true, // one touch per caster level: no held charge (PHB p.176)
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 6, DamageCount = 1,
                     DamageType = "negative",

@@ -211,4 +211,36 @@ public static class AiCastChoiceHeuristics
     public static bool IsWeaponChoiceSpell(SpellData spell)
         => spell != null && (spell.SpellId == SpellNames.MAGIC_WEAPON || spell.SpellId == SpellNames.GREATER_MAGIC_WEAPON
                              || spell.SpellId == SpellNames.KEEN_EDGE);
+
+    /// <summary>
+    /// The creature an AI summon calls (batch 11 step 27, SPL-091): among <paramref name="options"/> (the list of the
+    /// slot's own level the caster may call, SummonMonsterLists.GetFilteredOptionsForListLevel, so one creature per cast,
+    /// PHB p.285), the one most useful to its side: a creature that fights (one with a definition and at least one
+    /// natural attack or a piece of equipment; a swarm option is kept last) with the highest challenge rating, then the most Hit Dice;
+    /// equal ones keep the list's order. Null when there is none. Tactics only: the Summon resolve places whatever the
+    /// request carries.
+    /// </summary>
+    public static SummonMonsterOption ChooseSummonOption(IList<SummonMonsterOption> options)
+    {
+        if (options == null)
+            return null;
+        SummonMonsterOption best = null;
+        float bestScore = float.NegativeInfinity;
+        for (int i = 0; i < options.Count; i++)
+        {
+            SummonMonsterOption option = options[i];
+            NPCDefinition def = option != null ? NPCDatabase.Get(option.NpcDefinitionId) : null;
+            if (def == null)
+                continue;
+            bool fights = (def.NaturalAttacks != null && def.NaturalAttacks.Count > 0) || (def.EquipmentIds != null && def.EquipmentIds.Count > 0);
+            ChallengeRatingUtils.TryParse(def.ChallengeRating, out float cr);
+            float score = (fights ? 1000f : 0f) - (SummonMonsterLists.IsSwarmOption(option) ? 500f : 0f) + cr * 10f + def.HitDice * 0.1f;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = option;
+            }
+        }
+        return best;
+    }
 }

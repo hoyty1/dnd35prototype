@@ -33,6 +33,7 @@ namespace Tests.Magic
             TestSummonSwarmCloseRangeScaling();
             TestSummonMonsterSwarmDetectionByNameAndId();
             TestSummonMonsterSwarmDetectionByNpcMetadata();
+            TestAiSummonOptionChoice();
 
             Debug.Log($"====== Summon Monster Alignment Results: {_passed} passed, {_failed} failed ======");
         }
@@ -59,6 +60,66 @@ namespace Tests.Magic
             caster.CharacterAlignment = alignment;
             return caster;
         }
+
+        /// <summary>
+        /// Batch 11 step 27 (SPL-091): the AI's summon creature (AiCastChoiceHeuristics.ChooseSummonOption) is the list's
+        /// best fighter (one that fights, not a swarm, the highest challenge rating, then the most Hit Dice, then list
+        /// order), the same every time, and none from an empty list.
+        /// </summary>
+        private static void TestAiSummonOptionChoice()
+        {
+            NPCDatabase.Init();
+            foreach (Alignment alignment in new[] { Alignment.NeutralEvil, Alignment.LawfulGood })
+            {
+                CharacterStats cleric = CreateCaster("Cleric", alignment);
+                List<SummonMonsterOption> options = GetSummonMonsterIIOptions(cleric);
+                SummonMonsterOption chosen = AiCastChoiceHeuristics.ChooseSummonOption(options);
+                AssertTrue(chosen != null && options.Any(o => o.NpcDefinitionId == chosen.NpcDefinitionId),
+                    $"AI summon choice: a {alignment} cleric's Summon Monster II creature comes from its own list");
+                // The expected creature by the rule the heuristic claims (not its weights): one that fights (natural
+                // attacks or equipment) before one that does not, a non-swarm before a swarm, then the highest challenge
+                // rating, then the most Hit Dice, then list order.
+                SummonMonsterOption expected = null;
+                NPCDefinition expectedDef = null;
+                foreach (SummonMonsterOption o in options)
+                {
+                    NPCDefinition def = NPCDatabase.Get(o.NpcDefinitionId);
+                    if (def == null)
+                        continue;
+                    if (expected == null || RanksAbove(o, def, expected, expectedDef))
+                    {
+                        expected = o;
+                        expectedDef = def;
+                    }
+                }
+                AssertTrue(chosen != null && expected != null && chosen.NpcDefinitionId == expected.NpcDefinitionId,
+                    $"AI summon choice: a {alignment} cleric calls the list's best fighter ({expected?.DisplayName}), got {chosen?.DisplayName}");
+                SummonMonsterOption again = AiCastChoiceHeuristics.ChooseSummonOption(GetSummonMonsterIIOptions(cleric));
+                AssertTrue(again != null && chosen != null && again.NpcDefinitionId == chosen.NpcDefinitionId,
+                    $"AI summon choice: a {alignment} cleric's choice is the same every time");
+            }
+            AssertTrue(AiCastChoiceHeuristics.ChooseSummonOption(new List<SummonMonsterOption>()) == null && AiCastChoiceHeuristics.ChooseSummonOption(null) == null,
+                "AI summon choice: no creature from an empty list");
+        }
+
+        /// <summary>Whether option <paramref name="a"/> ranks strictly above <paramref name="b"/> by the AI summon rule.</summary>
+        private static bool RanksAbove(SummonMonsterOption a, NPCDefinition aDef, SummonMonsterOption b, NPCDefinition bDef)
+        {
+            bool aFights = Fights(aDef), bFights = Fights(bDef);
+            if (aFights != bFights)
+                return aFights;
+            bool aSwarm = SummonMonsterLists.IsSwarmOption(a), bSwarm = SummonMonsterLists.IsSwarmOption(b);
+            if (aSwarm != bSwarm)
+                return !aSwarm;
+            ChallengeRatingUtils.TryParse(aDef.ChallengeRating, out float aCr);
+            ChallengeRatingUtils.TryParse(bDef.ChallengeRating, out float bCr);
+            if (!Mathf.Approximately(aCr, bCr))
+                return aCr > bCr;
+            return aDef.HitDice > bDef.HitDice;
+        }
+
+        private static bool Fights(NPCDefinition def)
+            => (def.NaturalAttacks != null && def.NaturalAttacks.Count > 0) || (def.EquipmentIds != null && def.EquipmentIds.Count > 0);
 
         private static List<SummonMonsterOption> GetSummonMonsterIIOptions(CharacterStats caster)
         {

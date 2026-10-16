@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DND35e.Identifiers;
 using UnityEngine;
 
@@ -46,6 +47,11 @@ public partial class GameManager
             ShowFireShieldTypeSelection(caster);
             return CastChoiceFill.Suspended;
         }
+
+        // Dimension Door's destination (PHB p.221; batch 11 step 27, SPL-091): the escape square the game picks for the
+        // player, as before (ChooseDimensionDoorDestination; a square picker is UI-053). The AI decider fills it the same way.
+        if (string.Equals(spellId, SpellNames.DIMENSION_DOOR, StringComparison.Ordinal) && !req.Choices.Destination.HasValue)
+            req.Choices.Destination = ChooseDimensionDoorDestination(caster, req.Spell);
 
         CastChoiceFill fill = TryHandleMagicWeaponWeaponSelection(caster, target);
         if (fill != CastChoiceFill.Filled)
@@ -167,5 +173,135 @@ public partial class GameManager
         if (ctx.ResultLog != null)
             _lastCombatLog = ctx.ResultLog;
         UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// The AI decider's choices that read the battlefield (AiCastDecider.FillChoices; batch 11 step 27, SPL-091):
+    /// Dimension Door's destination (<see cref="ChooseDimensionDoorDestination"/>, the escape square the UI decider gives
+    /// the player too) and a Summon Monster's or Summon Nature's Ally's creature and square
+    /// (<see cref="AiFillSummonChoices"/>). Refused when a summon finds no creature or no square; nothing is spent then.
+    /// </summary>
+    internal CastChoiceFill AiFillCasterChoices(SpellCastRequest req)
+    {
+        if (req == null || req.Spell == null || req.Choices == null)
+            return CastChoiceFill.Filled;
+        if (string.Equals(req.Spell.SpellId, SpellNames.DIMENSION_DOOR, StringComparison.Ordinal) && !req.Choices.Destination.HasValue)
+            req.Choices.Destination = ChooseDimensionDoorDestination(req.Caster, req.Spell);
+        if (req.ResolveKind == CastResolveKind.Summon && IsSummonMonsterSpell(req.Spell))
+            return AiFillSummonChoices(req);
+        return CastChoiceFill.Filled;
+    }
+
+    /// <summary>
+    /// The AI's summon choices (batch 11 step 27, SPL-091), the ones the PC's prompts and placement click make: the list
+    /// of the spell's own level (one creature, PHB p.285; the count rule and its roll are the Summon resolve's,
+    /// RollSummonCreatureCount), the creature most useful to the caster's side on it
+    /// (AiCastChoiceHeuristics.ChooseSummonOption), and the square it appears on (<see cref="FindAiSummonSquare"/>). A
+    /// choice the caller already made is kept. Refused with no creature or no square.
+    /// </summary>
+    internal CastChoiceFill AiFillSummonChoices(SpellCastRequest req)
+    {
+        CastChoices choices = req.Choices;
+        CharacterController caster = req.Caster;
+        int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(req.Spell.SpellId);
+        if (choices.SummonListLevel <= 0)
+            choices.SummonListLevel = spellLevel;
+        if (choices.SummonSelection == null)
+            choices.SummonSelection = AiCastChoiceHeuristics.ChooseSummonOption(GetSummonOptionsForSpell(req.Spell, caster, choices.SummonListLevel));
+        if (choices.SummonSelection == null)
+            return CastChoiceFill.Refused;
+        if (choices.SummonCountInfo == null)
+            choices.SummonCountInfo = SummonMonsterLists.GetCreatureCountInfo(spellLevel, choices.SummonListLevel);
+        if (req.Aim == null)
+            req.Aim = new CastAim();
+        if (!req.Aim.Destination.HasValue)
+            req.Aim.Destination = FindAiSummonSquare(caster, choices.SummonSelection, Mathf.Max(1, CasterLevelRules.RangeSquares(req)));
+        return req.Aim.Destination.HasValue ? CastChoiceFill.Filled : CastChoiceFill.Refused;
+    }
+
+    /// <summary>
+    /// The square an AI summon puts its creature on (batch 11 step 27): the free square for the creature's size nearest
+    /// the caster's nearest living foe (team allegiance), within <paramref name="rangeSquares"/> of the caster (the PC
+    /// placement highlight's measure, ShowSummonPlacementTargets), so the creature can attack in the turn it appears
+    /// (FindBestAdditionalSummonCell, the search the Summon resolve uses for the extra creatures). With no foe, the free
+    /// square nearest the caster. Null when no square in range has room.
+    /// </summary>
+    internal Vector2Int? FindAiSummonSquare(CharacterController caster, SummonMonsterOption option, int rangeSquares)
+    {
+        if (caster == null || option == null || Grid == null)
+            return null;
+        NPCDefinition def = NPCDatabase.Get(option.NpcDefinitionId);
+        if (def == null)
+            return null;
+        CharacterController nearestFoe = null;
+        int nearest = int.MaxValue;
+        foreach (CharacterController c in GetAllCharacters())
+        {
+            if (c == null || c == caster || c.Stats == null || c.Stats.IsDead || !TeamUtility.IsEnemy(caster, c))
+                continue;
+            int d = CasterLevelRules.DistanceToTarget(caster, c);
+            if (d < nearest)
+            {
+                nearest = d;
+                nearestFoe = c;
+            }
+        }
+        Vector2Int preferred = nearestFoe != null ? nearestFoe.GridPosition : caster.GridPosition;
+        SquareCell cell = FindBestAdditionalSummonCell(caster, preferred, def.SizeCategory.GetSpaceWidthSquares(), rangeSquares);
+        return cell != null ? cell.Coords : (Vector2Int?)null;
+    }
+
+    /// <summary>
+    /// Where <paramref name="caster"/> can move with one move action this turn to touch <paramref name="target"/> (batch 11
+    /// step 27, SPL-115; AiCastDecider.TouchDeliveryFor and the AI's held-charge delivery): a free square within its
+    /// current move range, reached by a path (FindPath, no threat avoidance, as the AI's movement search,
+    /// AIService.EvaluateMovementOptions), from which the target's nearest square is adjacent (the touch's reach,
+    /// CasterLevelRules.InRange); the one with the shortest path, then the fewest attacks of opportunity. Null without a
+    /// move action or such a square.
+    /// </summary>
+    internal Vector2Int? FindTouchApproachSquareForAI(CharacterController caster, CharacterController target)
+    {
+        if (caster == null || target == null || caster.Stats == null || Grid == null || caster.Actions == null || !caster.Actions.HasMoveAction)
+            return null;
+        if (ThreatSystem.IsMoverIncapacitated(caster))
+            return null;
+        int moveRange = GetCurrentMoveRangeSquares(caster);
+        if (moveRange <= 0)
+            return null;
+        int size = caster.GetVisualSquaresOccupied();
+        List<Vector2Int> targetSquares = target.GetOccupiedSquares();
+        Vector2Int? best = null;
+        int bestLength = int.MaxValue;
+        int bestAoOs = int.MaxValue;
+        foreach (SquareCell cell in Grid.GetCellsInRange(caster.GridPosition, moveRange))
+        {
+            if (cell == null || cell.Coords == caster.GridPosition)
+                continue;
+            int reach = int.MaxValue;
+            if (targetSquares != null && targetSquares.Count > 0)
+            {
+                for (int i = 0; i < targetSquares.Count; i++)
+                    reach = Mathf.Min(reach, SquareGridUtils.GetDistance(cell.Coords, targetSquares[i]));
+            }
+            else
+            {
+                reach = SquareGridUtils.GetDistance(cell.Coords, target.GridPosition);
+            }
+            if (reach > 1)
+                continue;
+            if (!Grid.CanPlaceCreature(cell.Coords, size, caster))
+                continue;
+            AoOPathResult path = FindPath(caster, cell.Coords, avoidThreats: false, maxRangeOverride: moveRange);
+            if (path == null || path.Path == null || path.Path.Count == 0)
+                continue;
+            int aoos = path.ProvokedAoOs != null ? path.ProvokedAoOs.Count : 0;
+            if (path.Path.Count < bestLength || (path.Path.Count == bestLength && aoos < bestAoOs))
+            {
+                best = cell.Coords;
+                bestLength = path.Path.Count;
+                bestAoOs = aoos;
+            }
+        }
+        return best;
     }
 }

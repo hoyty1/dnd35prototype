@@ -230,7 +230,7 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckDeciderCapability(req)
-                              ?? CheckCastTargetLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
+                              ?? CheckCastTargetLegality(req) ?? CheckSummonPlacementLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
                               ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
@@ -302,6 +302,10 @@ public partial class GameManager
     {
         if (req == null || req.ResolveKind != CastResolveKind.HoldCharge || req.Caster == null || req.Spell == null)
             return null;
+        // A spell that touches several targets (Chill Touch) cannot be held (PHB p.176; SpellData.CanHoldCharge).
+        if (!req.Spell.CanHoldCharge())
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "cannot-hold-charge")
+                { Detail = $"{req.Spell.Name}'s charge cannot be held: it touches every target in the round it is cast (PHB p.176)." };
         string grappleRefusal = GrappleSpellcastRefusal(req.Caster, req.Spell);
         if (grappleRefusal != null)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple") { Detail = grappleRefusal };
@@ -323,6 +327,14 @@ public partial class GameManager
 
         CharacterController caster = req.Caster;
         CharacterController target = req.Aim != null ? req.Aim.Target : null;
+
+        // Delivering a held charge is no casting (PHB p.141): it needs no slot, and its action is the delivery's
+        // (free today, as for the PC, SPL-156), so only a living target is tested (batch 11 step 27, SPL-115).
+        if (req.Source != null && req.Source.Kind == CastSourceKind.HeldChargeDelivery)
+            return target != null && target.Stats != null && target.Stats.IsDead
+                ? new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "target-dead")
+                : null;
+
         CastActionCost cost = CastActionRules.CastingAction(req.Spell, req.Metamagic, req.Source);
         bool needsStandard = cost != CastActionCost.Free && cost != CastActionCost.Swift;
         if (caster.Actions == null || (needsStandard && !caster.Actions.HasStandardAction))
@@ -422,6 +434,64 @@ public partial class GameManager
         return null;
     }
 
+    /// <summary>
+    /// The square a summon places its creature on (batch 11 step 27), the same test for every caster and path (the PC's
+    /// click, the AI's square, a Scripted CastAt square): within the spell's range of the caster at the cast's caster
+    /// level (CasterLevelRules.RangeSquares, the PC highlight's measure), with room for the chosen creature's space
+    /// (Grid.CanPlaceCreature; PHB p.173: a conjured creature cannot appear inside a creature or object; not for Summon
+    /// Swarm, whose swarm may share a creature's space, PHB p.289, MM p.315) and in the caster's line of effect (PHB p.176;
+    /// AoESystem.HasLineOfEffectToSpace). "summon-out-of-range", "summon-no-room" or "summon-no-line-of-effect" otherwise.
+    /// Nothing to test before the square and the creature are chosen (the decider fills them; the Legality stage tests
+    /// again after it). Delegated RAW reading 2026-10-14 (RULES_COVERAGE 4.1): line of effect to any square of the space.
+    /// </summary>
+    private CastOutcome CheckSummonPlacementLegality(SpellCastRequest req)
+    {
+        if (req == null || req.ResolveKind != CastResolveKind.Summon || req.Caster == null || req.Spell == null
+            || req.Aim == null || !req.Aim.Destination.HasValue)
+            return null;
+        int sizeSquares = 0;
+        if (IsSummonMonsterSpell(req.Spell))
+        {
+            SummonMonsterOption option = req.Choices != null ? req.Choices.SummonSelection : null;
+            NPCDefinition def = option != null ? NPCDatabase.Get(option.NpcDefinitionId) : null;
+            if (def == null)
+                return null;
+            sizeSquares = def.SizeCategory.GetSpaceWidthSquares();
+        }
+        string reason = SummonPlacementRefusal(req.Caster, req.Aim.Destination.Value, CasterLevelRules.RangeSquares(req), sizeSquares);
+        return reason == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, reason);
+    }
+
+    /// <summary>
+    /// Why <paramref name="caster"/> cannot place a summoned creature whose space is <paramref name="sizeSquares"/> squares
+    /// a side (0: a swarm, no room test) with its lower-left square on <paramref name="destination"/>, or null
+    /// (<see cref="CheckSummonPlacementLegality"/>). The PC highlight (ShowSummonPlacementTargets,
+    /// ShowSummonSwarmPlacementTargets), the AI's square (FindAiSummonSquare) and the extra creatures' squares
+    /// (FindBestAdditionalSummonCell) filter through it.
+    /// </summary>
+    internal string SummonPlacementRefusal(CharacterController caster, Vector2Int destination, int rangeSquares, int sizeSquares)
+    {
+        if (caster == null || Grid == null || Grid.GetCell(destination) == null)
+            return "summon-out-of-range";
+        if (SquareGridUtils.GetDistance(caster.GridPosition, destination) > Mathf.Max(1, rangeSquares))
+            return "summon-out-of-range";
+        if (sizeSquares > 0 && !Grid.CanPlaceCreature(destination, sizeSquares))
+            return "summon-no-room";
+        if (!AoESystem.HasLineOfEffectToSpace(caster.GridPosition, caster.GetCurrentSpaceSquares(), destination, Mathf.Max(1, sizeSquares)))
+            return "summon-no-line-of-effect";
+        return null;
+    }
+
+    private static string DescribeSummonPlacementRefusal(string reason)
+    {
+        switch (reason)
+        {
+            case "summon-no-room": return "not enough open space for that creature size";
+            case "summon-no-line-of-effect": return "no line of effect to that square (PHB p.176)";
+            default: return "out of the spell's range";
+        }
+    }
+
     private CastOutcome CheckCastTargetLegality(SpellCastRequest req)
     {
         if (req == null || req.Spell == null || req.Caster == null)
@@ -437,6 +507,12 @@ public partial class GameManager
             return CheckAreaOriginLegality(req);
         if (req.ResolveKind != CastResolveKind.Single)
             return null;
+        // A summon spell places its creature on a square (PHB p.285-289): it reaches the battlefield through a summon
+        // request (the PC's placement click, SpellCastRequest.ForUiSummon; the AI's, ForAISummon), never a single-target
+        // one, for every caster (batch 11 step 27, SPL-091; Tests.Magic.SpellRoutingGoldenTests mirrors this data
+        // refusal: keep them in step).
+        if (IsSummonMonsterSpell(req.Spell) || IsSummonSwarmSpell(req.Spell))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "summon-needs-placement");
         // An area spell is aimed at a point, not cast on a creature (PHB p.175): it reaches its creatures through an area
         // request (the PC's area targeting, SpellCastRequest.ForUiArea; the AI's aim search, ForAIArea), never a
         // single-target one, for every caster (batch 11 step 25). "Area spell" is the PC routing's own predicate
@@ -573,7 +649,7 @@ public partial class GameManager
         refusal = CheckCastTargetLegality(req);
         if (refusal != null)
         {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason == "area-needs-aim" ? refusal.Reason : "invalid-target");
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason == "area-needs-aim" || refusal.Reason == "summon-needs-placement" ? refusal.Reason : "invalid-target");
             if (spell != null && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
             FinishCast(ctx, refusal);
@@ -629,6 +705,18 @@ public partial class GameManager
         if (fill == CastChoiceFill.Refused)
         {
             FinishCast(ctx, new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "choice-refused"));
+            return;
+        }
+
+        // The summon's square, once the creature and the square are chosen (batch 11 step 27): range, room and line of
+        // effect, the same for every caster.
+        refusal = CheckSummonPlacementLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"Cannot summon there: {DescribeSummonPlacementRefusal(refusal.Reason)}."));
+            FinishCast(ctx, refusal);
             return;
         }
 
@@ -991,6 +1079,29 @@ public partial class GameManager
             return;
         ctx.ConcentrationHandled = true;
         HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Source);
+        DissipateHeldChargeForCasting(ctx);
+    }
+
+    /// <summary>
+    /// Casting another spell dissipates a held touch charge (PHB p.141, p.176: "If you cast another spell, the touch spell
+    /// dissipates"), for every caster at the same step as decision D1's end of concentration: once the cast goes ahead
+    /// (not when a PC picks the spell, whose menu only warns, ConcentrationRules.HeldChargeCastWarning), a casting (a slot,
+    /// a spontaneous spell or conversion, a hold, a scroll; ConcentrationRules.CastEndsConcentration), not a delivery or a
+    /// wand (batch 11 step 27, SPL-115; which activations count as casting is the delegated RAW reading 2026-10-14 of
+    /// SPL-114, recorded in RULES_COVERAGE 4.1). A hold then stores its own charge. The direct scroll path
+    /// (ResolveDirectItemCastChecks) calls the same rule.
+    /// </summary>
+    private void DissipateHeldChargeForCasting(CastContext ctx)
+        => DissipateHeldChargeForCasting(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Source);
+
+    private void DissipateHeldChargeForCasting(CharacterController caster, SpellData spell, CastSource source)
+    {
+        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
+        if (spellComp == null || !spellComp.HasHeldTouchCharge || !ConcentrationRules.CastEndsConcentration(source))
+            return;
+        spellComp.ClearHeldTouchCharge("cast another spell");
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "held-charge-dissipated");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{caster.Stats.CharacterName}'s held touch charge dissipates as they begin another spell."));
     }
 
     /// <summary>
@@ -1464,6 +1575,10 @@ public partial class GameManager
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "held-charge-kept");
             }
         }
+        else if (MissedTouchHoldsCharge(ctx, result))
+        {
+            HoldChargeAfterMissedTouch(ctx);
+        }
 
         // The NPC path shows its result log before the target's death (NpcResultLogBeforeTargetDeath, SPL-160).
         bool logBeforeDeath = ctx.Request.HasQuirk(LegacyCastQuirk.NpcResultLogBeforeTargetDeath);
@@ -1483,6 +1598,36 @@ public partial class GameManager
             BuildCastResultLog(ctx);
 
         CastStageCombatEnd(ctx);
+    }
+
+    /// <summary>
+    /// Whether the melee touch of a cast in its casting round missed, so the spell was not discharged and its charge is
+    /// held (PHB p.141: a touch spell not discharged in the round it is cast is held, and the caster may keep making touch
+    /// attacks round after round; p.176; a missed touch touches nothing, so it does not discharge the spell; delegated RAW
+    /// reading 2026-10-14, batch 11 step 27, SPL-115): a single-target cast (not a delivery) of a melee touch spell whose
+    /// touch attack was rolled and missed. The same for every caster.
+    /// </summary>
+    internal static bool MissedTouchHoldsCharge(CastContext ctx, SpellResult result)
+    {
+        if (ctx == null || result == null || ctx.IsHeldChargeDelivery || ctx.Request.ResolveKind != CastResolveKind.Single)
+            return false;
+        SpellData spell = ctx.Request.Spell;
+        // Not a spell that touches several targets (Chill Touch): its charge cannot be held (PHB p.176, CanHoldCharge).
+        return spell != null && spell.CanHoldCharge() && result.RequiredAttackRoll && !result.AttackHit && !result.BlockedByGlobe;
+    }
+
+    /// <summary>
+    /// Holds the charge of a cast whose touch missed in its casting round (<see cref="MissedTouchHoldsCharge"/>, and a
+    /// missed touch at a Mirror Image figment): the spell as cast, its metamagic and its choices, as a hold stores them
+    /// (SpellcastingComponent.SetHeldTouchCharge), and the result log says the caster keeps the charge.
+    /// </summary>
+    internal void HoldChargeAfterMissedTouch(CastContext ctx)
+    {
+        if (ctx == null || ctx.SpellComp == null)
+            return;
+        ctx.SpellComp.SetHeldTouchCharge(ctx.Request.Spell, ctx.Request.Metamagic, ctx.Request.Choices);
+        ctx.RetainedHeldChargeOnMiss = true;
+        CastStageTrace.Mark(ctx.Request.Caster, ctx.Request.Spell, CastStageTrace.Handler, "held-charge-kept");
     }
 
     /// <summary>The cast's result log: its prefixes, SpellCaster's log and, for a missed held-charge touch, the kept charge.</summary>

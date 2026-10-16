@@ -5765,7 +5765,11 @@ public partial class GameManager : MonoBehaviour
         // before any check can lose the spell (decision D1, PHB p.176), as the cast core's ConcentrationOnCast step does;
         // a wand use does not (an open delegated question, SPL-114).
         if (kind == CastSourceKind.Scroll)
+        {
             HandleConcentrationOnCasting(actor, spell, source);
+            // ... and dissipates a touch charge the reader holds (PHB p.141, p.176), as the cast core's step does.
+            DissipateHeldChargeForCasting(actor, spell, source);
+        }
 
         if (CastComponentRules.CastingDistractionApplies(source))
         {
@@ -5948,6 +5952,9 @@ public partial class GameManager : MonoBehaviour
                 string concentrationWarning = ConcentrationRules.CastWarning(actor, scrollSpell, new CastSource { Kind = CastSourceKind.Scroll });
                 if (concentrationWarning != null)
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", concentrationWarning));
+                string heldChargeWarning = ConcentrationRules.HeldChargeCastWarning(actor, scrollSpell, new CastSource { Kind = CastSourceKind.Scroll });
+                if (heldChargeWarning != null)
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", heldChargeWarning));
             }
 
             // Route through the full spell targeting pipeline
@@ -9690,18 +9697,16 @@ public partial class GameManager : MonoBehaviour
         string concentrationWarning = ConcentrationRules.CastWarning(pc, spell, menuSource);
         if (concentrationWarning != null)
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", concentrationWarning));
+        // A held touch charge dissipates once the cast goes ahead (PHB p.141, p.176; the cast core's ConcentrationOnCast
+        // step, DissipateHeldChargeForCasting, for every caster; batch 11 step 27), not when the spell is picked: a
+        // warning here, as for the concentration (D1).
+        string heldChargeWarning = ConcentrationRules.HeldChargeCastWarning(pc, spell, menuSource);
+        if (heldChargeWarning != null)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", heldChargeWarning));
 
         BeginCast(SpellCastRequest.ForUi(pc, spell, metamagic, menuSource));
         if (metamagic != null && metamagic.HasAnyMetamagic)
             Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
-
-        // Casting another spell while holding a touch charge ends the held charge.
-        var spellComp = pc.Spellcasting;
-        if (spellComp != null && spellComp.HasHeldTouchCharge)
-        {
-            spellComp.ClearHeldTouchCharge("cast another spell");
-            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{pc.Stats.CharacterName}'s held touch charge dissipates as they begin another spell."));
-        }
 
         // (A metamagic clone of the spell, with its range and action changes, is part of the request build above.)
 
@@ -10865,6 +10870,9 @@ public partial class GameManager : MonoBehaviour
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
             if (dist > rangeSquares)
                 continue;
+            // Range and line of effect (SummonPlacementRefusal with no room test: a swarm may share a space).
+            if (SummonPlacementRefusal(caster, cell.Coords, rangeSquares, 0) != null)
+                continue;
 
             cell.SetHighlight(HighlightType.SpellTarget);
             _highlightedCells.Add(cell);
@@ -10891,6 +10899,10 @@ public partial class GameManager : MonoBehaviour
         int range = CasterLevelRules.RangeSquares(caster, spell);
         if (range <= 0) range = 1;
         List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, range);
+        // The squares the cast core's summon test accepts for the chosen creature (range, room for its space, line of
+        // effect; SummonPlacementRefusal, batch 11 step 27), the same test the AI's square meets.
+        NPCDefinition selectionDef = NPCDatabase.Get(_pendingSummonSelection.NpcDefinitionId);
+        int selectionSize = selectionDef != null ? selectionDef.SizeCategory.GetSpaceWidthSquares() : 1;
 
         foreach (var cell in cells)
         {
@@ -10899,7 +10911,7 @@ public partial class GameManager : MonoBehaviour
 
             cell.SetHighlight(HighlightType.SpellRange);
 
-            if (!cell.IsOccupied)
+            if (SummonPlacementRefusal(caster, cell.Coords, range, selectionSize) == null)
             {
                 cell.SetHighlight(HighlightType.SpellTarget);
                 _highlightedCells.Add(cell);
@@ -11210,6 +11222,74 @@ public partial class GameManager : MonoBehaviour
         if (cast && EvaluateCombatEnd("TryNPCPerformAreaSpellCast"))
             CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformAreaSpellCast");
         return cast;
+    }
+
+    /// <summary>
+    /// The NPC summon cast of <paramref name="spell"/> (batch 11 step 27, SPL-091; TryNPCPerformSummonSpellCast), then the
+    /// combat-end check after a cast that counts, as for the other NPC casts. <paramref name="metamagic"/> and
+    /// <paramref name="destination"/>: a Scripted cast step's (null: the prepared slot's metamagic, the AI's square).
+    /// </summary>
+    public bool TryNPCPerformSummonSpellCastForAI(CharacterController npc, SpellData spell, MetamagicData metamagic = null, Vector2Int? destination = null)
+    {
+        bool cast = TryNPCPerformSummonSpellCast(npc, spell, metamagic, destination);
+        if (cast && EvaluateCombatEnd("TryNPCPerformSummonSpellCast"))
+            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSummonSpellCast");
+        return cast;
+    }
+
+    /// <summary>The NPC hold of a melee touch spell's charge (batch 11 step 27, SPL-115; TryNPCHoldTouchCharge).</summary>
+    public bool TryNPCHoldTouchChargeForAI(CharacterController npc, SpellData spell, MetamagicData metamagic = null)
+        => TryNPCHoldTouchCharge(npc, spell, metamagic);
+
+    /// <summary>
+    /// The NPC delivery of its held charge to <paramref name="target"/> (batch 11 step 27, SPL-115; TryNPCDeliverHeldCharge),
+    /// then the combat-end check, as the PC's delivery runs it on its target's death.
+    /// </summary>
+    public bool TryNPCDeliverHeldChargeForAI(CharacterController npc, CharacterController target)
+    {
+        SpellData held = npc != null && npc.Spellcasting != null ? npc.Spellcasting.HeldTouchSpell : null;
+        bool delivered = TryNPCDeliverHeldCharge(npc, target);
+        if (delivered && EvaluateCombatEnd("TryNPCDeliverHeldCharge"))
+            CastStageTrace.Mark(npc, held, CastStageTrace.CombatEnd, "TryNPCDeliverHeldCharge");
+        return delivered;
+    }
+
+    /// <summary>
+    /// The AI's legality filter for a summon (batch 11 step 27): <see cref="CheckLegality"/> on the request the NPC summon
+    /// cast of <paramref name="spell"/> would build (SpellCastRequest.ForAISummon), then the AI decider's choices on a
+    /// copy (a creature it may call and a square with room for it, AiFillSummonChoices) and the square's test
+    /// (CheckSummonPlacementLegality), so the AI ranks only a summon the cast would make. "choice-refused" when it finds no
+    /// creature or square. No side effect.
+    /// </summary>
+    internal CastOutcome CheckSummonLegalityForAI(CharacterController caster, SpellData spell)
+    {
+        SpellCastRequest probe = SpellCastRequest.ForAISummon(caster, spell);
+        CastOutcome legality = CheckLegality(probe);
+        if (legality.Kind == CastOutcomeKind.Refused)
+            return legality;
+        if (AiFillCasterChoices(probe) != CastChoiceFill.Filled)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "choice-refused");
+        return CheckSummonPlacementLegality(probe) ?? legality;
+    }
+
+    /// <summary>
+    /// The AI's legality filter for holding <paramref name="spell"/>'s charge (batch 11 step 27): <see cref="CheckLegality"/>
+    /// on the request TryNPCHoldTouchCharge would build (SpellCastRequest.ForAIHoldCharge). No side effect.
+    /// </summary>
+    internal CastOutcome CheckHoldLegalityForAI(CharacterController caster, SpellData spell)
+        => CheckLegality(SpellCastRequest.ForAIHoldCharge(caster, spell));
+
+    /// <summary>
+    /// The AI's legality filter for delivering the held charge to <paramref name="target"/> (batch 11 step 27):
+    /// <see cref="CheckLegality"/> on the delivery request (SpellCastRequest.ForAIHeldChargeDelivery: the target test and the
+    /// touch's reach). Refused with no charge held. No side effect.
+    /// </summary>
+    internal CastOutcome CheckDeliveryLegalityForAI(CharacterController caster, CharacterController target)
+    {
+        SpellCastRequest request = SpellCastRequest.ForAIHeldChargeDelivery(caster, target);
+        return request == null
+            ? new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-held-charge")
+            : CheckLegality(request);
     }
 
     public bool HasActiveShieldSpellForAI(CharacterController target)

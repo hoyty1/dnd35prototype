@@ -235,9 +235,12 @@ namespace Tests.Scenarios
         public static Step CastChoosing(string spellId, string target, params string[] choices)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Choices = choices ?? new string[0] };
         /// <summary>
-        /// Ui only: <see cref="CastChoosing"/> aimed at the square (<paramref name="x"/>, <paramref name="y"/>) rather than at
-        /// an actor: the destination of a Summon Monster or Summon Swarm cast, or the anchor of a Grease area. The choices
-        /// answer the selection lists the cast opens (the Grease mode, the summoned creature, the swarm type) in order.
+        /// <see cref="CastChoosing"/> aimed at the square (<paramref name="x"/>, <paramref name="y"/>) rather than at an actor:
+        /// the destination of a Summon Monster or Summon Swarm cast, or the anchor of a Grease area. Ui: the choices answer
+        /// the selection lists the cast opens (the Grease mode, the summoned creature, the swarm type) in order. Scripted (a
+        /// Summon Monster or Summon Nature's Ally only, batch 11 step 27): the NPC summon cast places the creature the AI
+        /// decider picks on that square (GameManager.TryNPCPerformSummonSpellCastForAI); <see cref="Cast"/> of a summon
+        /// spell lets the AI pick the square too.
         /// </summary>
         public static Step CastAt(string spellId, int x, int y, params string[] choices)
             => new Step(StepKind.Cast) { SpellId = spellId, Cell = new Vector2Int(x, y), HasCell = true, Choices = choices ?? new string[0] };
@@ -372,9 +375,11 @@ namespace Tests.Scenarios
                 if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
                     || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
-                if (Kind == StepKind.Cast && HasCell)
-                    return Describe() + ": a cast aimed at a square is Ui only (the NPC path casts at an actor)";
-                if (Kind == StepKind.Cast && Choices != null)
+                // A summon aimed at a square is the one square cast the NPC path has (batch 11 step 27, SPL-091).
+                bool summonAtSquare = Kind == StepKind.Cast && SummoningService.IsSummonMonsterSpell(SpellDatabase.GetSpell(SpellId));
+                if (Kind == StepKind.Cast && HasCell && !summonAtSquare)
+                    return Describe() + ": a cast aimed at a square is Ui only (the NPC path casts at an actor, or a summon at a square)";
+                if (Kind == StepKind.Cast && Choices != null && Choices.Length > 0)
                     return Describe() + ": selection-list choices are Ui only (the NPC path makes its own)";
 
                 if ((Kind == StepKind.FullAttack || Kind == StepKind.Charge) && !string.IsNullOrEmpty(NaturalAttackName))
@@ -678,6 +683,16 @@ namespace Tests.Scenarios
                     case StepKind.Cast:
                     {
                         SpellData template = SpellDatabase.GetSpell(s.SpellId);
+                        if (template != null && SummoningService.IsSummonMonsterSpell(template))
+                        {
+                            // A summon (batch 11 step 27, SPL-091) goes through the NPC summon cast, as the AI casts it: the AI
+                            // decider picks the creature and, unless the step names a square (CastAt), its square.
+                            string preS = Preconditions(a, null);
+                            ok = gm.TryNPCPerformSummonSpellCastForAI(a, template.Clone(), s.Metamagic, s.HasCell ? s.Cell : (Vector2Int?)null);
+                            if (ok == false) note = "summon executor returned false (" + preS + ")";
+                            yield return null;
+                            break;
+                        }
                         if (template == null || target == null) { ok = false; note = template == null ? "unknown spell" : "no target"; break; }
                         string preC = Preconditions(a, null);
                         // The step's metamagic goes with the cast (batch 11 step 21): the NPC path applies it as the PC menu

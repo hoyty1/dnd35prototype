@@ -4,8 +4,10 @@ using DND35e.Identifiers;
 /// The NPC decider (batch 11, cast_core_batch11.md): it answers a cast's choices inline, so an NPC cast runs through the
 /// cast core synchronously (GameManager.RunCastSync, from TryNPCPerformSpellCast since batch 11 step 8). Since batch 11
 /// step 22 it makes the caster's choices as the AI judges them (AiCastChoiceHeuristics: the energy of the visible foes'
-/// attacks, Fire Shield's form, the recipient's wielded weapon, the caster's own race; SPL-112, SPL-113). The rules code
-/// reads the request and never asks who controls the caster or how the choice was made.
+/// attacks, Fire Shield's form, the recipient's wielded weapon, the caster's own race; SPL-112, SPL-113). Since batch 11
+/// step 27 it also picks a summon's creature and square and Dimension Door's destination (GameManager.AiFillCasterChoices;
+/// SPL-091) and whether to hold a touch spell's charge (<see cref="TouchDeliveryFor"/>; SPL-115). The rules code reads the
+/// request and never asks who controls the caster or how the choice was made.
 /// </summary>
 public sealed class AiCastDecider : ICastDecider
 {
@@ -20,7 +22,9 @@ public sealed class AiCastDecider : ICastDecider
     /// (Wall of Fire, PHB p.298; Wall of Ice, PHB p.299; Wall of Force, PHB p.298), Grease on a held object or worn armor
     /// (PHB p.237; a Grease request with no form chosen is the same choice left open), and the square a Summon Swarm
     /// places its swarm on (PHB p.289). A request for any of these is refused at Legality, nothing spent; the AI's
-    /// candidate walk then tries its next spell. Every other choice the AI fills (<see cref="FillAiChoices"/>).
+    /// candidate walk then tries its next spell. Every other choice the AI fills (<see cref="FillAiChoices"/>; since batch
+    /// 11 step 27 also a Summon Monster's or Summon Nature's Ally's creature and square and Dimension Door's destination,
+    /// GameManager.AiFillCasterChoices).
     /// </summary>
     public bool CanFill(SpellCastRequest req)
     {
@@ -43,14 +47,46 @@ public sealed class AiCastDecider : ICastDecider
     /// then tries its next candidate, AIService.TryExecuteSpellcastAction). Never suspends.
     /// </summary>
     public CastChoiceFill FillChoices(GameManager gm, CastContext ctx)
-        => FillAiChoices(ctx != null ? ctx.Request : null, gm != null ? gm.GetAllCharactersForAI() : null);
+    {
+        SpellCastRequest request = ctx != null ? ctx.Request : null;
+        CastChoiceFill fill = FillAiChoices(request, gm != null ? gm.GetAllCharactersForAI() : null);
+        if (fill != CastChoiceFill.Filled || gm == null || request == null)
+            return fill;
+        // The choices that read the battlefield (batch 11 step 27, SPL-091): a summon's creature and square, Dimension
+        // Door's destination.
+        return gm.AiFillCasterChoices(request);
+    }
 
     /// <summary>
-    /// A melee touch spell is always cast now: the NPC path never holds a charge (SPL-115; batch 11 step 27 lets the AI
-    /// hold one).
+    /// How the AI delivers a melee touch spell (PHB p.141; batch 11 step 27, SPL-115): <see cref="TouchDeliveryFor"/> for
+    /// the cast's caster and target.
     /// </summary>
     public void ChooseTouchDelivery(GameManager gm, CastContext ctx, System.Action<CastTouchDelivery> answer)
-        => answer?.Invoke(CastTouchDelivery.CastNow);
+        => answer?.Invoke(ctx != null && ctx.Request != null
+            ? TouchDeliveryFor(gm, ctx.Request.Caster, ctx.Request.Aim != null ? ctx.Request.Aim.Target : null, ctx.Request.Spell)
+            : CastTouchDelivery.CastNow);
+
+    /// <summary>
+    /// The AI's touch delivery (batch 11 step 27, SPL-115): cast now when <paramref name="target"/> is within the touch's
+    /// reach (an adjacent square, CasterLevelRules.InRange's touch measure), else cast and hold the charge only when the
+    /// caster can still move into reach this turn (GameManager.FindTouchApproachSquareForAI: a move action left and a free
+    /// square beside the target that a move reaches), then deliver it there (PHB p.141: in the casting round the caster may
+    /// move between casting and touching); else back out. A <paramref name="spell"/> whose charge cannot be held (Chill
+    /// Touch, SpellData.CanHoldCharge) is never held. Planning an approach over several turns is AI-047.
+    /// </summary>
+    public static CastTouchDelivery TouchDeliveryFor(GameManager gm, CharacterController caster, CharacterController target, SpellData spell = null)
+    {
+        if (caster == null || target == null)
+            return CastTouchDelivery.CastNow;
+        if (CasterLevelRules.DistanceToTarget(caster, target) <= 1)
+            return CastTouchDelivery.CastNow;
+        // A spell whose charge cannot be held (Chill Touch, PHB p.176; SpellData.CanHoldCharge) is not cast out of reach.
+        if (spell != null && !spell.CanHoldCharge())
+            return CastTouchDelivery.Cancel;
+        return gm != null && gm.FindTouchApproachSquareForAI(caster, target).HasValue
+            ? CastTouchDelivery.HoldCharge
+            : CastTouchDelivery.Cancel;
+    }
 
     /// <summary>
     /// Today's NPC decision and rolls for a threatened cast (AISpellcastingStrategist.ShouldCastDefensively, then

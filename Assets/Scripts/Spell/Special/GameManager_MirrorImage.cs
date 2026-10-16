@@ -81,8 +81,8 @@ public partial class GameManager
     /// own attacks (<see cref="MirrorImageRules.MakesOwnAttackRolls"/>: each of those attacks picks in its handler) reach
     /// the creature directly. A missile spell picks once per missile and fires the missiles that pick the creature
     /// (<see cref="CastContext.MissilesSpentOnImages"/>). A spell with an attack roll that picks an image rolls its touch
-    /// attack against the image's AC: a hit destroys the image, either way the spell is spent (a missed delivery of a held
-    /// charge keeps the charge, PHB p.141). A targeted Dispel Magic that picks an image makes its dispel check against
+    /// attack against the image's AC: a hit destroys the image and spends the spell; a missed ray is spent, and a missed
+    /// melee touch keeps its charge, a delivered one as a cast one (PHB p.141; batch 11 step 27, SPL-115). A targeted Dispel Magic that picks an image makes its dispel check against
     /// the Mirror Image alone (PHB p.223; delegated RAW reading 2026-10-14). Any other spell with no attack roll that picks
     /// an image is spent on it and destroys it (delegated RAW reading 2026-10-14, decision D7 (a)). True when the spell
     /// was spent on images (<paramref name="logLine"/> and <paramref name="traceDetail"/> say how).
@@ -195,6 +195,14 @@ public partial class GameManager
         {
             ctx.RetainedHeldChargeOnMiss = true;
             charge = $" {casterName} retains the {spell.Name} charge.";
+        }
+        else if (!isRanged && spell.CanHoldCharge())
+        {
+            // A melee touch that missed in its casting round touched nothing, so the spell is not discharged: its charge
+            // is held (PHB p.141, p.176; delegated RAW reading 2026-10-14, batch 11 step 27, SPL-115). A ray is spent, and
+            // so is a spell that touches several targets (Chill Touch; SpellData.CanHoldCharge).
+            HoldChargeAfterMissedTouch(ctx);
+            charge = $" {casterName} holds the {spell.Name} charge.";
         }
         logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name}: {touchKind} attack {roll}{FormatModifier(modifier)} = {total} vs image AC {imageAc} - misses an image of {targetName}.{charge}", "B7A8FF");
         return true;

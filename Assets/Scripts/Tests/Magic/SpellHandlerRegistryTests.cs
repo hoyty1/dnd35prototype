@@ -19,7 +19,7 @@ namespace Tests.Magic
 /// in SpellDatabase; and the order, gates, ContinueToBuff flags and spell ids equal the manifest below, re-derived on 2026-10-15
 /// from the old chain's guard expressions. Also the gate evaluation, and (batch 11 step 6, which runs the registry on the
 /// NPC cast path too) that the AI keeps out of its candidates exactly the registered spells whose handler needs a caster
-/// choice it cannot give (SPL-091).
+/// choice it cannot give (AI-071; Dimension Door left the list in batch 11 step 27, SPL-091).
 ///
 /// Batch 11 step 9 (cast-core-area): the area handler registry (GameManager.DescribeAreaHandlers). Its order, spell ids,
 /// combat-end contexts, log-prefix and async flags and cast-stage mark placement equal <see cref="AreaManifest"/>, read
@@ -347,12 +347,12 @@ public static class SpellHandlerRegistryTests
 
     /// <summary>
     /// Batch 11 step 6: the NPC cast path runs the registry too, so the AI keeps out of its candidates exactly the spells
-    /// whose handler needs a caster choice it cannot give yet (Dimension Door, Imbue with Spell Ability; SPL-091), and
-    /// no other registered spell.
+    /// whose handler needs a caster choice it cannot give yet (Imbue with Spell Ability; AI-071), and no other registered
+    /// spell. Dimension Door left the list in batch 11 step 27 (its destination is a cast choice the AI decider fills).
     /// </summary>
     private static void TestAiCandidateExclusions(IReadOnlyList<SpellHandlerEntry> entries)
     {
-        var excluded = new HashSet<string>(StringComparer.Ordinal) { SpellNames.DIMENSION_DOOR, SpellNames.IMBUE_WITH_SPELL_ABILITY };
+        var excluded = new HashSet<string>(StringComparer.Ordinal) { SpellNames.IMBUE_WITH_SPELL_ABILITY };
         foreach (SpellHandlerEntry e in entries)
         {
             if (e == null || e.SpellIds == null)

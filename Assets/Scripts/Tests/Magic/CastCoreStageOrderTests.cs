@@ -315,6 +315,22 @@ public static class CastCoreStageOrderTests
             "The AI decider fills Grease's area form and a Burning Hands cone, not Grease on an object or with no form");
         Assert(UiCastDecider.Instance.CanFill(greaseObject) && UiCastDecider.Instance.CanFill(SpellCastRequest.ForAIArea(null, SpellDatabase.GetSpell(SpellNames.WALL_OF_FIRE), aiCells, null, null)),
             "The UI decider can fill every request");
+
+        // Batch 11 step 27: the NPC summon, hold and delivery builders (SPL-091, SPL-115).
+        SpellData summonII = SpellDatabase.GetSpell(SpellNames.SUMMON_MONSTER_2);
+        SpellCastRequest aiSummon = SpellCastRequest.ForAISummon(null, summonII, new Vector2Int(4, 5));
+        Assert(aiSummon.ResolveKind == CastResolveKind.Summon && aiSummon.Aim.Target == null && aiSummon.Aim.Destination == new Vector2Int(4, 5)
+               && aiSummon.Decider is AiCastDecider && aiSummon.Quirks == LegacyCastQuirkSets.AiSummonPath && !ReferenceEquals(aiSummon.Spell, summonII)
+               && LegacyCastQuirkSets.AiSummonPath == (LegacyCastQuirkSets.UiSummonPath | LegacyCastQuirk.NpcOwnLegalityChecks),
+            "ForAISummon makes a summon request on its own clone with the AI decider and the NPC summon path's quirks (the PC summon path plus the NPC caster tests)", "" + aiSummon.Quirks);
+        Assert(AiCastDecider.Instance.CanFill(aiSummon) && AiCastDecider.Instance.CanFill(SpellCastRequest.ForAISummon(null, SpellDatabase.GetSpell(SpellNames.SUMMON_NATURES_ALLY_1))),
+            "The AI decider fills a Summon Monster's and a Summon Nature's Ally's creature and square (CanFill true; SPL-091)");
+        SpellCastRequest aiHold = SpellCastRequest.ForAIHoldCharge(null, SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP));
+        Assert(aiHold.ResolveKind == CastResolveKind.HoldCharge && aiHold.Aim.Target == null && aiHold.Decider is AiCastDecider
+               && aiHold.Quirks == LegacyCastQuirkSets.AiHoldPath && aiHold.Source.Kind == CastSourceKind.HeldChargeHold
+               && LegacyCastQuirkSets.AiHoldPath == (LegacyCastQuirkSets.UiHoldPath | LegacyCastQuirk.NpcOwnLegalityChecks),
+            "ForAIHoldCharge makes a hold as ForUiHoldCharge does, with the AI decider and the NPC hold path's quirks (SPL-115)", aiHold.Source.Kind + " " + aiHold.Quirks);
+        Assert(SpellCastRequest.ForAIHeldChargeDelivery(null, null) == null, "There is no delivery without a held charge");
     }
 
     /// <summary>The cast core's source: CombatUI only to log, and none of the UI follow-up.</summary>
@@ -640,6 +656,14 @@ public static class CastCoreStageOrderTests
             SpellCastRequest area = BeginAi(sc, caster, ally, SpellNames.BURNING_HANDS, null, out slot);
             cast = gm.RunCastSync(area, out o);
             Assert(!cast && o.Reason == "area-needs-aim" && !slot.IsUsed, "AI: a single-target request of an area spell is refused, nothing spent (area-needs-aim)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            // A summon is placed on a square (PHB p.285): a single-target request of one is refused for every caster; the AI
+            // casts it through a summon request (batch 11 step 27, SPL-091; rules/npc-summon-monster).
+            SpellCastRequest summonSingle = BeginAi(sc, caster, caster, SpellNames.SUMMON_MONSTER_1, null, out slot);
+            cast = gm.RunCastSync(summonSingle, out o);
+            Assert(!cast && o.Reason == "summon-needs-placement" && !slot.IsUsed,
+                "AI: a single-target request of a summon spell is refused, nothing spent (summon-needs-placement)", "" + o);
             sc.SpellSlots.Remove(slot);
 
             // A choice the AI decider cannot make (ICastDecider.CanFill, batch 11 step 25): Grease with no form chosen.
@@ -1650,7 +1674,7 @@ public static class CastCoreStageOrderTests
 
         var touch = new List<CastTouchDelivery>();
         AiCastDecider.Instance.ChooseTouchDelivery(null, null, touch.Add);
-        Assert(touch.Count == 1 && touch[0] == CastTouchDelivery.CastNow, "The AI decider casts a touch spell now (it never holds a charge, SPL-115)",
+        Assert(touch.Count == 1 && touch[0] == CastTouchDelivery.CastNow, "The AI decider casts a touch spell now when the cast names no target",
             string.Join(",", touch));
     }
 

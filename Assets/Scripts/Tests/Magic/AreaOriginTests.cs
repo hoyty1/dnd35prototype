@@ -60,6 +60,7 @@ public static class AreaOriginTests
         TestCandidateAims();
         TestLineOfEffectFromIntersection();
         TestLineOfEffectOnWallFace();
+        TestLineOfEffectToSpace();
         TestPlayModeAims();
 
         Debug.Log($"====== Area Origin Results: {_passed} passed, {_failed} failed ======");
@@ -342,6 +343,33 @@ public static class AreaOriginTests
         public bool BlocksLineOfEffect(Vector2Int from, Vector2Int to) => WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, _cells);
 
         public HashSet<Vector2Int> GetBlockerCells() => new HashSet<Vector2Int>(_cells);
+    }
+
+    /// <summary>
+    /// Batch 11 step 27 (PHB p.176: line of effect to any space in which an effect is created; delegated RAW reading
+    /// 2026-10-14): a summoned creature's space is reached when any of its squares is (AoESystem.HasLineOfEffectToSpace),
+    /// never through a wall or on a wall's own square.
+    /// </summary>
+    private static void TestLineOfEffectToSpace()
+    {
+        var wall = new RowWall(5);
+        LineOfEffectService.Register(wall);
+        try
+        {
+            var caster = new Vector2Int(5, 3);
+            Assert(!AoESystem.HasLineOfEffectToSpace(caster, 1, new Vector2Int(5, 7), 1),
+                "no line of effect to a square beyond a wall (a summon cannot appear there, PHB p.176)");
+            Assert(AoESystem.HasLineOfEffectToSpace(caster, 1, new Vector2Int(8, 4), 1),
+                "line of effect to a square on the caster's side of the wall");
+            Assert(!AoESystem.HasLineOfEffectToSpace(caster, 1, new Vector2Int(5, 5), 1),
+                "a wall's own square is not reached");
+            Assert(AoESystem.HasLineOfEffectToSpace(caster, 1, new Vector2Int(5, 4), 2),
+                "a Large space across the wall's row is reached through its near squares");
+        }
+        finally
+        {
+            LineOfEffectService.Unregister(wall);
+        }
     }
 
     private static void TestLineOfEffectOnWallFace()
@@ -631,6 +659,32 @@ public static class AreaOriginTests
             Assert(scored == new GridIntersection(21, 6),
                 "a corner chosen by a score takes the one with the best score (the north-east one, which reaches only the eastern creature)",
                 "origin " + scored);
+
+            // 6. The cast core's summon square test (GameManager.SummonPlacementRefusal, batch 11 step 27), the one the PC
+            // highlight, the AI's square and a Scripted square all meet: range, room for the creature's space, line of effect.
+            CharacterController summoner = Make("Summoner", "Cleric", CharacterTeam.Player, 5, 25);
+            Make("Blocker", "Fighter", CharacterTeam.Enemy, 7, 25);
+            Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(6, 25), 5, 1) == null,
+                "a free square within range and in sight takes the summon");
+            Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(5, 29), 3, 1) == "summon-out-of-range",
+                "a square beyond the spell's range is refused");
+            Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(7, 25), 5, 1) == "summon-no-room",
+                "an occupied square is refused (PHB p.173: not inside a creature)");
+            Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(6, 25), 5, 2) == "summon-no-room",
+                "a Large creature's space overlapping a creature is refused");
+            var summonWall = new RowWall(27);
+            LineOfEffectService.Register(summonWall);
+            try
+            {
+                Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(5, 29), 5, 1) == "summon-no-line-of-effect",
+                    "a square beyond a wall is refused (PHB p.176)");
+                Assert(gm.SummonPlacementRefusal(summoner, new Vector2Int(4, 26), 5, 1) == null,
+                    "a square on the caster's side of the wall is accepted");
+            }
+            finally
+            {
+                LineOfEffectService.Unregister(summonWall);
+            }
         }
         finally
         {

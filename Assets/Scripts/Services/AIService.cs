@@ -35,6 +35,18 @@ public class AIService : MonoBehaviour
 
     [SerializeField] private AIDifficultyLevel _difficulty = AIDifficultyLevel.Normal;
 
+    /// <summary>
+    /// The creatures whose held touch charge the AI tried to deliver this turn (batch 11 step 27, SPL-115): one delivery
+    /// a turn (the AI's own limit; RAW a later touch takes an attack, SPL-156, which the shared rule does not charge yet).
+    /// </summary>
+    private readonly HashSet<CharacterController> _heldChargeTriedThisTurn = new HashSet<CharacterController>();
+
+    /// <summary>
+    /// The creatures that cast and held a touch charge this turn to move and touch (a HoldCharge candidate, batch 11 step
+    /// 27), with the foe they meant to touch: the turn's end moves them into reach and delivers it.
+    /// </summary>
+    private readonly Dictionary<CharacterController, CharacterController> _heldChargePlans = new Dictionary<CharacterController, CharacterController>();
+
     public void Initialize(GameManager gameManager)
     {
         _gameManager = gameManager;
@@ -88,7 +100,31 @@ public class AIService : MonoBehaviour
         return behavior == NPCAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged;
     }
 
+    /// <summary>
+    /// The NPC's turn (<see cref="ExecuteNPCTurnBody"/>), then, when the AI cast and held a touch charge this turn to
+    /// reach a foe out of reach (a HoldCharge candidate, batch 11 step 27, SPL-115), the move into reach and the touch
+    /// (<see cref="TryDeliverHeldChargeTurn"/>; PHB p.141: in the casting round the caster may move between casting and
+    /// touching).
+    /// </summary>
     public IEnumerator ExecuteNPCTurn(CharacterController npc, NPCAIBehavior behavior)
+    {
+        if (npc != null)
+        {
+            _heldChargeTriedThisTurn.Remove(npc);
+            _heldChargePlans.Remove(npc);
+        }
+
+        yield return _gameManager != null ? _gameManager.StartCoroutine(ExecuteNPCTurnBody(npc, behavior)) : null;
+
+        if (npc != null && _heldChargePlans.TryGetValue(npc, out CharacterController plannedTarget))
+        {
+            _heldChargePlans.Remove(npc);
+            if (!CombatEnded() && npc.Stats != null && npc.Stats.CurrentHP > 0)
+                yield return _gameManager.StartCoroutine(TryDeliverHeldChargeTurn(npc, plannedTarget));
+        }
+    }
+
+    private IEnumerator ExecuteNPCTurnBody(CharacterController npc, NPCAIBehavior behavior)
     {
         if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
             yield break;
@@ -324,6 +360,17 @@ public class AIService : MonoBehaviour
         {
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteSummonedCreatureTurnForAI(npc));
             yield break;
+        }
+
+        // A touch charge held from an earlier turn (PHB p.141: the caster may keep making touch attacks round after round;
+        // batch 11 step 27, SPL-115): move into reach if needed and touch the best target, through the delivery the PC's
+        // Discharge button runs. A missed touch keeps the charge. The delivery costs no action today on both sides
+        // (SPL-156), so the turn goes on.
+        if (npc.Spellcasting != null && npc.Spellcasting.HasHeldTouchCharge && !npc.IsGrappling())
+        {
+            yield return _gameManager.StartCoroutine(TryDeliverHeldChargeTurn(npc, targetPC));
+            if (CombatEnded() || npc.Stats.CurrentHP <= 0 || ThreatSystem.IsMoverIncapacitated(npc))
+                yield break;
         }
 
         // Bardic music (PHB p.29-30): a song, its concentration or a suggestion with the standard action, through the rules
@@ -2746,7 +2793,11 @@ public class AIService : MonoBehaviour
     /// Since batch 11 step 25 (AI-001 area half) an area spell is a candidate too, aimed at the best placement its aim
     /// search found (AreaAimSearch, through the profile's ally sparing) and cast through the area resolve
     /// (GameManager.TryNPCPerformAreaSpellCastForAI), within the same cap; one with no legal, worthwhile placement is not
-    /// a candidate. Summon and escape spells stay out as before (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive).
+    /// a candidate. Since batch 11 step 27 a Summon Monster or Summon Nature's Ally is a candidate too, cast as a summon
+    /// whose creature and square the AI decider picks (GameManager.TryNPCPerformSummonSpellCastForAI; SPL-091), Dimension
+    /// Door is cast to escape when the caster is in danger, and a hostile melee touch spell whose foes are out of reach is
+    /// cast and held when a foe can be reached this turn (GameManager.TryNPCHoldTouchChargeForAI; the move and the touch
+    /// close the turn, ExecuteNPCTurn; SPL-115). Imbue with Spell Ability stays out (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive).
     /// </summary>
     /// <param name="allow">Optional filter on the candidate spells (the dragon turn's cast-first step, AI-037); null allows all.</param>
     /// <param name="minScore">A candidate must score above this to be chosen; the default keeps the old no-floor choice.</param>
@@ -2776,6 +2827,39 @@ public class AIService : MonoBehaviour
         bool casted = AiSpellCandidates.TryInOrder(RankedSpellCandidates(caster, fallbackTarget, scored), AiSpellCandidates.MaxTries, candidate =>
         {
             SpellData spell = candidate.Spell;
+            if (candidate.Kind == AiSpellCastKind.Summon)
+            {
+                // A summon (batch 11 step 27, SPL-091): the AI decider picks the creature and its square; the same Summon
+                // resolve as a PC's.
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name} as a summon, castablePrepared={castableCount}");
+                if (!_gameManager.TryNPCPerformSummonSpellCastForAI(caster, spell))
+                {
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} (refused, nothing spent); trying the next candidate.");
+                    return false;
+                }
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name}");
+                return true;
+            }
+
+            if (candidate.Kind == AiSpellCastKind.HoldCharge)
+            {
+                // A melee touch spell at a foe out of reach (batch 11 step 27, SPL-115): cast it and hold the charge, then
+                // move into reach and touch at the turn's end (ExecuteNPCTurn), when the foe can be reached this turn.
+                CharacterController holdTarget = candidate.Target;
+                if (AiCastDecider.TouchDeliveryFor(_gameManager, caster, holdTarget, spell) != CastTouchDelivery.HoldCharge)
+                    return false;
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name} to hold its charge for {holdTarget.Stats.CharacterName}, castablePrepared={castableCount}");
+                if (!_gameManager.TryNPCHoldTouchChargeForAI(caster, spell))
+                {
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to hold {spell.Name} (refused, nothing spent); trying the next candidate.");
+                    return false;
+                }
+                if (caster.Spellcasting != null && caster.Spellcasting.HasHeldTouchCharge)
+                    _heldChargePlans[caster] = holdTarget;
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} holds the charge of {spell.Name} to touch {holdTarget.Stats.CharacterName}");
+                return true;
+            }
+
             if (candidate.Placement != null)
             {
                 // An area the AI aimed (batch 11 step 25): the same cast core as a PC's area cast.
@@ -2840,9 +2924,25 @@ public class AIService : MonoBehaviour
                 continue;
             }
 
+            // A summon has no target: the AI decider places its creature (batch 11 step 27).
+            if (scored[i].Summon)
+            {
+                yield return new AiSpellCandidate(spell, null, scored[i].Score, null, AiSpellCastKind.Summon);
+                continue;
+            }
+
             CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
             if (spellTarget == null)
             {
+                // A hostile melee touch spell with every foe out of reach (batch 11 step 27, SPL-115): cast it and hold the
+                // charge when a foe can be reached with a move this turn (AiCastDecider.TouchDeliveryFor).
+                CharacterController holdTarget = SelectHoldChargeTarget(caster, spell, fallbackTarget);
+                if (holdTarget != null)
+                {
+                    yield return new AiSpellCandidate(spell, holdTarget, scored[i].Score, null, AiSpellCastKind.HoldCharge);
+                    continue;
+                }
+
                 int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
                 Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no legal target ({rangeSquares} squares).");
                 continue;
@@ -2850,6 +2950,142 @@ public class AIService : MonoBehaviour
 
             yield return new AiSpellCandidate(spell, spellTarget, scored[i].Score);
         }
+    }
+
+    /// <summary>
+    /// The foe a hostile melee touch spell would be held for (batch 11 step 27, SPL-115): a living foe (team allegiance)
+    /// the spell may touch but that is out of reach now (the cast core's legality on the NPC cast refuses it only as
+    /// "out-of-range"), that the caster can reach with a move this turn (AiCastDecider.TouchDeliveryFor answers
+    /// HoldCharge), and for which the hold itself is legal (GameManager.CheckHoldLegalityForAI): <paramref name="preferred"/>
+    /// when it qualifies, else the nearest. Null otherwise.
+    /// </summary>
+    private CharacterController SelectHoldChargeTarget(CharacterController caster, SpellData spell, CharacterController preferred)
+    {
+        if (_gameManager == null || caster == null || spell == null || !spell.IsMeleeTouchSpell()
+            || !AISpellcastingStrategist.IsEnemyTargetedSpell(spell) || AISpellcastingStrategist.IsAllyTargetedSpell(spell))
+            return null;
+        if (caster.Actions == null || !caster.Actions.HasMoveAction)
+            return null;
+        if (_gameManager.CheckHoldLegalityForAI(caster, spell).Kind == CastOutcomeKind.Refused)
+            return null;
+
+        CharacterController best = null;
+        int bestDistance = int.MaxValue;
+        foreach (CharacterController c in _gameManager.GetAllCharactersForAI())
+        {
+            if (c == null || c == caster || c.Stats == null || c.Stats.IsDead || !TeamUtility.IsEnemy(caster, c))
+                continue;
+            // A foe the spell is worth landing on (not an undead an inflict spell would heal; IsWorthwhileSpellTarget).
+            if (!AISpellcastingStrategist.IsWorthwhileSpellTarget(caster, spell, c, _gameManager))
+                continue;
+            CastOutcome legality = _gameManager.CheckLegalityForAI(caster, c, spell);
+            if (legality.Kind != CastOutcomeKind.Refused || legality.Reason != "out-of-range")
+                continue;
+            if (AiCastDecider.TouchDeliveryFor(_gameManager, caster, c, spell) != CastTouchDelivery.HoldCharge)
+                continue;
+            if (c == preferred)
+                return c;
+            int distance = CasterLevelRules.DistanceToTarget(caster, c);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = c;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Delivers <paramref name="npc"/>'s held touch charge (batch 11 step 27, SPL-115; PHB p.141): at most one try a turn;
+    /// the target is the creature the charge may touch (the delivery's legality, GameManager.CheckDeliveryLegalityForAI)
+    /// within reach, <paramref name="preferred"/> first, else the one with the fewest hit points (a hostile spell's foes, a
+    /// helpful spell's hurt allies); with none in reach and a move action left, the first such creature (preferred, then
+    /// nearest) a move reaches (GameManager.FindTouchApproachSquareForAI), after moving beside it. Then the delivery
+    /// request (GameManager.TryNPCDeliverHeldChargeForAI), the PC's Discharge path with the AI decider. A miss keeps the charge.
+    /// </summary>
+    private IEnumerator TryDeliverHeldChargeTurn(CharacterController npc, CharacterController preferred)
+    {
+        SpellcastingComponent sc = npc != null ? npc.Spellcasting : null;
+        if (_gameManager == null || sc == null || !sc.HasHeldTouchCharge || sc.HeldTouchSpell == null || CombatEnded())
+            yield break;
+        // One delivery request a turn (an AI-only stand-in for SPL-156's per-delivery action cost, to go with that fix):
+        // spent only when a delivery is made (below), so a turn-start look that finds nothing to touch leaves the try for
+        // the delivery after a new hold.
+        if (_heldChargeTriedThisTurn.Contains(npc))
+            yield break;
+
+        SpellData held = sc.HeldTouchSpell;
+        bool hostile = !AISpellcastingStrategist.IsAllyTargetedSpell(held);
+        CharacterController target = null;
+        int bestHp = int.MaxValue;
+        var reachable = new List<CharacterController>();
+        foreach (CharacterController c in _gameManager.GetAllCharactersForAI())
+        {
+            if (c == null || c.Stats == null || c.Stats.IsDead)
+                continue;
+            bool sideOk = hostile ? TeamUtility.IsEnemy(npc, c) : (c == npc || TeamUtility.IsAlly(npc, c)) && c.Stats.CurrentHP < c.Stats.TotalMaxHP;
+            if (!sideOk)
+                continue;
+            // Only a creature the spell is worth landing on (an inflict spell not on an undead foe, a cure not on an undead
+            // ally; AISpellcastingStrategist.IsWorthwhileSpellTarget, the single-target choice's tests).
+            if (!AISpellcastingStrategist.IsWorthwhileSpellTarget(npc, held, c, _gameManager))
+                continue;
+            CastOutcome legality = _gameManager.CheckDeliveryLegalityForAI(npc, c);
+            if (legality.Kind != CastOutcomeKind.Refused)
+            {
+                if (c == preferred)
+                {
+                    target = c;
+                    bestHp = int.MinValue;
+                }
+                else if (c.Stats.CurrentHP < bestHp)
+                {
+                    target = c;
+                    bestHp = c.Stats.CurrentHP;
+                }
+            }
+            else if (legality.Reason == "out-of-range")
+            {
+                reachable.Add(c);
+            }
+        }
+
+        if (target == null && npc.Actions != null && npc.Actions.HasMoveAction && reachable.Count > 0)
+        {
+            reachable.Sort((a, b) =>
+            {
+                if (a == preferred) return -1;
+                if (b == preferred) return 1;
+                return CasterLevelRules.DistanceToTarget(npc, a).CompareTo(CasterLevelRules.DistanceToTarget(npc, b));
+            });
+            for (int i = 0; i < reachable.Count && target == null; i++)
+            {
+                Vector2Int? approach = _gameManager.FindTouchApproachSquareForAI(npc, reachable[i]);
+                if (!approach.HasValue)
+                    continue;
+                target = reachable[i];
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("✋", $"{npc.Stats.CharacterName} moves to touch {target.Stats.CharacterName} with the held {held.Name}."));
+                yield return _gameManager.StartCoroutine(
+                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, approach.Value, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                if (CombatEnded() || npc.Stats.CurrentHP <= 0 || ThreatSystem.IsMoverIncapacitated(npc))
+                    yield break; // dropped by an attack of opportunity on the way (CMB-073)
+                npc.Actions.UseMoveAction();
+            }
+        }
+
+        if (target == null)
+        {
+            Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} holds {held.Name} but has no creature to touch this turn.");
+            yield break;
+        }
+        if (!sc.HasHeldTouchCharge || target.Stats == null || target.Stats.IsDead
+            || _gameManager.CheckDeliveryLegalityForAI(npc, target).Kind == CastOutcomeKind.Refused)
+            yield break;
+
+        Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} delivers the held {held.Name} to {target.Stats.CharacterName}");
+        _heldChargeTriedThisTurn.Add(npc);
+        _gameManager.TryNPCDeliverHeldChargeForAI(npc, target);
+        yield return new WaitForSeconds(0.5f);
     }
 
     private CharacterController SelectBestSpellTarget(CharacterController caster, SpellData spell, CharacterController fallbackTarget)
@@ -2900,11 +3136,15 @@ public class AIService : MonoBehaviour
         public readonly float Score;
         public readonly AreaPlacement Placement;
 
-        public AiScoredSpell(SpellData spell, float score, AreaPlacement placement = null)
+        /// <summary>A Summon Monster or Summon Nature's Ally the AI can place (batch 11 step 27).</summary>
+        public readonly bool Summon;
+
+        public AiScoredSpell(SpellData spell, float score, AreaPlacement placement = null, bool summon = false)
         {
             Spell = spell;
             Score = score;
             Placement = placement;
+            Summon = summon;
         }
     }
 
@@ -2971,7 +3211,8 @@ public class AIService : MonoBehaviour
     /// AISpellcastingStrategist.ScoreSpellComprehensive), best first; equal scores keep the spell list's order, so the
     /// first is the spell the old single pick chose. Left out: a spell <paramref name="allow"/> refuses, one scoring
     /// <paramref name="minScore"/> or less, one with no modelled effect (SPL-135) or a choice the AI cannot give
-    /// (SPL-091), a buff already running, one the cast core's caster tests refuse
+    /// (Imbue with Spell Ability, AI-071), Dimension Door out of danger (batch 11 step 27), a summon the AI cannot place
+    /// (GameManager.CheckSummonLegalityForAI; Summon Swarm, AI-071), a buff already running, one the cast core's caster tests refuse
     /// (GameManager.CheckCasterLegalityForAI: the metamagic, the casting action, Silence, the components; batch 11
     /// step 22, the same CheckLegality the cast runs), and an area spell with no legal, worthwhile aim
     /// (<see cref="FindAreaPlacementForAI"/>, batch 11 step 25), whose aim is kept with its score. An area spell is scored
@@ -3030,8 +3271,16 @@ public class AIService : MonoBehaviour
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell))
                 continue;
 
-            // A handler that needs a choice the AI cannot give yet (Dimension Door's destination, Imbue's slot picker; SPL-091).
+            // A handler that needs a choice the AI cannot give yet (Imbue's slot picker; AI-071).
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell))
+                continue;
+
+            // Dimension Door (PHB p.221; batch 11 step 27, SPL-091): an escape the AI casts only in danger
+            // (AISpellcastingStrategist.GetEscapeScore) and with a free escape square (GameManager.ChooseDimensionDoorDestination,
+            // the square the AI decider then fills in).
+            if (spell.SpellId == SpellNames.DIMENSION_DOOR
+                && (_gameManager == null || AISpellcastingStrategist.GetEscapeScore(caster, spell, allCombatants) <= 0f
+                    || !_gameManager.ChooseDimensionDoorDestination(caster, spell).HasValue))
                 continue;
 
             // The cast core's caster tests (batch 11 step 22): a prepared metamagic spell's metamagic the rules refuse
@@ -3047,6 +3296,25 @@ public class AIService : MonoBehaviour
             else if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null
                      || CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
                 continue;
+
+            // A summon (batch 11 step 27, SPL-091): a candidate only when the cast core would let the summon request
+            // through and the AI decider finds a creature to call and a square for it (GameManager.CheckSummonLegalityForAI).
+            // A Summon Swarm's square is a choice the AI cannot make yet (AiCastDecider.CanFill). Without a GameManager (a
+            // static test) summons are no candidates.
+            bool isSummon = false;
+            if (SummoningService.IsSummonMonsterSpell(spell) || SummoningService.IsSummonSwarmSpell(spell))
+            {
+                if (_gameManager == null || SummoningService.IsSummonSwarmSpell(spell))
+                    continue;
+                CastOutcome summonLegality = _gameManager.CheckSummonLegalityForAI(caster, spell);
+                if (summonLegality.Kind == CastOutcomeKind.Refused)
+                {
+                    if (logAreaSkips)
+                        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: skips {spell.Name}, which it cannot summon now ({summonLegality.Reason}).");
+                    continue;
+                }
+                isSummon = true;
+            }
 
             // An area spell (batch 11 step 25, AI-001 area half): a candidate only with a legal, worthwhile aim, which it
             // keeps for the cast. Without a GameManager (a static test) area spells are no candidates.
@@ -3096,7 +3364,7 @@ public class AIService : MonoBehaviour
             }
 
             if (score > minScore)
-                result.Add(new AiScoredSpell(spell, score, placement));
+                result.Add(new AiScoredSpell(spell, score, placement, isSummon));
         }
 
         // Best first; a stable sort keeps the list order among equal scores (the old pick took the first best).

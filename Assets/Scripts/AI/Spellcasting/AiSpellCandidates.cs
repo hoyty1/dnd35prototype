@@ -1,9 +1,26 @@
 using System;
 using System.Collections.Generic;
 
+/// <summary>How an AI spell candidate is cast (batch 11 step 27): the request the AI's walk builds for it.</summary>
+public enum AiSpellCastKind
+{
+    /// <summary>At one target (SpellCastRequest.ForAI).</summary>
+    Single,
+
+    /// <summary>At an aimed area (SpellCastRequest.ForAIArea or ForAIGrease; batch 11 step 25).</summary>
+    Area,
+
+    /// <summary>A Summon Monster or Summon Nature's Ally whose creature and square the AI decider picks (ForAISummon; step 27).</summary>
+    Summon,
+
+    /// <summary>A melee touch spell cast and held, then delivered after a move into reach (ForAIHoldCharge; step 27).</summary>
+    HoldCharge
+}
+
 /// <summary>
 /// One (spell, target) pair the AI would cast, with its spell's score (batch 11 step 22; AIService.TryExecuteSpellcastAction);
-/// for an area spell, the aim its search found instead of a target (batch 11 step 25, AreaAimSearch).
+/// for an area spell, the aim its search found instead of a target (batch 11 step 25, AreaAimSearch); since batch 11 step
+/// 27 a summon (no target: the AI decider places the creature) or a held touch charge (its target out of reach now).
 /// </summary>
 public readonly struct AiSpellCandidate
 {
@@ -14,12 +31,17 @@ public readonly struct AiSpellCandidate
     /// <summary>The area's aim for an area spell (no <see cref="Target"/>), else null.</summary>
     public readonly AreaPlacement Placement;
 
-    public AiSpellCandidate(SpellData spell, CharacterController target, float score, AreaPlacement placement = null)
+    /// <summary>How the walk casts it.</summary>
+    public readonly AiSpellCastKind Kind;
+
+    public AiSpellCandidate(SpellData spell, CharacterController target, float score, AreaPlacement placement = null,
+        AiSpellCastKind kind = AiSpellCastKind.Single)
     {
         Spell = spell;
         Target = target;
         Score = score;
         Placement = placement;
+        Kind = placement != null ? AiSpellCastKind.Area : kind;
     }
 }
 

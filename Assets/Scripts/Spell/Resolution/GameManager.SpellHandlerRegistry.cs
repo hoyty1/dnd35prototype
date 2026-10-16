@@ -131,10 +131,11 @@ internal sealed class AreaHandlerEntry
 /// and TryNPCPerformSpellCast (NPC, since step 6, which replaced the NPC path's own 19-handler chain; SPL-054), and since
 /// steps 7 and 8 the cast core's Handlers stage runs it for both, with the same gates, so a handler resolves the same for
 /// every caster. A handler must read the caster it is given,
-/// never ActivePC, IsControllable or a <c>_pending*</c> choice (Dimension Door's destination search still forks on
-/// IsPlayerControlled, a known divergence filed in SPL-091); a spell whose handler needs a choice the AI cannot give
-/// yet (Dimension Door's destination, Imbue with Spell Ability's slot picker) is kept out of the AI's candidates by
-/// <c>AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive</c> (SPL-091), not forked here.
+/// never ActivePC, IsControllable or a <c>_pending*</c> choice; a caster's choice comes with the cast's own request
+/// (CurrentCast.Request.Choices: Dimension Door's destination since batch 11 step 27, which the UI and AI deciders fill
+/// alike, SPL-091); a spell whose handler needs a choice the AI cannot give yet (Imbue with Spell Ability's slot picker)
+/// is kept out of the AI's candidates by <c>AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive</c> (AI-071), not
+/// forked here.
 /// To add a single-target handler: write the method and add one line to <see cref="BuildSingleTargetHandlers"/>.
 ///
 /// The area registry (batch 11 step 9, cast-core-area): <see cref="BuildAreaHandlers"/> holds the area handlers of the

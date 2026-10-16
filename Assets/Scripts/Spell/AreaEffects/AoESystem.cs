@@ -1211,6 +1211,39 @@ public static class AoESystem
     }
 
     /// <summary>
+    /// True when a caster whose space is <paramref name="casterSize"/> squares a side with its lower-left square at
+    /// <paramref name="casterBase"/> has line of effect to the space of <paramref name="spaceSize"/> squares a side whose
+    /// lower-left square is <paramref name="spaceBase"/> (PHB p.176: a clear line of effect "to any space in which you
+    /// wish to create an effect"): some square of that space, not a blocker's own square, is on the caster's space or
+    /// reached unblocked from some square of it, as a creature target is reached at any part of its space. The summon
+    /// placement test (GameManager.SummonPlacementRefusal; batch 11 step 27, delegated RAW reading 2026-10-14).
+    /// </summary>
+    public static bool HasLineOfEffectToSpace(Vector2Int casterBase, int casterSize, Vector2Int spaceBase, int spaceSize)
+    {
+        if (!LineOfEffectService.HasBlockers)
+            return true;
+        HashSet<Vector2Int> blockerCells = LineOfEffectService.GetAllBlockerCells();
+        int s = Mathf.Max(1, casterSize);
+        int t = Mathf.Max(1, spaceSize);
+        for (int tx = spaceBase.x; tx < spaceBase.x + t; tx++)
+        {
+            for (int ty = spaceBase.y; ty < spaceBase.y + t; ty++)
+            {
+                var square = new Vector2Int(tx, ty);
+                if (square.x >= casterBase.x && square.x < casterBase.x + s && square.y >= casterBase.y && square.y < casterBase.y + s)
+                    return true;
+                if (blockerCells.Contains(square))
+                    continue;
+                for (int x = casterBase.x; x < casterBase.x + s; x++)
+                    for (int y = casterBase.y; y < casterBase.y + s; y++)
+                        if (!LineOfEffectService.IsBlocked(new Vector2Int(x, y), square))
+                            return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Removes from <paramref name="aoeCells"/> (in place) every square the area's point of origin
     /// <paramref name="origin"/> has no line of effect to (<see cref="IsLineOfEffectBlocked"/>), keeping the squares that
     /// belong to a blocker so the area can affect the blocker itself. Returns the removed squares.

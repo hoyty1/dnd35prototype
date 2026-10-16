@@ -1299,6 +1299,58 @@ public partial class GameManager
         return RunCastSync(request, out _);
     }
 
+    /// <summary>
+    /// The NPC summon cast executor (batch 11 step 27, SPL-091): a Summon Monster or Summon Nature's Ally cast as an AI
+    /// summon request (SpellCastRequest.ForAISummon, the AI decider choosing the creature and its square at the Legality
+    /// stage, AiFillSummonChoices) run through the shared cast core at once (RunCastSync): the same stages and the same
+    /// Summon resolve as a PC's summon, which inserts each creature into the initiative after the caster and registers it.
+    /// <paramref name="destination"/>: a square the caller chose (a scenario), else the AI's. Returns whether the cast
+    /// counts as cast (CastOutcome.WasCast). TryNPCPerformSummonSpellCastForAI runs the combat-end check after a true return.
+    /// </summary>
+    private bool TryNPCPerformSummonSpellCast(CharacterController npc, SpellData spell, MetamagicData metamagic = null, Vector2Int? destination = null)
+    {
+        if (npc == null || spell == null || npc.Stats == null)
+            return false;
+
+        SpellCastRequest request = SpellCastRequest.ForAISummon(npc, spell, destination, metamagic);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSummonSpellCast));
+        return RunCastSync(request, out _);
+    }
+
+    /// <summary>
+    /// The NPC hold of a melee touch spell's charge (batch 11 step 27, SPL-115; PHB p.141): an AI hold request
+    /// (SpellCastRequest.ForAIHoldCharge) run through the shared cast core at once, the same stages and HoldCharge resolve
+    /// as the PC's Discharge Later. The AI then moves into reach and delivers the charge in the same turn
+    /// (AIService.TryDeliverHeldChargeTurn). Returns whether the cast counts as cast.
+    /// </summary>
+    private bool TryNPCHoldTouchCharge(CharacterController npc, SpellData spell, MetamagicData metamagic = null)
+    {
+        if (npc == null || spell == null || npc.Stats == null)
+            return false;
+
+        SpellCastRequest request = SpellCastRequest.ForAIHoldCharge(npc, spell, metamagic);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCHoldTouchCharge));
+        return RunCastSync(request, out _);
+    }
+
+    /// <summary>
+    /// The NPC delivery of its held charge to <paramref name="target"/> (batch 11 step 27, SPL-115): the request the PC's
+    /// Discharge button builds, with the AI decider (SpellCastRequest.ForAIHeldChargeDelivery), run through the shared
+    /// cast core at once. A missed touch keeps the charge (PHB p.141; the PostCast stage). Returns whether the delivery
+    /// was made (CastOutcome.WasCast: it passed the Legality stage; a delivery spends nothing).
+    /// </summary>
+    private bool TryNPCDeliverHeldCharge(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null || npc.Stats == null || target.Stats == null)
+            return false;
+
+        SpellCastRequest request = SpellCastRequest.ForAIHeldChargeDelivery(npc, target);
+        if (request == null)
+            return false;
+        CastStageTrace.Mark(npc, request.Spell, CastStageTrace.Begin, nameof(TryNPCDeliverHeldCharge));
+        return RunCastSync(request, out _);
+    }
+
     /// <summary>Delegates to AIService.IsGiantBombardierBeetle for centralized AI utility.</summary>
     private static bool IsGiantBombardierBeetle(CharacterController npc)
         => AIService.IsGiantBombardierBeetle(npc);
