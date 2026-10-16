@@ -177,6 +177,8 @@ public static partial class SpellDatabase
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
                     HasMaterialComponent = true, // M/DF: phosphorus (common — covered by spell component pouch)
+                    HasDivineFocus = true,
+                    MaterialOrDivineFocus = true,
                     IsPlaceholder = false
                 });
 

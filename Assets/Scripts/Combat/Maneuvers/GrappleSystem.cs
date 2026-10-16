@@ -325,13 +325,37 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>
+    /// Whether a grappled or pinned caster may begin casting <paramref name="spell"/> (PHB p.156: a casting time of no
+    /// more than 1 standard action, no somatic component, and no verbal component while pinned): false with the refusal
+    /// logged. The targeting (BeginPendingSpellTargeting) calls it; the cast core's hold uses the log-free
+    /// <see cref="GrappleSpellcastRefusal"/>.
+    /// </summary>
     private bool CanBeginSpellcastWhileGrappledOrPinned(CharacterController caster, SpellData spell)
     {
         if (caster == null || spell == null)
             return false;
 
-        if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
+        string refusal = GrappleSpellcastRefusal(caster, spell);
+        if (refusal == null)
             return true;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", refusal));
+        return false;
+    }
+
+    /// <summary>
+    /// The grapple casting rule with no side effect (PHB p.156): null when <paramref name="caster"/> is neither grappled
+    /// nor pinned or may cast <paramref name="spell"/> (a casting time of 1 standard action or less, no somatic component,
+    /// and no verbal component while pinned), else the refusal's log text. One rule for the targeting and the hold of a
+    /// touch charge (batch 11 step 15, SPL-146), PC or NPC alike.
+    /// </summary>
+    internal string GrappleSpellcastRefusal(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null)
+            return null;
+
+        if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
+            return null;
 
         // D&D 3.5e: While grappled/pinned, you can only cast spells with casting time
         // of 1 standard action or less.
@@ -339,26 +363,17 @@ public partial class GameManager
             || spell.ActionType == SpellActionType.Swift
             || spell.ActionType == SpellActionType.Free;
         if (!hasAllowedCastingTime)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less."));
-            return false;
-        }
+            return $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less.";
 
         bool isPinned = caster.HasCondition(CombatConditionType.Pinned);
         if (isPinned && spell.HasVerbalComponent)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Cannot cast - pinned (no verbal components)"));
-            return false;
-        }
+            return "Cannot cast - pinned (no verbal components)";
 
         // Grappled/pinned casters also cannot provide somatic components.
         if (spell.HasSomaticComponent)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: spells with somatic components are blocked."));
-            return false;
-        }
+            return $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: spells with somatic components are blocked.";
 
-        return true;
+        return null;
     }
 
     /// <summary>

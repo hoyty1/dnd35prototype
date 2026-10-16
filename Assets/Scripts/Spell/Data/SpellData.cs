@@ -462,6 +462,11 @@ public class SpellData
     public bool HasSomaticComponent = true; // Most spells include somatic components unless explicitly overridden.
     public bool HasMaterialComponent = false; // Whether the spell requires a material component.
     public bool HasDivineFocus = false; // Whether the spell uses a divine focus component.
+    /// <summary>
+    /// "M/DF" on the Components line (PHB p.175): the arcane version needs the material component, the divine version a
+    /// divine focus instead (<see cref="CastComponentRules.DivineFocusReplacesMaterial"/>). Not set for "M, DF" (both).
+    /// </summary>
+    public bool MaterialOrDivineFocus = false;
     // ========== SPECIAL ==========
     /// <summary>Number of missiles for Magic Missile (1 at CL1, +1 per 2 CL above 1).</summary>
     public int MissileCount;

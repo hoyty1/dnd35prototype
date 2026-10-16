@@ -524,7 +524,9 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: one hard metal bar or rod
+                    HasMaterialComponent = true, // M/DF: one hard metal bar or rod (PHB p.241)
+                    HasDivineFocus = true,
+                    MaterialOrDivineFocus = true,
                     IsPlaceholder = false
                 });
 

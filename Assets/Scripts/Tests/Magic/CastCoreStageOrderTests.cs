@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using DND35e.Identifiers;
 using Tests.Utilities;
@@ -57,6 +58,19 @@ namespace Tests.Magic
 /// delivery carries DeliverySkipsCounterspell (UiPath); the AI decider casts a touch spell now. A hold (no choices asked,
 /// the charge stored, Resolved at Resolve) and a Grease armor cast (Resolved at CombatEnd with its log) by the recording
 /// decider run the shared stages and their resolve stage once each.
+///
+/// Batch 11 step 15 (raw-counterspell-order-parity): every cast runs Counterspell, InvisibilityBreak, then
+/// RingCounterspell (decision D4), the AI path the PC path's stages exactly (ConcentrationOnCast included); the summon,
+/// Grease and hold sets are the shared bit only; a Ring of Counterspells on an enemy absorbs a PC's and an NPC's spell
+/// after the invisible caster's invisibility has ended, and does not counter an area spell that takes in its wearer; an
+/// invisible caster's Grease on a foe's armor ends the invisibility and on an ally's does not; an area spell, Grease, a
+/// summon and a hold are refused without a spell component pouch; a grappled caster cannot hold a somatic touch spell
+/// (the pre-check logs nothing); a hold asks the caster's choices and keeps them with the charge; an AI caster's Silent
+/// Image starts its concentration and a later AI cast runs the casting-while-concentrating step.
+/// Review fixes: a Ring of Counterspells counters a held charge's delivery and the charge is gone; it does not meet a
+/// burst centred on the caster (Prayer); a druid's M/DF Sleet Storm needs no pouch (the divine focus) and Earthquake has no
+/// material component; a delivery is not tested for the pouch again; a hold suspended at its energy dialog resumes through
+/// ResumeCastAfterChoiceDialog and its delivery request (GameManager.BuildHeldChargeDeliveryRequest) carries the energy.
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -67,7 +81,7 @@ public static class CastCoreStageOrderTests
     private static readonly string[] ResolvedSequence =
     {
         "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
-        "decider:provocation", "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "MirrorImage", "TargetBlink",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "InvisibilityBreak", "RingCounterspell", "MirrorImage", "TargetBlink",
         "Globe", "Resolve", "Handlers", "Buff", "PostCast", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
@@ -81,17 +95,17 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
-        LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
     };
 
     /// <summary>
     /// The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls. The
-    /// area Globe stage runs before the invisibility break (batch 11 step 11: a foe inside a globe is not in the area).
+    /// area Globe stage runs before the invisibility break (batch 11 step 11: a foe inside a globe is not in the area); the
+    /// RingCounterspell stage runs after the break (batch 11 step 15) and tests no creature of an area.
     /// </summary>
     private static readonly string[] AreaResolvedSequence =
     {
         "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
-        "decider:provocation", "ConcentrationOnCast", "Counterspell", "Globe", "InvisibilityBreak", "Resolve", "CombatEnd", "decider:before-combat-end",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "Globe", "InvisibilityBreak", "RingCounterspell", "Resolve", "CombatEnd", "decider:before-combat-end",
         "decider:finished:Resolved@CombatEnd"
     };
 
@@ -99,8 +113,6 @@ public static class CastCoreStageOrderTests
     private static readonly LegacyCastQuirk[] AreaPathBits =
     {
         LegacyCastQuirk.AlliesForgoEverySave,
-        LegacyCastQuirk.AreaSkipsRing,                      // SPL-006
-        LegacyCastQuirk.AreaSkipsPouch,                     // SPL-006, SPL-114
         LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers,    // CORE-039
         LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers,    // SPL-161
     };
@@ -116,34 +128,19 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.NpcRefusesArea,                          // AI-001
         LegacyCastQuirk.NpcNullMetamagic,                        // AI-001, SPL-038
         LegacyCastQuirk.NpcNoComponentCheck,                     // SPL-114
-        LegacyCastQuirk.NpcNoConcentrationOnCastCheck,           // SPL-114
-        LegacyCastQuirk.NpcNoConcentrationTracking,              // SPL-114
-        LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell,  // SPL-118
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
     };
 
     /// <summary>
-    /// The AI path's stage sequence from the PC path's, by the NPC quirk bits that move or skip a stage:
-    /// NpcNoConcentrationOnCastCheck (no ConcentrationOnCast) and NpcInvisibilityBreakBeforeCounterspell
-    /// (InvisibilityBreak before Counterspell). Every other stage is the same (batch 11 step 13 removed the NPC path's
-    /// Spend before Failure).
+    /// The AI path's stage sequence from the PC path's: the same stages in the same order since batch 11 step 15 removed
+    /// the last NPC bits that moved or skipped one (NpcNoConcentrationOnCastCheck, NpcInvisibilityBreakBeforeCounterspell;
+    /// step 13 removed the NPC path's Spend before Failure). Kept as a seam: an NPC bit that moved a stage would show here.
     /// </summary>
     private static List<string> DeriveAiSequence(IEnumerable<string> pcSequence)
     {
-        var seq = new List<string>(pcSequence);
-        seq.Remove("ConcentrationOnCast");
-        MoveBefore(seq, "InvisibilityBreak", "Counterspell");
-        return seq;
-    }
-
-    private static void MoveBefore(List<string> seq, string item, string before)
-    {
-        if (!seq.Contains(item) || !seq.Contains(before))
-            return;
-        seq.Remove(item);
-        seq.Insert(seq.IndexOf(before), item);
+        return new List<string>(pcSequence);
     }
 
     public static void RunAll()
@@ -158,6 +155,7 @@ public static class CastCoreStageOrderTests
         TestQuirkSets();
         TestEffectQuirkSets();
         TestComponentRules();
+        TestRingAndFocusRules();
         TestCoreSourceTouchesNoUi();
 
         if (GameManager.Instance != null)
@@ -402,6 +400,19 @@ public static class CastCoreStageOrderTests
             TestConvertedHold(gm);
             Assert(violations.Count == violationsBeforeRefund, "No cast-core or cast-stack violation for the step 14 cases",
                 string.Join("; ", violations.GetRange(violationsBeforeRefund, violations.Count - violationsBeforeRefund)));
+
+            // Batch 11 step 15: one counterspell, ring, invisibility, pouch, grapple, choice and concentration rule.
+            int violationsBeforeStep15 = violations.Count;
+            TestRingAfterInvisibilityBreak(gm, sc, caster);
+            TestRingCountersDelivery(gm, sc, caster);
+            TestGreaseInvisibility(gm, sc, caster, ally);
+            TestPouchOnEveryPath(gm, sc, caster, ally);
+            TestHoldWhileGrappled(gm, sc, caster);
+            TestHoldKeepsChoices(gm, sc, caster);
+            TestHoldChoiceResume(gm, sc, caster);
+            TestAiConcentration(gm, sc, caster, ally);
+            Assert(violations.Count == violationsBeforeStep15, "No cast-core or cast-stack violation for the step 15 cases",
+                string.Join("; ", violations.GetRange(violationsBeforeStep15, violations.Count - violationsBeforeStep15)));
         }
         finally
         {
@@ -521,7 +532,7 @@ public static class CastCoreStageOrderTests
 
         List<string> expected = DeriveAiSequence(ResolvedSequence);
         Assert(string.Join(",", events) == string.Join(",", expected),
-            label + ": the AI path runs the PC path's stages, moved or skipped only by the NPC quirk bits (no ConcentrationOnCast, InvisibilityBreak before Counterspell)",
+            label + ": the AI path runs the PC path's stages in the PC path's order (batch 11 step 15: ConcentrationOnCast, and Counterspell before InvisibilityBreak before RingCounterspell)",
             string.Join(",", events));
         Assert(cast && outcome != null && outcome.Kind == CastOutcomeKind.Resolved && outcome.At == CastStage.CombatEnd && outcome.WasCast && !outcome.CombatEnded,
             label + ": RunCastSync returns true with Resolved at CombatEnd (no combat-end check in the stage: the NPC wrapper runs it)", "" + outcome);
@@ -725,6 +736,45 @@ public static class CastCoreStageOrderTests
             RemoveBlink(caster, casterBlink);
             RemoveBlink(ally, allyBlink);
         }
+    }
+
+    /// <summary>
+    /// Batch 11 step 15 review fixes, pure rules: a Ring of Counterspells meets every single-target cast except a burst or
+    /// emanation centred on its caster (GameManager.RingMeetsSingleCast; DMG p.230, PHB p.175; delegated RAW reading
+    /// 2026-10-14); the M/DF spells are marked as such and Earthquake (V, S, DF, PHB p.225) has no material component; a
+    /// held charge's delivery source is recognised (CastComponentRules.IsHeldChargeDelivery).
+    /// </summary>
+    private static void TestRingAndFocusRules()
+    {
+        Assert(!GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.PRAYER))
+               && !GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.INVISIBILITY_PURGE))
+               && !GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.ZONE_OF_TRUTH)),
+            "Step 15: a Ring of Counterspells does not meet a burst or emanation centred on the caster (Prayer, Invisibility Purge, Zone of Truth)");
+        Assert(GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE))
+               && GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP))
+               && GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.SILENCE))
+               && GameManager.RingMeetsSingleCast(SpellDatabase.GetSpell(SpellNames.SHIELD))
+               && !GameManager.RingMeetsSingleCast(null),
+            "Step 15: a Ring of Counterspells meets a targeted spell, a touch spell, a Silence centred on a creature and a personal spell");
+
+        string[] materialOrFocus = { SpellNames.SLEET_STORM, SpellNames.WALL_OF_FIRE, SpellNames.SUNBURST, SpellNames.SPELL_TURNING, SpellNames.HOLD_MONSTER };
+        bool allMarked = true;
+        foreach (string id in materialOrFocus)
+        {
+            SpellData spell = SpellDatabase.GetSpell(id);
+            allMarked &= spell != null && spell.HasMaterialComponent && spell.HasDivineFocus && spell.MaterialOrDivineFocus;
+        }
+        Assert(allMarked, "Step 15: Sleet Storm, Wall of Fire, Sunburst, Spell Turning and Hold Monster are marked M/DF (PHB p.175)");
+        SpellData earthquake = SpellDatabase.GetSpell(SpellNames.EARTHQUAKE);
+        Assert(earthquake != null && !earthquake.HasMaterialComponent && earthquake.HasDivineFocus && !earthquake.MaterialOrDivineFocus,
+            "Step 15: Earthquake is V, S, DF with no material component (PHB p.225)");
+        SpellData fireball = SpellDatabase.GetSpell(SpellNames.FIREBALL);
+        Assert(fireball.HasMaterialComponent && !fireball.MaterialOrDivineFocus && !CastComponentRules.DivineFocusReplacesMaterial(null, fireball),
+            "Step 15: a plain M spell (Fireball) is not M/DF");
+
+        Assert(CastComponentRules.IsHeldChargeDelivery(new CastSource { Kind = CastSourceKind.HeldChargeDelivery })
+               && !CastComponentRules.IsHeldChargeDelivery(new CastSource()) && !CastComponentRules.IsHeldChargeDelivery(null),
+            "Step 15: a held charge's delivery source is recognised as no casting (PHB p.141)");
     }
 
     // ── Batch 11 step 13: one entangled, deafened, Silence, ASF and Blink rule on every path ─────────────────
@@ -1315,8 +1365,8 @@ public static class CastCoreStageOrderTests
 
         RunArea(gm, sc, caster, SpellNames.BURNING_HANDS, false, true, "an area spell through the generic loop (Burning Hands)");
         RunArea(gm, sc, caster, SpellNames.BURNING_HANDS, true, true, "a quickened area spell through the generic loop (Burning Hands)");
-        Assert(!SpellComponentRegistry.HasSpellComponentPouch(caster),
-            "The test wizard carries no spell component pouch (so the Sleep cast below tests AreaSkipsPouch)");
+        // The test wizard carries no spell component pouch: since batch 11 step 15 an area cast makes the pouch test
+        // (TestPouchOnEveryPath), so this Sleep's own clone drops its material component.
         RunArea(gm, sc, caster, SpellNames.SLEEP, true, false, "a quickened Sleep (a handler that logs no prefix, SPL-161)");
 
         Assert(gm.CurrentSubPhase == subPhaseBefore, "No area stage set CurrentSubPhase", subPhaseBefore + " -> " + gm.CurrentSubPhase);
@@ -1343,6 +1393,7 @@ public static class CastCoreStageOrderTests
         var events = new List<string>();
         var decider = new RecordingDecider(events);
         SpellCastRequest req = SpellCastRequest.ForUi(caster, template, metamagic, new CastSource());
+        req.Spell.HasMaterialComponent = false; // the test wizard carries no component pouch (the request's own clone)
         var cells = new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) };
         SpellCastRequest.ForUiArea(req, new List<CharacterController>(), cells);
         req.Decider = decider;
@@ -1358,7 +1409,7 @@ public static class CastCoreStageOrderTests
         if (quickened)
             expected.Remove("decider:provocation");
         Assert(string.Join(",", events) == string.Join(",", expected),
-            label + ": the area cast runs the shared stages (no Ring of Counterspells; no provocation question when quickened), then the area Resolve and CombatEnd stages",
+            label + ": the area cast runs the shared stages (no provocation question when quickened), then the area Resolve and CombatEnd stages",
             string.Join(",", events));
         Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.CombatEnd,
             label + ": FinishAreaCast and FinishCast give Resolved at CombatEnd once", "" + done);
@@ -1377,25 +1428,28 @@ public static class CastCoreStageOrderTests
             Assert(ctx.ResultLog.StartsWith(ctx.LogPrefix, StringComparison.Ordinal) && ctx.ResultLog.Contains("No valid targets in area!"),
                 label + ": the generic loop's log carries the cast's prefix", ctx.ResultLog);
         else
-            Assert(!ctx.ResultLog.Contains("QUICKENED") && ctx.ResultLog.StartsWith("═", StringComparison.Ordinal) && template.HasMaterialComponent,
-                label + ": the log has no prefix, and the material-component spell was cast without a pouch (AreaSkipsPouch)", ctx.ResultLog);
+            Assert(!ctx.ResultLog.Contains("QUICKENED") && ctx.ResultLog.StartsWith("═", StringComparison.Ordinal),
+                label + ": the log has no prefix", ctx.ResultLog);
         sc.SpellSlots.Remove(slot);
     }
 
     // ── Batch 11 step 10: the Summon, Grease and HoldCharge resolve variants ──────────────────────────────────
 
-    /// <summary>The stages of a hold (Discharge Later) with the hold path's quirks: no choices asked, Resolve ends the cast.</summary>
+    /// <summary>
+    /// The stages of a hold (Discharge Later): the choices asked (batch 11 step 15), the shared stages, Resolve ends the
+    /// cast.
+    /// </summary>
     private static readonly string[] HoldResolvedSequence =
     {
-        "Legality", "Cost", "Distraction", "Failure", "Spend", "Provocation", "decider:provocation",
-        "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "decider:finished:Resolved@Resolve"
+        "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation", "decider:provocation",
+        "ConcentrationOnCast", "Counterspell", "InvisibilityBreak", "RingCounterspell", "Resolve", "decider:finished:Resolved@Resolve"
     };
 
     /// <summary>The stages of a Grease cast with the Grease path's quirks: the shared stages, Resolve, then CombatEnd.</summary>
     private static readonly string[] GreaseResolvedSequence =
     {
         "Legality", "decider:fill", "Cost", "Distraction", "Failure", "Spend", "Provocation",
-        "decider:provocation", "ConcentrationOnCast", "Counterspell", "RingCounterspell", "InvisibilityBreak", "Resolve", "CombatEnd",
+        "decider:provocation", "ConcentrationOnCast", "Counterspell", "InvisibilityBreak", "RingCounterspell", "Resolve", "CombatEnd",
         "decider:before-combat-end", "decider:finished:Resolved@CombatEnd"
     };
 
@@ -1405,29 +1459,23 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.EffectResolveSkipsCombatEndCheck,   // CORE-039
     };
 
-    /// <summary>Today's PC summon path, beyond the shared bits (batch 11 step 10).</summary>
-    private static readonly LegacyCastQuirk[] SummonPathBits =
-    {
-        LegacyCastQuirk.SummonSkipsCounterspell,            // SPL-006
-        LegacyCastQuirk.SummonSkipsPouch,                   // SPL-006, SPL-114
-    };
+    /// <summary>
+    /// Today's PC summon path, beyond the shared bits: none since batch 11 step 15 removed SummonSkipsCounterspell and
+    /// SummonSkipsPouch (SPL-006).
+    /// </summary>
+    private static readonly LegacyCastQuirk[] SummonPathBits = { };
 
-    /// <summary>Today's PC Grease path, beyond the shared bits (batch 11 step 10).</summary>
-    private static readonly LegacyCastQuirk[] GreasePathBits =
-    {
-        LegacyCastQuirk.GreaseSkipsCounterspell,            // SPL-006
-        LegacyCastQuirk.GreaseSkipsPouch,                   // SPL-006, SPL-114
-        LegacyCastQuirk.GreaseSkipsInvisibilityBreak,       // SPL-006
-    };
+    /// <summary>
+    /// Today's PC Grease path, beyond the shared bits: none since batch 11 step 15 removed GreaseSkipsCounterspell,
+    /// GreaseSkipsPouch and GreaseSkipsInvisibilityBreak (SPL-006).
+    /// </summary>
+    private static readonly LegacyCastQuirk[] GreasePathBits = { };
 
-    /// <summary>Today's PC hold path, beyond the shared bits (batch 11 step 10).</summary>
-    private static readonly LegacyCastQuirk[] HoldPathBits =
-    {
-        LegacyCastQuirk.HoldSkipsGrappleLegality,           // SPL-146
-        LegacyCastQuirk.HoldSkipsPouch,                     // SPL-146, SPL-114
-        LegacyCastQuirk.HoldSkipsCounterspell,              // SPL-146
-        LegacyCastQuirk.HoldSkipsChoices,                   // SPL-146
-    };
+    /// <summary>
+    /// Today's PC hold path, beyond the shared bits: none since batch 11 step 15 removed HoldSkipsGrappleLegality,
+    /// HoldSkipsPouch, HoldSkipsCounterspell and HoldSkipsChoices (SPL-146).
+    /// </summary>
+    private static readonly LegacyCastQuirk[] HoldPathBits = { };
 
     private static LegacyCastQuirk Union(params LegacyCastQuirk[][] lists)
     {
@@ -1486,9 +1534,11 @@ public static class CastCoreStageOrderTests
                                       | LegacyCastQuirkSets.UiSummonPath | LegacyCastQuirkSets.UiGreasePath | LegacyCastQuirkSets.UiHoldPath) & ~owner;
             Assert((owner & bit) == bit && (others & bit) == 0, "The bit " + name + " is set by its own builder only");
         }
-        Assert((LegacyCastQuirkSets.UiPath & LegacyCastQuirk.DeliverySkipsCounterspell) != 0
-               && (LegacyCastQuirkSets.UiAreaPath & LegacyCastQuirk.DeliverySkipsCounterspell) == 0,
-            "A held-charge delivery (a UI single-target request) carries DeliverySkipsCounterspell; an area request does not");
+        foreach (string name in new[] { "NpcNoConcentrationOnCastCheck", "NpcNoConcentrationTracking", "NpcInvisibilityBreakBeforeCounterspell",
+                     "AreaSkipsRing", "AreaSkipsPouch", "SummonSkipsCounterspell", "SummonSkipsPouch", "GreaseSkipsCounterspell",
+                     "GreaseSkipsPouch", "GreaseSkipsInvisibilityBreak", "HoldSkipsGrappleLegality", "HoldSkipsPouch",
+                     "HoldSkipsCounterspell", "HoldSkipsChoices", "DeliverySkipsCounterspell" })
+            Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), name), "Batch 11 step 15 removed the quirk bit " + name);
 
         var touch = new List<CastTouchDelivery>();
         AiCastDecider.Instance.ChooseTouchDelivery(null, null, touch.Add);
@@ -1514,7 +1564,7 @@ public static class CastCoreStageOrderTests
         int doneCalls = 0;
         gm.ExecuteCast(ctx, o => { done = o; doneCalls++; });
         Assert(string.Join(",", events) == string.Join(",", HoldResolvedSequence),
-            "A hold runs the shared stages with no choices asked, then the HoldCharge Resolve stage", string.Join(",", events));
+            "A hold asks the caster's choices and runs the shared stages, then the HoldCharge Resolve stage (batch 11 step 15)", string.Join(",", events));
         Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.Resolve
                && ctx.Ended && gm.Harness_OpenCastCount == 0,
             "A hold finishes once, Resolved at Resolve, and its cast is ended", "" + done);
@@ -1623,6 +1673,436 @@ public static class CastCoreStageOrderTests
         req.Decider = decider;
         SpellCastRequest.ForUiHoldCharge(req);
         return gm.BeginCast(req);
+    }
+
+    // ── Batch 11 step 15: counterspell, ring, invisibility, pouch, grapple, choices and concentration ─────────────
+
+    /// <summary>An enemy test creature 1 square from the caster with high hit points (it is never killed here).</summary>
+    private static CharacterController CreateEnemy(string name, Vector2Int at)
+    {
+        CharacterController foe = TestHelpers.CreateCharacter(name, "Fighter", level: 20, con: 30, bab: 20, gridPosition: at);
+        foe.SetTeam(CharacterTeam.Enemy);
+        return foe;
+    }
+
+    /// <summary>A Ring of Counterspells holding <paramref name="spellId"/> on <paramref name="wearer"/>'s left hand (DMG p.230).</summary>
+    private static ItemData WearCounterspellRing(CharacterController wearer, string spellId)
+    {
+        var ring = new ItemData
+        {
+            Id = RingNames.RING_OF_COUNTERSPELLS,
+            Name = "Ring of Counterspells",
+            IsRing = true,
+            RingId = RingNames.RING_OF_COUNTERSPELLS,
+            RingCounterspellStored = spellId,
+            RingCounterspellStoredName = spellId,
+            RingCounterspellStoredLevel = 1
+        };
+        global::Inventory inv = wearer.Inventory != null ? wearer.Inventory.GetInventory() : null;
+        if (inv != null)
+            inv.LeftRingSlot = ring;
+        return ring;
+    }
+
+    /// <summary>
+    /// Decision D4 (batch 11 step 15, SPL-118): a Ring of Counterspells absorbs a spell cast on its wearer after the
+    /// hostile-cast invisibility break, so the invisible caster's invisibility ends, for a PC (the recording decider on the
+    /// UI path) and an NPC (RunCastSync on the AI path) alike; the stages run Counterspell, InvisibilityBreak, then
+    /// RingCounterspell. An area spell that takes in the wearer is not "cast upon" it (PHB p.175, DMG p.230; delegated RAW
+    /// reading 2026-10-14): the ring keeps its spell and the area resolves.
+    /// </summary>
+    private static void TestRingAfterInvisibilityBreak(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        CharacterController foe = null;
+        try
+        {
+            foe = CreateEnemy("CastCoreRingFoe", caster.GridPosition + new Vector2Int(2, 0));
+            ItemData ring = WearCounterspellRing(foe, SpellNames.MAGIC_MISSILE);
+
+            // PC path.
+            caster.ApplyInvisibilityEffect(5, caster);
+            var events = new List<string>();
+            CastContext ctx = Begin(gm, sc, caster, foe, SpellNames.MAGIC_MISSILE, new RecordingDecider(events), out SpellSlot slot);
+            int hpBefore = foe.Stats.CurrentHP;
+            gm.ExecuteCast(ctx, null);
+            string seq = string.Join(",", events);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.RingCounterspell
+                   && slot.IsUsed && foe.Stats.CurrentHP == hpBefore && string.IsNullOrEmpty(ring.RingCounterspellStored),
+                "Step 15: a Ring of Counterspells on the target absorbs the PC's Magic Missile (DMG p.230): Failed at RingCounterspell, the slot spent, no damage, the ring empty",
+                ctx.Outcome + " hp " + hpBefore + "->" + foe.Stats.CurrentHP + " ring '" + ring.RingCounterspellStored + "'");
+            Assert(seq.Contains("Counterspell,InvisibilityBreak,RingCounterspell,decider:finished:Failed@RingCounterspell"),
+                "Step 15: the PC cast runs Counterspell, InvisibilityBreak, then RingCounterspell (decision D4)", seq);
+            Assert(!caster.HasActiveInvisibilityEffect,
+                "Step 15: the invisible PC caster's invisibility ends although the ring absorbed its spell (decision D4, PHB p.245)");
+            sc.SpellSlots.Remove(slot);
+
+            // AI path.
+            caster.ApplyInvisibilityEffect(5, caster);
+            ring.RingCounterspellStored = SpellNames.MAGIC_MISSILE;
+            var aiEvents = new List<string>();
+            SpellCastRequest ai = BeginAi(sc, caster, foe, SpellNames.MAGIC_MISSILE, aiEvents, out slot);
+            bool cast = gm.RunCastSync(ai, out CastOutcome o, stage => aiEvents.Add(stage.ToString()));
+            Assert(cast && o.Kind == CastOutcomeKind.Failed && o.At == CastStage.RingCounterspell && slot.IsUsed
+                   && string.Join(",", aiEvents).Contains("Counterspell,InvisibilityBreak,RingCounterspell"),
+                "Step 15: the ring absorbs the NPC's Magic Missile in the same stage order (counts as cast)", o + " " + string.Join(",", aiEvents));
+            Assert(!caster.HasActiveInvisibilityEffect,
+                "Step 15: the invisible NPC caster's invisibility ends too: one rule for PCs and NPCs (SPL-118)");
+            sc.SpellSlots.Remove(slot);
+
+            // An area spell that takes in the wearer: the ring does not act (delegated RAW reading 2026-10-14).
+            CombatEndRules.SideCounts sides = gm.GetCombatEndSides();
+            if (!sides.PlayersOut && !sides.EnemiesOut)
+            {
+                ring.RingCounterspellStored = SpellNames.BURNING_HANDS;
+                var areaEvents = new List<string>();
+                ctx = BeginArea(gm, sc, caster, new RecordingDecider(areaEvents), out slot);
+                ctx.Request.Aim.AreaTargets.Add(foe);
+                ctx.Request.Aim.Cells.Add(foe.GridPosition);
+                gm.ExecuteCast(ctx, null);
+                Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ring.RingCounterspellStored == SpellNames.BURNING_HANDS
+                       && string.Join(",", areaEvents).Contains("InvisibilityBreak,RingCounterspell,Resolve"),
+                    "Step 15: a Ring of Counterspells does not counter an area spell that takes in its wearer, which is not cast upon it (PHB p.175, DMG p.230; delegated RAW reading 2026-10-14)",
+                    ctx.Outcome + " ring '" + ring.RingCounterspellStored + "' " + string.Join(",", areaEvents));
+                sc.SpellSlots.Remove(slot);
+            }
+        }
+        finally
+        {
+            caster.ForceEndInvisibility("CastCoreStageOrderTests");
+            if (foe != null)
+                Object.DestroyImmediate(foe.gameObject);
+        }
+    }
+
+    /// <summary>
+    /// A held charge delivered to a Ring of Counterspells wearer whose ring stores that spell is countered before the touch
+    /// attack ("immediately, as a counterspell action", DMG p.230), and the countered charge is gone (PHB p.170-171; a
+    /// delegated RAW reading 2026-10-14): Failed at RingCounterspell, no charge held, the ring empty, no damage.
+    /// </summary>
+    private static void TestRingCountersDelivery(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        CharacterController foe = null;
+        try
+        {
+            foe = CreateEnemy("CastCoreRingDeliveryFoe", caster.GridPosition + new Vector2Int(1, 1));
+            ItemData ring = WearCounterspellRing(foe, SpellNames.SHOCKING_GRASP);
+            SpellData held = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP));
+            held.HasMaterialComponent = false;
+            sc.SetHeldTouchCharge(held, null);
+            caster.Actions.Reset();
+
+            var events = new List<string>();
+            SpellCastRequest req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+            req.Aim.Target = foe;
+            req.Decider = new RecordingDecider(events);
+            CastContext ctx = gm.BeginCast(req);
+            ctx.StageObserver = stage => events.Add(stage.ToString());
+            int hpBefore = foe.Stats.CurrentHP;
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.RingCounterspell
+                   && !sc.HasHeldTouchCharge && string.IsNullOrEmpty(ring.RingCounterspellStored) && foe.Stats.CurrentHP == hpBefore
+                   && !events.Contains("Resolve"),
+                "Step 15: a Ring of Counterspells counters a held charge's delivery before the touch attack and the charge is gone (DMG p.230, PHB p.170-171; delegated RAW reading 2026-10-14)",
+                ctx.Outcome + " held " + sc.HasHeldTouchCharge + " ring '" + ring.RingCounterspellStored + "' " + string.Join(",", events));
+        }
+        finally
+        {
+            sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+            if (foe != null)
+                Object.DestroyImmediate(foe.gameObject);
+        }
+    }
+
+    /// <summary>
+    /// Grease on an object a foe wears is an attack for Invisibility (PHB p.245 spares only actions directed at
+    /// unattended objects; PHB p.237; delegated RAW reading 2026-10-14, batch 11 step 15): an invisible caster's Grease on
+    /// the foe's armor ends its invisibility, on an ally's armor it does not.
+    /// </summary>
+    private static void TestGreaseInvisibility(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        CharacterController foe = null;
+        try
+        {
+            foe = CreateEnemy("CastCoreGreaseFoe", caster.GridPosition + new Vector2Int(2, 0));
+            foreach (bool onFoe in new[] { false, true })
+            {
+                CharacterController holder = onFoe ? foe : ally;
+                caster.ApplyInvisibilityEffect(5, caster);
+                CastContext ctx = Begin(gm, sc, caster, null, SpellNames.GREASE, new RecordingDecider(new List<string>()), out SpellSlot slot);
+                ctx.Request.Choices.GreaseMode = GreaseCastMode.Armor;
+                SpellCastRequest.ForUiGrease(ctx.Request, holder, null, null);
+                gm.ExecuteCast(ctx, null);
+                Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && caster.HasActiveInvisibilityEffect == !onFoe,
+                    onFoe
+                        ? "Step 15: an invisible caster's Grease on a foe's armor ends its invisibility (PHB p.245, p.237; delegated RAW reading 2026-10-14)"
+                        : "Step 15: an invisible caster's Grease on an ally's armor keeps it invisible",
+                    ctx.Outcome + " invisible " + caster.HasActiveInvisibilityEffect);
+                StatusEffectManager effects = holder.StatusEffectManager;
+                if (effects != null)
+                    effects.ActiveEffects.RemoveAll(e => e != null && e.Spell != null && e.Spell.SpellId == "grease_armor");
+                sc.SpellSlots.Remove(slot);
+                caster.ForceEndInvisibility("CastCoreStageOrderTests");
+            }
+        }
+        finally
+        {
+            caster.ForceEndInvisibility("CastCoreStageOrderTests");
+            if (foe != null)
+                Object.DestroyImmediate(foe.gameObject);
+        }
+    }
+
+    /// <summary>
+    /// The spell component pouch test on every PC path (batch 11 step 15; SPL-006, SPL-146; PHB p.174, p.130): an area
+    /// Sleep, a Grease, a Summon Monster I and a hold of a touch spell given a material component are refused at Legality
+    /// by a caster without a pouch, with nothing spent. NPC casts still skip it (NpcNoComponentCheck, step 17).
+    /// </summary>
+    private static void TestPouchOnEveryPath(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        Assert(!SpellComponentRegistry.HasSpellComponentPouch(caster), "Step 15: the test wizard carries no spell component pouch");
+
+        // Area: Sleep (M: sand, rose petals or a cricket, PHB p.280).
+        CastContext area = BeginArea(gm, sc, caster, new RecordingDecider(new List<string>()), out SpellSlot slot);
+        area.Request.Spell = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.SLEEP));
+        slot.PreparedSpell = SpellDatabase.GetSpell(SpellNames.SLEEP).Clone();
+        ExpectPouchRefusal(gm, area, slot, caster, "an area Sleep");
+        sc.SpellSlots.Remove(slot);
+
+        // Grease (M: a bit of pork rind or butter, PHB p.237).
+        CastContext grease = Begin(gm, sc, caster, null, SpellNames.GREASE, new RecordingDecider(new List<string>()), out slot);
+        grease.Request.Spell.HasMaterialComponent = true;
+        grease.Request.Choices.GreaseMode = GreaseCastMode.Armor;
+        SpellCastRequest.ForUiGrease(grease.Request, caster, null, null);
+        ExpectPouchRefusal(gm, grease, slot, caster, "a Grease");
+        sc.SpellSlots.Remove(slot);
+
+        // Summon Monster I, given a material component on the request's own clone (refused before any placement).
+        CastContext summon = Begin(gm, sc, caster, null, SpellNames.SUMMON_MONSTER_1, new RecordingDecider(new List<string>()), out slot);
+        summon.Request.Spell.HasMaterialComponent = true;
+        SpellCastRequest.ForUiSummon(summon.Request, caster.GridPosition + new Vector2Int(0, 2));
+        ExpectPouchRefusal(gm, summon, slot, caster, "a Summon Monster I");
+        sc.SpellSlots.Remove(slot);
+
+        // A hold of Shocking Grasp, given a material component on the request's own clone.
+        CastContext hold = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, new RecordingDecider(new List<string>()), out slot);
+        hold.Request.Spell.HasMaterialComponent = true;
+        SpellCastRequest.ForUiHoldCharge(hold.Request);
+        ExpectPouchRefusal(gm, hold, slot, caster, "a hold of a touch charge");
+        Assert(!sc.HasHeldTouchCharge, "Step 15: the refused hold holds no charge");
+        sc.SpellSlots.Remove(slot);
+
+        // The delivery of a held charge is no casting (PHB p.141): its components were met at the hold, so a pouchless
+        // caster delivers a charge whose spell has a material component.
+        SpellData heldSpell = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP));
+        heldSpell.HasMaterialComponent = true;
+        sc.SetHeldTouchCharge(heldSpell, null);
+        caster.Actions.Reset();
+        SpellCastRequest delivery = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+        delivery.Aim.Target = ally;
+        CastOutcome deliveryLegality = gm.CheckLegality(delivery);
+        Assert(delivery.Spell.HasMaterialComponent && deliveryLegality.Kind == CastOutcomeKind.Resolved,
+            "Step 15: a held charge's delivery is not tested for the pouch again (its components were met at the hold, PHB p.141)", "" + deliveryLegality);
+        sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+
+        // M/DF (PHB p.174-175): a druid casts the divine version of Sleet Storm with its divine focus and needs no pouch;
+        // the pouchless wizard's arcane version is refused (delegated RAW reading 2026-10-14).
+        CharacterController druid = null;
+        try
+        {
+            druid = TestHelpers.CreateCharacter("CastCoreDruid", "Druid", level: 7, wis: 18, gridPosition: caster.GridPosition + new Vector2Int(0, 4));
+            druid.SetTeam(CharacterTeam.Player);
+            SpellData sleet = SpellDatabase.GetSpell(SpellNames.SLEET_STORM);
+            Assert(!SpellComponentRegistry.HasSpellComponentPouch(druid) && CastComponentRules.DivineFocusReplacesMaterial(druid, sleet)
+                   && !CastComponentRules.DivineFocusReplacesMaterial(caster, sleet),
+                "Step 15: a druid's Sleet Storm (M/DF) uses the divine focus, a wizard's the material component (PHB p.175)");
+
+            SpellCastRequest druidCast = SpellCastRequest.ForUi(druid, sleet, null, new CastSource());
+            SpellCastRequest.ForUiArea(druidCast, new List<CharacterController>(), new HashSet<Vector2Int> { druid.GridPosition + new Vector2Int(0, 1) });
+            CastOutcome druidLegality = gm.CheckLegality(druidCast);
+            caster.Actions.Reset();
+            SpellCastRequest wizardCast = SpellCastRequest.ForUi(caster, sleet, null, new CastSource());
+            SpellCastRequest.ForUiArea(wizardCast, new List<CharacterController>(), new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) });
+            CastOutcome wizardLegality = gm.CheckLegality(wizardCast);
+            Assert(druidCast.Spell.HasMaterialComponent && druidLegality.Reason != "no-component-pouch" && wizardLegality.Reason == "no-component-pouch",
+                "Step 15: a pouchless druid's area Sleet Storm is not refused for the pouch; a pouchless wizard's is",
+                druidLegality + " / " + wizardLegality);
+        }
+        finally
+        {
+            if (druid != null)
+                Object.DestroyImmediate(druid.gameObject);
+        }
+    }
+
+    private static void ExpectPouchRefusal(GameManager gm, CastContext ctx, SpellSlot slot, CharacterController caster, string label)
+    {
+        gm.ExecuteCast(ctx, null);
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Refused && ctx.Outcome.At == CastStage.Legality
+               && ctx.Outcome.Reason == "no-component-pouch" && !slot.IsUsed && !caster.Actions.StandardActionUsed && ctx.Ended,
+            "Step 15: " + label + " without a spell component pouch is refused at Legality with nothing spent (PHB p.174, p.130)", "" + ctx.Outcome);
+    }
+
+    /// <summary>
+    /// Step-1 issue (f), SPL-146 (batch 11 step 15): a grappled caster cannot hold the charge of a somatic touch spell
+    /// (PHB p.141: holding the charge is casting it; PHB p.156: no somatic component while grappling). The hold is refused
+    /// at Legality with one log line and nothing spent; CheckLegality refuses the same request with no log line.
+    /// </summary>
+    private static void TestHoldWhileGrappled(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        var logs = new List<string>();
+        Action<string> oldLog = ScenarioHooks.CombatLog;
+        ScenarioHooks.CombatLog = m => logs.Add(m);
+        caster.ApplyCondition(CombatConditionType.Grappled, 10, "UnitTest");
+        try
+        {
+            CastContext ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, new RecordingDecider(new List<string>()), out SpellSlot slot);
+            SpellCastRequest.ForUiHoldCharge(ctx.Request);
+
+            CastOutcome pre = gm.CheckLegality(ctx.Request);
+            Assert(pre.Kind == CastOutcomeKind.Refused && pre.Reason == "grapple" && logs.Count == 0,
+                "Step 15: CheckLegality refuses a grappled caster's hold of a somatic touch spell and logs nothing (a pure pre-check)",
+                pre + " / " + string.Join(" | ", logs));
+
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Refused && ctx.Outcome.At == CastStage.Legality
+                   && ctx.Outcome.Reason == "grapple" && !slot.IsUsed && !caster.Actions.StandardActionUsed && !sc.HasHeldTouchCharge,
+                "Step 15: a grappled caster cannot hold a somatic touch spell: refused at Legality, nothing spent, no charge (PHB p.141, p.156; SPL-146)",
+                "" + ctx.Outcome);
+            Assert(logs.Count == 1 && logs[0].Contains("somatic"), "Step 15: the hold's grapple refusal logs one line", string.Join(" | ", logs));
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            ScenarioHooks.CombatLog = oldLog;
+            caster.RemoveCondition(CombatConditionType.Grappled);
+        }
+    }
+
+    /// <summary>
+    /// A hold asks the caster's choices (batch 11 step 15, SPL-146) and keeps them with the charge: a held Resist Energy
+    /// whose energy was chosen at the hold carries it (SpellcastingComponent.HeldTouchChoices), as a copy, so the
+    /// delivery need not ask again (delegated RAW reading 2026-10-14).
+    /// </summary>
+    private static void TestHoldKeepsChoices(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        var events = new List<string>();
+        CastContext ctx = Begin(gm, sc, caster, null, SpellNames.RESIST_ENERGY, new RecordingDecider(events), out SpellSlot slot);
+        ctx.Request.Choices.Energy = ResistEnergyType.Cold;
+        SpellCastRequest.ForUiHoldCharge(ctx.Request);
+        gm.ExecuteCast(ctx, null);
+        Assert(events.Contains("decider:fill") && ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && sc.HasHeldTouchCharge
+               && sc.HeldTouchChoices != null && sc.HeldTouchChoices.Energy == ResistEnergyType.Cold
+               && !ReferenceEquals(sc.HeldTouchChoices, ctx.Request.Choices),
+            "Step 15: a hold asks the choices and the held charge keeps a copy of them (the energy type of a held Resist Energy)",
+            ctx.Outcome + " " + string.Join(",", events));
+        sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+        Assert(sc.HeldTouchChoices == null, "Step 15: clearing the held charge clears its choices");
+        sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// A hold whose choice dialog is open (the decider suspends at FillChoices) resumes once the energy is chosen: the
+    /// dialog's answer goes to the open cast and GameManager.ResumeCastAfterChoiceDialog runs the hold again (batch 11 step
+    /// 15). It finishes once with the charge held with that energy, and the delivery request built as the Discharge button
+    /// builds it (GameManager.BuildHeldChargeDeliveryRequest) carries a copy of the energy, so the UI decider's choices do
+    /// not suspend at the delivery.
+    /// </summary>
+    private static void TestHoldChoiceResume(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        MethodInfo resume = typeof(GameManager).GetMethod("ResumeCastAfterChoiceDialog", BindingFlags.NonPublic | BindingFlags.Instance);
+        PropertyInfo subPhase = typeof(GameManager).GetProperty("CurrentSubPhase");
+        Assert(resume != null && subPhase != null, "Step 15: GameManager.ResumeCastAfterChoiceDialog and CurrentSubPhase exist (reflection)");
+        if (resume == null || subPhase == null)
+            return;
+
+        GameManager.PlayerSubPhase phaseBefore = gm.CurrentSubPhase;
+        CastContext delivery = null;
+        try
+        {
+            var events = new List<string>();
+            var decider = new RecordingDecider(events);
+            decider.Fills.Enqueue(CastChoiceFill.Suspended);
+            CastContext ctx = Begin(gm, sc, caster, null, SpellNames.RESIST_ENERGY, decider, out SpellSlot slot);
+            SpellCastRequest.ForUiHoldCharge(ctx.Request);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome == null && decider.Finishes == 0 && !ctx.Ended && !sc.HasHeldTouchCharge && !slot.IsUsed,
+                "Step 15: a hold suspends at its choice dialog with nothing spent and no charge", string.Join(",", events));
+
+            ctx.Request.Choices.Energy = ResistEnergyType.Fire; // the dialog's answer (_pendingResistEnergyType writes the open cast)
+            resume.Invoke(gm, new object[] { caster });
+            Assert(decider.Finishes == 1 && ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.Ended && slot.IsUsed
+                   && sc.HasHeldTouchCharge && sc.HeldTouchChoices != null && sc.HeldTouchChoices.Energy == ResistEnergyType.Fire,
+                "Step 15: ResumeCastAfterChoiceDialog runs the hold again: one finish, the charge held with the chosen energy",
+                ctx.Outcome + " finishes " + decider.Finishes + " " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+
+            SpellCastRequest req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+            Assert(req != null && req.Source != null && req.Source.Kind == CastSourceKind.HeldChargeDelivery
+                   && req.Choices.Energy == ResistEnergyType.Fire && !ReferenceEquals(req.Choices, sc.HeldTouchChoices),
+                "Step 15: the delivery request starts from a copy of the hold's choices (the energy)");
+            delivery = gm.BeginCast(req);
+            Assert(gm.UiFillCastChoices(delivery) == CastChoiceFill.Filled,
+                "Step 15: the UI decider's choices do not suspend at the delivery (the energy is already chosen)");
+        }
+        finally
+        {
+            if (delivery != null)
+                gm.EndCast(delivery);
+            sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+            subPhase.SetValue(gm, phaseBefore);
+        }
+    }
+
+    /// <summary>
+    /// SPL-114 (batch 11 step 15): an AI caster's Silent Image (a Concentration-duration spell, PHB p.279) starts its
+    /// concentration (BeginConcentrationTracking), and its next cast runs the casting-while-concentrating step in the
+    /// ConcentrationOnCast stage, as a PC's does: the stage's trace mark is the check's "kept" or "lost" (the caster is
+    /// concentrating), not "not-concentrating".
+    /// </summary>
+    private static void TestAiConcentration(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        ConcentrationManager conc = caster.Concentration;
+        bool added = conc == null;
+        if (added)
+        {
+            conc = caster.gameObject.AddComponent<ConcentrationManager>();
+            conc.Init(caster.Stats, caster);
+        }
+        if (caster.GetComponent<StatusEffectManager>() == null)
+            caster.gameObject.AddComponent<StatusEffectManager>().Init(caster.Stats);
+        Action<CharacterController, SpellData, string, string> oldStageHook = ScenarioHooks.CastStage;
+        try
+        {
+            var events = new List<string>();
+            SpellCastRequest image = BeginAi(sc, caster, caster, SpellNames.SILENT_IMAGE, events, out SpellSlot slot);
+            bool cast = gm.RunCastSync(image, out CastOutcome o, stage => events.Add(stage.ToString()));
+            Assert(cast && o.Kind == CastOutcomeKind.Resolved && conc.IsConcentrating && conc.ConcentrationSpellName == "Silent Image",
+                "Step 15: an AI caster's Silent Image starts its concentration (SPL-114, PHB p.176)", o + " concentrating " + conc.IsConcentrating);
+            sc.SpellSlots.Remove(slot);
+
+            events = new List<string>();
+            var marks = new List<string>();
+            ScenarioHooks.CastStage = (c, s, stage, detail) =>
+            {
+                if (stage == CastStageTrace.ConcentrationOnCast)
+                    marks.Add(detail);
+            };
+            SpellCastRequest missile = BeginAi(sc, caster, ally, SpellNames.RAY_OF_FROST, events, out slot);
+            gm.RunCastSync(missile, out o, stage => events.Add(stage.ToString()));
+            ScenarioHooks.CastStage = oldStageHook;
+            Assert(events.Contains("ConcentrationOnCast") && marks.Count == 1 && (marks[0] == "kept" || marks[0] == "lost"),
+                "Step 15: the concentrating AI caster's next cast makes the casting-while-concentrating check on its concentration (SPL-114)",
+                string.Join(",", marks) + " / " + string.Join(",", events));
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            ScenarioHooks.CastStage = oldStageHook;
+            if (conc != null && conc.IsConcentrating)
+                conc.EndConcentration();
+            if (added && conc != null)
+                Object.DestroyImmediate(conc);
+        }
     }
 
     private static void TestMissingQuirk(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)

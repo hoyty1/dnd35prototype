@@ -15,7 +15,8 @@ public partial class GameManager
 {
     /// <summary>
     /// The PC's choices for the cast: the Resist Energy, Protection from Energy and Fire Shield dialogs (which re-enter
-    /// the cast through BeginPendingSpellTargeting once answered), then the Magic Weapon, Keen Edge and Greater Magic
+    /// the cast through BeginPendingSpellTargeting once answered; the energy dialogs at a hold of the charge resume the
+    /// hold through ResumeCastAfterChoiceDialog instead, batch 11 step 15), then the Magic Weapon, Keen Edge and Greater Magic
     /// Weapon pickers (which re-enter through PerformSpellCast). A picker with nothing to pick refuses the cast.
     /// </summary>
     internal CastChoiceFill UiFillCastChoices(CastContext ctx)

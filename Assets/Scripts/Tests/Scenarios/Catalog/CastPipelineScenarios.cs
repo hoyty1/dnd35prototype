@@ -35,6 +35,8 @@ namespace Tests.Scenarios
             yield return S("cast-wand-aoo-cancel", () => ItemAoOCancel(scroll: false));
             yield return S("cast-held-touch-charge", HeldTouchCharge);
             yield return S("cast-held-aoo-cancel", HeldAoOCancel);
+            yield return S("cast-held-grappled", HeldGrappled);
+            yield return S("npc-concentration-tracking", NpcConcentrationTracking);
             yield return S("cast-ui-summon-monster", UiSummonMonster);
             yield return S("cast-ui-summon-aoo-cancel", UiSummonAoOCancel);
             yield return S("cast-ui-summon-entangled", UiSummonEntangled);
@@ -839,6 +841,85 @@ namespace Tests.Scenarios
                     FactCaster("cancel", "wizard"))
                 .Expect("The hold's AoO confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
                 .Expect("Nothing is spent and no charge is held", FactsAre(("cancel.spent", "none"), ("cancel.actions", "smf"), ("cancel.held", false)))
+                .Build();
+        }
+
+        // ── rules/cast-held-grappled, rules/npc-concentration-tracking (batch 11 step 15) ──
+
+        /// <summary>
+        /// Step-1 issue (f), SPL-146, fixed in batch 11 step 15: holding the charge is casting the spell (PHB p.141), so a
+        /// grappled caster meets the grapple casting rule at the hold (PHB p.156: no somatic component while grappling). A
+        /// Ui wizard 5 grappled at the start of its turn picks Shocking Grasp (V, S) and answers the touch prompt Discharge
+        /// Later: the hold is refused at Legality with one log line, nothing is spent and no charge is held.
+        /// </summary>
+        private static ScenarioDef HeldGrappled()
+        {
+            return Rules("rules/cast-held-grappled", "A grappled Ui caster cannot hold the charge of a somatic touch spell (PHB p.141, p.156; SPL-146)")
+                .Covers("PHB p.141", "PHB p.156", "SPL-146", "batch 11 step 15")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Grappled Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 15, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SHOCKING_GRASP))
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    Step.Assert("grappled", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        w.ApplyCondition(CombatConditionType.Grappled, 10, "scenario");
+                        Fact(ctx, "grappled", w.HasCondition(CombatConditionType.Grappled));
+                        return true;
+                    }),
+                    RecordCaster("wizard"),
+                    Step.CastHeld(SpellNames.SHOCKING_GRASP),
+                    FactCaster("hold", "wizard"))
+                .Expect("The wizard is grappled when it casts", FactIs("grappled", true))
+                .Expect("The hold is refused: nothing is spent and no charge is held (PHB p.141, p.156)",
+                    FactsAre(("hold.spent", "none"), ("hold.actions", "smf"), ("hold.held", false)))
+                .Expect("The refusal is logged once", Expect.Count("log", e => (e.Str("text") ?? "").Contains("spells with somatic components are blocked"), 1, 1))
+                .Expect("No Shocking Grasp is cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 0))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-114, fixed in batch 11 step 15: an NPC's Concentration-duration spell starts its concentration as a PC's
+        /// does (PHB p.176). The Scripted neutral mage (an enemy wizard 3, given a 1st-level slot holding Silent Image, PHB
+        /// p.279) casts Silent Image through the NPC cast path and is then dealt 30 damage (GameManager.DealDamage): the
+        /// Concentration check against damage is DC 10 + 30 + the spell's level 1 = 41 (PHB p.69-70), which no d20 roll of
+        /// the mage reaches, so its concentration breaks and the image ends.
+        /// </summary>
+        private static ScenarioDef NpcConcentrationTracking()
+        {
+            return Rules("rules/npc-concentration-tracking", "An NPC's Silent Image ends when the caster is damaged and fails Concentration (PHB p.176; SPL-114)")
+                .Covers("SPL-114", "PHB p.176", "PHB p.279", "PHB p.69-70", "PC_NPC_PARITY", "batch 11 step 15")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Conc Hero", 3)), 4, 10, Control.Idle)
+                .Npc("mage", "neutral_mage_test", 10, 10, Control.Scripted)
+                .Tweak("mage", c => { AddWizardSlot(c, 1, SpellNames.SILENT_IMAGE); Sturdy(c); })
+                .Initiative("mage", "hero")
+                .Turn("mage", 1,
+                    Step.Cast(SpellNames.SILENT_IMAGE, "mage"),
+                    Step.Assert("after the cast", ctx =>
+                    {
+                        CharacterController m = ctx.Get("mage");
+                        Fact(ctx, "cast.concentrating", m.Concentration != null && m.Concentration.IsConcentrating);
+                        Fact(ctx, "cast.spell", m.Concentration != null ? m.Concentration.ConcentrationSpellName : "none");
+                        Fact(ctx, "cast.effect", m.StatusEffectManager != null && m.StatusEffectManager.HasEffect(SpellNames.SILENT_IMAGE));
+                        return true;
+                    }),
+                    Step.Assert("damaged", ctx =>
+                    {
+                        CharacterController m = ctx.Get("mage");
+                        GameManager.Instance.DealDamage(m, 30, DamagePackets.Spell("Scenario damage", DamageType.Untyped));
+                        Fact(ctx, "hit.concentrating", m.Concentration != null && m.Concentration.IsConcentrating);
+                        Fact(ctx, "hit.effect", m.StatusEffectManager != null && m.StatusEffectManager.HasEffect(SpellNames.SILENT_IMAGE));
+                        Fact(ctx, "hit.alive", !m.IsDead);
+                        return true;
+                    }))
+                .Expect("The NPC cast of Silent Image is done", Expect.StepStatus("mage", 1, "Cast", 0, "done"))
+                .Expect("The NPC's Silent Image starts its concentration (PHB p.176; SPL-114)",
+                    FactsAre(("cast.concentrating", true), ("cast.spell", "Silent Image"), ("cast.effect", true)))
+                .Expect("30 damage breaks the concentration (DC 41, PHB p.69-70) and the image ends; the mage lives",
+                    FactsAre(("hit.concentrating", false), ("hit.effect", false), ("hit.alive", true)))
                 .Build();
         }
 

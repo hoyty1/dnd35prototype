@@ -85,6 +85,12 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Metamagic data that was applied when the held touch spell was cast.</summary>
     public MetamagicData HeldTouchMetamagic { get; private set; }
 
+    /// <summary>
+    /// The caster's choices made when the held touch spell was cast (the energy type of a held Resist Energy or
+    /// Protection from Energy; batch 11 step 15): a copy, which each delivery copies again. Null with no charge held.
+    /// </summary>
+    public CastChoices HeldTouchChoices { get; private set; }
+
     /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
     public bool HasHeldTouchCharge => HeldTouchSpell != null;
     /// <summary>Whether this character has any supported spellcasting ability.</summary>
@@ -3012,12 +3018,13 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Store a held melee touch spell charge on this caster.
+    /// Store a held melee touch spell charge on this caster, with the metamagic and a copy of the choices it was cast with.
     /// </summary>
-    public void SetHeldTouchCharge(SpellData spell, MetamagicData metamagic)
+    public void SetHeldTouchCharge(SpellData spell, MetamagicData metamagic, CastChoices choices = null)
     {
         HeldTouchSpell = spell;
         HeldTouchMetamagic = metamagic;
+        HeldTouchChoices = spell != null && choices != null ? choices.Clone() : null;
 
         if (HeldTouchSpell != null)
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: holding touch charge ({HeldTouchSpell.Name})");
@@ -3036,6 +3043,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         HeldTouchSpell = null;
         HeldTouchMetamagic = null;
+        HeldTouchChoices = null;
     }
 
     /// <summary>

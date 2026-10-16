@@ -74,4 +74,10 @@ public sealed class CastChoices
 
     /// <summary>The swarm a Summon Swarm cast places (PHB p.289).</summary>
     public string SummonSwarmNpcId;
+
+    /// <summary>
+    /// A shallow copy (the chosen items are shared references, as on the request): a held touch charge keeps the choices
+    /// of its hold, and each delivery starts from a copy of them (batch 11 step 15).
+    /// </summary>
+    public CastChoices Clone() => (CastChoices)MemberwiseClone();
 }

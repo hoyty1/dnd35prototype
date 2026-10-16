@@ -9468,14 +9468,29 @@ public partial class GameManager : MonoBehaviour
         if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null)
             return;
 
-        // The delivery is its own Ui cast (batch 11 step 4): a clone of the held spell as it was cast (its metamagic's
-        // pre-cast changes already made), with a held-charge-delivery source.
-        BeginCast(SpellCastRequest.ForUiPrebuilt(pc, SpellCastRequest.CloneForCast(spellComp.HeldTouchSpell), spellComp.HeldTouchMetamagic,
-            new CastSource { Kind = CastSourceKind.HeldChargeDelivery }));
+        BeginCast(BuildHeldChargeDeliveryRequest(pc, spellComp));
 
         _pendingAttackMode = PendingAttackMode.CastSpell;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowSpellTargets(pc, _pendingSpell);
+    }
+
+    /// <summary>
+    /// The request of a held charge's delivery, its own Ui cast (batch 11 step 4): a clone of the held spell as it was cast
+    /// (its metamagic's pre-cast changes already made), with a held-charge-delivery source. It starts from a copy of the
+    /// choices made at the hold (the energy type; batch 11 step 15, SPL-146): they belong to the spell as cast (PHB p.141),
+    /// so the delivery does not ask them again; a choice that picks the target (the weapon Magic Weapon touches) is still
+    /// asked once the target is known (delegated RAW reading 2026-10-14). Null with no charge held.
+    /// </summary>
+    internal static SpellCastRequest BuildHeldChargeDeliveryRequest(CharacterController caster, SpellcastingComponent spellComp)
+    {
+        if (caster == null || spellComp == null || spellComp.HeldTouchSpell == null)
+            return null;
+        SpellCastRequest delivery = SpellCastRequest.ForUiPrebuilt(caster, SpellCastRequest.CloneForCast(spellComp.HeldTouchSpell), spellComp.HeldTouchMetamagic,
+            new CastSource { Kind = CastSourceKind.HeldChargeDelivery });
+        if (spellComp.HeldTouchChoices != null)
+            delivery.Choices = spellComp.HeldTouchChoices.Clone();
+        return delivery;
     }
 
     public bool HasActiveDisguiseSelf(CharacterController character)

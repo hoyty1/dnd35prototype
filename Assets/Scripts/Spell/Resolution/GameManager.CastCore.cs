@@ -8,7 +8,8 @@ using UnityEngine;
 /// The stages of the cast core (batch 11 step 7, docs/designs/cast_core_batch11.md), in the order a cast runs them
 /// today, except that ConcentrationOnCast runs after Provocation, once the provocation lets the cast proceed (batch 11
 /// step 12, SPL-152). The Globe stage runs before Resolve on the single-target and area paths (batch 11 step 11,
-/// SPL-141).
+/// SPL-141). Since batch 11 step 15 every cast runs Counterspell, InvisibilityBreak, then RingCounterspell (decision D4,
+/// SPL-118).
 /// </summary>
 public enum CastStage
 {
@@ -20,8 +21,8 @@ public enum CastStage
     ConcentrationOnCast,
     Provocation,
     Counterspell,
-    RingCounterspell,
     InvisibilityBreak,
+    RingCounterspell,
     MirrorImage,
     TargetBlink,
     Globe,
@@ -218,12 +219,11 @@ public partial class GameManager
     /// bit the area refusal, and
     /// the casting action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
     /// material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
-    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>), and for a hold the grapple
-    /// test (<see cref="CheckHoldChargeLegality"/>). No side effect, except that a hold request without
-    /// <see cref="LegacyCastQuirk.HoldSkipsGrappleLegality"/> logs the grapple refusal (batch 11 step 15 must keep that
-    /// log out of pure pre-checks). A refusal
-    /// comes back with Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not
-    /// checked here (the decider makes them).
+    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>; every path makes it since
+    /// batch 11 step 15), and for a hold the grapple test (<see cref="CheckHoldChargeLegality"/>, since step 15). No side
+    /// effect: the grapple refusal's log line is the Legality stage's, not this pre-check's. A refusal comes back with
+    /// Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not checked here (the
+    /// decider makes them).
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
@@ -234,20 +234,22 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The grapple test a cast meets in its targeting (BeginPendingSpellTargeting) and a hold bypasses: a grappled or
-    /// pinned caster can cast only a spell that the grapple allows (CanBeginSpellcastWhileGrappledOrPinned, PHB p.156).
-    /// A hold skips it today (<see cref="LegacyCastQuirk.HoldSkipsGrappleLegality"/>, SPL-146; batch 11 step 15).
-    /// Holding a charge inside a Resilient Sphere is legal: the cast and the held charge send nothing through the sphere
-    /// (PHB p.258); only a delivery to a creature on the other side crosses it, which is the delivery's test (CMB-092)
-    /// (delegated RAW reading 2026-10-14). Null for any other request, or when the hold passes. The grapple test logs
-    /// its own refusal, so without the bit <see cref="CheckLegality"/> is no longer free of side effects for a hold.
+    /// The grapple test a cast meets in its targeting (BeginPendingSpellTargeting), which a hold meets here: holding the
+    /// charge is casting the spell (PHB p.141), so a grappled or pinned caster can hold only a spell that the grapple
+    /// allows (GrappleSpellcastRefusal: a casting time of 1 standard action or less, no somatic component, and no verbal
+    /// one while pinned; PHB p.156; batch 11 step 15, SPL-146). Holding a charge inside a Resilient Sphere is legal: the
+    /// cast and the held charge send nothing through the sphere (PHB p.258); only a delivery to a creature on the other
+    /// side crosses it, which is the delivery's test (CMB-092) (delegated RAW reading 2026-10-14). Null for any other
+    /// request, or when the hold passes; a refusal carries its log line in <see cref="CastOutcome.Detail"/>, which the
+    /// Legality stage shows, so the pre-check has no side effect.
     /// </summary>
     private CastOutcome CheckHoldChargeLegality(SpellCastRequest req)
     {
         if (req == null || req.ResolveKind != CastResolveKind.HoldCharge || req.Caster == null || req.Spell == null)
             return null;
-        if (!req.HasQuirk(LegacyCastQuirk.HoldSkipsGrappleLegality) && !CanBeginSpellcastWhileGrappledOrPinned(req.Caster, req.Spell))
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple");
+        string grappleRefusal = GrappleSpellcastRefusal(req.Caster, req.Spell);
+        if (grappleRefusal != null)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple") { Detail = grappleRefusal };
         return null;
     }
 
@@ -350,17 +352,16 @@ public partial class GameManager
         // Spells with common material components (M with no GP cost) need a spell component pouch (PHB p.130). F12 test
         // panel casts (their Components bypass), scroll casts and wand casts bypass it (the item provides the
         // components); the cast's own source decides (batch 11 step 4).
-        // NPCs carry no pouch and are not tested (NpcNoComponentCheck, SPL-114), nor are area casts (AreaSkipsPouch,
-        // SPL-006), summons, Grease and holds (SummonSkipsPouch, GreaseSkipsPouch, HoldSkipsPouch; SPL-006, SPL-146);
-        // decision D3 removes them in steps 15 and 17.
+        // Every path makes the test (area casts, summons, Grease and holds since batch 11 step 15; SPL-006, SPL-146). NPCs
+        // carry no pouch yet and are not tested (NpcNoComponentCheck, SPL-114); decision D3 removes that bit in step 17.
+        // A held charge's delivery is no casting (PHB p.141): its components were met at the hold. A divine caster's M/DF
+        // spell uses the divine focus, not the material component (PHB p.174-175; CastComponentRules.DivineFocusReplacesMaterial,
+        // delegated RAW reading 2026-10-14).
         CastSource source = req.Source;
         bool componentsBypassed = req.HasQuirk(LegacyCastQuirk.NpcNoComponentCheck)
-                                  || req.HasQuirk(LegacyCastQuirk.AreaSkipsPouch)
-                                  || req.HasQuirk(LegacyCastQuirk.SummonSkipsPouch)
-                                  || req.HasQuirk(LegacyCastQuirk.GreaseSkipsPouch)
-                                  || req.HasQuirk(LegacyCastQuirk.HoldSkipsPouch)
+                                  || CastComponentRules.IsHeldChargeDelivery(source)
                                   || (source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem));
-        if (componentsBypassed || !req.Spell.HasMaterialComponent)
+        if (componentsBypassed || !req.Spell.HasMaterialComponent || CastComponentRules.DivineFocusReplacesMaterial(req.Caster, req.Spell))
             return null;
 
         if (SpellComponentRegistry.ValidatePouchRequirement(req.Spell.SpellId, req.Spell, req.Caster, out string pouchFailure))
@@ -407,11 +408,13 @@ public partial class GameManager
             return;
         }
 
-        // A hold meets the grapple test a cast meets in its targeting, unless it still skips it (SPL-146).
+        // A hold meets the grapple test a cast meets in its targeting (PHB p.141, p.156; SPL-146).
         refusal = CheckHoldChargeLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (!string.IsNullOrEmpty(refusal.Detail))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", refusal.Detail));
             FinishCast(ctx, refusal);
             return;
         }
@@ -464,8 +467,10 @@ public partial class GameManager
             return;
         }
 
-        // A hold asks none of the caster's choices (HoldSkipsChoices, SPL-146): its delivery's cast does.
-        CastChoiceFill fill = req.HasQuirk(LegacyCastQuirk.HoldSkipsChoices) ? CastChoiceFill.Filled : req.Decider.FillChoices(this, ctx);
+        // The caster's choices, a hold's included (batch 11 step 15, SPL-146): the energy type of a held Resist Energy is
+        // chosen at the hold and kept with the charge; a choice that picks the target (the weapon Magic Weapon touches)
+        // waits for the delivery, which has the target (delegated RAW reading 2026-10-14).
+        CastChoiceFill fill = req.Decider.FillChoices(this, ctx);
         if (fill == CastChoiceFill.Suspended)
             return;
         if (fill == CastChoiceFill.Refused)
@@ -801,15 +806,12 @@ public partial class GameManager
     /// <summary>
     /// ConcentrationOnCast: a caster concentrating on another spell checks it as it casts (HandleConcentrationOnCasting;
     /// decision D1 replaces it in step 16), once, after the provocation stage lets the cast proceed (batch 11 step 12,
-    /// SPL-152). Skipped with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
+    /// SPL-152), for every caster (batch 11 step 15, SPL-114).
     /// </summary>
     private void CastStageConcentrationOnCast(CastContext ctx, Action<CastContext> next)
     {
-        if (!ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationOnCastCheck))
-        {
-            EnterCastStage(ctx, CastStage.ConcentrationOnCast);
-            HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
-        }
+        EnterCastStage(ctx, CastStage.ConcentrationOnCast);
+        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
         next(ctx);
     }
 
@@ -865,36 +867,28 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The pre-resolution checks after a proceeding provocation: the counterspell, the Ring of Counterspells, then the
-    /// invisibility break, or with <see cref="LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell"/> (SPL-118) the
-    /// invisibility break first.
+    /// The pre-resolution checks after a proceeding provocation, in one order for every caster and path (decision D4,
+    /// batch 11 step 15, SPL-118): the readied counterspell, then the hostile-cast invisibility break, then the Ring of
+    /// Counterspells. A readied counterspell interrupts the casting before a target is chosen or an area placed (PHB
+    /// p.160, p.170-171, p.175), so a countered spell leaves its caster invisible; the ring acts on a spell already cast
+    /// on its wearer (DMG p.230), so a spell the ring absorbs has ended the caster's invisibility (PHB p.245); a counter
+    /// that fails lets the spell resolve as an attack (delegated RAW reading 2026-10-14).
     /// </summary>
     private void CastStageBeforeResolution(CastContext ctx)
     {
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
-            CastStageInvisibilityBreak(ctx);
-        else
-            CastStageCounterspell(ctx);
+        CastStageCounterspell(ctx);
     }
 
     /// <summary>
-    /// Counterspell: a readied counterspell (PHB p.170) stops the spell. Not for a held-charge delivery, which is no
-    /// casting (PHB p.141; <see cref="LegacyCastQuirk.DeliverySkipsCounterspell"/> while the hold is not countered either),
-    /// and skipped for a summon, Grease and a hold (<see cref="LegacyCastQuirk.SummonSkipsCounterspell"/>,
-    /// <see cref="LegacyCastQuirk.GreaseSkipsCounterspell"/>, <see cref="LegacyCastQuirk.HoldSkipsCounterspell"/>;
-    /// SPL-006, SPL-146; step 15).
+    /// Counterspell: a readied counterspell (PHB p.170) stops the spell, on every path: a single target, an area, a summon,
+    /// Grease and a hold (batch 11 step 15, SPL-006, SPL-146; the held charge is the spell already cast, PHB p.141, so it
+    /// is countered at the hold). Not for a held-charge delivery, which is no casting (PHB p.141). A countered spell ends
+    /// the cast here, before the invisibility break (decision D4).
     /// </summary>
     private void CastStageCounterspell(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Counterspell);
-        SpellCastRequest req = ctx.Request;
-        if (ctx.IsHeldChargeDelivery)
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.DeliverySkipsCounterspell);
-        bool skipped = ctx.IsHeldChargeDelivery
-                       || req.HasQuirk(LegacyCastQuirk.SummonSkipsCounterspell)
-                       || req.HasQuirk(LegacyCastQuirk.GreaseSkipsCounterspell)
-                       || req.HasQuirk(LegacyCastQuirk.HoldSkipsCounterspell);
-        if (!skipped)
+        if (!ctx.IsHeldChargeDelivery)
         {
             CharacterController caster = ctx.Request.Caster;
             SpellData spell = ctx.Request.Spell;
@@ -910,18 +904,25 @@ public partial class GameManager
             // A failed counterspell (a Dispel Magic miss) lets the spell go on.
         }
 
-        CastStageRingCounterspell(ctx);
+        CastStageInvisibilityBreak(ctx);
     }
 
     /// <summary>
-    /// RingCounterspell: a Ring of Counterspells on the target holding this spell counters it (DMG p.230). Skipped for an
-    /// area cast (<see cref="LegacyCastQuirk.AreaSkipsRing"/>, SPL-006).
+    /// RingCounterspell, after the invisibility break (decision D4): a Ring of Counterspells on the target holding this
+    /// spell counters it (DMG p.230: the stored spell "cast upon the wearer"). Only a single-target cast (a held charge's
+    /// delivery included, whose target is chosen when it is delivered) has a creature the spell is cast upon: an area spell
+    /// is cast at an area, not on the creatures in it (PHB p.175), so the ring stops neither the whole spell nor its effect
+    /// on a wearer in the area; a summon, a Grease (an area or an object) and a hold target no creature, nor does a burst
+    /// or emanation centred on the caster (Prayer, Invisibility Purge, Zone of Truth: <see cref="RingMeetsSingleCast"/>)
+    /// (delegated RAW reading 2026-10-14; batch 11 step 15 removed AreaSkipsRing, SPL-006). The ring counters "immediately,
+    /// as a counterspell action", so a touch spell meets it before its touch attack; a held charge countered at its
+    /// delivery is gone, as a countered spell is (PHB p.170-171), so the charge is cleared. Then the request's resolve variant.
     /// </summary>
     private void CastStageRingCounterspell(CastContext ctx)
     {
-        if (!ctx.Request.HasQuirk(LegacyCastQuirk.AreaSkipsRing))
+        EnterCastStage(ctx, CastStage.RingCounterspell);
+        if (ctx.Request.ResolveKind == CastResolveKind.Single && RingMeetsSingleCast(ctx.Request.Spell))
         {
-            EnterCastStage(ctx, CastStage.RingCounterspell);
             CharacterController caster = ctx.Request.Caster;
             CharacterController target = ctx.Request.Aim.Target;
             SpellData spell = ctx.Request.Spell;
@@ -929,19 +930,34 @@ public partial class GameManager
             {
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Ring, "countered");
                 Debug.Log($"[RingCounterspell] {spell.Name} countered by Ring of Counterspells on {target.Stats?.CharacterName}!");
+                if (ctx.IsHeldChargeDelivery)
+                    ctx.SpellComp?.ClearHeldTouchCharge("countered by Ring of Counterspells");
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.RingCounterspell, "ring"));
                 return;
             }
         }
 
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
-            CastStageResolveVariant(ctx);
-        else
-            CastStageInvisibilityBreak(ctx);
+        CastStageResolveVariant(ctx);
     }
 
     /// <summary>
-    /// After the pre-resolution checks, the request's resolve variant: the single-target stages from Mirror Image on, the
+    /// False for a spell resolved on the single-target path whose effect is a burst or emanation centred on its caster
+    /// (Target "You" with an area: Prayer, Invisibility Purge, Zone of Truth): it is cast at an area, not upon a creature,
+    /// so a Ring of Counterspells does not meet it (DMG p.230, PHB p.175; delegated RAW reading 2026-10-14). True for every
+    /// other single-target cast, including an emanation centred on a creature the spell is cast upon (Silence on a
+    /// creature, which gets a save, PHB p.279; Invisibility Sphere and Magic Circle on the creature touched).
+    /// </summary>
+    internal static bool RingMeetsSingleCast(SpellData spell)
+    {
+        if (spell == null)
+            return false;
+        bool centredOnCasterArea = spell.TargetType == SpellTargetType.Self
+                                   && (spell.AoEShapeType != AoEShape.None || spell.AreaRadius > 0 || CutsGlobeOutOfOwnBurst(spell));
+        return !centredOnCasterArea;
+    }
+
+    /// <summary>
+    /// After the pre-resolution checks (the Ring of Counterspells last), the request's resolve variant: the single-target stages from Mirror Image on, the
     /// area Resolve stage (<see cref="CastResolveKind.Area"/>), or the Summon, Grease and HoldCharge Resolve stages.
     /// </summary>
     private void CastStageResolveVariant(CastContext ctx)
@@ -969,8 +985,8 @@ public partial class GameManager
     /// <summary>
     /// InvisibilityBreak: a hostile cast ends the caster's invisibility (PHB p.245). Here too, as before, the cast settles
     /// whether a willing target skips the touch attack and whether the target forgoes its save (both read only the
-    /// creatures, so the NPC order does not change them). Then the Mirror Image stage, or with
-    /// <see cref="LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell"/> the counterspell.
+    /// creatures). It runs after the readied counterspell and before the Ring of Counterspells (decision D4); then the
+    /// RingCounterspell stage.
     /// </summary>
     private void CastStageInvisibilityBreak(CastContext ctx)
     {
@@ -994,8 +1010,13 @@ public partial class GameManager
                     BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
                     break;
                 case CastResolveKind.Grease:
-                    // Grease never ends the caster's invisibility today (GreaseSkipsInvisibilityBreak, SPL-006; step 15).
-                    if (!ctx.Request.HasQuirk(LegacyCastQuirk.GreaseSkipsInvisibilityBreak))
+                    // Grease is an attack when its square takes in a foe, or when it greases an object a foe holds or
+                    // wears: PHB p.245 spares only actions directed at unattended objects, and Grease gives the wielder
+                    // of the object a save (PHB p.237) (delegated RAW reading 2026-10-14; batch 11 step 15, SPL-006).
+                    GreaseCastMode greaseMode = ctx.Request.Choices.GreaseMode;
+                    if (greaseMode == GreaseCastMode.Object || greaseMode == GreaseCastMode.Armor)
+                        BreakInvisibilityOnHostileSpellCast(caster, spell, ctx.Request.Aim.ObjectHolder, null);
+                    else
                         BreakInvisibilityOnHostileSpellCast(caster, spell, null, ctx.Request.Aim.AreaTargets);
                     break;
                 default:
@@ -1005,10 +1026,7 @@ public partial class GameManager
                     break;
             }
 
-            if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
-                CastStageCounterspell(ctx);
-            else
-                CastStageResolveVariant(ctx);
+            CastStageRingCounterspell(ctx);
             return;
         }
 
@@ -1019,10 +1037,7 @@ public partial class GameManager
         if (ctx.TargetForgoesSave)
             RequireLegacyQuirk(ctx, LegacyCastQuirk.AlliesForgoEverySave);
 
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell))
-            CastStageCounterspell(ctx);
-        else
-            CastStageMirrorImage(ctx);
+        CastStageRingCounterspell(ctx);
     }
 
     /// <summary>MirrorImage: a targeted spell against a creature with figments may strike one instead (PHB p.254).</summary>
@@ -1219,9 +1234,9 @@ public partial class GameManager
             var appliedEffect = ApplySpellBuff(caster, ctx.Request.Aim.Target, spell, ctx.SpellComp, ctx.Result);
             CastStageTrace.Mark(caster, spell, CastStageTrace.Buff, appliedEffect != null ? "applied" : "no-effect");
 
-            // The NPC path tracks no concentration (NpcNoConcentrationTracking, SPL-114).
-            if (appliedEffect != null && spell.DurationType == DurationType.Concentration
-                && !ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationTracking))
+            // Every caster's Concentration-duration effect starts its concentration (batch 11 step 15, SPL-114), so damage
+            // can end it (PHB p.176).
+            if (appliedEffect != null && spell.DurationType == DurationType.Concentration)
                 BeginConcentrationTracking(caster, appliedEffect, spell);
         }
 
@@ -1524,14 +1539,15 @@ public partial class GameManager
 
     /// <summary>
     /// Resolve (hold): the cast spell's charge is held (SpellcastingComponent.SetHeldTouchCharge, PHB p.141 and p.176),
-    /// with the cast's metamagic, for a later delivery (OnDischargeHeldTouchButtonPressed, a HeldChargeDelivery cast).
+    /// with the cast's metamagic and the choices made at the hold (the energy type; batch 11 step 15), for a later
+    /// delivery (OnDischargeHeldTouchButtonPressed, a HeldChargeDelivery cast that starts from a copy of them).
     /// </summary>
     private void CastStageResolveHoldCharge(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Resolve);
         CharacterController caster = ctx.Request.Caster;
         SpellData spell = ctx.Request.Spell;
-        ctx.SpellComp.SetHeldTouchCharge(spell, ctx.Request.Metamagic);
+        ctx.SpellComp.SetHeldTouchCharge(spell, ctx.Request.Metamagic, ctx.Request.Choices);
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "hold-charge");
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {spell.Name}."));
         FinishEffectCast(ctx, "held");
@@ -1643,12 +1659,11 @@ public partial class GameManager
 
     /// <summary>
     /// A spell lost to a distraction or a spell failure still runs the casting-while-concentrating step
-    /// (HandleConcentrationOnCasting), except with <see cref="LegacyCastQuirk.NpcNoConcentrationOnCastCheck"/> (SPL-114).
+    /// (HandleConcentrationOnCasting), for every caster (batch 11 step 15, SPL-114).
     /// </summary>
     private void CheckConcentrationOnLostCast(CastContext ctx)
     {
-        if (!ctx.Request.HasQuirk(LegacyCastQuirk.NpcNoConcentrationOnCastCheck))
-            HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
     }
 
     /// <summary>Spends the cast's slot (or scroll, wand charge, converted spell) with the parameters the Cost stage set.</summary>

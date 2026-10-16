@@ -370,6 +370,8 @@ public static partial class SpellDatabase
                         + "Concentration DC 5 + spell level to cast inside. Extinguishes torches and small fires. "
                         + "No save. No SR. Components: V, S, M/DF (dust and water). PHB p.281",
                     HasMaterialComponent = true, // M/DF: dust and water (common — covered by spell component pouch)
+                    HasDivineFocus = true,
+                    MaterialOrDivineFocus = true,
                     SpellLevel = 3, School = "Conjuration (Creation) [Cold]",
                     ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
                     TargetType = SpellTargetType.Area,
@@ -1285,6 +1287,8 @@ public static partial class SpellDatabase
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
                     HasMaterialComponent = true,
+                    HasDivineFocus = true,
+                    MaterialOrDivineFocus = true, // V, S, M/DF (PHB p.289)
                     IsPlaceholder = false
                 });
 
@@ -1343,6 +1347,8 @@ public static partial class SpellDatabase
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
                     HasMaterialComponent = true,
+                    HasDivineFocus = true,
+                    MaterialOrDivineFocus = true, // V, S, M/DF (PHB p.282)
                     IsPlaceholder = false
                 });
 

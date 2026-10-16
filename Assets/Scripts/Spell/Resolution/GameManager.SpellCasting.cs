@@ -898,6 +898,24 @@ public partial class GameManager
             });
     }
 
+    /// <summary>
+    /// Goes on with the open cast once a choice dialog of the UI decider (the Resist Energy or Protection from Energy
+    /// type) is answered: a hold of the charge (Discharge Later, batch 11 step 15) runs the cast core again from Legality,
+    /// which now has the choice; any other cast goes back to its targeting, as before.
+    /// </summary>
+    private void ResumeCastAfterChoiceDialog(CharacterController caster)
+    {
+        CastContext open = CurrentCast;
+        if (open != null && open.Outcome == null && open.Request.ResolveKind == CastResolveKind.HoldCharge)
+        {
+            CurrentSubPhase = PlayerSubPhase.Animating;
+            ExecuteCast(open, null);
+            return;
+        }
+
+        BeginPendingSpellTargeting(caster);
+    }
+
     private void ShowResistEnergyTypeSelection(CharacterController caster)
     {
         if (caster == null || caster.Stats == null || CombatUI == null)
@@ -938,7 +956,7 @@ public partial class GameManager
 
                 _pendingResistEnergyType = (ResistEnergyType)selectedIndex;
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Resist Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
-                BeginPendingSpellTargeting(caster);
+                ResumeCastAfterChoiceDialog(caster);
             },
             onCancel: () =>
             {
@@ -994,7 +1012,7 @@ public partial class GameManager
 
                 _pendingProtectionFromEnergyType = (ResistEnergyType)selectedIndex;
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Protection from Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
-                BeginPendingSpellTargeting(caster);
+                ResumeCastAfterChoiceDialog(caster);
             },
             onCancel: () =>
             {

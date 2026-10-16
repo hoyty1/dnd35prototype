@@ -115,26 +115,14 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcNoComponentCheck = 1 << 19,
 
-    /// <summary>
-    /// No casting-while-concentrating step (HandleConcentrationOnCasting): the ConcentrationOnCast stage is skipped, and
-    /// a spell lost to a distraction or a spell failure does not run the step either (SPL-114). Batch 11 step 15
-    /// (raw-counterspell-order-parity) removes the bit.
-    /// </summary>
-    NpcNoConcentrationOnCastCheck = 1 << 20,
+    // Bits 20 and 21 are unused: NpcNoConcentrationOnCastCheck and NpcNoConcentrationTracking (SPL-114) were removed by
+    // batch 11 step 15 (raw-counterspell-order-parity); every caster runs the casting-while-concentrating step
+    // (HandleConcentrationOnCasting) and a Concentration-duration effect starts its caster's concentration
+    // (BeginConcentrationTracking), so damage can break an NPC's Silent Image as it breaks a PC's.
 
-    /// <summary>
-    /// A Concentration-duration effect the Buff stage applies starts no concentration tracking
-    /// (BeginConcentrationTracking), so it never ends by damage or by the caster's choice (SPL-114). Batch 11 step 15
-    /// removes the bit.
-    /// </summary>
-    NpcNoConcentrationTracking = 1 << 21,
-
-    /// <summary>
-    /// The hostile-cast invisibility break runs right after the provocation, before the counterspell and the Ring of
-    /// Counterspells, so a countered NPC spell still ends the caster's invisibility (SPL-118). Batch 11 step 15 applies
-    /// decision D4's one order to every caster and removes the bit.
-    /// </summary>
-    NpcInvisibilityBreakBeforeCounterspell = 1 << 22,
+    // Bit 22 is unused: NpcInvisibilityBreakBeforeCounterspell (SPL-118) was removed by batch 11 step 15; every cast runs
+    // decision D4's order: the readied counterspell (a countered spell leaves its caster invisible), then the hostile-cast
+    // invisibility break, then the Ring of Counterspells (a spell the ring absorbs still ends the invisibility).
 
     // Bit 23 is unused: NpcSpendsBeforeFailureChecks (SPL-160) was removed by batch 11 step 13
     // (raw-distraction-failure-stages); every caster spends its slot after the failure checks (a failed spell spends it in
@@ -171,21 +159,10 @@ public enum LegacyCastQuirk : long
     // (raw-distraction-failure-stages); an area cast makes the entangled check and the blinking caster's 20% (PHB p.308,
     // p.206).
 
-    /// <summary>
-    /// An area cast is never tested against a Ring of Counterspells (DMG p.230; SPL-006): the RingCounterspell stage is
-    /// skipped (an area request has no single target for it to test). The ring counters its stored spell when that spell
-    /// is cast on the wearer; RAW does not say whether an area spell whose area takes in the wearer counts, nor whether the
-    /// ring then stops the whole spell or only its effect on the wearer. So this bit is not yet a known deviation: batch 11
-    /// step 15 (raw-counterspell-order-parity) must decide that reading under the owner's delegation and record it in
-    /// docs/systems/RULES_COVERAGE.md 4.1 before it removes the bit.
-    /// </summary>
-    AreaSkipsRing = 1L << 30,
-
-    /// <summary>
-    /// An area cast makes no spell component pouch test (PHB p.174 and p.130; SPL-006, SPL-114): the Legality stage's
-    /// component test passes it. Batch 11 step 17 (raw-components-all-casters, decision D3) removes the bit.
-    /// </summary>
-    AreaSkipsPouch = 1L << 31,
+    // Bits 30 and 31 are unused: AreaSkipsRing and AreaSkipsPouch (SPL-006) were removed by batch 11 step 15. An area
+    // cast makes the spell component pouch test like any cast, and the RingCounterspell stage runs for it but tests only
+    // a single-target cast's target: the ring counters a spell "cast upon the wearer" (DMG p.230), and an area spell is
+    // cast at an area, not on the creatures in it (PHB p.175; delegated RAW reading 2026-10-14).
 
     /// <summary>
     /// Only some area handlers end their cast with a combat-end check (EvaluateCombatEnd): the generic loop, the scaled
@@ -204,48 +181,24 @@ public enum LegacyCastQuirk : long
     /// </summary>
     AreaLogPrefixOnlyInSomeHandlers = 1L << 33,
 
-    // The summon, Grease and held-charge paths' own behaviours (batch 11 step 10): set only by SpellCastRequest.ForUiSummon,
-    // ForUiGrease and ForUiHoldCharge (LegacyCastQuirkSets.UiSummonPath, UiGreasePath and UiHoldPath), and the held charge's
-    // delivery (UiPath). Each names the issue of what that path skips or does differently today.
+    // The summon, Grease and held-charge paths' own behaviours (batch 11 step 10) were set only by
+    // SpellCastRequest.ForUiSummon, ForUiGrease and ForUiHoldCharge (LegacyCastQuirkSets.UiSummonPath, UiGreasePath and
+    // UiHoldPath), and the held charge's delivery (UiPath); batch 11 steps 13 and 15 removed them all.
 
     // Bit 34 is unused: SummonSkipsBlink (SPL-006) was removed by batch 11 step 13 (raw-distraction-failure-stages).
 
-    /// <summary>
-    /// A summon is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch
-    /// 11 step 15 (raw-counterspell-order-parity) removes the bit.
-    /// </summary>
-    SummonSkipsCounterspell = 1L << 35,
-
-    /// <summary>
-    /// A summon makes no spell component pouch test (PHB p.174 and p.130; SPL-006, SPL-114): the Legality stage's
-    /// component test passes it (Summon Swarm has an M/DF component). Batch 11 step 15 removes the bit.
-    /// </summary>
-    SummonSkipsPouch = 1L << 36,
+    // Bits 35 and 36 are unused: SummonSkipsCounterspell and SummonSkipsPouch (SPL-006) were removed by batch 11 step 15;
+    // a summon meets a readied counterspell and the pouch test like any cast.
 
     // Bit 37 is unused: SummonItemCastCommitsCastAction (SPL-163) was removed by batch 11 step 12; a summon from a
     // scroll or wand charges only the item's action, as every item cast does.
 
     // Bit 38 is unused: GreaseSkipsBlink (SPL-006) was removed by batch 11 step 13 (raw-distraction-failure-stages).
 
-    /// <summary>
-    /// Grease is never offered to a readied counterspell (PHB p.170; SPL-006): the Counterspell stage is skipped. Batch 11
-    /// step 15 removes the bit.
-    /// </summary>
-    GreaseSkipsCounterspell = 1L << 39,
-
-    /// <summary>
-    /// Grease makes no spell component pouch test for its material component (PHB p.237, p.174 and p.130; SPL-006,
-    /// SPL-114): the Legality stage's component test passes it. Batch 11 step 15 removes the bit.
-    /// </summary>
-    GreaseSkipsPouch = 1L << 40,
-
-    /// <summary>
-    /// Grease never ends the caster's invisibility (PHB p.245; SPL-006), even when its area takes in a foe: the
-    /// InvisibilityBreak stage is skipped. Whether greasing an object a foe holds or wears is an attack on the foe is a
-    /// reading the step that removes the bit records (batch 11 step 15, with the Ring of Counterspells reading of
-    /// AreaSkipsRing).
-    /// </summary>
-    GreaseSkipsInvisibilityBreak = 1L << 41,
+    // Bits 39, 40 and 41 are unused: GreaseSkipsCounterspell, GreaseSkipsPouch and GreaseSkipsInvisibilityBreak (SPL-006)
+    // were removed by batch 11 step 15. Grease meets a readied counterspell and the pouch test, and ends its caster's
+    // invisibility when its square takes in a foe or when it greases an object a foe holds or wears (PHB p.245 spares
+    // only actions directed at unattended objects; delegated RAW reading 2026-10-14).
 
     // Bit 42 is unused: GreaseConcentrationCheckedTwice (SPL-152) was removed by batch 11 step 12; Grease runs the
     // casting-while-concentrating step once, as every cast.
@@ -254,47 +207,23 @@ public enum LegacyCastQuirk : long
     // nothing crosses the sphere until the charge is delivered; delegated RAW reading 2026-10-14), and the delivery's
     // boundary test belongs to CMB-092.
 
-    /// <summary>
-    /// Holding a touch charge skips the grapple legality test (CanBeginSpellcastWhileGrappledOrPinned, PHB p.156;
-    /// SPL-146): without the bit the Legality stage runs it. Batch 11 step 15 removes the bit.
-    /// </summary>
-    HoldSkipsGrappleLegality = 1L << 44,
+    // Bit 44 is unused: HoldSkipsGrappleLegality (SPL-146) was removed by batch 11 step 15; holding a charge is casting
+    // the spell (PHB p.141), so a grappled or pinned caster meets the grapple casting rule (PHB p.156) at the hold.
 
     // Bits 45 and 46 are unused: HoldSkipsEntangled and HoldSkipsBlink (SPL-146) were removed by batch 11 step 13
     // (raw-distraction-failure-stages); holding a charge is casting the spell (PHB p.141), so it makes the entangled check
     // and the blinking caster's 20%.
 
-    /// <summary>
-    /// Holding a touch charge makes no spell component pouch test (PHB p.174 and p.130; SPL-146, SPL-114): the Legality
-    /// stage's component test passes it. Batch 11 step 15 removes the bit.
-    /// </summary>
-    HoldSkipsPouch = 1L << 47,
-
-    /// <summary>
-    /// Holding a touch charge is never offered to a readied counterspell (PHB p.170; SPL-146): the Counterspell stage is
-    /// skipped. The charge is the spell already cast (PHB p.141), so it is countered when it is cast, at the hold. Batch
-    /// 11 step 15 removes the bit.
-    /// </summary>
-    HoldSkipsCounterspell = 1L << 48,
-
-    /// <summary>
-    /// Holding a touch charge asks none of the caster's choices (the Resist Energy and Protection from Energy types, the
-    /// Magic Weapon, Keen Edge and Greater Magic Weapon pickers; SPL-146): the Legality stage does not call the decider's
-    /// FillChoices, so the delivery's cast asks them. The choices belong to the casting (PHB p.141: the charge is the spell
-    /// already cast); batch 11 step 15 removes the bit.
-    /// </summary>
-    HoldSkipsChoices = 1L << 49,
+    // Bits 47, 48 and 49 are unused: HoldSkipsPouch, HoldSkipsCounterspell and HoldSkipsChoices (SPL-146) were removed
+    // by batch 11 step 15. A hold makes the pouch test, meets a readied counterspell (the charge is the spell already cast,
+    // PHB p.141, so it is countered at the hold) and asks the caster's choices for the spell (the energy type), which the
+    // held charge keeps for its delivery (delegated RAW reading 2026-10-14).
 
     // Bit 50 is unused: HoldIgnoresConversion (SPL-154) was removed by batch 11 step 14 (raw-resources-caster-level); a
     // hold of a cleric's converted cure or inflict spell spends the sacrificed spell.
 
-    /// <summary>
-    /// Delivering a held touch charge is never offered to a readied counterspell, and while the hold is not either
-    /// (<see cref="HoldSkipsCounterspell"/>) a held charge can never be countered (SPL-146). Delivering is no casting
-    /// (PHB p.141), so the delivery's skip is the rule; the Counterspell stage requires the bit until batch 11 step 15
-    /// counters the charge at the hold and removes both bits. Required for a held-charge delivery.
-    /// </summary>
-    DeliverySkipsCounterspell = 1L << 51,
+    // Bit 51 is unused: DeliverySkipsCounterspell (SPL-146) was removed by batch 11 step 15; delivering a held charge is
+    // no casting (PHB p.141), so the Counterspell stage passes it by rule, and the charge met the counterspell at its hold.
 
     // Bit 52 is unused: LostCastShowsActionMenu (SPL-006) was removed by batch 11 step 13
     // (raw-distraction-failure-stages); a summon or Grease lost to a distraction or a spell failure pauses like any lost
@@ -308,15 +237,14 @@ public enum LegacyCastQuirk : long
     EffectResolveSkipsCombatEndCheck = 1L << 53,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10; trimmed by steps 11 to 15).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
         | LegacyCastQuirk.AlliesForgoEverySave
-        | LegacyCastQuirk.HeldChargeDeliveryIsFree
-        | LegacyCastQuirk.DeliverySkipsCounterspell;
+        | LegacyCastQuirk.HeldChargeDeliveryIsFree;
 
     /// <summary>
     /// Today's NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8):
@@ -330,9 +258,6 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.NpcRefusesArea
         | LegacyCastQuirk.NpcNullMetamagic
         | LegacyCastQuirk.NpcNoComponentCheck
-        | LegacyCastQuirk.NpcNoConcentrationOnCastCheck
-        | LegacyCastQuirk.NpcNoConcentrationTracking
-        | LegacyCastQuirk.NpcInvisibilityBreakBeforeCounterspell
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;
@@ -345,10 +270,7 @@ public static class LegacyCastQuirkSets
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
         (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-                    | LegacyCastQuirk.HeldChargeDeliveryIsFree
-                    | LegacyCastQuirk.DeliverySkipsCounterspell))
-        | LegacyCastQuirk.AreaSkipsRing
-        | LegacyCastQuirk.AreaSkipsPouch
+                    | LegacyCastQuirk.HeldChargeDeliveryIsFree))
         | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
         | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
 
@@ -362,34 +284,26 @@ public static class LegacyCastQuirkSets
 
     /// <summary>
     /// Today's PC summon path (PerformSummonMonsterCast and PerformSummonSwarmCast through the cast core's Summon resolve,
-    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits plus the summon path's own bits (the
-    /// placement range is the cast's caster level's since batch 11 step 14). Tests.Magic.CastCoreStageOrderTests checks
-    /// the list.
+    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits only (the placement range is the cast's
+    /// caster level's since batch 11 step 14; the counterspell and pouch skips went in batch 11 step 15).
+    /// Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiSummonPath =
-        UiEffectPathShared
-        | LegacyCastQuirk.SummonSkipsCounterspell
-        | LegacyCastQuirk.SummonSkipsPouch;
+        UiEffectPathShared;
 
     /// <summary>
     /// Today's PC Grease path (the three Grease casts, now one request through the cast core's Grease resolve, batch 11
-    /// step 10): the shared bits plus the Grease path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// step 10): the shared bits only (the counterspell, pouch and invisibility skips went in batch 11 step 15).
+    /// Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiGreasePath =
-        UiEffectPathShared
-        | LegacyCastQuirk.GreaseSkipsCounterspell
-        | LegacyCastQuirk.GreaseSkipsPouch
-        | LegacyCastQuirk.GreaseSkipsInvisibilityBreak;
+        UiEffectPathShared;
 
     /// <summary>
     /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10;
-    /// formerly HoldPendingMeleeTouchCharge): the shared bits plus the hold path's own. Tests.Magic.CastCoreStageOrderTests
-    /// checks the list.
+    /// formerly HoldPendingMeleeTouchCharge): the shared bits only (the grapple, pouch, counterspell and choice skips went
+    /// in batch 11 step 15). Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiHoldPath =
-        UiEffectPathShared
-        | LegacyCastQuirk.HoldSkipsGrappleLegality
-        | LegacyCastQuirk.HoldSkipsPouch
-        | LegacyCastQuirk.HoldSkipsCounterspell
-        | LegacyCastQuirk.HoldSkipsChoices;
+        UiEffectPathShared;
 }

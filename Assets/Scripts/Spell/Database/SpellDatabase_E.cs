@@ -336,7 +336,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true,
+                    HasDivineFocus = true, // V, S, DF (PHB p.225): no material component
                     IsPlaceholder = false
                 });
 
