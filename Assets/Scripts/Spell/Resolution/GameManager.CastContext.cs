@@ -40,6 +40,10 @@ public partial class GameManager
     /// SPL-016, SPL-017).
     /// </summary>
     internal SpellCastRequest OpenCastRequestFor(CharacterController caster, SpellData spell)
+        => OpenCastFor(caster, spell)?.Request;
+
+    /// <summary>The newest open cast of <paramref name="spell"/> (by SpellId) by <paramref name="caster"/>, or null.</summary>
+    internal CastContext OpenCastFor(CharacterController caster, SpellData spell)
     {
         if (caster == null || spell == null || string.IsNullOrEmpty(spell.SpellId))
             return null;
@@ -48,9 +52,24 @@ public partial class GameManager
             SpellCastRequest req = ctx != null ? ctx.Request : null;
             if (req != null && !ctx.Ended && req.Caster == caster && req.Spell != null
                 && string.Equals(req.Spell.SpellId, spell.SpellId, System.StringComparison.Ordinal))
-                return req;
+                return ctx;
         }
         return null;
+    }
+
+    /// <summary>
+    /// <paramref name="target"/>'s save against <paramref name="spell"/> cast by <paramref name="caster"/>, for a spell
+    /// handler with no cast context in hand (batch 11 step 18, SPL-018): the open cast's CastContext.RollSave, else
+    /// SpellSaveRules.RollSave for the same caster and spell (a later effect of a cast that has ended). Either way the
+    /// target may give up its save (PHB p.177) and the save carries the spell-and-caster bonuses (SaveRules).
+    /// </summary>
+    private SaveResult RollSpellSave(CharacterController caster, CharacterController target, SpellData spell, SaveType save, int dc,
+        string diceContext = null)
+    {
+        CastContext open = OpenCastFor(caster, spell);
+        return open != null
+            ? open.RollSave(target, save, dc, diceContext)
+            : SpellSaveRules.RollSave(caster, target, spell, save, dc, diceContext);
     }
 
     /// <summary>Opens <paramref name="request"/>'s context on top of the cast stack.</summary>

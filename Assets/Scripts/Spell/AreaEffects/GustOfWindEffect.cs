@@ -59,21 +59,23 @@ public class GustOfWindEffect
             string targetName = target.Stats.CharacterName;
             log.AppendLine($"  → {targetName}");
 
+            // The one spell resistance check (SpellSaveRules, batch 11 step 18, SPL-122): d20 + CL + Spell Penetration.
             if (spell != null && spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                int srRoll = DiceRoller.D20();
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                bool overcameSR = srTotal >= target.Stats.SpellResistance;
-                log.AppendLine($"    SR check: d20({srRoll}) + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} {(overcameSR ? "PASS" : "BLOCKED")}");
-                if (!overcameSR)
+                SRResult sr = SpellSaveRules.RollSpellResistance(caster, target, spell, null, casterLevel);
+                string penetration = sr.PenetrationBonus != 0 ? $" + {sr.PenetrationBonus} Spell Penetration" : string.Empty;
+                log.AppendLine($"    SR check: d20({sr.Roll}) + CL {sr.CasterLevel}{penetration} = {sr.Total} vs SR {sr.TargetSR} {(sr.Overcame ? "PASS" : "BLOCKED")}");
+                if (!sr.Overcame)
                     continue;
             }
 
-            int saveRoll = DiceRoller.D20();
-            int fortMod = SaveRules.Modifier(target.Stats, SavingThrowType.Fortitude, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
-            int saveTotal = saveRoll + fortMod;
-            bool saveSucceeded = saveTotal >= saveDC;
-            log.AppendLine($"    Fortitude save: d20({saveRoll}) + {fortMod} = {saveTotal} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
+            // The spell save (SpellSaveRules.RollSave): the voluntary save (PHB p.177) and the spell-and-caster bonuses (SPL-018).
+            SaveResult save = SpellSaveRules.RollSave(caster, target, spell, SaveType.Fortitude, saveDC);
+            bool saveSucceeded = save.Saved;
+            if (save.Forgone)
+                log.AppendLine($"    Gives up its Fortitude save (PHB p.177).");
+            else
+                log.AppendLine($"    Fortitude save: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
 
             if (saveSucceeded)
             {

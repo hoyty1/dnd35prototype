@@ -59,7 +59,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Grapple | Mostly shared | CMB-103, CMB-101, CMB-097 |
 | Monster specials | NPC only | CRE-039, CRE-040, AI-040, AI-041 |
 | Class abilities (rage, turn undead, aid another; bardic music shared since 2026-10-15, CHR-026) | PC only | AI-054, CHR-069 |
-| Saves | Shared modifier (`SaveRules`, CHR-018, 2026-10-09); spell-and-caster bonuses and the Luck reroll still depend on the resolver | SPL-018, SPL-090 |
+| Saves | Shared modifier (`SaveRules`, CHR-018, 2026-10-09), with the spell-and-caster bonuses on the saves of `SpellCaster.Cast` and the spell handlers and one voluntary-save rule asked of the target's own decider (batch 11 step 18, 2026-10-15); the Luck reroll, the context-free item and ability saves and the spell saves that roll their own d20 (SPL-018) still depend on the resolver | SPL-018, SPL-090 |
 | Conditions: application | Shared | - |
 | Conditions: compulsion behaviour | Divergent | CMB-100 |
 | Wards and barriers (Sanctuary, Resilient Sphere) | Divergent | CMB-093, CMB-092, AI-005 |
@@ -103,7 +103,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | AI-055 | TWF, off-hand (flurry shared since CHR-003, 2026-10-14) | No NPC executor | PC | Med | NPCTurns.cs:1213, 1286 |
 | SPL-091 | Summons, escapes | NPC summon and escape casts spend the slot and do nothing; the AI skips Dimension Door and Imbue with Spell Ability, whose handlers need a caster choice it cannot give yet (`AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive`; a selection exclusion, not a rule fork). One rule fork remains inside the shared Dimension Door handler: `FindDimensionDoorDestination` picks an escape square for a player-controlled caster and a square next to the weakest foe otherwise (foes by `TeamUtility.IsEnemy` since step 6's review); RAW the caster picks (PHB p.221), so the destination belongs on the cast request | PC | Med | `TryNPCPerformSpellCast` (_Core/GameManager.NPCTurns.cs); `AIService.SelectSpell` |
 | AI-009, AI-054 | Items, class abilities, pick up | PC-only executors | PC | Med | GameManager.cs:4373-4379, 9240-9313 |
-| SPL-018 | Saves | The character's bonuses are shared (`SaveRules`, CHR-018); the spell-and-caster bonuses (Charm Person, Hideous Laughter, the ward, Lullaby) only on the SpellCaster.Cast path | depends | Med | SpellCaster.cs (GetSaveModifier); SpellSaveResolver.cs (RollSave) |
+| SPL-018 | Saves | The character's and the spell-and-caster bonuses are shared (`SaveRules`; batch 11 step 18 for the spell handlers' saves); the Luck domain reroll only through `SavingThrowResolver`, and the item and creature-ability saves pass no context | depends | Low | SavingThrowResolver.cs (ResolveSave); ConditionService.cs |
 | CORE-015 | Death | Post-victory rest revives dead PCs | PC | Med | GameManager.cs:1018 |
 | ITM-010 | Armor speed | Baked into 9 NPC entries; never applied to PCs | PC | Med | NPCDatabase_P.cs:207 |
 | SPL-113 (new) | Weapon buff spells | Fizzle on the NPC path (the stale-pick leak was fixed 2026-10-15, batch 11 step 4: the pick is per cast) | PC | Low | AiCastDecider.cs (no weapon); GameManager.cs `TryApplyMagicWeaponToPendingItem` |

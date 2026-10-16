@@ -156,13 +156,13 @@ public partial class GameManager
                 continue;
             }
 
-            // Will save
-            int willRoll = DiceRoller.D20();
-            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
-            int willTotal = willRoll + willMod;
-            bool savePassed = willTotal >= saveDc;
+            // Will save: the spell save (RollSpellSave: the voluntary save, PHB p.177, and the spell-and-caster bonuses, SPL-018)
+            SaveResult will = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
+            bool savePassed = will.Saved;
 
-            sb.AppendLine($"  {target.Stats.CharacterName} ({targetHD} HD): Will d20({willRoll})+{willMod}={willTotal} vs DC {saveDc} → {(savePassed ? "SAVED" : "FAILED")}");
+            sb.AppendLine(will.Forgone
+                ? $"  {target.Stats.CharacterName} ({targetHD} HD): gives up its Will save (PHB p.177) → FAILED"
+                : $"  {target.Stats.CharacterName} ({targetHD} HD): Will d20({will.Roll})+{will.Modifier}={will.Total} vs DC {saveDc} → {(savePassed ? "SAVED" : "FAILED")}");
 
             if (!savePassed)
             {
@@ -238,13 +238,13 @@ public partial class GameManager
         {
             if (target == null || target.Stats == null || target.Stats.IsDead) continue;
 
-            // Will save
-            int willRoll = DiceRoller.D20();
-            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
-            int willTotal = willRoll + willMod;
-            bool savePassed = willTotal >= saveDc;
+            // Will save: the spell save (RollSpellSave: the voluntary save, PHB p.177, and the spell-and-caster bonuses, SPL-018)
+            SaveResult will = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
+            bool savePassed = will.Saved;
 
-            sb.AppendLine($"  {target.Stats.CharacterName}: Will d20({willRoll})+{willMod}={willTotal} vs DC {saveDc} → {(savePassed ? "SAVED" : "FAILED")}");
+            sb.AppendLine(will.Forgone
+                ? $"  {target.Stats.CharacterName}: gives up its Will save (PHB p.177) → FAILED"
+                : $"  {target.Stats.CharacterName}: Will d20({will.Roll})+{will.Modifier}={will.Total} vs DC {saveDc} → {(savePassed ? "SAVED" : "FAILED")}");
 
             if (!savePassed)
             {

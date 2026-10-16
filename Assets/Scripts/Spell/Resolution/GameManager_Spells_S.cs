@@ -178,7 +178,7 @@ public partial class GameManager
         // Will save
         if (spell.AllowsSavingThrow)
         {
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+            var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Will Save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
             if (saveResult.Saved)
@@ -307,7 +307,7 @@ public partial class GameManager
                     damage += DiceRoller.D6();
 
                 // Fortitude save
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDc);
                 bool savePassed = saveResult.Saved;
 
                 bool deafened = false;
@@ -461,7 +461,8 @@ public partial class GameManager
     /// <summary>
     /// Sound Burst's stun (PHB p.281): the cast's one Fortitude save (rolled by SpellCaster.Cast) decides it; a failed
     /// save stuns the target for 1 round unless it cannot hear: a deafened creature (delegated RAW reading 2026-10-14).
-    /// A forgone save (LegacyCastQuirk.AlliesForgoEverySave, SPL-149) counts as failed. Registered with gate Success, so a
+    /// A forgone save counts as failed, but no target gives up its save against this damage spell (PHB p.177; batch 11
+    /// step 18, SPL-149), so an ally or the caster rolls it too. Registered with gate Success, so a
     /// failed cast (spell resistance, a deafened caster's verbal failure, a Silence on the target, PHB p.279) stuns no
     /// one; returns false so the cast goes on to the buff step, as before.
     /// </summary>

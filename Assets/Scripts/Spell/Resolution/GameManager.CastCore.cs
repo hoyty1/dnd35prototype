@@ -1044,9 +1044,9 @@ public partial class GameManager
         BreakInvisibilityOnHostileSpellCast(caster, spell, target, null);
         // A willing friendly target of a melee touch spell needs no touch attack.
         ctx.SkipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
-        ctx.TargetForgoesSave = ShouldForceTargetToAcceptSave(caster, target, spell);
-        if (ctx.TargetForgoesSave)
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.AlliesForgoEverySave);
+        // The target's own decider says whether it gives up its save (PHB p.177; batch 11 step 18, SPL-149): only against
+        // a harmless or beneficial spell of its own side.
+        ctx.ForgoesSingleTargetSave = ctx.TargetForgoesSave(target);
 
         CastStageRingCounterspell(ctx);
     }
@@ -1194,7 +1194,7 @@ public partial class GameManager
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
 
-        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.TargetForgoesSave, caster, target, ctx.GlobeAgainstTouch);
+        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.ForgoesSingleTargetSave, caster, target, ctx.GlobeAgainstTouch);
         ctx.Result = result;
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
         if (result.BlockedByGlobe)

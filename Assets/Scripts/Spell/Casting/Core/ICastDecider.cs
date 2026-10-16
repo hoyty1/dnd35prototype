@@ -46,7 +46,8 @@ public enum CastProvocationAnswer
 /// The only difference between a PC cast and an NPC cast (batch 11, cast_core_batch11.md; PC_NPC_PARITY): who makes the
 /// caster's choices. The UI decider asks the player through the dialogs and the AoO prompt and can suspend the cast;
 /// the AI decider answers inline. The cast core (GameManager.ExecuteCast) asks the decider at fixed points; the rules
-/// stay in the core's stages. Still to come: ForgoSave and ChooseMirrorImageSwap (later steps).
+/// stay in the core's stages. A question put to another creature than the caster (a target giving up its save, since
+/// batch 11 step 18) goes to that creature's own decider (CastDeciders.For). Still to come: ChooseMirrorImageSwap.
 /// </summary>
 public interface ICastDecider
 {
@@ -71,6 +72,17 @@ public interface ICastDecider
     /// at once or after the player answered.
     /// </summary>
     void ChooseProvocation(GameManager gm, CastContext ctx, Action<CastProvocationAnswer> answer);
+
+    /// <summary>
+    /// Whether <paramref name="self"/>, the target of <paramref name="spell"/> cast by <paramref name="caster"/>, gives up
+    /// its saving throw (PHB p.177: a creature may choose to give up its save and take the spell's effect). Asked of the
+    /// target's own decider (CastDeciders.For) before each of its saves against a cast, on the single-target path, the
+    /// generic area loop and every spell-handler save that goes through SpellSaveRules.RollSave (CastContext.RollSave,
+    /// GameManager.RollSpellSave; batch 11 step 18). The saves that roll their own d20 (PersistentAreaEffect, the Grease
+    /// area and greased object, Wall of Ice) and Phantasmal Killer's Fortitude save do not ask it yet (SPL-018). Both deciders answer with
+    /// SpellSaveRules.IsHarmlessOrBeneficialTo for now: yes only against a harmless or beneficial spell of its own side.
+    /// </summary>
+    bool ForgoSave(CharacterController self, CharacterController caster, SpellData spell);
 
     /// <summary>
     /// A resolved cast is about to run its combat-end check (CombatEnd stage, after the result log went out): the

@@ -35,11 +35,25 @@ public sealed class SaveContext
     public readonly bool IsSonicOrLanguageDependent;
     /// <summary>What the save is against, for logs (may be null).</summary>
     public readonly string Label;
+    /// <summary>
+    /// The spell the save is against, or null (read only: a database template may sit here). With it,
+    /// <see cref="SaveRules.SituationalBonus(CharacterStats, SavingThrowType, SaveContext, out string)"/> adds the bonuses
+    /// that depend on the spell (Hideous Laughter, Charm Person, Lullaby; SPL-018).
+    /// </summary>
+    public readonly SpellData SourceSpell;
+    /// <summary>The creature whose spell or effect it is (the caster), or null.</summary>
+    public readonly CharacterController SourceCaster;
+    /// <summary>The caster's stats (its alignment for a protection ward, its creature type), or null.</summary>
+    public readonly CharacterStats SourceCasterStats;
 
     public SaveContext(bool spell = false, bool enchantment = false, bool illusion = false, bool fear = false,
         bool poison = false, bool spiderPoison = false, bool trap = false, bool feySpellLike = false, string label = null,
-        bool charm = false, bool sonicOrLanguageDependent = false)
+        bool charm = false, bool sonicOrLanguageDependent = false, SpellData sourceSpell = null,
+        CharacterController sourceCaster = null, CharacterStats sourceCasterStats = null)
     {
+        SourceSpell = sourceSpell;
+        SourceCasterStats = sourceCasterStats ?? (sourceCaster != null ? sourceCaster.Stats : null);
+        SourceCaster = sourceCaster ?? (SourceCasterStats != null ? SourceCasterStats.OwnerCharacter : null);
         IsSonicOrLanguageDependent = sonicOrLanguageDependent;
         IsSpell = spell;
         IsEnchantment = enchantment;
@@ -74,15 +88,30 @@ public sealed class SaveContext
     /// A save against <paramref name="spell"/>: a spell, plus its school (enchantment, illusion) and whether it is a
     /// fear effect. When the caster is a fey without a spellcasting class, its spells are its spell-like abilities
     /// (MM fey such as the dryad, pixie and satyr), which Resist Nature's Lure covers. A null spell gives a plain
-    /// spell context.
+    /// spell context. The context carries the spell and its caster (the caster's controller is
+    /// <see cref="CharacterStats.OwnerCharacter"/>), so the spell-and-caster bonuses apply (SPL-018).
     /// </summary>
     public static SaveContext ForSpell(SpellData spell, CharacterStats caster = null)
+        => ForSpell(spell, caster, caster != null ? caster.OwnerCharacter : null);
+
+    /// <summary>A save against <paramref name="spell"/> cast by <paramref name="caster"/> (see <see cref="ForSpell(SpellData, CharacterStats)"/>).</summary>
+    public static SaveContext ForSpellCast(SpellData spell, CharacterController caster)
+        => ForSpell(spell, caster != null ? caster.Stats : null, caster);
+
+    /// <summary>
+    /// A save against <paramref name="spell"/> whose caster has the stats <paramref name="casterStats"/> and the controller
+    /// <paramref name="caster"/> (either may be null; see <see cref="ForSpell(SpellData, CharacterStats)"/>).
+    /// </summary>
+    public static SaveContext ForSpell(SpellData spell, CharacterStats casterStats, CharacterController caster)
     {
-        bool feySpellLike = caster != null
-            && string.Equals((caster.CreatureType ?? string.Empty).Trim(), "Fey", System.StringComparison.OrdinalIgnoreCase)
-            && !caster.IsSpellcaster;
+        if (casterStats == null && caster != null)
+            casterStats = caster.Stats;
+        bool feySpellLike = casterStats != null
+            && string.Equals((casterStats.CreatureType ?? string.Empty).Trim(), "Fey", System.StringComparison.OrdinalIgnoreCase)
+            && !casterStats.IsSpellcaster;
         if (spell == null)
-            return new SaveContext(spell: true, feySpellLike: feySpellLike, label: "spell");
+            return new SaveContext(spell: true, feySpellLike: feySpellLike, label: "spell",
+                sourceCaster: caster, sourceCasterStats: casterStats);
 
         string school = (spell.School ?? string.Empty).Trim();
         // The school may carry a subschool or descriptor ("Illusion (Glamer)", "Evocation [Fire]").
@@ -92,7 +121,8 @@ public sealed class SaveContext
         bool poison = string.Equals(spell.SpellId, DND35e.Identifiers.SpellNames.POISON, System.StringComparison.Ordinal);
         bool sonicOrLanguage = spell.HasDescriptor(SpellDescriptor.Sonic) || spell.HasDescriptor(SpellDescriptor.LanguageDependent);
         return new SaveContext(spell: true, enchantment: enchantment, illusion: illusion, fear: fear, poison: poison,
-            feySpellLike: feySpellLike, label: spell.Name, charm: IsCharmSpell(spell.SpellId), sonicOrLanguageDependent: sonicOrLanguage);
+            feySpellLike: feySpellLike, label: spell.Name, charm: IsCharmSpell(spell.SpellId), sonicOrLanguageDependent: sonicOrLanguage,
+            sourceSpell: spell, sourceCaster: caster, sourceCasterStats: casterStats);
     }
 
     /// <summary>
@@ -118,9 +148,10 @@ public sealed class SaveContext
 /// The one saving throw modifier (CHR-018, PHB p.177-178): <see cref="CharacterStats.GetSaveTotal"/>, which holds every
 /// bonus that applies to all saves (ability, base save, feats, Divine Grace, racial, resistance, competence, luck,
 /// morale, familiar, rage, conditions), plus the bonuses that apply only against some effects, chosen by a
-/// <see cref="SaveContext"/>. Every save roll site uses it, on the PC and the NPC side alike (PC_NPC_PARITY); the
-/// spell-specific situational bonuses of SpellCaster.GetSaveModifier (Charm Person, Hideous Laughter, the alignment
-/// ward, Lullaby) are added there on top (SPL-018).
+/// <see cref="SaveContext"/>. Every save roll site uses it, on the PC and the NPC side alike (PC_NPC_PARITY); a context
+/// that carries its spell and caster also gives the bonuses that depend on them (Charm Person, Hideous Laughter, the
+/// alignment ward, Lullaby; batch 11 step 18, SPL-018), so SpellCaster.Cast and the spell handlers' saves get the same
+/// ones.
 /// Stacking (PHB p.171-172): bonuses of one type do not stack except dodge, circumstance and untyped ones from different
 /// sources (<see cref="BonusStacking"/>); a situational bonus of a type the creature already has on that save (morale,
 /// luck) counts only for the part above it.
@@ -209,13 +240,40 @@ public static class SaveRules
     /// <item>Trap sense (barbarian 3 and rogue 3, PHB p.26, p.51): on Reflex saves against traps; the classes' bonuses stack.</item>
     /// <item>Cloak of Arachnida (DMG p.253): +2 luck bonus on Fortitude saves against spider poison, beyond the luck bonus
     /// the creature already has on Fortitude saves (luck bonuses do not stack, PHB glossary p.310).</item>
+    /// <item>With the context's caster and spell (<see cref="SpellAndCasterBonus"/>, SPL-018): a protection ward's
+    /// resistance bonus against the caster's alignment, Charm Person's and Charm Monster's +5 when threatened,
+    /// Hideous Laughter's +4 for a different creature type and Lullaby's -2 against sleep effects.</item>
     /// </list>
     /// </summary>
     public static int SituationalBonus(CharacterStats stats, SavingThrowType save, SaveContext context, out string sources)
     {
+        int total = SituationalBonus(stats, stats != null ? stats.OwnerCharacter : null, save, context, out sources, out int ward,
+            out string wardSource);
+        if (ward > 0)
+        {
+            var parts = new System.Text.StringBuilder(sources);
+            AddText(parts, wardSource + " +" + ward);
+            sources = parts.ToString();
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// <see cref="SituationalBonus(CharacterStats, SavingThrowType, SaveContext, out string)"/> for the saver
+    /// <paramref name="saver"/> (null: <see cref="CharacterStats.OwnerCharacter"/>), with the protection ward's part given
+    /// apart (<paramref name="alignmentWard"/>, included in the total, left out of <paramref name="sources"/>) for the
+    /// spell result's log (SpellCaster.Cast).
+    /// </summary>
+    public static int SituationalBonus(CharacterStats stats, CharacterController saver, SavingThrowType save, SaveContext context,
+        out string sources, out int alignmentWard, out string alignmentWardSource)
+    {
         sources = string.Empty;
+        alignmentWard = 0;
+        alignmentWardSource = string.Empty;
         if (stats == null || context == null || ReferenceEquals(context, SaveContext.None))
             return 0;
+        if (saver == null)
+            saver = stats.OwnerCharacter;
 
         int total = 0;
         var parts = new System.Text.StringBuilder();
@@ -275,8 +333,92 @@ public static class SaveRules
             Add(ref total, parts, Mathf.Max(0, stats.WondrousLuckFortSaveBonus - stats.BestSaveBonusOfType(save, BonusType.Luck)),
                 "luck vs spider poison");
 
+        total += SpellAndCasterBonus(stats, saver, save, context, parts, out alignmentWard, out alignmentWardSource);
+
         sources = parts.ToString();
         return total;
+    }
+
+    /// <summary>
+    /// The save bonuses that depend on the spell and its caster (batch 11 step 18, SPL-018; formerly only in
+    /// SpellCaster.GetSaveModifier, so the spell handlers' own saves lacked them). Returns their total, the protection
+    /// ward included; the ward's part is also given in <paramref name="alignmentWard"/> and is not named in
+    /// <paramref name="parts"/>.
+    /// <list type="bullet">
+    /// <item>Protection from Evil, Good, Chaos or Law and the magic circles (PHB p.266, p.250): +2 resistance bonus on
+    /// saves against effects created by a creature of the warded alignment, beyond the resistance bonus the saver
+    /// already has (PHB p.171; AlignmentProtectionRules.ResistanceSaveIncrease). Any save against the caster's effect.</item>
+    /// <item>Charm Person and Charm Monster (PHB p.209; Charm Monster works as Charm Person does): +5 on the Will save
+    /// when the caster or its allies threaten or are attacking the target (SpellCaster.IsBeingThreatenedBy).</item>
+    /// <item>Hideous Laughter (PHB p.292): +4 on the save for a creature whose type differs from the caster's.</item>
+    /// <item>Lullaby (PHB p.249): -2 on Will saves against sleep effects while it lasts
+    /// (SpellCaster.LullabySleepSavePenalty).</item>
+    /// </list>
+    /// </summary>
+    private static int SpellAndCasterBonus(CharacterStats stats, CharacterController saver, SavingThrowType save, SaveContext context,
+        System.Text.StringBuilder parts, out int alignmentWard, out string alignmentWardSource)
+    {
+        alignmentWard = 0;
+        alignmentWardSource = string.Empty;
+        int total = 0;
+        CharacterStats casterStats = context.SourceCasterStats;
+        SpellData spell = context.SourceSpell;
+
+        if (casterStats != null && saver != null)
+        {
+            AlignmentProtectionBenefits ward = AlignmentProtectionRules.GetBenefitsAgainst(saver, casterStats.CharacterAlignment);
+            if (ward.HasMatch)
+            {
+                alignmentWard = AlignmentProtectionRules.ResistanceSaveIncrease(ward, stats);
+                alignmentWardSource = string.IsNullOrEmpty(ward.SourceSpellName) ? "Protection from Alignment" : ward.SourceSpellName;
+                total += alignmentWard;
+            }
+        }
+
+        if (spell == null)
+            return total;
+
+        bool isWill = save == SavingThrowType.Will;
+        if (isWill
+            && IsCharmPersonFamily(spell.SpellId)
+            && SpellCaster.IsBeingThreatenedBy(saver, context.SourceCaster))
+        {
+            total += 5;
+            AddText(parts, "Threatened by the caster's side (+5)");
+        }
+
+        if (string.Equals(spell.SpellId, DND35e.Identifiers.SpellNames.HIDEOUS_LAUGHTER, System.StringComparison.Ordinal)
+            && casterStats != null
+            && !string.Equals(casterStats.CreatureType ?? string.Empty, stats.CreatureType ?? string.Empty,
+                System.StringComparison.OrdinalIgnoreCase))
+        {
+            total += 4;
+            AddText(parts, "Different creature type (+4)");
+        }
+
+        int lullaby = isWill ? SpellCaster.LullabySleepSavePenalty(saver, spell) : 0;
+        if (lullaby != 0)
+        {
+            total += lullaby;
+            AddText(parts, "Lullaby (" + lullaby + " vs sleep)");
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Charm Person and Charm Monster, whose Will save gets +5 when the caster's side threatens or attacks the subject
+    /// (PHB p.209: Charm Monster works as Charm Person does).
+    /// </summary>
+    private static bool IsCharmPersonFamily(string spellId)
+        => string.Equals(spellId, DND35e.Identifiers.SpellNames.CHARM_PERSON, System.StringComparison.Ordinal)
+           || string.Equals(spellId, DND35e.Identifiers.SpellNames.CHARM_MONSTER, System.StringComparison.Ordinal);
+
+    private static void AddText(System.Text.StringBuilder parts, string text)
+    {
+        if (parts.Length > 0)
+            parts.Append(", ");
+        parts.Append(text);
     }
 
     /// <summary>

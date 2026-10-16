@@ -59,6 +59,12 @@ public struct SaveResult
     /// <summary>True if Total >= DC.</summary>
     public bool Saved;
 
+    /// <summary>
+    /// True when the target gave up its save (PHB p.177; SpellSaveRules.TargetForgoesSave): no die was rolled, and the
+    /// save counts as failed.
+    /// </summary>
+    public bool Forgone;
+
     /// <summary>Short display name for the save type ("Fort", "Reflex", "Will").</summary>
     public string TypeName => Type switch
     {
@@ -80,6 +86,11 @@ public struct SaveResult
         if (sb == null) return;
         string success = successText ?? "SAVED";
         string fail = failText ?? "FAILED";
+        if (Forgone)
+        {
+            sb.AppendLine($"  {TypeName}: save forgone (willing) vs DC {DC} → {fail}");
+            return;
+        }
         sb.AppendLine($"  {TypeName}: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? success : fail)}");
     }
 
@@ -90,6 +101,11 @@ public struct SaveResult
     public void AppendHalfDamageLog(StringBuilder sb)
     {
         if (sb == null) return;
+        if (Forgone)
+        {
+            sb.AppendLine($"  {TypeName} save: forgone (willing) vs DC {DC} → FAILED (full)");
+            return;
+        }
         sb.AppendLine($"  {TypeName} save: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? "SAVED (half)" : "FAILED (full)")}");
     }
 }
@@ -191,11 +207,15 @@ public static class SpellSaveResolver
     /// <param name="dc">The spell DC to meet or exceed.</param>
     /// <param name="context">What the save is against (usually SaveContext.ForSpell(spell, caster)); null gives only
     /// the bonuses that apply to every save.</param>
+    /// <param name="diceContext">The d20's label (DiceService), or null; the label never changes the roll.</param>
+    /// <param name="extraModifier">A modifier of this one effect that no SaveContext describes (Hypnotism's combat
+    /// and single-target terms, PHB p.242), added to the save modifier.</param>
     /// <returns>A SaveResult with all roll details.</returns>
-    public static SaveResult RollSave(CharacterController target, SaveType type, int dc, SaveContext context = null)
+    public static SaveResult RollSave(CharacterController target, SaveType type, int dc, SaveContext context = null,
+        string diceContext = null, int extraModifier = 0)
     {
-        int roll = DiceRoller.D20();
-        int modifier = SaveRules.Modifier(target != null ? target.Stats : null, type, context);
+        int roll = DiceService.D20(diceContext);
+        int modifier = SaveRules.Modifier(target != null ? target.Stats : null, type, context) + extraModifier;
         // A countersong's Perform result replaces the save against a sonic or language-dependent attack when higher (PHB p.29).
         int total = BardicMusicRules.ApplyCountersong(target, roll + modifier, context);
 
@@ -215,7 +235,7 @@ public static class SpellSaveResolver
     /// </summary>
     public static SaveResult RollSave(CharacterStats stats, SaveType type, int dc, SaveContext context = null)
     {
-        int roll = DiceRoller.D20();
+        int roll = DiceService.D20();
         int modifier = SaveRules.Modifier(stats, type, context);
         int total = BardicMusicRules.ApplyCountersong(stats != null ? stats.OwnerCharacter : null, roll + modifier, context);
 
@@ -241,27 +261,36 @@ public static class SpellSaveResolver
     /// <param name="caster">The spellcaster.</param>
     /// <param name="target">The target with potential SR.</param>
     /// <param name="casterLevel">The effective caster level for this spell.</param>
+    /// <param name="diceContext">The d20's label (DiceService), or null; the label never changes the roll.</param>
     /// <returns>An SRResult with all details. Check Skipped or Overcame.</returns>
-    public static SRResult RollSpellResistance(CharacterController caster, CharacterController target, int casterLevel)
+    public static SRResult RollSpellResistance(CharacterController caster, CharacterController target, int casterLevel,
+        string diceContext = null)
     {
-        if (target == null || target.Stats == null || target.Stats.SpellResistance <= 0)
-        {
+        int targetSR = target != null && target.Stats != null ? target.Stats.SpellResistance : 0;
+        return RollSpellResistance(casterLevel, FeatManager.GetSpellPenetrationBonus(caster?.Stats), targetSR, diceContext);
+    }
+
+    /// <summary>
+    /// The one spell resistance check (PHB p.177; batch 11 step 18, SPL-122): the caster level check d20 +
+    /// <paramref name="casterLevel"/> + <paramref name="penetrationBonus"/> (Spell Penetration and Greater Spell
+    /// Penetration, PHB p.100, p.94) against <paramref name="spellResistance"/>. One d20, under
+    /// <paramref name="diceContext"/>; a target with no SR is skipped with no roll.
+    /// </summary>
+    public static SRResult RollSpellResistance(int casterLevel, int penetrationBonus, int spellResistance, string diceContext = null)
+    {
+        if (spellResistance <= 0)
             return new SRResult { Skipped = true, Overcame = true };
-        }
 
-        int roll = DiceRoller.D20();
-        int penBonus = FeatManager.GetSpellPenetrationBonus(caster?.Stats);
-        int total = roll + casterLevel + penBonus;
-        int targetSR = target.Stats.SpellResistance;
-
+        int roll = DiceService.D20(diceContext);
+        int total = roll + casterLevel + penetrationBonus;
         return new SRResult
         {
             Roll = roll,
             CasterLevel = casterLevel,
-            PenetrationBonus = penBonus,
+            PenetrationBonus = penetrationBonus,
             Total = total,
-            TargetSR = targetSR,
-            Overcame = total >= targetSR,
+            TargetSR = spellResistance,
+            Overcame = total >= spellResistance,
             Skipped = false
         };
     }

@@ -1241,47 +1241,6 @@ public partial class GameManager
         }
     }
 
-    private bool ShouldForceTargetToAcceptSave(CharacterController caster, CharacterController target, SpellData spell)
-    {
-        if (caster == null || target == null || spell == null) return false;
-
-        bool isAlly = target == caster || TeamUtility.IsAlly(caster, target);
-
-        // --- VOLUNTARY SAVE FAILURE (D&D 3.5e PHB p.177) ---
-        // A willing creature can voluntarily forgo a saving throw and accept a spell's result.
-        // This applies to ALL spells cast on allies, not just specific "harmless" ones.
-        //
-        // EXCEPTION: Compelled or controlled creatures (e.g. under Charm or Confusion)
-        // cannot voluntarily choose to fail a save, because their will is compromised.
-        // They must roll saves normally even against allied casters.
-        if (isAlly)
-        {
-            // Check if the target is under a compulsion/control effect that prevents voluntary save failure.
-            bool isCompelled = target.HasCondition(CombatConditionType.Charmed)
-                            || target.HasCondition(CombatConditionType.Confused);
-
-            if (isCompelled)
-            {
-                // Compelled allies cannot voluntarily fail saves — they roll normally.
-                // BUFF AUTO-SUCCESS: Even compelled allies auto-fail saves for buff spells,
-                // since buff spells are beneficial and the compulsion doesn't make them resist help.
-                // (Task 2: EffectType.Buff on ally = always skip save)
-                if (spell.EffectType == SpellEffectType.Buff)
-                {
-                    return true; // Buff on ally always auto-accepts, even if compelled
-                }
-                return false; // Non-buff on compelled ally: roll save normally
-            }
-
-            // Willing (non-compelled) ally: voluntarily fails the save for ANY spell.
-            // This covers both buff spells (Task 2) and the general voluntary failure rule (Task 3).
-            return true;
-        }
-
-        // Enemies always roll saves normally — no change to existing enemy save mechanics.
-        return false;
-    }
-
     private bool HasActiveShieldSpell(CharacterController target)
     {
         if (target == null)
@@ -2657,8 +2616,9 @@ public partial class GameManager
                 // For damage spells, resolve with save and damage
                 else if (_pendingSpell.EffectType == SpellEffectType.Damage)
                 {
-                    // VOLUNTARY SAVE FAILURE: AoE damage spells also respect voluntary save failure for allies.
-                    bool aoeForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                    // The target's own decider says whether it gives up its save (PHB p.177; batch 11 step 18, SPL-149):
+                    // never against a damage spell, so an ally in its own side's Burning Hands rolls its Reflex save.
+                    bool aoeForceFailSave = ctx.TargetForgoesSave(target);
                     SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
                     if (ScenarioHooks.CastStage != null)
                         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
@@ -2695,8 +2655,9 @@ public partial class GameManager
                 // For healing spells
                 else if (_pendingSpell.EffectType == SpellEffectType.Healing)
                 {
-                    // VOLUNTARY SAVE FAILURE: AoE healing spells also respect voluntary save failure for allies.
-                    bool aoeHealForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                    // A living creature of the caster's side gives up its save against a healing spell (PHB p.177); an
+                    // undead one does not (SpellSaveRules.IsHarmlessOrBeneficialTo; batch 11 step 18).
+                    bool aoeHealForceFailSave = ctx.TargetForgoesSave(target);
                     SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
                     if (ScenarioHooks.CastStage != null)
                         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
@@ -2719,13 +2680,20 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// An area handler's spell resistance line: "d20 R + CL C = T vs SR S", with " + P Spell Penetration" after the caster
+    /// level when the caster has the feat (the total always included it).
+    /// </summary>
+    private static string FormatAreaSpellResistanceCheck(SRResult sr)
+        => $"d20 {sr.Roll} + CL {sr.CasterLevel}{(sr.PenetrationBonus > 0 ? $" + {sr.PenetrationBonus} Spell Penetration" : "")} = {sr.Total} vs SR {sr.TargetSR}";
+
+    /// <summary>
     /// Resolve Hypnotism (PHB p.242) over the area's creatures.
     /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
     /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private string ResolveHypnotismSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveHypnotismSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
@@ -2807,22 +2775,20 @@ public partial class GameManager
 
             remainingPool -= targetHd;
 
-            int srTotal = 0;
-            int srRoll = 0;
-            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018).
+            if (_pendingSpell.SpellResistanceApplies)
             {
-                srRoll = DiceService.D20("Hypnotism SR check");
-                srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < target.Stats.SpellResistance)
+                SRResult sr = ctx.RollSpellResistance(target, "Hypnotism SR check");
+                if (!sr.Overcame)
                 {
-                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect ({FormatAreaSpellResistanceCheck(sr)}).");
                     continue;
                 }
             }
 
-            int saveRoll = DiceService.D20("Hypnotism Will save");
-            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + saveContextModifier; // CHR-018
-            bool saved = saveTotal >= saveDc;
+            SaveResult save = ctx.RollSave(target, SaveType.Will, saveDc, "Hypnotism Will save", saveContextModifier);
+            int saveTotal = save.Total;
+            bool saved = save.Saved;
             if (saved)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -2882,9 +2848,9 @@ public partial class GameManager
     /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
     /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private string ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveSleepSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
@@ -2943,20 +2909,21 @@ public partial class GameManager
 
             remainingPool -= targetHd;
 
-            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018); Lullaby's -2 against
+            // sleep effects (PHB p.249) is in the save's spell context.
+            if (_pendingSpell.SpellResistanceApplies)
             {
-                int srRoll = DiceService.D20("Sleep SR check");
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < target.Stats.SpellResistance)
+                SRResult sr = ctx.RollSpellResistance(target, "Sleep SR check");
+                if (!sr.Overcame)
                 {
-                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect ({FormatAreaSpellResistanceCheck(sr)}).");
                     continue;
                 }
             }
 
-            int saveRoll = DiceService.D20("Sleep Will save");
-            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 (PHB p.249); CHR-018
-            if (saveTotal >= saveDc)
+            SaveResult save = ctx.RollSave(target, SaveType.Will, saveDc, "Sleep Will save");
+            int saveTotal = save.Total;
+            if (save.Saved)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
                 continue;
@@ -2982,9 +2949,9 @@ public partial class GameManager
     /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
     /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private string ResolveDeepSlumberSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveDeepSlumberSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
@@ -3041,22 +3008,21 @@ public partial class GameManager
 
             remainingPool -= targetHd;
 
-            // Spell Resistance check
-            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018); Lullaby's -2 against
+            // sleep effects (PHB p.249) is in the save's spell context. The dice keep their old labels.
+            if (_pendingSpell.SpellResistanceApplies)
             {
-                int srRoll = DiceService.D20("Color Spray SR check");
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < target.Stats.SpellResistance)
+                SRResult sr = ctx.RollSpellResistance(target, "Color Spray SR check");
+                if (!sr.Overcame)
                 {
-                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect ({FormatAreaSpellResistanceCheck(sr)}).");
                     continue;
                 }
             }
 
-            // Will save
-            int saveRoll = DiceService.D20("Color Spray Will save");
-            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 vs Deep Slumber (PHB p.249); CHR-018
-            if (saveTotal >= saveDc)
+            SaveResult save = ctx.RollSave(target, SaveType.Will, saveDc, "Color Spray Will save");
+            int saveTotal = save.Total;
+            if (save.Saved)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
                 continue;
@@ -3080,9 +3046,9 @@ public partial class GameManager
     /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
     /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private string ResolveColorSpraySpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveColorSpraySpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
@@ -3111,20 +3077,21 @@ public partial class GameManager
 
             int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
 
-            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018). The dice keep their
+            // old labels.
+            if (_pendingSpell.SpellResistanceApplies)
             {
-                int srRoll = DiceService.D20("Dazing Touch SR check");
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < target.Stats.SpellResistance)
+                SRResult sr = ctx.RollSpellResistance(target, "Dazing Touch SR check");
+                if (!sr.Overcame)
                 {
-                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks Color Spray (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks Color Spray ({FormatAreaSpellResistanceCheck(sr)}).");
                     continue;
                 }
             }
 
-            int saveRoll = DiceService.D20("Dazing Touch Will save");
-            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)); // CHR-018
-            if (saveTotal >= saveDc)
+            SaveResult save = ctx.RollSave(target, SaveType.Will, saveDc, "Dazing Touch Will save");
+            int saveTotal = save.Total;
+            if (save.Saved)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
                 continue;
@@ -3638,9 +3605,11 @@ public partial class GameManager
             if (distance > ghoulEffect.StenchRadiusSquares) continue;
 
             // Fort save vs sickened
-            // The stench is a poison effect of the spell (PHB p.235): spell and poison bonuses apply (SaveRules, CHR-018).
+            // The stench is a poison effect of the spell (PHB p.235): spell and poison bonuses apply (SaveRules, CHR-018),
+            // and those against its caster (the protection ward, SPL-018).
             int fortSave = DiceService.D20("Ghoul Touch Fort save")
-                + SaveRules.Modifier(creature.Stats, SavingThrowType.Fortitude, new SaveContext(spell: true, poison: true, label: "Ghoul Touch stench"));
+                + SaveRules.Modifier(creature.Stats, SavingThrowType.Fortitude,
+                    new SaveContext(spell: true, poison: true, label: "Ghoul Touch stench", sourceCaster: caster));
             bool saved = fortSave >= spellDC;
 
             if (saved)
@@ -3813,9 +3782,9 @@ public partial class GameManager
     /// Returns the cast's log (null for no caster or spell); since batch 11 step 9 the cast core shows it, refreshes the
     /// UI, runs the combat-end check and paces the turn (FinishAreaCast), and the area handler registry calls this.
     /// </summary>
-    private string ResolveFearSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    private string ResolveFearSpell(CastContext ctx, CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
-        if (caster == null || caster.Stats == null || _pendingSpell == null)
+        if (ctx == null || caster == null || caster.Stats == null || _pendingSpell == null)
             return null;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
@@ -3856,24 +3825,23 @@ public partial class GameManager
                 continue;
             }
 
-            // Spell Resistance check
-            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // The one spell resistance check and the cast's save (batch 11 step 18; SPL-122, SPL-018).
+            if (_pendingSpell.SpellResistanceApplies)
             {
-                int srRoll = DiceService.D20("Fear SR check");
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < target.Stats.SpellResistance)
+                SRResult sr = ctx.RollSpellResistance(target, "Fear SR check");
+                if (!sr.Overcame)
                 {
-                    logBuilder.AppendLine($"  • {targetName}: SR blocks Fear (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    logBuilder.AppendLine($"  • {targetName}: SR blocks Fear ({FormatAreaSpellResistanceCheck(sr)}).");
                     immuneCount++;
                     continue;
                 }
             }
 
-            // Will save
-            int saveRoll = DiceService.D20("Fear Will save");
-            int fearWillMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)); // CHR-018
-            int saveTotal = saveRoll + fearWillMod;
-            bool saveSuccess = saveTotal >= saveDc;
+            SaveResult save = ctx.RollSave(target, SaveType.Will, saveDc, "Fear Will save");
+            int saveRoll = save.Roll;
+            int fearWillMod = save.Modifier;
+            int saveTotal = save.Total;
+            bool saveSuccess = save.Saved;
 
             if (saveSuccess)
             {

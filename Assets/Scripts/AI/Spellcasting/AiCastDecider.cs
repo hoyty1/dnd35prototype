@@ -43,6 +43,13 @@ public sealed class AiCastDecider : ICastDecider
         answer?.Invoke(proceeds ? CastProvocationAnswer.Proceeds : CastProvocationAnswer.Lost);
     }
 
+    /// <summary>
+    /// An NPC gives up its save only against a harmless or beneficial spell of its own side
+    /// (SpellSaveRules.IsHarmlessOrBeneficialTo; PHB p.177), the same default as the player's creatures.
+    /// </summary>
+    public bool ForgoSave(CharacterController self, CharacterController caster, SpellData spell)
+        => SpellSaveRules.IsHarmlessOrBeneficialTo(self, caster, spell);
+
     /// <summary>Nothing to do before the combat-end check.</summary>
     public void BeforeCombatEndCheck(GameManager gm, CastContext ctx) { }
 

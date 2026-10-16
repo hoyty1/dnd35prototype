@@ -22,6 +22,13 @@ public sealed class UiCastDecider : ICastDecider
 
     public void ChooseProvocation(GameManager gm, CastContext ctx, Action<CastProvocationAnswer> answer) => gm.UiChooseCastProvocation(ctx, answer);
 
+    /// <summary>
+    /// The player's creature gives up its save only against a harmless or beneficial spell of its own side
+    /// (SpellSaveRules.IsHarmlessOrBeneficialTo; PHB p.177). The game does not ask: a standing default, as the AI's.
+    /// </summary>
+    public bool ForgoSave(CharacterController self, CharacterController caster, SpellData spell)
+        => SpellSaveRules.IsHarmlessOrBeneficialTo(self, caster, spell);
+
     public void BeforeCombatEndCheck(GameManager gm, CastContext ctx) => gm.UiBeforeCastCombatEndCheck(ctx);
 
     public void OnCastFinished(GameManager gm, CastContext ctx, CastOutcome outcome) => gm.UiOnCastFinished(ctx, outcome);

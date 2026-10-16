@@ -353,10 +353,12 @@ public partial class GameManager
                 int trackedDuration = effect != null ? effect.RemainingRounds : Mathf.Max(1, statusMgr.GetRemainingRounds(SpellNames.GLITTERDUST));
 
                 bool blinded = false;
-                int saveRoll = DiceRoller.D20();
-                int glitterWillMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster.Stats)); // CHR-018
-                int saveTotal = saveRoll + glitterWillMod;
-                if (saveTotal < saveDc)
+                // The spell save (RollSpellSave: the voluntary save, PHB p.177, and the spell-and-caster bonuses, SPL-018).
+                SaveResult glitterSave = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
+                int saveRoll = glitterSave.Roll;
+                int glitterWillMod = glitterSave.Modifier;
+                int saveTotal = glitterSave.Total;
+                if (!glitterSave.Saved)
                 {
                     blinded = true;
                     blindedCount++;
@@ -382,7 +384,9 @@ public partial class GameManager
                 affectedCount++;
 
                 string blindText = blinded
-                    ? $"FAILED Will d20({saveRoll}) + {glitterWillMod} = {saveTotal} vs DC {saveDc} → BLINDED"
+                    ? (glitterSave.Forgone
+                        ? "gives up its Will save (PHB p.177) → BLINDED"
+                        : $"FAILED Will d20({saveRoll}) + {glitterWillMod} = {saveTotal} vs DC {saveDc} → BLINDED")
                     : $"Will d20({saveRoll}) + {glitterWillMod} = {saveTotal} vs DC {saveDc} → not blinded";
 
                 sb.AppendLine($"  • {target.Stats.CharacterName}: outlined in golden dust; {blindText}.");

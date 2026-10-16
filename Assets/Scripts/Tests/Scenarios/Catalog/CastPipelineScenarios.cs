@@ -68,6 +68,8 @@ namespace Tests.Scenarios
             yield return S("concentration-ai-maintains", AiMaintains);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
+            yield return S("sleep-spell-penetration", SleepSpellPenetration);
+            yield return S("spell-save-bonus-custom-handler", SpellSaveBonusCustomHandler);
             yield return S("cast-entangled", Entangled);
             yield return S("cast-silenced", Silenced);
             yield return S("npc-cast-without-divine-focus", NpcCastWithoutDivineFocus);
@@ -2147,15 +2149,16 @@ namespace Tests.Scenarios
         // ── rules/cast-ally-in-burning-hands (SPL-149) ──────────────────
 
         /// <summary>
-        /// SPL-149 (PHB p.177: a creature may give up a save voluntarily; nothing makes it fail). A Ui wizard 5 casts Burning
-        /// Hands (5d4, every d4 at 4 = 20, Reflex half) through an ally fighter 10 ft away and a dummy 15 ft away, both with
-        /// +30 on saves. The dummy saves and takes 10. Today ShouldForceTargetToAcceptSave makes the ally forgo its save in
-        /// the generic area loop, so it takes the full 20.
+        /// SPL-149, fixed in batch 11 step 18 (PHB p.177: a creature may give up a save voluntarily; nothing makes it fail).
+        /// A Ui wizard 5 casts Burning Hands (5d4, every d4 at 4 = 20, Reflex half) through an ally fighter 10 ft away and a
+        /// dummy 15 ft away, both with +30 on saves. Both make their Reflex saves and take 10: the ally's own decider gives
+        /// up its save only against a harmless or beneficial spell (SpellSaveRules.IsHarmlessOrBeneficialTo), and Burning
+        /// Hands is a damage spell. Before step 18 ShouldForceTargetToAcceptSave made the ally forgo it and take the full 20.
         /// </summary>
         private static ScenarioDef AllyInBurningHands()
         {
-            return Rules("rules/cast-ally-in-burning-hands", "An ally in its own side's Burning Hands gets no save (SPL-149, pinned)")
-                .Covers("SPL-149", "PHB p.177", "PHB p.207")
+            return Rules("rules/cast-ally-in-burning-hands", "An ally in its own side's Burning Hands rolls its save (PHB p.177; SPL-149)")
+                .Covers("SPL-149", "PHB p.177", "PHB p.207", "batch 11 step 18")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
                 .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Pin Ally", 3)), 7, 10, Control.Idle)
@@ -2169,7 +2172,101 @@ namespace Tests.Scenarios
                     Step.Cast(SpellNames.BURNING_HANDS, "foe"),
                     Step.Assert("after", ctx => { FactHpLost(ctx, "cone", "ally", "foe"); return true; }))
                 .Expect("The foe makes its Reflex save and takes half (PHB p.207)", FactIs("cone.lost.foe", 10))
-                .ExpectKnown("SPL-149", "Today the ally forgoes its save and takes the full 20 (SPL-149)", FactIs("cone.lost.ally", 20))
+                .Expect("The ally rolls its Reflex save too, makes it and takes half (PHB p.177: no one is made to fail)",
+                    FactIs("cone.lost.ally", 10))
+                .Build();
+        }
+
+        // ── rules/sleep-spell-penetration (SPL-122) ─────────────────────
+
+        /// <summary>
+        /// Batch 11 step 18 (SPL-122): the Sleep handler's spell resistance check is the one rule, d20 + the cast's caster
+        /// level + Spell Penetration (PHB p.177, p.100), through CastContext.RollSpellResistance. A Ui wizard 1 with Spell
+        /// Penetration casts Sleep (PHB p.280; spell resistance yes) on two goblins of 1 HD that fail every save; every d4
+        /// is 4 (a 16 HD pool) and each SR d20 (label "Sleep SR check") is 10, so the check is 10 + 1 + 2 = 13. g1 has SR 13
+        /// and is overcome (13 meets it), g2 has SR 14 and is not; without Spell Penetration (11) both would resist. The
+        /// blocked line names the feat's +2.
+        /// </summary>
+        private static ScenarioDef SleepSpellPenetration()
+        {
+            return Rules("rules/sleep-spell-penetration", "Sleep's spell resistance check adds Spell Penetration (PHB p.177, p.100; SPL-122)")
+                .Covers("SPL-122", "PHB p.177", "PHB p.100", "PHB p.280", "batch 11 step 18")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 1, "Spell Penetration")), 2, 10, Control.Ui)
+                .Npc("g1", "goblin", 8, 10, Control.Idle)
+                .Npc("g2", "goblin", 9, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SLEEP))
+                .Tweak("g1", c => { Fails(c); c.Stats.SpellResistance = 13; })
+                .Tweak("g2", c => { Fails(c); c.Stats.SpellResistance = 14; })
+                .Initiative("wizard", "g1", "g2")
+                .Force(4, 4, null, -1)
+                .Force(20, 10, "Sleep SR check", -1)
+                .Turn("wizard", 1,
+                    Step.Cast(SpellNames.SLEEP, "g1"),
+                    Step.Assert("after", ctx =>
+                    {
+                        Fact(ctx, "asleep.g1", ctx.Get("g1").HasCondition(CombatConditionType.Asleep));
+                        Fact(ctx, "asleep.g2", ctx.Get("g2").HasCondition(CombatConditionType.Asleep));
+                        return true;
+                    }))
+                .Expect("The Ui cast ran", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("10 + CL 1 + 2 = 13 overcomes SR 13 (g1 sleeps) and not SR 14 (g2 stays awake)",
+                    FactsAre(("asleep.g1", true), ("asleep.g2", false)))
+                .Expect("The blocked check is logged with the Spell Penetration term", Expect.Count("log",
+                    e => (e.Str("text") ?? "").Contains("d20 10 + CL 1 + 2 Spell Penetration = 13 vs SR 14"), 1, 1))
+                .Build();
+        }
+
+        // ── rules/spell-save-bonus-custom-handler (SPL-018) ─────────────
+
+        /// <summary>
+        /// Batch 11 step 18 (SPL-018): a save rolled by a spell's own handler carries the bonuses that depend on the spell and
+        /// its caster, as SpellCaster.Cast's does. The example is the protection ward (PHB p.266: Protection from Evil gives
+        /// +2 resistance on saves against effects of evil creatures), on Fireball's handler (TryResolveScaledAoEDamageSpell,
+        /// PHB p.231). A chaotic evil Ui wizard 5 casts Fireball (every d6 6: 5d6 = 30, Reflex half) on two dummies; d1 is
+        /// under Protection from Evil, d2 is not. Before the cast each dummy's save tweak is set so that the forced d20 of 10
+        /// plus its Reflex modifier against the spell (without the ward) is the DC less 1. d2 fails and takes 30; d1's ward
+        /// makes it the DC plus 1, so it saves and takes 15. Before step 18 the handler's save had no ward and d1 took 30.
+        /// (No charm spell resolves in a custom handler, so the plan's "charm" example is this ward; Charm Person's +5,
+        /// Hideous Laughter's +4 and Lullaby's -2 are checked in Tests.Magic.SpellSaveAndResistanceRulesTests.)
+        /// </summary>
+        private static ScenarioDef SpellSaveBonusCustomHandler()
+        {
+            return Rules("rules/spell-save-bonus-custom-handler", "A spell handler's own save carries the protection ward against an evil caster (PHB p.266; SPL-018)")
+                .Covers("SPL-018", "PHB p.266", "PHB p.231", "PHB p.177", "batch 11 step 18")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 2, 10, Control.Ui)
+                .Npc("d1", "target_dummy", 10, 10, Control.Idle)
+                .Npc("d2", "target_dummy", 11, 10, Control.Idle)
+                .Tweak("wizard", c => { AddWizardSlot(c, 3, SpellNames.FIREBALL); c.Stats.CharacterAlignment = Alignment.ChaoticEvil; })
+                .Tweak("d1", Sturdy).Tweak("d2", Sturdy)
+                .Initiative("wizard", "d1", "d2")
+                .Force(6, 6, null, -1)
+                .Force(20, 10, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("setup", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        SpellData fireball = SpellDatabase.GetSpell(SpellNames.FIREBALL);
+                        int dc = SpellSaveDCRules.Explain(w, fireball).Total;
+                        foreach (string key in new[] { "d1", "d2" })
+                        {
+                            CharacterController d = ctx.Get(key);
+                            int mod = SaveRules.Modifier(d.Stats, SavingThrowType.Reflex, SaveContext.ForSpell(fireball));
+                            SaveTweak(d, dc - 1 - 10 - mod);
+                        }
+                        CharacterController d1 = ctx.Get("d1");
+                        ctx.Gm.Harness_ApplySpellBuff(d1, d1, SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL).Clone());
+                        Fact(ctx, "ward", d1.StatusEffectManager != null && d1.StatusEffectManager.HasEffect(SpellNames.PROTECTION_FROM_EVIL));
+                        RecordHp(ctx, "d1", "d2");
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.FIREBALL, "d1"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "fireball", "d1", "d2"); return true; }))
+                .Expect("d1 is under Protection from Evil", FactIs("ward", true))
+                .Expect("The Ui cast ran", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("d2 misses the DC by 1 and takes 30; d1's +2 ward makes the DC + 1, so it takes half (PHB p.266, p.231)",
+                    FactsAre(("fireball.lost.d2", 30), ("fireball.lost.d1", 15)))
                 .Build();
         }
 

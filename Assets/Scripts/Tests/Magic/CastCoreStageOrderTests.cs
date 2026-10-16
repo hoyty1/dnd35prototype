@@ -93,7 +93,6 @@ public static class CastCoreStageOrderTests
     private static readonly LegacyCastQuirk[] PcPathBits =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
-        LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
     };
 
@@ -112,7 +111,6 @@ public static class CastCoreStageOrderTests
     /// <summary>Today's PC area path, bit by bit (batch 11 step 9).</summary>
     private static readonly LegacyCastQuirk[] AreaPathBits =
     {
-        LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers,    // CORE-039
         LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers,    // SPL-161
     };
@@ -204,6 +202,10 @@ public static class CastCoreStageOrderTests
                 answer(Answer);
         }
 
+        /// <summary>Not asked by the cast core for the caster: a target's own decider answers (CastDeciders.For).</summary>
+        public bool ForgoSave(CharacterController self, CharacterController caster, SpellData spell)
+            => SpellSaveRules.IsHarmlessOrBeneficialTo(self, caster, spell);
+
         public void BeforeCombatEndCheck(GameManager gm, CastContext ctx)
         {
             Events.Add("decider:before-combat-end");
@@ -223,7 +225,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath | LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -380,6 +382,7 @@ public static class CastCoreStageOrderTests
 
             TestReentryWhileAwaitingProvocation(gm, sc, caster, ally, violations);
             TestMissingQuirk(gm, sc, caster, violations);
+            TestVoluntarySave(gm, sc, caster, ally, violations);
 
             // Batch 11 step 9: area casts through the same core.
             int violationsBeforeArea = violations.Count;
@@ -495,6 +498,9 @@ public static class CastCoreStageOrderTests
             Events.Add("decider:provocation");
             AiCastDecider.Instance.ChooseProvocation(gm, ctx, answer);
         }
+
+        public bool ForgoSave(CharacterController self, CharacterController caster, SpellData spell)
+            => AiCastDecider.Instance.ForgoSave(self, caster, spell);
 
         public void BeforeCombatEndCheck(GameManager gm, CastContext ctx)
         {
@@ -2240,18 +2246,49 @@ public static class CastCoreStageOrderTests
     {
         var events = new List<string>();
         var decider = new RecordingDecider(events);
-        CastContext ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, decider, out SpellSlot slot);
-        // Shield on the caster: the caster forgoes its save (AlliesForgoEverySave, SPL-149), which the InvisibilityBreak stage
-        // still requires (batch 11 step 11 removed GlobeAfterCast, the bit this test used before).
-        ctx.Request.Quirks = LegacyCastQuirkSets.UiPath & ~LegacyCastQuirk.AlliesForgoEverySave;
+        CastContext ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, decider, out SpellSlot slot);
+        SpellCastRequest.ForUiHoldCharge(ctx.Request);
+        // A hold ends with no combat-end check (EffectResolveSkipsCombatEndCheck, CORE-039), which its exit still requires
+        // (batch 11 step 18 removed AlliesForgoEverySave, the bit this test used before; step 11 removed GlobeAfterCast).
+        ctx.Request.Quirks = LegacyCastQuirkSets.UiHoldPath & ~LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
         int before = violations.Count;
         gm.ExecuteCast(ctx, null);
 
-        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("AlliesForgoEverySave"),
+        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("EffectResolveSkipsCombatEndCheck"),
             "A request without a quirk a stage still needs raises one cast-core violation naming it", string.Join("; ", violations));
-        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.TargetForgoesSave,
-            "...and gets the legacy behaviour anyway (the caster forgoes its save)", string.Join(",", events));
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.Outcome.At == CastStage.Resolve && sc.HasHeldTouchCharge,
+            "...and gets the legacy behaviour anyway (the hold ends at Resolve with no combat-end check)", ctx.Outcome + " " + string.Join(",", events));
+        if (sc.HasHeldTouchCharge)
+            sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
         sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// Batch 11 step 18 (PHB p.177, SPL-149): the single-target path asks the target's own decider whether it gives up
+    /// its save. The caster's Shield (a Buff) is given up; Daze (Will negates, a Debuff or Control spell after
+    /// SpellCategoryClassifier.ReclassifyAll) on an ally is not, so the ally rolls its Will save; nothing requires a quirk.
+    /// </summary>
+    private static void TestVoluntarySave(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally,
+        List<string> violations)
+    {
+        int before = violations.Count;
+        CastContext shield = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out SpellSlot slot);
+        gm.ExecuteCast(shield, null);
+        Assert(shield.Outcome != null && shield.Outcome.Kind == CastOutcomeKind.Resolved && shield.ForgoesSingleTargetSave,
+            "Step 18: the caster gives up its save against its own Shield (a Buff, PHB p.177)", "" + shield.Outcome);
+        sc.SpellSlots.Remove(slot);
+
+        if (ally != null)
+        {
+            CastContext daze = Begin(gm, sc, caster, ally, SpellNames.DAZE, new RecordingDecider(new List<string>()), out slot);
+            SpellEffectType dazeType = daze.Request.Spell.EffectType;
+            gm.ExecuteCast(daze, null);
+            Assert((dazeType == SpellEffectType.Debuff || dazeType == SpellEffectType.Control) && daze.Outcome != null && !daze.ForgoesSingleTargetSave,
+                "Step 18: an ally does not give up its save against a Debuff or Control spell of its own side (PHB p.177; SPL-149)",
+                dazeType + " " + daze.Outcome);
+            sc.SpellSlots.Remove(slot);
+        }
+        Assert(violations.Count == before, "Step 18: a voluntary save requires no legacy quirk", string.Join("; ", violations));
     }
 
     private static void Assert(bool condition, string testName, string detail = "")

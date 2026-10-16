@@ -140,7 +140,7 @@ public partial class GameManager
 
         // Will save at the spell's DC (Clr 4 or domain 4; SpellSaveDCRules, SPL-001, SPL-031)
         int saveDC = GetSpellSaveDC(caster, spell);
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+        var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, saveDC);
         bool saveSuccess = saveResult.Saved;
 
         if (saveSuccess)
@@ -258,7 +258,7 @@ public partial class GameManager
                     damage += DiceRoller.D6(); // 1d6
 
                 // Reflex save + Blink
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
                 bool savePassed = saveResult.Saved;
                 if (savePassed)
                     damage = Mathf.Max(0, damage / 2);

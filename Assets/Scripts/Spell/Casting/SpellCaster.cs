@@ -391,11 +391,15 @@ public static class SpellCaster
         // A cure is "Yes (harmless)" against the living, but an undead applies spell resistance against it (PHB p.215).
         if (result.AttackHit && (spell.SpellResistanceApplies || harmsUndead) && targetStats != null && targetStats.SpellResistance > 0)
         {
+            // The one spell resistance rule (batch 11 step 18, SPL-122): d20 + caster level + Spell Penetration.
+            SRResult sr = SpellSaveResolver.RollSpellResistance(
+                casterStats != null ? CastCasterLevel(casterController, casterStats, spell) : 0,
+                FeatManager.GetSpellPenetrationBonus(casterStats), targetStats.SpellResistance);
             result.SpellResistanceChecked = true;
-            result.SpellResistanceValue = targetStats.SpellResistance;
-            result.SpellResistanceRoll = DiceRoller.D20();
-            result.SpellResistanceTotal = result.SpellResistanceRoll + GetCasterLevelForSpellResistanceCheck(casterController, casterStats, spell);
-            result.SpellResistancePassed = result.SpellResistanceTotal >= result.SpellResistanceValue;
+            result.SpellResistanceValue = sr.TargetSR;
+            result.SpellResistanceRoll = sr.Roll;
+            result.SpellResistanceTotal = sr.Total;
+            result.SpellResistancePassed = sr.Overcame;
 
             if (!result.SpellResistancePassed)
             {
@@ -448,12 +452,12 @@ public static class SpellCaster
             else
             {
                 int saveRoll = DiceService.D20(SavingThrowContext);
+                SaveContext saveContext = SaveContext.ForSpell(spell, casterStats, casterController);
                 int saveMod = GetSaveModifier(
                     targetStats,
                     spell,
                     saveType,
-                    protection,
-                    casterController,
+                    saveContext,
                     targetController,
                     out int protectionSaveBonus,
                     out int situationalSaveBonus,
@@ -465,8 +469,7 @@ public static class SpellCaster
                 result.SituationalSaveBonusSource = situationalSaveSource;
                 // A countersong's Perform result replaces the save against a sonic or language-dependent spell when higher
                 // (PHB p.29; CHR-026).
-                result.SaveTotal = BardicMusicRules.ApplyCountersong(targetController, saveRoll + saveMod,
-                    SaveContext.ForSpell(spell, casterController != null ? casterController.Stats : null));
+                result.SaveTotal = BardicMusicRules.ApplyCountersong(targetController, saveRoll + saveMod, saveContext);
                 result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
             }
         }
@@ -734,7 +737,7 @@ public static class SpellCaster
         return string.Equals(targetStats.CreatureType.Trim(), "undead", System.StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsLivingCreature(CharacterStats targetStats)
+    internal static bool IsLivingCreature(CharacterStats targetStats)
     {
         if (targetStats == null)
             return false;
@@ -985,22 +988,6 @@ public static class SpellCaster
             ? CasterLevelRules.ForCaster(casterController, spell)
             : CasterLevelRules.ForStats(casterStats, spell);
 
-    /// <summary>The caster level check against spell resistance (PHB p.177): the cast's caster level plus Spell Penetration.</summary>
-    private static int GetCasterLevelForSpellResistanceCheck(CharacterController casterController, CharacterStats casterStats, SpellData spell)
-    {
-        if (casterStats == null)
-            return 0;
-
-        int casterLevel = CastCasterLevel(casterController, casterStats, spell);
-
-        // Spell Penetration (+2) and Greater Spell Penetration (+2) stack
-        int spellPenBonus = FeatManager.GetSpellPenetrationBonus(casterStats);
-        if (spellPenBonus > 0)
-            Debug.Log($"[SpellCaster] Spell Penetration bonus +{spellPenBonus} to SR check");
-
-        return casterLevel + spellPenBonus;
-    }
-
     /// <summary>
     /// Check if target is immune to this spell due to Protection from [Alignment].
     /// This uses SpellData.BlockedByProtectionFromAlignment instead of the broader
@@ -1027,15 +1014,17 @@ public static class SpellCaster
     }
 
     /// <summary>
-    /// Get the appropriate saving throw modifier for a character,
-    /// including conditional bonuses such as Still Mind (+2 vs enchantment effects).
+    /// The target's save modifier against <paramref name="spell"/>: SaveRules.Modifier with the spell-and-caster context
+    /// (CHR-018; batch 11 step 18, SPL-018), which also gives the bonuses that depend on the spell and its caster (the
+    /// protection ward, Charm Person, Hideous Laughter, Lullaby), so the spell handlers' own saves get the same ones.
+    /// <paramref name="protectionSaveBonus"/> is the ward's part and <paramref name="situationalSaveBonus"/> the rest of
+    /// the situational part, each logged apart (SpellResult). An unknown save name gives +0 as before.
     /// </summary>
     private static int GetSaveModifier(
         CharacterStats stats,
         SpellData spell,
         string saveType,
-        AlignmentProtectionBenefits protection,
-        CharacterController casterController,
+        SaveContext context,
         CharacterController targetController,
         out int protectionSaveBonus,
         out int situationalSaveBonus,
@@ -1048,72 +1037,14 @@ public static class SpellCaster
         if (stats == null || spell == null)
             return 0;
 
-        // The shared save modifier (SaveRules, CHR-018): every bonus that applies to all saves plus those that apply
-        // against this spell (racial, Still Mind, Indomitable Will, morale against fear, Resist Nature's Lure). The save
-        // name is matched case-insensitively ("Fort", "Fortitude", ...); an unknown name gives +0 as before.
         if (!SaveRules.TryParse(saveType, out SavingThrowType save))
             return 0;
-        SaveContext context = SaveContext.ForSpell(spell, casterController != null ? casterController.Stats : null);
-        int baseSave = stats.GetSaveTotal(save);
-        int characterSituational = SaveRules.SituationalBonus(stats, save, context, out string characterSources);
-        if (characterSituational != 0)
-        {
-            baseSave += characterSituational;
-            situationalSaveBonus = characterSituational;
-            situationalSaveSource = characterSources;
-        }
-        bool isWill = save == SavingThrowType.Will;
-
-        // D&D 3.5e Charm Person: +5 bonus on save if threatened/attacked by caster side.
-        if (isWill
-            && string.Equals(spell.SpellId, SpellNames.CHARM_PERSON, System.StringComparison.Ordinal)
-            && IsBeingThreatenedBy(targetController, casterController))
-        {
-            baseSave += 5;
-        }
-
-        // The ward's resistance bonus does not stack with a cloak or ring of resistance: only the excess applies.
-        int protectionResistanceIncrease = protection.HasMatch ? AlignmentProtectionRules.ResistanceSaveIncrease(protection, stats) : 0;
-        if (protectionResistanceIncrease > 0)
-        {
-            protectionSaveBonus = protectionResistanceIncrease;
-            baseSave += protectionSaveBonus;
-        }
-
-        if (string.Equals(spell.SpellId, SpellNames.HIDEOUS_LAUGHTER, System.StringComparison.Ordinal)
-            && casterController != null
-            && casterController.Stats != null
-            && targetController != null
-            && targetController.Stats != null)
-        {
-            bool differentCreatureType = !string.Equals(
-                casterController.Stats.CreatureType ?? string.Empty,
-                targetController.Stats.CreatureType ?? string.Empty,
-                System.StringComparison.OrdinalIgnoreCase);
-            if (differentCreatureType)
-            {
-                situationalSaveBonus += 4;
-                situationalSaveSource = string.IsNullOrEmpty(situationalSaveSource)
-                    ? "Different creature type (+4)"
-                    : situationalSaveSource + ", Different creature type (+4)";
-                baseSave += 4;
-            }
-        }
-
-        // Remove Fear's +4 morale bonus against fear (PHB p.271) is part of SaveRules.SituationalBonus above.
-
-        // Lullaby (PHB p.249): -2 on Will saves against sleep effects while it lasts.
-        int lullabyPenalty = isWill ? LullabySleepSavePenalty(targetController, spell) : 0;
-        if (lullabyPenalty != 0)
-        {
-            baseSave += lullabyPenalty;
-            situationalSaveBonus += lullabyPenalty;
-            situationalSaveSource = string.IsNullOrEmpty(situationalSaveSource)
-                ? $"Lullaby ({lullabyPenalty} vs sleep)"
-                : situationalSaveSource + $", Lullaby ({lullabyPenalty} vs sleep)";
-        }
-
-        return baseSave;
+        int situational = SaveRules.SituationalBonus(stats, targetController, save, context, out string sources,
+            out int ward, out _);
+        protectionSaveBonus = ward;
+        situationalSaveBonus = situational - ward;
+        situationalSaveSource = situationalSaveBonus != 0 ? sources : string.Empty;
+        return stats.GetSaveTotal(save) + situational;
     }
 
     /// <summary>

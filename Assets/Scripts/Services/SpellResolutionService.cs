@@ -178,11 +178,11 @@ public static class SpellResolutionService
     // ========================================================================
 
     /// <summary>
-    /// Perform a spell resistance check.
-    /// D&amp;D 3.5e PHB p.177: Caster rolls d20 + caster level vs target's SR.
-    /// Note: The actual SR check is primarily handled inside SpellCaster.Cast().
-    /// This method is provided for cases where SR needs to be checked outside
-    /// the standard SpellCaster.Cast pipeline (e.g. Hypnotism, Sleep, Color Spray).
+    /// Perform a spell resistance check: the one rule, SpellSaveResolver.RollSpellResistance (PHB p.177; batch 11 step
+    /// 18, SPL-122). D&amp;D 3.5e PHB p.177: the caster rolls d20 + caster level vs the target's SR.
+    /// <paramref name="casterLevel"/> is the whole caster level check bonus (add Spell Penetration to it; a cast's own
+    /// rolls go through CastContext.RollSpellResistance, which does). A target with no SR (0 or less) is overcome with no
+    /// roll (<paramref name="roll"/> and <paramref name="total"/> 0).
     /// </summary>
     /// <param name="casterLevel">Effective caster level for the check.</param>
     /// <param name="spellResistance">Target's spell resistance value.</param>
@@ -192,8 +192,9 @@ public static class SpellResolutionService
     /// <returns>True if the caster overcomes SR (total >= SR).</returns>
     public static bool TryOvercomeSpellResistance(int casterLevel, int spellResistance, string context, out int roll, out int total)
     {
-        roll = DiceService.D20(context);
-        total = roll + casterLevel;
-        return total >= spellResistance;
+        SRResult sr = SpellSaveResolver.RollSpellResistance(casterLevel, 0, spellResistance, context);
+        roll = sr.Roll;
+        total = sr.Total;
+        return sr.Overcame;
     }
 }

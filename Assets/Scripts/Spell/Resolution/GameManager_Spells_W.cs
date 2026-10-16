@@ -378,10 +378,12 @@ public partial class GameManager
     /// Roll a Reflex save for a creature against the Wall of Ice disruption DC.
     /// Returns true if the save succeeds.
     /// </summary>
-    private bool RollWallOfIceReflexSave(CharacterController creature, int dc, out int roll, out int total)
+    private bool RollWallOfIceReflexSave(CharacterController caster, CharacterController creature, int dc, out int roll, out int total)
     {
         roll = DiceRoller.D20();
-        int reflexMod = SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.WALL_OF_ICE)); // CHR-018
+        // The save against the caster's spell (SaveRules with the caster: the protection ward, SPL-018).
+        int reflexMod = SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex,
+            SaveContext.ForSpellId(SpellNames.WALL_OF_ICE, caster != null ? caster.Stats : null)); // CHR-018
         total = roll + reflexMod;
         bool success = total >= dc;
 
@@ -516,7 +518,7 @@ public partial class GameManager
 
         foreach (CharacterController aiCreature in aiCreatures)
         {
-            bool success = RollWallOfIceReflexSave(aiCreature, saveDC, out int roll, out int total);
+            bool success = RollWallOfIceReflexSave(caster, aiCreature, saveDC, out int roll, out int total);
             string name = aiCreature.Stats.CharacterName;
 
             if (success)
@@ -618,7 +620,7 @@ public partial class GameManager
                 if (selectedIndex == 0)
                 {
                     // Player chose to attempt save
-                    bool success = RollWallOfIceReflexSave(pc, saveDC, out int roll, out int total);
+                    bool success = RollWallOfIceReflexSave(caster, pc, saveDC, out int roll, out int total);
 
                     if (success)
                     {
@@ -921,10 +923,11 @@ public partial class GameManager
                 return true;
             }
 
-            // Reflex save for additional creatures
-            int reflexSave = DiceRoller.D20() + SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex,
-                SaveContext.ForSpellId(SpellNames.RESILIENT_SPHERE, caster != null ? caster.Stats : null)); // CHR-018
-            if (reflexSave >= saveDC)
+            // Reflex save for additional creatures: the spell save (RollSpellSave: the voluntary save, PHB p.177, and the
+            // spell-and-caster bonuses, SPL-018).
+            SaveResult sphereSave = RollSpellSave(caster, creature, spell, SaveType.Reflex, saveDC);
+            int reflexSave = sphereSave.Total;
+            if (sphereSave.Saved)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!"));
                 return true; // Spell consumed but sphere doesn't form

@@ -128,7 +128,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.HIDEOUS_LAUGHTER,
                     Name = "Tasha's Hideous Laughter",
-                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Subject collapses into laughter, falls prone, and cannot take actions (not helpless). Int 2 or less is immune. Different creature type than caster gets +4 on save. Will negates. SR applies. Duration 1 round/level. PHB p.240",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Subject collapses into laughter, falls prone, and cannot take actions (not helpless). Int 2 or less is immune. Different creature type than caster gets +4 on save. Will negates. SR applies. Duration 1 round/level. PHB p.292",
                     SpellLevel = 2, School = "Enchantment",
                     ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleEnemy,

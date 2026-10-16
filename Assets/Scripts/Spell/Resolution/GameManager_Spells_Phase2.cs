@@ -88,7 +88,7 @@ public partial class GameManager
                 return null;
             }
 
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+            var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDc);
             saved = saveResult.Saved;
             saveResult.AppendToLog(sb, "SAVED", "FAILED");
         }
@@ -186,7 +186,7 @@ public partial class GameManager
                 sb.AppendLine($"    Damage roll: {diceCount}d6 = {damage}{(isUndead ? " (Undead)" : "")}");
 
                 // Reflex save + Evasion
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
                 saveResult.AppendHalfDamageLog(sb);
                 if (saveResult.Saved)
                 {
@@ -258,7 +258,7 @@ public partial class GameManager
                 idx++;
                 sb.AppendLine($"  --- Target {idx}: {target.Stats.CharacterName} ---");
 
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
                 saveResult.AppendToLog(sb, "SAVED", "FAILED");
 
                 if (!saveResult.Saved)
@@ -501,7 +501,7 @@ public partial class GameManager
             }
             else
             {
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, GetSpellSaveDC(caster, spell), SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, GetSpellSaveDC(caster, spell));
                 saveResult.AppendHalfDamageLog(sb);
                 saved = saveResult.Saved;
             }
@@ -797,7 +797,7 @@ public partial class GameManager
                 return null;
             }
 
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+            var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
             saveResult.AppendToLog(sb, "SAVED", "FAILED");
             if (saveResult.Saved)
             {

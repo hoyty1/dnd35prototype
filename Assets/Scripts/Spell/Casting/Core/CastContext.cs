@@ -72,7 +72,11 @@ public sealed class CastContext
     internal int SlotLevelToConsume;
     internal SpellcastingComponent SpellComp;
     internal bool SkipFriendlyTouchAttackRoll;
-    internal bool TargetForgoesSave;
+    /// <summary>
+    /// Whether the single-target cast's target gives up its save (<see cref="TargetForgoesSave"/>, asked at the
+    /// InvisibilityBreak stage; SpellCaster.Cast then records a failed save).
+    /// </summary>
+    internal bool ForgoesSingleTargetSave;
     internal bool AppliesTrackedEffect;
     internal bool ClaimedByHandler;
     internal bool RetainedHeldChargeOnMiss;
@@ -117,6 +121,28 @@ public sealed class CastContext
                && LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(Request.Spell, target, out blockingGlobe);
     }
 
+    /// <summary>
+    /// Whether <paramref name="target"/> gives up its save against this cast (PHB p.177; batch 11 step 18): its own decider
+    /// answers (SpellSaveRules.TargetForgoesSave, ICastDecider.ForgoSave), yes only against a harmless or beneficial
+    /// spell of its own side.
+    /// </summary>
+    public bool TargetForgoesSave(CharacterController target)
+        => SpellSaveRules.TargetForgoesSave(Request.Caster, target, Request.Spell);
+
+    /// <summary>
+    /// <paramref name="target"/>'s save against this cast's spell (SpellSaveRules.RollSave): given up when
+    /// <see cref="TargetForgoesSave"/>, else one d20 with SaveRules.Modifier for the spell-and-caster context (SPL-018).
+    /// </summary>
+    public SaveResult RollSave(CharacterController target, SaveType save, int dc, string diceContext = null, int extraModifier = 0)
+        => SpellSaveRules.RollSave(Request.Caster, target, Request.Spell, save, dc, diceContext, extraModifier);
+
+    /// <summary>
+    /// The caster level check against <paramref name="target"/>'s spell resistance (PHB p.177): d20 + the cast's caster
+    /// level (CasterLevelRules.For, a scroll's or wand's own) + Spell Penetration; skipped when it has none (SPL-122).
+    /// </summary>
+    public SRResult RollSpellResistance(CharacterController target, string diceContext = null)
+        => SpellSaveRules.RollSpellResistance(Request.Caster, target, Request.Spell, diceContext, CasterLevelRules.For(Request));
+
     /// <summary>Clears the run state before a run of the cast core (a cast suspended at a dialog runs again).</summary>
     internal void ResetRun()
     {
@@ -136,7 +162,7 @@ public sealed class CastContext
         SlotLevelToConsume = 0;
         SpellComp = null;
         SkipFriendlyTouchAttackRoll = false;
-        TargetForgoesSave = false;
+        ForgoesSingleTargetSave = false;
         AppliesTrackedEffect = false;
         ClaimedByHandler = false;
         RetainedHeldChargeOnMiss = false;

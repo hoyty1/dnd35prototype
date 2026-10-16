@@ -110,18 +110,17 @@ public partial class GameManager
                 }
             }
 
-            // Fort save — willing allies auto-fail (accept the spell)
+            // Fort save: a willing creature of the caster's side gives up its save against this buff (PHB p.177; its own
+            // decider answers, SpellSaveRules.TargetForgoesSave, batch 11 step 18); any other rolls it to negate.
             if (spell.AllowsSavingThrow)
             {
-                if (isAlly)
+                var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDc);
+                if (saveResult.Forgone)
                 {
-                    // Willing target — auto-accept
                     CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  {target.Stats.CharacterName}: willing target, auto-accepts {spellName}."));
                 }
                 else
                 {
-                    // Unwilling target — Fort save to negate
-                    var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                     CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Fort Save ({target.Stats.CharacterName}): d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
                     if (saveResult.Saved)

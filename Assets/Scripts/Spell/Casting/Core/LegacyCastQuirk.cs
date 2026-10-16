@@ -52,12 +52,9 @@ public enum LegacyCastQuirk : long
     // 11 step 11; a failed cast lands no Sound Burst stun (gate Success) and no Animate Rope entanglement (the handler
     // tests the failed result itself).
 
-    /// <summary>
-    /// The caster and every ally that is not charmed or confused forgo their save against every spell, harmful ones
-    /// included (ShouldForceTargetToAcceptSave; SPL-149, PHB p.177; batch 11 step 18). Required whenever it makes the
-    /// target forgo a save.
-    /// </summary>
-    AlliesForgoEverySave = 1 << 9,
+    // Bit 9 is unused: AlliesForgoEverySave (SPL-149) was removed by batch 11 step 18 (raw-saves-and-sr); a target's own
+    // decider gives up its save only against a harmless or beneficial spell of its own side (PHB p.177;
+    // SpellSaveRules.IsHarmlessOrBeneficialTo), on the single-target path, the generic area loop and the area handlers.
 
     // Bit 10 is unused: DeafenedRolledInSpellCaster (SPL-150) was removed by batch 11 step 13
     // (raw-distraction-failure-stages); the deafened 20% verbal failure is rolled once per casting in the Failure stage
@@ -235,13 +232,12 @@ public enum LegacyCastQuirk : long
     EffectResolveSkipsCombatEndCheck = 1L << 53,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10; trimmed by steps 11 to 15).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10; trimmed by steps 11 to 18).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-        | LegacyCastQuirk.AlliesForgoEverySave
         | LegacyCastQuirk.HeldChargeDeliveryIsFree;
 
     /// <summary>
@@ -261,9 +257,9 @@ public static class LegacyCastQuirkSets
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
-    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the generic loop's forgone saves), without the
-    /// single-target ones (the combat-end check on a target's death, the held-charge delivery), plus the area path's own
-    /// bits. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// batch 11 step 9): the UI path's bits that an area cast exhibits (none since batch 11 step 18 removed the generic
+    /// loop's forgone saves), without the single-target ones (the combat-end check on a target's death, the held-charge
+    /// delivery), plus the area path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
         (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath

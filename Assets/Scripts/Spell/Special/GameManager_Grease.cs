@@ -11,6 +11,8 @@ public partial class GameManager
         public int RemainingRounds;
         public int SaveDC;
         public string CasterName;
+        /// <summary>The caster, for the saves' spell-and-caster context (SaveRules, SPL-018); cleared with the list.</summary>
+        public CharacterController Caster;
     }
 
     // _pendingGreaseCastMode (GreaseCastMode, Spell/Casting/Core/CastChoices.cs): the open cast's choice (GameManager.CastContext.cs, batch 11 step 4).
@@ -484,8 +486,12 @@ public partial class GameManager
         return false;
     }
 
-    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos)
+    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos) => GetHighestGreaseSaveDCAtCell(pos, out _);
+
+    /// <summary>The highest save DC of the Grease areas on <paramref name="pos"/>, and the caster of that area.</summary>
+    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos, out CharacterController greaseCaster)
     {
+        greaseCaster = null;
         int highestDC = 10;
         List<GreaseAreaEffect> greaseEffects = AreaEffectManager.Instance.GetEffectsOfType<GreaseAreaEffect>();
         for (int i = 0; i < greaseEffects.Count; i++)
@@ -494,6 +500,8 @@ public partial class GameManager
             if (effect == null || !effect.IsCellInArea(pos))
                 continue;
 
+            if (greaseCaster == null || effect.SaveDC > highestDC)
+                greaseCaster = effect.Caster;
             highestDC = Mathf.Max(highestDC, effect.SaveDC);
         }
 
@@ -527,9 +535,11 @@ public partial class GameManager
                 return false;
             }
 
-            int saveDC = GetHighestGreaseSaveDCAtCell(currentCell);
+            int saveDC = GetHighestGreaseSaveDCAtCell(currentCell, out CharacterController greaseCaster);
             int roll = DiceRoller.D20();
-            int reflex = SaveRules.Modifier(mover.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
+            // The save against the area's caster's spell (SaveRules with the caster: the protection ward, SPL-018).
+            int reflex = SaveRules.Modifier(mover.Stats, SavingThrowType.Reflex,
+                SaveContext.ForSpellId(SpellNames.GREASE, greaseCaster != null ? greaseCaster.Stats : null)); // CHR-018
             int total = roll + reflex;
             bool success = total >= saveDC;
 
@@ -578,15 +588,19 @@ public partial class GameManager
             return $"Grease has no effect: no held item found on {target.Stats.CharacterName}.";
 
         int saveDC = GetSpellSaveDC(caster, spell);
-        int roll = DiceRoller.D20();
-        int greaseReflexMod = SaveRules.Modifier(target.Stats, SavingThrowType.Reflex, SaveContext.ForSpell(spell, caster.Stats)); // CHR-018
-        int total = roll + greaseReflexMod;
-        bool saveSucceeded = total >= saveDC;
+        // The spell save (RollSpellSave: the voluntary save, PHB p.177, and the spell-and-caster bonuses, SPL-018).
+        SaveResult greaseSave = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDC);
+        int roll = greaseSave.Roll;
+        int greaseReflexMod = greaseSave.Modifier;
+        int total = greaseSave.Total;
+        bool saveSucceeded = greaseSave.Saved;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════");
         sb.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s {targetItem.Name}!");
-        sb.AppendLine($"Reflex save: d20({roll}) + {greaseReflexMod} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
+        sb.AppendLine(greaseSave.Forgone
+            ? "Reflex save: given up (PHB p.177) FAIL"
+            : $"Reflex save: d20({roll}) + {greaseReflexMod} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
         if (_isGreaseTestEncounter)
             sb.AppendLine("[TEST] Greased-object validation: failed save should force immediate weapon drop.");
 
@@ -606,17 +620,18 @@ public partial class GameManager
         }
 
         int durationRounds = GetGreaseDurationRounds(caster, spell);
-        RegisterGreasedObject(targetItem, durationRounds, saveDC, caster.Stats.CharacterName);
+        RegisterGreasedObject(targetItem, durationRounds, saveDC, caster);
         sb.AppendLine($"{targetItem.Name} remains slick for {durationRounds} rounds.");
         sb.Append("═══════════════════════════════");
 
         return sb.ToString();
     }
 
-    private void RegisterGreasedObject(ItemData item, int durationRounds, int saveDC, string casterName)
+    private void RegisterGreasedObject(ItemData item, int durationRounds, int saveDC, CharacterController caster)
     {
         if (item == null)
             return;
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : string.Empty;
 
         for (int i = 0; i < _activeGreasedObjects.Count; i++)
         {
@@ -626,6 +641,7 @@ public partial class GameManager
                 existing.RemainingRounds = Mathf.Max(existing.RemainingRounds, Mathf.Max(1, durationRounds));
                 existing.SaveDC = Mathf.Max(existing.SaveDC, saveDC);
                 existing.CasterName = casterName;
+                existing.Caster = caster;
                 return;
             }
         }
@@ -635,7 +651,8 @@ public partial class GameManager
             Item = item,
             RemainingRounds = Mathf.Max(1, durationRounds),
             SaveDC = saveDC,
-            CasterName = casterName
+            CasterName = casterName,
+            Caster = caster
         });
     }
 
@@ -685,7 +702,8 @@ public partial class GameManager
             if (TryFindGreasedItemHolder(effect.Item, out CharacterController holder, out EquipSlot slot))
             {
                 int roll = DiceRoller.D20();
-                int reflex = SaveRules.Modifier(holder.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
+                int reflex = SaveRules.Modifier(holder.Stats, SavingThrowType.Reflex,
+                    SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null)); // CHR-018, SPL-018
                 int total = roll + reflex;
                 bool saveSucceeded = total >= effect.SaveDC;
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Greased item check: {holder.Stats.CharacterName} d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}."));
@@ -737,7 +755,8 @@ public partial class GameManager
             return true;
 
         int roll = DiceRoller.D20();
-        int reflex = SaveRules.Modifier(actor.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
+        int reflex = SaveRules.Modifier(actor.Stats, SavingThrowType.Reflex,
+            SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null)); // CHR-018, SPL-018
         int total = roll + reflex;
         bool saveSucceeded = total >= effect.SaveDC;
 

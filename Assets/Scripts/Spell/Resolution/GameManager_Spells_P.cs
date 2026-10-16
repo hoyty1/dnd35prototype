@@ -152,7 +152,7 @@ public partial class GameManager
 
         // Fort save at the spell's DC (Clr 4, Drd 3; SpellSaveDCRules, SPL-001, SPL-031)
         int saveDC = GetSpellSaveDC(caster, spell);
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+        var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDC);
         bool saveSuccess = saveResult.Saved;
 
         if (saveSuccess)

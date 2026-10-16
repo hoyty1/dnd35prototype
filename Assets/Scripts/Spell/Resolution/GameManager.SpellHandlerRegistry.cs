@@ -383,11 +383,11 @@ public partial class GameManager
         Add(nameof(TryResolveHaltUndeadSpell), "ResolveHaltUndeadSpell",
             ctx => Claim(gm.TryResolveHaltUndeadSpell(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, out string log), log),
             SpellNames.HALT_UNDEAD);
-        AddSelfPaced(nameof(ResolveHypnotismSpell), ctx => gm.ResolveHypnotismSpell(ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.HYPNOTISM);
-        AddSelfPaced(nameof(ResolveSleepSpell), ctx => gm.ResolveSleepSpell(ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.SLEEP);
-        AddSelfPaced(nameof(ResolveDeepSlumberSpell), ctx => gm.ResolveDeepSlumberSpell(ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.DEEP_SLUMBER);
-        AddSelfPaced(nameof(ResolveColorSpraySpell), ctx => gm.ResolveColorSpraySpell(ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.COLOR_SPRAY);
-        AddSelfPaced(nameof(ResolveFearSpell), ctx => gm.ResolveFearSpell(ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.FEAR);
+        AddSelfPaced(nameof(ResolveHypnotismSpell), ctx => gm.ResolveHypnotismSpell(ctx, ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.HYPNOTISM);
+        AddSelfPaced(nameof(ResolveSleepSpell), ctx => gm.ResolveSleepSpell(ctx, ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.SLEEP);
+        AddSelfPaced(nameof(ResolveDeepSlumberSpell), ctx => gm.ResolveDeepSlumberSpell(ctx, ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.DEEP_SLUMBER);
+        AddSelfPaced(nameof(ResolveColorSpraySpell), ctx => gm.ResolveColorSpraySpell(ctx, ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.COLOR_SPRAY);
+        AddSelfPaced(nameof(ResolveFearSpell), ctx => gm.ResolveFearSpell(ctx, ctx.Request.Caster, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells), SpellNames.FEAR);
         Add(nameof(TryResolveGlitterdustSpell), null,
             ctx => Claim(gm.TryResolveGlitterdustSpell(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Aim.AreaTargets, ctx.Request.Aim.Cells, out string log), log),
             SpellNames.GLITTERDUST);

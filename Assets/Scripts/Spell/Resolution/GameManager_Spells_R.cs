@@ -426,7 +426,7 @@ public partial class GameManager
             }
 
             // Will save negates
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+            var saveResult = RollSpellSave(caster, target, spell, SaveType.Will, saveDc);
             string saveStr = $"d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc}";
 
             if (saveResult.Saved)
