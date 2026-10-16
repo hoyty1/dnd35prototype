@@ -1218,17 +1218,21 @@ public partial class GameManager
         CastStageRingCounterspell(ctx);
     }
 
-    /// <summary>MirrorImage: a targeted spell against a creature with figments may strike one instead (PHB p.254).</summary>
+    /// <summary>
+    /// MirrorImage: a spell cast at a creature with Mirror Image images picks a figure at random, one pick per missile
+    /// of a missile spell (PHB p.254; decision D7, batch 11 step 26; <see cref="TryResolveMirrorImageSpellPick"/>). A
+    /// spell spent on images ends here, Resolved; a pick of the real creature goes on.
+    /// </summary>
     private void CastStageMirrorImage(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.MirrorImage);
         CharacterController caster = ctx.Request.Caster;
         SpellData spell = ctx.Request.Spell;
-        if (TryHandleMirrorImageSpellTargetAttack(caster, ctx.Request.Aim.Target, spell, out string mirrorSpellLog))
+        if (TryResolveMirrorImageSpellPick(ctx, out string mirrorSpellLog, out string traceDetail))
         {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, "struck-image");
-            ctx.ResultLog = mirrorSpellLog;
-            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.MirrorImage, "struck-image"));
+            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, traceDetail);
+            ctx.ResultLog = ctx.LogPrefix + mirrorSpellLog;
+            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.MirrorImage, traceDetail));
             return;
         }
 
@@ -1361,7 +1365,8 @@ public partial class GameManager
         CharacterController target = ctx.Request.Aim.Target;
         SpellData spell = ctx.Request.Spell;
 
-        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.ForgoesSingleTargetSave, caster, target, ctx.GlobeAgainstTouch);
+        SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.ForgoesSingleTargetSave, caster, target, ctx.GlobeAgainstTouch,
+            missilesSpentOnImages: ctx.MissilesSpentOnImages);
         ctx.Result = result;
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
         if (result.BlockedByGlobe)
@@ -1436,6 +1441,14 @@ public partial class GameManager
 
         if (result.DamageDealt > 0 && target != null)
             CheckConcentrationOnDamage(target, result.DamageDealt);
+
+        // A hostile spell that struck the real figure of a Mirror Image creature, which did not vanish, shows the creatures
+        // watching which figure is real (decision D7 (6)): a spell with no attack roll, or one whose roll hit. A spell whose
+        // effect makes its own attacks (Spiritual Weapon, Produce Flame) reveals only through a hit, in its handler.
+        if (target != null && target != caster && MirrorImageRules.HasImages(target)
+            && !MirrorImageRules.SpellReachesDirectly(caster, target, spell) && !MirrorImageRules.MakesOwnAttackRolls(spell)
+            && (!result.RequiredAttackRoll || result.AttackHit))
+            MirrorImageRules.RevealRealFigure(target, caster);
 
         // Delivering a held charge clears it only if the touch actually lands; a missed touch keeps the charge.
         if (ctx.IsHeldChargeDelivery)

@@ -2395,10 +2395,7 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
         {
-            if (_isSelectingMirrorImageSwap)
-                CancelMirrorImageSwapSelectionAndSkip();
-            else
-                CancelSpecialAttackTargeting();
+            CancelSpecialAttackTargeting();
             return true;
         }
 
@@ -5667,7 +5664,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        // Special handling: Mirror Image needs clone spawning, not just a generic buff
+        // Special handling: Mirror Image needs its image count (MirrorImageRules), not just a generic buff
         if (string.Equals(consumableSpell.SpellId, SpellNames.MIRROR_IMAGE, System.StringComparison.Ordinal))
         {
             var mirrorResult = new SpellResult
@@ -5677,7 +5674,8 @@ public partial class GameManager : MonoBehaviour
                 CasterName = actor.Stats?.CharacterName ?? "Unknown",
                 TargetName = actor.Stats?.CharacterName ?? "Unknown"
             };
-            bool handled = TryResolveMirrorImageSpellEffect(actor, actor, consumableSpell, mirrorResult);
+            // The scroll's or wand's own caster level sets the image count and the duration (DMG p.238, p.245).
+            bool handled = ApplyMirrorImageSpell(actor, actor, consumableSpell, mirrorResult, casterLevel);
             if (handled)
             {
                 summary = $"Mirror Image applied via {item?.Name ?? "consumable"}.";

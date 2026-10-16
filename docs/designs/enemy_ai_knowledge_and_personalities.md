@@ -424,7 +424,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-002** | Casters on melee routines never cast. |
 | | **ENC-021** | DMG casters have no spells, so the Healer and Caster traits cannot act. |
 | Before Inc 2 | **AI-051** | Routines path to the true square of unseen targets (`AIService.cs:531, 882, 1188`). |
-| | **AI-036** | The Mirror Image override bypasses all scoring. |
+| | **AI-036** | The Mirror Image override bypasses all scoring (fixed 2026-10-16: removed in batch 11 step 26). |
 | | **AI-011** | Becomes the outcome-fact writers. |
 | Before Phase 4 | NPC skills (no issue exists yet; file one) | `NPCDefinition` has no skills field and `InitializeSkills` never runs for NPCs, so trained-only checks always fail for monsters. |
 | | **ENC-015** | The DMG `SpawnResult` is dropped at `EncounterSelectionUI.cs:676`, so DMG encounters carry no intel context. |
@@ -459,7 +459,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 
 ### Increment 2: fair sight (large)
 
-- **Prerequisites:** AI-051, AI-036 and the Inc 1 fixes.
+- **Prerequisites:** AI-051 and the Inc 1 fixes (AI-036 fixed 2026-10-16).
 - **Build:**
   - `KnowledgeService`, `SideKnowledgeStore`, `VisualFactExtractor` and `ConditionVisibility`.
   - `PerceivedKnowledgeProvider` with tier filtering and `EncounterEntityId` keys.

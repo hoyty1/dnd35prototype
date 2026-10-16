@@ -6015,6 +6015,9 @@ public partial class GameManager
             return false;
         bool anyExpired = false;
         var statusMgr = character.StatusEffectManager;
+        // Mirror Image images whose tracked effect was removed by anything but its expiry end with it (batch 11 step 26).
+        if (MirrorImageRules.HasImages(character))
+            SyncMirrorImageDurationForCaster(character, statusMgr);
         if (statusMgr != null && statusMgr.ActiveEffectCount > 0
             && (ticksForAnchor == null || statusMgr.ActiveEffects.Exists(e => e != null && ticksForAnchor(e.DurationAnchor))))
         {

@@ -54,7 +54,8 @@ public static class SpellCaster
         CharacterController casterController,
         CharacterController targetController,
         LesserGlobeOfInvulnerabilityAreaEffect globeAgainstTouch = null,
-        AreaDamageRoll areaDamageRoll = null)
+        AreaDamageRoll areaDamageRoll = null,
+        int missilesSpentOnImages = 0)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -145,25 +146,14 @@ public static class SpellCaster
             bool isRanged = spell.IsRangedTouchSpell();
             result.IsRangedTouch = isRanged;
 
-            // A touch attack is an attack roll: the racial bonus against the target's kind applies (PHB p.15, p.17; CHR-019).
-            int atkBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged)
-                + RacialTraitRules.AttackBonusAgainst(casterStats, targetStats);
-
-            int situationalSpellAttackBonus = 0;
-            string situationalSpellAttackSource = string.Empty;
-            if (ShouldApplyShockingGraspMetalBonus(spell, targetController, targetStats, out string shockingGraspBonusSource))
-            {
-                situationalSpellAttackBonus += 3;
-                situationalSpellAttackSource = shockingGraspBonusSource;
-            }
-
-            int fightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
-            bool preciseShotNegated = false;
-            int shootingIntoMeleePenalty = 0;
-            if (isRanged)
-            {
-                shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(casterController, targetController, out preciseShotNegated);
-            }
+            // The touch attack's modifier: one rule with the Mirror Image stage's roll against an image (SpellTouchAttack).
+            SpellTouchAttackTerms terms = SpellTouchAttack(spell, casterController, casterStats, targetController, targetStats, isRanged, againstImage: false);
+            int atkBonus = terms.AttackBonus;
+            int situationalSpellAttackBonus = terms.SituationalBonus;
+            string situationalSpellAttackSource = terms.SituationalSource;
+            int fightingDefensivelyPenalty = terms.FightingDefensivelyPenalty;
+            bool preciseShotNegated = terms.PreciseShotNegated;
+            int shootingIntoMeleePenalty = terms.ShootingIntoMeleePenalty;
 
             int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
                 + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0)
@@ -177,28 +167,16 @@ public static class SpellCaster
                 result.ProtectionAcBonus = protectionDeflection;
             }
 
-            int animateRopeRangePenalty = 0;
-            int animateRopeIncrement = 0;
-            if (isRanged
-                && spell != null
-                && string.Equals(spell.SpellId, SpellNames.ANIMATE_ROPE, System.StringComparison.Ordinal)
-                && casterController != null
-                && targetController != null)
+            int animateRopeRangePenalty = terms.RangeIncrementPenalty;
+            int animateRopeIncrement = terms.RangeIncrement;
+            if (terms.BeyondMaximumRange)
             {
-                int distanceSquares = SquareGridUtils.GetDistance(casterController.GridPosition, targetController.GridPosition);
-                int distanceFeet = Mathf.Max(0, distanceSquares * 5);
-                animateRopeIncrement = Mathf.Max(1, Mathf.CeilToInt(distanceFeet / 10f));
-                if (animateRopeIncrement > 5)
-                {
-                    result.RequiredAttackRoll = true;
-                    result.IsRangedTouch = true;
-                    result.AttackHit = false;
-                    result.Success = false;
-                    result.NoEffectReason = $"Target is beyond Animate Rope maximum range (increment {animateRopeIncrement}/5).";
-                    return result;
-                }
-
-                animateRopeRangePenalty = -2 * Mathf.Max(0, animateRopeIncrement - 1);
+                result.RequiredAttackRoll = true;
+                result.IsRangedTouch = true;
+                result.AttackHit = false;
+                result.Success = false;
+                result.NoEffectReason = $"Target is beyond Animate Rope maximum range (increment {animateRopeIncrement}/5).";
+                return result;
             }
 
             int roll = DiceService.D20(TouchAttackContext);
@@ -497,9 +475,9 @@ public static class SpellCaster
 
             if (spell.AutoHit && spell.MissileCount > 0)
             {
-                // Magic Missile: 1 + (CL-1)/2 missiles, max 5, at the cast's caster level (a scroll's or wand's own; SPL-016)
-                int effectiveCasterLevel = CastCasterLevel(casterController, casterStats, spell);
-                int missileCount = Mathf.Min(5, 1 + (effectiveCasterLevel - 1) / 2);
+                // Magic Missile: 1 + (CL-1)/2 missiles, max 5, at the cast's caster level (a scroll's or wand's own; SPL-016),
+                // less the missiles a Mirror Image figure pick spent on images (PHB p.254; batch 11 step 26).
+                int missileCount = Mathf.Max(1, MissileCountFor(casterController, casterStats, spell) - Mathf.Max(0, missilesSpentOnImages));
                 result.MissileCount = missileCount;
                 result.MissileDamages = new int[missileCount];
                 int totalDmg = 0;
@@ -1001,6 +979,84 @@ public static class SpellCaster
         }
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// The missiles of a missile spell (Magic Missile, PHB p.251): 1 + (CL - 1) / 2, at most 5, at the cast's caster level
+    /// (a scroll's or wand's own; SPL-016). Read by <see cref="Cast"/> and by the cast core's Mirror Image stage, which
+    /// picks a figure for each missile (batch 11 step 26).
+    /// </summary>
+    public static int MissileCountFor(CharacterController casterController, CharacterStats casterStats, SpellData spell)
+    {
+        int effectiveCasterLevel = CastCasterLevel(casterController, casterStats, spell);
+        return Mathf.Clamp(1 + (effectiveCasterLevel - 1) / 2, 1, 5);
+    }
+
+    /// <summary>The terms of a spell's touch or ray attack roll (<see cref="SpellTouchAttack"/>).</summary>
+    public struct SpellTouchAttackTerms
+    {
+        /// <summary>The touch attack bonus (BAB + Str or Dex + size) and the racial bonus against the target's kind.</summary>
+        public int AttackBonus;
+        /// <summary>Shocking Grasp's +3 against metal (PHB p.279).</summary>
+        public int SituationalBonus;
+        public string SituationalSource;
+        public int FightingDefensivelyPenalty;
+        public int ShootingIntoMeleePenalty;
+        public bool PreciseShotNegated;
+        /// <summary>Animate Rope's range increment (PHB p.199) and its penalty.</summary>
+        public int RangeIncrement;
+        public int RangeIncrementPenalty;
+        /// <summary>Beyond Animate Rope's fifth range increment: the attack cannot be made.</summary>
+        public bool BeyondMaximumRange;
+
+        public int Total => AttackBonus + SituationalBonus + FightingDefensivelyPenalty + ShootingIntoMeleePenalty + RangeIncrementPenalty;
+    }
+
+    /// <summary>
+    /// The modifier of a spell's touch or ray attack, one rule for <see cref="Cast"/>'s roll against the target and the
+    /// Mirror Image stage's roll against one of its images (PHB p.254; batch 11 step 26): the caster's touch attack bonus
+    /// (BAB + Str or Dex + size) and its racial bonus against the target's kind (PHB p.15, p.17; CHR-019), Shocking
+    /// Grasp's +3 against metal, fighting defensively, and for a ray, shooting into melee and Animate Rope's range
+    /// increments. <paramref name="againstImage"/>: the roll is against a figment, which wears no metal (PHB p.173), so
+    /// Shocking Grasp's bonus does not apply (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1).
+    /// </summary>
+    public static SpellTouchAttackTerms SpellTouchAttack(SpellData spell, CharacterController casterController, CharacterStats casterStats,
+        CharacterController targetController, CharacterStats targetStats, bool isRanged, bool againstImage)
+    {
+        var terms = new SpellTouchAttackTerms { SituationalSource = string.Empty };
+        if (casterStats == null)
+            return terms;
+
+        // A touch attack is an attack roll: the racial bonus against the target's kind applies (PHB p.15, p.17; CHR-019).
+        terms.AttackBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged)
+            + RacialTraitRules.AttackBonusAgainst(casterStats, targetStats);
+
+        if (!againstImage && ShouldApplyShockingGraspMetalBonus(spell, targetController, targetStats, out string shockingGraspBonusSource))
+        {
+            terms.SituationalBonus += 3;
+            terms.SituationalSource = shockingGraspBonusSource;
+        }
+
+        terms.FightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
+        if (isRanged)
+            terms.ShootingIntoMeleePenalty = GetShootingIntoMeleePenalty(casterController, targetController, out terms.PreciseShotNegated);
+
+        if (isRanged
+            && spell != null
+            && string.Equals(spell.SpellId, SpellNames.ANIMATE_ROPE, System.StringComparison.Ordinal)
+            && casterController != null
+            && targetController != null)
+        {
+            int distanceSquares = SquareGridUtils.GetDistance(casterController.GridPosition, targetController.GridPosition);
+            int distanceFeet = Mathf.Max(0, distanceSquares * 5);
+            terms.RangeIncrement = Mathf.Max(1, Mathf.CeilToInt(distanceFeet / 10f));
+            if (terms.RangeIncrement > 5)
+                terms.BeyondMaximumRange = true;
+            else
+                terms.RangeIncrementPenalty = -2 * Mathf.Max(0, terms.RangeIncrement - 1);
+        }
+
+        return terms;
     }
 
     /// <summary>

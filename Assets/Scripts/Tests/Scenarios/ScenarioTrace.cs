@@ -618,6 +618,10 @@ namespace Tests.Scenarios
                 .Set("barrier", r.ProtectionSummonedBarrierBlocked)
                 .Set("deflected", IsDeflected(r))
                 .Set("attackerDown", ScenarioChecks.IsDown(attacker));
+            // An attack the Mirror Image figure pick sent at an image (PHB p.254; batch 11 step 26): rolled against the
+            // image's AC, never a hit on the target. Set only then, so every other attack event keeps its hash.
+            if (r.MirrorImageFigure)
+                ev.Set("mirrorImage", true).Set("imageStruck", r.MirrorImageFigureHit);
             _attackByResult[r] = ev;
             _job.Checks.OnAttack(attacker, ev);
         }

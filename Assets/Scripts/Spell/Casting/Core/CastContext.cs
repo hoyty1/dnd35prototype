@@ -89,6 +89,9 @@ public sealed class CastContext
     /// </summary>
     internal LesserGlobeOfInvulnerabilityAreaEffect GlobeAgainstTouch;
 
+    /// <summary>The missiles of a missile spell that the MirrorImage stage's per-missile picks spent on images (SpellCaster.Cast fires the rest).</summary>
+    internal int MissilesSpentOnImages;
+
     /// <summary>The cast's result log (with <see cref="LogPrefix"/>), shown once (GameManager.FlushCastLog).</summary>
     internal string ResultLog;
     internal bool ResultLogShown;
@@ -175,6 +178,7 @@ public sealed class CastContext
         RetainedHeldChargeOnMiss = false;
         CombatEnded = false;
         GlobeAgainstTouch = null;
+        MissilesSpentOnImages = 0;
         ResultLog = null;
         ResultLogShown = false;
         ConsoleLogLabel = "[Spell] ";

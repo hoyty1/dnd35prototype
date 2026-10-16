@@ -122,7 +122,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
             PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
             NameColor = new Color(1f, 0.45f, 0.45f),
-            Description = "Shortbow goblin used in the Mirror Image Test Arena for clone-targeting and dissipation validation."
+            Description = "Shortbow goblin used in the Mirror Image Test Arena to validate the random figure pick and image destruction."
         });
     }
 

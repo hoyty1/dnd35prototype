@@ -590,10 +590,7 @@ public partial class GameManager
                 break;
 
             case PlayerSubPhase.SelectingSpecialTarget:
-                if (_isSelectingMirrorImageSwap)
-                    HandleMirrorImageSwapCellClick(pc, cell);
-                else
-                    HandleSpecialAttackTargetClick(pc, cell);
+                HandleSpecialAttackTargetClick(pc, cell);
                 break;
 
             case PlayerSubPhase.ConfirmingTurnUndead:
@@ -2935,10 +2932,6 @@ public partial class GameManager
     /// </summary>
     private void EndActivePCTurn()
     {
-        CharacterController pc = ActivePC;
-        if (TryBeginMirrorImageSwapSelection(pc))
-            return;
-
         EndAttackSequence();
         EndThrownAttackSequence();
         ResetOffHandTurnState();

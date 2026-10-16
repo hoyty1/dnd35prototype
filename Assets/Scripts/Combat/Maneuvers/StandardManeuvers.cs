@@ -1387,7 +1387,7 @@ public partial class GameManager
 
             SquareCell targetCell = Grid.GetCell(targetNext);
             if (targetCell != null)
-                target.MoveToCell(targetCell, markAsMoved: false);
+                target.MoveToCell(targetCell, markAsMoved: false, forced: true);
             if (target.GridPosition != targetNext)
             {
                 obstructed = true;
@@ -1517,7 +1517,7 @@ public partial class GameManager
                 break;
             SquareCell cell = Grid.GetCell(next);
             if (cell != null)
-                target.MoveToCell(cell);
+                target.MoveToCell(cell, forced: true);
             if (target.GridPosition != next)
                 break;
             pushed++;

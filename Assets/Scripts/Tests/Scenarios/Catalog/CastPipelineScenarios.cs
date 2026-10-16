@@ -36,6 +36,8 @@ namespace Tests.Scenarios
             yield return S("holy-area-overlap", HolyAreaOverlap);
             yield return S("bane-area", BaneArea);
             yield return S("cast-ui-sleep", UiSleep);
+            yield return S("mirror-image-figure-pick", MirrorImageFigurePickUi);
+            yield return S("mirror-image-pc-attacker", MirrorImagePcAttacker);
             yield return S("cast-ui-sleep-quickened", UiSleepQuickened);
             yield return S("cast-scroll-ui", () => ItemCast(scroll: true));
             yield return S("cast-wand-ui", () => ItemCast(scroll: false));
@@ -393,6 +395,141 @@ namespace Tests.Scenarios
         /// <summary>A trace condition event: <paramref name="actor"/> gained (or lost) <paramref name="type"/>.</summary>
         private static bool IsCondition(TraceEvent e, string actor, string type, bool added)
             => e.Str("actor") == actor && Convert.ToString(e.Get("type")) == type && e.Bool("added") == added;
+
+        /// <summary>
+        /// Mirror Image by RAW (PHB p.254; decision D7, batch 11 step 26): a Ui wizard 5 casts Mirror Image (d4 = 3, plus 1
+        /// for caster level 5: four images); goblin g1 (Scripted) attacks and the 1d5 figure pick names an image (3): the
+        /// d20 of 19 beats the image AC (10 + size + Dex), the image vanishes and the wizard takes nothing; goblin g2's 1d4
+        /// pick (three images left) is a 1, the real wizard, who is hit, and g2 learns which figure is real. In round 2 the
+        /// wizard's own 5-foot step confounds g2 again. The goblins act after the wizard, so they are flat-footed and make
+        /// no AoO against the cast (PHB p.137). The NPC-attacker half of the rule; mirror-image-pc-attacker is the PC half.
+        /// </summary>
+        private static ScenarioDef MirrorImageFigurePickUi()
+        {
+            return Rules("rules/mirror-image-figure-pick", "Mirror Image: each attack picks a random figure; an image hit vanishes (PHB p.254)")
+                .Covers("PHB p.254", "SPL-117", "AI-036", "batch 11 step 26")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Mirror Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("g1", "goblin", 6, 10, Control.Scripted)
+                .Npc("g2", "goblin", 5, 11, Control.Scripted)
+                .Tweak("wizard", c => { Prepare(c, 2, SpellNames.MIRROR_IMAGE); Sturdy(c); })
+                .Initiative("wizard", "g1", "g2")
+                .Force(4, 3, MirrorImageRules.CountRollContext, 1)
+                .Force(5, 3, MirrorImageRules.FigureRollContext, 1)
+                .Force(4, 1, MirrorImageRules.FigureRollContext, 1)
+                .Force(20, 19, null, -1)
+                .Turn("wizard", 1,
+                    Step.Cast(SpellNames.MIRROR_IMAGE, "wizard"),
+                    Step.Assert("cast", ctx =>
+                    {
+                        Fact(ctx, "images.cast", MirrorImageRules.ImagesOf(ctx.Get("wizard")));
+                        Fact(ctx, "hp.cast", ctx.Get("wizard").Stats.CurrentHP);
+                        return true;
+                    }))
+                .Turn("g1", 1,
+                    Step.Attack("wizard"),
+                    Step.Assert("g1", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "images.g1", MirrorImageRules.ImagesOf(w));
+                        Fact(ctx, "hp.g1", w.Stats.CurrentHP);
+                        Fact(ctx, "knows.g1", MirrorImageRules.KnowsRealFigure(ctx.Get("g1"), w));
+                        return true;
+                    }))
+                .Turn("g2", 1,
+                    Step.Attack("wizard"),
+                    Step.Assert("g2", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "images.g2", MirrorImageRules.ImagesOf(w));
+                        Fact(ctx, "hurt.g2", w.Stats.CurrentHP < w.Stats.MaxHP);
+                        Fact(ctx, "knows.g2", MirrorImageRules.KnowsRealFigure(ctx.Get("g2"), w));
+                        return true;
+                    }))
+                .Turn("wizard", 2,
+                    Step.FiveFootStep(4, 10),
+                    Step.Assert("moved", ctx =>
+                    {
+                        Fact(ctx, "knows.moved", MirrorImageRules.KnowsRealFigure(ctx.Get("g2"), ctx.Get("wizard")));
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Turn("g1", 2, Step.Pass())
+                .Turn("g2", 2, Step.Pass())
+                .Expect("Caster level 5 and a d4 of 3 make four images (1d4 + 1 per three levels, PHB p.254)", FactIs("images.cast", 4))
+                .Expect("g1's attack picks an image, hits its AC, and the image vanishes",
+                    FactsAre(("images.g1", 3), ("knows.g1", false)))
+                .Expect("No damage from the image strike", FactsEqual("hp.cast", "hp.g1"))
+                .Expect("g2's pick of 1 is the real wizard: it is hit, no image is lost, and g2 learns the real figure",
+                    FactsAre(("images.g2", 3), ("hurt.g2", true), ("knows.g2", true)))
+                .Expect("The wizard's own 5-foot step confounds g2 again (PHB p.254)", FactIs("knows.moved", false))
+                .Expect("The image strike is in the attack trace as an image struck, not a hit on the wizard", v =>
+                {
+                    List<TraceEvent> g1 = v.Attacks("g1", "wizard", false);
+                    return g1.Count > 0 && !g1[0].Bool("hit") && g1[0].Bool("mirrorImage") && g1[0].Bool("imageStruck")
+                        ? ExpectResult.Pass("g1 attack recorded on an image")
+                        : ExpectResult.Fail(g1.Count + " attacks" + (g1.Count > 0 ? ", hit " + g1[0].Bool("hit") + ", image " + g1[0].Bool("mirrorImage") : ""));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// Gives <paramref name="c"/> <paramref name="images"/> Mirror Image images with the tracked effect a cast would add
+        /// (the duration tick ends images whose effect is gone, batch 11 step 26).
+        /// </summary>
+        private static void GrantMirrorImages(CharacterController c, int images)
+        {
+            StatusEffectManager sem = c.StatusEffectManager ?? c.gameObject.AddComponent<StatusEffectManager>();
+            sem.Init(c.Stats);
+            sem.AddEffect(SpellDatabase.GetSpell(SpellNames.MIRROR_IMAGE).Clone(), c.Stats.CharacterName, 3);
+            MirrorImageRules.Grant(c, images);
+        }
+
+        /// <summary>
+        /// The PC half of <see cref="MirrorImageFigurePickUi"/>: a Ui fighter attacks a goblin with two Mirror Image images
+        /// (granted by the tweak with the tracked effect; a cast grants them through the same rule). Round 1: the 1d3 pick is an image (2) and the
+        /// d20 of 19 beats its AC, so it vanishes and the goblin is unharmed. Round 2: the 1d2 pick is the goblin (1) and the
+        /// d20 of 19 hits it (PHB p.254; decision D7, batch 11 step 26).
+        /// </summary>
+        private static ScenarioDef MirrorImagePcAttacker()
+        {
+            return Rules("rules/mirror-image-pc-attacker", "Mirror Image fools a PC attacker the same way (PHB p.254)")
+                .Covers("PHB p.254", "SPL-117", "PC_NPC_PARITY", "batch 11 step 26")
+                .MaxRounds(2)
+                .Pc("fighter", ActorSource.Stats(() => BardScenarios.Fighter("Mirror Fighter", 6)), 8, 10, Control.Ui)
+                .Npc("goblin", "goblin", 9, 10, Control.Idle)
+                .Tweak("fighter", RulesScenarios.StripOffHand)
+                .Tweak("goblin", c => { Sturdy(c); GrantMirrorImages(c, 2); })
+                .Initiative("fighter", "goblin")
+                .Force(3, 2, MirrorImageRules.FigureRollContext, 1)
+                .Force(2, 1, MirrorImageRules.FigureRollContext, 1)
+                .Force(20, 19, null, -1)
+                .Turn("fighter", 1,
+                    Step.Attack("goblin"),
+                    Step.Assert("r1", ctx =>
+                    {
+                        CharacterController g = ctx.Get("goblin");
+                        Fact(ctx, "images.r1", MirrorImageRules.ImagesOf(g));
+                        Fact(ctx, "hurt.r1", g.Stats.CurrentHP < g.Stats.MaxHP);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Turn("fighter", 2,
+                    Step.Attack("goblin"),
+                    Step.Assert("r2", ctx =>
+                    {
+                        CharacterController g = ctx.Get("goblin");
+                        Fact(ctx, "images.r2", MirrorImageRules.ImagesOf(g));
+                        Fact(ctx, "hurt.r2", g.Stats.CurrentHP < g.Stats.MaxHP);
+                        Fact(ctx, "knows.r2", MirrorImageRules.KnowsRealFigure(ctx.Get("fighter"), g));
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("Round 1: the pick is an image, which the hit destroys; the goblin is unharmed", FactsAre(("images.r1", 1), ("hurt.r1", false)))
+                .Expect("Round 2: the pick is the goblin, which is hit; the fighter learns the real figure",
+                    FactsAre(("images.r2", 1), ("hurt.r2", true), ("knows.r2", true)))
+                .Build();
+        }
 
         /// <summary>
         /// A Ui area cast resolved by one of the area handlers that used to show its own log and pace the turn

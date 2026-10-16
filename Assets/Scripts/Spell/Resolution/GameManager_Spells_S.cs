@@ -650,6 +650,16 @@ public partial class GameManager
         // Attack roll: caster's BAB + WIS modifier
         int bab = caster.Stats.BaseAttackBonus;
         int wisMod = caster.Stats.WISMod;
+
+        // Mirror Image (PHB p.254; decision D7 (2), batch 11 step 26): each of the weapon's attacks, the first and every
+        // later one, picks a figure; the cleric's senses aim it. An image is rolled against 10 + size + Dex and vanishes on
+        // a hit; the weapon stays either way.
+        if (MirrorImageRules.TryStrikeImageWithEffectAttack(caster, target, bab + wisMod, "Spiritual Weapon attack", "Spiritual Weapon", out string imageNote))
+        {
+            Debug.Log($"[SpiritualWeapon] {imageNote}");
+            return $"  ⚔ {imageNote}";
+        }
+
         int attackRoll = DiceService.D20("Spiritual Weapon attack");
         int totalAttack = attackRoll + bab + wisMod;
         int targetAC = target.Stats.ArmorClass;
@@ -669,6 +679,9 @@ public partial class GameManager
             damage = dealt.FinalDamage;
 
             sb.Append($"  ⚔ Spiritual Weapon attacks {target.Stats.CharacterName}: {attackRoll}+{bab}+{wisMod}={totalAttack} vs AC {targetAC} — HIT for {damage} force damage{DescribeMitigation(dealt)}!");
+            // A hit on the real figure of a Mirror Image creature shows who is real (decision D7 (6)).
+            if (MirrorImageRules.HasImages(target))
+                MirrorImageRules.RevealRealFigure(target, caster);
             if (target.Stats.IsDead)
                 sb.Append($" 💀 {target.Stats.CharacterName} has been slain!");
             Debug.Log($"[SpiritualWeapon] Hit {target.Stats.CharacterName}: roll={attackRoll}+BAB{bab}+WIS{wisMod}={totalAttack} vs AC{targetAC}, damage={damage}");

@@ -1078,7 +1078,7 @@ public partial class GameManager
                         continue;
                     }
 
-                    opponent.MoveToCell(destinationCell, markAsMoved: false);
+                    opponent.MoveToCell(destinationCell, markAsMoved: false, forced: true);
                     if (opponent.GridPosition == opponentDestination)
                     {
                         movedSet.Add(opponent);

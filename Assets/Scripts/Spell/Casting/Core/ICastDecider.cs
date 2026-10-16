@@ -47,7 +47,8 @@ public enum CastProvocationAnswer
 /// caster's choices. The UI decider asks the player through the dialogs and the AoO prompt and can suspend the cast;
 /// the AI decider answers inline. The cast core (GameManager.ExecuteCast) asks the decider at fixed points; the rules
 /// stay in the core's stages. A question put to another creature than the caster (a target giving up its save, since
-/// batch 11 step 18) goes to that creature's own decider (CastDeciders.For). Still to come: ChooseMirrorImageSwap.
+/// batch 11 step 18) goes to that creature's own decider (CastDeciders.For). Mirror Image asks no decider: its figure
+/// pick is random for every attacker (MirrorImageRules, batch 11 step 26).
 /// </summary>
 public interface ICastDecider
 {

@@ -346,7 +346,7 @@ public class GustOfWindEffect
         if (destinationCell == null)
             return 0;
 
-        target.MoveToCell(destinationCell, markAsMoved: false);
+        target.MoveToCell(destinationCell, markAsMoved: false, forced: true);
         return movedSquares;
     }
 

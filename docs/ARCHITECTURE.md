@@ -179,7 +179,7 @@ There are 62 files (since batch 11 step 7 added `GameManager.CastCore.cs` and `G
 | GameManager_FlamingSphere.cs | 675 | Flaming Sphere control (`OnControlFlamingSphereButtonPressed`), turn-start damage, AI control. |
 | GameManager_Grease.cs | 750 | Grease area/object/armor modes (the mode prompt, the request builder `PerformGreaseCast` and the cast core's Grease resolve `ResolveGreaseCast`), ticking, clearing. |
 | GameManager_HolyAreas.cs | 304 | Consecrate / Desecrate. |
-| GameManager_MirrorImage.cs | 827 | Mirror Image clones, end-of-turn swap selection, cleanup. |
+| GameManager_MirrorImage.cs | 273 | Mirror Image's cast handler (the image count), the cast core's figure pick for a spell, the caster's movement confounding its foes, cleanup; the rule itself is `Spell/Special/MirrorImageRules.cs` (batch 11 step 26). |
 | GameManager_WallOfFire/Ice/Force.cs | 681 / 315 / 208 | Wall placement modes and targeting. |
 | **Spell/Domain/** (3) | | |
 | GameManager_DomainPowers.cs | 987 | Cleric granted powers (`OnDomainPowerButtonPressed`, `TickDomainPowerDurations`). |
@@ -282,8 +282,8 @@ Assets/Scripts/
     Casting/ (12) + Core/ (13: SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
                          UiCastDecider, CastResourceSnapshot, CastStageTrace, LegacyCastQuirk, CastActionRules,
                          CastComponentRules, CasterLevelRules), Components/ (7), Effects/ (1: EffectService)
-    Resolution/ (26), Special/ (9), Domain/ (3)   mostly GameManager partials
-    AreaEffects/ (32), StatusEffects/ (29)
+    Resolution/ (26), Special/ (10), Domain/ (3)  mostly GameManager partials (Special/ also MirrorImageRules)
+    AreaEffects/ (32), StatusEffects/ (28)
   Equipment/             Items/ (9), Inventory/ (10), Weapons/ (18), Armor/ (10), Rings/ (7),
                          Rods/ (5), Staves/ (3), Wondrous/ (4), SpecificItems/ (4), Enchantments/ (7),
                          Materials/ (1), SpellStorage/ (3), Effects/ (1), Store/ (3: StoreInventory, StoreUI, StoreSelling)

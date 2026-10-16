@@ -376,8 +376,8 @@ public partial class GameManager
         if (_isMirrorImageTestEncounter)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "🪞 Mirror Image Test Arena enemy ring: 4 goblin archers spawned at N/E/S/W ~25 ft from center."));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Expected flow: cast Mirror Image, observe clone visuals, end-turn swap prompt, and clone-target redirection in combat log."));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Repeat until all clones dissipate, then confirm real caster hits and remaining duration behavior."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Expected flow: cast Mirror Image, then watch each arrow pick a random figure: an image hit vanishes, a 1 in (images + 1) strikes the caster."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Repeat until every image is gone; a goblin that hits the real figure attacks it directly until the caster moves."));
         }
 
         if (_isProtectionFromEvilTestEncounter)

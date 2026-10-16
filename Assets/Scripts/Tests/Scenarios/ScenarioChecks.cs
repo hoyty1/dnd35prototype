@@ -444,6 +444,14 @@ namespace Tests.Scenarios
                 Violation(AttackMath, key + " hit on a natural 1 (PHB p.134)", attacker);
             // Concealment, a protection barrier and Deflect Arrows (PHB p.93) all turn a hit into a miss.
             bool excused = ev.Bool("conceal") || ev.Bool("barrier") || ev.Bool("deflected");
+            // An attack on a Mirror Image image (PHB p.254) never hits the target: its roll decides only the image.
+            if (ev.Bool("mirrorImage"))
+            {
+                bool struck = ev.Bool("imageStruck");
+                if (struck != ((total >= ac || ev.Bool("nat20")) && !ev.Bool("nat1")))
+                    Violation(AttackMath, key + " Mirror Image roll " + total + " against image AC " + ac + " but struck=" + struck, attacker);
+                return;
+            }
             if (hit && total < ac && !ev.Bool("nat20"))
                 Violation(AttackMath, key + " hit with " + total + " against AC " + ac + " (die " + die + ")", attacker);
             if (!hit && total >= ac && !ev.Bool("nat1") && !excused)

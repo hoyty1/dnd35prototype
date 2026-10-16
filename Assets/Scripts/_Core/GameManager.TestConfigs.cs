@@ -1720,9 +1720,9 @@ public partial class GameManager
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "🪞 Mirror Image Test Arena loaded: Mirror Mage Theron (Wizard 5, HP 30, AC 14)."));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Turn 1 prompt: cast Mirror Image to spawn 1d4+1 clones around the caster."));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   End-turn flow: use swap prompt to reposition with adjacent clone and watch target redirection."));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validate outcomes: clone dissipates on hit, real caster can still be struck, and status icon/log tracks remaining images + duration."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Turn 1 prompt: cast Mirror Image: 1d4 + 1 images (caster level 5), at most 8."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Each attack or spell at the caster picks a random figure (PHB p.254); moving confounds foes that found the real one."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validate outcomes: an image vanishes when an attack hits its AC (10 + size + Dex), the real caster is struck on a 1, and the log tracks the images left."));
     }
 
     private void ConfigureClericSpellTestParty()

@@ -2223,6 +2223,12 @@ public class CharacterController : MonoBehaviour
         ActiveSlowEffect = null;
     }
 
+    /// <summary>
+    /// This creature's Mirror Image figments (PHB p.254; MirrorImageRules, batch 11 step 26): the images left and the
+    /// creatures that know the real figure. Null when it has none. Cleared by <see cref="ResetForNewCreature"/> (CRE-046).
+    /// </summary>
+    public MirrorImageFigures MirrorImageFigures;
+
     public bool HasActiveInvisibilityEffect => ActiveInvisibilityEffect != null && ActiveInvisibilityEffect.IsInvisible;
     public bool HasActiveSeeInvisibilityEffect => ActiveSeeInvisibilityEffect != null && ActiveSeeInvisibilityEffect.CanSeeInvisible;
     public bool HasActiveGlitterdustEffect => ActiveGlitterdustEffect != null && ActiveGlitterdustEffect.OutlinedByDust && ActiveGlitterdustEffect.DurationRemainingRounds > 0;
@@ -3940,7 +3946,10 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     /// <param name="targetCell">Destination grid cell.</param>
     /// <param name="markAsMoved">Whether this movement should count as normal movement for turn tracking.</param>
-    public void MoveToCell(SquareCell targetCell, bool markAsMoved = true)
+    /// <param name="forced">The creature is pushed or dragged by something else (bull rush, overrun, Gust of Wind, a
+    /// grappler's drag): GameManager.NotifyCharacterMovement is told it is not the creature's own movement (Mirror Image's
+    /// re-confounding, PHB p.254). The movement type the trace sees is unchanged.</param>
+    public void MoveToCell(SquareCell targetCell, bool markAsMoved = true, bool forced = false)
     {
         if (targetCell == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
             return;
@@ -3961,7 +3970,7 @@ public class CharacterController : MonoBehaviour
             HasMovedThisTurn = true;
 
         if (oldPosition != GridPosition)
-            GameManager.Instance?.NotifyCharacterMovement(this, oldPosition, GridPosition, markAsMoved ? "move" : "reposition");
+            GameManager.Instance?.NotifyCharacterMovement(this, oldPosition, GridPosition, markAsMoved ? "move" : "reposition", forced);
     }
 
     /// <summary>
@@ -4524,6 +4533,7 @@ public class CharacterController : MonoBehaviour
         WasSummoned = false;
 
         // Spell-effect records kept on the controller (their stat changes went to the old stats).
+        MirrorImageFigures = null;
         ActiveDisguiseSelfEffect = null;
         ActiveExpeditiousRetreatEffect = null;
         ActiveInvisibilityEffect = null;
@@ -4647,6 +4657,9 @@ public class CharacterController : MonoBehaviour
             RemoveCondition(CombatConditionType.Feinted);
 
         _lastKnownTargetPositions.Remove(other);
+
+        // The old creature's knowledge of which of this creature's Mirror Image figures is real (PHB p.254).
+        MirrorImageRules.Forget(this, other);
 
         // A counterspell readied against the old creature must not fire against the new one in the same controller.
         if (ReadiedCounterspell != null && ReadiedCounterspell.WatchedCaster == other)
@@ -7369,6 +7382,9 @@ public class CharacterController : MonoBehaviour
             dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
         if (GameManager.Instance != null && target != null)
             GameManager.Instance.NotifyWeaponAttackAgainst(this, target);
+        // A hit on the real figure of a Mirror Image caster shows who is real to everyone watching (decision D7 (6)).
+        if (result != null && result.Hit && !result.MirrorImageFigure && MirrorImageRules.HasImages(target))
+            MirrorImageRules.RevealRealFigure(target, this);
         ScenarioHooks.AttackResolved?.Invoke(this, result);
         return result;
     }
@@ -7734,14 +7750,18 @@ public class CharacterController : MonoBehaviour
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
 
-        if (GameManager.Instance != null && GameManager.Instance.TryHandleMirrorImageCloneAttacked(this, target, result, totalAtkModWithTrueStrike, out CombatResult mirrorCloneResult))
+        // Mirror Image (PHB p.254; decision D7, batch 11 step 26): an attack on a caster with images picks a figure at
+        // random; an image is rolled against 10 + size + Dex, and a hit destroys it with no damage and no on-hit effect.
+        // The same for every attacker and caster (MirrorImageRules).
+        // The attack roll against an image is still this attack's roll: the same bookkeeping follows it as a roll against
+        // the caster (a declared Destruction smite and True Strike are used up, a Luck reroll is logged, the modifiers
+        // are listed), so a daily smite spent on an image is spent.
+        if (MirrorImageRules.TryStrikeImageWithAttack(this, target, totalAtkModWithTrueStrike, result))
         {
-            mirrorCloneResult.IsRangedAttack = isRangedAttack;
-            if (trueStrikeActive)
-                trueStrike.ConsumeOnAttackRoll();
-
-            mirrorCloneResult.RebuildBreakdownsFromComputedValues();
-            return mirrorCloneResult;
+            result.IsRangedAttack = isRangedAttack;
+            FinishAttackRollBookkeeping();
+            result.RebuildBreakdownsFromComputedValues();
+            return result;
         }
 
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
@@ -7916,9 +7936,6 @@ public class CharacterController : MonoBehaviour
         // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkModWithTrueStrike, targetAC);
 
-        // Log Luck domain reroll if it was triggered during the attack roll
-        GameManager.Instance?.LogLuckRerollIfTriggered(Stats);
-
         result.DieRoll = roll;
         result.TotalRoll = total;
         result.TargetAC = targetAC;
@@ -7927,46 +7944,57 @@ public class CharacterController : MonoBehaviour
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
 
-        // Consume Destruction Domain Smite immediately after the attack roll (D&D 3.5e: declared before attack)
-        if (destructionSmiteAttackBonus > 0)
+        FinishAttackRollBookkeeping();
+
+        // What follows every attack roll of this attack, against the caster or one of its Mirror Image figures: the Luck
+        // reroll's log, the declared Destruction smite used up (declared before the attack, PHB p.186), the smite note,
+        // the attack modifiers listed, and True Strike used up (hit or miss).
+        void FinishAttackRollBookkeeping()
         {
-            result.AddAttackBuffDebuffModifier("Destruction Smite", destructionSmiteAttackBonus);
-            GameManager.ConsumeDestructionSmite(this);
+            // Log Luck domain reroll if it was triggered during the attack roll
+            GameManager.Instance?.LogLuckRerollIfTriggered(Stats);
+
+            // Consume Destruction Domain Smite immediately after the attack roll (D&D 3.5e: declared before attack)
+            if (destructionSmiteAttackBonus > 0)
+            {
+                result.AddAttackBuffDebuffModifier("Destruction Smite", destructionSmiteAttackBonus);
+                GameManager.ConsumeDestructionSmite(this);
+            }
+
+            if (smite.Used)
+            {
+                if (smiteAttackBonus != 0)
+                    result.AddAttackBuffDebuffModifier(smite.Label, smiteAttackBonus);
+                string smiteTargetName = target != null && target.Stats != null ? target.Stats.CharacterName : "the target";
+                string smiteNote = smite.TargetIsSmiteFoe
+                    ? $"{smite.Label}: {CharacterStats.FormatMod(smite.AttackBonus)} attack, {CharacterStats.FormatMod(smite.DamageBonus)} damage."
+                    : $"{smite.Label} used up with no effect: {smiteTargetName} is not {(smite.Source == SmiteSource.TemplateSmiteGood ? "good" : "evil")} (PHB p.44).";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? smiteNote : $"{result.SpecialAttackNote} {smiteNote}";
+            }
+
+            AttachAttackBuffDebuffBreakdown(result);
+
+            // NOTE: Weapon enhancement bonus is NOT added to AttackBuffDebuffModifiers here
+            // because it is already included in CombatResult.WeaponEnhancementAttackBonus,
+            // which BuildBreakdowns() adds to AttackRollBreakdown.Modifiers as "enhancement".
+            // Adding it here as well would create a duplicate entry in the breakdown display.
+
+            if (trueStrikeActive && trueStrikeBonus != 0)
+                result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
+
+            if (helplessMeleeAttackBonus > 0)
+            {
+                result.AddAttackBuffDebuffModifier("Melee vs helpless target", helplessMeleeAttackBonus);
+                string helplessNote = "Target is helpless: +4 melee attack bonus applied.";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? helplessNote
+                    : $"{result.SpecialAttackNote} {helplessNote}";
+            }
+
+            // D&D 3.5e True Strike is consumed on the next attack roll (hit or miss).
+            if (trueStrikeActive)
+                trueStrike.ConsumeOnAttackRoll();
         }
-
-        if (smite.Used)
-        {
-            if (smiteAttackBonus != 0)
-                result.AddAttackBuffDebuffModifier(smite.Label, smiteAttackBonus);
-            string smiteTargetName = target != null && target.Stats != null ? target.Stats.CharacterName : "the target";
-            string smiteNote = smite.TargetIsSmiteFoe
-                ? $"{smite.Label}: {CharacterStats.FormatMod(smite.AttackBonus)} attack, {CharacterStats.FormatMod(smite.DamageBonus)} damage."
-                : $"{smite.Label} used up with no effect: {smiteTargetName} is not {(smite.Source == SmiteSource.TemplateSmiteGood ? "good" : "evil")} (PHB p.44).";
-            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? smiteNote : $"{result.SpecialAttackNote} {smiteNote}";
-        }
-
-        AttachAttackBuffDebuffBreakdown(result);
-
-        // NOTE: Weapon enhancement bonus is NOT added to AttackBuffDebuffModifiers here
-        // because it is already included in CombatResult.WeaponEnhancementAttackBonus,
-        // which BuildBreakdowns() adds to AttackRollBreakdown.Modifiers as "enhancement".
-        // Adding it here as well would create a duplicate entry in the breakdown display.
-
-        if (trueStrikeActive && trueStrikeBonus != 0)
-            result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
-
-        if (helplessMeleeAttackBonus > 0)
-        {
-            result.AddAttackBuffDebuffModifier("Melee vs helpless target", helplessMeleeAttackBonus);
-            string helplessNote = "Target is helpless: +4 melee attack bonus applied.";
-            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                ? helplessNote
-                : $"{result.SpecialAttackNote} {helplessNote}";
-        }
-
-        // D&D 3.5e True Strike is consumed on the next attack roll (hit or miss).
-        if (trueStrikeActive)
-            trueStrike.ConsumeOnAttackRoll();
 
         // Step 2: Concealment miss chance check (rolled after a successful attack roll)
         bool isThreat = false;

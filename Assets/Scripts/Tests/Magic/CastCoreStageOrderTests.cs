@@ -119,7 +119,8 @@ public static class CastCoreStageOrderTests
     /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
     /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017;
     /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic; step 25 removed NpcRefusesArea:
-    /// an NPC casts an area spell through the area resolve, SpellCastRequest.ForAIArea).
+    /// an NPC casts an area spell through the area resolve, SpellCastRequest.ForAIArea; step 26 removed
+    /// NpcNoMirrorImageSwap: no swap, a random figure per attack for every caster, SPL-117).
     /// </summary>
     private static readonly LegacyCastQuirk[] AiPathDifferences =
     {
@@ -127,7 +128,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
-        LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
     };
 
     /// <summary>
@@ -1645,6 +1645,8 @@ public static class CastCoreStageOrderTests
                      "GreaseSkipsPouch", "GreaseSkipsInvisibilityBreak", "HoldSkipsGrappleLegality", "HoldSkipsPouch",
                      "HoldSkipsCounterspell", "HoldSkipsChoices", "DeliverySkipsCounterspell" })
             Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), name), "Batch 11 step 15 removed the quirk bit " + name);
+        Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), "NpcNoMirrorImageSwap"),
+            "Batch 11 step 26 removed the quirk bit NpcNoMirrorImageSwap (SPL-117: no swap, a random figure per attack for every caster)");
 
         var touch = new List<CastTouchDelivery>();
         AiCastDecider.Instance.ChooseTouchDelivery(null, null, touch.Add);

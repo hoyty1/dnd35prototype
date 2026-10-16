@@ -140,12 +140,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcCombatEndCheckedByCaller = 1 << 26,
 
-    /// <summary>
-    /// The Mirror Image end-of-turn swap is offered only to controllable casters, so an NPC's figments keep their places
-    /// (SPL-117). Not read by a stage: the swap is an end-of-turn action outside the cast core
-    /// (TryBeginMirrorImageSwapSelection). Batch 11 step 26 (raw-mirror-image, decision D7) removes the swap and the bit.
-    /// </summary>
-    NpcNoMirrorImageSwap = 1 << 27,
+    // Bit 27 is unused: NpcNoMirrorImageSwap (SPL-117) was removed by batch 11 step 26 (raw-mirror-image, decision D7):
+    // Mirror Image picks a random figure for every attack and spell against the caster, for every caster and attacker
+    // (MirrorImageRules), and the end-of-turn swap offered only to controllable casters is gone.
 
     // The PC area path's own behaviours (batch 11 step 9): set only by SpellCastRequest.ForUiArea
     // (LegacyCastQuirkSets.UiAreaPath). Each names the issue of what an area cast skips or does differently today.
@@ -250,8 +247,7 @@ public static class LegacyCastQuirkSets
         (UiPath & ~LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
         | LegacyCastQuirk.NpcOwnLegalityChecks
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
-        | LegacyCastQuirk.NpcCombatEndCheckedByCaller
-        | LegacyCastQuirk.NpcNoMirrorImageSwap;
+        | LegacyCastQuirk.NpcCombatEndCheckedByCaller;
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,

@@ -207,6 +207,21 @@ public class DispelMagicService : MonoBehaviour
     }
 
     /// <summary>
+    /// A targeted Dispel Magic whose Mirror Image figure pick named one of <paramref name="target"/>'s images (PHB p.254;
+    /// batch 11 step 26): the dispel was aimed at a figment, which is part of the Mirror Image spell's effect, and a
+    /// targeted dispel may target a spell (PHB p.223), so its one dispel check is made against the Mirror Image on the
+    /// creature alone (1d20 + caster level, max +10, DC 11 + its caster level; the spell's own caster succeeds
+    /// automatically). A success ends every image (<see cref="HandleDispelSpecialCleanup"/>); no other spell on the
+    /// creature is checked. Delegated RAW reading 2026-10-14 (the specific targeted-dispel text over decision D7 (3)'s
+    /// general rule for a spell with no attack roll); PCs and NPCs alike, through the cast core's MirrorImage stage.
+    /// </summary>
+    public void PerformMirrorImageDispel(CharacterController caster, CharacterController target, int casterLevel = 0)
+    {
+        ResolveDispelChecks(caster, target, casterLevel, DispelMode.Targeted,
+            effect => string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Break Enchantment on one creature (PHB p.207): a caster level check (1d20 + caster level, max +15) against
     /// each enchantment, transmutation or curse on it, DC 11 + that effect's caster level; each success frees the
     /// creature of that effect. Only the effects that victimize it are checked (Debuff or Control spells, and
@@ -263,7 +278,8 @@ public class DispelMagicService : MonoBehaviour
     /// The shared dispel loop: one check per eligible effect, highest caster level first. Targeted and Break
     /// Enchantment remove every effect whose check succeeds; Area stops after the first success.
     /// </summary>
-    private void ResolveDispelChecks(CharacterController caster, CharacterController target, int casterLevel, DispelMode mode)
+    private void ResolveDispelChecks(CharacterController caster, CharacterController target, int casterLevel, DispelMode mode,
+        Func<ActiveSpellEffect, bool> onlyEffects = null)
     {
         string spellLabel = mode == DispelMode.BreakEnchantment ? "Break Enchantment" : "Dispel Magic";
         if (caster == null || target == null || target.Stats == null)
@@ -291,6 +307,8 @@ public class DispelMagicService : MonoBehaviour
                 if (effect.Spell.DurationType == DurationType.Instantaneous)
                     continue;
                 if (mode == DispelMode.BreakEnchantment && !IsBreakEnchantmentEffect(effect))
+                    continue;
+                if (onlyEffects != null && !onlyEffects(effect))
                     continue;
                 eligible.Add(effect);
             }
@@ -422,6 +440,16 @@ public class DispelMagicService : MonoBehaviour
                 target.OnDeath();
                 _handleSummonDeathCleanup?.Invoke(target);
             }
+            return;
+        }
+
+        // --- Mirror Image ---
+        // The images live on the caster (MirrorImageRules), not in the tracked effect: a dispelled Mirror Image ends them
+        // all (PHB p.254, p.223; batch 11 step 26). The tracked effect itself is removed by DispelSingleEffect.
+        if (spellId == SpellNames.MIRROR_IMAGE)
+        {
+            target.Spellcasting?.ActiveBuffs?.Remove(SpellNames.MIRROR_IMAGE);
+            MirrorImageRules.End(target, "dispelled", removeStatusEffect: false, log: true);
             return;
         }
 

@@ -333,8 +333,18 @@ public partial class GameManager
         int bonusDamage = Mathf.Min(casterLevel, 5); // +1 per CL, max +5
 
         // Ranged touch attack
-        int attackRoll = DiceRoller.D20();
         int attackMod = CombatCalculationService.RangedTouchAttackBonus(caster.Stats) + RacialTraitRules.AttackBonusAgainst(caster.Stats, target.Stats);
+
+        // Mirror Image (PHB p.254; decision D7 (2), batch 11 step 26): the flame's attack picks a figure; an image is rolled
+        // against 10 + size + Dex and vanishes on a hit, and the caster takes nothing.
+        if (MirrorImageRules.TryStrikeImageWithEffectAttack(caster, target, attackMod, SpellCaster.TouchAttackContext, $"{caster.Stats.CharacterName}'s Produce Flame", out string imageNote))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🔥 {imageNote}", "B7A8FF"));
+            UpdateAllStatsUI();
+            return true;
+        }
+
+        int attackRoll = DiceRoller.D20();
         int attackTotal = attackRoll + attackMod;
         int targetTouchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, caster.Stats); // CHR-019
         bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
@@ -358,6 +368,10 @@ public partial class GameManager
 
             if (target.Stats.IsDead)
                 sb.AppendLine($"<color=#FF0000>  💀 {target.Stats.CharacterName} has been slain!</color>");
+
+            // A hit on the real figure of a Mirror Image creature shows who is real (decision D7 (6)).
+            if (MirrorImageRules.HasImages(target))
+                MirrorImageRules.RevealRealFigure(target, caster);
         }
 
         CombatUI?.ShowCombatLog(sb.ToString());

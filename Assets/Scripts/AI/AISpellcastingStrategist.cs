@@ -415,21 +415,6 @@ public static class AISpellcastingStrategist
     {
         if (allCombatants == null) return fallbackTarget;
 
-        // Mirror image priority target
-        if (gm != null)
-        {
-            CharacterController mirrorTarget = gm.GetMirrorImagePriorityTargetForAI(caster);
-            if (mirrorTarget != null)
-            {
-                int mirrorDist = CasterLevelRules.DistanceToTarget(caster, mirrorTarget);
-                int range = CasterLevelRules.RangeSquares(caster, spell);
-                if (range <= 0) range = 1;
-                if (mirrorDist <= range && !IsWastedOnGlobe(spell, mirrorTarget)
-                    && (spell.TargetType != SpellTargetType.SingleEnemy || CanSeeSpellTarget(caster, mirrorTarget, spell))
-                    && IsLegalSpellTarget(gm, caster, spell, mirrorTarget, range)) return mirrorTarget;
-            }
-        }
-
         int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
         if (rangeSquares <= 0) rangeSquares = 1;
 

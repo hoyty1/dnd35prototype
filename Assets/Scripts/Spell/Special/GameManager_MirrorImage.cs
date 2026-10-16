@@ -2,39 +2,28 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using DND35e.Identifiers;
-using Random = UnityEngine.Random;
 
+/// <summary>
+/// Mirror Image's GameManager side (PHB p.254; decision D7, batch 11 step 26): the cast handler that grants the images,
+/// the cast core's figure pick for a spell, the caster's own movement confounding its foes, and the cleanup. The rule
+/// itself is <see cref="MirrorImageRules"/>, which the weapon attack path calls too, so PC and NPC casters and attackers
+/// follow one model. There are no image tokens and no end-of-turn swap (SPL-117 closed).
+/// </summary>
 public partial class GameManager
 {
-    private class MirrorImageState
-    {
-        public CharacterController Caster;
-        public ActiveSpellEffect Effect;
-        public readonly List<CharacterController> Clones = new List<CharacterController>();
-
-        public int RemainingRounds => Effect != null ? Mathf.Max(0, Effect.RemainingRounds) : 0;
-    }
-
-    private readonly Dictionary<CharacterController, MirrorImageState> _mirrorImageStates = new Dictionary<CharacterController, MirrorImageState>();
-    private readonly Dictionary<CharacterController, CharacterController> _mirrorImageCloneToCaster = new Dictionary<CharacterController, CharacterController>();
-    private readonly HashSet<CharacterController> _mirrorImageFollowSuppression = new HashSet<CharacterController>();
-
-    private bool _isSelectingMirrorImageSwap;
-    private CharacterController _mirrorImageSwapCaster;
-
-    private static readonly Vector2Int[] MirrorImageOffsets =
-    {
-        new Vector2Int(0, 1),
-        new Vector2Int(1, 0),
-        new Vector2Int(0, -1),
-        new Vector2Int(-1, 0),
-        new Vector2Int(1, 1),
-        new Vector2Int(1, -1),
-        new Vector2Int(-1, -1),
-        new Vector2Int(-1, 1)
-    };
+    /// <summary>The creatures with Mirror Image images, for the cleanup between encounters (each one's state is on it).</summary>
+    private readonly HashSet<CharacterController> _mirrorImageCasters = new HashSet<CharacterController>();
 
     private bool TryResolveMirrorImageSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+        => ApplyMirrorImageSpell(caster, target, spell, result, 0);
+
+    /// <summary>
+    /// Mirror Image's effect: grants the images and tracks the effect. <paramref name="casterLevelOverride"/> (above 0)
+    /// is a scroll's or wand's own caster level when no cast is open (the consumable's direct path,
+    /// GameManager.TryApplySpellConsumableEffect; DMG p.238, p.245); otherwise the cast's caster level is used.
+    /// </summary>
+    private bool ApplyMirrorImageSpell(CharacterController caster, CharacterController target, SpellData spell, SpellResult result,
+        int casterLevelOverride)
     {
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
             return false;
@@ -60,7 +49,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
 
-        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int casterLevel = casterLevelOverride > 0 ? casterLevelOverride : SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
         if (effect == null)
         {
@@ -68,475 +57,158 @@ public partial class GameManager
             return true;
         }
 
-        var state = new MirrorImageState
-        {
-            Caster = recipient,
-            Effect = effect
-        };
-
-        // 1d4+1 as the handler draws it (the count by caster level is decision D7's step). A variable effect the cast's
-        // Empower and Maximize change (PHB p.93: more images; at most 8, PHB p.254; SpellDiceRules, batch 11 step 19).
-        MetamagicData imageMetamagic = SpellDiceRules.MetamagicOf(spell);
-        bool imageDiceChanged = imageMetamagic != null
-            && (imageMetamagic.Has(MetamagicFeatId.EmpowerSpell) || imageMetamagic.Has(MetamagicFeatId.MaximizeSpell));
-        int intendedCloneCount = imageDiceChanged
-            ? Mathf.Min(8, SpellDiceRules.RollUnfiltered(SpellDice.Of(1, 4, 1), imageMetamagic))
-            : UnityEngine.Random.Range(2, 6); // 1d4+1
-        List<SquareCell> spawnCells = GetMirrorImageSpawnCells(recipient, intendedCloneCount);
-
-        for (int i = 0; i < spawnCells.Count; i++)
-        {
-            CharacterController clone = SpawnMirrorImageClone(recipient, spawnCells[i], i + 1);
-            if (clone == null)
-                continue;
-
-            state.Clones.Add(clone);
-            _mirrorImageCloneToCaster[clone] = recipient;
-        }
-
-        _mirrorImageStates[recipient] = state;
+        // 1d4 + 1 per three caster levels, at most eight (PHB p.254); the cast's Empower or Maximize changes the roll
+        // (PHB p.93, p.97; SpellDiceRules, batch 11 step 19).
+        int images = MirrorImageRules.RollImageCount(spell, casterLevel, out int rolled);
+        MirrorImageRules.Grant(recipient, images);
+        _mirrorImageCasters.Add(recipient);
 
         SpellcastingComponent spellComp = recipient.Spellcasting;
         if (spellComp != null)
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = effect.RemainingRounds;
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {recipient.Stats.CharacterName} casts Mirror Image: {state.Clones.Count} clone(s) appear (rolled {intendedCloneCount}).", "B7A8FF"));
-
-        if (state.Clones.Count < intendedCloneCount)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚠", $"Only {state.Clones.Count}/{intendedCloneCount} images could be placed due to blocked adjacent cells."));
-
+        string cap = rolled > images ? $", rolled {rolled}, at most {MirrorImageRules.MaxImages}" : "";
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color(
+            $"🪞 {recipient.Stats.CharacterName} casts Mirror Image: {images} image(s) surround it (1d4 + {Mathf.Max(0, casterLevel) / 3}{cap}). Each attack or spell against it strikes a random figure.",
+            "B7A8FF"));
         return true;
     }
 
-    private List<SquareCell> GetMirrorImageSpawnCells(CharacterController caster, int maxCount)
-    {
-        var cells = new List<SquareCell>();
-        if (caster == null || Grid == null || maxCount <= 0)
-            return cells;
-
-        int size = 1;
-        for (int i = 0; i < MirrorImageOffsets.Length && cells.Count < maxCount; i++)
-        {
-            Vector2Int pos = caster.GridPosition + MirrorImageOffsets[i];
-            SquareCell cell = Grid.GetCell(pos);
-            if (cell == null)
-                continue;
-
-            if (!Grid.CanPlaceCreature(pos, size, null))
-                continue;
-
-            cells.Add(cell);
-        }
-
-        return cells;
-    }
-
-    private CharacterController SpawnMirrorImageClone(CharacterController caster, SquareCell cell, int cloneIndex)
-    {
-        if (caster == null || caster.Stats == null || cell == null)
-            return null;
-
-        CharacterStats cloneStats = BuildMirrorImageCloneStats(caster, cloneIndex);
-
-        GameObject cloneObj = new GameObject($"MirrorImage_{caster.Stats.CharacterName}_{cloneIndex}_{UnityEngine.Random.Range(1000, 9999)}");
-        if (cloneObj.GetComponent<SpriteRenderer>() == null)
-            cloneObj.AddComponent<SpriteRenderer>();
-
-        CharacterController clone = cloneObj.AddComponent<CharacterController>();
-
-        Sprite aliveSprite = caster.AliveSprite;
-        SpriteRenderer casterRenderer = caster.GetComponent<SpriteRenderer>();
-        if (aliveSprite == null && casterRenderer != null)
-            aliveSprite = casterRenderer.sprite;
-
-        clone.Init(cloneStats, cell.Coords, aliveSprite, caster.DeadSprite);
-        clone.ConfigureTeamControl(caster.Team, controllable: false);
-        clone.PriorityTargetName = caster.PriorityTargetName;
-
-        SpriteRenderer cloneRenderer = clone.GetComponent<SpriteRenderer>();
-        if (cloneRenderer != null && casterRenderer != null)
-        {
-            cloneRenderer.sprite = casterRenderer.sprite;
-            cloneRenderer.color = casterRenderer.color;
-            cloneRenderer.sortingLayerID = casterRenderer.sortingLayerID;
-            cloneRenderer.sortingOrder = casterRenderer.sortingOrder;
-        }
-
-        clone.transform.localScale = caster.transform.localScale;
-
-        MirrorImageClone cloneMarker = cloneObj.AddComponent<MirrorImageClone>();
-        cloneMarker.Initialize(caster, cloneIndex, caster.Stats.TouchArmorClass);
-
-        return clone;
-    }
-
-    private CharacterStats BuildMirrorImageCloneStats(CharacterController caster, int cloneIndex)
-    {
-        CharacterStats source = caster.Stats;
-        // The clone takes the caster's scores with the racial adjustments already in them and no race in the constructor,
-        // so nothing is added twice: a PC's base scores are before its racial adjustments, an NPC's (built from its MM
-        // entry, SourceNpcDefinitionId set) already include them (RacialTraitRules.AttachNpcRace, CHR-019). The race,
-        // speed and size are then copied from the caster.
-        RaceData race = source.Race;
-        bool raceInBaseScores = race == null || !string.IsNullOrEmpty(source.SourceNpcDefinitionId);
-        int Score(int baseScore, int current, int racialModifier)
-            => baseScore != 0 ? baseScore + (raceInBaseScores ? 0 : racialModifier) : Mathf.Max(1, current);
-
-        CharacterStats stats = new CharacterStats(
-            name: source.CharacterName,
-            level: Mathf.Max(1, source.Level),
-            characterClass: string.IsNullOrWhiteSpace(source.CharacterClass) ? "Wizard" : source.CharacterClass,
-            str: Score(source.BaseSTR, source.STR, race != null ? race.STRModifier : 0),
-            dex: Score(source.BaseDEX, source.DEX, race != null ? race.DEXModifier : 0),
-            con: Score(source.BaseCON, source.CON, race != null ? race.CONModifier : 0),
-            wis: Score(source.BaseWIS, source.WIS, race != null ? race.WISModifier : 0),
-            intelligence: Score(source.BaseINT, source.INT, race != null ? race.INTModifier : 0),
-            cha: Score(source.BaseCHA, source.CHA, race != null ? race.CHAModifier : 0),
-            bab: Mathf.Max(0, source.BaseAttackBonus),
-            armorBonus: Mathf.Max(0, source.ArmorBonus),
-            shieldBonus: Mathf.Max(0, source.ShieldBonus),
-            damageDice: Mathf.Max(1, source.BaseDamageDice),
-            damageCount: Mathf.Max(1, source.BaseDamageCount),
-            bonusDamage: 0,
-            baseSpeed: Mathf.Max(1, source.BaseSpeed),
-            atkRange: Mathf.Max(1, source.AttackRange),
-            baseHitDieHP: 1,
-            raceName: null);
-
-        stats.Race = race;
-        stats.SetBaseSizeCategory(source.BaseSizeCategory);
-        stats.CharacterAlignment = source.CharacterAlignment;
-        stats.MaterialComposition = source.MaterialComposition;
-        stats.CreatureType = source.CreatureType;
-        stats.ChallengeRating = source.ChallengeRating;
-        stats.CurrentHP = Mathf.Max(1, stats.CurrentHP);
-        stats.SourceNpcDefinitionId = $"mirror_image_clone_{cloneIndex}";
-
-        return stats;
-    }
-
-    public bool TryHandleMirrorImageCloneAttacked(CharacterController attacker, CharacterController target, CombatResult baseResult, out CombatResult resolved)
-    {
-        return TryHandleMirrorImageCloneAttacked(attacker, target, baseResult, null, out resolved);
-    }
-
-    public bool TryHandleMirrorImageCloneAttacked(CharacterController attacker, CharacterController target, CombatResult baseResult, int? totalAttackModifier, out CombatResult resolved)
-    {
-        resolved = baseResult;
-
-        if (!IsMirrorImageClone(target))
-            return false;
-
-        MirrorImageClone marker = target != null ? target.GetComponent<MirrorImageClone>() : null;
-        CharacterController caster = GetMirrorImageCaster(target);
-
-        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
-        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "caster";
-
-        int touchArmorClass = marker != null
-            ? Mathf.Max(0, marker.TouchArmorClass)
-            : Mathf.Max(0, caster != null && caster.Stats != null ? caster.Stats.TouchArmorClass : 10);
-
-        bool hasAttackRollContext = totalAttackModifier.HasValue && attacker != null && attacker.Stats != null;
-
-        if (hasAttackRollContext)
-        {
-            var (hit, roll, total) = attacker.Stats.RollToHitWithMod(totalAttackModifier.Value, touchArmorClass);
-            resolved.DieRoll = roll;
-            resolved.TotalRoll = total;
-            resolved.Hit = hit;
-            resolved.NaturalTwenty = roll == 20;
-            resolved.NaturalOne = roll == 1;
-        }
-        else if (resolved.DieRoll > 0)
-        {
-            int total = resolved.TotalRoll;
-            bool hit = CombatCalculationService.IsHit(resolved.DieRoll, total, touchArmorClass);
-            resolved.Hit = hit;
-            resolved.NaturalTwenty = resolved.DieRoll == 20;
-            resolved.NaturalOne = resolved.DieRoll == 1;
-        }
-        else
-        {
-            resolved.Hit = true;
-            resolved.NaturalTwenty = false;
-            resolved.NaturalOne = false;
-        }
-
-        resolved.TargetAC = touchArmorClass;
-        resolved.MissedDueToConcealment = false;
-        resolved.Damage = 0;
-        resolved.BaseDamageRoll = 0;
-        resolved.RawTotalDamage = 0;
-        resolved.FinalDamageDealt = 0;
-        resolved.TargetKilled = false;
-
-        if (resolved.Hit)
-        {
-            resolved.SpecialAttackNote = $"Mirror Image: Attack {resolved.TotalRoll} vs Touch AC {touchArmorClass} - HIT! {attackerName}'s attack strikes an illusion of {casterName}, which dissipates.";
-            DissipateMirrorImageClone(target, $"attacked by {attackerName}");
-        }
-        else
-        {
-            resolved.SpecialAttackNote = $"Mirror Image: Attack {resolved.TotalRoll} vs Touch AC {touchArmorClass} - MISS! {attackerName} fails to strike the illusion of {casterName}.";
-        }
-
-        return true;
-    }
-
-    public bool TryHandleMirrorImageSpellTargetAttack(CharacterController attacker, CharacterController target, SpellData spell, out string logLine)
+    /// <summary>
+    /// The figure pick for a single-target spell cast at a creature with Mirror Image images (PHB p.254; decision D7 (3);
+    /// the cast core's MirrorImage stage). An ally's spell that is not hostile (<see cref="MirrorImageRules.SpellReachesDirectly"/>),
+    /// casts the spell's exemptions cover (<see cref="MirrorImageRules.WhyNoPick"/>), and spells whose effect makes its
+    /// own attacks (<see cref="MirrorImageRules.MakesOwnAttackRolls"/>: each of those attacks picks in its handler) reach
+    /// the creature directly. A missile spell picks once per missile and fires the missiles that pick the creature
+    /// (<see cref="CastContext.MissilesSpentOnImages"/>). A spell with an attack roll that picks an image rolls its touch
+    /// attack against the image's AC: a hit destroys the image, either way the spell is spent (a missed delivery of a held
+    /// charge keeps the charge, PHB p.141). A targeted Dispel Magic that picks an image makes its dispel check against
+    /// the Mirror Image alone (PHB p.223; delegated RAW reading 2026-10-14). Any other spell with no attack roll that picks
+    /// an image is spent on it and destroys it (delegated RAW reading 2026-10-14, decision D7 (a)). True when the spell
+    /// was spent on images (<paramref name="logLine"/> and <paramref name="traceDetail"/> say how).
+    /// </summary>
+    private bool TryResolveMirrorImageSpellPick(CastContext ctx, out string logLine, out string traceDetail)
     {
         logLine = null;
-
-        if (!IsMirrorImageClone(target))
+        traceDetail = null;
+        CharacterController caster = ctx.Request.Caster;
+        CharacterController target = ctx.Request.Aim.Target;
+        SpellData spell = ctx.Request.Spell;
+        if (caster == null || target == null || target == caster || spell == null || !MirrorImageRules.HasImages(target))
             return false;
+        if (MirrorImageRules.SpellReachesDirectly(caster, target, spell))
+            return false;
+        if (MirrorImageRules.MakesOwnAttackRolls(spell))
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, "own-attacks");
+            return false;
+        }
+        string why = MirrorImageRules.WhyNoPick(caster, target);
+        if (why != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, "no-pick");
+            Debug.Log($"[MirrorImage] {spell.Name} reaches {target.Stats.CharacterName} directly: {why}.");
+            return false;
+        }
 
-        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
-        CharacterController caster = GetMirrorImageCaster(target);
-        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "caster";
-        string spellName = spell != null && !string.IsNullOrWhiteSpace(spell.Name) ? spell.Name : "attack";
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : caster.name;
+        string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
 
-        DissipateMirrorImageClone(target, $"targeted by {spellName}");
-        logLine = $"🪞 {attackerName}'s {spellName} strikes a Mirror Image of {casterName}; the clone dissipates.";
+        // Missiles: one pick per missile (decision D7 (3)).
+        if (spell.AutoHit && spell.MissileCount > 0)
+        {
+            int missiles = SpellCaster.MissileCountFor(caster, caster.Stats, spell);
+            int spent = 0;
+            for (int i = 0; i < missiles; i++)
+            {
+                if (MirrorImageRules.HasImages(target) && MirrorImageRules.PickFigure(MirrorImageRules.ImagesOf(target)) == MirrorImageFigurePick.Image)
+                {
+                    spent++;
+                    MirrorImageRules.DestroyImage(target, $"struck by {casterName}'s {spell.Name}");
+                }
+            }
+
+            if (spent >= missiles)
+            {
+                traceDetail = "struck-image";
+                logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name} ({missiles} missile(s)) strikes only images of {targetName}.", "B7A8FF");
+                return true;
+            }
+
+            ctx.MissilesSpentOnImages = spent;
+            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, spent > 0 ? $"missiles-on-images {spent}/{missiles}" : "caster-picked");
+            if (spent > 0)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {spent} of {casterName}'s {missiles} missiles strike images of {targetName}; {missiles - spent} find the real one.", "B7A8FF"));
+            return false;
+        }
+
+        if (MirrorImageRules.PickFigure(MirrorImageRules.ImagesOf(target)) != MirrorImageFigurePick.Image)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.MirrorImage, "caster-picked");
+            return false;
+        }
+
+        bool needsAttackRoll = (spell.IsMeleeTouchSpell() || spell.IsRangedTouchSpell()) && !spell.AutoHit && !ctx.SkipFriendlyTouchAttackRoll;
+        if (!needsAttackRoll && string.Equals(spell.SpellId, SpellNames.DISPEL_MAGIC, StringComparison.Ordinal))
+        {
+            // A targeted dispel aimed at a figment targets the Mirror Image spell itself (PHB p.223, p.254): one dispel
+            // check against it alone, which ends every image on a success (delegated RAW reading 2026-10-14).
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name} is aimed at an image of {targetName}: the dispel check is made against the Mirror Image alone.", "B7A8FF"));
+            PerformMirrorImageDispel(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));
+            traceDetail = "dispel-at-image";
+            logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name} reached only the Mirror Image of {targetName}.", "B7A8FF");
+            return true;
+        }
+
+        if (!needsAttackRoll)
+        {
+            MirrorImageRules.DestroyImage(target, $"struck by {casterName}'s {spell.Name}");
+            traceDetail = "struck-image";
+            logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name} strikes an image of {targetName}; the image vanishes and the spell is spent.", "B7A8FF");
+            return true;
+        }
+
+        bool isRanged = spell.IsRangedTouchSpell();
+        int imageAc = MirrorImageRules.ImageArmorClass(target.Stats);
+        SpellCaster.SpellTouchAttackTerms terms = SpellCaster.SpellTouchAttack(spell, caster, caster.Stats, target, target.Stats, isRanged, againstImage: true);
+        if (terms.BeyondMaximumRange)
+            return false; // SpellCaster.Cast fails the attack that cannot be made
+        int modifier = terms.Total;
+        int roll = DiceService.D20(SpellCaster.TouchAttackContext);
+        int total = roll + modifier;
+        bool hit = CombatCalculationService.IsHit(roll, total, imageAc);
+        string touchKind = isRanged ? "ranged touch" : "touch";
+
+        if (hit)
+        {
+            MirrorImageRules.DestroyImage(target, $"struck by {casterName}'s {spell.Name}");
+            if (ctx.IsHeldChargeDelivery)
+                ctx.SpellComp?.ClearHeldTouchCharge("touch struck a Mirror Image");
+            traceDetail = "struck-image";
+            logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name}: {touchKind} attack {roll}{FormatModifier(modifier)} = {total} vs image AC {imageAc} - strikes an image of {targetName}, which vanishes; the spell is spent.", "B7A8FF");
+            return true;
+        }
+
+        traceDetail = "missed-image";
+        string charge = "";
+        if (ctx.IsHeldChargeDelivery)
+        {
+            ctx.RetainedHeldChargeOnMiss = true;
+            charge = $" {casterName} retains the {spell.Name} charge.";
+        }
+        logLine = CombatLogHelper.Color($"🪞 {casterName}'s {spell.Name}: {touchKind} attack {roll}{FormatModifier(modifier)} = {total} vs image AC {imageAc} - misses an image of {targetName}.{charge}", "B7A8FF");
         return true;
     }
 
-    private bool IsMirrorImageClone(CharacterController candidate)
-    {
-        if (candidate == null)
-            return false;
+    private static string FormatModifier(int modifier) => modifier >= 0 ? $" + {modifier}" : $" - {-modifier}";
 
-        MirrorImageClone clone = candidate.GetComponent<MirrorImageClone>();
-        return clone != null && !clone.IsDissipated;
-    }
-
-    private CharacterController GetMirrorImageCaster(CharacterController clone)
-    {
-        if (clone == null)
-            return null;
-
-        if (_mirrorImageCloneToCaster.TryGetValue(clone, out CharacterController caster))
-            return caster;
-
-        MirrorImageClone marker = clone.GetComponent<MirrorImageClone>();
-        return marker != null ? marker.RealCaster : null;
-    }
-
-    private void DissipateMirrorImageClone(CharacterController clone, string reason)
-    {
-        if (clone == null)
-            return;
-
-        MirrorImageClone marker = clone.GetComponent<MirrorImageClone>();
-        if (marker != null && marker.IsDissipated)
-            return;
-
-        CharacterController caster = GetMirrorImageCaster(clone);
-
-        if (marker != null)
-            marker.MarkDissipated();
-
-        _mirrorImageCloneToCaster.Remove(clone);
-
-        if (caster != null && _mirrorImageStates.TryGetValue(caster, out MirrorImageState state))
-        {
-            state.Clones.Remove(clone);
-            if (state.Clones.Count <= 0)
-            {
-                ClearMirrorImageForCaster(caster, "all clones dissipated", removeStatusEffect: true, log: true);
-            }
-        }
-
-        if (Grid != null)
-            Grid.ClearCreatureOccupancy(clone);
-
-        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "caster";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 A Mirror Image of {casterName} dissipates ({reason}).", "D5C8FF"));
-
-        Destroy(clone.gameObject);
-    }
-
+    /// <summary>Ends <paramref name="caster"/>'s images (recast, death, reused slot); with <paramref name="removeStatusEffect"/> also its tracked effect.</summary>
     private void ClearMirrorImageForCaster(CharacterController caster, string reason, bool removeStatusEffect, bool log)
     {
         if (caster == null)
             return;
-
-        if (!_mirrorImageStates.TryGetValue(caster, out MirrorImageState state))
-            return;
-
-        for (int i = state.Clones.Count - 1; i >= 0; i--)
-        {
-            CharacterController clone = state.Clones[i];
-            if (clone == null)
-                continue;
-
-            MirrorImageClone marker = clone.GetComponent<MirrorImageClone>();
-            if (marker != null)
-                marker.MarkDissipated();
-
-            _mirrorImageCloneToCaster.Remove(clone);
-            if (Grid != null)
-                Grid.ClearCreatureOccupancy(clone);
-            Destroy(clone.gameObject);
-        }
-
-        state.Clones.Clear();
-        _mirrorImageStates.Remove(caster);
-        _mirrorImageFollowSuppression.Remove(caster);
-
-        if (removeStatusEffect)
-        {
-            StatusEffectManager statusMgr = caster.StatusEffectManager;
-            statusMgr?.RemoveEffectsBySpellId(SpellNames.MIRROR_IMAGE);
-
-            SpellcastingComponent spellComp = caster.Spellcasting;
-            spellComp?.ActiveBuffs?.Remove(SpellNames.MIRROR_IMAGE);
-        }
-
-        if (log)
-        {
-            string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Mirror Image ends on {casterName} ({reason})."));
-        }
-    }
-
-    private List<CharacterController> GetAdjacentMirrorImageClones(CharacterController caster)
-    {
-        var adjacent = new List<CharacterController>();
-        if (caster == null)
-            return adjacent;
-
-        if (!_mirrorImageStates.TryGetValue(caster, out MirrorImageState state) || state.Clones.Count == 0)
-            return adjacent;
-
-        for (int i = 0; i < state.Clones.Count; i++)
-        {
-            CharacterController clone = state.Clones[i];
-            if (clone == null || !IsMirrorImageClone(clone))
-                continue;
-
-            int distance = SquareGridUtils.GetDistance(caster.GridPosition, clone.GridPosition);
-            if (distance == 1)
-                adjacent.Add(clone);
-        }
-
-        return adjacent;
-    }
-
-    private bool TryBeginMirrorImageSwapSelection(CharacterController caster)
-    {
-        if (caster == null || caster.Stats == null)
-            return false;
-
-        if (!caster.IsControllable)
-            return false;
-
-        List<CharacterController> adjacent = GetAdjacentMirrorImageClones(caster);
-        if (adjacent.Count == 0)
-            return false;
-
-        _isSelectingMirrorImageSwap = true;
-        _mirrorImageSwapCaster = caster;
-        CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
-
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        for (int i = 0; i < adjacent.Count; i++)
-        {
-            CharacterController clone = adjacent[i];
-            if (clone == null)
-                continue;
-
-            SquareCell cloneCell = Grid.GetCell(clone.GridPosition);
-            if (cloneCell == null)
-                continue;
-
-            cloneCell.SetHighlight(HighlightType.SpellTarget);
-            _highlightedCells.Add(cloneCell);
-        }
-
-        HighlightCharacterFootprint(caster, HighlightType.Selected);
-        CombatUI?.SetActionButtonsVisible(false);
-        CombatUI?.SetTurnIndicator($"🪞 Mirror Image: Select adjacent clone to swap with, or click Skip ({adjacent.Count} available)");
-
-        CombatUI?.ShowConfirmationDialog(
-            title: "Mirror Image",
-            message: "Select an adjacent clone on the grid to swap positions, or Skip to end your turn.",
-            confirmLabel: "Skip",
-            cancelLabel: "Keep Selecting",
-            onConfirm: () => CompleteMirrorImageSwapSelection(skip: true, selectedClone: null),
-            onCancel: () => { });
-
-        return true;
-    }
-
-    private void HandleMirrorImageSwapCellClick(CharacterController caster, SquareCell cell)
-    {
-        if (!_isSelectingMirrorImageSwap || caster == null || cell == null)
-            return;
-
-        if (cell.IsOccupied && cell.Occupant != null && IsMirrorImageClone(cell.Occupant))
-        {
-            CharacterController clone = cell.Occupant;
-            CharacterController cloneCaster = GetMirrorImageCaster(clone);
-            if (cloneCaster == caster && SquareGridUtils.GetDistance(caster.GridPosition, clone.GridPosition) == 1)
-            {
-                CompleteMirrorImageSwapSelection(skip: false, selectedClone: clone);
-                return;
-            }
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Select an adjacent Mirror Image clone, or press Skip."));
-    }
-
-    private void CompleteMirrorImageSwapSelection(bool skip, CharacterController selectedClone)
-    {
-        CharacterController caster = _mirrorImageSwapCaster;
-
-        if (!skip && caster != null && selectedClone != null)
-        {
-            Vector2Int casterPos = caster.GridPosition;
-            Vector2Int clonePos = selectedClone.GridPosition;
-
-            if (Grid != null)
-            {
-                Grid.ClearCreatureOccupancy(caster);
-                Grid.ClearCreatureOccupancy(selectedClone);
-            }
-
-            SquareCell casterDest = Grid != null ? Grid.GetCell(clonePos) : null;
-            SquareCell cloneDest = Grid != null ? Grid.GetCell(casterPos) : null;
-
-            _mirrorImageFollowSuppression.Add(caster);
-            caster.MoveToCell(casterDest, markAsMoved: false);
-            _mirrorImageFollowSuppression.Remove(caster);
-            selectedClone.MoveToCell(cloneDest, markAsMoved: false);
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {caster.Stats.CharacterName} swaps positions with a Mirror Image ({casterPos.x},{casterPos.y}) ↔ ({clonePos.x},{clonePos.y}).", "B7A8FF"));
-        }
-        else if (caster != null)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {caster.Stats.CharacterName} keeps current position (Mirror Image swap skipped).", "B7A8FF"));
-        }
-
-        _isSelectingMirrorImageSwap = false;
-        _mirrorImageSwapCaster = null;
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        EndAttackSequence();
-        EndThrownAttackSequence();
-        ResetOffHandTurnState();
-        CombatUI.SetActionButtonsVisible(false);
-
-        if (CurrentPhase != TurnPhase.CombatOver)
-            NextInitiativeTurn();
-    }
-
-    private void CancelMirrorImageSwapSelectionAndSkip()
-    {
-        CompleteMirrorImageSwapSelection(skip: true, selectedClone: null);
+        _mirrorImageCasters.Remove(caster);
+        MirrorImageRules.End(caster, reason, removeStatusEffect, log);
     }
 
     private void OnMirrorImageEffectExpired(CharacterController caster)
@@ -544,12 +216,15 @@ public partial class GameManager
         ClearMirrorImageForCaster(caster, "duration expired", removeStatusEffect: false, log: true);
     }
 
+    /// <summary>
+    /// Keeps the legacy ActiveBuffs mirror in step with the tracked effect and ends the images when the effect is gone
+    /// (removed by anything but its expiry, which <see cref="OnMirrorImageEffectExpired"/> handles). Called by the duration
+    /// tick for every creature with images (GameManager.TickCharacterSpellDurations), whether or not it holds the effect;
+    /// a dispel ends them at once (DispelMagicService.HandleDispelSpecialCleanup).
+    /// </summary>
     private void SyncMirrorImageDurationForCaster(CharacterController caster, StatusEffectManager statusMgr)
     {
-        if (caster == null)
-            return;
-
-        if (!_mirrorImageStates.TryGetValue(caster, out MirrorImageState state))
+        if (caster == null || caster.MirrorImageFigures == null)
             return;
 
         ActiveSpellEffect mirrorEffect = null;
@@ -558,10 +233,7 @@ public partial class GameManager
             for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
             {
                 ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
-                if (effect?.Spell == null)
-                    continue;
-
-                if (string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
+                if (effect?.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                 {
                     mirrorEffect = effect;
                     break;
@@ -571,24 +243,21 @@ public partial class GameManager
 
         if (mirrorEffect == null)
         {
-            ClearMirrorImageForCaster(caster, "effect removed", removeStatusEffect: false, log: false);
+            caster.Spellcasting?.ActiveBuffs?.Remove(SpellNames.MIRROR_IMAGE);
+            ClearMirrorImageForCaster(caster, "effect removed", removeStatusEffect: false, log: true);
             return;
         }
-
-        state.Effect = mirrorEffect;
 
         SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp != null)
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = mirrorEffect.RemainingRounds;
     }
 
-    private class MirrorImageMovePlan
-    {
-        public CharacterController Clone;
-        public SquareCell Destination;
-    }
-
-    public void NotifyCharacterMovement(CharacterController mover, Vector2Int previousPosition, Vector2Int currentPosition, string movementType = null)
+    /// <summary>
+    /// Every change of a creature's square lands here (MoveToCell, each MoveAlongPath segment, a grapple reposition).
+    /// <paramref name="forced"/>: the creature was pushed or dragged by something else, not its own movement.
+    /// </summary>
+    public void NotifyCharacterMovement(CharacterController mover, Vector2Int previousPosition, Vector2Int currentPosition, string movementType = null, bool forced = false)
     {
         if (mover == null || previousPosition == currentPosition)
             return;
@@ -606,253 +275,41 @@ public partial class GameManager
         if (!string.IsNullOrEmpty(holdEnded))
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", holdEnded));
 
-        if (_mirrorImageFollowSuppression.Contains(mover))
-        {
-            _mirrorImageFollowSuppression.Remove(mover);
-            return;
-        }
-
-        if (!_mirrorImageStates.TryGetValue(mover, out MirrorImageState state) || state == null || state.Clones == null || state.Clones.Count == 0)
-            return;
-
-        if (IsMirrorImageClone(mover))
-            return;
-
-        Vector2Int offset = currentPosition - previousPosition;
-        if (offset == Vector2Int.zero)
-            return;
-
-        FollowMirrorImageCasterMovement(mover, state, offset, movementType);
+        // A Mirror Image caster moving among its figments confounds the foes that had learned the real one (PHB p.254).
+        if (MirrorImageRules.HasImages(mover))
+            MirrorImageRules.ConfoundOnMove(mover, !forced && IsOwnMovement(mover, movementType));
     }
 
-    private void FollowMirrorImageCasterMovement(CharacterController caster, MirrorImageState state, Vector2Int offset, string movementType)
+    /// <summary>
+    /// True when <paramref name="mover"/>'s move is its own movement (a move, 5-foot step, withdraw or charge): a move on
+    /// its own turn other than a grapple reposition, or any move outside combat turns. A creature pushed or dragged
+    /// (bull rush, overrun, Gust of Wind, a grappler's drag: MoveToCell's forced, which NotifyCharacterMovement checks
+    /// first, on any creature's turn, a readied bull rush on its own included) does not move by itself (decision D7 (6)).
+    /// </summary>
+    private bool IsOwnMovement(CharacterController mover, string movementType)
     {
-        if (caster == null || state == null || Grid == null)
-            return;
-
-        var activeClones = new List<CharacterController>();
-        for (int i = 0; i < state.Clones.Count; i++)
-        {
-            CharacterController clone = state.Clones[i];
-            if (clone == null || !IsMirrorImageClone(clone))
-                continue;
-
-            activeClones.Add(clone);
-        }
-
-        if (activeClones.Count == 0)
-            return;
-
-        for (int i = 0; i < activeClones.Count; i++)
-            Grid.ClearCreatureOccupancy(activeClones[i]);
-
-        var reservedCells = new HashSet<Vector2Int>();
-        List<Vector2Int> casterSquares = caster.GetOccupiedSquares();
-        for (int i = 0; i < casterSquares.Count; i++)
-            reservedCells.Add(casterSquares[i]);
-
-        var movePlans = new List<MirrorImageMovePlan>();
-        var dissipatedClones = new List<CharacterController>();
-        int fallbackMoves = 0;
-
-        for (int i = 0; i < activeClones.Count; i++)
-        {
-            CharacterController clone = activeClones[i];
-            Vector2Int preferredPos = clone.GridPosition + offset;
-
-            if (TryReserveMirrorImageDestination(clone, preferredPos, reservedCells, out SquareCell preferredCell))
-            {
-                movePlans.Add(new MirrorImageMovePlan
-                {
-                    Clone = clone,
-                    Destination = preferredCell
-                });
-
-                continue;
-            }
-
-            if (TryFindMirrorImageFallbackCell(caster, clone, preferredPos, reservedCells, out SquareCell fallbackCell))
-            {
-                fallbackMoves++;
-                movePlans.Add(new MirrorImageMovePlan
-                {
-                    Clone = clone,
-                    Destination = fallbackCell
-                });
-
-                continue;
-            }
-
-            dissipatedClones.Add(clone);
-        }
-
-        for (int i = 0; i < movePlans.Count; i++)
-        {
-            MirrorImageMovePlan plan = movePlans[i];
-            if (plan?.Clone == null || plan.Destination == null)
-                continue;
-
-            MoveMirrorImageCloneToDestination(plan.Clone, plan.Destination);
-        }
-
-        for (int i = 0; i < dissipatedClones.Count; i++)
-        {
-            CharacterController clone = dissipatedClones[i];
-            if (clone == null)
-                continue;
-
-            DissipateMirrorImageClone(clone, "could not keep formation while following");
-        }
-
-        if (movePlans.Count > 0)
-        {
-            string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 Mirror images shift to follow {casterName}.", "B7A8FF"));
-        }
-
-        if (fallbackMoves > 0)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {fallbackMoves} image(s) adjust position around obstacles.", "C7B9FF"));
-
-        if (dissipatedClones.Count > 0)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {dissipatedClones.Count} image(s) dissipate while trying to keep up.", "D5C8FF"));
-    }
-
-    private bool TryReserveMirrorImageDestination(CharacterController clone, Vector2Int destination, HashSet<Vector2Int> reservedCells, out SquareCell cell)
-    {
-        cell = null;
-        if (clone == null || Grid == null)
+        if (string.Equals(movementType, "grapple-reposition", StringComparison.Ordinal))
             return false;
-
-        if (reservedCells.Contains(destination))
-            return false;
-
-        if (!Grid.CanPlaceCreature(destination, clone.GetVisualSquaresOccupied(), clone))
-            return false;
-
-        SquareCell candidate = Grid.GetCell(destination);
-        if (candidate == null)
-            return false;
-
-        reservedCells.Add(destination);
-        cell = candidate;
-        return true;
-    }
-
-    private bool TryFindMirrorImageFallbackCell(CharacterController caster, CharacterController clone, Vector2Int preferredPosition, HashSet<Vector2Int> reservedCells, out SquareCell fallbackCell)
-    {
-        fallbackCell = null;
-        if (caster == null || clone == null || Grid == null)
-            return false;
-
-        Vector2Int casterPos = caster.GridPosition;
-        int bestScore = int.MaxValue;
-
-        for (int i = 0; i < MirrorImageOffsets.Length; i++)
-        {
-            Vector2Int candidatePos = casterPos + MirrorImageOffsets[i];
-
-            if (reservedCells.Contains(candidatePos))
-                continue;
-
-            if (!Grid.CanPlaceCreature(candidatePos, clone.GetVisualSquaresOccupied(), clone))
-                continue;
-
-            SquareCell candidateCell = Grid.GetCell(candidatePos);
-            if (candidateCell == null)
-                continue;
-
-            int score = SquareGridUtils.GetDistance(preferredPosition, candidatePos) * 10 + i;
-            if (score < bestScore)
-            {
-                bestScore = score;
-                fallbackCell = candidateCell;
-            }
-        }
-
-        if (fallbackCell == null)
-            return false;
-
-        reservedCells.Add(fallbackCell.Coords);
-        return true;
-    }
-
-    private void MoveMirrorImageCloneToDestination(CharacterController clone, SquareCell destination)
-    {
-        if (clone == null || destination == null)
-            return;
-
-        if (SquareGridUtils.IsAdjacent(clone.GridPosition, destination.Coords))
-        {
-            StartCoroutine(clone.MoveAlongPath(new List<Vector2Int> { destination.Coords }, 0.05f, markAsMoved: false));
-            return;
-        }
-
-        clone.MoveToCell(destination, markAsMoved: false);
+        CharacterController acting = CurrentCharacter;
+        return acting == null || acting == mover;
     }
 
     private void ClearAllMirrorImageEffects(string reason)
     {
-        var casters = new List<CharacterController>(_mirrorImageStates.Keys);
+        var casters = new List<CharacterController>(_mirrorImageCasters);
+        if (PCs != null)
+            casters.AddRange(PCs);
+        if (NPCs != null)
+            casters.AddRange(NPCs);
         for (int i = 0; i < casters.Count; i++)
         {
             CharacterController caster = casters[i];
             if (caster == null)
                 continue;
 
-            ClearMirrorImageForCaster(caster, reason, removeStatusEffect: false, log: false);
+            MirrorImageRules.End(caster, reason, removeStatusEffect: false, log: false);
         }
 
-        _mirrorImageStates.Clear();
-        _mirrorImageCloneToCaster.Clear();
-        _mirrorImageFollowSuppression.Clear();
-        _isSelectingMirrorImageSwap = false;
-        _mirrorImageSwapCaster = null;
-    }
-
-    public CharacterController GetMirrorImagePriorityTargetForAI(CharacterController attacker)
-    {
-        if (attacker == null || attacker.Stats == null)
-            return null;
-
-        CharacterController best = null;
-        int bestDistance = int.MaxValue;
-
-        foreach (KeyValuePair<CharacterController, MirrorImageState> kvp in _mirrorImageStates)
-        {
-            CharacterController caster = kvp.Key;
-            MirrorImageState state = kvp.Value;
-
-            if (caster == null || caster.Stats == null || caster.Stats.IsDead)
-                continue;
-
-            if (!TeamUtility.IsEnemy(attacker, caster))
-                continue;
-
-            int casterDistance = SquareGridUtils.GetDistance(attacker.GridPosition, caster.GridPosition);
-            if (casterDistance < bestDistance)
-            {
-                best = caster;
-                bestDistance = casterDistance;
-            }
-
-            if (state == null || state.Clones == null)
-                continue;
-
-            for (int i = 0; i < state.Clones.Count; i++)
-            {
-                CharacterController clone = state.Clones[i];
-                if (!IsMirrorImageClone(clone) || clone.Stats == null || clone.Stats.IsDead)
-                    continue;
-
-                int dist = SquareGridUtils.GetDistance(attacker.GridPosition, clone.GridPosition);
-                if (dist < bestDistance)
-                {
-                    best = clone;
-                    bestDistance = dist;
-                }
-            }
-        }
-
-        return best;
+        _mirrorImageCasters.Clear();
     }
 }

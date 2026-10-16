@@ -381,7 +381,7 @@ public static class SizeDamageScalingTests
     }
 
     /// <summary>
-    /// The unarmed stats fallback (Inventory.RecalculateStats, read by the confused self-attack, Mirror Image and the
+    /// The unarmed stats fallback (Inventory.RecalculateStats, read by the confused self-attack and the
     /// inventory summary) is resized like the attack code: PHB Table 7-5 (1d2 Small, 1d3 Medium), DMG Table 2-2
     /// (1d4 Large); a monk's 1d6 (PHB Table 3-10) is 1d4 when Small.
     /// </summary>

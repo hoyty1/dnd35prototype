@@ -1068,7 +1068,7 @@ public static partial class NPCDatabase
             BAB = 2,
             HasScent = true,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
-            CreatureTags = new List<string> { "Monstrous Humanoid", "Blindsight40", "MM35" },
+            CreatureTags = new List<string> { "Monstrous Humanoid", "Blindsight40", "Sightless", "MM35" }, // blind (MM p.140): Mirror Image cannot fool it (MirrorImageRules.SightlessTag)
             Feats = new List<string> { "Alertness", "Track" },
             SpecialAbilities = new List<string> { "Blindsight 40 ft.", "Immune to gaze attacks/visual effects/illusions", "Scent" },
             EquipmentIds = new List<EquipmentSlotPair>

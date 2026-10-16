@@ -413,7 +413,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true }
             },
             Immunities = new CreatureImmunities { immuneToSonic = true },
-            CreatureTags = new List<string> { "Aberration", "Blindsight100", "MM35" },
+            CreatureTags = new List<string> { "Aberration", "Blindsight100", "Sightless", "MM35" }, // blind (MM p.49): Mirror Image cannot fool it (MirrorImageRules.SightlessTag)
             Feats = new List<string> { "Dodge", "Improved Initiative", "Lightning Reflexes" },
             SpecialAbilities = new List<string> { "Destructive Harmonics (Su): 80 ft. cone, choose: 4d6 sonic (Ref DC 17), shatter objects, or lethal pitch", "Blindsight 100 ft. (deaf = blinded)", "Immune to sonic/gaze attacks", "Protection from sonics grants immunity to harmonics" },
             AIProfileArchetype = NPCAIProfileArchetype.Brute,

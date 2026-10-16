@@ -1788,15 +1788,6 @@ public class AIService : MonoBehaviour
         if (npc == null || allCombatants == null)
             return null;
 
-        CharacterController mirrorPriorityTarget = _gameManager != null
-            ? _gameManager.GetMirrorImagePriorityTargetForAI(npc)
-            : null;
-        if (mirrorPriorityTarget != null)
-        {
-            Debug.Log($"[AI][MirrorImage] {npc.Stats.CharacterName} prioritizes nearest mirror-image entity: {mirrorPriorityTarget.Stats?.CharacterName}");
-            return mirrorPriorityTarget;
-        }
-
         LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
         if (tracker == null)
             tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();

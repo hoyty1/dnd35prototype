@@ -136,6 +136,16 @@ public class CombatResult
 
     public string SpecialAttackNote = "";
 
+    /// <summary>
+    /// The random figure pick sent this attack at one of the defender's Mirror Image images (PHB p.254; MirrorImageRules,
+    /// batch 11 step 26): the roll is against the image's AC (<see cref="TargetAC"/>), <see cref="Hit"/> stays false
+    /// because the defender itself is not hit, and <see cref="MirrorImageFigureHit"/> says whether the image was struck
+    /// (and destroyed).
+    /// </summary>
+    public bool MirrorImageFigure;
+    /// <summary>With <see cref="MirrorImageFigure"/>: the attack hit the image's AC, so the image vanished.</summary>
+    public bool MirrorImageFigureHit;
+
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
     public string BreakdownAbilityName;
@@ -379,7 +389,9 @@ public class CombatResult
 
         string summary = actorPrefix
             + string.Join(" ", pieces)
-            + $" = {AttackRollBreakdown.Total} vs AC {AttackRollBreakdown.TargetArmorClass} - {(AttackRollBreakdown.Hit ? "HIT!" : "MISS!")}{critSuffix}";
+            + (MirrorImageFigure
+                ? $" = {AttackRollBreakdown.Total} vs image AC {AttackRollBreakdown.TargetArmorClass} - {(MirrorImageFigureHit ? "IMAGE STRUCK!" : "MISS!")}{critSuffix}"
+                : $" = {AttackRollBreakdown.Total} vs AC {AttackRollBreakdown.TargetArmorClass} - {(AttackRollBreakdown.Hit ? "HIT!" : "MISS!")}{critSuffix}");
         return summary.Trim();
     }
 

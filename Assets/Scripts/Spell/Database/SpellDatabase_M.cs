@@ -413,7 +413,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.MIRROR_IMAGE,
                     Name = "Mirror Image",
-                    Description = "1d4+1 illusory clones appear in adjacent cells. Clones are targetable decoys and can be swapped with at end of your turn. Duration 1 min/level.",
+                    Description = "1d4 images +1 per three caster levels (max 8) move with you. Each attack or spell against you strikes a random figure; an image is destroyed when an attack hits its AC (10 + size + Dex) or a spell without an attack roll lands on it. Duration 1 min/level.",
                     SpellLevel = 2,
                     School = "Illusion (Figment)",
                     ClassList = new[] { "Wizard", "Sorcerer", "Bard" },

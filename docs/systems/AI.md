@@ -225,11 +225,10 @@ The routine returns; unused actions are discarded (no Delay, Ready, Total Defens
 
 ### 4.1 `SelectBestTarget` (AIService.cs:1499)
 
-1. **Mirror Image override.** `GameManager.GetMirrorImagePriorityTargetForAI` returns the nearest enemy Mirror Image caster or clone anywhere on the map, before every exclusion and ignoring the candidate list passed in (AI-036).
-2. Ensures a `LastKnownPositionTracker` on the NPC.
-3. For each living candidate that `TeamUtility.IsEnemy` accepts, applies exclusions in order: charm source (`ShouldExcludeTargetBecauseOfCharm`), fear source, Sanctuary (a fresh Will save each call, AI-005), Hide from Undead (undead attackers only; mindless excluded automatically; a successful save ends the spell, AI-005).
-4. Partitions into **visible** (`npc.CanSee(target, ranged)`, which only means "miss chance below 50%"; no line of sight, GRID-009) and **concealed but tracked** (has a last-known square).
-5. Returns the best visible target. If none, runs `AttemptListenChecks` on the concealed set (re-rolled per call, AI-007) and returns the best pinpointed, else the best tracked. Unseen enemies with no last-known square do not exist for the AI.
+1. Ensures a `LastKnownPositionTracker` on the NPC. (The Mirror Image override that came first, the nearest image token or caster anywhere on the map, AI-036, went in batch 11 step 26 with the tokens: images are a count on the caster and every attack picks a random figure, `MirrorImageRules`, so the AI targets the caster like any creature.)
+2. For each living candidate that `TeamUtility.IsEnemy` accepts, applies exclusions in order: charm source (`ShouldExcludeTargetBecauseOfCharm`), fear source, Sanctuary (a fresh Will save each call, AI-005), Hide from Undead (undead attackers only; mindless excluded automatically; a successful save ends the spell, AI-005).
+3. Partitions into **visible** (`npc.CanSee(target, ranged)`, which only means "miss chance below 50%"; no line of sight, GRID-009) and **concealed but tracked** (has a last-known square).
+4. Returns the best visible target. If none, runs `AttemptListenChecks` on the concealed set (re-rolled per call, AI-007) and returns the best pinpointed, else the best tracked. Unseen enemies with no last-known square do not exist for the AI.
 
 `SelectBestTargetFromCandidates` (1586) tries, in order: `PriorityTargetName` exact name match (from `AITargetPriority`; 4 definitions, `grease_test_grappler1`-`4`, all naming "Slippery Sam"), then the profile scorer, then armor-priority targeting (unreachable in practice: its only writer also assigns a profile, AI-053), then the default heuristic. With a profile, the profile scorer always returns a target.
 
@@ -274,7 +273,7 @@ Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUncon
 | Selector | Used by | Filters |
 |---|---|---|
 | `SelectLowestHPEnemy` (2657) | DefensiveMelee's first target and charge | lowest absolute HP; no ward, charm, visibility or unconscious filter (AI-049) |
-| `SelectAdaptiveFullAttackTarget` (3063) | mid-full-attack retarget | living, in reach if required, then `SelectBestTarget` (so Mirror Image can override reach, AI-036) |
+| `SelectAdaptiveFullAttackTarget` (3063) | mid-full-attack retarget | living, in reach if required, then `SelectBestTarget` |
 | `TryTakeFiveFootStepForAdaptiveFullAttack` (NPCTurns.cs:863) | full attack with no target in reach | `ScoreTarget - dist*0.25` over legal 5-ft steps |
 | `SelectSummonTarget` (2911) | `AI_SummonedCreature` | nearest enemy to summon or caster; no filters (AI-050) |
 | `BuildSwarmTargetCandidates` + `SwarmAI.ResolveTarget` | swarms | sticky nearest; no filters (AI-050) |
@@ -531,7 +530,7 @@ Since batch 11 step 22 (2026-10-16) every candidate must pass the cast core's ow
 
 - Self spells: the caster, when legal.
 - Ally spells (Healing, non-Area Buff, SingleAlly): `SelectBestAllyTarget` scores allies in range (healing by missing HP, frontliner bonus; buff skipped if already active); returns no target for a healing spell when no ally in range is hurt (an unhurt ally, an undead and a construct score negative infinity, SPL-005), and the **caster** for a buff when no ally is in range and the caster is a legal target. Magic Weapon, Greater Magic Weapon and Keen Edge take only a creature that wields a weapon the spell could enchant (`AiCastChoiceHeuristics.ChooseWeapon`, 7.6) and never fall back to the caster. Touch range means adjacent only, so a healer often buffs itself (AI-047).
-- Enemy spells: Mirror Image target in range wins; else `ScoreEnemyTarget` (wounded, casters, save exploit, resistance, kill bonus, SR). The SR chance is computed as `(CL + 1 - SR)/20` instead of `(21 + CL - SR)/20` (PHB ch.10, Spell Resistance), so moderately resistant targets look unbeatable (AI-046). No Sanctuary (AI-005) or immunity filtering beyond the legality test. Every single-enemy spell also needs a target the caster can see (PHB p.175; `CanSeeSpellTarget`, with or without a GameManager, because `IsValidTargetForSpell` skips its sight test for Daze, the charms, Dominate Person, Hold Monster and some others, SPL-185). Falls back to the passed target only when it is an enemy and the cast at it is legal (the step 22 review: the Healer branch passes a wounded ally, AI-047, and the walk goes on to offensive spells, which must not land on that ally).
+- Enemy spells: `ScoreEnemyTarget` (wounded, casters, save exploit, resistance, kill bonus, SR); the Mirror Image priority target that used to win went in batch 11 step 26 (AI-036). The SR chance is computed as `(CL + 1 - SR)/20` instead of `(21 + CL - SR)/20` (PHB ch.10, Spell Resistance), so moderately resistant targets look unbeatable (AI-046). No Sanctuary (AI-005) or immunity filtering beyond the legality test. Every single-enemy spell also needs a target the caster can see (PHB p.175; `CanSeeSpellTarget`, with or without a GameManager, because `IsValidTargetForSpell` skips its sight test for Daze, the charms, Dominate Person, Hold Monster and some others, SPL-185). Falls back to the passed target only when it is an enemy and the cast at it is legal (the step 22 review: the Healer branch passes a wounded ally, AI-047, and the walk goes on to offensive spells, which must not land on that ally).
 
 ### 7.5 `SpellCategoryClassifier` (AI/SpellCategoryClassifier.cs)
 
@@ -662,7 +661,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-032 | Breath weapons, ranged specials and terrain manipulation never recharge (their tick methods have no callers) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
 | AI-035 | Trip-flagged profiles and null-profile NPCs trip every standing target in reach (one attack step), with no odds check |
-| AI-036 | The Mirror Image priority target overrides all targeting map-wide, before exclusions and reach filters |
+| AI-036 (fixed 2026-10-16) | The Mirror Image priority target overrode all targeting map-wide; removed with the image tokens in batch 11 step 26 |
 | SPL-015 | The lich, evil_acolyte_test, gust_druid and mist_wizard prepare nothing (positional slot assignment plus the wizard 2nd-level cap) |
 | CRE-030 | The vampire is a Fighter, so it never gets a `SpellcastingComponent` |
 | ENC-021 | DMG class-levelled casters get caster AI but no spell lists |
@@ -765,7 +764,7 @@ Worked playbooks for likely requests (flanking and Aid Another, area spells and 
 |---|---|
 | `Tests.AI.AIProfileFrameworkTests.RunAll` (38 test methods, no callers) | profile scoring (Berserk, Ranged, Animal), maneuver preferences, coup de grace defaults, NPC data archetypes, Evoker/Abjurer/Spellcaster AoE settings, Healer priorities, concealment tiers, ThreatSystem estimates, swarm targeting, `ActionEconomy.UseMoveAction` failure and the one-move gate. 2-3 tests are stale (TST-025) |
 | `Tests.Classes.NPCTemplateSystemTests` | configurator class maps and `AIConsumableManager` (test-only paths; TST-003, TST-008) |
-| `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image priority target, Frightened decision, confusion d% distribution |
+| `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image by RAW (the figure pick, its distribution, image AC and destruction, PC and NPC attackers and spells; batch 11 step 26), Frightened decision, confusion d% distribution |
 
 Untested: `ExecuteNPCTurn` and every routine, `SelectBestTarget`, `EvaluateMovementOptions`, `SelectSpell`, the strategist, the classifier, `LastKnownPositionTracker`, `BuildRuntimeAIProfile`, `TryNPCPerformSpellCast`, summon and grapple AI, Dragon/Lich/Vampire/Undead/Humanoid/Necromancer profiles.
 
@@ -781,7 +780,7 @@ Run them with the committed runner in [TESTING.md section 3](../TESTING.md#3-run
 | `armor_targeting_test` | `RangedAIProfile` tag targeting and the kiter (not the armor-priority scorer, AI-053) |
 | `obscuring_mist_ranged_only`, `wind_dispersion_test` | concealment tiers, last-known attacks, Listen, ranged AoO risk |
 | `disrupt_undead_test`, `charm_person_test` | DefensiveMelee; charmed NPC healing its charmer |
-| `mirror_image_test` | Mirror Image override |
+| `mirror_image_test` | Mirror Image figure pick against goblin archers |
 | `npc_magic_missile_test`, `protection_from_evil_test` | NPC cast path end to end |
 | `summon_monster_test` | summons |
 | `tier2_ooze_dungeon` | null-profile NPCs, engulf |
@@ -794,7 +793,7 @@ No preset contains a Brute or Caster NPC, a swarm, the gibbering mouther, a Spel
 
 ### 12.3 Observing decisions
 
-All AI logs are unconditional `Debug.Log`; there is no verbose flag. Filter the Console on `[AI` to catch every tag: `[AI]`, `[AI][Profile:...]`, `[AI][Default]`, `[AI][PriorityTarget]`, `[AI][MirrorImage]`, `[AI][Sanctuary]`, `[AI][HideFromUndead]`, `[AI][Search]`, `[AI][Healer]`, `[AI][Spell]`, `[AI][Dragon]`, `[AI][DragonBreath]`, `[AI][RangedAoO]`, `[AI][Maneuver]`, `[AI][Aura]`, `[AI][Attack]`, `[AI][Concealment]`, `[AI][SpecialAttack]`, `[AI][Grapple]`, `[AI][Animal]`, `[AI][SpecialAbilities]`, `[AI][UndeadMindless]`, `[AI][BreathWeapon]`, `[AI][ArmorPriority]`, `[AI SelectBestAction]`, `[AI Charge]`, `[AI Validation]`. Also `[SpellCategoryClassifier]` at startup.
+All AI logs are unconditional `Debug.Log`; there is no verbose flag. Filter the Console on `[AI` to catch every tag: `[AI]`, `[AI][Profile:...]`, `[AI][Default]`, `[AI][PriorityTarget]`, `[AI][Sanctuary]`, `[AI][HideFromUndead]`, `[AI][Search]`, `[AI][Healer]`, `[AI][Spell]`, `[AI][Dragon]`, `[AI][DragonBreath]`, `[AI][RangedAoO]`, `[AI][Maneuver]`, `[AI][Aura]`, `[AI][Attack]`, `[AI][Concealment]`, `[AI][SpecialAttack]`, `[AI][Grapple]`, `[AI][Animal]`, `[AI][SpecialAbilities]`, `[AI][UndeadMindless]`, `[AI][BreathWeapon]`, `[AI][ArmorPriority]`, `[AI SelectBestAction]`, `[AI Charge]`, `[AI Validation]`. Also `[SpellCategoryClassifier]` at startup.
 
 Not logged anywhere: which routine ran, the behaviour value, the profile class assigned at spawn, the chosen movement cell and its score, and per-spell scores. The strategist, the tracker and the condition controllers have no `Debug.Log`. Adding a single decision-trace line per turn (routine, target and score, cell, action) is the cheapest debugging investment. Noise that buries AI lines: per-call A* logs (GRID-011), threat rebuild logs (CMB-039), `[AOO-DEBUG]`.
 
