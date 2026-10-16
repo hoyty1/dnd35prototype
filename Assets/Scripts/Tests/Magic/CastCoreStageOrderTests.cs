@@ -79,8 +79,6 @@ public static class CastCoreStageOrderTests
     private static readonly LegacyCastQuirk[] PcPathBits =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
-        LegacyCastQuirk.SlotFailureClearsSnapshot,
-        LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.HeldChargeDeliveryIsFree,
         LegacyCastQuirk.DeliverySkipsCounterspell,          // SPL-146 (batch 11 step 10)
@@ -100,7 +98,6 @@ public static class CastCoreStageOrderTests
     /// <summary>Today's PC area path, bit by bit (batch 11 step 9).</summary>
     private static readonly LegacyCastQuirk[] AreaPathBits =
     {
-        LegacyCastQuirk.SlotFailureClearsSnapshot,
         LegacyCastQuirk.AlliesForgoEverySave,
         LegacyCastQuirk.AreaSkipsRing,                      // SPL-006
         LegacyCastQuirk.AreaSkipsPouch,                     // SPL-006, SPL-114
@@ -110,14 +107,12 @@ public static class CastCoreStageOrderTests
 
     /// <summary>
     /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
-    /// issue: the two PC-only bits it drops and the NPC bits it adds.
+    /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017).
     /// </summary>
     private static readonly LegacyCastQuirk[] AiPathDifferences =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
-        LegacyCastQuirk.RangeHighlightUsesCharacterLevel,        // dropped: SPL-017 (the PC targeting highlight)
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
-        LegacyCastQuirk.NpcRangeUsesCasterLevel,                 // SPL-017
         LegacyCastQuirk.NpcRefusesArea,                          // AI-001
         LegacyCastQuirk.NpcNullMetamagic,                        // AI-001, SPL-038
         LegacyCastQuirk.NpcNoComponentCheck,                     // SPL-114
@@ -231,7 +226,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.SlotFailureClearsSnapshot) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.AlliesForgoEverySave | LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -400,6 +395,13 @@ public static class CastCoreStageOrderTests
             TestEffectCasts(gm, sc, caster, ally);
             Assert(violations.Count == violationsBeforeEffects, "No cast-core or cast-stack violation for hold and Grease requests",
                 string.Join("; ", violations.GetRange(violationsBeforeEffects, violations.Count - violationsBeforeEffects)));
+
+            // Batch 11 step 14: a failed spend refunds the action, and a hold of a cleric's conversion spends the sacrificed spell.
+            int violationsBeforeRefund = violations.Count;
+            TestFailedSpendRefund(gm, sc, caster, ally);
+            TestConvertedHold(gm);
+            Assert(violations.Count == violationsBeforeRefund, "No cast-core or cast-stack violation for the step 14 cases",
+                string.Join("; ", violations.GetRange(violationsBeforeRefund, violations.Count - violationsBeforeRefund)));
         }
         finally
         {
@@ -564,7 +566,7 @@ public static class CastCoreStageOrderTests
                 SpellCastRequest outOfRange = BeginAi(sc, caster, far, SpellNames.SHOCKING_GRASP, null, out slot);
                 cast = gm.RunCastSync(outOfRange, out o);
                 Assert(!cast && o.Reason == "out-of-range" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
-                    "AI: a touch spell at a creature 40 squares away is refused by the caster-level range (NpcRangeUsesCasterLevel)", "" + o);
+                    "AI: a touch spell at a creature 40 squares away is refused by the caster-level range (CasterLevelRules)", "" + o);
                 sc.SpellSlots.Remove(slot);
             }
             finally
@@ -1067,6 +1069,23 @@ public static class CastCoreStageOrderTests
                 "Step 13: the entangled check's result decides the cast (a lost spell spends its slot)", "" + ctx.Outcome);
             sc.SpellSlots.Remove(slot);
 
+            // Batch 11 step 14 review fix: a lost entangled check whose slot cannot be spent gives the action back
+            // (LoseCastAtDistraction, as LoseCastAtFailure does): no spell was cast (PHB p.141, p.143).
+            if (lost)
+            {
+                forced[GameManager.EntangledConcentrationDiceContext] = 1;
+                ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+                ctx.Request.Spell.HasSomaticComponent = false;
+                sc.SpellSlots.Remove(slot); // no slot holds the spell: the lost check has nothing to spend
+                gm.ExecuteCast(ctx, null);
+                Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.Distraction
+                       && ctx.Outcome.Reason == CastOutcome.ReasonSlotNotSpent
+                       && !caster.Actions.StandardActionUsed && caster.Actions.HasStandardAction,
+                    "Step 14: a lost entangled check with no slot to spend ends Failed at Distraction and gives the standard action back (SPL-147)",
+                    ctx.Outcome + " / standard used " + caster.Actions.StandardActionUsed);
+                Assert(gm.Harness_PendingSpellcastSnapshot == null, "Step 14: the entangled refund uses the snapshot up");
+            }
+
             // The area path makes the check too (no AreaSkipsEntangled).
             forced[GameManager.EntangledConcentrationDiceContext] = 1;
             labels.Clear();
@@ -1383,14 +1402,12 @@ public static class CastCoreStageOrderTests
     /// <summary>The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared).</summary>
     private static readonly LegacyCastQuirk[] EffectSharedBits =
     {
-        LegacyCastQuirk.SlotFailureClearsSnapshot,
         LegacyCastQuirk.EffectResolveSkipsCombatEndCheck,   // CORE-039
     };
 
     /// <summary>Today's PC summon path, beyond the shared bits (batch 11 step 10).</summary>
     private static readonly LegacyCastQuirk[] SummonPathBits =
     {
-        LegacyCastQuirk.RangeHighlightUsesCharacterLevel,
         LegacyCastQuirk.SummonSkipsCounterspell,            // SPL-006
         LegacyCastQuirk.SummonSkipsPouch,                   // SPL-006, SPL-114
     };
@@ -1410,7 +1427,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.HoldSkipsPouch,                     // SPL-146, SPL-114
         LegacyCastQuirk.HoldSkipsCounterspell,              // SPL-146
         LegacyCastQuirk.HoldSkipsChoices,                   // SPL-146
-        LegacyCastQuirk.HoldIgnoresConversion,              // SPL-154
     };
 
     private static LegacyCastQuirk Union(params LegacyCastQuirk[][] lists)
@@ -1452,7 +1468,7 @@ public static class CastCoreStageOrderTests
             new CastSource { Kind = CastSourceKind.SpontaneousConversion, ConversionLevel = 1 }));
         Assert(h.ResolveKind == CastResolveKind.HoldCharge && h.Source.Kind == CastSourceKind.HeldChargeHold && h.Aim.Target == null
                && h.Quirks == LegacyCastQuirkSets.UiHoldPath && hc.Source.Kind == CastSourceKind.SpontaneousConversion,
-            "ForUiHoldCharge makes a hold (a slot's source becomes HeldChargeHold, a conversion keeps its kind, SPL-154) with the hold path's quirks",
+            "ForUiHoldCharge makes a hold (a slot's source becomes HeldChargeHold, a conversion keeps its kind and spends the sacrificed spell, SPL-154) with the hold path's quirks",
             h.Source.Kind + " / " + hc.Source.Kind);
         Assert(LegacyCastQuirkSets.UiHoldPath == Union(EffectSharedBits, HoldPathBits),
             "The hold path's quirk set is exactly today's hold-path bits", "" + LegacyCastQuirkSets.UiHoldPath);
@@ -1529,6 +1545,84 @@ public static class CastCoreStageOrderTests
         if (allyEffects != null)
             allyEffects.ActiveEffects.RemoveAll(e => e != null && e.Spell != null && e.Spell.SpellId == "grease_armor");
         sc.SpellSlots.Remove(slot);
+    }
+
+    /// <summary>
+    /// Batch 11 step 14 (SPL-147): a cast whose slot cannot be spent after its standard action was committed ends Failed at
+    /// Spend and gives the action back (PHB p.141, p.143: casting the spell is the action); the old SlotFailureClearsSnapshot
+    /// bit kept the action spent.
+    /// </summary>
+    private static void TestFailedSpendRefund(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        var events = new List<string>();
+        var decider = new RecordingDecider(events);
+        CastContext ctx = Begin(gm, sc, caster, ally, SpellNames.RAY_OF_FROST, decider, out SpellSlot slot);
+        sc.SpellSlots.Remove(slot); // no slot holds the spell: the spend fails after the Cost stage committed the action
+        CastOutcome done = null;
+        gm.ExecuteCast(ctx, o => done = o);
+        Assert(done != null && done.Kind == CastOutcomeKind.Failed && done.At == CastStage.Spend && done.Reason == CastOutcome.ReasonSlotNotSpent,
+            "A cast whose slot cannot be spent ends Failed at Spend", "" + done);
+        Assert(!caster.Actions.StandardActionUsed && caster.Actions.HasStandardAction,
+            "A failed spend gives the standard action back (SPL-147)", "standard used " + caster.Actions.StandardActionUsed);
+        Assert(gm.Harness_PendingSpellcastSnapshot == null, "The refund uses the snapshot up");
+    }
+
+    /// <summary>
+    /// Batch 11 step 14 (SPL-154): a good cleric 5 converts a prepared Bless into Cure Light Wounds (PHB p.32) and holds the
+    /// charge (PHB p.141): the hold spends the Bless slot and the standard action and holds Cure Light Wounds. A second
+    /// converted hold with no Bless left fails its spend and gives the action back (SPL-147).
+    /// </summary>
+    private static void TestConvertedHold(GameManager gm)
+    {
+        CharacterController cleric = null;
+        try
+        {
+            cleric = TestHelpers.CreateCleric("CastCoreCleric", 5);
+            cleric.SetTeam(CharacterTeam.Player);
+            cleric.Stats.SpontaneousCasting = SpontaneousCastingType.Cure;
+            SpellcastingComponent sc = cleric.gameObject.AddComponent<SpellcastingComponent>();
+            sc.Init(cleric.Stats);
+            sc.SpellSlots.Clear();
+            var bless = new SpellSlot(1, SpellDatabase.GetSpell(SpellNames.BLESS).Clone(), false, "Cleric");
+            sc.SpellSlots.Add(bless);
+            cleric.Actions.Reset();
+
+            CastContext ctx = BeginConvertedHold(gm, cleric, out RecordingDecider decider);
+            CastOutcome done = null;
+            gm.ExecuteCast(ctx, o => done = o);
+            Assert(done != null && done.Kind == CastOutcomeKind.Resolved && bless.IsUsed && cleric.Actions.StandardActionUsed
+                   && sc.HasHeldTouchCharge && sc.HeldTouchSpell != null && sc.HeldTouchSpell.SpellId == SpellNames.CURE_LIGHT_WOUNDS,
+                "A held converted Cure Light Wounds spends the sacrificed Bless and the standard action and holds the charge (SPL-154)",
+                done + " bless used " + bless.IsUsed + " held " + sc.HasHeldTouchCharge);
+            sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+
+            cleric.Actions.Reset();
+            ctx = BeginConvertedHold(gm, cleric, out decider);
+            done = null;
+            gm.ExecuteCast(ctx, o => done = o);
+            Assert(done != null && done.Kind == CastOutcomeKind.Failed && done.Reason == CastOutcome.ReasonSlotNotSpent
+                   && !cleric.Actions.StandardActionUsed && !sc.HasHeldTouchCharge,
+                "A converted hold with no Bless left fails its spend, holds nothing and gives the action back (SPL-147)",
+                done + " standard used " + cleric.Actions.StandardActionUsed);
+        }
+        finally
+        {
+            if (gm.Harness_OpenCastCount > 0)
+                gm.Harness_EndAllCasts("CastCoreStageOrderTests converted hold cleanup");
+            if (cleric != null)
+                Object.DestroyImmediate(cleric.gameObject);
+        }
+    }
+
+    private static CastContext BeginConvertedHold(GameManager gm, CharacterController cleric, out RecordingDecider decider)
+    {
+        decider = new RecordingDecider(new List<string>());
+        SpellCastRequest req = SpellCastRequest.ForUi(cleric, SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS), null,
+            new CastSource { Kind = CastSourceKind.SpontaneousConversion, ConversionLevel = 1, SacrificedSpellId = SpellNames.BLESS });
+        req.Spell.HasMaterialComponent = false;
+        req.Decider = decider;
+        SpellCastRequest.ForUiHoldCharge(req);
+        return gm.BeginCast(req);
     }
 
     private static void TestMissingQuirk(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)

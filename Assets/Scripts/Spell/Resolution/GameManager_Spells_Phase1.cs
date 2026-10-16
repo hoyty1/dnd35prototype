@@ -775,7 +775,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
@@ -817,7 +817,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int charmRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
@@ -917,7 +917,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         ActiveSpellEffect effect = statusMgr.AddEffect(
             spell,
@@ -952,7 +952,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         ActiveSpellEffect effect = statusMgr.AddEffect(
@@ -1035,7 +1035,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         // StatusEffectManager.AddEffect scales the bonus by the effect's caster level (the same rule for staffs, scrolls
         // and potions), applies it as an enhancement bonus to natural armor and removes it when the spell ends.
@@ -1120,7 +1120,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null || caster == null || caster.Stats == null)
             return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         string casterName = caster.Stats.CharacterName;
         string targetName = target.Stats.CharacterName;
 

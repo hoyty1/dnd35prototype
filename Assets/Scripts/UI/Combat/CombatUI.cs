@@ -2505,8 +2505,9 @@ public class CombatUI : MonoBehaviour
         }
 
         // Build label
-        int casterLevel = (spellComp != null && spellComp.Stats != null) ? spellComp.Stats.Level : 0;
-        int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
+        // The range at the cast's caster level, the rule the targeting highlight uses (CasterLevelRules, SPL-017).
+        CharacterController labelCaster = spellComp != null ? spellComp.GetComponent<CharacterController>() : null;
+        int effectiveRangeSquares = CasterLevelRules.RangeSquares(labelCaster, spell);
         string rangeStr = effectiveRangeSquares == 0 ? "Touch" :
                           effectiveRangeSquares < 0 ? "Self" :
                           $"{effectiveRangeSquares} sq";
@@ -2646,8 +2647,9 @@ public class CombatUI : MonoBehaviour
             default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
         }
 
-        int casterLevel = (spellComp != null && spellComp.Stats != null) ? spellComp.Stats.Level : 0;
-        int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
+        // The range at the cast's caster level, the rule the targeting highlight uses (CasterLevelRules, SPL-017).
+        CharacterController labelCaster = spellComp != null ? spellComp.GetComponent<CharacterController>() : null;
+        int effectiveRangeSquares = CasterLevelRules.RangeSquares(labelCaster, spell);
         string rangeStr = effectiveRangeSquares == 0 ? "Touch" :
                           effectiveRangeSquares < 0 ? "Self" :
                           $"{effectiveRangeSquares} sq";

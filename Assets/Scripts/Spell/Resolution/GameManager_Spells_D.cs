@@ -267,7 +267,7 @@ public partial class GameManager
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
@@ -361,7 +361,7 @@ public partial class GameManager
         // Caster gains 1d8 temporary HP, +2 enhancement to STR and +1 caster level. A second Death Knell while the first
         // lasts refreshes it and adds no more STR (the same spell's enhancement bonus does not stack; SPL-003).
         int tempHP = DiceService.D8("Death Knell temp HP 1d8");
-        int cl = caster.Stats.GetDomainBoostedCasterLevel(spell);
+        int cl = CasterLevelRules.ForCaster(caster, spell);
         bool newlyApplied = EffectService.ApplyDeathKnellBonus(caster, spell, cl, buffRounds, tempHP);
         if (!newlyApplied)
             Debug.Log($"[DeathKnell] {caster.Stats.CharacterName} already has Death Knell: duration and temp HP refreshed, no extra STR");

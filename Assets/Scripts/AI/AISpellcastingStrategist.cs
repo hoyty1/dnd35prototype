@@ -167,8 +167,7 @@ public static class AISpellcastingStrategist
         bool isAllySpell = IsAllyTargetedSpell(spell);
         bool isEnemySpell = IsEnemyTargetedSpell(spell);
 
-        int rangeSquares = spell.GetRangeSquaresForCasterLevel(
-            caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
+        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
         if (rangeSquares <= 0) rangeSquares = 1;
 
         for (int i = 0; i < allCombatants.Count; i++)
@@ -198,7 +197,7 @@ public static class AISpellcastingStrategist
             }
 
             // Range check
-            int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
+            int distance = CasterLevelRules.DistanceToTarget(caster, candidate);
             if (distance > rangeSquares)
                 continue;
 
@@ -283,8 +282,7 @@ public static class AISpellcastingStrategist
     {
         if (allCombatants == null) return caster;
 
-        int rangeSquares = spell.GetRangeSquaresForCasterLevel(
-            caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
+        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
         if (rangeSquares <= 0) rangeSquares = 1;
 
         CharacterController bestTarget = null;
@@ -297,7 +295,7 @@ public static class AISpellcastingStrategist
                 continue;
             if (candidate.Team != caster.Team) continue;
 
-            int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
+            int distance = CasterLevelRules.DistanceToTarget(caster, candidate);
             if (distance > rangeSquares) continue;
             if (IsWastedOnGlobe(spell, candidate)) continue;
 
@@ -396,15 +394,14 @@ public static class AISpellcastingStrategist
             CharacterController mirrorTarget = gm.GetMirrorImagePriorityTargetForAI(caster);
             if (mirrorTarget != null)
             {
-                int mirrorDist = SquareGridUtils.GetDistance(caster.GridPosition, mirrorTarget.GridPosition);
-                int range = spell.GetRangeSquaresForCasterLevel(caster.Stats?.GetCasterLevel() ?? 1);
+                int mirrorDist = CasterLevelRules.DistanceToTarget(caster, mirrorTarget);
+                int range = CasterLevelRules.RangeSquares(caster, spell);
                 if (range <= 0) range = 1;
                 if (mirrorDist <= range && !IsWastedOnGlobe(spell, mirrorTarget)) return mirrorTarget;
             }
         }
 
-        int rangeSquares = spell.GetRangeSquaresForCasterLevel(
-            caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
+        int rangeSquares = CasterLevelRules.RangeSquares(caster, spell);
         if (rangeSquares <= 0) rangeSquares = 1;
 
         CharacterController bestTarget = null;
@@ -417,7 +414,7 @@ public static class AISpellcastingStrategist
                 continue;
             if (candidate.Team == caster.Team) continue; // skip allies
 
-            int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
+            int distance = CasterLevelRules.DistanceToTarget(caster, candidate);
             if (distance > rangeSquares) continue;
 
             // Line of sight check for single-target spells
@@ -507,7 +504,7 @@ public static class AISpellcastingStrategist
         // Spell resistance penalty
         if (spell.SpellResistanceApplies && enemy.Stats.SpellResistance > 0)
         {
-            int casterLevel = caster.Stats?.GetCasterLevel() ?? 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int srPenBonus = FeatManager.GetSpellPenetrationBonus(caster.Stats);
             int effectiveCL = casterLevel + srPenBonus;
             float srChance = Mathf.Clamp01((float)(effectiveCL + 1 - enemy.Stats.SpellResistance) / 20f);

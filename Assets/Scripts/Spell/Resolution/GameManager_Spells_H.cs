@@ -26,7 +26,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
@@ -269,7 +269,7 @@ public partial class GameManager
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // If target has Slow, Haste dispels it

@@ -492,17 +492,17 @@ namespace Tests.Scenarios
         /// (TryUseConsumableFromInventory), which enters the cast pipeline (InitiateScrollCastThroughPipeline,
         /// InitiateWandCastThroughPipeline) and PerformSpellCast. Every d4 is 4. The scroll is used up (or the wand loses one
         /// charge, both charge fields, ITM-034), no prepared slot is spent, and no action is left: RAW retrieving the stored
-        /// item is a move action (PHB p.141, Table 8-2) and activating it a standard action (DMG p.213). Pinned: today the
-        /// item use is charged as one full-round action (GetItemUseActionType, ITM-005; the fact "fullround" tells the two
-        /// apart, since both leave no action), and the missile count follows the user's caster level 5 (three missiles, 15),
-        /// not the item's (SPL-016).
+        /// item is a move action (PHB p.141, Table 8-2) and activating it a standard action (DMG p.213). The missiles count
+        /// at the item's caster level 1, not the user's 5 (one missile, 5; CasterLevelRules, batch 11 step 14, SPL-016).
+        /// Pinned: today the item use is charged as one full-round action (GetItemUseActionType, ITM-005; the fact
+        /// "fullround" tells the two apart, since both leave no action).
         /// </summary>
         private static ScenarioDef ItemCast(bool scroll)
         {
             string id = scroll ? ScrollId : WandId;
             string name = scroll ? "scroll" : "wand";
             ScenarioBuilder b = Rules("rules/cast-" + name + "-ui", "A Ui " + name + " of magic missile through the cast pipeline: the " + name + " is spent, no slot, the item action (DMG p.237, p.245)")
-                .Covers("DMG p.237", "DMG p.245", "PHB p.251", "ITM-005", "ITM-034")
+                .Covers("DMG p.237", "DMG p.245", "PHB p.251", "ITM-005", "ITM-034", "SPL-016")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
                 .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
@@ -522,7 +522,7 @@ namespace Tests.Scenarios
                         return true;
                     }))
                 .Expect("The item use ran", Expect.StepStatus("wizard", 1, "UseItem", 0, "done"))
-                .ExpectKnown("SPL-016", "Today the missiles count at the user's caster level 5: three missiles of 1d4+1 = 15, where the item's caster level 1 gives one (SPL-016)", FactIs("missile.lost.dummy", 15))
+                .Expect("The missiles count at the item's caster level 1: one missile of 1d4+1 = 5 (DMG p.237, p.245; PHB p.251)", FactIs("missile.lost.dummy", 5))
                 .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"))
                 .Expect("The item cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.MAGIC_MISSILE, 1))
                 .Expect("No action is left: a move action to retrieve the stored item and a standard action to activate it (PHB p.141 Table 8-2, DMG p.213)", FactIs("actions", "---"))
@@ -551,19 +551,23 @@ namespace Tests.Scenarios
         /// <summary>
         /// ITM-084: a threatened Ui wizard 5 starts a scroll (or wand) cast of magic missile at a dummy and answers the
         /// cast's AoO confirmation Cancel. The goblin beside it has Combat Reflexes (two AoOs a round: with a scroll, its
-        /// first goes to the item use's own confirmation, answered Proceed) and -30 on attacks. Today the pipeline spends
-        /// the scroll or the charge (ConsumePendingSpellSlot) before the confirmation and the cancel gives back only the
-        /// actions and slots, so the scroll is gone (or a charge lost) although no spell was cast. A scroll is a spell
-        /// completion item and provokes as casting does (DMG p.213), so its cast confirmation is the rule. A wand is a spell
-        /// trigger item whose activation does not provoke (DMG p.213, p.245); only retrieving it provokes (PHB p.141). Today
-        /// the wand skips the item-use confirmation and its pipeline cast opens the spellcasting one (ITM-085), so the wand
-        /// scenario pins that confirmation as today's behaviour, not as the rule.
+        /// first goes to the item use's own confirmation, answered Proceed) and -30 on attacks. The pipeline spends the
+        /// scroll or the charge (ConsumePendingSpellSlot) before the confirmation; since batch 11 step 14 the cancel restores
+        /// the snapshot, which records the scroll's stack and slot and both of the wand's charge stores (ITM-034), so the
+        /// scroll is kept (or no charge lost), no slot is spent and the standard action of activation is left. Every other
+        /// action is left too, but only because the item use is one deferred full-round action (ITM-005): RAW the
+        /// retrieval is a move action that provoked (PHB p.141, Table 8-2) and stays spent once its confirmation was
+        /// answered Proceed, so that part is pinned as today's behaviour.
+        /// A scroll is a spell completion item and provokes as casting does (DMG p.213), so its cast confirmation is the
+        /// rule. A wand is a spell trigger item whose activation does not provoke (DMG p.213, p.245); only retrieving it
+        /// provokes (PHB p.141). Today the wand skips the item-use confirmation and its pipeline cast opens the spellcasting
+        /// one (ITM-085), so the wand scenario pins that confirmation as today's behaviour, not as the rule.
         /// </summary>
         private static ScenarioDef ItemAoOCancel(bool scroll)
         {
             string id = scroll ? ScrollId : WandId;
             string name = scroll ? "scroll" : "wand";
-            ScenarioBuilder b = Rules("rules/cast-" + name + "-aoo-cancel", "A " + name + " cast cancelled at the AoO prompt (" + (scroll ? "ITM-084" : "ITM-084, ITM-085") + ", pinned)")
+            ScenarioBuilder b = Rules("rules/cast-" + name + "-aoo-cancel", "A " + name + " cast cancelled at the AoO prompt keeps the " + name + (scroll ? " (ITM-084)" : " (ITM-084; ITM-085 pinned)"))
                 .Covers("ITM-084", "PHB p.141", "DMG p.213", scroll ? "DMG p.237" : "DMG p.245")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
@@ -577,17 +581,20 @@ namespace Tests.Scenarios
             if (scroll)
                 steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the item use's own confirmation (retrieving and reading)
             steps.Add(Step.AnswerAoO(AoOAnswer.Cancel));       // the cast's confirmation
-            steps.Add(Step.Assert("after", ctx => { RecordItem(ctx, id, "after"); FactHpLost(ctx, "missile", "dummy"); return true; }));
+            steps.Add(Step.Assert("after", ctx => { RecordItem(ctx, id, "after"); FactHpLost(ctx, "missile", "dummy"); Fact(ctx, "actions", Actions(ctx.Get("wizard"))); Fact(ctx, "standard.left", ctx.Get("wizard").Actions.HasStandardAction); return true; }));
             b = b.Turn("wizard", 1, steps.ToArray());
             b = scroll
                 ? b.Expect("The scroll's cast confirmation (it provokes as casting does, DMG p.213) was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
                 : b.Covers("ITM-085").ExpectKnown("ITM-085", "Today the wand's activation opens the spellcasting AoO confirmation, answered Cancel, where a spell trigger activation does not provoke and the retrieval that does gets no confirmation (ITM-085)",
                     Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"));
             b = b.Expect("The cancelled spell does nothing", FactIs("missile.lost.dummy", 0))
-                .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"));
+                .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"))
+                .Expect("The standard action is left: the cancelled spell cost no activation (ITM-084; DMG p.237, p.245)", FactIs("standard.left", true))
+                .Covers("ITM-005").ExpectKnown("ITM-005", "Today every action is left, the move and full-round ones too: the cancel refunds the one deferred full-round item action, where RAW the retrieval's move action stays spent once it provoked (PHB p.141, Table 8-2; ITM-005)",
+                    FactIs("actions", "smf"));
             b = scroll
-                ? b.ExpectKnown("ITM-084", "Today the scroll is used up although the cast was cancelled (ITM-084)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 0)))
-                : b.ExpectKnown("ITM-084", "Today the wand loses a charge although the cast was cancelled (ITM-084; under RAW the only confirmation to cancel is the retrieval's, before any charge is spent, ITM-085)", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49")));
+                ? b.Expect("The scroll is kept: the cancel restores it (ITM-084)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 1)))
+                : b.Expect("The wand keeps its charge in both charge fields: the cancel restores them (ITM-084, ITM-034)", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "50/50")));
             return b.Build();
         }
 
@@ -2357,15 +2364,15 @@ namespace Tests.Scenarios
         /// <summary>
         /// SPL-147 (PHB p.141 and p.143: casting the spell is the action; a cast that never happens costs nothing). A Ui
         /// wizard 1 with Still Spell picks a stilled Magic Missile (a 2nd-level slot, which a wizard 1 does not have; the
-        /// harness selects it past the spell menu's slot filter, as a slot mismatch such as SPL-011 or SPL-154 does). Today
-        /// PerformSpellCast spends the standard action, then fails to spend the slot, logs an error and returns to the action
-        /// menu without restoring the action: no spell, the slot kept, the standard action lost.
+        /// harness selects it past the spell menu's slot filter, as a slot mismatch such as SPL-011 does). The cast core
+        /// commits the standard action, fails to spend the slot, logs an error and, since batch 11 step 14, restores the
+        /// snapshot before returning to the action menu: no spell, the slot kept, every action left.
         /// </summary>
         private static ScenarioDef SlotFailureRefund()
         {
             var still = new MetamagicData();
             still.Toggle(MetamagicFeatId.StillSpell);
-            return Rules("rules/cast-slot-failure-refund", "A failed slot spend loses the action (SPL-147, pinned)")
+            return Rules("rules/cast-slot-failure-refund", "A failed slot spend gives the action back (SPL-147)")
                 .Covers("SPL-147", "PHB p.141", "PHB p.143")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 1, "Still Spell")), 5, 10, Control.Ui)
@@ -2377,7 +2384,7 @@ namespace Tests.Scenarios
                     Step.Cast(SpellNames.MAGIC_MISSILE, "dummy", still),
                     Step.Assert("after", ctx => { CharacterController w = ctx.Get("wizard"); FactHpLost(ctx, "missile", "dummy"); Fact(ctx, "slots.after", Slots(w)); Fact(ctx, "actions", Actions(w)); return true; }))
                 .Expect("No spell: the dummy is untouched and the slot kept", Expect.All(FactIs("missile.lost.dummy", 0), FactsEqual("slots.before", "slots.after")))
-                .ExpectKnown("SPL-147", "Today the standard action is spent anyway (SPL-147)", FactIs("actions", "-m-"))
+                .Expect("Every action is left: a cast that never happens costs nothing (PHB p.141, p.143)", FactIs("actions", "smf"))
                 .Build();
         }
     }

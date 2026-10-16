@@ -136,7 +136,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
 
         // Choose a random curse type

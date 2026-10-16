@@ -156,7 +156,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
 

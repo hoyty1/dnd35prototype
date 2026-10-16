@@ -80,7 +80,7 @@ public class SpellApplicationService : MonoBehaviour
     {
         if (caster == null || caster.Stats == null)
             return 1;
-        return Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        return CasterLevelRules.ForCaster(caster, spell);
     }
 
     // ==================== EFFECT APPLICATION HELPERS ====================

@@ -395,43 +395,6 @@ public partial class GameManager
         return check.Success;
     }
 
-    private bool ResolveGrappledOrPinnedCastingConcentration(
-        CharacterController caster,
-        SpellcastingComponent spellComp,
-        SpellData spell,
-        MetamagicData metamagic,
-        bool hasMetamagicApplied,
-        int slotLevelToConsume,
-        bool isSpontaneous,
-        int spontaneousLevel,
-        string spontaneousSacrificedSpellId)
-    {
-        if (caster == null || spell == null)
-            return false;
-
-        if (RollGrappledOrPinnedCastingConcentration(caster, spell, out int dc, out string conditionLabel))
-            return true;
-
-        bool consumed = ConsumePendingSpellSlot(
-            spellComp,
-            spell,
-            metamagic,
-            hasMetamagicApplied,
-            slotLevelToConsume,
-            isSpontaneous,
-            spontaneousLevel,
-            spontaneousSacrificedSpellId);
-
-        if (!consumed)
-        {
-            Debug.LogError($"[GameManager] {conditionLabel} concentration failure path: could not consume level {slotLevelToConsume} slot for {spell.Name}");
-            return false;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} fails the DC {dc} concentration check while {conditionLabel}. {spell.Name} is lost and the spell slot is spent."));
-        return false;
-    }
-
     private List<Vector2Int> GetValidFreeAdjacentGrappleMoveSquares(CharacterController actor)
     {
         var validSquares = new List<Vector2Int>();

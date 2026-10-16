@@ -142,7 +142,7 @@ public static class SpellRoutingGoldenTests
 
     /// <summary>
     /// The data refusal of the NPC cast path (an Area target type; AI-001): the cast core's Legality stage for a request
-    /// with LegacyCastQuirk.NpcRefusesArea (GameManager.CheckNpcRangeAndAreaLegality).
+    /// with LegacyCastQuirk.NpcRefusesArea (GameManager.CheckCastRangeAndAreaLegality).
     /// </summary>
     public static bool NpcRefusesOnData(SpellData spell) => spell.TargetType == SpellTargetType.Area;
 

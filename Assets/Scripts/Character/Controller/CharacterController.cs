@@ -10918,7 +10918,7 @@ public class CharacterController : MonoBehaviour
     /// Lets this character's pin lapse when its 1 round is up (<see cref="IsPinRenewalDue"/>; PHB p.156, CMB-120)
     /// and returns the log line, or an empty string when no pin was due. Called by every action the pinner takes
     /// on its renewal turn other than pinning again or releasing: grapple actions (<see cref="ResolveGrappleAction"/>)
-    /// and spellcasting (GameManager.ResolveGrappledOrPinnedCastingConcentration, shared by the PC and NPC cast paths).
+    /// and spellcasting (GameManager.RollGrappledOrPinnedCastingConcentration, shared by the PC and NPC cast paths).
     /// </summary>
     public string LetDuePinLapseIfDue()
     {

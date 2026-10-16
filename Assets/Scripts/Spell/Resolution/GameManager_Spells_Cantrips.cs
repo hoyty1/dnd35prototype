@@ -68,7 +68,7 @@ public partial class GameManager
         if (caster == null || spell == null) return null;
 
         string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats != null ? caster.Stats.CasterLevel : 1);
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int gallons = casterLevel * 2;
 
         var sb = new StringBuilder();
@@ -171,7 +171,7 @@ public partial class GameManager
         if (caster == null || spell == null) return null;
 
         string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats != null ? caster.Stats.CasterLevel : 1);
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

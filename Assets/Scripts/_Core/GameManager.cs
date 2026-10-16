@@ -6023,8 +6023,9 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// The spell a scroll casts through the targeting pipeline: a clone with the dice at the scroll's caster level
-    /// (DMG p.237; SpellDiceRules.BakeForCasterLevel, SPL-005), the scroll's metamagic and its save DC. Duration, range
-    /// and the SR check still read the reader's caster level (SPL-016).
+    /// (DMG p.237; SpellDiceRules.BakeForCasterLevel, SPL-005), the scroll's metamagic and its save DC. The cast's other
+    /// caster-level reads take the scroll's caster level from its source (CasterLevelRules, batch 11 step 14), except the
+    /// services that still read CharacterStats.GetCasterLevel without the cast (SPL-016).
     /// </summary>
     internal static SpellData BuildScrollPipelineSpell(ItemData scrollItem, SpellData baseSpell, out MetamagicData scrollMetamagic, out int scrollCasterLevel)
     {
@@ -6157,8 +6158,9 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// The spell a wand casts through the targeting pipeline: a clone with the dice at the wand's caster level
-    /// (DMG p.213; SpellDiceRules.BakeForCasterLevel, SPL-005), the wand's metamagic and its save DC. Duration, range
-    /// and the SR check still read the user's caster level (SPL-016).
+    /// (DMG p.213; SpellDiceRules.BakeForCasterLevel, SPL-005), the wand's metamagic and its save DC. The cast's other
+    /// caster-level reads take the wand's caster level from its source (CasterLevelRules, batch 11 step 14), except the
+    /// services that still read CharacterStats.GetCasterLevel without the cast (SPL-016).
     /// </summary>
     internal static SpellData BuildWandPipelineSpell(ItemData wandItem, SpellData baseSpell, out MetamagicData wandMetamagic, out int wandCasterLevel)
     {
@@ -10842,7 +10844,7 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int rangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 1));
+        int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
         List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, rangeSquares);
 
         foreach (SquareCell cell in cells)
@@ -10860,7 +10862,7 @@ public partial class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(caster, HighlightType.Selected);
 
-        int feet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        int feet = CalculateSummonSwarmRangeFeet(CasterLevelRules.ForCaster(caster, spell));
         CombatUI.SetTurnIndicator($"✦ {spell.Name}: place swarm ({_pendingSummonSwarmNpcId}) | Range: {feet} ft | Occupied squares allowed | Right-click to cancel");
     }
 
@@ -10876,7 +10878,7 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+        int range = CasterLevelRules.RangeSquares(caster, spell);
         if (range <= 0) range = 1;
         List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, range);
 

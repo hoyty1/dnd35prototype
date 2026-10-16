@@ -57,7 +57,7 @@ public partial class GameManager
         // Apply negative levels using existing system
         int newTotal = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, "Enervation");
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         // PHB p.226: the negative levels last a number of hours equal to the caster level, maximum 15 hours. The shared
         // duration rule at a caster level capped at 15 gives that (and Extend still doubles it).
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, Mathf.Min(casterLevel, 15));

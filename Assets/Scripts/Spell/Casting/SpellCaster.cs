@@ -394,7 +394,7 @@ public static class SpellCaster
             result.SpellResistanceChecked = true;
             result.SpellResistanceValue = targetStats.SpellResistance;
             result.SpellResistanceRoll = DiceRoller.D20();
-            result.SpellResistanceTotal = result.SpellResistanceRoll + GetCasterLevelForSpellResistanceCheck(casterStats);
+            result.SpellResistanceTotal = result.SpellResistanceRoll + GetCasterLevelForSpellResistanceCheck(casterController, casterStats, spell);
             result.SpellResistancePassed = result.SpellResistanceTotal >= result.SpellResistanceValue;
 
             if (!result.SpellResistancePassed)
@@ -486,8 +486,8 @@ public static class SpellCaster
 
             if (spell.AutoHit && spell.MissileCount > 0)
             {
-                // Magic Missile: 1 + (CL-1)/2 missiles, max 5
-                int effectiveCasterLevel = casterStats != null ? Mathf.Max(1, casterStats.GetCasterLevel()) : 1;
+                // Magic Missile: 1 + (CL-1)/2 missiles, max 5, at the cast's caster level (a scroll's or wand's own; SPL-016)
+                int effectiveCasterLevel = CastCasterLevel(casterController, casterStats, spell);
                 int missileCount = Mathf.Min(5, 1 + (effectiveCasterLevel - 1) / 2);
                 result.MissileCount = missileCount;
                 result.MissileDamages = new int[missileCount];
@@ -560,7 +560,7 @@ public static class SpellCaster
             if (result.DamageDealt > 0)
                 result.DamageDealt = Mathf.Max(1, result.DamageDealt);
 
-            int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterStats != null ? casterStats.GetCasterLevel() : 0);
+            int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(CastCasterLevel(casterController, casterStats, spell));
             bool isRangedSpellDamage = result.RequiredAttackRoll
                 ? result.IsRangedTouch
                 : (effectiveRangeSquares > 1 || spell.TargetType == SpellTargetType.Area);
@@ -975,14 +975,23 @@ public static class SpellCaster
         return string.Empty;
     }
 
-    private static int GetCasterLevelForSpellResistanceCheck(CharacterStats casterStats)
+    /// <summary>
+    /// The cast's caster level (CasterLevelRules, batch 11 step 14, SPL-016, SPL-017): the open cast's when the caster's
+    /// controller is known (a scroll's or wand's own caster level, DMG p.237, p.245), else the stats' rule (the casting
+    /// class's caster level, or the Hit Dice of a creature with no casting class, MM p.315). At least 1.
+    /// </summary>
+    private static int CastCasterLevel(CharacterController casterController, CharacterStats casterStats, SpellData spell)
+        => casterController != null && casterController.Stats != null
+            ? CasterLevelRules.ForCaster(casterController, spell)
+            : CasterLevelRules.ForStats(casterStats, spell);
+
+    /// <summary>The caster level check against spell resistance (PHB p.177): the cast's caster level plus Spell Penetration.</summary>
+    private static int GetCasterLevelForSpellResistanceCheck(CharacterController casterController, CharacterStats casterStats, SpellData spell)
     {
         if (casterStats == null)
             return 0;
 
-        int casterLevel = casterStats.GetCasterLevel();
-        if (casterLevel <= 0)
-            casterLevel = Mathf.Max(1, casterStats.EffectiveCharacterLevel);
+        int casterLevel = CastCasterLevel(casterController, casterStats, spell);
 
         // Spell Penetration (+2) and Greater Spell Penetration (+2) stack
         int spellPenBonus = FeatManager.GetSpellPenetrationBonus(casterStats);

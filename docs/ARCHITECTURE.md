@@ -279,9 +279,9 @@ Assets/Scripts/
     Data/ (8)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...
     Database/ (25)       SpellDatabase + 23 SpellDatabase_<letter> partials (A..Z, some letters
                          absent) + SpontaneousCastingType
-    Casting/ (12) + Core/ (12: SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
+    Casting/ (12) + Core/ (13: SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
                          UiCastDecider, CastResourceSnapshot, CastStageTrace, LegacyCastQuirk, CastActionRules,
-                         CastComponentRules), Components/ (7), Effects/ (1: EffectService)
+                         CastComponentRules, CasterLevelRules), Components/ (7), Effects/ (1: EffectService)
     Resolution/ (26), Special/ (9), Domain/ (3)   mostly GameManager partials
     AreaEffects/ (32), StatusEffects/ (29)
   Equipment/             Items/ (9), Inventory/ (10), Weapons/ (18), Armor/ (10), Rings/ (7),

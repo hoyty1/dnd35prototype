@@ -94,20 +94,15 @@ public static class SpellCastingHelper
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Get the effective caster level for a spell, applying domain boosts
-    /// and clamping to a minimum of 1.
-    /// Replaces: Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
+    /// The caster level <paramref name="caster"/> casts <paramref name="spell"/> at: CasterLevelRules.ForCaster (an open
+    /// scroll or wand cast's own caster level, else the casting class's with the domain boost, half for a paladin or
+    /// ranger, or the Hit Dice of a creature with no casting class; batch 11 step 14, SPL-017). Minimum 1.
     /// </summary>
     /// <param name="caster">The spellcaster.</param>
     /// <param name="spell">The spell being cast (for domain boost check).</param>
     /// <returns>Effective caster level, minimum 1.</returns>
     public static int GetEffectiveCasterLevel(CharacterController caster, SpellData spell)
-    {
-        if (caster == null || caster.Stats == null)
-            return 1;
-
-        return Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-    }
+        => CasterLevelRules.ForCaster(caster, spell);
 
     /// <summary>
     /// Get the base caster level (no domain boost), clamped to minimum 1.

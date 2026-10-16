@@ -164,7 +164,7 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfFireMaxLengthSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return Mathf.Max(2, cl * 4);
     }
 
@@ -174,7 +174,7 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfFireMaxRingRadius(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return Mathf.Max(1, cl / 2);
     }
 
@@ -183,9 +183,9 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfFireRangeSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return _pendingSpell != null
-            ? _pendingSpell.GetRangeSquaresForCasterLevel(cl)
+            ? CasterLevelRules.RangeSquares(caster, _pendingSpell)
             : (20 + 2 * cl);
     }
 

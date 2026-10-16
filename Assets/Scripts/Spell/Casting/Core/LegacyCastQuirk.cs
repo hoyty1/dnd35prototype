@@ -38,21 +38,15 @@ public enum LegacyCastQuirk : long
     // Bit 3 is unused: QuickenedProvokes (SPL-143) was removed by batch 11 step 12 (raw-action-cost-provocation); a
     // quickened cast does not provoke (PHB p.98).
 
-    /// <summary>
-    /// A cast whose slot spend fails (or whose caster has no SpellcastingComponent) after the action was spent clears
-    /// the resource snapshot, so the action is lost (SPL-147; batch 11 step 14). Without the bit the core restores it.
-    /// </summary>
-    SlotFailureClearsSnapshot = 1 << 4,
+    // Bit 4 is unused: SlotFailureClearsSnapshot (SPL-147) was removed by batch 11 step 14 (raw-resources-caster-level);
+    // a cast whose spend fails after the action was spent restores the resource snapshot, so it costs nothing.
 
     // Bit 5 is unused: ConcentrationGateBeforeProvocation (SPL-152) was removed by batch 11 step 12; the
     // casting-while-concentrating step runs once the provocation lets the cast proceed.
 
-    /// <summary>
-    /// The PC range highlight (ShowSpellTargets) measures range by character level, not caster level (SPL-017; batch 11
-    /// step 14). Not read by a stage yet: the range test is still the targeting highlight's; the Legality stage takes it
-    /// over with CasterLevelRules.
-    /// </summary>
-    RangeHighlightUsesCharacterLevel = 1 << 6,
+    // Bit 6 is unused: RangeHighlightUsesCharacterLevel (SPL-017) was removed by batch 11 step 14
+    // (raw-resources-caster-level); the PC targeting highlight and the Legality stage's range test both read
+    // CasterLevelRules.
 
     // Bits 7 and 8 are unused: SoundBurstStunIgnoresSuccess and AnimateRopeIgnoresSuccess (SPL-142) were removed by batch
     // 11 step 11; a failed cast lands no Sound Burst stun (gate Success) and no Animate Rope entanglement (the handler
@@ -99,13 +93,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcOwnLegalityChecks = 1 << 15,
 
-    /// <summary>
-    /// The NPC range test: the Legality stage refuses a target beyond the spell's range at the caster's caster level
-    /// (GetCasterLevel, at least 1 square), measured to the target's anchor square. The PC range is the targeting
-    /// highlight's, by character level and to any footprint square (<see cref="RangeHighlightUsesCharacterLevel"/>;
-    /// SPL-017). Batch 11 step 14 (raw-resources-caster-level) gives both one CasterLevelRules range.
-    /// </summary>
-    NpcRangeUsesCasterLevel = 1 << 16,
+    // Bit 16 is unused: NpcRangeUsesCasterLevel (SPL-017) was removed by batch 11 step 14 (raw-resources-caster-level);
+    // every single-target cast meets one range test (CasterLevelRules.InRange: the cast's caster level, to the target's
+    // nearest square).
 
     /// <summary>
     /// The Legality stage refuses every spell whose target type is Area (AI-001; Tests.Magic.SpellRoutingGoldenTests
@@ -295,12 +285,8 @@ public enum LegacyCastQuirk : long
     /// </summary>
     HoldSkipsChoices = 1L << 49,
 
-    /// <summary>
-    /// Holding the charge of a cleric's converted cure or inflict spell ignores the conversion: the Cost stage treats the
-    /// cast as a plain slot cast, so the spend looks for a prepared copy of the cure or inflict spell (SPL-154, SPL-147).
-    /// Batch 11 step 14 (raw-resources-caster-level) removes the bit.
-    /// </summary>
-    HoldIgnoresConversion = 1L << 50,
+    // Bit 50 is unused: HoldIgnoresConversion (SPL-154) was removed by batch 11 step 14 (raw-resources-caster-level); a
+    // hold of a cleric's converted cure or inflict spell spends the sacrificed spell.
 
     /// <summary>
     /// Delivering a held touch charge is never offered to a readied counterspell, and while the hold is not either
@@ -328,23 +314,19 @@ public static class LegacyCastQuirkSets
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
     public const LegacyCastQuirk UiPath =
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-        | LegacyCastQuirk.SlotFailureClearsSnapshot
-        | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
         | LegacyCastQuirk.AlliesForgoEverySave
         | LegacyCastQuirk.HeldChargeDeliveryIsFree
         | LegacyCastQuirk.DeliverySkipsCounterspell;
 
     /// <summary>
     /// Today's NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8):
-    /// the UI path's bits except the two that describe only the PC side (the combat-end check on a target's death,
-    /// CORE-039, and the targeting highlight's range, SPL-017), plus the NPC path's own bits. It differs from
-    /// <see cref="UiPath"/> only by bits that name a PC/NPC parity issue (Tests.Magic.CastCoreStageOrderTests checks the
-    /// list).
+    /// the UI path's bits except the one that describes only the PC side (the combat-end check on a target's death,
+    /// CORE-039), plus the NPC path's own bits. It differs from <see cref="UiPath"/> only by bits that name a PC/NPC
+    /// parity issue (Tests.Magic.CastCoreStageOrderTests checks the list).
     /// </summary>
     public const LegacyCastQuirk AiPath =
-        (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath | LegacyCastQuirk.RangeHighlightUsesCharacterLevel))
+        (UiPath & ~LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
         | LegacyCastQuirk.NpcOwnLegalityChecks
-        | LegacyCastQuirk.NpcRangeUsesCasterLevel
         | LegacyCastQuirk.NpcRefusesArea
         | LegacyCastQuirk.NpcNullMetamagic
         | LegacyCastQuirk.NpcNoComponentCheck
@@ -357,14 +339,12 @@ public static class LegacyCastQuirkSets
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
-    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the snapshot cleared after a failed spend and the
-    /// generic loop's forgone saves), without the single-target ones (the combat-end check on a target's death, the
-    /// targeting highlight's range, the held-charge delivery), plus the area path's own bits.
-    /// Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// batch 11 step 9): the UI path's bits that an area cast exhibits (the generic loop's forgone saves), without the
+    /// single-target ones (the combat-end check on a target's death, the held-charge delivery), plus the area path's own
+    /// bits. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
         (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-                    | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
                     | LegacyCastQuirk.HeldChargeDeliveryIsFree
                     | LegacyCastQuirk.DeliverySkipsCounterspell))
         | LegacyCastQuirk.AreaSkipsRing
@@ -373,22 +353,21 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
 
     /// <summary>
-    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the snapshot cleared after a failed
-    /// spend and the missing combat-end check (the cost, provocation and concentration-order bits went in batch 11 step 12).
+    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the missing combat-end check (the
+    /// cost, provocation and concentration-order bits went in batch 11 step 12, the snapshot cleared after a failed spend
+    /// in step 14).
     /// </summary>
     private const LegacyCastQuirk UiEffectPathShared =
-        LegacyCastQuirk.SlotFailureClearsSnapshot
-        | LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
+        LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
 
     /// <summary>
     /// Today's PC summon path (PerformSummonMonsterCast and PerformSummonSwarmCast through the cast core's Summon resolve,
-    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits, the targeting highlight's range (the
-    /// placement range is by character level too), plus the summon path's own bits. Tests.Magic.CastCoreStageOrderTests
-    /// checks the list.
+    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits plus the summon path's own bits (the
+    /// placement range is the cast's caster level's since batch 11 step 14). Tests.Magic.CastCoreStageOrderTests checks
+    /// the list.
     /// </summary>
     public const LegacyCastQuirk UiSummonPath =
         UiEffectPathShared
-        | LegacyCastQuirk.RangeHighlightUsesCharacterLevel
         | LegacyCastQuirk.SummonSkipsCounterspell
         | LegacyCastQuirk.SummonSkipsPouch;
 
@@ -412,6 +391,5 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.HoldSkipsGrappleLegality
         | LegacyCastQuirk.HoldSkipsPouch
         | LegacyCastQuirk.HoldSkipsCounterspell
-        | LegacyCastQuirk.HoldSkipsChoices
-        | LegacyCastQuirk.HoldIgnoresConversion;
+        | LegacyCastQuirk.HoldSkipsChoices;
 }

@@ -60,9 +60,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats); // always rebind to the current stats, as the generic branch does
 
-        int casterLevel = caster != null && caster.Stats != null
-            ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
-            : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 

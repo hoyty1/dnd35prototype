@@ -2690,7 +2690,7 @@ public class AIService : MonoBehaviour
         if (bestSpell == null)
             return 0;
 
-        int rangeSquares = bestSpell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel());
+        int rangeSquares = CasterLevelRules.RangeSquares(caster, bestSpell);
         return Mathf.Max(1, rangeSquares);
     }
 
@@ -2754,13 +2754,13 @@ public class AIService : MonoBehaviour
         CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
         if (spellTarget == null)
         {
-            int rangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel()));
+            int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
             Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no valid targets in range ({rangeSquares} squares).");
             return false;
         }
 
-        int targetDistance = SquareGridUtils.GetDistance(caster.GridPosition, spellTarget.GridPosition);
-        int spellRange = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel()));
+        int targetDistance = CasterLevelRules.DistanceToTarget(caster, spellTarget);
+        int spellRange = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
         bool isAllyTargeted = AISpellcastingStrategist.IsAllyTargetedSpell(spell);
         string targetRelation = isAllyTargeted ? "ally" : "enemy";
         Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");

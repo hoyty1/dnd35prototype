@@ -96,7 +96,7 @@ public partial class GameManager
     {
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = CasterLevelRules.ForCaster(caster, imbueSpell); // the cast's caster level (SPL-016, SPL-017)
 
         // Build the selection list: group by spell name for clarity
         var selectedIndices = new List<int>();
@@ -606,7 +606,7 @@ public partial class GameManager
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,

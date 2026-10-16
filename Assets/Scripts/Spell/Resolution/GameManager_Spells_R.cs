@@ -209,7 +209,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         // Rage duration: Concentration + 1 round/level (max 10 rounds after concentration ends)
         // For simplicity in combat, we use caster level rounds (max 10)
@@ -275,7 +275,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // PHB: Fortitude partial. Failed save = Exhausted. Successful save = Fatigued.

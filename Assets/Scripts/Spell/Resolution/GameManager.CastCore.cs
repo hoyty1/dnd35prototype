@@ -214,7 +214,8 @@ public partial class GameManager
     /// <summary>
     /// Whether <paramref name="req"/> may be cast as it stands: with <see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>
     /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
-    /// target test (IsValidTargetForSpell), with the NPC bits the range at the caster level and the area refusal, and
+    /// target test (IsValidTargetForSpell), the range at the cast's caster level (CasterLevelRules, SPL-017), with the NPC
+    /// bit the area refusal, and
     /// the casting action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
     /// material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
     /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>), and for a hold the grapple
@@ -227,7 +228,7 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
-                              ?? CheckNpcRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastSpeechLegality(req)
+                              ?? CheckCastRangeAndAreaLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
     }
@@ -275,26 +276,22 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The NPC range test (<see cref="LegacyCastQuirk.NpcRangeUsesCasterLevel"/>, SPL-017: the spell's range at the
-    /// caster's caster level, at least 1 square, to the target's anchor square), then the area refusal
-    /// (<see cref="LegacyCastQuirk.NpcRefusesArea"/>, AI-001). Null when the request carries neither bit or passes.
+    /// The range test, one rule for every caster and path (batch 11 step 14, SPL-017): a single-target cast whose target
+    /// lies beyond the spell's range at the cast's caster level (CasterLevelRules.InRange: a scroll's or wand's own
+    /// caster level, else the casting class's, half for a paladin or ranger; at least 1 square; measured to the target's
+    /// nearest square, as the PC targeting highlight measures it) is refused. Then the area refusal
+    /// (<see cref="LegacyCastQuirk.NpcRefusesArea"/>, AI-001). Null when the request passes.
     /// </summary>
-    private static CastOutcome CheckNpcRangeAndAreaLegality(SpellCastRequest req)
+    private static CastOutcome CheckCastRangeAndAreaLegality(SpellCastRequest req)
     {
         if (req == null || req.Caster == null || req.Spell == null)
             return null;
 
-        CharacterController caster = req.Caster;
         CharacterController target = req.Aim != null ? req.Aim.Target : null;
         SpellData spell = req.Spell;
-        if (req.HasQuirk(LegacyCastQuirk.NpcRangeUsesCasterLevel) && target != null && caster.Stats != null)
-        {
-            int rangeSquares = spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel());
-            if (rangeSquares <= 0)
-                rangeSquares = 1;
-            if (SquareGridUtils.GetDistance(caster.GridPosition, target.GridPosition) > rangeSquares)
-                return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "out-of-range");
-        }
+        if (req.ResolveKind == CastResolveKind.Single && target != null && req.Caster.Stats != null
+            && !CasterLevelRules.InRange(req, target))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "out-of-range");
 
         // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests) mirrors this data refusal: keep them in step.
         if (req.HasQuirk(LegacyCastQuirk.NpcRefusesArea) && spell.TargetType == SpellTargetType.Area)
@@ -381,11 +378,11 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Legality: the target, then the caster's choices (the decider; the UI may suspend here at a dialog), then the
-    /// components. Nothing is spent before the cast passes. With the NPC bits: no metamagic
-    /// (<see cref="LegacyCastQuirk.NpcNullMetamagic"/>), the NPC path's own caster tests before the target and its
-    /// unlogged target refusal (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the range at the caster level and the
-    /// area refusal after it, and no component test.
+    /// Legality: the target, the range at the cast's caster level (every caster, SPL-017), then the caster's choices (the
+    /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. With
+    /// the NPC bits: no metamagic (<see cref="LegacyCastQuirk.NpcNullMetamagic"/>), the NPC path's own caster tests before
+    /// the target and its unlogged target and range refusals (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the
+    /// area refusal after the range, and no component test.
     /// </summary>
     private void CastStageLegality(CastContext ctx)
     {
@@ -429,10 +426,15 @@ public partial class GameManager
             return;
         }
 
-        refusal = CheckNpcRangeAndAreaLegality(req);
+        // The range at the cast's caster level (SPL-017), the same for every caster; the PC's target comes from the
+        // targeting highlight, which applies the same rule, so a PC cast meets this only through a stale target. The NPC
+        // path's refusals log nothing, as its others.
+        refusal = CheckCastRangeAndAreaLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (refusal.Reason == "out-of-range" && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{req.Aim.Target?.Stats?.CharacterName ?? "The target"} is out of range of {spell.Name}."));
             FinishCast(ctx, refusal);
             return;
         }
@@ -499,7 +501,7 @@ public partial class GameManager
         SpellData spell = req.Spell;
         MetamagicData metamagic = req.Metamagic;
 
-        CaptureSpellcastResourceSnapshot(caster);
+        CaptureSpellcastResourceSnapshot(caster, req.Source);
 
         CastSourceKind sourceKind = req.Source.Kind;
         bool isDeliveringHeldCharge = sourceKind == CastSourceKind.HeldChargeDelivery;
@@ -571,7 +573,7 @@ public partial class GameManager
         SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
-            DropSnapshotAfterFailedSpend(ctx);
+            RefundAfterFailedSpend(ctx);
             Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "PerformAoESpellCast" : "PerformSpellCast")}: No SpellcastingComponent!");
             FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Cost, CastOutcome.ReasonNoSpellcasting));
             return;
@@ -579,10 +581,9 @@ public partial class GameManager
         ctx.SpellComp = spellComp;
 
         // A cleric converting a specific prepared spell: the cast's own source, which the spell menu filled once from its
-        // Convert button (batch 11 step 4), so a cancelled conversion cannot make a later cast spontaneous. A hold ignores
-        // the conversion and spends as a plain slot cast (HoldIgnoresConversion, SPL-154).
-        bool isSpontaneous = !isDeliveringHeldCharge && sourceKind == CastSourceKind.SpontaneousConversion
-                             && !req.HasQuirk(LegacyCastQuirk.HoldIgnoresConversion);
+        // Convert button (batch 11 step 4), so a cancelled conversion cannot make a later cast spontaneous. A hold of the
+        // converted spell spends the sacrificed spell too (PHB p.32, p.141; batch 11 step 14, SPL-154).
+        bool isSpontaneous = !isDeliveringHeldCharge && sourceKind == CastSourceKind.SpontaneousConversion;
         ctx.IsSpontaneousConversion = isSpontaneous;
         ctx.SpontaneousLevel = isSpontaneous ? req.Source.ConversionLevel : -1;
         ctx.SpontaneousSacrificedSpellId = isSpontaneous ? req.Source.SacrificedSpellId : null;
@@ -631,34 +632,54 @@ public partial class GameManager
             SpellData spell = req.Spell;
 
             // An entangled caster: Concentration DC 15 + the spell's level for any spell (PHB p.308, p.70; SPL-145).
-            if (!ResolveEntangledCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
-                    ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
+            if (!RollEntangledCastingConcentration(caster, spell, req.Metamagic, out int entangledDc))
             {
-                CheckConcentrationOnLostCast(ctx);
-                ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "entangled"));
+                LoseCastAtDistraction(ctx, "entangled", "Entangled", "entangled", entangledDc);
                 return;
             }
 
-            if (!ResolveGrappledOrPinnedCastingConcentration(caster, ctx.SpellComp, spell, req.Metamagic, ctx.HasMetamagicApplied,
-                    ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId))
+            // A grappled or pinned caster: Concentration DC 20 + the spell's level (PHB p.156).
+            if (!RollGrappledOrPinnedCastingConcentration(caster, spell, out int grappleDc, out string conditionLabel))
             {
-                CheckConcentrationOnLostCast(ctx);
-                ClearSpellcastResourceSnapshot();
-                FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, "grappled"));
+                LoseCastAtDistraction(ctx, "grappled", conditionLabel, conditionLabel, grappleDc);
                 return;
             }
         }
         else if (!ctx.IsHeldChargeDelivery)
         {
             // A wand use makes no casting check, but a pinner who uses one on its renewal turn does not pin again, as
-            // for a cast (PHB p.156, CMB-120; ResolveGrappledOrPinnedCastingConcentration does this for a casting).
+            // for a cast (PHB p.156, CMB-120; RollGrappledOrPinnedCastingConcentration does this for a casting).
             string pinLapse = ctx.Request.Caster.LetDuePinLapseIfDue();
             if (!string.IsNullOrEmpty(pinLapse))
                 CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", pinLapse));
         }
 
         CastStageFailure(ctx);
+    }
+
+    /// <summary>
+    /// A spell lost to a failed casting Concentration check at the Distraction stage (entangled, grappled or pinned): its
+    /// slot (or scroll, converted spell) is spent and the loss is logged, the casting-while-concentrating step runs, and
+    /// the cast ends Interrupted. A slot that cannot be spent restores the snapshot and ends the cast with
+    /// <see cref="CastOutcome.ReasonSlotNotSpent"/>, as <see cref="LoseCastAtFailure"/> does (batch 11 step 14: no
+    /// spell was cast, so the action is given back).
+    /// </summary>
+    private void LoseCastAtDistraction(CastContext ctx, string reason, string errorLabel, string conditionLabel, int dc)
+    {
+        CharacterController caster = ctx.Request.Caster;
+        SpellData spell = ctx.Request.Spell;
+        if (!SpendCastSlot(ctx))
+        {
+            RefundAfterFailedSpend(ctx);
+            Debug.LogError($"[GameManager] {errorLabel} concentration failure path: could not consume level {ctx.SlotLevelToConsume} slot for {spell.Name}");
+            FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Distraction, CastOutcome.ReasonSlotNotSpent));
+            return;
+        }
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} fails the DC {dc} concentration check while {conditionLabel}. {spell.Name} is lost and the spell slot is spent."));
+        CheckConcentrationOnLostCast(ctx);
+        ClearSpellcastResourceSnapshot();
+        FinishCast(ctx, LostCastOutcome(CastOutcomeKind.Interrupted, CastStage.Distraction, reason));
     }
 
     /// <summary>
@@ -726,7 +747,7 @@ public partial class GameManager
     {
         if (!SpendCastSlot(ctx))
         {
-            DropSnapshotAfterFailedSpend(ctx);
+            RefundAfterFailedSpend(ctx);
             Debug.LogError($"[GameManager] {errorLabel}: failed to consume level {ctx.SlotLevelToConsume} spell slot!");
             FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Failure, CastOutcome.ReasonSlotNotSpent));
             return;
@@ -752,7 +773,7 @@ public partial class GameManager
             SpellData spell = ctx.Request.Spell;
             if (!SpendCastSlot(ctx))
             {
-                DropSnapshotAfterFailedSpend(ctx);
+                RefundAfterFailedSpend(ctx);
                 Debug.LogError($"[GameManager] {(IsAreaCast(ctx) ? "AoE: " : "")}Failed to consume level {ctx.SlotLevelToConsume} spell slot!");
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Spend, CastOutcome.ReasonSlotNotSpent));
                 return;
@@ -1638,15 +1659,13 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// After a spend that failed once the action was spent: with <see cref="LegacyCastQuirk.SlotFailureClearsSnapshot"/>
-    /// the snapshot is dropped and the action lost (SPL-147), else it is restored.
+    /// After a spend that failed once the action was spent (no spellcasting component, or no slot, spell per day or
+    /// sacrificed spell to spend): no spell was cast, so the snapshot is restored and the cast costs nothing (PHB p.141
+    /// and p.143: casting the spell is the action; batch 11 step 14 removed SlotFailureClearsSnapshot, SPL-147).
     /// </summary>
-    private void DropSnapshotAfterFailedSpend(CastContext ctx)
+    private void RefundAfterFailedSpend(CastContext ctx)
     {
-        if (ctx.Request.HasQuirk(LegacyCastQuirk.SlotFailureClearsSnapshot))
-            ClearSpellcastResourceSnapshot();
-        else
-            RestoreSpellcastResourceSnapshot(ctx.Request.Caster);
+        RestoreSpellcastResourceSnapshot(ctx.Request.Caster);
     }
 
     /// <summary>

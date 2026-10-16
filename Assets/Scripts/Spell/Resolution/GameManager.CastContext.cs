@@ -33,6 +33,26 @@ public partial class GameManager
     /// <summary>The source of the cast on top of the stack, or null.</summary>
     private CastSource CurrentCastSource => CurrentCast?.Request.Source;
 
+    /// <summary>
+    /// The newest open cast of <paramref name="spell"/> (by SpellId) by <paramref name="caster"/>, or null.
+    /// CasterLevelRules.ForCaster reads it, so the cast's own caster level (a scroll's or wand's, DMG p.237, p.245)
+    /// reaches the readers that have no request in hand: durations, handlers, SpellCaster.Cast (batch 11 step 14;
+    /// SPL-016, SPL-017).
+    /// </summary>
+    internal SpellCastRequest OpenCastRequestFor(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null || string.IsNullOrEmpty(spell.SpellId))
+            return null;
+        foreach (CastContext ctx in _castStack)
+        {
+            SpellCastRequest req = ctx != null ? ctx.Request : null;
+            if (req != null && !ctx.Ended && req.Caster == caster && req.Spell != null
+                && string.Equals(req.Spell.SpellId, spell.SpellId, System.StringComparison.Ordinal))
+                return req;
+        }
+        return null;
+    }
+
     /// <summary>Opens <paramref name="request"/>'s context on top of the cast stack.</summary>
     internal CastContext BeginCast(SpellCastRequest request)
     {

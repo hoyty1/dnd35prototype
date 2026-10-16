@@ -457,7 +457,8 @@ public partial class GameManager
         if (summon == null)
             return;
 
-        int defaultDuration = Mathf.Max(1, caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        // 1 round per caster level by default (CasterLevelRules, SPL-017), not per character level.
+        int defaultDuration = CasterLevelRules.ForCaster(caster, string.IsNullOrEmpty(sourceSpellId) ? null : SpellDatabase.GetSpell(sourceSpellId));
         int durationRounds = Mathf.Max(1, durationRoundsOverride ?? defaultDuration);
 
         var activeSummon = new ActiveSummonInstance
@@ -579,9 +580,11 @@ public partial class GameManager
 
         BeginSummonSwarmConcentration(caster, spell, summonCC);
 
-        int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        // The cast's caster level (CasterLevelRules, SPL-017), not the character level.
+        int swarmCasterLevel = CasterLevelRules.ForCaster(caster, spell);
+        int rangeFeet = CalculateSummonSwarmRangeFeet(swarmCasterLevel);
         CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {spell.Name}!"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Range: {rangeFeet} ft (level {swarmCasterLevel} caster)"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Swarm type: {baseDef.Name}"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!"));
@@ -673,7 +676,7 @@ public partial class GameManager
         int? summonDurationRounds = SpellDurationRules.IsTimed(spell)
             ? SpellCastingHelper.CalculateDuration(spell, SpellDurationRules.CasterLevelFor(caster, spell))
             : (int?)null;
-        int summonRangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster != null && caster.Stats != null ? caster.Stats.Level : 0));
+        int summonRangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
 
         for (int i = 0; i < creatureCount; i++)
         {
@@ -848,7 +851,7 @@ public partial class GameManager
         {
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            Debug.Log($"[SpellCasting] Non-self spell → SelectingAttackTarget mode, calling ShowSpellTargets  range={_pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0)}");
+            Debug.Log($"[SpellCasting] Non-self spell → SelectingAttackTarget mode, calling ShowSpellTargets  range={CasterLevelRules.RangeSquares(caster, _pendingSpell)}");
             ShowSpellTargets(caster, _pendingSpell);
         }
     }
@@ -1306,7 +1309,9 @@ public partial class GameManager
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+        // The cast's range at its caster level, the rule the NPC range test uses too (CasterLevelRules, SPL-017; batch 11
+        // step 14): the open cast's own (a scroll's or wand's caster level), the casting class's, not the character level.
+        int range = CasterLevelRules.RangeSquares(caster, spell);
         if (range <= 0) range = 1; // Touch/self spells = adjacent (1 square for targeting)
         Debug.Log($"[SpellCasting]   Computed range={range} squares ({range * 5} ft)");
 
@@ -1462,10 +1467,10 @@ public partial class GameManager
     /// </summary>
     private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
     {
-        int casterLevel = caster?.Stats?.GetCasterLevel() ?? 0;
+        // The placement range at the cast's caster level (CasterLevelRules, SPL-017: a scroll's or wand's own).
         int placementRange = spell.AoERangeSquares > 0
             ? spell.AoERangeSquares
-            : spell.GetRangeSquaresForCasterLevel(casterLevel);
+            : CasterLevelRules.RangeSquares(caster, spell);
 
         // ===== SELF-CENTERED BURST: Show preview with confirmation =====
         // Some burst spells (e.g., Bless) are centered on the caster. Others (e.g.,
@@ -1925,7 +1930,7 @@ public partial class GameManager
 
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
-                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.GetCasterLevel() ?? 0);
+                    : CasterLevelRules.RangeSquares(pc, _pendingSpell);
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
                     return;
                 aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
@@ -2029,7 +2034,7 @@ public partial class GameManager
             {
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
-                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.GetCasterLevel() ?? 0);
+                    : CasterLevelRules.RangeSquares(pc, _pendingSpell);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
                 if (dist <= range)
                     cell.SetHighlight(HighlightType.SpellRange);
@@ -2077,7 +2082,7 @@ public partial class GameManager
         {
             int range = _pendingSpell.AoERangeSquares > 0
                 ? _pendingSpell.AoERangeSquares
-                : _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+                : CasterLevelRules.RangeSquares(caster, _pendingSpell);
             if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, range))
             {
                 Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");
@@ -3562,7 +3567,7 @@ public partial class GameManager
         }
 
         // PHB p.235: 1d6+2 rounds; the tracked effect lasts as long as the paralysis just rolled.
-        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1,
+        targetStatusMgr.AddEffect(spell, casterName, CasterLevelRules.ForCaster(caster, spell),
             Mathf.Max(1, ghoulEffect.ParalysisDurationRounds));
 
         if (result != null)
@@ -3665,7 +3670,7 @@ public partial class GameManager
 
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{casterName} casts Scare on {targetName}."));
 
@@ -3941,7 +3946,8 @@ public partial class GameManager
 
     private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
     {
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        // The cast's caster level (CasterLevelRules: a scroll's or wand's own, the casting class's; SPL-016, SPL-017).
+        int casterLevel = CasterLevelRules.ForCaster(caster, SpellDatabase.GetSpell(SpellNames.RAY_OF_ENFEEBLEMENT));
         int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
         int d6 = DiceService.D6("Enervation damage");
         return d6 + levelBonus;
@@ -3957,7 +3963,7 @@ public partial class GameManager
 
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveRayOfEnfeeblementSpellEffect));
 
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1));
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, CasterLevelRules.ForCaster(caster, spell)));
         int penalty = CalculateRayOfEnfeeblementPenalty(caster);
 
         EnfeebledConditionData previousEffect = target.ActiveEnfeeblementEffect;
@@ -4004,7 +4010,7 @@ public partial class GameManager
 
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, nameof(TryResolveTouchOfIdiocySpellEffect));
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         int intDamage = DiceService.D6("Touch of Idiocy INT damage");
@@ -4050,13 +4056,9 @@ public partial class GameManager
 
     private static int CalculateMelfsAcidArrowAdditionalRounds(CharacterController caster)
     {
-        int casterLevel = 1;
-        if (caster != null && caster.Stats != null)
-        {
-            casterLevel = caster.Stats.GetCasterLevel();
-            if (casterLevel <= 0)
-                casterLevel = Mathf.Max(1, caster.Stats.EffectiveCharacterLevel);
-        }
+        // The cast's caster level (CasterLevelRules: a scroll's or wand's own, the casting class's, or the Hit Dice of a
+        // creature with no casting class, MM p.315; SPL-016, SPL-017).
+        int casterLevel = CasterLevelRules.ForCaster(caster, SpellDatabase.GetSpell(SpellNames.MELFS_ACID_ARROW));
 
         // D&D 3.5e: total rounds = 1 + floor(CL / 3), max total 7 rounds at CL 18.
         return Mathf.Min(6, Mathf.Max(0, casterLevel / 3));
@@ -4153,7 +4155,7 @@ public partial class GameManager
     {
         if (spell != null && (spell.SpellId == SpellNames.DAZE || spell.SpellId == SpellNames.DAZE_MONSTER))
         {
-            int dazeRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1));
+            int dazeRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, CasterLevelRules.ForCaster(caster, spell)));
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
 
             if (_conditionService != null)
@@ -4179,7 +4181,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.HIDEOUS_LAUGHTER)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int laughterRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             string sourceName = spell.Name;
 
@@ -4255,7 +4257,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.BLINDNESS_DEAFNESS)
         {
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
 
             // D&D 3.5e PHB p.206: Caster chooses blindness or deafness at cast time.
             // For AI casters, randomly choose. For player casters, default to blindness
@@ -4304,7 +4306,7 @@ public partial class GameManager
                 return null;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             bool isIntelligent = target.IsIntelligentUndead();
 
             CommandUndeadEffectData effectData;
@@ -4355,7 +4357,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.CHARM_PERSON)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int charmRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
             string sourceName = spell.Name;
 
@@ -4411,7 +4413,7 @@ public partial class GameManager
                 return null;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
             // Apply domination using the command/dominate side-switching pattern
@@ -4503,7 +4505,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.SLEEP)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             int wakeDc = GetSpellSaveDC(caster, spell);
 
@@ -4516,7 +4518,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.DEEP_SLUMBER)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             int wakeDc = GetSpellSaveDC(caster, spell);
 
@@ -4557,9 +4559,7 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.TOUCH_OF_FATIGUE)
         {
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
-            int casterLevel = caster != null && caster.Stats != null
-                ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
-                : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
             bool wasExhausted = target.HasCondition(CombatConditionType.Exhausted);
             if (wasExhausted)
@@ -4635,7 +4635,7 @@ public partial class GameManager
                 selectedRace = recipient.ActualRace;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4664,7 +4664,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4732,7 +4732,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4761,7 +4761,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4823,7 +4823,7 @@ public partial class GameManager
                 return null;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int resistance = casterLevel >= 11 ? 30 : (casterLevel >= 7 ? 20 : 10);
             int durationRounds = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
 
@@ -4873,7 +4873,7 @@ public partial class GameManager
                 return null;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int absorptionPool = ProtectionFromEnergyEffectData.CalculateAbsorptionPool(casterLevel);
             int durationRoundsProtEnergy = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
 
@@ -4915,7 +4915,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4993,7 +4993,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -5065,7 +5065,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
             int intMod = recipient.Stats.INTMod;
 
             // Roll 1d4 for HP loss / hand HP
@@ -5119,7 +5119,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int targetHD = target.Stats.GetHitDice();
 
             // Create the attribute enhancement effect data
@@ -5178,7 +5178,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
 
             // Roll temp HP: 1d10 + min(CL, 10)
             FalseLifeEffectData falseLifeEffect = FalseLifeEffectData.CreateFalseLife(casterLevel, recipient);
@@ -5219,7 +5219,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
             int saveDC = GetSpellSaveDC(caster ?? recipient, spell);
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
@@ -5252,7 +5252,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
             int saveDC = GetSpellSaveDC(caster, spell);
 
             StatusEffectManager targetStatusMgr = target.StatusEffectManager;
@@ -5285,7 +5285,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
             // Remove existing fear conditions (Frightened, Shaken, Panicked)
             bool removedFear = false;
@@ -5340,7 +5340,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
@@ -5374,7 +5374,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int casterLevel = CasterLevelRules.ForCaster(recipient, spell); // the cast's caster level (SPL-016, SPL-017)
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
@@ -5407,7 +5407,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
             // D&D 3.5e: +2 at CL 1-5, +3 at CL 6-11, +4 at CL 12-17, +5 at CL 18+
             int deflectionBonus = 2;
@@ -6125,9 +6125,9 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The entangled casting Concentration check itself (see <see cref="ResolveEntangledCastingConcentration"/>), with its
-    /// log and trace mark and no spending: true when the caster is not entangled or passes. <paramref name="dc"/> is 0
-    /// when no check is made. Also used by a scroll read outside the cast core (ResolveDirectItemCastChecks).
+    /// The entangled casting Concentration check (DC 15 + spell level, PHB p.308, p.70), with its log and trace mark and
+    /// no spending (the cast core's Distraction stage spends, GameManager.LoseCastAtDistraction): true when the caster is
+    /// not entangled or passes. <paramref name="dc"/> is 0 when no check is made. Also used by a scroll read outside the cast core (ResolveDirectItemCastChecks).
     /// </summary>
     private bool RollEntangledCastingConcentration(CharacterController caster, SpellData spell, MetamagicData metamagic, out int dc)
     {
@@ -6144,43 +6144,6 @@ public partial class GameManager
 
         CastStageTrace.Mark(caster, spell, CastStageTrace.Distraction, check.Success ? "entangled-passed" : "entangled-lost");
         return check.Success;
-    }
-
-    private bool ResolveEntangledCastingConcentration(
-        CharacterController caster,
-        SpellcastingComponent spellComp,
-        SpellData spell,
-        MetamagicData metamagic,
-        bool hasMetamagicApplied,
-        int slotLevelToConsume,
-        bool isSpontaneous,
-        int spontaneousLevel,
-        string spontaneousSacrificedSpellId)
-    {
-        if (caster == null || caster.Stats == null || spell == null)
-            return false;
-
-        if (RollEntangledCastingConcentration(caster, spell, metamagic, out int dc))
-            return true;
-
-        bool consumed = ConsumePendingSpellSlot(
-            spellComp,
-            spell,
-            metamagic,
-            hasMetamagicApplied,
-            slotLevelToConsume,
-            isSpontaneous,
-            spontaneousLevel,
-            spontaneousSacrificedSpellId);
-
-        if (!consumed)
-        {
-            Debug.LogError($"[GameManager] Entangled concentration failure path: could not consume level {slotLevelToConsume} slot for {spell.Name}");
-            return false;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} fails the DC {dc} concentration check while entangled. {spell.Name} is lost and the spell slot is spent."));
-        return false;
     }
 
     private bool AttemptCastDefensively(CharacterController caster, SpellData spell)
@@ -6390,7 +6353,13 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"<color={color}>Concentration [{reason}] {caster.Stats.CharacterName}: d20 {check.Roll} + {check.Bonus} = {check.Total} vs DC {check.DC} — {status}</color>"));
     }
 
-    private void CaptureSpellcastResourceSnapshot(CharacterController caster)
+    /// <summary>
+    /// Records what the cast of <paramref name="caster"/> is about to spend (the cast core's Cost stage): the actions, the
+    /// quickened spell of the round, the prepared slots and the spells-per-day counters, and, for a scroll or wand
+    /// <paramref name="source"/>, the item, its pack slot, the scroll's stack and both of a wand's charge stores (ITM-084,
+    /// ITM-034), so <see cref="RestoreSpellcastResourceSnapshot"/> can give all of it back.
+    /// </summary>
+    private void CaptureSpellcastResourceSnapshot(CharacterController caster, CastSource source = null)
     {
         _pendingSpellcastSnapshot = null;
 
@@ -6433,7 +6402,69 @@ public partial class GameManager
                 : null;
         }
 
+        if (source != null && source.IsItem && source.Item != null)
+        {
+            snapshot.ItemSource = source;
+            snapshot.Item = source.Item;
+            snapshot.ItemIndex = source.ItemIndex;
+            snapshot.ItemStackCount = source.Item.StackCount;
+            snapshot.ItemCharges = source.Item.CurrentCharges;
+            snapshot.WandDataCharges = source.Item.Wand != null ? source.Item.Wand.CurrentCharges : -1;
+        }
+
         _pendingSpellcastSnapshot = snapshot;
+    }
+
+    /// <summary>
+    /// Gives back the scroll or wand a restored snapshot recorded (ITM-084): the scroll's stack count, and the scroll in
+    /// its pack slot when the spend took the last one out (ConsumeOneFromStack empties the slot); both of a wand's charge
+    /// stores (ITM-034); and the cast source's item and slot, which the spend cleared.
+    /// </summary>
+    private static void RestoreSnapshotItem(CastResourceSnapshot snapshot, CharacterController caster)
+    {
+        ItemData item = snapshot != null ? snapshot.Item : null;
+        if (item == null)
+            return;
+
+        item.StackCount = snapshot.ItemStackCount;
+        item.CurrentCharges = snapshot.ItemCharges;
+        if (item.Wand != null && snapshot.WandDataCharges >= 0)
+            item.Wand.CurrentCharges = snapshot.WandDataCharges;
+
+        Inventory inv = caster != null && caster.InventoryComp != null ? caster.InventoryComp.CharacterInventory : null;
+        if (inv != null && inv.GeneralSlots != null && !InventoryHolds(inv, item))
+        {
+            int index = snapshot.ItemIndex;
+            if (index >= 0 && index < inv.GeneralSlots.Length && inv.GeneralSlots[index] == null)
+            {
+                inv.GeneralSlots[index] = item;
+                inv.RecalculateStats();
+            }
+            else if (!inv.AddItem(item))
+            {
+                // The pack has no room for the refunded item (nothing normally fills its slot between the spend and
+                // the refund): say so rather than lose it silently.
+                string owner = caster.Stats != null ? caster.Stats.CharacterName : "The caster";
+                Debug.LogWarning($"[ScrollCast] {owner}'s pack has no room for the refunded {item.Name}; the item is lost.");
+                Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{owner}'s pack has no room for the refunded {item.Name}; it is lost."));
+            }
+        }
+
+        if (snapshot.ItemSource != null)
+        {
+            snapshot.ItemSource.Item = item;
+            snapshot.ItemSource.ItemIndex = snapshot.ItemIndex;
+        }
+    }
+
+    private static bool InventoryHolds(Inventory inv, ItemData item)
+    {
+        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+        {
+            if (ReferenceEquals(inv.GeneralSlots[i], item))
+                return true;
+        }
+        return false;
     }
 
     private void ClearSpellcastResourceSnapshot()
@@ -6483,6 +6514,7 @@ public partial class GameManager
             RestoreSlotCounters(_pendingSpellcastSnapshot.PartialSlotsRemaining, spellComp.PartialData?.SlotsRemaining);
         }
 
+        RestoreSnapshotItem(_pendingSpellcastSnapshot, caster);
         _pendingSpellcastSnapshot = null;
     }
 
@@ -6516,7 +6548,7 @@ public partial class GameManager
             TransitionSummonSwarmToPostConcentration(caster, "new concentration spell");
         }
 
-        ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1, caster.Stats != null ? caster.Stats.CharacterName : "Caster");
+        ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", CasterLevelRules.ForCaster(caster, spell), caster.Stats != null ? caster.Stats.CharacterName : "Caster");
         string log = concMgr.BeginConcentration(concentrationMarker);
         if (!string.IsNullOrEmpty(log))
             CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{log}"));

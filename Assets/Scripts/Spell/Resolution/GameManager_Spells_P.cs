@@ -213,7 +213,7 @@ public partial class GameManager
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Curse("", $"👻 {casterName} casts Phantasmal Killer on {targetName}!"));

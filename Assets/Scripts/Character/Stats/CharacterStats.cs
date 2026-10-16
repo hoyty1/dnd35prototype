@@ -2429,8 +2429,11 @@ public class CharacterStats
 
 
     /// <summary>
-    /// Effective caster level for a class. When className is omitted, returns the highest
-    /// caster level among spellcasting classes for backward compatibility.
+    /// Effective caster level for a class: the class's caster level (CasterLevelRules.ClassCasterLevel: the class level,
+    /// or one-half of it from 4th level for a paladin or ranger, PHB p.44 and p.48) at the class level less the negative
+    /// levels (DMG p.293), plus a worn item's caster level bonus. When className is omitted, returns the highest caster
+    /// level among the spellcasting classes. A cast's caster level comes from CasterLevelRules.For (the casting class,
+    /// the domain boost, an item's caster level).
     /// </summary>
     public int GetCasterLevel(string className = null)
     {
@@ -2440,7 +2443,7 @@ public class CharacterStats
         EnsureMulticlassDataInitialized();
 
         if (!string.IsNullOrWhiteSpace(className))
-            return WithItemCasterLevelBonus(Mathf.Max(0, GetClassLevel(className) - NegativeLevelCount));
+            return WithItemCasterLevelBonus(CasterLevelRules.ClassCasterLevel(className, GetClassLevel(className) - NegativeLevelCount));
 
         int best = 0;
         for (int i = 0; i < ClassLevels.Count; i++)
@@ -2453,7 +2456,7 @@ public class CharacterStats
             if (classDef == null || !classDef.IsSpellcaster)
                 continue;
 
-            best = Mathf.Max(best, Mathf.Max(0, entry.Level - NegativeLevelCount));
+            best = Mathf.Max(best, CasterLevelRules.ClassCasterLevel(entry.ClassName, entry.Level - NegativeLevelCount));
         }
 
         return WithItemCasterLevelBonus(best);
@@ -2519,12 +2522,43 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// D&D 3.5e spellcasting concentration bonus used when casting in combat:
-    /// caster level + CON modifier (+4 Combat Casting when applicable).
+    /// The level the casting Concentration proxy reads (CHR-085): the highest spellcasting class level less the negative
+    /// levels, plus a worn item's caster level bonus, as GetCasterLevel() gave it before batch 11 step 14. It is not
+    /// halved for a paladin or ranger: the proxy stands in for Concentration ranks (PHB p.69-70, up to the character
+    /// level + 3), which the half caster level of PHB p.44 and p.48 does not touch.
+    /// </summary>
+    private int GetConcentrationProxyLevel()
+    {
+        if (!IsSpellcaster)
+            return 0;
+
+        EnsureMulticlassDataInitialized();
+
+        int best = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry == null)
+                continue;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(entry.ClassName);
+            if (classDef == null || !classDef.IsSpellcaster)
+                continue;
+
+            best = Mathf.Max(best, Mathf.Max(0, entry.Level - NegativeLevelCount));
+        }
+
+        return WithItemCasterLevelBonus(best);
+    }
+
+    /// <summary>
+    /// D&D 3.5e spellcasting concentration bonus used when casting in combat: the class-level proxy
+    /// (<see cref="GetConcentrationProxyLevel"/>, CHR-085: RAW is Concentration ranks) + CON modifier (+4 Combat
+    /// Casting when applicable).
     /// </summary>
     public int GetSpellcastingConcentrationBonus(bool includeCombatCasting = true)
     {
-        int bonus = GetCasterLevel() + CONMod;
+        int bonus = GetConcentrationProxyLevel() + CONMod;
         if (includeCombatCasting && HasFeat("Combat Casting"))
             bonus += 4;
         return bonus;
@@ -2535,7 +2569,7 @@ public class CharacterStats
     /// </summary>
     public string GetSpellcastingConcentrationBreakdown(bool includeCombatCasting = true)
     {
-        string breakdown = $"Caster Level {GetCasterLevel()} + CON {FormatMod(CONMod)}";
+        string breakdown = $"Caster Level {GetConcentrationProxyLevel()} + CON {FormatMod(CONMod)}";
         if (includeCombatCasting && HasFeat("Combat Casting"))
             breakdown += " + Combat Casting +4";
         return breakdown;

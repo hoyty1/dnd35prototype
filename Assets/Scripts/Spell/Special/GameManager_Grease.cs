@@ -100,7 +100,7 @@ public partial class GameManager
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+        int range = CasterLevelRules.RangeSquares(caster, spell);
         if (range <= 0) range = 1;
 
         List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -125,7 +125,7 @@ public partial class GameManager
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+        int range = CasterLevelRules.RangeSquares(caster, spell);
         if (range <= 0) range = 1;
 
         List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -156,7 +156,7 @@ public partial class GameManager
         _lastAoEHoverPos = anchor;
         ClearAoEPreviewHighlights();
 
-        int range = _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+        int range = CasterLevelRules.RangeSquares(caster, _pendingSpell);
         if (range <= 0) range = 1;
 
         if (!AoESystem.IsWithinCastingRange(caster.GridPosition, anchor, range))
@@ -194,7 +194,7 @@ public partial class GameManager
             return false;
 
         Vector2Int anchor = clickedCell.Coords;
-        int range = _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+        int range = CasterLevelRules.RangeSquares(caster, _pendingSpell);
         if (range <= 0) range = 1;
 
         if (!AoESystem.IsWithinCastingRange(caster.GridPosition, anchor, range))

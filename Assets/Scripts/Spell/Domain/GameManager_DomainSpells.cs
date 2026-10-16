@@ -55,7 +55,7 @@ public partial class GameManager
         }
 
         // Apply Hold Person–style paralysis
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
@@ -111,7 +111,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.CALM_ANIMALS, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
 
         // Roll 2d4 + caster level for HD budget
@@ -216,7 +216,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.CALM_EMOTIONS, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
@@ -373,7 +373,7 @@ public partial class GameManager
         if (target == null || target.Stats == null)
             return true;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
         string casterName = caster?.Stats?.CharacterName ?? "Caster";
 
         // Track the effect via StatusEffectManager for duration/dispel

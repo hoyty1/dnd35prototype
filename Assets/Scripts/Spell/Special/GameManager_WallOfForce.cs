@@ -64,7 +64,7 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfForceMaxLengthSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return Mathf.Max(2, cl * 2);
     }
 
@@ -73,9 +73,9 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfForceRangeSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return _pendingSpell != null
-            ? _pendingSpell.GetRangeSquaresForCasterLevel(cl)
+            ? CasterLevelRules.RangeSquares(caster, _pendingSpell)
             : (5 + cl);
     }
 
@@ -107,7 +107,7 @@ public partial class GameManager
         HashSet<Vector2Int> aoeCells,
         System.Action<string> onComplete)
     {
-        int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level (SPL-016, SPL-017)
 
         // Validate proposed wall cells are not occupied
         if (aoeCells != null && aoeCells.Count > 0)
@@ -136,7 +136,7 @@ public partial class GameManager
         List<CharacterController> targets,
         HashSet<Vector2Int> aoeCells)
     {
-        int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level (SPL-016, SPL-017)
 
         // Duration: 1 round per caster level
         int durationRounds = Mathf.Max(1, casterLevel);

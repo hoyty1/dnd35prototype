@@ -26,7 +26,7 @@ public partial class GameManager
         if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind && !isSleetStorm && !isStinkingCloud && !isSolidFog)
             return false;
 
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = CasterLevelRules.ForCaster(caster, spell);
 
         if (isGustOfWind)
         {

@@ -89,7 +89,7 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfIceMaxLengthSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return Mathf.Max(2, cl * 2);
     }
 
@@ -103,7 +103,7 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfIceMaxCircleRadius(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return Mathf.Max(1, (3 + cl) / 5);
     }
 
@@ -112,9 +112,9 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfIceRangeSquares(CharacterController caster)
     {
-        int cl = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        int cl = CasterLevelRules.ForCaster(caster, _pendingSpell); // the cast's caster level (SPL-016, SPL-017)
         return _pendingSpell != null
-            ? _pendingSpell.GetRangeSquaresForCasterLevel(cl)
+            ? CasterLevelRules.RangeSquares(caster, _pendingSpell)
             : (20 + 2 * cl);
     }
 

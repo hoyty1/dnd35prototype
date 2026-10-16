@@ -67,19 +67,13 @@ public static class SpellDiceRules
     public const string HealingDieContext = "Spell healing die";
 
     /// <summary>
-    /// The caster level of a cast: the domain-boosted caster level, else the character level, at least 1 (the rule
-    /// SpellDurationRules.CasterLevelFor and SpellCastingHelper.GetEffectiveCasterLevel use).
+    /// The caster level of a cast by a caster known by its stats: CasterLevelRules.ForStats (the casting class's caster
+    /// level with the domain boost, half for a paladin or ranger, or the Hit Dice of a creature with no casting class), at
+    /// least 1; the rule SpellDurationRules.CasterLevelFor and SpellCastingHelper.GetEffectiveCasterLevel use (batch 11
+    /// step 14, SPL-017). A scroll's or wand's dice are already fixed at its caster level (BakeForCasterLevel).
     /// </summary>
     public static int CasterLevelFor(CharacterStats caster, SpellData spell)
-    {
-        if (caster == null)
-            return 1;
-
-        int casterLevel = caster.GetDomainBoostedCasterLevel(spell);
-        if (casterLevel <= 0)
-            casterLevel = caster.Level;
-        return Mathf.Max(1, casterLevel);
-    }
+        => CasterLevelRules.ForStats(caster, spell);
 
     /// <summary>Dice count: the base count, or one die per <paramref name="perLevels"/> caster levels (at least 1, at most <paramref name="max"/>) when scaling is set.</summary>
     public static int ScaledCount(int baseCount, int perLevels, int max, int casterLevel)

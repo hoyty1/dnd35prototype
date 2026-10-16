@@ -175,8 +175,8 @@ public sealed class SpellCastRequest
     /// The PC hold builder (batch 11 step 10): turns the open Ui cast <paramref name="request"/> of a melee touch spell,
     /// answered Discharge Later at the touch prompt (ICastDecider.ChooseTouchDelivery), into a hold: the cast runs the
     /// core's stages through Spend and Provocation and then stores the charge (PHB p.141, p.176). A prepared or
-    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>; a cleric's conversion keeps its kind
-    /// (holding a converted charge is SPL-154). No target creature (the charge is delivered later, by a cast of its own);
+    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>; a cleric's conversion keeps its kind,
+    /// so the hold spends the sacrificed spell (PHB p.32, p.141; batch 11 step 14, SPL-154). No target creature (the charge is delivered later, by a cast of its own);
     /// the hold path's legacy quirks (<see cref="LegacyCastQuirkSets.UiHoldPath"/>). Returns the request.
     /// </summary>
     public static SpellCastRequest ForUiHoldCharge(SpellCastRequest request)

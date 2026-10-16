@@ -718,8 +718,8 @@ public static class GrappleDamageRulesTests
     private static void TestSpellOnRenewalTurnLetsPinLapse()
     {
         GameManager gm = GameManager.Instance;
-        MethodInfo concentration = typeof(GameManager).GetMethod("ResolveGrappledOrPinnedCastingConcentration", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert(concentration != null, "CMB-120: GameManager.ResolveGrappledOrPinnedCastingConcentration exists for the spell-lapse test");
+        MethodInfo concentration = typeof(GameManager).GetMethod("RollGrappledOrPinnedCastingConcentration", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(concentration != null, "CMB-120: GameManager.RollGrappledOrPinnedCastingConcentration exists for the spell-lapse test");
         if (gm == null || concentration == null)
         {
             if (gm == null)
@@ -748,11 +748,11 @@ public static class GrappleDamageRulesTests
             Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the spell-lapse test");
 
             // In the turn of the pin a cast does not touch the pin.
-            concentration.Invoke(gm, new object[] { attacker, null, spell, null, false, spell.SpellLevel, false, -1, null });
+            concentration.Invoke(gm, new object[] { attacker, spell, 0, null });
             Assert(defender.HasCondition(CombatConditionType.Pinned) && attacker.IsHoldingPinThisRound(), "CMB-120: a cast in the turn of the pin leaves the pin in place");
 
             attacker.StartNewTurn();
-            concentration.Invoke(gm, new object[] { attacker, null, spell, null, false, spell.SpellLevel, false, -1, null });
+            concentration.Invoke(gm, new object[] { attacker, spell, 0, null });
             Assert(!defender.HasCondition(CombatConditionType.Pinned) && !attacker.IsPinningOpponent(),
                 "CMB-120: casting a spell on the renewal turn lets the pin lapse before the spell resolves (shared PC/NPC cast step)");
             Assert(attacker.IsGrappling() && defender.IsGrappling(), "CMB-120: the grapple goes on after a cast lets the pin lapse");

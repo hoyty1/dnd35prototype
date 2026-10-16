@@ -49,7 +49,7 @@ public sealed class CastSource
     /// <summary>The item's slot in the caster's pack; -1 when none.</summary>
     public int ItemIndex = -1;
 
-    /// <summary>The item's caster level (DMG p.237, p.245); recorded for the cast core, not read yet (SPL-016).</summary>
+    /// <summary>The item's caster level (DMG p.237, p.245): CasterLevelRules.For gives it to the cast (batch 11 step 14).</summary>
     public int? ItemCasterLevel;
 
     /// <summary>The item's save DC, when it fixes one; recorded for the cast core, not read yet (the spell clone carries it).</summary>

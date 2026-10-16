@@ -80,19 +80,12 @@ public static class SpellDurationRules
         => spell != null && Rounds(spell, 1) > 0;
 
     /// <summary>
-    /// The caster level a duration uses: the cast's caster level (with the domain caster-level boosts), or the creature's
-    /// level when it has no casting class (a spell-like or racial caster). Minimum 1.
+    /// The caster level a duration uses: the cast's caster level (CasterLevelRules.ForCaster: a scroll's or wand's own,
+    /// else the casting class's with the domain caster-level boosts, half for a paladin or ranger, or the Hit Dice of a
+    /// creature with no casting class; batch 11 step 14, SPL-017). Minimum 1.
     /// </summary>
     public static int CasterLevelFor(CharacterController caster, SpellData spell)
-    {
-        if (caster == null || caster.Stats == null)
-            return 1;
-
-        int casterLevel = caster.Stats.GetDomainBoostedCasterLevel(spell);
-        if (casterLevel <= 0)
-            casterLevel = caster.Stats.Level;
-        return Mathf.Max(1, casterLevel);
-    }
+        => CasterLevelRules.ForCaster(caster, spell);
 
     /// <summary>A spell that set only the legacy BuffDurationRounds and left the duration fields at their defaults.</summary>
     public static bool HasLegacyOnlyDuration(SpellData spell)
