@@ -1224,7 +1224,7 @@ public static class AoESystem
     }
 
     /// <summary><see cref="FilterCellsByLineOfEffect(HashSet{Vector2Int}, GridIntersection)"/> without the log line (the AI's candidate aims).</summary>
-    private static HashSet<Vector2Int> RemoveCellsWithoutLineOfEffect(HashSet<Vector2Int> aoeCells, GridIntersection origin)
+    internal static HashSet<Vector2Int> RemoveCellsWithoutLineOfEffect(HashSet<Vector2Int> aoeCells, GridIntersection origin)
     {
         var blockedCells = new HashSet<Vector2Int>();
         if (aoeCells == null || aoeCells.Count == 0 || !LineOfEffectService.HasBlockers)

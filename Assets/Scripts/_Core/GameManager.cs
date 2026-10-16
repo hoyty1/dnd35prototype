@@ -859,6 +859,7 @@ public partial class GameManager : MonoBehaviour
         if (WindEffectManager.HasInstance)
             WindEffectManager.Instance.ClearAllWindEffects();
         ClearAllHolyAreas(); // Consecrate and Desecrate (batch 11 step 23, SPL-042)
+        ClearAreaDifficultTerrain(); // the cleared areas' difficult squares (batch 11 step 25)
 
         // Despawn any lingering summoned creatures from the finished combat.
         for (int i = _activeSummons.Count - 1; i >= 0; i--)
@@ -11196,6 +11197,20 @@ public partial class GameManager : MonoBehaviour
         // A spell that drops the last creature of a side ends the combat now, as the PC cast sites do (CORE-011).
         if (cast && EvaluateCombatEnd("TryNPCPerformSpellCast"))
             CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSpellCast");
+        return cast;
+    }
+
+    /// <summary>
+    /// The NPC area cast of <paramref name="spell"/> aimed at <paramref name="placement"/> (batch 11 step 25; the AI's aim
+    /// search, AreaAimSearch), then the combat-end check after a cast that counts, as for a single-target NPC cast (the
+    /// area handler's own check has usually run already, CORE-039; a second check finds the combat over).
+    /// <paramref name="metamagic"/>: a Scripted cast step's (null: the spell's own prepared metamagic, SpellCastRequest.ForAI).
+    /// </summary>
+    public bool TryNPCPerformAreaSpellCastForAI(CharacterController npc, SpellData spell, AreaPlacement placement, MetamagicData metamagic = null)
+    {
+        bool cast = TryNPCPerformAreaSpellCast(npc, spell, placement, metamagic);
+        if (cast && EvaluateCombatEnd("TryNPCPerformAreaSpellCast"))
+            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformAreaSpellCast");
         return cast;
     }
 

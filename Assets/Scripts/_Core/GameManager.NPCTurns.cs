@@ -1281,6 +1281,24 @@ public partial class GameManager
         return RunCastSync(request, out _);
     }
 
+    /// <summary>
+    /// The NPC area cast executor (batch 11 step 25, AI-001 area half): an area the AI aimed (<paramref name="placement"/>,
+    /// AreaAimSearch) built into an AI area request (BuildAiAreaRequest: SpellCastRequest.ForAIArea, or ForAIGrease for
+    /// Grease's 10-ft. square) and run through the shared cast core at once (RunCastSync), the same stages, area handler
+    /// registry and Grease resolve as a PC's area cast: the Legality stage filters the area by line of effect from the
+    /// placement's origin and tests the origin's range and line of effect and the decider's capability. Returns whether the
+    /// cast counts as cast (CastOutcome.WasCast). TryNPCPerformAreaSpellCastForAI runs the combat-end check after a true return.
+    /// </summary>
+    private bool TryNPCPerformAreaSpellCast(CharacterController npc, SpellData spell, AreaPlacement placement, MetamagicData metamagic = null)
+    {
+        if (npc == null || spell == null || placement == null || npc.Stats == null)
+            return false;
+
+        SpellCastRequest request = BuildAiAreaRequest(npc, spell, placement, metamagic);
+        CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformAreaSpellCast));
+        return RunCastSync(request, out _);
+    }
+
     /// <summary>Delegates to AIService.IsGiantBombardierBeetle for centralized AI utility.</summary>
     private static bool IsGiantBombardierBeetle(CharacterController npc)
         => AIService.IsGiantBombardierBeetle(npc);

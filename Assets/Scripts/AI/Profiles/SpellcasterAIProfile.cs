@@ -70,15 +70,27 @@ namespace DND35.AI.Profiles
                 if (AOECasting.PreferSingleTarget)
                     score -= 5f;
 
+                // The best aim the caster has (AreaAimSearch, batch 11 step 25): the spell is scored on that placement.
                 SpellAOEEvaluation aoeEval = EvaluateAOECast(spell, caster, primaryTarget, allCombatants, gameManager);
-                score += aoeEval.EnemiesHit * 3f;
-                score -= aoeEval.EffectiveAllyCasualties * 10f;
+                AreaAimPolarity polarity = AreaAimSearch.PolarityOf(spell);
+                if (polarity == AreaAimPolarity.Beneficial || polarity == AreaAimPolarity.Mixed)
+                {
+                    // Bless helps allies; Prayer (PHB p.264) helps allies and hinders foes, each one it reaches counts.
+                    score += (aoeEval.AlliesBenefited + (polarity == AreaAimPolarity.Mixed ? aoeEval.EnemiesHit : 0)) * 3f;
+                    if (aoeEval.Placement == null)
+                        score -= 1000f;
+                }
+                else
+                {
+                    score += aoeEval.EnemiesHit * 3f;
+                    score -= aoeEval.EffectiveAllyCasualties * 10f;
 
-                if (aoeEval.EnemiesHit < AOECasting.MinimumEnemiesInAOE)
-                    score -= 6f;
+                    if (aoeEval.EnemiesHit < AOECasting.MinimumEnemiesInAOE)
+                        score -= 6f;
 
-                if (!aoeEval.IsSafe)
-                    score -= 1000f;
+                    if (!aoeEval.IsSafe)
+                        score -= 1000f;
+                }
             }
             else
             {
@@ -137,15 +149,14 @@ namespace DND35.AI.Profiles
         }
 
         /// <summary>
-        /// How an area cast of <paramref name="spell"/> aimed at <paramref name="primaryTarget"/> would land: the best of the
-        /// aims the caster has at that creature (batch 11 step 24, decision D5; AoESystem.GetCandidateAimsAt, the same choices
-        /// the PC cursor offers): a burst or cube at each intersection of the target's space (the four corners of a Small or
-        /// Medium creature's square) within range, a cone or line from each corner of the caster's space toward it, a
-        /// self-centred area from each of the caster's creature-centred origins, a one-square effect on the target's square.
-        /// The best is a safe aim first, then the most enemies, then the fewest ally casualties, then the first found.
-        /// Each footprint keeps only the squares its origin has line of effect to, and a burst's or cube's origin must be in
-        /// the caster's line of effect (AoESystem.GetCandidateAimsAt, the cast's own tests); a creature counts when any
-        /// square of its space is in the footprint (AoESystem.IsCreatureInCells). Ally sparing (AOECasting) is unchanged.
+        /// How the best area cast of <paramref name="spell"/> would land (batch 11 step 25): the best of the aims the caster
+        /// has (AreaAimSearch.Search: the step 24 geometry and line of effect, the same tests the PC cursor and the cast core
+        /// make, so the aim evaluated is one the cast core lets through), wherever the enemies stand, not only at
+        /// <paramref name="primaryTarget"/>. A harmful spell's aim must reach an enemy it affects, a beneficial one's an ally
+        /// it helps, Prayer's an ally or a foe not already under it. The best is a safe aim first (AOECasting: the allies' expected casualties within
+        /// MaxAcceptableAllyCasualties when AvoidHittingAllies), then the search's score (the enemies affected less twice the
+        /// allies affected), then fewer allies harmed, then the first found. A creature counts when any square of its space
+        /// is in the area (AoESystem.IsCreatureInCells) and the spell's filter takes it in. No aim: unsafe, nothing hit.
         /// </summary>
         public virtual SpellAOEEvaluation EvaluateAOECast(
             SpellData spell,
@@ -154,127 +165,82 @@ namespace DND35.AI.Profiles
             List<CharacterController> allCombatants,
             GameManager gameManager)
         {
-            if (spell == null || caster == null || primaryTarget == null || gameManager == null || gameManager.Grid == null)
+            if (spell == null || caster == null || gameManager == null || gameManager.Grid == null)
                 return new SpellAOEEvaluation(false, 0, 0, 999f);
 
-            List<HashSet<Vector2Int>> footprints = CalculateCandidateFootprints(spell, caster, primaryTarget, gameManager);
-            bool found = false;
-            SpellAOEEvaluation best = new SpellAOEEvaluation(false, 0, 0, 999f);
-            foreach (HashSet<Vector2Int> cells in footprints)
+            AreaAimPolarity polarity = AreaAimSearch.PolarityOf(spell);
+            AreaPlacement best = null;
+            bool bestSafe = false;
+            float bestCasualties = 999f;
+            foreach (AreaPlacement aim in AreaAimSearch.Search(spell, caster, allCombatants, gameManager.Grid))
             {
-                if (cells == null || cells.Count == 0)
+                if (polarity == AreaAimPolarity.Harmful && aim.EnemiesHit == 0)
                     continue;
-                SpellAOEEvaluation eval = EvaluateFootprint(spell, caster, cells, allCombatants, gameManager);
-                if (!found || IsBetterAim(eval, best))
+                if (polarity == AreaAimPolarity.Beneficial && aim.AlliesBenefited == 0)
+                    continue;
+                if (polarity == AreaAimPolarity.Mixed && aim.AlliesBenefited + aim.EnemiesHit == 0)
+                    continue;
+                float casualties = GetPlacementCasualties(spell, caster, aim, allCombatants);
+                bool safe = IsSafeCasualties(casualties);
+                if (best == null || (safe && !bestSafe) || (safe == bestSafe && AreaAimSearch.IsBetter(aim, best)))
                 {
-                    best = eval;
-                    found = true;
+                    best = aim;
+                    bestSafe = safe;
+                    bestCasualties = casualties;
                 }
             }
-            return best;
+
+            if (best == null)
+                return new SpellAOEEvaluation(false, 0, 0, 999f);
+            return new SpellAOEEvaluation(bestSafe, best.EnemiesHit, best.AlliesHit, bestCasualties, best.AlliesBenefited, best);
         }
 
-        private static bool IsBetterAim(SpellAOEEvaluation a, SpellAOEEvaluation b)
+        /// <summary>
+        /// The aim this profile casts <paramref name="spell"/> at (batch 11 step 25): the best worthwhile aim
+        /// (AreaAimSearch.FindBest) that is safe for its allies by this profile's AOECasting; null when there is none, and
+        /// then the AI drops the spell (no fallback).
+        /// </summary>
+        public AreaPlacement FindAreaPlacement(SpellData spell, CharacterController caster, List<CharacterController> allCombatants, GameManager gameManager)
         {
-            if (a.IsSafe != b.IsSafe)
-                return a.IsSafe;
-            if (a.EnemiesHit != b.EnemiesHit)
-                return a.EnemiesHit > b.EnemiesHit;
-            return a.EffectiveAllyCasualties < b.EffectiveAllyCasualties;
+            if (spell == null || caster == null || gameManager == null)
+                return null;
+            var options = new AreaAimOptions
+            {
+                Accept = aim => IsSafeCasualties(GetPlacementCasualties(spell, caster, aim, allCombatants))
+            };
+            return AreaAimSearch.FindBest(spell, caster, allCombatants, gameManager.Grid, options);
         }
 
-        private SpellAOEEvaluation EvaluateFootprint(SpellData spell, CharacterController caster, HashSet<Vector2Int> cells,
-            List<CharacterController> allCombatants, GameManager gameManager)
+        private bool IsSafeCasualties(float casualties)
+            => !AOECasting.AvoidHittingAllies || casualties <= AOECasting.MaxAcceptableAllyCasualties;
+
+        /// <summary>
+        /// The allies' expected casualties from <paramref name="aim"/> (GetAllyCasualtyWeight per ally the spell's filter
+        /// takes in), for a harmful spell when the profile avoids hitting allies; 0 otherwise.
+        /// </summary>
+        private float GetPlacementCasualties(SpellData spell, CharacterController caster, AreaPlacement aim, List<CharacterController> allCombatants)
         {
-            int enemiesHit = 0;
-            int alliesHit = 0;
-            float effectiveCasualties = 0f;
+            if (aim == null || allCombatants == null || !AOECasting.AvoidHittingAllies
+                || AreaAimSearch.PolarityOf(spell) != AreaAimPolarity.Harmful)
+                return 0f;
             int estimatedDamage = EstimateAverageDamage(spell, caster);
             DamageType damageType = DamageTextUtils.ParseSingleDamageType(spell.DamageType);
-
-            if (allCombatants == null)
-                allCombatants = new List<CharacterController>();
-
+            AoETargetFilter filter = AreaAimSearch.IsGrease(spell) ? AoETargetFilter.All : spell.AoEFilter;
+            float casualties = 0f;
             for (int i = 0; i < allCombatants.Count; i++)
             {
-                CharacterController candidate = allCombatants[i];
-                if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                CharacterController c = allCombatants[i];
+                if (c == null || c.Stats == null || c.Stats.IsDead)
                     continue;
-
-                // Any square of its space, as the area's resolution counts it (AoESystem.GetTargetsInArea; a Large ally
-                // covered only by its other squares is still hit; batch 11 step 24 review).
-                if (!AoESystem.IsCreatureInCells(cells, candidate))
+                if (c != caster && !TeamUtility.IsAlly(caster, c))
                     continue;
-
-                bool isEnemy = gameManager.IsEnemyTeamForAI(caster, candidate);
-                if (isEnemy)
-                {
-                    enemiesHit++;
+                if (!AoESystem.IsCreatureInCells(aim.Cells, c) || !AoESystem.IncludedByFilter(caster, c, filter))
                     continue;
-                }
-
-                if (candidate == caster && spell.AoEFilter == AoETargetFilter.EnemiesOnly)
+                if (!AreaAimSearch.WouldAffect(spell, c))
                     continue;
-
-                alliesHit++;
-
-                if (!AOECasting.AvoidHittingAllies)
-                    continue;
-
-                float casualty = GetAllyCasualtyWeight(candidate, damageType, estimatedDamage);
-                effectiveCasualties += casualty;
+                casualties += GetAllyCasualtyWeight(c, damageType, estimatedDamage);
             }
-
-            bool safe = !AOECasting.AvoidHittingAllies || effectiveCasualties <= AOECasting.MaxAcceptableAllyCasualties;
-            return new SpellAOEEvaluation(safe, enemiesHit, alliesHit, effectiveCasualties);
-        }
-
-        /// <summary>The footprints of every aim the caster has at <paramref name="primaryTarget"/> (see <see cref="EvaluateAOECast"/>).</summary>
-        private static List<HashSet<Vector2Int>> CalculateCandidateFootprints(SpellData spell, CharacterController caster,
-            CharacterController primaryTarget, GameManager gameManager)
-        {
-            var footprints = new List<HashSet<Vector2Int>>();
-            SquareGrid grid = gameManager.Grid;
-            AoEShape shape = spell.AoEShapeType;
-            int size = spell.AoESizeSquares;
-            if (shape == AoEShape.None && spell.TargetType == SpellTargetType.Area)
-            {
-                // Area-target spells without shape metadata: a burst of their area radius (no shipped spell; AreaRoutingTests).
-                shape = AoEShape.Burst;
-                size = spell.AreaRadius;
-            }
-
-            if (AoESystem.IsSingleSquarePlacement(spell))
-            {
-                footprints.Add(new HashSet<Vector2Int> { primaryTarget.GridPosition });
-                return footprints;
-            }
-
-            int casterSize = caster.GetCurrentSpaceSquares();
-            int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(caster, spell);
-            if (shape == AoEShape.Burst && range <= 0)
-            {
-                // Centred on the caster: one footprint per creature-centred origin (the caster's choice of corner).
-                // Each keeps the squares its origin has line of effect to, as the cast's Legality stage filters them.
-                foreach (GridIntersection origin in AoESystem.GetCreatureCentredOrigins(caster))
-                {
-                    HashSet<Vector2Int> cells = AoESystem.GetCreatureCentredBurstCells(caster.GridPosition, casterSize, origin, size, grid);
-                    AoESystem.FilterCellsByLineOfEffect(cells, origin);
-                    footprints.Add(cells);
-                }
-                return footprints;
-            }
-
-            if (AoESystem.IsPlacedShape(shape) || shape == AoEShape.Cone || shape == AoEShape.Line)
-            {
-                foreach (AreaAim aim in AoESystem.GetCandidateAimsAt(shape, Mathf.Max(1, size), caster.GridPosition, casterSize,
-                             primaryTarget.GridPosition, primaryTarget.GetCurrentSpaceSquares(), range, grid))
-                    footprints.Add(aim.Cells);
-                return footprints;
-            }
-
-            footprints.Add(new HashSet<Vector2Int> { primaryTarget.GridPosition });
-            return footprints;
+            return casualties;
         }
 
         private float GetAllyCasualtyWeight(CharacterController ally, DamageType damageType, int estimatedDamage)

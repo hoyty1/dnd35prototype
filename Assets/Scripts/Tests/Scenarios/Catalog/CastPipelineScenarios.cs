@@ -62,6 +62,10 @@ namespace Tests.Scenarios
             yield return S("npc-magic-weapon", NpcMagicWeapon);
             yield return S("ai-spell-retry", AiSpellRetry);
             yield return S("ai-spell-retry-refused", AiSpellRetryRefused);
+            yield return S("npc-cast-fireball", NpcCastFireball);
+            yield return S("npc-cast-bless", NpcCastBless);
+            yield return S("npc-cast-web", NpcCastWeb);
+            yield return S("ai-area-aim", AiAreaAim);
             yield return S("cast-globe-damage", GlobeDamage);
             yield return S("area-globe", AreaGlobe);
             yield return S("cast-globe-held-touch", GlobeHeldTouch);
@@ -618,7 +622,7 @@ namespace Tests.Scenarios
         /// stunned), "resists" has spell resistance 100 (d20 19 + CL 7 fails: nothing), "silenced" is under a Silence (PHB
         /// p.279: nothing); "outside", 15 ft. away, is not in the area. One d8 is drawn for the whole area (decision D6), and
         /// the slot is spent. Replaces the single-target pairs rules/cast-pair-sound-burst, -saved, -deaf, -silenced and
-        /// rules/sound-burst-failed (SPL-142's facts, now on one area cast; the NPC side waits for step 25, AI-001).
+        /// rules/sound-burst-failed (SPL-142's facts, now on one area cast; an NPC casts it through the same area resolve since batch 11 step 25, rules/ai-area-aim).
         /// </summary>
         private static ScenarioDef SoundBurstArea()
         {
@@ -678,7 +682,7 @@ namespace Tests.Scenarios
         /// creature; 7d6 (every d6 is 6: 42) to an evil outsider ("fiend", a dummy made an outsider), blinded; nothing
         /// outside the area; an evil creature under Blink that fails its save takes half, 12 (PHB p.206: half damage from
         /// area attacks; the step 23 review), and is blinded. One roll of 3d8 and one of 7d6 for the whole area (decision
-        /// D6). Ui only: NPC area casting waits for batch 11 step 25 (AI-001).
+        /// D6). Ui only (NPC area casts since batch 11 step 25 run the same resolve: rules/npc-cast-fireball).
         /// </summary>
         private static ScenarioDef AlignmentBurstUi()
         {
@@ -1467,8 +1471,8 @@ namespace Tests.Scenarios
             yield return new PairSpec { Family = "silence", SpellId = SpellNames.SILENCE, Caster = cleric, SlotLevel = 2, TargetNpc = "target_dummy",
                 Title = "Silence on a creature (PHB p.279)", Covers = new[] { "PHB p.279" } };
             // Sound Burst is an area spell since batch 11 step 23 (SPL-046): its five pairs (failed save, spell resistance,
-            // saved, deafened, silenced) became the one Ui area scenario rules/sound-burst-area; the NPC side waits for step 25
-            // (AI-001: NPC area casting).
+            // saved, deafened, silenced) became the one Ui area scenario rules/sound-burst-area; the NPC side casts it as
+            // an area since batch 11 step 25 (rules/ai-area-aim).
             yield return new PairSpec { Family = "searing-light", SpellId = SpellNames.SEARING_LIGHT, Caster = cleric, SlotLevel = 3, TargetNpc = "target_dummy",
                 Title = "Searing Light (PHB p.275)", Covers = new[] { "PHB p.275" } };
             yield return new PairSpec { Family = "death-ward", SpellId = SpellNames.DEATH_WARD, Caster = cleric, SlotLevel = 4,
@@ -1925,6 +1929,178 @@ namespace Tests.Scenarios
                 .Expect("The AI's first pick is Shocking Grasp, refused against the wolf 20 ft away (out-of-range)", FactsAre(("top", SpellNames.SHOCKING_GRASP), ("top.legal", "out-of-range")))
                 .Expect("The wizard casts Ray of Frost, its second candidate", CastEvents("wizard", SpellNames.RAY_OF_FROST, 1))
                 .Expect("The wizard never casts Shocking Grasp", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.SHOCKING_GRASP, 0, 0))
+                .Build();
+        }
+
+        // ── rules/npc-cast-fireball, -bless, -web, rules/ai-area-aim (batch 11 step 25, AI-001 area half) ──
+
+        /// <summary>
+        /// After <see cref="AddWizardSlot"/> for an NPC wizard: the NPC path's slot test (SpellcastingComponent.CanCast) also
+        /// reads the class table, which stops at 2nd level from wizard 4 on (SPL-041), so the table is widened to the added
+        /// slot's level (SpellcastingComponent.Harness_WidenClassSlotTable; a scenario setup, as the slot itself).
+        /// </summary>
+        private static void WidenNpcSlotTable(CharacterController c, int level)
+            => c.Spellcasting.Harness_WidenClassSlotTable("Wizard", level);
+
+        /// <summary>
+        /// AI-001 (area half; batch 11 step 25): an AI-run Enemy-team wizard (mist_wizard, Wizard 5, the Evoker profile)
+        /// holds only Fireball (PHB p.231: 20-ft.-radius spread, Long range). Three heroes stand together at (10,10),
+        /// (11,10) and (10,11); the wizard's kobold ally stands at (13,13), inside the burst of some origins that take the
+        /// heroes (+(12,12) takes all four) and outside others (+(10,10)). The AI aims the burst through its search
+        /// (AreaAimSearch) and casts it through the same area resolve as a PC (SpellCastRequest.ForAIArea): every hero
+        /// takes the 5d6 (forced to 30, failed saves) and the kobold takes nothing. Before this step the NPC cast path
+        /// refused every Area spell (NpcRefusesArea).
+        /// </summary>
+        private static ScenarioDef NpcCastFireball()
+        {
+            return Rules("rules/npc-cast-fireball", "An Enemy-team AI wizard aims Fireball at the party and spares its ally (AI-001)")
+                .Covers("AI-001", "PHB p.231", "PHB p.175", "batch 11 step 25")
+                .MaxRounds(1)
+                .Pc("h1", ActorSource.Stats(() => Wizard("Hero One", 1)), 10, 10, Control.Scripted)
+                .Pc("h2", ActorSource.Stats(() => Wizard("Hero Two", 1)), 11, 10, Control.Scripted)
+                .Pc("h3", ActorSource.Stats(() => Wizard("Hero Three", 1)), 10, 11, Control.Scripted)
+                .Npc("wizard", "mist_wizard", 2, 10, Control.Ai)
+                .Npc("kobold", "kobold_warrior", 13, 13, Control.Idle)
+                .Tweak("wizard", c => { AddWizardSlot(c, 3, SpellNames.FIREBALL); SpendAllBut(c, SpellNames.FIREBALL); WidenNpcSlotTable(c, 3); })
+                .Tweak("h1", Fails).Tweak("h2", Fails).Tweak("h3", Fails).Tweak("kobold", Fails)
+                .Initiative("h1", "wizard", "h2", "h3", "kobold")
+                .Force(6, 6, null, -1)
+                .Turn("h1", 1, Step.Assert("record", ctx => { RecordHp(ctx, "h1", "h2", "h3", "kobold"); return true; }))
+                .Turn("h2", 1, Step.Assert("after", ctx => { FactHpLost(ctx, "fireball", "h1", "h2", "h3", "kobold"); return true; }))
+                .Expect("The AI wizard casts Fireball once", CastEvents("wizard", SpellNames.FIREBALL, 1))
+                .Expect("Every hero takes the burst's 5d6 (30, failed Reflex saves)",
+                    FactsAre(("fireball.lost.h1", 30), ("fireball.lost.h2", 30), ("fireball.lost.h3", 30)))
+                .Expect("The wizard's kobold ally is outside the burst it chose", FactIs("fireball.lost.kobold", 0))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-001 (area half; batch 11 step 25): an AI-run Enemy-team cleric (human_cleric, Cleric 5, given the Healer profile:
+        /// the melee turn of its own profile casts no spell) holds only Bless (PHB
+        /// p.205: the caster and all allies within a 50-ft. burst centred on the caster). Two kobold allies and a hero
+        /// stand within 50 ft. The cleric casts it through the area resolve: it and both kobolds gain Bless, the hero
+        /// does not (allies only, AoESystem.GetTargetsInArea with the AlliesOnly filter, relative to the caster's side).
+        /// </summary>
+        private static ScenarioDef NpcCastBless()
+        {
+            return Rules("rules/npc-cast-bless", "An Enemy-team AI cleric casts Bless on itself and its allies only (AI-001)")
+                .Covers("AI-001", "PHB p.205", "SPL-119", "batch 11 step 25")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Watching Hero", 1)), 10, 14, Control.Scripted)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Npc("k1", "kobold_warrior", 11, 10, Control.Idle)
+                .Npc("k2", "kobold_warrior", 9, 11, Control.Idle)
+                .Profile("cleric", () => UnityEngine.ScriptableObject.CreateInstance<DND35.AI.Profiles.HealerAIProfile>())
+                .Tweak("cleric", c => { Prepare(c, 1, SpellNames.BLESS); SpendAllBut(c, SpellNames.BLESS); })
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero", "k1", "k2")
+                .Turn("hero", 1, Step.Assert("after", ctx =>
+                {
+                    foreach (string k in new[] { "cleric", "k1", "k2", "hero" })
+                    {
+                        StatusEffectManager sem = ctx.Get(k).StatusEffectManager;
+                        Fact(ctx, "bless." + k, sem != null && sem.HasEffect(SpellNames.BLESS));
+                    }
+                    return true;
+                }))
+                .Expect("The AI cleric casts Bless once", CastEvents("cleric", SpellNames.BLESS, 1))
+                .Expect("The cleric and both kobolds are blessed", FactsAre(("bless.cleric", true), ("bless.k1", true), ("bless.k2", true)))
+                .Expect("The hero, an enemy inside the burst, is not", FactIs("bless.hero", false))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-001 (area half; batch 11 step 25): an AI-run Enemy-team wizard (mist_wizard) holds only Web (PHB p.301:
+        /// 20-ft.-radius spread, Medium range, Reflex negates). Three heroes stand together 40 ft. away and fail their
+        /// saves. The wizard casts Web through the area resolve: the web is made and every hero is entangled.
+        /// </summary>
+        private static ScenarioDef NpcCastWeb()
+        {
+            return Rules("rules/npc-cast-web", "An Enemy-team AI wizard webs the party (AI-001)")
+                .Covers("AI-001", "PHB p.301", "batch 11 step 25")
+                .MaxRounds(1)
+                .Pc("h1", ActorSource.Stats(() => Wizard("Webbed One", 1)), 10, 10, Control.Scripted)
+                .Pc("h2", ActorSource.Stats(() => Wizard("Webbed Two", 1)), 11, 10, Control.Scripted)
+                .Pc("h3", ActorSource.Stats(() => Wizard("Webbed Three", 1)), 10, 11, Control.Scripted)
+                .Npc("wizard", "mist_wizard", 2, 10, Control.Ai)
+                .Tweak("wizard", c => { Prepare(c, 2, SpellNames.WEB); SpendAllBut(c, SpellNames.WEB); })
+                .Tweak("h1", Fails).Tweak("h2", Fails).Tweak("h3", Fails)
+                .Initiative("wizard", "h1", "h2", "h3")
+                .Turn("h1", 1, Step.Assert("after", ctx =>
+                {
+                    foreach (string k in new[] { "h1", "h2", "h3" })
+                        Fact(ctx, "web." + k, ctx.Get(k).HasCondition(CombatConditionType.Entangled));
+                    return true;
+                }))
+                .Expect("The AI wizard casts Web once", CastEvents("wizard", SpellNames.WEB, 1))
+                .Expect("Every hero failed its Reflex save and is entangled", FactsAre(("web.h1", true), ("web.h2", true), ("web.h3", true)))
+                .Build();
+        }
+
+        /// <summary>
+        /// The AI's area aim (batch 11 step 25, AreaAimSearch): four heroes stand in a 2-by-2 block at (10,10) to
+        /// (11,11), and the Enemy side's kobold stands beside them at (12,10). An AI-run cleric (human_cleric) holds only
+        /// Sound Burst (PHB p.281: 10-ft.-radius spread, Close range): the burst at +(11,11), on the block's centre, would
+        /// take all four heroes and the kobold; the one at +(10,11) takes the four heroes and leaves the kobold out, so the
+        /// AI takes it. Then an AI-run wizard (mist_wizard) 10 ft. west of the block holds only Burning Hands (PHB p.207:
+        /// 15-ft. cone): its cone is aimed at the cluster and takes at least two heroes, never the kobold. Saves fail;
+        /// everyone has 100 more hit points. Three Player-team target dummies far to the west record the hit points between the turns (the
+        /// burst stuns the heroes, who then take no turn).
+        /// </summary>
+        private static ScenarioDef AiAreaAim()
+        {
+            return Rules("rules/ai-area-aim", "The AI's burst spares the ally beside the party and its cone is aimed at the cluster (AI-001)")
+                .Covers("AI-001", "PHB p.175", "PHB p.281", "PHB p.207", "batch 11 step 25")
+                .MaxRounds(1)
+                .Pc("h1", ActorSource.Stats(() => Wizard("Block One", 1)), 10, 10, Control.Scripted)
+                .Pc("h2", ActorSource.Stats(() => Wizard("Block Two", 1)), 11, 10, Control.Scripted)
+                .Pc("h3", ActorSource.Stats(() => Wizard("Block Three", 1)), 10, 11, Control.Scripted)
+                .Pc("h4", ActorSource.Stats(() => Wizard("Block Four", 1)), 11, 11, Control.Scripted)
+                .Npc("kobold", "kobold_warrior", 12, 10, Control.Idle)
+                .Npc("cleric", "human_cleric", 8, 14, Control.Ai)
+                .Npc("wizard", "mist_wizard", 7, 10, Control.Ai)
+                .Npc("obs1", "target_dummy", 2, 2, Control.Scripted, CharacterTeam.Player)
+                .Npc("obs2", "target_dummy", 2, 4, Control.Scripted, CharacterTeam.Player)
+                .Npc("obs3", "target_dummy", 2, 6, Control.Scripted, CharacterTeam.Player)
+                .Profile("cleric", () => UnityEngine.ScriptableObject.CreateInstance<DND35.AI.Profiles.HealerAIProfile>())
+                .Tweak("cleric", c => { Prepare(c, 2, SpellNames.SOUND_BURST); SpendAllBut(c, SpellNames.SOUND_BURST); })
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.BURNING_HANDS); SpendAllBut(c, SpellNames.BURNING_HANDS); })
+                .Tweak("h1", Fails).Tweak("h2", Fails).Tweak("h3", Fails).Tweak("h4", Fails).Tweak("kobold", Fails)
+                .Initiative("obs1", "cleric", "obs2", "wizard", "obs3", "h1", "h2", "h3", "h4", "kobold")
+                .Turn("obs1", 1, Step.Assert("record", ctx => { RecordHp(ctx, "h1", "h2", "h3", "h4", "kobold"); return true; }))
+                .Turn("obs2", 1, Step.Assert("after the burst", ctx =>
+                {
+                    FactHpLost(ctx, "burst", "h1", "h2", "h3", "h4", "kobold");
+                    RecordHp(ctx, "h1", "h2", "h3", "h4", "kobold");
+                    return true;
+                }))
+                .Turn("obs3", 1, Step.Assert("after the cone", ctx =>
+                {
+                    FactHpLost(ctx, "cone", "h1", "h2", "h3", "h4", "kobold");
+                    int hit = 0;
+                    foreach (string k in new[] { "h1", "h2", "h3", "h4" })
+                        if (Numbers(ctx).TryGetValue("hp|" + k, out int before) && before > ctx.Get(k).Stats.CurrentHP)
+                            hit++;
+                    Fact(ctx, "cone.heroes", hit >= 2 ? "2+" : hit.ToString());
+                    return true;
+                }))
+                .Expect("The AI cleric casts Sound Burst once", CastEvents("cleric", SpellNames.SOUND_BURST, 1))
+                .Expect("The burst takes all four heroes", v =>
+                {
+                    foreach (string k in new[] { "h1", "h2", "h3", "h4" })
+                    {
+                        string f = FactOf(v, "burst.lost." + k);
+                        if (f == null)
+                            return ExpectResult.Inconclusive("no fact burst.lost." + k);
+                        if (!int.TryParse(f, out int lost) || lost <= 0)
+                            return ExpectResult.Fail(k + " lost " + f);
+                    }
+                    return ExpectResult.Pass("all four heroes hit");
+                })
+                .Expect("The burst spares the kobold beside the party", FactIs("burst.lost.kobold", 0))
+                .Expect("The AI wizard casts Burning Hands once", CastEvents("wizard", SpellNames.BURNING_HANDS, 1))
+                .Expect("The cone is aimed at the cluster: two heroes or more", FactIs("cone.heroes", "2+"))
+                .Expect("The cone spares the kobold", FactIs("cone.lost.kobold", 0))
                 .Build();
         }
 
@@ -3166,7 +3342,7 @@ namespace Tests.Scenarios
         /// through the NPC cast path: one has lost its holy symbol (taken from its pack at setup, as confiscation or theft
         /// would), the other keeps the kit it spawned with. The first casts Bull's Strength on itself (V, S, M/DF: a
         /// cleric casts the divine version, which needs the divine focus): refused at Legality with one log line and
-        /// nothing spent (not Bless: the NPC path still refuses an area burst, AI-001); it then casts Shield of Faith
+        /// nothing spent (Bull's Strength, a single-target spell, as when this was written; Bless is an area cast since batch 11 step 25); it then casts Shield of Faith
         /// (V, S, M), whose material component is in the pouch it still carries. The second casts Bull's Strength.
         /// </summary>
         private static ScenarioDef NpcCastWithoutDivineFocus()

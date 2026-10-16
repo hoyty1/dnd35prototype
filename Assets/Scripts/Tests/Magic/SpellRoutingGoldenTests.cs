@@ -16,8 +16,10 @@ namespace Tests.Magic
 /// Per spell: the EffectType after SpellCategoryClassifier.ReclassifyAll (run by SpellDatabase.Init), TargetType,
 /// AoEShapeType, SpellEffectRouting.ReachesApplySpellBuff, the branch GameManager.BeginPendingSpellTargeting takes for a
 /// PC cast (aoe, summon, swarm, wish, self, single; grease for Grease, whose branch is the caster's mode choice) and
-/// whether the NPC cast path (GameManager.TryNPCPerformSpellCast, the cast core's Legality stage with the NpcRefusesArea
-/// quirk) refuses it on data alone (an Area target type). Everything is computed
+/// whether a single-target request refuses it on data alone (an Area target type: the cast core's Legality stage,
+/// "area-needs-aim", for every caster since batch 11 step 25; the NPC single-target path, TryNPCPerformSpellCast, is the
+/// one that sends such requests, and the AI casts these spells through an area request instead, AreaAimSearch; the
+/// column keeps its old name "npcRefuses"). Everything is computed
 /// from data, without casting. The result is compared with tools/tests/spell-routing-golden.json; every changed, added
 /// or missing spell is one failure naming the spell. After a deliberate routing change, regenerate the file with
 /// <see cref="WriteGolden"/> (through the Unity MCP) and list the changed spells in the commit body.
@@ -143,10 +145,11 @@ public static class SpellRoutingGoldenTests
     }
 
     /// <summary>
-    /// The data refusal of the NPC cast path (an Area target type; AI-001): the cast core's Legality stage for a request
-    /// with LegacyCastQuirk.NpcRefusesArea (GameManager.CheckCastRangeAndAreaLegality).
+    /// The data refusal of a single-target request (an area spell, AoESystem.RoutesToArea: an Area target type or an area
+    /// shape, Prayer's burst): the cast core's Legality stage, "area-needs-aim" (GameManager.CheckCastTargetLegality; batch
+    /// 11 step 25, which replaced the NPC-only LegacyCastQuirk.NpcRefusesArea; its review added Prayer).
     /// </summary>
-    public static bool NpcRefusesOnData(SpellData spell) => spell.TargetType == SpellTargetType.Area;
+    public static bool NpcRefusesOnData(SpellData spell) => AoESystem.RoutesToArea(spell);
 
     private static void CompareRows(SortedDictionary<string, string> golden, SortedDictionary<string, string> current)
     {

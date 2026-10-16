@@ -15,6 +15,9 @@ public sealed class UiCastDecider : ICastDecider
 
     public bool IsSynchronous => false;
 
+    /// <summary>The player can make every choice a cast needs (the dialogs, pickers and placement clicks).</summary>
+    public bool CanFill(SpellCastRequest req) => true;
+
     public CastChoiceFill FillChoices(GameManager gm, CastContext ctx) => gm.UiFillCastChoices(ctx);
 
     /// <summary>The touch prompt (Cast Now, Discharge Later, Cancel; GameManager.UiChooseTouchDelivery).</summary>

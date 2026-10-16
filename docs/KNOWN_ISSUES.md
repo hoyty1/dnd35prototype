@@ -32,15 +32,15 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-040 |
 | [Combat](issues/CMB.md) | CMB | 0 | 52 | 63 | 115 | CMB-173 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-024 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 57 | 84 | 141 | SPL-195 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 58 | 85 | 143 | SPL-197 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-086 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 34 | 62 | CRE-073 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 37 | 42 | 79 | ITM-088 |
-| [AI](issues/AI.md) | AI | 1 | 24 | 42 | 67 | AI-071 |
+| [AI](issues/AI.md) | AI | 1 | 25 | 42 | 68 | AI-072 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 39 | 51 | UI-053 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-042 |
-| **All** | | 2 | 287 | 423 | 712 | |
+| **All** | | 2 | 289 | 424 | 715 | |
 
 ## Top issues
 
@@ -48,4 +48,4 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
+| [AI-001](issues/AI.md) | High | AI | NPCs never choose a metamagic feat (they cast area spells since batch 11 step 25) | Yes |

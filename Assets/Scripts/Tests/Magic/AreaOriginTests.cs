@@ -29,7 +29,8 @@ namespace Tests.Magic
 /// <item>Play mode: the AI's area evaluation picks the corner that spares an ally (SpellcasterAIProfile.EvaluateAOECast),
 /// a breath picks the start that covers foes and spares its ally (AoESystem.BestDirectedAimAt), the PC aim rule
 /// (GameManager.TryBuildUiAreaAim) snaps to the nearest intersection and refuses an origin behind a wall, the cast core
-/// refuses an origin out of range or out of the caster's line of effect (a Grease area's too), Prayer's corner takes in
+/// refuses an origin out of range or out of the caster's line of effect (a Grease area's too; a Grease square or a
+/// one-square effect beyond the spell's range, batch 11 step 25 review), Prayer's corner takes in
 /// the most creatures and a scored corner (Invisibility Purge's) follows its score, ally sparing counts every square of a
 /// Large ally, and a lasting area made by a cast covers exactly the cast's squares (SPL-029).</item>
 /// </list>
@@ -441,8 +442,13 @@ public static class AreaOriginTests
 
             TestHelpers.SetGridPosition(ally, 10, 11);
             SpellAOEEvaluation adjacent = profile.EvaluateAOECast(fireball, wizard, hero, all, gm);
-            Assert(!adjacent.IsSafe, "an ally beside the target is in every corner's burst, so the AI holds the Fireball (ally sparing unchanged)",
-                $"safe={adjacent.IsSafe} allies={adjacent.AlliesHit}");
+            // Since the batch 11 step 25 review the AI searches every origin whose burst reaches the target (AreaAimSearch), so
+            // an ally beside it no longer stops the Fireball: an origin on the target's far side (+(10,7): 4 to the hero's far
+            // corner, 5 to the ally's, PHB p.175) takes the hero alone.
+            Assert(adjacent.IsSafe && adjacent.EnemiesHit == 1 && adjacent.AlliesHit == 0 && adjacent.Placement != null
+                   && !adjacent.Placement.Cells.Contains(new Vector2Int(10, 11)),
+                "an ally beside the target: the AI's Fireball originates on the target's far side and spares it",
+                $"safe={adjacent.IsSafe} enemies={adjacent.EnemiesHit} allies={adjacent.AlliesHit} aim={adjacent.Placement}");
 
             // 2. A 10-ft. breath cone starts at the corner that covers two foes and spares the breather's ally.
             CharacterController hound = Make("Hound", "Fighter", CharacterTeam.Enemy, 5, 20);
@@ -485,6 +491,34 @@ public static class AreaOriginTests
                 "the cast core refuses an area whose point of origin is beyond the spell's range of the caster's space (PHB p.175)",
                 $"near {nearOutcome.Reason}, far {farOutcome.Reason}");
 
+            // 3b'. The same for a Grease square and a one-square effect (batch 11 step 25 review): the range test lives in the
+            //      cast core, not only in the PC highlight and the AI's aim search.
+            SpellData greaseRanged = SpellDatabase.GetSpell(SpellNames.GREASE).Clone();
+            int greaseRange = Mathf.Max(1, CasterLevelRules.RangeSquares(pc, greaseRanged));
+            SpellCastRequest GreaseAt(Vector2Int anchor)
+            {
+                var cells = new HashSet<Vector2Int> { anchor, anchor + Vector2Int.right, anchor + Vector2Int.up, anchor + Vector2Int.one };
+                SpellCastRequest r = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, greaseRanged, null, new CastSource()), null,
+                    new List<CharacterController>(), cells, GridIntersection.NorthEastCornerOf(anchor));
+                r.Choices.GreaseMode = GreaseCastMode.Area;
+                return r;
+            }
+            CastOutcome greaseNear = gm.CheckLegality(GreaseAt(new Vector2Int(2, 25)));
+            CastOutcome greaseBeyond = gm.CheckLegality(GreaseAt(new Vector2Int(greaseRange + 1, 25)));
+            Assert(greaseNear.Reason != "origin-out-of-range" && greaseBeyond.Kind == CastOutcomeKind.Refused && greaseBeyond.Reason == "origin-out-of-range",
+                "the cast core refuses a Grease square beyond Grease's range (PHB p.237: Close), for every caster",
+                $"near {greaseNear.Reason}, beyond {greaseBeyond.Reason}");
+            int boltRange = callLightning.AoERangeSquares > 0 ? callLightning.AoERangeSquares : CasterLevelRules.RangeSquares(pc, callLightning);
+            SpellCastRequest boltNear = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, new CastSource()),
+                new List<CharacterController>(), new HashSet<Vector2Int> { new Vector2Int(5, 25) }, null);
+            SpellCastRequest boltBeyond = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, new CastSource()),
+                new List<CharacterController>(), new HashSet<Vector2Int> { new Vector2Int(boltRange + 1, 25) }, null);
+            CastOutcome boltNearOutcome = gm.CheckLegality(boltNear);
+            CastOutcome boltBeyondOutcome = gm.CheckLegality(boltBeyond);
+            Assert(boltNearOutcome.Reason != "origin-out-of-range" && boltBeyondOutcome.Kind == CastOutcomeKind.Refused && boltBeyondOutcome.Reason == "origin-out-of-range",
+                "the cast core refuses a one-square effect (Call Lightning's bolt) whose square is beyond the spell's range",
+                $"near {boltNearOutcome.Reason}, beyond {boltBeyondOutcome.Reason}");
+
             // 3c. Behind a wall: the PC's aim refuses an origin out of its line of effect, and so does the cast core (every
             //     caster), for a burst and for a Grease area (PHB p.176; SPL-006).
             var wall = new RowWall(20);
@@ -501,9 +535,10 @@ public static class AreaOriginTests
                     "the cast core refuses a burst whose point of origin the caster has no line of effect to", "reason " + hiddenOutcome.Reason);
 
                 SpellData grease = SpellDatabase.GetSpell(SpellNames.GREASE).Clone();
-                var greaseCells = new HashSet<Vector2Int> { new Vector2Int(4, 15), new Vector2Int(5, 15), new Vector2Int(4, 16), new Vector2Int(5, 16) };
+                // Within Grease's range (7 squares at caster level 5) but beyond the wall, so line of effect is what refuses it.
+                var greaseCells = new HashSet<Vector2Int> { new Vector2Int(1, 18), new Vector2Int(2, 18), new Vector2Int(1, 19), new Vector2Int(2, 19) };
                 SpellCastRequest greaseFar = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, grease, null, new CastSource()), null,
-                    new List<CharacterController>(), greaseCells, GridIntersection.NorthEastCornerOf(new Vector2Int(4, 15)));
+                    new List<CharacterController>(), greaseCells, GridIntersection.NorthEastCornerOf(new Vector2Int(1, 18)));
                 greaseFar.Choices.GreaseMode = GreaseCastMode.Area;
                 CastOutcome greaseOutcome = gm.CheckLegality(greaseFar);
                 Assert(greaseOutcome.Kind == CastOutcomeKind.Refused && greaseOutcome.Reason == "origin-no-line-of-effect",
@@ -534,9 +569,24 @@ public static class AreaOriginTests
             Assert(AoESystem.IsCreatureInCells(new HashSet<Vector2Int> { new Vector2Int(5, 4) }, bigAlly)
                    && !AoESystem.IsCreatureInCells(new HashSet<Vector2Int> { new Vector2Int(6, 4) }, bigAlly),
                 "a Large creature is in an area when any of its four squares is");
-            SpellAOEEvaluation bigEval = profile.EvaluateAOECast(fireball, wizard, target2, new List<CharacterController> { wizard, target2, bigAlly }, gm);
-            Assert(!bigEval.IsSafe && bigEval.AlliesHit == 1,
-                "every corner's burst reaches some square of the Large ally, so the AI's Fireball is not safe (its lower-left square alone was spared)",
+            // Since batch 11 step 25 the AI searches origins around the target's neighbours too (AreaAimSearch): every aim that
+            // reaches any square of the Large ally counts it, and the best aim lies on the far side and spares it.
+            var bigAll = new List<CharacterController> { wizard, target2, bigAlly };
+            AreaAimSearch.ClearCache();
+            bool everyAimCountsIt = true;
+            int aimsReachingIt = 0;
+            foreach (AreaPlacement aim in AreaAimSearch.Search(fireball, wizard, bigAll, grid))
+            {
+                bool reaches = AoESystem.IsCreatureInCells(aim.Cells, bigAlly);
+                if (reaches) aimsReachingIt++;
+                if (reaches != (aim.AlliesHit > 0)) everyAimCountsIt = false;
+            }
+            Assert(everyAimCountsIt && aimsReachingIt > 0,
+                "every searched burst that reaches any square of the Large ally counts it as hit (its lower-left square alone was once tested)",
+                "aims reaching it " + aimsReachingIt);
+            SpellAOEEvaluation bigEval = profile.EvaluateAOECast(fireball, wizard, target2, bigAll, gm);
+            Assert(bigEval.IsSafe && bigEval.AlliesHit == 0 && bigEval.Placement != null && !AoESystem.IsCreatureInCells(bigEval.Placement.Cells, bigAlly),
+                "the AI's Fireball takes an origin that spares every square of the Large ally",
                 $"safe={bigEval.IsSafe} allies={bigEval.AlliesHit}");
 
             // 3e. A lasting area made by a cast covers exactly the cast's squares (PersistentAreaEffect.CastFootprint, SPL-029).

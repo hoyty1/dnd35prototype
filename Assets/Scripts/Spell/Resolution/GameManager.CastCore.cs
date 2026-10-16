@@ -215,8 +215,9 @@ public partial class GameManager
     /// <summary>
     /// Whether <paramref name="req"/> may be cast as it stands: with <see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>
     /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
-    /// target test (IsValidTargetForSpell), the range at the cast's caster level (CasterLevelRules, SPL-017), with the NPC
-    /// bit the area refusal, and
+    /// decider's capability (<see cref="CheckDeciderCapability"/>: a choice its decider cannot make, batch 11 step 25), the
+    /// target test (IsValidTargetForSpell; a single-target request of an Area spell is refused, "area-needs-aim"), the
+    /// range at the cast's caster level (CasterLevelRules, SPL-017), and
     /// the metamagic (MetamagicSystem, since batch 11 step 21; <see cref="CheckCastMetamagicLegality"/>), the casting
     /// action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
     /// component test (the pouch, a divine focus, a priced focus or material component, PHB p.174 and p.130;
@@ -228,8 +229,8 @@ public partial class GameManager
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
-        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastTargetLegality(req)
-                              ?? CheckCastRangeAndAreaLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
+        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckDeciderCapability(req)
+                              ?? CheckCastTargetLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
                               ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
@@ -244,6 +245,35 @@ public partial class GameManager
     /// </summary>
     internal CastOutcome CheckLegalityForAI(CharacterController caster, CharacterController target, SpellData spell)
         => CheckLegality(SpellCastRequest.ForAI(caster, target, spell));
+
+    /// <summary>
+    /// The AI's legality filter for an area it aimed (batch 11 step 25): <see cref="CheckLegality"/> on the request the
+    /// NPC area cast of <paramref name="spell"/> at <paramref name="placement"/> would build
+    /// (<see cref="BuildAiAreaRequest"/>: the decider's capability, the point of origin's range and line of effect, the
+    /// NPC caster tests, the metamagic, the casting action, Silence and the components). No side effect.
+    /// </summary>
+    internal CastOutcome CheckAreaLegalityForAI(CharacterController caster, SpellData spell, AreaPlacement placement)
+        => CheckLegality(BuildAiAreaRequest(caster, spell, placement, null));
+
+    /// <summary>
+    /// The request of an NPC area cast of <paramref name="spell"/> aimed at <paramref name="placement"/> (an aim of
+    /// AreaAimSearch): an area request (SpellCastRequest.ForAIArea), or Grease's area form (ForAIGrease), with a copy of
+    /// the placement's squares and the creatures in them that the spell's filter takes in, judged as the PC's area is
+    /// (AoESystem.GetTargetsInArea, relative to the caster's side). The core's Legality stage filters both by line of
+    /// effect from the placement's origin. Without a placement: the bare request the AI's search and caster tests start from.
+    /// </summary>
+    internal SpellCastRequest BuildAiAreaRequest(CharacterController caster, SpellData spell, AreaPlacement placement, MetamagicData metamagic)
+    {
+        bool grease = AreaAimSearch.IsGrease(spell);
+        HashSet<Vector2Int> cells = placement != null ? new HashSet<Vector2Int>(placement.Cells) : null;
+        List<CharacterController> targets = cells != null && Grid != null
+            ? AoESystem.GetTargetsInArea(cells, caster, grease ? AoETargetFilter.All : spell.AoEFilter, Grid)
+            : new List<CharacterController>();
+        GridIntersection? origin = placement != null ? placement.Origin : null;
+        return grease
+            ? SpellCastRequest.ForAIGrease(caster, spell, cells, targets, origin, metamagic)
+            : SpellCastRequest.ForAIArea(caster, spell, cells, targets, origin, metamagic);
+    }
 
     /// <summary>
     /// The caster's own part of <see cref="CheckLegality"/> for an NPC cast of <paramref name="spell"/>, with no target,
@@ -312,24 +342,32 @@ public partial class GameManager
     /// The range test, one rule for every caster and path (batch 11 step 14, SPL-017): a single-target cast whose target
     /// lies beyond the spell's range at the cast's caster level (CasterLevelRules.InRange: a scroll's or wand's own
     /// caster level, else the casting class's, half for a paladin or ranger; at least 1 square; measured to the target's
-    /// nearest square, as the PC targeting highlight measures it) is refused. Then the area refusal
-    /// (<see cref="LegacyCastQuirk.NpcRefusesArea"/>, AI-001). Null when the request passes.
+    /// nearest square, as the PC targeting highlight measures it) is refused. Null when the request passes. (An area's
+    /// point of origin meets its own range test, <see cref="CheckAreaOriginLegality"/>.)
     /// </summary>
-    private static CastOutcome CheckCastRangeAndAreaLegality(SpellCastRequest req)
+    private static CastOutcome CheckCastRangeLegality(SpellCastRequest req)
     {
         if (req == null || req.Caster == null || req.Spell == null)
             return null;
 
         CharacterController target = req.Aim != null ? req.Aim.Target : null;
-        SpellData spell = req.Spell;
         if (req.ResolveKind == CastResolveKind.Single && target != null && req.Caster.Stats != null
             && !CasterLevelRules.InRange(req, target))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "out-of-range");
-
-        // Spell routing golden suite (Tests.Magic.SpellRoutingGoldenTests) mirrors this data refusal: keep them in step.
-        if (req.HasQuirk(LegacyCastQuirk.NpcRefusesArea) && spell.TargetType == SpellTargetType.Area)
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "area-refused");
         return null;
+    }
+
+    /// <summary>
+    /// The decider's capability (batch 11 step 25; ICastDecider.CanFill): a request whose choices its decider cannot make
+    /// (the AI cannot place a wall's ends, grease a held object or worn armor, or place a summoned swarm yet) is refused,
+    /// "choices-incomplete", before anything is spent. Not a rule fork: the same request from a decider that can fill it
+    /// goes on by the same rules. Null when the decider can fill the request.
+    /// </summary>
+    private static CastOutcome CheckDeciderCapability(SpellCastRequest req)
+    {
+        if (req == null || req.Decider == null || req.Decider.CanFill(req))
+            return null;
+        return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "choices-incomplete");
     }
 
     /// <summary>
@@ -338,22 +376,40 @@ public partial class GameManager
     /// AoESystem.IsOriginWithinRange, the test the PC cursor makes), and in the caster's line of effect (PHB p.176: "You
     /// must have a clear line of effect to the point of origin of any spell you cast"; AoESystem.HasLineOfEffectToOrigin):
     /// "origin-out-of-range" or "origin-no-line-of-effect" otherwise (batch 11 step 24, delegated RAW reading 2026-10-14 in
-    /// RULES_COVERAGE 4.1). A Grease area's origin, its 10-ft. square's centre, meets the line of effect test. The same
-    /// for every caster. Nothing to test for a cone or line (it starts at the caster), an area centred on the caster (no
-    /// range, its origin on the caster's space), a one-square effect or an aim with no recorded origin (the walls).
+    /// RULES_COVERAGE 4.1). A Grease area's 10-ft. square must have its anchor square (the south-west one, the square the
+    /// PC clicks) within the spell's range at the cast's caster level, and its origin, the square's centre, in the
+    /// caster's line of effect; a one-square effect (Flaming Sphere, Call Lightning) must have its square within range
+    /// (AoESystem.IsWithinCastingRange, the measure the PC highlight and the AI's aim search use; batch 11 step 25 review).
+    /// The same for every caster. Nothing to test for a cone or line (it starts at the caster), an area centred on the
+    /// caster (no range, its origin on the caster's space) or an aim with no recorded origin (the walls).
     /// </summary>
     private static CastOutcome CheckAreaOriginLegality(SpellCastRequest req)
     {
         SpellData spell = req.Spell;
         GridIntersection? origin = req.Aim != null ? req.Aim.AreaOrigin : null;
-        if (!origin.HasValue)
-            return null;
         Vector2Int casterBase = req.Caster.GridPosition;
         int casterSize = req.Caster.GetCurrentSpaceSquares();
+        if (req.ResolveKind == CastResolveKind.Area && !origin.HasValue && AoESystem.IsSingleSquarePlacement(spell))
+        {
+            int squareRange = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(req);
+            if (req.Aim != null && req.Aim.Cells != null)
+                foreach (Vector2Int square in req.Aim.Cells)
+                    if (!AoESystem.IsWithinCastingRange(casterBase, square, squareRange))
+                        return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-out-of-range");
+            return null;
+        }
+        if (!origin.HasValue)
+            return null;
         if (req.ResolveKind == CastResolveKind.Grease)
+        {
+            int greaseRange = Mathf.Max(1, CasterLevelRules.RangeSquares(req));
+            var anchor = new Vector2Int(origin.Value.X - 1, origin.Value.Y - 1); // GridIntersection.NorthEastCornerOf(anchor)
+            if (!AoESystem.IsWithinCastingRange(casterBase, anchor, greaseRange))
+                return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-out-of-range");
             return AoESystem.HasLineOfEffectToOrigin(casterBase, casterSize, origin.Value)
                 ? null
                 : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "origin-no-line-of-effect");
+        }
         if (!AoESystem.IsPlacedShape(spell.AoEShapeType) || AoESystem.IsSingleSquarePlacement(spell))
             return null;
         int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : CasterLevelRules.RangeSquares(req);
@@ -381,6 +437,14 @@ public partial class GameManager
             return CheckAreaOriginLegality(req);
         if (req.ResolveKind != CastResolveKind.Single)
             return null;
+        // An area spell is aimed at a point, not cast on a creature (PHB p.175): it reaches its creatures through an area
+        // request (the PC's area targeting, SpellCastRequest.ForUiArea; the AI's aim search, ForAIArea), never a
+        // single-target one, for every caster (batch 11 step 25). "Area spell" is the PC routing's own predicate
+        // (AoESystem.RoutesToArea: an Area target type, or an area shape such as Prayer's burst centred on the caster,
+        // PHB p.264), so a spell has one cast path (batch 11 step 25 review; Tests.Magic.SpellRoutingGoldenTests mirrors
+        // this data refusal: keep them in step).
+        if (AoESystem.RoutesToArea(req.Spell))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "area-needs-aim");
         if (!IsValidTargetForSpell(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell))
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "invalid-target");
         return null;
@@ -459,7 +523,8 @@ public partial class GameManager
     /// Legality: the target, the range at the cast's caster level (every caster, SPL-017), then the caster's choices (the
     /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. With
     /// the NPC bits: the NPC path's own caster tests before the target and its unlogged target and range refusals
-    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the area refusal after the range. Since batch 11 step 21 an
+    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>). Before the target test, the decider's capability (batch 11
+    /// step 25): a choice the decider cannot make refuses the cast. Since batch 11 step 21 an
     /// NPC cast keeps its metamagic (a prepared metamagic slot's, SpellCastRequest.ForAI) and meets the same metamagic
     /// rules (MetamagicSystem).
     /// </summary>
@@ -495,10 +560,20 @@ public partial class GameManager
             return;
         }
 
+        // A choice the cast's decider cannot make (batch 11 step 25; ICastDecider.CanFill): refused before anything is
+        // spent. Only the AI decider refuses (a wall's ends, Grease on an object or armor, a swarm's square); it logs nothing.
+        refusal = CheckDeciderCapability(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            FinishCast(ctx, refusal);
+            return;
+        }
+
         refusal = CheckCastTargetLegality(req);
         if (refusal != null)
         {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, "invalid-target");
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason == "area-needs-aim" ? refusal.Reason : "invalid-target");
             if (spell != null && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
             FinishCast(ctx, refusal);
@@ -508,7 +583,7 @@ public partial class GameManager
         // The range at the cast's caster level (SPL-017), the same for every caster; the PC's target comes from the
         // targeting highlight, which applies the same rule, so a PC cast meets this only through a stale target. The NPC
         // path's refusals log nothing, as its others.
-        refusal = CheckCastRangeAndAreaLegality(req);
+        refusal = CheckCastRangeLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);

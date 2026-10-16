@@ -579,6 +579,18 @@ public partial class GameManager
         AreaEffectManager.Instance.ClearAllEffects();
         WindEffectManager.Instance.ClearAllWindEffects();
         _activeGreasedObjects.Clear();
+        ClearAreaDifficultTerrain();
+    }
+
+    /// <summary>
+    /// Every area that made squares difficult terrain (Web, Entangle, Grease, Plant Growth, Soften Earth, Spike Stones) is
+    /// gone once all areas are cleared, but destroying them skips their expiry, which is what gives the squares back:
+    /// clear the difficult-terrain set with them, so a fight's webs do not slow the next encounter (found in batch 11 step
+    /// 25, when an NPC's Web left its squares difficult for the next scenario job). Only area effects write the set.
+    /// </summary>
+    private void ClearAreaDifficultTerrain()
+    {
+        _movementService?.ClearDifficultTerrain();
     }
 
     private string ResolveGreaseObjectCast(CharacterController caster, CharacterController target, SpellData spell)

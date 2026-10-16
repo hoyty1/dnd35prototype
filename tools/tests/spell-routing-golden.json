@@ -200,7 +200,7 @@
     {"id":"plane_shift","effectType":"Control","targetType":"SingleEnemy","aoeShape":"None","reachesApplySpellBuff":true,"pcBranch":"single","npcRefuses":false},
     {"id":"plant_growth","effectType":"Debuff","targetType":"Area","aoeShape":"Burst","reachesApplySpellBuff":true,"pcBranch":"aoe","npcRefuses":true},
     {"id":"poison","effectType":"Debuff","targetType":"SingleEnemy","aoeShape":"None","reachesApplySpellBuff":true,"pcBranch":"single","npcRefuses":false},
-    {"id":"prayer","effectType":"Buff","targetType":"Self","aoeShape":"Burst","reachesApplySpellBuff":true,"pcBranch":"aoe","npcRefuses":false},
+    {"id":"prayer","effectType":"Buff","targetType":"Self","aoeShape":"Burst","reachesApplySpellBuff":true,"pcBranch":"aoe","npcRefuses":true},
     {"id":"prestidigitation","effectType":"Buff","targetType":"Self","aoeShape":"None","reachesApplySpellBuff":true,"pcBranch":"self","npcRefuses":false},
     {"id":"produce_flame","effectType":"Damage","targetType":"SingleEnemy","aoeShape":"None","reachesApplySpellBuff":false,"pcBranch":"single","npcRefuses":false},
     {"id":"protection_from_arrows","effectType":"Buff","targetType":"SingleAlly","aoeShape":"None","reachesApplySpellBuff":true,"pcBranch":"single","npcRefuses":false},

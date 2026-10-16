@@ -257,4 +257,48 @@ public sealed class SpellCastRequest
         request.Aim.Target = target;
         return request;
     }
+
+    /// <summary>
+    /// An NPC (AI-run) area cast of <paramref name="spell"/> (batch 11 step 25, AI-001 area half): the request
+    /// <see cref="ForAI"/> builds (the clone with its metamagic, the slot source, the AI decider), turned into an area cast
+    /// aimed at <paramref name="cells"/> from <paramref name="origin"/> (the point of origin the AI's aim search chose,
+    /// AreaAimSearch; null for a one-square effect) with the creatures in it, <paramref name="targets"/> (the core's
+    /// Legality stage filters both by line of effect, as for a PC's area), no single target, and the NPC area path's
+    /// legacy quirks (<see cref="LegacyCastQuirkSets.AiAreaPath"/>). With null cells it is the request the AI's search and
+    /// legality filter start from (its spell clone is the one the cast will use, so a Widened area is searched widened).
+    /// </summary>
+    public static SpellCastRequest ForAIArea(CharacterController caster, SpellData spell, HashSet<Vector2Int> cells,
+        List<CharacterController> targets, GridIntersection? origin, MetamagicData metamagic = null)
+    {
+        SpellCastRequest request = ForAI(caster, null, spell, metamagic);
+        request.ResolveKind = CastResolveKind.Area;
+        request.Aim.Target = null;
+        request.Aim.Cells = cells;
+        request.Aim.AreaTargets = targets ?? new List<CharacterController>();
+        request.Aim.AreaOrigin = origin;
+        request.Quirks = LegacyCastQuirkSets.AiAreaPath;
+        return request;
+    }
+
+    /// <summary>
+    /// An NPC (AI-run) Grease on a 10-ft. square (PHB p.237; batch 11 step 25): the <see cref="ForAI"/> request turned into
+    /// a Grease cast in its area form (CastChoices.GreaseMode Area, the only form the AI decider can fill,
+    /// AiCastDecider.CanFill) on <paramref name="cells"/>, whose point of origin is the square's centre,
+    /// <paramref name="origin"/>, with the creatures in it, <paramref name="targets"/>, and the NPC Grease path's legacy
+    /// quirks (<see cref="LegacyCastQuirkSets.AiGreasePath"/>).
+    /// </summary>
+    public static SpellCastRequest ForAIGrease(CharacterController caster, SpellData spell, HashSet<Vector2Int> cells,
+        List<CharacterController> targets, GridIntersection? origin, MetamagicData metamagic = null)
+    {
+        SpellCastRequest request = ForAI(caster, null, spell, metamagic);
+        request.ResolveKind = CastResolveKind.Grease;
+        request.Choices.GreaseMode = GreaseCastMode.Area;
+        request.Aim.Target = null;
+        request.Aim.ObjectHolder = null;
+        request.Aim.Cells = cells;
+        request.Aim.AreaTargets = targets ?? new List<CharacterController>();
+        request.Aim.AreaOrigin = origin;
+        request.Quirks = LegacyCastQuirkSets.AiGreasePath;
+        return request;
+    }
 }

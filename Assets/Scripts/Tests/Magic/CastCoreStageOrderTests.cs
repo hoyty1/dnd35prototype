@@ -118,14 +118,13 @@ public static class CastCoreStageOrderTests
     /// <summary>
     /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
     /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017;
-    /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic).
+    /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic; step 25 removed NpcRefusesArea:
+    /// an NPC casts an area spell through the area resolve, SpellCastRequest.ForAIArea).
     /// </summary>
     private static readonly LegacyCastQuirk[] AiPathDifferences =
     {
         LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
-        LegacyCastQuirk.NpcRefusesArea,                          // AI-001
-
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
@@ -181,6 +180,8 @@ public static class CastCoreStageOrderTests
         public RecordingDecider(List<string> events) { Events = events; }
 
         public bool IsSynchronous => true;
+
+        public bool CanFill(SpellCastRequest req) => true;
 
         public CastChoiceFill FillChoices(GameManager gm, CastContext ctx)
         {
@@ -282,6 +283,38 @@ public static class CastCoreStageOrderTests
             Assert((LegacyCastQuirkSets.UiAreaPath & bit) == bit && (LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == 0,
                 "The area bit " + name + " is set by the area builder only");
         }
+
+        // Batch 11 step 25: the NPC area and Grease builders (the area half of AI-001).
+        Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), "NpcRefusesArea"), "Batch 11 step 25 removed the quirk bit NpcRefusesArea (AI-001)");
+        SpellData burning = SpellDatabase.GetSpell(SpellNames.BURNING_HANDS);
+        var aiCells = new HashSet<Vector2Int> { new Vector2Int(1, 0) };
+        SpellCastRequest aiArea = SpellCastRequest.ForAIArea(null, burning, aiCells, null, new GridIntersection(1, 1));
+        Assert(aiArea.ResolveKind == CastResolveKind.Area && aiArea.Aim.Target == null && aiArea.Aim.Cells == aiCells
+               && aiArea.Aim.AreaTargets != null && aiArea.Aim.AreaOrigin == new GridIntersection(1, 1) && aiArea.Decider is AiCastDecider
+               && aiArea.Quirks == LegacyCastQuirkSets.AiAreaPath && !ReferenceEquals(aiArea.Spell, burning),
+            "ForAIArea makes an area request on its own clone, aimed from its origin, with the AI decider and the NPC area path's quirks", "" + aiArea.Quirks);
+        Assert(LegacyCastQuirkSets.AiAreaPath == (LegacyCastQuirkSets.UiAreaPath | LegacyCastQuirk.NpcOwnLegalityChecks),
+            "The NPC area path is the PC area path plus the NPC caster tests (SPL-160)", "" + LegacyCastQuirkSets.AiAreaPath);
+        SpellCastRequest aiGrease = SpellCastRequest.ForAIGrease(null, SpellDatabase.GetSpell(SpellNames.GREASE), aiCells, null, new GridIntersection(2, 1));
+        Assert(aiGrease.ResolveKind == CastResolveKind.Grease && aiGrease.Choices.GreaseMode == GreaseCastMode.Area && aiGrease.Aim.ObjectHolder == null
+               && aiGrease.Quirks == LegacyCastQuirkSets.AiGreasePath
+               && LegacyCastQuirkSets.AiGreasePath == (LegacyCastQuirkSets.UiGreasePath | LegacyCastQuirk.NpcOwnLegalityChecks),
+            "ForAIGrease makes Grease's area form with the NPC Grease path's quirks (the PC Grease path plus the NPC caster tests)", "" + aiGrease.Quirks);
+
+        // The AI decider's capability (ICastDecider.CanFill): no wall ends, no Grease on an object or armor (nor one with no
+        // form), no swarm placement; the UI decider fills everything.
+        Assert(!AiCastDecider.Instance.CanFill(SpellCastRequest.ForAIArea(null, SpellDatabase.GetSpell(SpellNames.WALL_OF_FIRE), aiCells, null, null))
+               && !AiCastDecider.Instance.CanFill(SpellCastRequest.ForAIArea(null, SpellDatabase.GetSpell(SpellNames.WALL_OF_ICE), aiCells, null, null))
+               && !AiCastDecider.Instance.CanFill(SpellCastRequest.ForAIArea(null, SpellDatabase.GetSpell(SpellNames.WALL_OF_FORCE), aiCells, null, null))
+               && !AiCastDecider.Instance.CanFill(SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.SUMMON_SWARM))),
+            "The AI decider cannot place a wall's ends or a summoned swarm (CanFill false)");
+        SpellCastRequest greaseObject = SpellCastRequest.ForAIGrease(null, SpellDatabase.GetSpell(SpellNames.GREASE), aiCells, null, null);
+        greaseObject.Choices.GreaseMode = GreaseCastMode.Object;
+        Assert(!AiCastDecider.Instance.CanFill(greaseObject) && !AiCastDecider.Instance.CanFill(SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.GREASE)))
+               && AiCastDecider.Instance.CanFill(aiGrease) && AiCastDecider.Instance.CanFill(aiArea),
+            "The AI decider fills Grease's area form and a Burning Hands cone, not Grease on an object or with no form");
+        Assert(UiCastDecider.Instance.CanFill(greaseObject) && UiCastDecider.Instance.CanFill(SpellCastRequest.ForAIArea(null, SpellDatabase.GetSpell(SpellNames.WALL_OF_FIRE), aiCells, null, null)),
+            "The UI decider can fill every request");
     }
 
     /// <summary>The cast core's source: CombatUI only to log, and none of the UI follow-up.</summary>
@@ -485,6 +518,7 @@ public static class CastCoreStageOrderTests
         public readonly List<string> Events;
         public RecordingAiDecider(List<string> events) { Events = events; }
         public bool IsSynchronous => AiCastDecider.Instance.IsSynchronous;
+        public bool CanFill(SpellCastRequest req) => AiCastDecider.Instance.CanFill(req);
 
         public CastChoiceFill FillChoices(GameManager gm, CastContext ctx)
         {
@@ -562,7 +596,7 @@ public static class CastCoreStageOrderTests
     /// <summary>
     /// The AI path's refusals: RunCastSync returns false (the old NPC executor's false) with nothing spent and no
     /// combat-log line, for a caster with no standard action, a Self spell aimed at another creature, a target out of
-    /// range and an area spell.
+    /// range, a single-target request of an area spell and a choice the AI decider cannot make.
     /// </summary>
     private static void TestAiRefusals(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
     {
@@ -601,9 +635,18 @@ public static class CastCoreStageOrderTests
                 Object.DestroyImmediate(far.gameObject);
             }
 
+            // An area spell is aimed at a point (PHB p.175): a single-target request of one is refused for every caster; the
+            // AI casts it through an area request (batch 11 step 25, TestAreaCasts).
             SpellCastRequest area = BeginAi(sc, caster, ally, SpellNames.BURNING_HANDS, null, out slot);
             cast = gm.RunCastSync(area, out o);
-            Assert(!cast && o.Reason == "area-refused" && !slot.IsUsed, "AI: an area spell is refused (NpcRefusesArea, AI-001)", "" + o);
+            Assert(!cast && o.Reason == "area-needs-aim" && !slot.IsUsed, "AI: a single-target request of an area spell is refused, nothing spent (area-needs-aim)", "" + o);
+            sc.SpellSlots.Remove(slot);
+
+            // A choice the AI decider cannot make (ICastDecider.CanFill, batch 11 step 25): Grease with no form chosen.
+            SpellCastRequest grease = BeginAi(sc, caster, ally, SpellNames.GREASE, null, out slot);
+            cast = gm.RunCastSync(grease, out o);
+            Assert(!cast && o.Reason == "choices-incomplete" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+                "AI: a cast whose choices the AI decider cannot make is refused at Legality, nothing spent (choices-incomplete)", "" + o);
             sc.SpellSlots.Remove(slot);
 
             Assert(logs.Count == 0, "AI: the refusals log no combat-log line, as the old NPC executor did", string.Join(" | ", logs));
@@ -1389,6 +1432,49 @@ public static class CastCoreStageOrderTests
 
         Assert(gm.CurrentSubPhase == subPhaseBefore, "No area stage set CurrentSubPhase", subPhaseBefore + " -> " + gm.CurrentSubPhase);
         Assert(gm.Harness_LastCombatLog == lastLogBefore, "No area stage wrote the last combat log (the UI decider's follow-up does)");
+
+        RunAiArea(gm, sc, caster);
+    }
+
+    /// <summary>
+    /// Batch 11 step 25 (AI-001 area half): an NPC area cast (SpellCastRequest.ForAIArea) runs the same stages as the PC's
+    /// through RunCastSync, resolves in the area handler registry's generic loop and spends the slot and the standard
+    /// action; a Summon Swarm, whose swarm the AI cannot place, is refused at Legality with nothing spent.
+    /// </summary>
+    private static void RunAiArea(GameManager gm, SpellcastingComponent sc, CharacterController caster)
+    {
+        SpellData template = SpellDatabase.GetSpell(SpellNames.BURNING_HANDS);
+        var slot = new SpellSlot(template.SpellLevel, template.Clone(), false, "Wizard");
+        sc.SpellSlots.Add(slot);
+        caster.Actions.Reset();
+        sc.ResetQuickenedSpellTracking();
+
+        var events = new List<string>();
+        var cells = new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) };
+        SpellCastRequest req = SpellCastRequest.ForAIArea(caster, template, cells, new List<CharacterController>(),
+            new GridIntersection(caster.GridPosition.x + 1, caster.GridPosition.y + 1));
+        req.Decider = new RecordingAiDecider(events);
+        bool cast = gm.RunCastSync(req, out CastOutcome outcome, stage => events.Add(stage.ToString()));
+        Assert(string.Join(",", events) == string.Join(",", AreaResolvedSequence),
+            "AI area: the NPC area cast runs the PC area path's stages in the same order", string.Join(",", events));
+        Assert(cast && outcome != null && outcome.Kind == CastOutcomeKind.Resolved && outcome.At == CastStage.CombatEnd,
+            "AI area: RunCastSync returns true with Resolved at CombatEnd", "" + outcome);
+        Assert(slot.IsUsed && caster.Actions.StandardActionUsed && gm.Harness_OpenCastCount == 0,
+            "AI area: the slot and the standard action are spent and the cast is ended");
+        Assert(gm.Harness_LastCombatLog != null && gm.Harness_LastCombatLog.Contains("No valid targets in area!"),
+            "AI area: the generic loop's log is the last combat log (the AI follow-up)", gm.Harness_LastCombatLog);
+        sc.SpellSlots.Remove(slot);
+
+        // Summon Swarm (2nd level, a slot the test wizard's table has): the AI cannot place the swarm (ICastDecider.CanFill).
+        SpellData swarm = SpellDatabase.GetSpell(SpellNames.SUMMON_SWARM);
+        slot = new SpellSlot(swarm.SpellLevel, swarm.Clone(), false, "Wizard");
+        sc.SpellSlots.Add(slot);
+        caster.Actions.Reset();
+        SpellCastRequest swarmReq = SpellCastRequest.ForAIArea(caster, swarm, new HashSet<Vector2Int>(cells), new List<CharacterController>(), null);
+        cast = gm.RunCastSync(swarmReq, out outcome);
+        Assert(!cast && outcome.Reason == "choices-incomplete" && !slot.IsUsed && !caster.Actions.StandardActionUsed,
+            "AI area: a Summon Swarm, whose swarm the AI cannot place, is refused at Legality with nothing spent", "" + outcome);
+        sc.SpellSlots.Remove(slot);
     }
 
     private static void RunArea(GameManager gm, SpellcastingComponent sc, CharacterController caster, string spellId, bool quickened,

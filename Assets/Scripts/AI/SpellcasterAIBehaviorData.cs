@@ -69,6 +69,10 @@ namespace DND35.AI
         public bool CounterEnemySpells = true;
     }
 
+    /// <summary>
+    /// How the best aim of an area spell would land (SpellcasterAIProfile.EvaluateAOECast; batch 11 step 25: the aim
+    /// AreaAimSearch found, <see cref="Placement"/>, null when the caster has none).
+    /// </summary>
     public readonly struct SpellAOEEvaluation
     {
         public readonly bool IsSafe;
@@ -76,12 +80,25 @@ namespace DND35.AI
         public readonly int AlliesHit;
         public readonly float EffectiveAllyCasualties;
 
+        /// <summary>The allies a beneficial area (Bless) would help (AreaPlacement.AlliesBenefited).</summary>
+        public readonly int AlliesBenefited;
+
+        /// <summary>The aim evaluated, or null when the caster has no aim with value.</summary>
+        public readonly AreaPlacement Placement;
+
         public SpellAOEEvaluation(bool isSafe, int enemiesHit, int alliesHit, float effectiveAllyCasualties)
+            : this(isSafe, enemiesHit, alliesHit, effectiveAllyCasualties, 0, null)
+        {
+        }
+
+        public SpellAOEEvaluation(bool isSafe, int enemiesHit, int alliesHit, float effectiveAllyCasualties, int alliesBenefited, AreaPlacement placement)
         {
             IsSafe = isSafe;
             EnemiesHit = enemiesHit;
             AlliesHit = alliesHit;
             EffectiveAllyCasualties = effectiveAllyCasualties;
+            AlliesBenefited = alliesBenefited;
+            Placement = placement;
         }
     }
 }

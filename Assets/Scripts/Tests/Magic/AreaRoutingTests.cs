@@ -223,8 +223,10 @@ public static class AreaRoutingTests
                       && AoESystem.RoutesToArea(spell) && SpellRoutingGoldenTests.PcRoutingBranch(spell) == "aoe";
             Assert(ok, row.id + " has its PHB area and is routed to the area targeting (" + row.phb + ")",
                 spell == null ? "missing" : spell.TargetType + " " + spell.AoEShapeType + " " + spell.AoESizeSquares + " " + spell.AoEFilter + " " + spell.GetEffectiveRangeCategory());
-            // NPC area casting stays refused until batch 11 step 25 (AI-001).
-            Assert(spell != null && SpellRoutingGoldenTests.NpcRefusesOnData(spell), row.id + ": the NPC cast path still refuses an Area spell (AI-001, step 25)");
+            // An Area spell is aimed at a point: a single-target request of it is refused for every caster, and the AI casts it
+            // through an area request it aimed (batch 11 step 25, AI-001 area half).
+            Assert(spell != null && SpellRoutingGoldenTests.NpcRefusesOnData(spell) && AreaAimSearch.IsAreaCastForAI(spell),
+                row.id + ": a single-target request refuses it (area-needs-aim) and the AI casts it as an area (batch 11 step 25)");
         }
 
         SpellData bane = SpellDatabase.GetSpell(SpellNames.BANE);
@@ -249,8 +251,9 @@ public static class AreaRoutingTests
             passwall == null ? "missing" : passwall.TargetType + " " + SpellRoutingGoldenTests.PcRoutingBranch(passwall));
 
         SpellData prayer = SpellDatabase.GetSpell(SpellNames.PRAYER);
-        Assert(prayer != null && prayer.TargetType == SpellTargetType.Self && AoESystem.RoutesToArea(prayer) && !SpellRoutingGoldenTests.NpcRefusesOnData(prayer),
-            "Prayer (Self with a burst) is routed to the area targeting for a PC; the NPC path keeps its burst resolver (rules/prayer-cast)");
+        Assert(prayer != null && prayer.TargetType == SpellTargetType.Self && AoESystem.RoutesToArea(prayer) && SpellRoutingGoldenTests.NpcRefusesOnData(prayer)
+               && AreaAimSearch.IsAreaCastForAI(prayer),
+            "Prayer (Self with a burst) is routed to the area cast for every caster: the PC's area targeting, the AI's aim search; a single-target request refuses it (batch 11 step 25 review, rules/prayer-cast)");
     }
 
     // ── Wall of Thorns ────────────────────────────────────────────────────────────────────────────────────

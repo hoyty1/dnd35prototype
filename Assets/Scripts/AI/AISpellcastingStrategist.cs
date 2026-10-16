@@ -78,6 +78,9 @@ public static class AISpellcastingStrategist
     // T3.3: Area denial
     private const float WALL_SPLIT_BONUS = 20f;
     private const float AREA_DENIAL_BONUS = 12f;
+    // An area's aim (AreaAimSearch, batch 11 step 25): per point of placement score, for a caster with no profile (the
+    // profile's ScoreSpell adds 3 per enemy hit itself).
+    private const float AREA_PLACEMENT_VALUE = 3f;
 
     // T3.5: Metamagic
     private const float QUICKEN_BONUS = 8f;
@@ -1027,10 +1030,16 @@ public static class AISpellcastingStrategist
     //  T3.3: AREA DENIAL & BATTLEFIELD CONTROL
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// <summary>Score bonus for wall and area denial spells.</summary>
+    /// <summary>
+    /// Score bonus for wall and area denial spells. Since batch 11 step 25 an area spell the AI casts is judged on the aim
+    /// its search found (<paramref name="placement"/>, AreaAimSearch: the enemies its area would affect), not on every
+    /// enemy on the map; without a placement an area spell gets no area bonus (the AI does not cast it). Whether the caster
+    /// is outnumbered is still read from the whole fight.
+    /// </summary>
     public static float GetAreaDenialScore(
         CharacterController caster, SpellData spell,
-        List<CharacterController> allCombatants)
+        List<CharacterController> allCombatants,
+        AreaPlacement placement = null)
     {
         if (spell == null || caster == null) return 0f;
 
@@ -1038,7 +1047,7 @@ public static class AISpellcastingStrategist
 
         if (spell.EffectType == SpellEffectType.Wall)
         {
-            int enemyCount = CountEnemies(caster, allCombatants);
+            int enemyCount = placement != null ? placement.EnemiesHit : CountEnemies(caster, allCombatants);
 
             // Walls are valuable when enemies are clustered
             if (enemyCount >= 3) score += WALL_SPLIT_BONUS;
@@ -1060,9 +1069,9 @@ public static class AISpellcastingStrategist
             // Control is more valuable when outnumbered
             if (enemyCount > allyCount) score += AREA_DENIAL_BONUS;
 
-            // AoE control (Web, Entangle) scales with enemies
+            // AoE control (Web, Entangle) scales with the enemies its aim takes in (batch 11 step 25)
             bool isAoE = spell.TargetType == SpellTargetType.Area || spell.AoEShapeType != AoEShape.None;
-            if (isAoE && enemyCount >= 3) score += 10f;
+            if (isAoE && placement != null && placement.EnemiesHit >= 3) score += 10f;
         }
 
         return score;
@@ -1308,8 +1317,19 @@ public static class AISpellcastingStrategist
         // ── T3.2: Spell combos ──
         score += GetComboScore(caster, spell, allCombatants, gm);
 
-        // ── T3.3: Area denial ──
-        score += GetAreaDenialScore(caster, spell, allCombatants);
+        // ── T3.3: Area denial, on the area's best aim (batch 11 step 25) ──
+        // An area spell the AI casts is scored on the placement its aim search finds (AreaAimSearch; the profile's own
+        // ally sparing when it has one, which also adds the placement's value in SpellcasterAIProfile.ScoreSpell).
+        AreaPlacement placement = null;
+        if (gm != null && AreaAimSearch.IsAreaCastForAI(spell))
+        {
+            placement = profile != null
+                ? profile.FindAreaPlacement(spell, caster, allCombatants, gm)
+                : AreaAimSearch.FindBest(spell, caster, allCombatants, gm.Grid);
+            if (profile == null && placement != null)
+                score += AREA_PLACEMENT_VALUE * placement.Score;
+        }
+        score += GetAreaDenialScore(caster, spell, allCombatants, placement);
 
         // ── T3.4: Counterspell bonus ──
         score += GetCounterspellScore(caster, spell, allCombatants);

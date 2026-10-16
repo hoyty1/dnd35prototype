@@ -2682,26 +2682,31 @@ public partial class GameManager
         List<CharacterController> targets = ctx.Request.Aim.AreaTargets;
         HashSet<Vector2Int> aoeCells = ctx.Request.Aim.Cells;
         SpellcastingComponent spellComp = ctx.SpellComp;
+        // The request's own spell and metamagic, not the _pendingSpell and _pendingMetamagic forwarding properties, which
+        // read whichever cast is on top of the cast stack (batch 11 step 25: an NPC area cast runs nested over a Ui cast
+        // the player left open).
+        SpellData spell = ctx.Request.Spell;
+        MetamagicData metamagic = ctx.Request.Metamagic;
 
         if (aoeCells != null
-            && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(spell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
         {
             foreach (Vector2Int cell in aoeCells)
-                NotifyFireDamageAtPosition(cell, _pendingSpell.Name);
+                NotifyFireDamageAtPosition(cell, spell.Name);
         }
 
-        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Handler, "generic-area-loop");
+        CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "generic-area-loop");
 
         // Build the combat log header
         var logBuilder = new System.Text.StringBuilder();
-        string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
-                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" :
-                          _pendingSpell.AoEShapeType == AoEShape.Cube ? "cube" : "line";
+        string shapeStr = spell.AoEShapeType == AoEShape.Cone ? "cone" :
+                          spell.AoEShapeType == AoEShape.Burst ? "burst" :
+                          spell.AoEShapeType == AoEShape.Cube ? "cube" : "line";
         logBuilder.AppendLine($"═══════════════════════════════════");
-        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
-        logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
-        if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
-            logBuilder.AppendLine($"  Metamagic: {_pendingMetamagic.GetDisplayName()}");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {spell.Name}! ({spell.AoESizeSquares * 5}-ft {shapeStr})");
+        logBuilder.AppendLine($"  [{(spell.SpellLevel == 0 ? "Cantrip" : $"Level {spell.SpellLevel}")}] {spell.School}");
+        if (metamagic != null && metamagic.HasAnyMetamagic)
+            logBuilder.AppendLine($"  Metamagic: {metamagic.GetDisplayName()}");
         logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
         logBuilder.AppendLine();
 
@@ -2727,33 +2732,33 @@ public partial class GameManager
 
                 // For buff/debuff/control/illusion/wall spells, apply tracked effects. The area pipeline routes only
                 // the tracked effect types (SpellEffectRouting.IsTrackedEffectType), not the single-target extras.
-                if (SpellEffectRouting.IsTrackedEffectType(_pendingSpell.EffectType))
+                if (SpellEffectRouting.IsTrackedEffectType(spell.EffectType))
                 {
-                    var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+                    var appliedEffect = ApplySpellBuff(caster, target, spell, spellComp);
                     if (ScenarioHooks.CastStage != null)
-                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.Buff, (appliedEffect != null ? "applied " : "no-effect ") + target.Stats.CharacterName);
+                        CastStageTrace.Mark(caster, spell, CastStageTrace.Buff, (appliedEffect != null ? "applied " : "no-effect ") + target.Stats.CharacterName);
 
                     // Track concentration for the first target of a concentration AoE effect
-                    if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
+                    if (appliedEffect != null && spell.DurationType == DurationType.Concentration && targetIndex == 1)
                     {
-                        BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
+                        BeginConcentrationTracking(caster, appliedEffect, spell);
                     }
 
-                    string effectLabel = (_pendingSpell.EffectType == SpellEffectType.Debuff || _pendingSpell.EffectType == SpellEffectType.Control)
+                    string effectLabel = (spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control)
                         ? "DEBUFF APPLIED" : "BUFF APPLIED";
-                    logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
-                    Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
+                    logBuilder.AppendLine($"  {effectLabel}! {spell.Description}");
+                    Debug.Log($"[AoE] {spell.EffectType} applied to {target.Stats.CharacterName}");
                 }
                 // For damage spells, resolve with save and damage
-                else if (_pendingSpell.EffectType == SpellEffectType.Damage)
+                else if (spell.EffectType == SpellEffectType.Damage)
                 {
                     // The target's own decider says whether it gives up its save (PHB p.177; batch 11 step 18, SPL-149):
                     // never against a damage spell, so an ally in its own side's Burning Hands rolls its Reflex save.
                     bool aoeForceFailSave = ctx.TargetForgoesSave(target);
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target,
+                    SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, metamagic, false, aoeForceFailSave, caster, target,
                         areaDamageRoll: areaDamageRoll);
                     if (ScenarioHooks.CastStage != null)
-                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
+                        CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
                     if (result.RequiredSave)
                     {
@@ -2787,14 +2792,14 @@ public partial class GameManager
                     }
                 }
                 // For healing spells
-                else if (_pendingSpell.EffectType == SpellEffectType.Healing)
+                else if (spell.EffectType == SpellEffectType.Healing)
                 {
                     // A living creature of the caster's side gives up its save against a healing spell (PHB p.177); an
                     // undead one does not (SpellSaveRules.IsHarmlessOrBeneficialTo; batch 11 step 18).
                     bool aoeHealForceFailSave = ctx.TargetForgoesSave(target);
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
+                    SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, metamagic, false, aoeHealForceFailSave, caster, target);
                     if (ScenarioHooks.CastStage != null)
-                        CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
+                        CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
                     logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
                     if (result.EmpowerBonus > 0)

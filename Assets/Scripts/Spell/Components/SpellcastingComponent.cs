@@ -3349,4 +3349,29 @@ public class SpellcastingComponent : MonoBehaviour
         if (metamagic == null || !metamagic.HasAnyMetamagic) return spell.SpellLevel;
         return metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Scenario harness seam (editor only, batch 11 step 25): widens <paramref name="className"/>'s slot table to
+    /// <paramref name="level"/>, so a slot a scenario added at that level counts for the slot test (CanCast reads the
+    /// table, which for a wizard stops at 2nd level, SPL-041). Then resyncs the remaining counts from the slots.
+    /// </summary>
+    internal void Harness_WidenClassSlotTable(string className, int level)
+    {
+        if (string.IsNullOrEmpty(className) || level < 0)
+            return;
+        _slotsMaxByClass.TryGetValue(className, out int[] max);
+        if (max == null || max.Length <= level)
+        {
+            int[] widened = new int[level + 1];
+            if (max != null)
+                System.Array.Copy(max, widened, max.Length);
+            _slotsMaxByClass[className] = widened;
+        }
+        int[] table = _slotsMaxByClass[className];
+        table[level] = Mathf.Max(table[level], SpellSlots.Count(sl => sl != null && sl.Level == level
+            && string.Equals(sl.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase)));
+        SyncSlotsRemainingFromSpellSlots();
+    }
+#endif
 }

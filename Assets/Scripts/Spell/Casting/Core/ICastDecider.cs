@@ -55,6 +55,16 @@ public interface ICastDecider
     bool IsSynchronous { get; }
 
     /// <summary>
+    /// Whether this decider can make every choice <paramref name="req"/> needs (batch 11 step 25): a capability of the
+    /// decider, not a rule. The UI decider can (the player places walls, picks Grease's object and a swarm's square);
+    /// the AI decider cannot yet place a wall's ends (Wall of Fire, Wall of Ice, Wall of Force), grease a held object or
+    /// worn armor, or place a summoned swarm (AiCastDecider.CanFill; AI follow-ups in docs/systems/AI.md). The Legality
+    /// stage (GameManager.CheckLegality) refuses a request whose decider cannot fill it ("choices-incomplete"), before
+    /// anything is spent.
+    /// </summary>
+    bool CanFill(SpellCastRequest req);
+
+    /// <summary>
     /// Makes the caster's choices the cast still lacks (Legality stage, after the target test and before the component
     /// test). A decider that asks returns <see cref="CastChoiceFill.Suspended"/>; one that refuses logs why.
     /// </summary>

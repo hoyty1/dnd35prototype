@@ -9,7 +9,9 @@ using System;
 /// <see cref="SpellCastRequest.ForUiSummon"/>, <see cref="SpellCastRequest.ForUiGrease"/> and
 /// <see cref="SpellCastRequest.ForUiHoldCharge"/> set <see cref="LegacyCastQuirkSets.UiSummonPath"/>,
 /// <see cref="LegacyCastQuirkSets.UiGreasePath"/> and <see cref="LegacyCastQuirkSets.UiHoldPath"/>, and
-/// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one); only the cast core's stage
+/// <see cref="SpellCastRequest.ForAI"/> sets <see cref="LegacyCastQuirkSets.AiPath"/>, the NPC one, and
+/// <see cref="SpellCastRequest.ForAIArea"/> and <see cref="SpellCastRequest.ForAIGrease"/> the NPC area and Grease ones,
+/// <see cref="LegacyCastQuirkSets.AiAreaPath"/> and <see cref="LegacyCastQuirkSets.AiGreasePath"/>); only the cast core's stage
 /// methods (Spell/Resolution/GameManager.CastCore.cs) read them. A RAW-fix step removes a family of bits on every path at
 /// once. A bit whose RAW behaviour the core does not have yet is required by the stage that would need it: a request
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
@@ -95,11 +97,10 @@ public enum LegacyCastQuirk : long
     // every single-target cast meets one range test (CasterLevelRules.InRange: the cast's caster level, to the target's
     // nearest square).
 
-    /// <summary>
-    /// The Legality stage refuses every spell whose target type is Area (AI-001; Tests.Magic.SpellRoutingGoldenTests
-    /// mirrors this data refusal). Batch 11 step 25 (npc-area-casting) lets NPCs cast area spells and removes the bit.
-    /// </summary>
-    NpcRefusesArea = 1 << 17,
+    // Bit 17 is unused: NpcRefusesArea (AI-001) was removed by batch 11 step 25 (npc-area-casting); the AI aims an area
+    // spell (AreaAimSearch) and casts it through the area resolve (SpellCastRequest.ForAIArea, ForAIGrease), and a
+    // single-target request of an Area spell is refused for every caster ("area-needs-aim": an area spell is aimed at a
+    // point, PHB p.175; Tests.Magic.SpellRoutingGoldenTests mirrors this data refusal).
 
     // Bit 18 is unused: NpcNullMetamagic (AI-001) was removed by batch 11 step 21 (metamagic-legality-and-slots); an NPC
     // cast carries its prepared metamagic slot's metamagic (SpellCastRequest.ForAI) or a Scripted step's, and meets the
@@ -231,7 +232,7 @@ public enum LegacyCastQuirk : long
     EffectResolveSkipsCombatEndCheck = 1L << 53,
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9 and 10; trimmed by steps 11 to 18).</summary>
+/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9, 10 and 25; trimmed by steps 11 to 18 and 25).</summary>
 public static class LegacyCastQuirkSets
 {
     /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
@@ -248,7 +249,6 @@ public static class LegacyCastQuirkSets
     public const LegacyCastQuirk AiPath =
         (UiPath & ~LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
         | LegacyCastQuirk.NpcOwnLegalityChecks
-        | LegacyCastQuirk.NpcRefusesArea
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;
@@ -264,6 +264,17 @@ public static class LegacyCastQuirkSets
                     | LegacyCastQuirk.HeldChargeDeliveryIsFree))
         | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
         | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
+
+    /// <summary>
+    /// The NPC area path (batch 11 step 25, SpellCastRequest.ForAIArea: an area the AI aimed with AreaAimSearch, through
+    /// the same area resolve as the PC's): the PC area path's bits plus the NPC path's own caster tests
+    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160: a standard action, a caster that can cast, a slot;
+    /// refusals unlogged). The NPC wrapper runs its combat-end check after the cast as well, which finds the combat over
+    /// when the area handler's own check ended it. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk AiAreaPath =
+        UiAreaPath
+        | LegacyCastQuirk.NpcOwnLegalityChecks;
 
     /// <summary>
     /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the missing combat-end check (the
@@ -289,6 +300,15 @@ public static class LegacyCastQuirkSets
     /// </summary>
     public const LegacyCastQuirk UiGreasePath =
         UiEffectPathShared;
+
+    /// <summary>
+    /// The NPC Grease path (batch 11 step 25, SpellCastRequest.ForAIGrease: Grease on a 10-ft. square the AI aimed): the PC
+    /// Grease path's bits plus the NPC path's own caster tests (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>,
+    /// SPL-160). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// </summary>
+    public const LegacyCastQuirk AiGreasePath =
+        UiGreasePath
+        | LegacyCastQuirk.NpcOwnLegalityChecks;
 
     /// <summary>
     /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10;

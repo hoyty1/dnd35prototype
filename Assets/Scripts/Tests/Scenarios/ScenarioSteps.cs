@@ -211,7 +211,9 @@ namespace Tests.Scenarios
         /// <summary>
         /// Casts a prepared spell at <paramref name="target"/>. Scripted: TryNPCPerformSpellCastForAI with a clone of the
         /// database spell (never the template) and <paramref name="metamagic"/> (batch 11 step 21: the NPC path casts it as
-        /// the PC menu does). Ui: the cast menu with the first unused prepared slot holding that spell, with
+        /// the PC menu does); an area spell (AreaAimSearch.IsAreaCastForAI, Prayer's burst included) goes through
+        /// TryNPCPerformAreaSpellCastForAI at the aim search's best aim whose area holds the target (batch 11 step 25
+        /// review). Ui: the cast menu with the first unused prepared slot holding that spell, with
         /// <paramref name="metamagic"/> as the menu passes it (a prepared slot's, or a spontaneous caster's panel choice),
         /// then the target square (or, for a self-centered burst such as Prayer, the preview's confirmation).
         /// </summary>
@@ -680,6 +682,18 @@ namespace Tests.Scenarios
                         string preC = Preconditions(a, null);
                         // The step's metamagic goes with the cast (batch 11 step 21): the NPC path applies it as the PC menu
                         // does and spends the slot or spell per day the metamagic spell takes.
+                        if (AreaAimSearch.IsAreaCastForAI(template))
+                        {
+                            // An area spell (Prayer's burst; batch 11 step 25 review) goes through the NPC area cast, as
+                            // the AI casts it: the best of the aim search's aims whose area takes in the step's target.
+                            SpellData areaSpell = template.Clone();
+                            AreaPlacement aim = ScriptedAreaAim(gm, a, areaSpell, target, s.Metamagic);
+                            if (aim == null) { ok = false; note = "no aim of " + s.SpellId + " takes in " + s.Target; break; }
+                            ok = gm.TryNPCPerformAreaSpellCastForAI(a, areaSpell, aim, s.Metamagic);
+                            if (ok == false) note = "area executor returned false (" + preC + ")";
+                            yield return null;
+                            break;
+                        }
                         ok = gm.TryNPCPerformSpellCastForAI(a, target, template.Clone(), s.Metamagic);
                         if (ok == false) note = "executor returned false (" + preC + ")";
                         yield return null;
@@ -728,6 +742,21 @@ namespace Tests.Scenarios
             }
             sb.Append(", grappled=").Append(a.HasCondition(CombatConditionType.Grappled));
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// A Scripted cast step's aim for an area spell (batch 11 step 25 review): of the AI aim search's aims
+        /// (AreaAimSearch.Search, on the clone the cast will use, its metamagic applied), the best (AreaAimSearch.IsBetter)
+        /// whose area takes in <paramref name="target"/>, worthwhile or not, since the script chose the cast. Null when none does.
+        /// </summary>
+        private static AreaPlacement ScriptedAreaAim(GameManager gm, CharacterController caster, SpellData spell, CharacterController target, MetamagicData metamagic)
+        {
+            SpellData searched = gm.BuildAiAreaRequest(caster, spell, null, metamagic).Spell;
+            AreaPlacement best = null;
+            foreach (AreaPlacement p in AreaAimSearch.Search(searched, caster, gm.GetAllCharactersForAI(), gm.Grid))
+                if (AoESystem.IsCreatureInCells(p.Cells, target) && (best == null || AreaAimSearch.IsBetter(p, best)))
+                    best = p;
+            return best;
         }
     }
 

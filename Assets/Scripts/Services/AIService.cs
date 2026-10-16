@@ -2752,8 +2752,10 @@ public class AIService : MonoBehaviour
     /// NPC cast path refuses (TryNPCPerformSpellCastForAI false: nothing spent) passes to the next candidate, at most
     /// <see cref="AiSpellCandidates.MaxTries"/> tries (AI-063, single-target part). A spell too risky to cast while
     /// threatened (AISpellcastingStrategist.EvaluateDefensiveCasting) or with no legal target is skipped and costs no try.
-    /// Area, summon and escape spells stay out as before (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive; the NPC
-    /// path refuses an area spell, AI-001).
+    /// Since batch 11 step 25 (AI-001 area half) an area spell is a candidate too, aimed at the best placement its aim
+    /// search found (AreaAimSearch, through the profile's ally sparing) and cast through the area resolve
+    /// (GameManager.TryNPCPerformAreaSpellCastForAI), within the same cap; one with no legal, worthwhile placement is not
+    /// a candidate. Summon and escape spells stay out as before (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive).
     /// </summary>
     /// <param name="allow">Optional filter on the candidate spells (the dragon turn's cast-first step, AI-037); null allows all.</param>
     /// <param name="minScore">A candidate must score above this to be chosen; the default keeps the old no-floor choice.</param>
@@ -2773,7 +2775,7 @@ public class AIService : MonoBehaviour
         List<SpellData> castableSpells = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
         int castableCount = castableSpells != null ? castableSpells.Count : 0;
 
-        List<AiScoredSpell> scored = ScoreCastableSpells(caster, fallbackTarget, allow, minScore);
+        List<AiScoredSpell> scored = ScoreCastableSpells(caster, fallbackTarget, allow, minScore, logAreaSkips: true);
         if (scored.Count == 0)
         {
             Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} has no castable spell choice. castablePrepared={castableCount}");
@@ -2783,6 +2785,20 @@ public class AIService : MonoBehaviour
         bool casted = AiSpellCandidates.TryInOrder(RankedSpellCandidates(caster, fallbackTarget, scored), AiSpellCandidates.MaxTries, candidate =>
         {
             SpellData spell = candidate.Spell;
+            if (candidate.Placement != null)
+            {
+                // An area the AI aimed (batch 11 step 25): the same cast core as a PC's area cast.
+                AreaPlacement aim = candidate.Placement;
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name} as an area at {aim}, castablePrepared={castableCount}");
+                if (!_gameManager.TryNPCPerformAreaSpellCastForAI(caster, spell, aim))
+                {
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} at {aim} (refused, nothing spent); trying the next candidate.");
+                    return false;
+                }
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} at {aim}");
+                return true;
+            }
+
             CharacterController spellTarget = candidate.Target;
             int targetDistance = CasterLevelRules.DistanceToTarget(caster, spellTarget);
             int spellRange = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
@@ -2825,6 +2841,13 @@ public class AIService : MonoBehaviour
             }
             if (defensiveResult == 1)
                 Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} will cast {spell.Name} defensively (threatened in melee).");
+
+            // An area spell carries the placement its search found (ScoreCastableSpells; batch 11 step 25).
+            if (scored[i].Placement != null)
+            {
+                yield return new AiSpellCandidate(spell, null, scored[i].Score, scored[i].Placement);
+                continue;
+            }
 
             CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
             if (spellTarget == null)
@@ -2877,17 +2900,65 @@ public class AIService : MonoBehaviour
         return HasCreatureTag(caster, "AI:MagicMissileOnly");
     }
 
-    /// <summary>A castable spell and its score (<see cref="ScoreCastableSpells"/>).</summary>
+    /// <summary>
+    /// A castable spell and its score (<see cref="ScoreCastableSpells"/>), with the aim of an area spell (batch 11 step 25).
+    /// </summary>
     private readonly struct AiScoredSpell
     {
         public readonly SpellData Spell;
         public readonly float Score;
+        public readonly AreaPlacement Placement;
 
-        public AiScoredSpell(SpellData spell, float score)
+        public AiScoredSpell(SpellData spell, float score, AreaPlacement placement = null)
         {
             Spell = spell;
             Score = score;
+            Placement = placement;
         }
+    }
+
+    /// <summary>
+    /// The aim the AI would cast area spell <paramref name="spell"/> at (batch 11 step 25, AI-001 area half), or null, and
+    /// then the spell is no candidate (no fallback): a choice the AI decider cannot make (a wall's ends, a swarm's square;
+    /// ICastDecider.CanFill), no worthwhile placement (AreaAimSearch, through <paramref name="profile"/>'s ally sparing
+    /// when it has one, SpellcasterAIProfile.FindAreaPlacement), or a placement the cast core's Legality refuses
+    /// (GameManager.CheckAreaLegalityForAI: the origin's range and line of effect, the NPC caster tests, the metamagic,
+    /// the casting action, Silence and the components). The search runs on the clone the cast will use (its metamagic
+    /// applied), which comes back in <paramref name="castSpell"/> so the spell is scored on the same footprint (batch 11
+    /// step 25 review). The skip lines are logged only when <paramref name="log"/> (the cast's own walk, not every planning
+    /// call of SelectSpell).
+    /// </summary>
+    private AreaPlacement FindAreaPlacementForAI(CharacterController caster, SpellData spell, SpellcasterAIProfile profile,
+        List<CharacterController> allCombatants, bool log, out SpellData castSpell)
+    {
+        castSpell = null;
+        if (_gameManager == null || caster == null || spell == null)
+            return null;
+        SpellCastRequest probe = _gameManager.BuildAiAreaRequest(caster, spell, null, null);
+        castSpell = probe.Spell;
+        if (probe.Decider != null && !probe.Decider.CanFill(probe))
+        {
+            if (log)
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: skips {spell.Name}, whose choices the AI cannot make yet (choices-incomplete).");
+            return null;
+        }
+        AreaPlacement placement = profile != null
+            ? profile.FindAreaPlacement(probe.Spell, caster, allCombatants, _gameManager)
+            : AreaAimSearch.FindBest(probe.Spell, caster, allCombatants, _gameManager.Grid);
+        if (placement == null)
+        {
+            if (log)
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: no worthwhile aim for {spell.Name}; it is not a candidate.");
+            return null;
+        }
+        CastOutcome legality = _gameManager.CheckAreaLegalityForAI(caster, spell, placement);
+        if (legality.Kind == CastOutcomeKind.Refused)
+        {
+            if (log)
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: the aim of {spell.Name} at {placement} is refused ({legality.Reason}).");
+            return null;
+        }
+        return placement;
     }
 
     /// <summary>
@@ -2909,12 +2980,15 @@ public class AIService : MonoBehaviour
     /// AISpellcastingStrategist.ScoreSpellComprehensive), best first; equal scores keep the spell list's order, so the
     /// first is the spell the old single pick chose. Left out: a spell <paramref name="allow"/> refuses, one scoring
     /// <paramref name="minScore"/> or less, one with no modelled effect (SPL-135) or a choice the AI cannot give
-    /// (SPL-091), a buff already running, and one the cast core's caster tests refuse
+    /// (SPL-091), a buff already running, one the cast core's caster tests refuse
     /// (GameManager.CheckCasterLegalityForAI: the metamagic, the casting action, Silence, the components; batch 11
-    /// step 22, the same CheckLegality the cast runs).
+    /// step 22, the same CheckLegality the cast runs), and an area spell with no legal, worthwhile aim
+    /// (<see cref="FindAreaPlacementForAI"/>, batch 11 step 25), whose aim is kept with its score. An area spell is scored
+    /// on the clone its cast uses (a prepared metamagic slot's metamagic applied), the one its aim was searched on.
+    /// <paramref name="logAreaSkips"/>: log why an area spell is no candidate (the cast's walk only).
     /// </summary>
     private List<AiScoredSpell> ScoreCastableSpells(CharacterController caster, CharacterController target,
-        Func<SpellData, bool> allow, float minScore)
+        Func<SpellData, bool> allow, float minScore, bool logAreaSkips = false)
     {
         var result = new List<AiScoredSpell>();
         if (caster == null || caster.Stats == null)
@@ -2983,6 +3057,19 @@ public class AIService : MonoBehaviour
                      || CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
                 continue;
 
+            // An area spell (batch 11 step 25, AI-001 area half): a candidate only with a legal, worthwhile aim, which it
+            // keeps for the cast. Without a GameManager (a static test) area spells are no candidates.
+            AreaPlacement placement = null;
+            SpellData scoredSpell = spell;
+            if (AreaAimSearch.IsAreaCastForAI(spell))
+            {
+                placement = FindAreaPlacementForAI(caster, spell, spellcasterProfile, allCombatants, logAreaSkips, out SpellData castSpell);
+                if (placement == null)
+                    continue;
+                if (castSpell != null)
+                    scoredSpell = castSpell;
+            }
+
             // ── Buff-already-active check ──
             // D&D 3.5e: Same spell doesn't stack — skip buff/illusion spells already active on the caster.
             // This prevents AI from wasting actions and spell slots recasting Mage Armor, Shield,
@@ -3008,17 +3095,17 @@ public class AIService : MonoBehaviour
 
             if (spellcasterProfile != null)
             {
-                score = spellcasterProfile.ScoreSpell(spell, caster, target, allCombatants, _gameManager);
+                score = spellcasterProfile.ScoreSpell(scoredSpell, caster, target, allCombatants, _gameManager);
             }
             else
             {
                 // ── Comprehensive scoring for non-profile casters (Tiers 1–4) ──
                 score = AISpellcastingStrategist.ScoreSpellComprehensive(
-                    spell, caster, target, allCombatants, _gameManager);
+                    scoredSpell, caster, target, allCombatants, _gameManager);
             }
 
             if (score > minScore)
-                result.Add(new AiScoredSpell(spell, score));
+                result.Add(new AiScoredSpell(spell, score, placement));
         }
 
         // Best first; a stable sort keeps the list order among equal scores (the old pick took the first best).

@@ -432,14 +432,18 @@ public static class SpellComponentRulesTests
             csc.SpellSlots.Clear();
             AddSlot(csc, SpellNames.BLESS, "Cleric");
             cleric.Actions.Reset();
-            SpellCastRequest blessNoSymbol = SpellCastRequest.ForUi(cleric, Spell(SpellNames.BLESS), null, new CastSource());
-            blessNoSymbol.Aim.Target = cleric;
+            // Bless is an area (the 50-ft. burst on the caster, PHB p.205): an area request, as the PC's area cast builds it
+            // (a single-target request of an Area spell is refused, area-needs-aim, batch 11 step 25).
+            SpellCastRequest blessNoSymbol = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(cleric, Spell(SpellNames.BLESS), null, new CastSource()),
+                new List<CharacterController> { cleric }, new HashSet<Vector2Int> { cleric.GridPosition }, AoESystem.GetCreatureCentredOrigins(cleric)[0]);
             CastOutcome noSymbol = gm.CheckLegality(blessNoSymbol);
             Assert(noSymbol.Kind == CastOutcomeKind.Refused && noSymbol.Reason == SpellComponentRules.ReasonNoDivineFocus,
                 "A PC cleric without a holy symbol is refused Bless at Legality (DF, PHB p.174)", "" + noSymbol);
             SpellComponentKit.Give(cleric.Stats, cleric.GetInventoryData());
-            SpellCastRequest blessWithSymbol = SpellCastRequest.ForUi(cleric, Spell(SpellNames.BLESS), null, new CastSource());
-            blessWithSymbol.Aim.Target = cleric;
+            // Bless is an area (the 50-ft. burst on the caster, PHB p.205): an area request, as the PC's area cast builds it
+            // (a single-target request of an Area spell is refused, area-needs-aim, batch 11 step 25).
+            SpellCastRequest blessWithSymbol = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(cleric, Spell(SpellNames.BLESS), null, new CastSource()),
+                new List<CharacterController> { cleric }, new HashSet<Vector2Int> { cleric.GridPosition }, AoESystem.GetCreatureCentredOrigins(cleric)[0]);
             CastOutcome withSymbol = gm.CheckLegality(blessWithSymbol);
             Assert(withSymbol.Kind == CastOutcomeKind.Resolved, "With the kit's holy symbol the cleric may cast Bless", "" + withSymbol);
         }
