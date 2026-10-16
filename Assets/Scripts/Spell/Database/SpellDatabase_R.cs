@@ -127,7 +127,6 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.REDUCE_PERSON,
                     Name = "Reduce Person",
-                    HasMaterialComponent = true, // M: powdered iron (common — covered by spell component pouch)
                     Description = "Humanoid creature halves in size. -2 STR, +2 DEX, +1 AC/attack (size). 1 min/level. Components: V, S, M (powdered iron). PHB p.269",
                     SpellLevel = 1, School = "Transmutation",
                     ClassList = new[] { "Wizard" },
@@ -373,7 +372,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true
                 });
 
         RegisterClassSpellAlias("rainbow_pattern_brd", SpellNames.RAINBOW_PATTERN, "Bard", 4);
@@ -472,7 +470,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = false,
                     IsPlaceholder = false
                 });
 
@@ -548,7 +545,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: 10,000 gp diamond
                     IsPlaceholder = false
                 });
 

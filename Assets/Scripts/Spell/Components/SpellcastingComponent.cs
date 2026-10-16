@@ -2637,11 +2637,22 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get list of prepared spells that can currently be cast (have slots available).
-    /// This is the primary method used by the spell casting UI during combat and the AI candidate list.
-    /// A 0-level spell is included only while one of its slots is unspent (SPL-138).
+    /// The prepared (or known) spells the creature can cast now (the AI's candidate list): a slot or spell per day left
+    /// (a 0-level spell only while one of its slots is unspent, SPL-138), a form that can cast
+    /// them (wild shape), and the components the spell needs (SpellComponentRules, batch 11 step 17: the one rule the
+    /// cast core's Legality stage applies, so the AI never picks a spell it would be refused for want of a pouch or a
+    /// divine focus).
     /// </summary>
     public List<SpellData> GetCastablePreparedSpells()
+    {
+        List<SpellData> castable = CollectCastablePreparedSpells();
+        var owner = GetComponent<CharacterController>();
+        if (owner != null)
+            castable.RemoveAll(spell => spell != null && SpellComponentRules.Refusal(owner, spell, null, out _) != null);
+        return castable;
+    }
+
+    private List<SpellData> CollectCastablePreparedSpells()
     {
         var castable = new List<SpellData>();
 
@@ -2687,16 +2698,34 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if the character has at least one prepared spell they can cast.
+    /// Whether the creature can cast at least one spell now: a slot or spell per day left, a form that can cast it, and
+    /// its components (SpellComponentRules, batch 11 step 17), for a prepared and a spontaneous caster alike; the same
+    /// answer as a non-empty <see cref="GetCastablePreparedSpells"/>. The AI's "can still cast" tests ask it. The PC's
+    /// Cast Spell button asks <see cref="HasAnySpellWithSlotLeft"/> instead, so a spell refused for its components is
+    /// refused with a log line when picked (GameManager.OnSpellSelectedWithMetamagic).
     /// </summary>
     public bool HasAnyCastablePreparedSpell()
     {
+        var owner = GetComponent<CharacterController>();
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             // Any slot, 0-level included, with a spell and not used (SPL-138), that the current form can cast
-            return SpellSlots.Any(s => s.CanCast && !IsBlockedByWildShape(s.PreparedSpell, s.AppliedMetamagic));
+            return SpellSlots.Any(s => s.CanCast && !IsBlockedByWildShape(s.PreparedSpell, s.AppliedMetamagic)
+                                       && (owner == null || SpellComponentRules.Refusal(owner, s.PreparedSpell, null, out _) == null));
         }
         return GetCastablePreparedSpells().Count > 0;
+    }
+
+    /// <summary>
+    /// <see cref="HasAnyCastablePreparedSpell"/> without the component test: a slot or spell per day left that the
+    /// current form can cast. The PC's Cast Spell button (ActionButtonPanel, GameManager.OnCastSpellButtonPressed) asks
+    /// it, so the spell menu opens and a spell the PC lacks the components for is refused with its reason when picked.
+    /// </summary>
+    public bool HasAnySpellWithSlotLeft()
+    {
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
+            return SpellSlots.Any(s => s.CanCast && !IsBlockedByWildShape(s.PreparedSpell, s.AppliedMetamagic));
+        return CollectCastablePreparedSpells().Count > 0;
     }
 
     // ========== SLOT MANAGEMENT ==========
@@ -2705,7 +2734,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// Check if the character can cast a specific spell (has slots remaining), 0-level spells included (SPL-138).
     /// One availability predicate for PCs and NPCs (SPL-123): the NPC cast executor and the counterspell
     /// availability check (CharacterController.HasSpellAvailableForCounter) ask it directly; the PC combat menu's
-    /// Cast Spell button (ActionButtonPanel, through HasAnyCastablePreparedSpell) and the AI candidate list
+    /// Cast Spell button (ActionButtonPanel, through HasAnySpellWithSlotLeft) and the AI candidate list
     /// (AIService.SelectSpell) go through <see cref="GetCastablePreparedSpells"/>, and the character sheet through
     /// <see cref="CanCastSpell"/> (which adds the Silence test), both of which call it for a spontaneous caster.
     /// </summary>

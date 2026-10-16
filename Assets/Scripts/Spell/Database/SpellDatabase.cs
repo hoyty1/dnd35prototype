@@ -100,6 +100,10 @@ public static partial class SpellDatabase
 
         spell.EnsureAvailabilityFromLegacyClassList();
 
+        // The material, focus and divine focus flags come from the spell's PHB Components line (batch 11 step 17).
+        if (!SpellComponentLines.Apply(spell))
+            Debug.LogWarning($"[SpellDatabase] {spell.SpellId} has no Components line in SpellComponentLines; it is cast with no material, focus or divine focus component. Add its PHB line.");
+
         // SPL-002: a spell that sets only the legacy BuffDurationRounds would keep the Instantaneous default and get a
         // 0-round effect. Every registered spell now sets its PHB duration; this catches a new one that does not.
         if (SpellDurationRules.NormalizeLegacyDuration(spell))

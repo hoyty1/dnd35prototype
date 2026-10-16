@@ -62,7 +62,6 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.ENLARGE_PERSON,
                     Name = "Enlarge Person",
-                    HasMaterialComponent = true, // M: powdered iron (common — covered by spell component pouch)
                     Description = "Humanoid creature doubles in size. +2 STR, -2 DEX, -1 AC/attack (size). Duration 1 min/level. Components: V, S, M (powdered iron). PHB p.226",
                     SpellLevel = 1, School = "Transmutation",
                     ClassList = new[] { "Wizard" },
@@ -265,7 +264,6 @@ public static partial class SpellDatabase
                         + "Tentacles grapple creatures in the area each round (grapple mod = CL + 8). "
                         + "Grappled creatures take 1d6+4 bludgeoning damage per round. "
                         + "Duration 1 round/level (D). Components: V, S, M (tentacle piece). PHB p.228",
-                    HasMaterialComponent = true, // M: tentacle from giant octopus/squid (common — covered by spell component pouch)
                     SpellLevel = 4,
                     School = "Conjuration (Creation)",
                     AvailableFor = new List<SpellAvailability>
@@ -336,7 +334,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasDivineFocus = true, // V, S, DF (PHB p.225): no material component
                     IsPlaceholder = false
                 });
 

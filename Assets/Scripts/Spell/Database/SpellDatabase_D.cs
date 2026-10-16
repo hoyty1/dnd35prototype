@@ -820,7 +820,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = false, // V only
-                    HasMaterialComponent = false,
                     IsPlaceholder = false
                 });
 
@@ -1042,7 +1041,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true,
                     IsPlaceholder = false
                 });
 

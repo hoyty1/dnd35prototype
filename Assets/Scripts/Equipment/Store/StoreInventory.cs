@@ -100,6 +100,16 @@ public class StoreInventory : MonoBehaviour
         // Spell Components
         Add(ItemID.ComponentSpellPouch, "Spell Component", 5);
         Add(ItemID.ComponentDiamondDust, "Spell Component", 250);
+        // Divine focuses (PHB p.128-130) and the priced foci of the spells in SpellComponentRegistry (batch 11 step 17).
+        Add(ItemID.HolySymbolWooden, "Spell Component", 1);
+        Add(ItemID.HolySymbolSilver, "Spell Component", 25);
+        Add(ItemID.UnholySymbolWooden, "Spell Component", 1);
+        Add(ItemID.UnholySymbolSilver, "Spell Component", 25);
+        Add(ItemID.HollyAndMistletoe, "Spell Component", 0);
+        Add(ItemID.FocusAuguryTokens, "Spell Component", 25);
+        Add(ItemID.FocusPlatinumRings, "Spell Component", 100);
+        Add(ItemID.FocusReliquary, "Spell Component", 500);
+        Add(ItemID.FocusDiamond1000, "Spell Component", 1000);
 
         // Adventuring gear / misc
         Add(ItemID.AmmoCrossbowBolts20, "Ammunition", 1);

@@ -127,7 +127,6 @@ public static class CastCoreStageOrderTests
         LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
         LegacyCastQuirk.NpcRefusesArea,                          // AI-001
         LegacyCastQuirk.NpcNullMetamagic,                        // AI-001, SPL-038
-        LegacyCastQuirk.NpcNoComponentCheck,                     // SPL-114
         LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
         LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
         LegacyCastQuirk.NpcNoMirrorImageSwap,                    // SPL-117
@@ -520,6 +519,10 @@ public static class CastCoreStageOrderTests
         caster.Actions.Reset();
 
         SpellCastRequest req = SpellCastRequest.ForAI(caster, target, template);
+        // The test wizard carries no component pouch (the request's own clone), as for the UI-path requests: since batch
+        // 11 step 17 the AI path makes the component test too (SpellComponentRulesTests covers it).
+        req.Spell.HasMaterialComponent = false;
+        req.Spell.HasFocusComponent = false;
         if (events != null)
             req.Decider = new RecordingAiDecider(events);
         return req;
@@ -1857,7 +1860,8 @@ public static class CastCoreStageOrderTests
     /// <summary>
     /// The spell component pouch test on every PC path (batch 11 step 15; SPL-006, SPL-146; PHB p.174, p.130): an area
     /// Sleep, a Grease, a Summon Monster I and a hold of a touch spell given a material component are refused at Legality
-    /// by a caster without a pouch, with nothing spent. NPC casts still skip it (NpcNoComponentCheck, step 17).
+    /// by a caster without a pouch, with nothing spent. Since batch 11 step 17 NPC casts make the same test
+    /// (SpellComponentRulesTests).
     /// </summary>
     private static void TestPouchOnEveryPath(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
     {
@@ -1925,8 +1929,8 @@ public static class CastCoreStageOrderTests
             SpellCastRequest wizardCast = SpellCastRequest.ForUi(caster, sleet, null, new CastSource());
             SpellCastRequest.ForUiArea(wizardCast, new List<CharacterController>(), new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) });
             CastOutcome wizardLegality = gm.CheckLegality(wizardCast);
-            Assert(druidCast.Spell.HasMaterialComponent && druidLegality.Reason != "no-component-pouch" && wizardLegality.Reason == "no-component-pouch",
-                "Step 15: a pouchless druid's area Sleet Storm is not refused for the pouch; a pouchless wizard's is",
+            Assert(druidCast.Spell.HasMaterialComponent && druidLegality.Reason == SpellComponentRules.ReasonNoDivineFocus && wizardLegality.Reason == "no-component-pouch",
+                "Step 15: a pouchless druid's area Sleet Storm is not refused for the pouch but, since step 17, for its divine focus (holly and mistletoe); a pouchless wizard's is refused for the pouch",
                 druidLegality + " / " + wizardLegality);
         }
         finally

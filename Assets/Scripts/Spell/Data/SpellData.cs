@@ -476,13 +476,22 @@ public class SpellData
     public bool ProvokesAoO;            // Most spells provoke AoO (true by default)
     public bool HasVerbalComponent = true; // Most spells include verbal components unless explicitly overridden.
     public bool HasSomaticComponent = true; // Most spells include somatic components unless explicitly overridden.
-    public bool HasMaterialComponent = false; // Whether the spell requires a material component.
-    public bool HasDivineFocus = false; // Whether the spell uses a divine focus component.
+    // The material, focus and divine focus flags below come from the spell's PHB Components line
+    // (SpellComponentLines.Apply, run by SpellDatabase.Register; batch 11 step 17): a spell block does not set them.
+    public bool HasMaterialComponent = false; // M, or the arcane side of M/DF (PHB p.174).
+    /// <summary>F, or the arcane side of F/DF (PHB p.174): a focus, not consumed (SpellComponentRules).</summary>
+    public bool HasFocusComponent = false;
+    public bool HasDivineFocus = false; // DF, alone or as the divine side of M/DF or F/DF (PHB p.174).
     /// <summary>
     /// "M/DF" on the Components line (PHB p.175): the arcane version needs the material component, the divine version a
     /// divine focus instead (<see cref="CastComponentRules.DivineFocusReplacesMaterial"/>). Not set for "M, DF" (both).
     /// </summary>
     public bool MaterialOrDivineFocus = false;
+    /// <summary>
+    /// "F/DF" on the Components line (PHB p.174): the arcane version needs the focus, the divine version a divine focus
+    /// instead (SpellComponentRules). Not set for "F, DF" (both).
+    /// </summary>
+    public bool FocusOrDivineFocus = false;
     // ========== SPECIAL ==========
     /// <summary>Number of missiles for Magic Missile (1 at CL1, +1 per 2 CL above 1).</summary>
     public int MissileCount;

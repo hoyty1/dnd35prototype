@@ -133,7 +133,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: ointment worth 250 gp
                     IsPlaceholder = false
                 });
 

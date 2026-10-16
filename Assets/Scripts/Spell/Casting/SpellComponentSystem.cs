@@ -222,36 +222,13 @@ public static class SpellComponentRegistry
         return req != null && req.HasCostlyComponents;
     }
 
-    /// <summary>
-    /// Whether a spell requires a spell component pouch for common material components.
-    /// A spell needs the pouch if:
-    /// 1) It has SpellData.HasMaterialComponent == true AND no costly components registered, OR
-    /// 2) It has registered common (GP==0, no InventoryItemId) material components.
-    /// Stoneskin has both a common component (granite) AND a costly one (diamond dust) — it needs the pouch for granite.
-    /// </summary>
-    public static bool RequiresComponentPouch(string spellId, SpellData spell = null)
-    {
-        // Check registered component requirements first
-        var req = GetRequirements(spellId);
-        if (req != null && req.HasCommonMaterialComponents)
-            return true;
-
-        // If spell data says it has material components but no costly components registered,
-        // it's a common-material-only spell — needs the pouch.
-        if (spell != null && spell.HasMaterialComponent)
-        {
-            if (req == null || !req.HasCostlyComponents)
-                return true;
-            // Even if it has costly components, it may also have common ones (e.g., Stoneskin has granite)
-            // We already checked HasCommonMaterialComponents above.
-        }
-
-        return false;
-    }
+    // The component test itself (the pouch, the divine focus, priced foci and materials, for every caster) and the spend
+    // of priced materials are SpellComponentRules (batch 11 step 17); the old per-path validators that encoded a second,
+    // different rule were deleted with it. Use SpellComponentRules, not new checks here (docs/systems/PC_NPC_PARITY.md).
 
     /// <summary>
-    /// Check if a character has a Spell Component Pouch in their inventory.
-    /// The pouch is NOT consumed — it's a reusable item.
+    /// Check if a character has a Spell Component Pouch in their pack (a test helper; the cast rule is
+    /// SpellComponentRules.Refusal). The pouch is NOT consumed — it's a reusable item.
     /// </summary>
     public static bool HasSpellComponentPouch(CharacterController caster)
     {
@@ -268,178 +245,11 @@ public static class SpellComponentRegistry
         return false;
     }
 
-    /// <summary>
-    /// Validates that a caster has the spell component pouch if needed for a spell.
-    /// Returns true if the pouch is not needed or is present. 
-    /// Returns false and sets reason if the pouch is missing.
-    /// </summary>
-    public static bool ValidatePouchRequirement(string spellId, SpellData spell, CharacterController caster, out string failureReason)
-    {
-        failureReason = null;
-        if (caster == null) return true;
-
-        if (!RequiresComponentPouch(spellId, spell))
-            return true;
-
-        if (HasSpellComponentPouch(caster))
-            return true;
-
-        failureReason = "Spell Component Pouch";
-        return false;
-    }
-
     /// <summary>Get the total GP cost of consumed components for a spell.</summary>
     public static int GetTotalComponentCost(string spellId)
     {
         var req = GetRequirements(spellId);
         return req?.TotalConsumedGpCost ?? 0;
-    }
-
-    /// <summary>
-    /// Check if a character can afford the material component costs for a spell.
-    /// For components with InventoryItemId, checks the character's inventory.
-    /// For other costly components, checks ComponentGold.
-    /// </summary>
-    public static bool CanAffordComponents(string spellId, CharacterStats stats)
-    {
-        if (stats == null) return false;
-        var req = GetRequirements(spellId);
-        if (req == null || !req.HasCostlyComponents) return true;
-
-        // For inventory-based components, defer to CanAffordComponentsFromInventory
-        if (req.HasInventoryComponents)
-            return true; // Gold check only applies to non-inventory components
-
-        return stats.ComponentGold >= req.TotalConsumedGpCost;
-    }
-
-    /// <summary>
-    /// Check if a character has the required inventory items for a spell's material components.
-    /// Returns true if all inventory-based components are present, false otherwise.
-    /// Also returns the missing component name via out parameter.
-    /// </summary>
-    public static bool HasRequiredInventoryComponents(string spellId, CharacterController caster, out string missingComponent)
-    {
-        missingComponent = null;
-        if (caster == null) return true;
-
-        var req = GetRequirements(spellId);
-        if (req == null || !req.HasInventoryComponents) return true;
-
-        Inventory inv = caster.GetInventoryData();
-        if (inv == null)
-        {
-            // No inventory — check fails for any inventory component
-            for (int i = 0; i < req.MaterialComponents.Count; i++)
-            {
-                var comp = req.MaterialComponents[i];
-                if (comp != null && !string.IsNullOrEmpty(comp.InventoryItemId) && comp.IsConsumed)
-                {
-                    missingComponent = comp.Name;
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        for (int i = 0; i < req.MaterialComponents.Count; i++)
-        {
-            var comp = req.MaterialComponents[i];
-            if (comp == null || string.IsNullOrEmpty(comp.InventoryItemId) || !comp.IsConsumed)
-                continue;
-
-            // Search inventory for an item with matching Id
-            bool found = false;
-            for (int s = 0; s < inv.GeneralSlots.Length; s++)
-            {
-                ItemData item = inv.GeneralSlots[s];
-                if (item != null && string.Equals(item.Id, comp.InventoryItemId, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                missingComponent = comp.Name;
-                Debug.Log($"[SpellComponentRegistry] {caster.Stats?.CharacterName} missing inventory component '{comp.Name}' (item id: {comp.InventoryItemId}) for {spellId}.");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Consume inventory-based material components for a spell.
-    /// Removes matching items from the character's inventory.
-    /// Returns true if successful.
-    /// </summary>
-    public static bool ConsumeInventoryComponents(string spellId, CharacterController caster)
-    {
-        if (caster == null) return false;
-
-        var req = GetRequirements(spellId);
-        if (req == null || !req.HasInventoryComponents) return true;
-
-        Inventory inv = caster.GetInventoryData();
-        if (inv == null) return false;
-
-        for (int i = 0; i < req.MaterialComponents.Count; i++)
-        {
-            var comp = req.MaterialComponents[i];
-            if (comp == null || string.IsNullOrEmpty(comp.InventoryItemId) || !comp.IsConsumed)
-                continue;
-
-            // Find and remove the first matching item from inventory
-            bool removed = false;
-            for (int s = 0; s < inv.GeneralSlots.Length; s++)
-            {
-                ItemData item = inv.GeneralSlots[s];
-                if (item != null && string.Equals(item.Id, comp.InventoryItemId, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    inv.GeneralSlots[s] = null;
-                    removed = true;
-                    Debug.Log($"[SpellComponentRegistry] {caster.Stats?.CharacterName} consumed inventory item '{item.Name}' for {spellId}.");
-                    break;
-                }
-            }
-
-            if (!removed)
-            {
-                Debug.LogWarning($"[SpellComponentRegistry] Failed to consume inventory component '{comp.Name}' for {spellId} — item not found.");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Consume the material components for a spell (deduct gold from component budget).
-    /// Only handles non-inventory components. For inventory-based components, use ConsumeInventoryComponents.
-    /// Returns true if successful, false if character can't afford it.
-    /// </summary>
-    public static bool ConsumeComponents(string spellId, CharacterStats stats)
-    {
-        if (stats == null) return false;
-        var req = GetRequirements(spellId);
-        if (req == null || !req.HasCostlyComponents) return true;
-
-        // Skip inventory-based components (handled by ConsumeInventoryComponents)
-        if (req.HasInventoryComponents) return true;
-
-        int cost = req.TotalConsumedGpCost;
-        if (stats.ComponentGold < cost)
-        {
-            Debug.LogWarning($"[SpellComponentRegistry] {stats.CharacterName} cannot afford {cost} gp for {spellId} (has {stats.ComponentGold} gp).");
-            return false;
-        }
-
-        stats.ComponentGold -= cost;
-        Debug.Log($"[SpellComponentRegistry] {stats.CharacterName} consumed {cost} gp in components for {spellId}. Remaining component gold: {stats.ComponentGold} gp.");
-        return true;
     }
 
     /// <summary>
@@ -484,11 +294,13 @@ public static class SpellComponentRegistry
         });
 
         // ── IDENTIFY (PHB p.243) ──
-        // Components: V, S, M (a pearl worth at least 100 gp)
+        // Components: V, S, M/DF (arcane: a pearl worth at least 100 gp, crushed and stirred into wine with an owl feather)
         RegisterComponents("identify", new SpellComponentRequirements
         {
             MaterialComponents = new List<SpellMaterialComponent>
             {
+                // The wine and the owl feather have no price: the pouch supplies them (PHB p.174), as Stoneskin's granite.
+                new SpellMaterialComponent("wine and an owl feather", 0, true, "Wine and an owl feather to stir the pearl into"),
                 new SpellMaterialComponent("pearl", 100, true, "A pearl worth at least 100 gp, crushed and stirred into wine")
             }
         });
@@ -513,7 +325,54 @@ public static class SpellComponentRegistry
             }
         });
 
-        // Future spells with costly components can be added here
-        // e.g., Restoration (100 gp diamond dust), Raise Dead (5000 gp diamond), etc.
+        // The other priced components and foci of the registered spells (PHB chapter 11; batch 11 step 17, SPL-020). A
+        // consumed component with no item is paid from CharacterStats.ComponentGold (ITM-029); a priced focus is an item
+        // the caster must carry (SpellComponentRules).
+        RegisterCostlyMaterial(SpellNames.AUGURY, "incense", 25, "Incense worth at least 25 gp (PHB p.202)");
+        GetRequirements(SpellNames.AUGURY).FocusComponents.Add(new SpellMaterialComponent("marked tokens", 25, false,
+            "Marked sticks, bones or similar tokens worth at least 25 gp (PHB p.202)", inventoryItemId: ItemIDs.FOCUS_AUGURY_TOKENS));
+        RegisterCostlyMaterial(SpellNames.CONSECRATE, "holy water and silver dust", 50,
+            "A vial of holy water (25 gp) and 25 gp of silver dust (PHB p.212)");
+        RegisterCostlyMaterial(SpellNames.DESECRATE, "unholy water and silver dust", 50,
+            "A vial of unholy water (25 gp) and 25 gp of silver dust (PHB p.218)");
+        RegisterCostlyMaterial(SpellNames.CIRCLE_OF_DEATH, "black pearl powder", 500, "A crushed black pearl worth at least 500 gp (PHB p.209)");
+        RegisterCostlyMaterial(SpellNames.GLYPH_OF_WARDING, "powdered diamond", 200, "Incense sprinkled with powdered diamond worth at least 200 gp (PHB p.236)",
+            unpricedPart: "incense");
+        RegisterCostlyMaterial(SpellNames.RESTORATION, "diamond dust", 100, "Diamond dust worth 100 gp (PHB p.272)");
+        RegisterCostlyMaterial(SpellNames.RESURRECTION, "diamonds", 10000, "Holy water and diamonds worth at least 10,000 gp (PHB p.272)");
+        RegisterCostlyMaterial(SpellNames.TRUE_SEEING, "eye ointment", 250, "An eye ointment costing 250 gp (PHB p.296)");
+        RegisterCostlyMaterial(SpellNames.PROTECTION_FROM_SPELLS, "crushed diamond", 500, "A diamond of at least 500 gp, crushed (PHB p.266)");
+        GetRequirements(SpellNames.PROTECTION_FROM_SPELLS).FocusComponents.Add(new SpellMaterialComponent("diamond", 1000, false,
+            "A 1,000 gp diamond for each subject to carry (PHB p.266)", inventoryItemId: ItemIDs.FOCUS_DIAMOND_1000));
+        RegisterComponents(SpellNames.SHIELD_OTHER, new SpellComponentRequirements
+        {
+            FocusComponents = new List<SpellMaterialComponent>
+            {
+                new SpellMaterialComponent("platinum rings", 100, false,
+                    "A pair of platinum rings worth at least 50 gp each (PHB p.278)", inventoryItemId: ItemIDs.FOCUS_PLATINUM_RINGS)
+            }
+        });
+        RegisterComponents(SpellNames.SHIELD_OF_LAW, new SpellComponentRequirements
+        {
+            FocusComponents = new List<SpellMaterialComponent>
+            {
+                new SpellMaterialComponent("reliquary", 500, false,
+                    "A tiny reliquary worth at least 500 gp (PHB p.278)", inventoryItemId: ItemIDs.FOCUS_RELIQUARY)
+            }
+        });
+    }
+
+    /// <summary>
+    /// Registers a spell's priced material component; <paramref name="unpricedPart"/> names the part of its Components
+    /// line that has no price (Glyph of Warding's incense), a 0 gp component the pouch supplies (PHB p.174), so the
+    /// caster also needs the pouch (SpellComponentRequirements.HasCommonMaterialComponents).
+    /// </summary>
+    private static void RegisterCostlyMaterial(string spellId, string name, int gpCost, string description, string unpricedPart = null)
+    {
+        var materials = new List<SpellMaterialComponent>();
+        if (!string.IsNullOrEmpty(unpricedPart))
+            materials.Add(new SpellMaterialComponent(unpricedPart, 0, true, unpricedPart));
+        materials.Add(new SpellMaterialComponent(name, gpCost, true, description));
+        RegisterComponents(spellId, new SpellComponentRequirements { MaterialComponents = materials });
     }
 }

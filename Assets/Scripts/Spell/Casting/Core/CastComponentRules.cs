@@ -167,19 +167,14 @@ public static class CastComponentRules
     /// True when the cast needs no material component because it is the divine version of an M/DF spell (PHB p.174-175:
     /// with M/DF the arcane version has the material component and the divine version a divine focus instead):
     /// <paramref name="spell"/> is marked SpellData.MaterialOrDivineFocus and <paramref name="caster"/> casts it with a
-    /// divine class (<see cref="CasterLevelRules.CastingClassFor"/>: the class of its slot, else the class lists). Delegated
-    /// RAW reading 2026-10-14: the class the spell is cast with decides which version is cast; the divine focus item itself
-    /// is not tested yet, as for DF-only spells (focus items come with step raw-components-all-casters). The same for every
-    /// caster and path (the cast core's component test).
+    /// divine class (<see cref="SpellComponentRules.CastsAsDivine"/>: the class of its slot, else the class lists).
+    /// Delegated RAW reading 2026-10-14: the class the spell is cast with decides which version is cast. The divine
+    /// version needs the divine focus instead (SpellComponentRules.Refusal, batch 11 step 17).
     /// </summary>
     public static bool DivineFocusReplacesMaterial(CharacterController caster, SpellData spell)
     {
         if (caster == null || caster.Stats == null || spell == null || !spell.MaterialOrDivineFocus)
             return false;
-        string castingClass = CasterLevelRules.CastingClassFor(caster, spell);
-        if (string.IsNullOrWhiteSpace(castingClass))
-            return false;
-        return ClassAssociationRules.IsDivineCasterClass(castingClass)
-               || caster.Stats.GetSpellcastingKind(castingClass) == SpellcastingType.Divine;
+        return SpellComponentRules.CastsAsDivine(caster, spell);
     }
 }

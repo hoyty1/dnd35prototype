@@ -109,7 +109,6 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 6,
                     DamageCount = 1, // Placeholder; actual dice = min(CL, 10) resolved at cast time
-                    HasMaterialComponent = true, // M: bat guano and sulfur (common — covered by spell component pouch)
                     DamageType = "fire",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",

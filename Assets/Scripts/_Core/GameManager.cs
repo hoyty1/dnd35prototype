@@ -2186,6 +2186,9 @@ public partial class GameManager : MonoBehaviour
         {
             Debug.LogWarning($"[GameManager] No class definition found for '{className}', skipping equipment setup.");
         }
+        // The component kit every caster carries, as an NPC gets it at spawn (batch 11 step 17, decision D3): the pouch
+        // the class package may already have given, and the holy or unholy symbol, or holly and mistletoe.
+        SpellComponentKit.Give(inv.CharacterInventory.OwnerStats, inv.CharacterInventory);
         inv.CharacterInventory.RecalculateStats();
     }
 
@@ -9474,9 +9477,11 @@ public partial class GameManager : MonoBehaviour
 
         // Casting can only begin if there is a castable prepared spell.
         // Held charges are delivered via the dedicated Discharge button.
-        if (!spellComp.HasAnyCastablePreparedSpell())
+        // The components are tested when a spell is picked (OnSpellSelectedWithMetamagic), which logs the refusal.
+        if (!spellComp.HasAnySpellWithSlotLeft())
         {
             Debug.Log($"[GameManager] {pc.Stats.CharacterName}: No prepared spells with available slots to cast.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{pc.Stats.CharacterName} has no spell left to cast."));
             return;
         }
 
@@ -9723,6 +9728,17 @@ public partial class GameManager : MonoBehaviour
         if (CastComponentRules.SilenceBlocks(pc, spell, metamagic, menuSource))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", CastComponentRules.DescribeSilenceRefusal(pc.Stats?.CharacterName, spell.Name, false)));
+            ShowActionChoices();
+            return;
+        }
+
+        // The components before any targeting, as Silence (the cast core's Legality stage tests them again;
+        // SpellComponentRules, batch 11 step 17): a spell the PC lacks the pouch, divine focus or priced component for
+        // changes nothing.
+        string componentRefusal = SpellComponentRules.Refusal(pc, spell, menuSource, out string missingComponent);
+        if (componentRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", SpellComponentRules.DescribeRefusal(pc.Stats?.CharacterName, spell.Name, componentRefusal, missingComponent)));
             ShowActionChoices();
             return;
         }

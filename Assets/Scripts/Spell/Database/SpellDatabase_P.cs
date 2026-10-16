@@ -402,7 +402,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: sesame seeds
                     IsPlaceholder = false
                 });
 
@@ -436,7 +435,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: a bit of fleece and jade dust worth 25 gp
                     IsPlaceholder = false
                 });
 
@@ -492,7 +490,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: diamond worth 500 gp that is consumed
                     IsPlaceholder = false
                 });
 

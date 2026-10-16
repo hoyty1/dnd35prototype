@@ -218,9 +218,9 @@ public partial class GameManager
     /// target test (IsValidTargetForSpell), the range at the cast's caster level (CasterLevelRules, SPL-017), with the NPC
     /// bit the area refusal, and
     /// the casting action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
-    /// material-component test (the component pouch, PHB p.174 and p.130; skipped for the F12 panel's Components
-    /// bypass, scrolls and wands, and with <see cref="LegacyCastQuirk.NpcNoComponentCheck"/>; every path makes it since
-    /// batch 11 step 15), and for a hold the grapple test (<see cref="CheckHoldChargeLegality"/>, since step 15). No side
+    /// component test (the pouch, a divine focus, a priced focus or material component, PHB p.174 and p.130;
+    /// SpellComponentRules, one rule for every caster since batch 11 step 17; skipped for the F12 panel's Components
+    /// bypass, scrolls and wands), and for a hold the grapple test (<see cref="CheckHoldChargeLegality"/>, since step 15). No side
     /// effect: the grapple refusal's log line is the Legality stage's, not this pre-check's. A refusal comes back with
     /// Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not checked here (the
     /// decider makes them).
@@ -347,27 +347,22 @@ public partial class GameManager
             : null;
     }
 
+    /// <summary>
+    /// The component test, one rule for every caster and path (batch 11 step 17, decision D3; SPL-114, SPL-020): the
+    /// spell component pouch for a material component or focus with no price, the divine focus of a divine casting, a
+    /// priced focus item and the priced material components (SpellComponentRules.Refusal; PHB p.140, p.174, p.130). A
+    /// held charge's delivery is no casting (PHB p.141): its components were met at the hold. Scrolls and wands supply
+    /// their spell's components (DMG p.238), and the F12 panel's Components bypass skips the test. Nothing is spent
+    /// before it passes; the refusal carries the missing component in <see cref="CastOutcome.Detail"/>.
+    /// </summary>
     private static CastOutcome CheckCastComponentLegality(SpellCastRequest req)
     {
-        // Spells with common material components (M with no GP cost) need a spell component pouch (PHB p.130). F12 test
-        // panel casts (their Components bypass), scroll casts and wand casts bypass it (the item provides the
-        // components); the cast's own source decides (batch 11 step 4).
-        // Every path makes the test (area casts, summons, Grease and holds since batch 11 step 15; SPL-006, SPL-146). NPCs
-        // carry no pouch yet and are not tested (NpcNoComponentCheck, SPL-114); decision D3 removes that bit in step 17.
-        // A held charge's delivery is no casting (PHB p.141): its components were met at the hold. A divine caster's M/DF
-        // spell uses the divine focus, not the material component (PHB p.174-175; CastComponentRules.DivineFocusReplacesMaterial,
-        // delegated RAW reading 2026-10-14).
-        CastSource source = req.Source;
-        bool componentsBypassed = req.HasQuirk(LegacyCastQuirk.NpcNoComponentCheck)
-                                  || CastComponentRules.IsHeldChargeDelivery(source)
-                                  || (source != null && (source.HasBypass(TestPanelBypass.Components) || source.IsItem));
-        if (componentsBypassed || !req.Spell.HasMaterialComponent || CastComponentRules.DivineFocusReplacesMaterial(req.Caster, req.Spell))
+        if (req == null || req.Caster == null || req.Spell == null)
             return null;
-
-        if (SpellComponentRegistry.ValidatePouchRequirement(req.Spell.SpellId, req.Spell, req.Caster, out string pouchFailure))
+        string reason = SpellComponentRules.Refusal(req.Caster, req.Spell, req.Source, out string missing);
+        if (reason == null)
             return null;
-
-        return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-component-pouch") { Detail = pouchFailure };
+        return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, reason) { Detail = missing };
     }
 
     // ── Stages ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -383,7 +378,7 @@ public partial class GameManager
     /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. With
     /// the NPC bits: no metamagic (<see cref="LegacyCastQuirk.NpcNullMetamagic"/>), the NPC path's own caster tests before
     /// the target and its unlogged target and range refusals (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>), the
-    /// area refusal after the range, and no component test.
+    /// area refusal after the range.
     /// </summary>
     private void CastStageLegality(CastContext ctx)
     {
@@ -479,11 +474,12 @@ public partial class GameManager
             return;
         }
 
+        // The components (batch 11 step 17, decision D3): the same test and log line for every caster.
         refusal = CheckCastComponentLegality(req);
         if (refusal != null)
         {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, "no-component-pouch");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{caster.Stats?.CharacterName} cannot cast {spell.Name} — requires a {refusal.Detail} for material components! Purchase one from the store (5 gp)."));
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", SpellComponentRules.DescribeRefusal(caster.Stats?.CharacterName, spell.Name, refusal.Reason, refusal.Detail)));
             FinishCast(ctx, refusal);
             return;
         }
@@ -1682,10 +1678,41 @@ public partial class GameManager
     }
 
     /// <summary>Spends the cast's slot (or scroll, wand charge, converted spell) with the parameters the Cost stage set.</summary>
+    /// <remarks>The cast's priced material components go with it (PHB p.174: the casting process consumes them, and the XP
+    /// Cost paragraph treats XP like a material component, expended whether or not the casting succeeds), on every path
+    /// that spends a slot, a spell lost at the Distraction or Failure stage included (delegated RAW reading 2026-10-14;
+    /// SpellComponentRules.SpendCostlyComponents, batch 11 step 17, SPL-020); the cancel snapshot records them for a
+    /// refund.</remarks>
     private bool SpendCastSlot(CastContext ctx)
     {
-        return ConsumePendingSpellSlot(ctx.SpellComp, ctx.Request.Spell, ctx.Request.Metamagic, ctx.HasMetamagicApplied,
+        bool spent = ConsumePendingSpellSlot(ctx.SpellComp, ctx.Request.Spell, ctx.Request.Metamagic, ctx.HasMetamagicApplied,
             ctx.SlotLevelToConsume, ctx.IsSpontaneousConversion, ctx.SpontaneousLevel, ctx.SpontaneousSacrificedSpellId);
+        if (spent)
+            SpendCastCostlyComponents(ctx);
+        return spent;
+    }
+
+    /// <summary>
+    /// Spends the cast's priced material components after its slot (SpellComponentRules.SpendCostlyComponents; PHB p.174),
+    /// logs them, and records them in the cancel snapshot so a cast cancelled at its AoO prompt gives them back.
+    /// </summary>
+    private void SpendCastCostlyComponents(CastContext ctx)
+    {
+        SpellCastRequest req = ctx.Request;
+        var removed = new List<KeyValuePair<int, ItemData>>();
+        string log = SpellComponentRules.SpendCostlyComponents(req.Caster, req.Spell, req.Source, removed, out int goldSpent);
+        if (log == null)
+            return;
+        CastResourceSnapshot snapshot = PeekSpellcastResourceSnapshot();
+        if (snapshot != null && snapshot.Caster == req.Caster)
+        {
+            if (snapshot.ComponentItemsSpent == null)
+                snapshot.ComponentItemsSpent = new List<KeyValuePair<int, ItemData>>();
+            snapshot.ComponentItemsSpent.AddRange(removed);
+            snapshot.ComponentGoldSpent += goldSpent;
+        }
+        CastStageTrace.Mark(req.Caster, req.Spell, CastStageTrace.Spend, "costly-components");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("💎", log));
     }
 
     /// <summary>

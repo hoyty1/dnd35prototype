@@ -71,6 +71,33 @@ namespace DND35e.Identifiers
         /// <summary>Item id: component_spell_pouch</summary>
         public const string COMPONENT_SPELL_POUCH = "component_spell_pouch";
 
+        /// <summary>Item id: holy_symbol_wooden (divine focus, PHB p.130)</summary>
+        public const string HOLY_SYMBOL_WOODEN = "holy_symbol_wooden";
+
+        /// <summary>Item id: holy_symbol_silver (divine focus, PHB p.130)</summary>
+        public const string HOLY_SYMBOL_SILVER = "holy_symbol_silver";
+
+        /// <summary>Item id: unholy_symbol_wooden (divine focus of an evil cleric, PHB p.130, p.174)</summary>
+        public const string UNHOLY_SYMBOL_WOODEN = "unholy_symbol_wooden";
+
+        /// <summary>Item id: unholy_symbol_silver (divine focus of an evil cleric, PHB p.130, p.174)</summary>
+        public const string UNHOLY_SYMBOL_SILVER = "unholy_symbol_silver";
+
+        /// <summary>Item id: holly_and_mistletoe (the druid's and ranger's divine focus, PHB p.130, p.174)</summary>
+        public const string HOLLY_AND_MISTLETOE = "holly_and_mistletoe";
+
+        /// <summary>Item id: focus_augury_tokens (augury's 25 gp focus, PHB p.202)</summary>
+        public const string FOCUS_AUGURY_TOKENS = "focus_augury_tokens";
+
+        /// <summary>Item id: focus_platinum_rings (shield other's pair of 50 gp rings, PHB p.278)</summary>
+        public const string FOCUS_PLATINUM_RINGS = "focus_platinum_rings";
+
+        /// <summary>Item id: focus_reliquary (shield of law's 500 gp reliquary, PHB p.278)</summary>
+        public const string FOCUS_RELIQUARY = "focus_reliquary";
+
+        /// <summary>Item id: focus_diamond_1000 (protection from spells' 1,000 gp diamond, PHB p.266)</summary>
+        public const string FOCUS_DIAMOND_1000 = "focus_diamond_1000";
+
         /// <summary>Item id: crossbow_bolts_20</summary>
         public const string CROSSBOW_BOLTS_20 = "crossbow_bolts_20";
 

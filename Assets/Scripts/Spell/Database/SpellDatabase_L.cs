@@ -57,7 +57,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true, // M: leather loop or golden wire
                     IsPlaceholder = false
                 });
 
@@ -222,7 +221,6 @@ public static partial class SpellDatabase
                     Name = "Lightning Bolt",
                     Description = "Evocation [Electricity]. You release a powerful stroke of electrical energy in a 120-ft line. "
                         + "Deals 1d6 electricity damage per caster level (max 10d6). Reflex half. SR: Yes. Components: V, S, M (fur and amber rod). PHB p.248",
-                    HasMaterialComponent = true, // M: fur and amber rod (common — covered by spell component pouch)
                     SpellLevel = 3,
                     School = "Evocation [Electricity]",
                     AvailableFor = new List<SpellAvailability>
@@ -285,7 +283,6 @@ public static partial class SpellDatabase
                     Description = "Abjuration. A 10-ft-radius emanation centered on you excludes all spell effects of 3rd level or lower. "
                         + "Such spells fail to affect any target within the globe. Spells of 4th level and higher pass through normally. "
                         + "Duration 1 round/level (D). Components: V, S, M (glass bead). PHB p.246",
-                    HasMaterialComponent = true, // M: glass or crystal bead (common — covered by spell component pouch)
                     SpellLevel = 4,
                     School = "Abjuration",
                     AvailableFor = new List<SpellAvailability>

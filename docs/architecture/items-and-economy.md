@@ -227,7 +227,7 @@ Despite its name, `Equipment/SpellStorage/` holds the Ring of Spell Storing and 
 
 - hardcoded mundane weapons, armor and shields with prices
 - their +1/+2 variants under "Magic Weapons/Armor/Shields"
-- 2 potions, spell components and gear
+- 2 potions, 11 spell components (pouch, diamond dust, holy and unholy symbols, holly and mistletoe, the priced foci; batch 11 step 17) and gear
 - then every generated scroll, potion and wand, and every ring, rod and wondrous item
 
 `StoreUI` (`Equipment/Store/StoreUI.cs`, about 2,510 lines of code-built uGUI; the sell logic is in `StoreSelling.cs`) is opened from the pre-combat hub through `GameManager.OpenStoreFromPreCombat` (GameManager.cs:1499).
@@ -261,7 +261,7 @@ Store quirks (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 | Pool | Field | Used by |
 |---|---|---|
 | Party gold | `EconomyService.PartyGold`; `GameManager.PartyGold/SpendGold/AddGold` delegate to it; starts at 1000 | Store buy and sell, treasure coins |
-| Per-character | `CharacterStats.ComponentGold` (default 1000, CharacterStats.cs:196) | Crafting (`SpendComponentGold`), costly spell components (`Spell/Casting/SpellComponentSystem.cs`) |
+| Per-character | `CharacterStats.ComponentGold` (default 1000, CharacterStats.cs:196) | Crafting (`SpendComponentGold`), the priced material components no item stands for (`SpellComponentRules.SpendCostlyComponents`, every caster since batch 11 step 17; an NPC starts with 0) |
 
 ## Crafting
 

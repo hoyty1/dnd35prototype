@@ -69,7 +69,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasDivineFocus = true,
                     IsPlaceholder = false
                 });
 

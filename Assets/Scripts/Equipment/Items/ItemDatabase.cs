@@ -278,6 +278,30 @@ public static class ItemDatabase
             IconChar = "🎒", IconColor = new Color(0.55f, 0.45f, 0.30f)
         });
 
+        // ── Divine focuses (PHB p.128-130, p.174; batch 11 step 17) ──
+        // A cleric's, paladin's or adept's divine focus is a holy symbol (an unholy one for an evil cleric); a druid's or
+        // ranger's is holly and mistletoe. The pouch holds none of them (PHB p.130). Reusable, not consumed.
+        RegisterFocusItem(ItemIDs.HOLY_SYMBOL_WOODEN, "Wooden Holy Symbol", 1, 0f,
+            "A wooden holy symbol: the divine focus of a cleric, paladin or adept (PHB p.130, p.174).");
+        RegisterFocusItem(ItemIDs.HOLY_SYMBOL_SILVER, "Silver Holy Symbol", 25, 1f,
+            "A silver holy symbol: the divine focus of a cleric, paladin or adept (PHB p.130, p.174).");
+        RegisterFocusItem(ItemIDs.UNHOLY_SYMBOL_WOODEN, "Wooden Unholy Symbol", 1, 0f,
+            "A wooden unholy symbol: the divine focus of an evil cleric (PHB p.130, p.174).");
+        RegisterFocusItem(ItemIDs.UNHOLY_SYMBOL_SILVER, "Silver Unholy Symbol", 25, 1f,
+            "A silver unholy symbol: the divine focus of an evil cleric (PHB p.130, p.174).");
+        RegisterFocusItem(ItemIDs.HOLLY_AND_MISTLETOE, "Holly and Mistletoe", 0, 0f,
+            "Sprigs of holly and mistletoe: the divine focus of a druid or ranger (PHB p.130, p.174).");
+
+        // ── Priced foci (PHB chapter 11; SpellComponentRegistry): not in a pouch, not consumed ──
+        RegisterFocusItem(ItemIDs.FOCUS_AUGURY_TOKENS, "Augury Tokens (25 gp)", 25, 0f,
+            "Marked sticks, bones or similar tokens worth 25 gp: the focus of augury (PHB p.202).");
+        RegisterFocusItem(ItemIDs.FOCUS_PLATINUM_RINGS, "Platinum Rings, pair (100 gp)", 100, 0f,
+            "A pair of platinum rings worth 50 gp each: the focus of shield other (PHB p.278).");
+        RegisterFocusItem(ItemIDs.FOCUS_RELIQUARY, "Reliquary (500 gp)", 500, 0f,
+            "A tiny reliquary worth 500 gp holding a sacred relic: the focus of shield of law (PHB p.278).");
+        RegisterFocusItem(ItemIDs.FOCUS_DIAMOND_1000, "Diamond (1,000 gp)", 1000, 0f,
+            "A diamond worth 1,000 gp: the focus of protection from spells, one per subject (PHB p.266).");
+
         // Dart: 1d4, 20/×2, piercing, range 20 ft
         Register(new ItemData
         {
@@ -1547,6 +1571,20 @@ public static class ItemDatabase
             new[] { EnchantmentType.Bashing }, out result) != null) created++;
 
         UnityEngine.Debug.Log($"[ItemDatabase] Registered {created} common enchanted items.");
+    }
+
+    /// <summary>A reusable spell focus or divine focus carried in the pack (batch 11 step 17; SpellComponentRules).</summary>
+    private static void RegisterFocusItem(string id, string name, int priceGp, float weightLbs, string description)
+    {
+        Register(new ItemData
+        {
+            Id = id, Name = name, Type = ItemType.Misc,
+            Slot = EquipSlot.None,
+            Description = description,
+            BasePriceGp = priceGp,
+            WeightLbs = weightLbs,
+            IconChar = "✦", IconColor = new Color(0.85f, 0.8f, 0.55f)
+        });
     }
 
     public static void Register(ItemData item)

@@ -14,7 +14,6 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.MAGE_ARMOR,
                     Name = "Mage Armor",
-                    HasMaterialComponent = true, // M: a piece of cured leather (common — covered by spell component pouch)
                     Description = "+4 armor bonus to AC for 1 hour/level. Doesn't stack with actual armor. Components: V, S, F (cured leather). PHB p.249",
                     SpellLevel = 1, School = "Conjuration",
                     ClassList = new[] { "Wizard" },
@@ -629,7 +628,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = false, // No somatic for Mass Suggestion
-                    HasMaterialComponent = true, // M: tongue and honeycomb
                     IsPlaceholder = false
                 });
 

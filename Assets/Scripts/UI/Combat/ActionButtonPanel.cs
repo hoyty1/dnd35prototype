@@ -909,7 +909,7 @@ public class ActionButtonPanel : MonoBehaviour
 
         bool isSpellcaster = pc.Stats.IsSpellcaster;
         SpellcastingComponent spellComp = pc.Spellcasting;
-        bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
+        bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnySpellWithSlotLeft();
         bool canCast = context.Actions.HasStandardAction && hasCastableSpells && !context.IsTurned;
         string castBaseLabel;
         if (!canCast)

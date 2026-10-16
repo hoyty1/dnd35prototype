@@ -109,11 +109,9 @@ public enum LegacyCastQuirk : long
     /// </summary>
     NpcNullMetamagic = 1 << 18,
 
-    /// <summary>
-    /// No material-component test (the spell component pouch, PHB p.174 and p.130): NPCs carry no pouch (SPL-114).
-    /// Batch 11 step 17 (raw-components-all-casters, decision D3) gives every caster its components and removes the bit.
-    /// </summary>
-    NpcNoComponentCheck = 1 << 19,
+    // Bit 19 is unused: NpcNoComponentCheck (SPL-114) was removed by batch 11 step 17 (raw-components-all-casters,
+    // decision D3); every caster makes the one component test (SpellComponentRules) and NPC casters carry the pouch and
+    // divine focus their class calls for (SpellComponentKit).
 
     // Bits 20 and 21 are unused: NpcNoConcentrationOnCastCheck and NpcNoConcentrationTracking (SPL-114) were removed by
     // batch 11 step 15 (raw-counterspell-order-parity); every caster runs the casting-while-concentrating step
@@ -257,7 +255,6 @@ public static class LegacyCastQuirkSets
         | LegacyCastQuirk.NpcOwnLegalityChecks
         | LegacyCastQuirk.NpcRefusesArea
         | LegacyCastQuirk.NpcNullMetamagic
-        | LegacyCastQuirk.NpcNoComponentCheck
         | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
         | LegacyCastQuirk.NpcCombatEndCheckedByCaller
         | LegacyCastQuirk.NpcNoMirrorImageSwap;

@@ -343,7 +343,6 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = false,
                     IsPlaceholder = false
                 });
 
@@ -419,7 +418,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasDivineFocus = true,
                     IsPlaceholder = false
                 });
 

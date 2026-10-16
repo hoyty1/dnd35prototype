@@ -1015,6 +1015,14 @@ public partial class GameManager
         }
         ApplyNpcSpontaneousCasting(stats);
 
+        // The component kit every caster carries, as a PC gets it (batch 11 step 17, decision D3; SpellComponentKit): a
+        // pouch, and the divine focus of a cleric, adept, paladin, druid or ranger. No priced components: an NPC has those
+        // only from its gear wealth or as treasure, so it starts with no component gold (ITM-029). The inventory and the
+        // stats are new for every spawn, so a reused slot keeps none of the last creature's kit (CRE-046).
+        stats.ComponentGold = 0;
+        if (SpellComponentKit.Give(stats, inv.CharacterInventory) > 0)
+            inv.CharacterInventory.RecalculateStats();
+
         bool shouldInitSpellcasting = stats.IsSpellcaster
             && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
                 || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));

@@ -38,4 +38,11 @@ internal sealed class CastResourceSnapshot
     public int ItemCharges;
     /// <summary>The wand's WandData.CurrentCharges before the spend; -1 without WandData.</summary>
     public int WandDataCharges = -1;
+
+    // The priced material components the spend used up (batch 11 step 17, SpellComponentRules.SpendCostlyComponents), so
+    // a cast cancelled at the AoO prompt gives them back with the slot.
+    /// <summary>The component items taken from the pack, with their pack index.</summary>
+    public List<KeyValuePair<int, ItemData>> ComponentItemsSpent;
+    /// <summary>The CharacterStats.ComponentGold the spend paid.</summary>
+    public int ComponentGoldSpent;
 }

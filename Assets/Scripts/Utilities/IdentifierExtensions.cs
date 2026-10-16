@@ -77,6 +77,15 @@ namespace DND35e.Identifiers
 
             { ItemID.ComponentDiamondDust, ItemIDs.COMPONENT_DIAMOND_DUST },
             { ItemID.ComponentSpellPouch, ItemIDs.COMPONENT_SPELL_POUCH },
+            { ItemID.HolySymbolWooden, ItemIDs.HOLY_SYMBOL_WOODEN },
+            { ItemID.HolySymbolSilver, ItemIDs.HOLY_SYMBOL_SILVER },
+            { ItemID.UnholySymbolWooden, ItemIDs.UNHOLY_SYMBOL_WOODEN },
+            { ItemID.UnholySymbolSilver, ItemIDs.UNHOLY_SYMBOL_SILVER },
+            { ItemID.HollyAndMistletoe, ItemIDs.HOLLY_AND_MISTLETOE },
+            { ItemID.FocusAuguryTokens, ItemIDs.FOCUS_AUGURY_TOKENS },
+            { ItemID.FocusPlatinumRings, ItemIDs.FOCUS_PLATINUM_RINGS },
+            { ItemID.FocusReliquary, ItemIDs.FOCUS_RELIQUARY },
+            { ItemID.FocusDiamond1000, ItemIDs.FOCUS_DIAMOND_1000 },
 
             { ItemID.ScrollMagicMissile, "scroll_magic_missile" },
             { ItemID.ScrollCureLightWounds, "scroll_cure_light_wounds" },

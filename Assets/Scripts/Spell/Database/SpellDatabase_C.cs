@@ -348,7 +348,6 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Utility,
                     DurationType = DurationType.Permanent,
                     BuffDurationRounds = -1,
-                    HasMaterialComponent = true, // 50 gp ruby dust
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
@@ -612,7 +611,6 @@ public static partial class SpellDatabase
                     SavingThrowType = "Reflex",
                     SaveHalves = true,
                     SpellResistanceApplies = true,
-                    HasMaterialComponent = true,
                     DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
@@ -754,7 +752,6 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
-                    HasMaterialComponent = true,
                     IsPlaceholder = false
                 });
 
@@ -825,7 +822,6 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
                     SpellResistanceApplies = true,
-                    HasMaterialComponent = true, // M: crushed black pearl worth 500 gp
                     DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,

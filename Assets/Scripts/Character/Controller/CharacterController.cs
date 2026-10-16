@@ -15691,6 +15691,8 @@ public class CharacterController : MonoBehaviour
     /// Check if this character has a specific spell prepared and available to cast.
     /// Used for same-spell counterspell checking.
     /// Metamagic is ignored for matching (PHB).
+    /// A counterspell is a casting of the counter (PHB p.170), so it needs the spell's components as any cast does
+    /// (SpellComponentRules, PHB p.174; batch 11 step 17).
     /// </summary>
     public bool HasSpellAvailableForCounter(string spellId)
     {
@@ -15701,7 +15703,7 @@ public class CharacterController : MonoBehaviour
         SpellData spell = SpellDatabase.GetSpell(spellId);
         if (spell == null) return false;
 
-        return spellComp.CanCast(spell);
+        return spellComp.CanCast(spell) && SpellComponentRules.Refusal(this, spell, null, out _) == null;
     }
 
     /// <summary>
@@ -15729,7 +15731,13 @@ public class CharacterController : MonoBehaviour
 
         bool consumed = spellComp.CastSpellFromSlot(spell);
         if (consumed)
+        {
             Debug.Log($"[Counterspell] {Stats.CharacterName}: Consumed spell slot for {spell.Name}.");
+            // The counter is a casting (PHB p.170): its priced material components go with the slot (PHB p.174).
+            string componentLog = SpellComponentRules.SpendCostlyComponents(this, spell, null, null, out _);
+            if (componentLog != null)
+                GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💎", componentLog));
+        }
         else
             Debug.LogWarning($"[Counterspell] {Stats.CharacterName}: Failed to consume spell slot for {spell.Name}!");
         return consumed;

@@ -1008,6 +1008,15 @@ public static class FeatDefinitions
         combatCasting.Benefit.Description = "+4 on concentration checks while casting in melee";
         Add(combatCasting);
 
+        // --- Eschew Materials (PHB p.94) ---
+        // Read by SpellComponentRules.Refusal (batch 11 step 17): a material component costing 1 gp or less is not
+        // needed; a focus, a divine focus and a costlier material component still are.
+        var eschewMaterials = new FeatDefinition("Eschew Materials",
+            "You can cast spells without needing material components that cost 1 gp or less.",
+            FeatType.General);
+        eschewMaterials.Benefit.Description = "Cast spells without material components costing 1 gp or less (not foci or divine foci)";
+        Add(eschewMaterials);
+
         // --- Augment Summoning ---
         var augSummon = new FeatDefinition("Augment Summoning",
             "Each creature you conjure with any summon spell gains a +4 enhancement bonus to Strength and Constitution for the duration of the spell.",

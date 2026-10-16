@@ -181,6 +181,15 @@ namespace DND35e.Identifiers
         // Spell Components (5500-5599)
         ComponentDiamondDust = 5500,
         ComponentSpellPouch = 5501,
+        HolySymbolWooden = 5502,
+        HolySymbolSilver = 5503,
+        UnholySymbolWooden = 5504,
+        UnholySymbolSilver = 5505,
+        HollyAndMistletoe = 5506,
+        FocusAuguryTokens = 5507,
+        FocusPlatinumRings = 5508,
+        FocusReliquary = 5509,
+        FocusDiamond1000 = 5510,
 
         // Gear & misc (6000-6999)
         GearBackpack = 6000,

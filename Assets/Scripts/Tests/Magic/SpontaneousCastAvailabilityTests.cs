@@ -76,6 +76,12 @@ public static class SpontaneousCastAvailabilityTests
             baseSpeed: 6, atkRange: 1, baseHitDieHP: 4 * level, raceName: "Human");
         controller.Stats = stats;
 
+        // The caster's component kit, as character creation and NPC spawn give it (batch 11 step 17): the castable list
+        // also leaves out a spell whose components the caster lacks (Daze's M, Alarm's F).
+        var inventory = go.AddComponent<InventoryComponent>();
+        inventory.Init(stats);
+        SpellComponentKit.Give(stats, inventory.CharacterInventory);
+
         var spellComp = go.AddComponent<SpellcastingComponent>();
         spellComp.SelectedSpellIds = known;
         spellComp.Init(stats);

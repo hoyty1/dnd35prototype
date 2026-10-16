@@ -70,6 +70,7 @@ namespace Tests.Scenarios
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("cast-entangled", Entangled);
             yield return S("cast-silenced", Silenced);
+            yield return S("npc-cast-without-divine-focus", NpcCastWithoutDivineFocus);
             yield return S("cast-deafened-area", DeafenedArea);
             yield return S("cast-slot-failure-refund", SlotFailureRefund);
             yield return S("stale-cast-state-energy", StaleEnergyChoice);
@@ -2322,6 +2323,87 @@ namespace Tests.Scenarios
                 .Expect("The holder's refusal is logged once", v => v.Log(@"Pin Holder cannot cast Magic Missile inside a Silence").Count == 1
                     ? ExpectResult.Pass("one refusal line") : ExpectResult.Fail(v.Log(@"Pin Holder cannot cast Magic Missile inside a Silence").Count + " refusal lines"))
                 .Build();
+        }
+
+        // ── rules/npc-cast-without-divine-focus (batch 11 step 17) ──
+
+        /// <summary>
+        /// Decision D3 (batch 11 step 17, SPL-114; PHB p.174, p.130): an NPC caster needs its components as a PC does, and
+        /// carries the kit its class calls for. Two human_cleric NPCs (Cleric 5, the DMG p.114 sample cleric's spells)
+        /// through the NPC cast path: one has lost its holy symbol (taken from its pack at setup, as confiscation or theft
+        /// would), the other keeps the kit it spawned with. The first casts Bull's Strength on itself (V, S, M/DF: a
+        /// cleric casts the divine version, which needs the divine focus): refused at Legality with one log line and
+        /// nothing spent (not Bless: the NPC path still refuses an area burst, AI-001); it then casts Shield of Faith
+        /// (V, S, M), whose material component is in the pouch it still carries. The second casts Bull's Strength.
+        /// </summary>
+        private static ScenarioDef NpcCastWithoutDivineFocus()
+        {
+            return Rules("rules/npc-cast-without-divine-focus", "An NPC cleric that lost its holy symbol cannot cast the divine version of an M/DF spell; its pouch still serves an M spell (PHB p.174; SPL-114)")
+                .Covers("SPL-114", "PHB p.174", "PHB p.130", "batch 11 step 17")
+                .MaxRounds(1)
+                .Npc("priest", "human_cleric", 5, 10, Control.Scripted, CharacterTeam.Enemy)
+                .Npc("priest2", "human_cleric", 5, 14, Control.Scripted, CharacterTeam.Enemy)
+                .Npc("dummy", "target_dummy", 12, 10, Control.Idle, CharacterTeam.Player)
+                .Tweak("priest", c => TakeDivineFocus(c))
+                .Tweak("dummy", Sturdy)
+                .Initiative("priest", "priest2", "dummy")
+                .Turn("priest", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordSlots(ctx, "priest");
+                        Fact(ctx, "priest.symbol", SpellComponentRules.InventoryHoldsAny(ctx.Get("priest").GetInventoryData(), SpellComponentRules.DivineFocusIdsFor("Cleric")));
+                        Fact(ctx, "priest.pouch", SpellComponentRules.InventoryHoldsAny(ctx.Get("priest").GetInventoryData(), DND35e.Identifiers.ItemIDs.COMPONENT_SPELL_POUCH));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.BULLS_STRENGTH, "priest"),
+                    Step.Assert("after Bull's Strength", ctx =>
+                    {
+                        FactSlotsSpent(ctx, "bull.spent", "priest");
+                        Fact(ctx, "bull.active", ctx.Get("priest").StatusEffectManager != null && ctx.Get("priest").StatusEffectManager.HasEffect(SpellNames.BULLS_STRENGTH));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.SHIELD_OF_FAITH, "priest"),
+                    Step.Assert("after Shield of Faith", ctx =>
+                    {
+                        Fact(ctx, "sof.active", ctx.Get("priest").StatusEffectManager != null && ctx.Get("priest").StatusEffectManager.HasEffect(SpellNames.SHIELD_OF_FAITH));
+                        return true;
+                    }))
+                .Turn("priest2", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        Fact(ctx, "priest2.symbol", SpellComponentRules.InventoryHoldsAny(ctx.Get("priest2").GetInventoryData(), SpellComponentRules.DivineFocusIdsFor("Cleric")));
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.BULLS_STRENGTH, "priest2"),
+                    Step.Assert("after", ctx =>
+                    {
+                        Fact(ctx, "priest2.bull", ctx.Get("priest2").StatusEffectManager != null && ctx.Get("priest2").StatusEffectManager.HasEffect(SpellNames.BULLS_STRENGTH));
+                        return true;
+                    }))
+                .Expect("The NPC clerics spawn with the kit; the first has lost only its symbol",
+                    FactsAre(("priest.symbol", false), ("priest.pouch", true), ("priest2.symbol", true)))
+                .Expect("Without its holy symbol the NPC cleric is refused Bull's Strength (M/DF: the divine version needs the divine focus) at Legality: nothing is spent (PHB p.174)", Expect.All(
+                    Expect.StepStatus("priest", 1, "Cast", 0, "refused"), FactsAre(("bull.spent", "none"), ("bull.active", false))))
+                .Expect("The refusal is logged once", v => v.Log(@"cannot cast Bull's Strength: it needs a divine focus").Count == 1
+                    ? ExpectResult.Pass("one refusal line") : ExpectResult.Fail(v.Log(@"cannot cast Bull's Strength: it needs a divine focus").Count + " refusal lines"))
+                .Expect("Its pouch still serves Shield of Faith's material component", Expect.All(
+                    Expect.StepStatus("priest", 1, "Cast", 1, "done"), FactsAre(("sof.active", true))))
+                .Expect("The cleric with its kit casts Bull's Strength", Expect.All(
+                    Expect.StepStatus("priest2", 1, "Cast", 0, "done"), FactsAre(("priest2.bull", true))))
+                .Build();
+        }
+
+        /// <summary>Takes every holy or unholy symbol out of <paramref name="c"/>'s pack.</summary>
+        private static void TakeDivineFocus(CharacterController c)
+        {
+            global::Inventory inv = c.GetInventoryData();
+            string[] ids = SpellComponentRules.DivineFocusIdsFor("Cleric");
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+            {
+                ItemData item = inv.GeneralSlots[i];
+                if (item != null && Array.IndexOf(ids, item.Id) >= 0)
+                    inv.GeneralSlots[i] = null;
+            }
         }
 
         /// <summary>Puts <paramref name="c"/> under a Silence centred on it for 100 rounds (CharacterStats.SilenceActive).</summary>

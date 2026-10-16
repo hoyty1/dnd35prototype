@@ -925,7 +925,8 @@ public partial class GameManager
             casterLevel);
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        // The 50 gp ruby dust is registered but not checked or consumed (SPL-020), so the log does not claim it.
+        // The 50 gp ruby dust is tested at the cast core's Legality stage and spent with the slot, which logs it
+        // (SpellComponentRules; batch 11 step 17).
         CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🔥", $"{casterName} casts Continual Flame! A permanent, heatless flame springs forth."));
         Debug.Log($"[GameManager] Continual Flame: permanent light effect applied (CL {casterLevel})");
 
