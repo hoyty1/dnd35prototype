@@ -331,7 +331,7 @@ public partial class GameManager
             if (summon.IsConcentrationSummon
                 && !summon.HasEnteredPostConcentrationDuration
                 && casterIncapacitated
-                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, SpellNames.SUMMON_SWARM))
+                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, summon.SourceSpellId))
             {
                 ConcentrationManager casterConc = summon.Caster.Concentration;
                 if (casterConc != null)
@@ -344,7 +344,7 @@ public partial class GameManager
 
             bool holdByConcentration = summon.IsConcentrationSummon
                 && !summon.HasEnteredPostConcentrationDuration
-                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, SpellNames.SUMMON_SWARM);
+                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, summon.SourceSpellId);
 
             if (!holdByConcentration)
             {
@@ -569,7 +569,7 @@ public partial class GameManager
 
         InsertIntoInitiative(summonCC, caster);
 
-        int persistedRounds = 2;
+        int persistedRounds = Mathf.Max(1, ConcentrationRules.TailRounds(spell, CasterLevelRules.ForCaster(caster, spell))); // PHB p.289: concentration + 2 rounds
         RegisterActiveSummon(
             summonCC,
             caster,
@@ -6187,7 +6187,10 @@ public partial class GameManager
         return true;
     }
 
-    private void ResolveSpellcastProvocation(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, System.Action<bool> onResolved)
+    /// <param name="beforeRolls">Runs once the caster has chosen to cast (defensively or not), before the rolls: the end
+    /// of its concentration (decision D1, batch 11 step 16; the timing is a delegated RAW reading 2026-10-15). Not run
+    /// on a cancel.</param>
+    private void ResolveSpellcastProvocation(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, System.Action beforeRolls, System.Action<bool> onResolved)
     {
         _spellcastProvocationCancelled = false;
 
@@ -6223,8 +6226,8 @@ public partial class GameManager
             CastDefensivelyDC = defensiveDC,
             ConcentrationBonus = concentrationBonus,
             SuccessChance = successChance,
-            OnCastDefensively = () => onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: true)),
-            OnProceed = () => onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: false)),
+            OnCastDefensively = () => { beforeRolls?.Invoke(); onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: true)); },
+            OnProceed = () => { beforeRolls?.Invoke(); onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: false)); },
             OnCancel = () =>
             {
                 _spellcastProvocationCancelled = true;
@@ -6241,7 +6244,7 @@ public partial class GameManager
     /// then <see cref="ResolveThreatenedSpellcast"/> resolves it. Call after the slot is spent and before
     /// the spell resolves. Returns true when the spell goes on to resolve; false means it is lost.
     /// </summary>
-    private bool ResolveNPCSpellcastProvocation(CharacterController caster, SpellData spell)
+    private bool ResolveNPCSpellcastProvocation(CharacterController caster, SpellData spell, System.Action beforeRolls = null)
     {
         if (caster == null || caster.Stats == null || spell == null)
             return false;
@@ -6256,6 +6259,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)."));
 
         bool castDefensively = AISpellcastingStrategist.ShouldCastDefensively(caster, spell);
+        beforeRolls?.Invoke(); // the caster stopped concentrating to begin casting (decision D1)
         return ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively);
     }
 
@@ -6544,10 +6548,9 @@ public partial class GameManager
     }
 
     // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
-
-    /// <summary>Delegates to <see cref="ConcentrationService.IsConcentratingOnSpell"/>.</summary>
-    private bool IsCasterMaintainingSummonSwarmConcentration(CharacterController caster)
-        => ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM);
+    // One rule for PCs and NPCs (ConcentrationRules; batch 11 step 16, decisions D1 and D2, SPL-153): casting ends the
+    // maintained spell with no roll, maintaining it costs a standard action on each later turn, and a "+N rounds" spell
+    // keeps going N rounds after the concentration ends, its effect and its summoned swarm alike.
 
     private void BeginSummonSwarmConcentration(CharacterController caster, SpellData spell, CharacterController summonedSwarm)
     {
@@ -6558,58 +6561,53 @@ public partial class GameManager
         if (concMgr == null)
             return;
 
-        if (concMgr.IsConcentrating
-            && concMgr.ConcentratingOn != null
-            && concMgr.ConcentratingOn.Spell != null
-            && string.Equals(concMgr.ConcentratingOn.Spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
-        {
-            TransitionSummonSwarmToPostConcentration(caster, "new concentration spell");
-        }
-
+        // A previous concentration (the cast core normally ended it already) ends here, its summons into their tail.
+        bool wasConcentrating = concMgr.IsConcentrating;
         ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", CasterLevelRules.ForCaster(caster, spell), caster.Stats != null ? caster.Stats.CharacterName : "Caster");
         string log = concMgr.BeginConcentration(concentrationMarker);
         if (!string.IsNullOrEmpty(log))
             CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{log}"));
+        if (wasConcentrating)
+            TransitionConcentrationSummonsToTail(caster, "new concentration spell");
 
         if (summonedSwarm != null)
         {
             ActiveSummonInstance active = GetActiveSummon(summonedSwarm);
             if (active != null)
             {
+                int tail = Mathf.Max(1, ConcentrationRules.TailRounds(spell, concentrationMarker.CasterLevel));
                 active.IsConcentrationSummon = true;
                 active.HasEnteredPostConcentrationDuration = false;
-                active.RemainingRounds = 2;
-                active.TotalDurationRounds = 2;
+                active.RemainingRounds = tail;
+                active.TotalDurationRounds = tail;
             }
         }
     }
 
-    private void TransitionSummonSwarmToPostConcentration(CharacterController caster, string reason)
+    /// <summary>
+    /// The summons a concentration kept (Summon Swarm) whose caster no longer concentrates on their spell start the
+    /// spell's "+N rounds" tail now (PHB p.176, p.289; ConcentrationRules.TailRounds); TickSummonDurations counts it down.
+    /// </summary>
+    private void TransitionConcentrationSummonsToTail(CharacterController caster, string reason)
     {
         if (caster == null)
             return;
 
-        bool transitionedAny = false;
         for (int i = 0; i < _activeSummons.Count; i++)
         {
             ActiveSummonInstance summon = _activeSummons[i];
-            if (summon == null || summon.Caster != caster || !summon.IsConcentrationSummon)
+            if (summon == null || summon.Caster != caster || !summon.IsConcentrationSummon || summon.HasEnteredPostConcentrationDuration)
                 continue;
-            if (!string.Equals(summon.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+            if (ConcentrationService.IsConcentratingOnSpell(caster, summon.SourceSpellId))
                 continue;
 
-            if (!summon.HasEnteredPostConcentrationDuration)
-            {
-                summon.HasEnteredPostConcentrationDuration = true;
-                summon.RemainingRounds = 2;
-                summon.TotalDurationRounds = 2;
-                transitionedAny = true;
-            }
-        }
-
-        if (transitionedAny)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", $"Concentration on Summon Swarm ended ({reason}). Swarm will last 2 more rounds."));
+            SpellData source = string.IsNullOrEmpty(summon.SourceSpellId) ? null : SpellDatabase.GetSpell(summon.SourceSpellId);
+            int tail = Mathf.Max(1, source != null ? ConcentrationRules.TailRounds(source, CasterLevelRules.ForCaster(caster, source)) : summon.TotalDurationRounds);
+            summon.HasEnteredPostConcentrationDuration = true;
+            summon.RemainingRounds = tail;
+            summon.TotalDurationRounds = tail;
+            string spellName = source != null ? source.Name : "the summoning";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", $"Concentration on {spellName} ended ({reason}). {summon.Controller?.Stats?.CharacterName ?? "The summoned creature"} will last {tail} more round{(tail == 1 ? "" : "s")}."));
         }
     }
 
@@ -6634,12 +6632,10 @@ public partial class GameManager
         {
             if (hasConcentrationSpell)
             {
-                bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
                 string breakLog = concMgr.ForceBreakConcentration("killed");
                 if (!string.IsNullOrEmpty(breakLog))
                     CombatUI?.ShowCombatLog(CombatLogHelper.InterruptedRaw(breakLog));
-                if (wasSummonSwarm)
-                    TransitionSummonSwarmToPostConcentration(character, "caster incapacitated");
+                TransitionConcentrationSummonsToTail(character, "caster incapacitated");
             }
 
             if (hasHeldTouchCharge)
@@ -6677,7 +6673,6 @@ public partial class GameManager
         // 2) Ongoing concentration spell check
         if (hasConcentrationSpell)
         {
-            bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
             var result = concMgr.CheckConcentrationOnDamage(damageTaken);
             if (!string.IsNullOrEmpty(result.LogMessage))
             {
@@ -6685,22 +6680,22 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"<color={color}>{result.LogMessage}</color>"));
             }
 
-            if (!result.Success && wasSummonSwarm)
-                TransitionSummonSwarmToPostConcentration(character, "failed concentration check");
+            if (!result.Success)
+                TransitionConcentrationSummonsToTail(character, "failed concentration check");
         }
 
         UpdateAllStatsUI();
     }
 
     /// <summary>
-    /// Check concentration when a character casts a spell while already concentrating.
-    /// If the new spell is also a concentration spell, the old one ends automatically.
-    /// If the new spell is NOT a concentration spell, requires a check (DC 15 + new spell level).
+    /// The casting-while-concentrating step (decision D1, batch 11 step 16; PHB p.176): a caster cannot cast a spell while
+    /// concentrating on another, so casting any spell (any casting time, a quickened one included; a scroll, DMG p.213)
+    /// first ends the maintained spell, a free action with no roll; a "+N rounds" spell then runs its tail
+    /// (ConcentrationRules.TailRounds), its summons included. The delivery of a held charge is not a casting, and a wand
+    /// use is an open delegated question that does not end it yet (ConcentrationRules.CastEndsConcentration, SPL-114).
+    /// The same for every caster. Returns true (the cast always proceeds).
     /// </summary>
-    /// <param name="caster">The caster.</param>
-    /// <param name="newSpell">The spell being cast.</param>
-    /// <returns>True if casting can proceed, false if concentration check failed and casting should be aborted.</returns>
-    private bool HandleConcentrationOnCasting(CharacterController caster, SpellData newSpell)
+    private bool HandleConcentrationOnCasting(CharacterController caster, SpellData newSpell, CastSource source)
     {
         if (caster == null || newSpell == null) return true;
 
@@ -6711,51 +6706,18 @@ public partial class GameManager
             return true;
         }
 
-        if (ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM)
-            && !string.Equals(newSpell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        if (!ConcentrationRules.CastEndsConcentration(source))
         {
-            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "swarm-tail");
-            string endLog = concMgr.EndConcentration();
-            if (!string.IsNullOrEmpty(endLog))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Color(endLog, CombatLogHelper.ColorOrange));
-
-            TransitionSummonSwarmToPostConcentration(caster, "caster cast another spell");
+            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "not-a-casting");
             return true;
         }
 
-        // If the new spell is a concentration spell, the old one ends: no check needed, casting proceeds.
-        // It ends here, not only in BeginConcentration, because some concentration spells (Lullaby, Mage Hand) resolve
-        // without a tracked effect and never reach BeginConcentration; without this the caster would keep both going.
-        if (newSpell.DurationType == DurationType.Concentration)
-        {
-            CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "switched");
-            string switchLog = concMgr.EndConcentration();
-            if (!string.IsNullOrEmpty(switchLog))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Color(switchLog, CombatLogHelper.ColorOrange));
-            UpdateAllStatsUI();
-            return true;
-        }
-
-        // Casting a non-concentration spell while concentrating requires a check
-        // DC = 15 + spell level of the NEW spell
-        bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM);
-        var result = concMgr.CheckConcentrationOnCasting(newSpell.SpellLevel);
-        CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, result.Success ? "kept" : "lost");
-        if (!string.IsNullOrEmpty(result.LogMessage))
-        {
-            string color = result.Success ? "#88CCFF" : "#FF6644";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"<color={color}>{result.LogMessage}</color>"));
-        }
-
-        if (!result.Success)
-        {
-            if (wasSummonSwarm)
-                TransitionSummonSwarmToPostConcentration(caster, "failed concentration while casting");
-
-            UpdateAllStatsUI();
-        }
-
-        // Casting always proceeds — the check only affects the existing concentration spell
+        CastStageTrace.Mark(caster, newSpell, CastStageTrace.ConcentrationOnCast, "ended");
+        string endLog = concMgr.CeaseConcentration("to cast " + newSpell.Name);
+        if (!string.IsNullOrEmpty(endLog))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color(endLog, CombatLogHelper.ColorOrange));
+        TransitionConcentrationSummonsToTail(caster, "caster cast another spell");
+        UpdateAllStatsUI();
         return true;
     }
 
@@ -6774,22 +6736,18 @@ public partial class GameManager
         var concMgr = caster.Concentration;
         if (concMgr == null) return;
 
-        if (ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM)
-            && !string.Equals(spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
-        {
-            TransitionSummonSwarmToPostConcentration(caster, "started another concentration spell");
-        }
-
+        bool wasConcentrating = concMgr.IsConcentrating;
         string log = concMgr.BeginConcentration(effect);
         if (!string.IsNullOrEmpty(log))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{log}"));
         }
+        if (wasConcentrating)
+            TransitionConcentrationSummonsToTail(caster, "started another concentration spell");
     }
 
     /// <summary>
-    /// Voluntarily end concentration for a character (free action).
-    /// Called from UI "End Concentration" button.
+    /// Voluntarily stop concentrating (a free action, PHB p.141): the spell ends or runs its "+N rounds" tail.
     /// </summary>
     public void EndConcentrationVoluntarily(CharacterController character)
     {
@@ -6798,16 +6756,107 @@ public partial class GameManager
         var concMgr = character.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating) return;
 
-        bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
-        string log = concMgr.EndConcentration();
+        string log = concMgr.CeaseConcentration("by choice");
         if (!string.IsNullOrEmpty(log))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Color(log, CombatLogHelper.ColorOrange));
         }
 
-        if (wasSummonSwarm)
-            TransitionSummonSwarmToPostConcentration(character, "voluntary end");
+        TransitionConcentrationSummonsToTail(character, "voluntary end");
+        UpdateAllStatsUI();
+    }
 
+    // ── Maintaining the concentration (decision D2, PHB p.176; PC and NPC alike) ──────────────────────────────────
+
+    /// <summary>
+    /// Spends <paramref name="caster"/>'s standard action keeping its concentration spell going this turn (no attack of
+    /// opportunity; ConcentrationRules.Maintain). The PC's Maintain button and the AI both call it. False when it cannot.
+    /// </summary>
+    private bool ExecuteMaintainConcentration(CharacterController caster)
+    {
+        string log = ConcentrationRules.Maintain(caster, out string reason);
+        if (log == null)
+        {
+            if (caster != null && caster.Stats != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot concentrate on a spell: {reason}."));
+            return false;
+        }
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🔵", log));
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    /// <summary>The PC's Maintain button: the standard action that keeps the maintained spell going this turn.</summary>
+    public void OnMaintainConcentrationButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null)
+            return;
+        EndAttackSequence();
+        ExecuteMaintainConcentration(pc);
+        ShowActionChoices();
+    }
+
+    /// <summary>The scenario and AI entry: maintain the concentration through the shared executor.</summary>
+    public bool TryMaintainConcentrationForAI(CharacterController npc) => ExecuteMaintainConcentration(npc);
+
+    /// <summary>
+    /// A turn the turn-skip gate skips (CMB-075), PC or NPC: a pinned or paralyzed caster still concentrates on its
+    /// spell, the one thing that turn lets it do (ConcentrationRules.MaintainOnSkippedTurn; delegated RAW reading
+    /// 2026-10-15, PHB p.156, p.311). Any other caster's spell ends at the end of the turn.
+    /// </summary>
+    private void MaintainConcentrationOnSkippedTurn(CharacterController character)
+    {
+        string log = ConcentrationRules.MaintainOnSkippedTurn(character);
+        if (log != null)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🔵", log));
+    }
+
+    /// <summary>
+    /// For the AI's maintain choice: whether <paramref name="caster"/> keeps a creature summoned by the spell it
+    /// concentrates on (Summon Swarm), which lapsing would start on its tail.
+    /// </summary>
+    public bool HasConcentrationSummonForAI(CharacterController caster)
+    {
+        if (caster == null || caster.Concentration == null || !caster.Concentration.IsConcentrating)
+            return false;
+        for (int i = 0; i < _activeSummons.Count; i++)
+        {
+            ActiveSummonInstance summon = _activeSummons[i];
+            if (summon != null && summon.Caster == caster && summon.IsConcentrationSummon && !summon.HasEnteredPostConcentrationDuration
+                && ConcentrationService.IsConcentratingOnSpell(caster, summon.SourceSpellId))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>At each initiative count: that caster's new turn owes a new concentration; a spell at its limit ends.</summary>
+    private void TickSpellConcentrationAtCount(CharacterController count)
+    {
+        if (count == null || count.Concentration == null || !count.Concentration.IsConcentrating)
+            return;
+        string log = ConcentrationRules.OnCasterCountReached(count);
+        if (string.IsNullOrEmpty(log))
+            return;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", log));
+        TransitionConcentrationSummonsToTail(count, "duration limit");
+        UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// At the end of each turn: a caster that spent no standard action concentrating this turn loses its spell, or the
+    /// spell runs its tail (PHB p.176; delegated RAW reading 2026-10-15, the CHR-026 timing). The PC gets the notice in
+    /// the combat log.
+    /// </summary>
+    private void CheckSpellConcentrationAtTurnEnd(CharacterController ending)
+    {
+        if (ending == null || ending.Concentration == null || !ending.Concentration.IsConcentrating)
+            return;
+        string log = ConcentrationRules.OnCasterTurnEnded(ending);
+        if (string.IsNullOrEmpty(log))
+            return;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color(log, CombatLogHelper.ColorOrange));
+        TransitionConcentrationSummonsToTail(ending, "not maintained");
         UpdateAllStatsUI();
     }
 

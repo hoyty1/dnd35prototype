@@ -334,7 +334,7 @@ public static partial class SpellDatabase
         // Range: Medium (100 ft. + 10 ft./level)
         // Targets: One willing living creature per three levels, no two
         //   of which may be more than 30 ft. apart
-        // Duration: Concentration + 1 round/level (max 10 rounds)
+        // Duration: Concentration + 1 round/level (D)
         // Saving Throw: None
         // Spell Resistance: Yes (harmless)
         //
@@ -366,6 +366,7 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     IsMindAffecting = true,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 1, ConcentrationTailScalesWithLevel = true, // PHB p.268: concentration + 1 round/level (ConcentrationRules.TailRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
@@ -385,7 +386,7 @@ public static partial class SpellDatabase
                     Description = "Enchantment (Compulsion) [Mind-Affecting]. Willing target gains +2 morale bonus to Str and Con, "
                         + "+1 morale bonus on Will saves, and takes -2 penalty to AC. "
                         + "Cannot use Concentration, Int-, Dex-, or Cha-based skills (except Balance, Escape Artist, Intimidate, Ride). "
-                        + "Duration: Concentration + 1 round/level (max 10 rounds after concentration ends). "
+                        + "Duration: Concentration + 1 round/level (D). "
                         + "No save (willing). SR: Yes (harmless). PHB p.268",
                     SpellLevel = 3,
                     School = "Enchantment",
@@ -409,6 +410,7 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     IsMindAffecting = true,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 1, ConcentrationTailScalesWithLevel = true, // PHB p.268: concentration + 1 round/level (ConcentrationRules.TailRounds)
                     DurationValue = 1, // +1 round/level after concentration
                     DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,

@@ -299,7 +299,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SILENT_IMAGE,
                     Name = "Silent Image",
-                    Description = "Creates minor illusion of your design. Concentration + 2 rounds. Will disbelief. PHB p.279",
+                    Description = "Creates minor illusion of your design. Concentration. Will disbelief. PHB p.279",
                     SpellLevel = 1, School = "Illusion",
                     ClassList = new[] { "Wizard" },
                     TargetType = SpellTargetType.Self,
@@ -876,6 +876,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 2, ConcentrationTailScalesWithLevel = false, // PHB p.289: concentration + 2 rounds (ConcentrationRules.TailRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = false,
                     ActionType = SpellActionType.FullRound,

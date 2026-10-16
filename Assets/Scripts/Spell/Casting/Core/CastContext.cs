@@ -57,6 +57,11 @@ public sealed class CastContext
     internal bool AwaitingDecider;
 
     internal bool IsHeldChargeDelivery;
+    /// <summary>
+    /// Set once the run has ended the caster's concentration for this casting (decision D1, batch 11 step 16): at the
+    /// provocation, before its rolls, or at the ConcentrationOnCast stage, so the step runs once per run.
+    /// </summary>
+    internal bool ConcentrationHandled;
     internal bool IsQuickened;
     /// <summary>A quickened cast or a free-action spell (Feather Fall): the round's quickened spell, no provocation (CastActionRules).</summary>
     internal bool CountsAsQuickenedSpell;
@@ -121,6 +126,7 @@ public sealed class CastContext
         Outcome = null;
         Done = null;
         IsHeldChargeDelivery = false;
+        ConcentrationHandled = false;
         IsQuickened = false;
         CountsAsQuickenedSpell = false;
         IsSpontaneousConversion = false;

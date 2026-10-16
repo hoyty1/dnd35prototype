@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
+using DND35e.Identifiers;
 using UnityEngine;
 
 namespace Tests.Services
@@ -17,7 +18,9 @@ namespace Tests.Services
 ///   - Entangled: DC = 15 + spell level (p.170)
 ///   - Vigorous Motion: DC = 10 + spell level (p.170)
 ///   - Violent Motion: DC = 15 + spell level (p.170)
-///   - Casting while concentrating: DC = 15 + new spell level (p.170)
+///   - Casting while concentrating: no check; a caster cannot cast while concentrating, so casting ends the
+///     maintained spell (p.176; decision D1, batch 11 step 16; the old DC 15 + level check had no source)
+///   - Maintaining a concentration spell: a standard action each later turn (p.176; ConcentrationRules, SPL-153)
 ///   - Natural 1 always fails, natural 20 always succeeds on ability checks
 ///   - Casting while threatened (p.140): provokes AoOs unless cast defensively;
 ///     a failed defensive check or a failed damage check loses the spell (SPL-006)
@@ -43,7 +46,6 @@ public static class ConcentrationServiceTests
         TestEntangledCastingDC();
         TestVigorousMotionDC();
         TestViolentMotionDC();
-        TestCastingWhileConcentratingDC();
 
         // Success chance tests
         TestSuccessChancePercent_AutoSuccess();
@@ -56,6 +58,16 @@ public static class ConcentrationServiceTests
         TestAIDefensiveCastingChoice();
         TestThreatenedSpellcastResolution();
         TestLargeCasterThreatenedOnAnyFootprintSquare();
+
+        // The one concentration rule (batch 11 step 16; decisions D1 and D2, SPL-153)
+        TestConcentrationTailAndLimitData();
+        TestCastEndsConcentrationBySource();
+        TestMaintainLifecycle();
+        TestTailKeepsEffect();
+        TestCasterWhoCannotActCannotMaintain();
+        TestPinnedOrParalyzedCasterMaintains(CharacterTeam.Player);
+        TestPinnedOrParalyzedCasterMaintains(CharacterTeam.Enemy);
+        TestDefaultAiMaintainChoice();
 
         Debug.Log($"====== ConcentrationService Results: {_passed} passed, {_failed} failed ======");
     }
@@ -124,13 +136,6 @@ public static class ConcentrationServiceTests
         // DC = 15 + spellLevel; level 3 => 18
         int dc = ConcentrationService.GetViolentMotionDC(3);
         Assert(dc == 18, "ViolentDC(3)==18", $"got {dc}");
-    }
-
-    private static void TestCastingWhileConcentratingDC()
-    {
-        // DC = 15 + newSpellLevel; casting a 5th-level spell while concentrating => 20
-        int dc = ConcentrationService.GetCastingWhileConcentratingDC(5);
-        Assert(dc == 20, "CastingWhileConcentrating(5)==20", $"got {dc}");
     }
 
     // ──────────────────────────────────────────────
@@ -348,6 +353,307 @@ public static class ConcentrationServiceTests
             DestroyTestObject(weak);
             DestroyTestObject(guard);
             Object.DestroyImmediate(gmObject);
+        }
+    }
+
+    // ──────────────────────────────────────────────
+    //  The one concentration rule (ConcentrationRules; batch 11 step 16, decisions D1 and D2, SPL-153; PHB p.176):
+    //  casting ends the maintained spell with no roll, maintaining costs a standard action on each later turn, a turn
+    //  that ends without it ends the spell, a "+N rounds" spell runs its tail, an "up to X" spell ends at its limit.
+    // ──────────────────────────────────────────────
+
+    private static void TestConcentrationTailAndLimitData()
+    {
+        int Tail(string id, int cl) => ConcentrationRules.TailRounds(SpellDatabase.GetSpell(id), cl);
+        int Max(string id, int cl) => ConcentrationRules.MaxRounds(SpellDatabase.GetSpell(id), cl);
+        Assert(Tail(SpellNames.HYPNOTIC_PATTERN, 5) == 2, "Hypnotic Pattern: concentration + 2 rounds (PHB p.242)", $"got {Tail(SpellNames.HYPNOTIC_PATTERN, 5)}");
+        Assert(Tail(SpellNames.MINOR_IMAGE, 5) == 2, "Minor Image: concentration + 2 rounds (PHB p.254)", $"got {Tail(SpellNames.MINOR_IMAGE, 5)}");
+        Assert(Tail(SpellNames.SUMMON_SWARM, 5) == 2, "Summon Swarm: concentration + 2 rounds (PHB p.289)", $"got {Tail(SpellNames.SUMMON_SWARM, 5)}");
+        Assert(Tail(SpellNames.RAGE, 5) == 5 && Tail(SpellNames.LULLABY, 3) == 3 && Tail(SpellNames.RAINBOW_PATTERN, 7) == 7,
+            "Rage, Lullaby and Rainbow Pattern: concentration + 1 round/level (PHB p.268, p.249)",
+            $"{Tail(SpellNames.RAGE, 5)} {Tail(SpellNames.LULLABY, 3)} {Tail(SpellNames.RAINBOW_PATTERN, 7)}");
+        Assert(Tail(SpellNames.SILENT_IMAGE, 5) == 0 && Tail(SpellNames.MAGE_HAND, 5) == 0 && Tail(SpellNames.DETECT_MAGIC, 5) == 0,
+            "Silent Image, Mage Hand and Detect Magic have no tail (PHB p.279, p.249, p.219)");
+        Assert(Max(SpellNames.CALM_EMOTIONS, 3) == 3, "Calm Emotions: concentration, up to 1 round/level (PHB p.207)", $"got {Max(SpellNames.CALM_EMOTIONS, 3)}");
+        Assert(Max(SpellNames.DETECT_MAGIC, 2) == 20 && Max(SpellNames.DETECT_EVIL, 1) == 100,
+            "Detect Magic up to 1 min./level, Detect Evil up to 10 min./level (PHB p.219, p.218)",
+            $"{Max(SpellNames.DETECT_MAGIC, 2)} {Max(SpellNames.DETECT_EVIL, 1)}");
+        Assert(Max(SpellNames.SILENT_IMAGE, 5) == 0 && Max(SpellNames.HYPNOTIC_PATTERN, 5) == 0, "Silent Image and Hypnotic Pattern have no 'up to' limit");
+        Assert(ConcentrationRules.TailRounds(SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE), 5) == 0, "A spell without a Concentration duration has no tail");
+    }
+
+    private static void TestCastEndsConcentrationBySource()
+    {
+        bool Ends(CastSourceKind k) => ConcentrationRules.CastEndsConcentration(new CastSource { Kind = k });
+        Assert(Ends(CastSourceKind.PreparedSlot) && Ends(CastSourceKind.SpontaneousSlot) && Ends(CastSourceKind.SpontaneousConversion)
+               && Ends(CastSourceKind.HeldChargeHold) && Ends(CastSourceKind.TestPanel),
+            "D1: casting from a slot, a spontaneous spell, a conversion, a hold or the F12 panel ends the concentration (PHB p.176)");
+        Assert(Ends(CastSourceKind.Scroll), "D1: reading a scroll is casting its spell and ends the concentration (DMG p.213)");
+        Assert(!Ends(CastSourceKind.HeldChargeDelivery), "D1: delivering a held charge is not a casting");
+        Assert(!Ends(CastSourceKind.Wand), "A wand use does not end the concentration yet (open delegated question, SPL-114)");
+    }
+
+    private static CharacterController CreateConcentrator(string name, out ConcentrationManager conc, CharacterTeam team = CharacterTeam.Player)
+    {
+        // Init (not CreateController's bare Stats) so the condition manager exists and Stunned applies.
+        GameObject go = new GameObject($"ConcentrationTest_{name}");
+        CharacterController caster = go.AddComponent<CharacterController>();
+        caster.Init(BuildCasterStats(name, "Wizard", 5, 12), new Vector2Int(1, 1), null, null);
+        caster.SetTeam(team);
+        if (caster.StatusEffectManager == null)
+            go.AddComponent<StatusEffectManager>().Init(caster.Stats);
+        conc = caster.Concentration;
+        if (conc == null)
+        {
+            conc = go.AddComponent<ConcentrationManager>();
+            conc.Init(caster.Stats, caster);
+        }
+        return caster;
+    }
+
+    private static void TestMaintainLifecycle()
+    {
+        ClassRegistry.Init();
+        CharacterController caster = null;
+        try
+        {
+            caster = CreateConcentrator("Maintainer", out ConcentrationManager conc);
+            ActiveSpellEffect image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), "Maintainer", 5);
+            conc.BeginConcentration(image);
+            Assert(conc.IsConcentrating && conc.MaintainedThisTurn, "D2: the casting turn counts as maintained (the casting was its standard action)");
+            Assert(ConcentrationRules.OnCasterTurnEnded(caster) == "" && conc.IsConcentrating, "D2: the casting turn's end keeps the spell");
+
+            ConcentrationRules.OnCasterCountReached(caster);
+            Assert(ConcentrationRules.OwesMaintenance(caster) && ConcentrationRules.CanMaintain(caster, out _),
+                "D2: the next turn owes the concentration, and a caster with its standard action can pay it");
+            caster.Actions.Reset();
+            string log = ConcentrationRules.Maintain(caster, out string reason);
+            Assert(log != null && conc.MaintainedThisTurn && !caster.Actions.HasStandardAction,
+                "D2: maintaining spends the standard action (PHB p.176, Table 8-2)", reason ?? log);
+            Assert(!ConcentrationRules.CanMaintain(caster, out string again) && again == "Already concentrated this turn",
+                "D2: one concentration per turn", again);
+            Assert(ConcentrationRules.OnCasterTurnEnded(caster) == "" && conc.IsConcentrating && caster.StatusEffectManager.ActiveEffects.Contains(image),
+                "D2: a maintained turn's end keeps the spell");
+
+            ConcentrationRules.OnCasterCountReached(caster);
+            caster.Actions.Reset();
+            caster.CommitStandardAction(); // the standard action spent on something else (an attack)
+            Assert(!ConcentrationRules.CanMaintain(caster, out string noAction) && noAction == "No standard action",
+                "D2: a caster without its standard action cannot maintain", noAction);
+            string lapse = ConcentrationRules.OnCasterTurnEnded(caster);
+            Assert(!conc.IsConcentrating && !caster.StatusEffectManager.ActiveEffects.Contains(image) && lapse.Contains("it ends"),
+                "D2: a turn that ends without the concentration ends Silent Image (no tail)", lapse);
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, "Concentration maintenance lifecycle ran without exceptions", ex.Message);
+        }
+        finally
+        {
+            DestroyTestObject(caster);
+        }
+    }
+
+    private static void TestTailKeepsEffect()
+    {
+        ClassRegistry.Init();
+        CharacterController caster = null;
+        try
+        {
+            caster = CreateConcentrator("Tail Caster", out ConcentrationManager conc);
+            ActiveSpellEffect image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.MINOR_IMAGE).Clone(), "Tail Caster", 5);
+            conc.BeginConcentration(image);
+            string log = conc.CeaseConcentration("to cast Magic Missile");
+            Assert(!conc.IsConcentrating && caster.StatusEffectManager.ActiveEffects.Contains(image) && image.RemainingRounds == 2
+                   && image.DurationAnchor == caster && log.Contains("2 more rounds"),
+                "D1: ceasing to concentrate on Minor Image leaves it 2 more rounds at the caster's count (PHB p.254, p.176)",
+                $"{image.RemainingRounds} {log}");
+            bool first = image.Tick();
+            bool second = image.Tick();
+            Assert(!first && second, "The 2-round tail expires at the second tick", $"{first} {second} {image.RemainingRounds}");
+            caster.StatusEffectManager.RemoveEffect(image);
+
+            ActiveSpellEffect again = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.MINOR_IMAGE).Clone(), "Tail Caster", 5);
+            conc.BeginConcentration(again);
+            conc.EndConcentration(silent: true);
+            Assert(!caster.StatusEffectManager.ActiveEffects.Contains(again), "EndConcentration (the slot reuse) removes the effect with no tail");
+
+            ActiveSpellEffect calm = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.CALM_EMOTIONS).Clone(), "Tail Caster", 2);
+            conc.BeginConcentration(calm);
+            Assert(conc.MaxRoundsForCurrent == 2, "Calm Emotions at caster level 2: up to 2 rounds", $"{conc.MaxRoundsForCurrent}");
+            conc.OnOwnCountReached();
+            Assert(conc.IsConcentrating, "One round in, Calm Emotions goes on");
+            string limit = conc.OnOwnCountReached();
+            Assert(!conc.IsConcentrating && !caster.StatusEffectManager.ActiveEffects.Contains(calm) && limit.Contains("limit"),
+                "At its 'up to 2 rounds' limit Calm Emotions ends (PHB p.176, p.207)", limit);
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, "Concentration tail and limit ran without exceptions", ex.Message);
+        }
+        finally
+        {
+            DestroyTestObject(caster);
+        }
+    }
+
+    private static void TestCasterWhoCannotActCannotMaintain()
+    {
+        ClassRegistry.Init();
+        CharacterController caster = null;
+        try
+        {
+            caster = CreateConcentrator("Dazed Caster", out ConcentrationManager conc);
+            ActiveSpellEffect image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), "Dazed Caster", 5);
+            conc.BeginConcentration(image);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            caster.ApplyCondition(CombatConditionType.Stunned, 2, "test");
+            bool stunned = caster.HasCondition(CombatConditionType.Stunned);
+            bool canMaintain = ConcentrationRules.CanMaintain(caster, out string reason);
+            Assert(stunned && !canMaintain && reason != null && reason.Contains("no standard action"),
+                "D2: a stunned caster cannot maintain (no standard action)", (stunned ? "" : "not stunned; ") + reason);
+            ConcentrationRules.OnCasterTurnEnded(caster);
+            Assert(!conc.IsConcentrating, "D2: the stunned caster's spell ends at the end of its turn");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, "A caster who cannot act ran without exceptions", ex.Message);
+        }
+        finally
+        {
+            DestroyTestObject(caster);
+        }
+    }
+
+    /// <summary>
+    /// Delegated RAW readings 2026-10-15 (ConcentrationRules.StandardActionBar): a pinned caster may maintain (PHB p.156
+    /// lets it cast), and so may a paralyzed one (purely mental actions, PHB p.311), on the turn the turn-skip gate skips
+    /// (CMB-075) too; an asleep caster may not. One rule for a PC and an NPC.
+    /// </summary>
+    private static void TestPinnedOrParalyzedCasterMaintains(CharacterTeam team)
+    {
+        ClassRegistry.Init();
+        string side = team == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController caster = null;
+        try
+        {
+            caster = CreateConcentrator($"Held {side}", out ConcentrationManager conc, team);
+            ActiveSpellEffect image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), $"Held {side}", 5);
+            conc.BeginConcentration(image);
+
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            caster.ApplyCondition(CombatConditionType.Pinned, 2, "test");
+            bool pinned = caster.HasCondition(CombatConditionType.Pinned);
+            bool canPinned = ConcentrationRules.CanMaintain(caster, out string pinnedReason);
+            Assert(pinned && canPinned, $"{side}: a pinned caster may maintain its spell (PHB p.156; delegated RAW reading 2026-10-15)",
+                (pinned ? "" : "not pinned; ") + pinnedReason);
+            string pinnedLog = ConcentrationRules.MaintainOnSkippedTurn(caster);
+            Assert(pinnedLog != null && conc.MaintainedThisTurn && ConcentrationRules.OnCasterTurnEnded(caster) == "" && conc.IsConcentrating,
+                $"{side}: on its skipped turn (CMB-075) a pinned caster keeps its spell up", pinnedLog);
+            caster.RemoveCondition(CombatConditionType.Pinned);
+
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            caster.ApplyCondition(CombatConditionType.Paralyzed, 2, "test");
+            caster.ApplyCondition(CombatConditionType.Helpless, 2, "test");
+            bool paralyzed = caster.HasCondition(CombatConditionType.Paralyzed) && caster.HasCondition(CombatConditionType.Helpless);
+            bool canParalyzed = ConcentrationRules.CanMaintain(caster, out string paralyzedReason);
+            Assert(paralyzed && canParalyzed, $"{side}: a paralyzed (helpless) caster may maintain, a purely mental action (PHB p.311; delegated RAW reading 2026-10-15)",
+                (paralyzed ? "" : "not paralyzed; ") + paralyzedReason);
+            string paralyzedLog = ConcentrationRules.MaintainOnSkippedTurn(caster);
+            Assert(paralyzedLog != null && ConcentrationRules.OnCasterTurnEnded(caster) == "" && conc.IsConcentrating,
+                $"{side}: on its skipped turn a paralyzed caster keeps its spell up", paralyzedLog);
+            caster.RemoveCondition(CombatConditionType.Paralyzed);
+            caster.RemoveCondition(CombatConditionType.Helpless);
+
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            caster.ApplyCondition(CombatConditionType.Asleep, 2, "test");
+            caster.ApplyCondition(CombatConditionType.Helpless, 2, "test");
+            bool asleep = caster.HasCondition(CombatConditionType.Asleep);
+            Assert(asleep && !ConcentrationRules.CanMaintain(caster, out _) && ConcentrationRules.MaintainOnSkippedTurn(caster) == null,
+                $"{side}: an asleep (helpless) caster cannot maintain, even on its skipped turn");
+            ConcentrationRules.OnCasterTurnEnded(caster);
+            Assert(!conc.IsConcentrating, $"{side}: the asleep caster's spell ends at the end of its turn");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"{side}: a pinned or paralyzed caster ran without exceptions", ex.Message);
+        }
+        finally
+        {
+            DestroyTestObject(caster);
+        }
+    }
+
+    private static void TestDefaultAiMaintainChoice()
+    {
+        ClassRegistry.Init();
+        CharacterController caster = null;
+        CharacterController ally = null;
+        CharacterController foe = null;
+        try
+        {
+            caster = CreateConcentrator("AI Concentrator", out ConcentrationManager conc);
+            ally = CreateController(BuildCasterStats("AI Ally", "Fighter", 5, 14), CharacterTeam.Player, new Vector2Int(2, 1));
+            foe = CreateController(BuildCasterStats("AI Foe", "Fighter", 5, 14), CharacterTeam.Enemy, new Vector2Int(6, 1));
+            var all = new List<CharacterController> { caster, ally, foe };
+            bool Choose(int otherSpellLevel, bool canAttack, bool summon = false)
+                => DND35.AI.AIProfile.DefaultShouldMaintainConcentration(caster, all, otherSpellLevel, canAttack, summon);
+
+            ActiveSpellEffect image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), "AI Concentrator", 5);
+            conc.BeginConcentration(image);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            Assert(Choose(-1, false), "AI: with nothing better to do, the caster keeps its Silent Image up");
+            Assert(!Choose(-1, true), "AI: an attack it can make now is worth more than an image on itself");
+            Assert(!Choose(1, false), "AI: a spell it would cast is worth more than an image on itself (the cast ends it, D1)");
+            Assert(!Choose(0, false), "AI: an image on itself is worth no more than a cantrip");
+            conc.EndConcentration(silent: true);
+
+            ActiveSpellEffect minor = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.MINOR_IMAGE).Clone(), "AI Concentrator", 5);
+            conc.BeginConcentration(minor);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            Assert(Choose(-1, false), "AI: Minor Image (a 2-round tail) is still kept up when nothing else is worth the action");
+            Assert(!Choose(-1, true), "AI: but an attack is worth more than Minor Image, whose tail keeps it 2 more rounds");
+            conc.EndConcentration(silent: true);
+
+            ActiveSpellEffect swarm = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SUMMON_SWARM).Clone(), "AI Concentrator", 5);
+            conc.BeginConcentration(swarm);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            Assert(Choose(-1, false, summon: true), "AI: with nothing better to do, the caster keeps its Summon Swarm up");
+            Assert(!Choose(1, false, summon: true), "AI: a spell is worth more than a swarm whose tail keeps it 2 more rounds");
+            conc.EndConcentration(silent: true);
+
+            ActiveSpellEffect lullaby = ally.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.LULLABY).Clone(), "AI Concentrator", 1);
+            conc.BeginConcentration(lullaby);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            Assert(Choose(-1, true), "AI: a spell on another creature with a 1-round tail is worth more than an attack");
+            Assert(Choose(0, true), "AI: and more than a cantrip");
+            Assert(!Choose(1, true), "AI: but not more than a spell of 1st level or higher it would cast");
+            conc.EndConcentration(silent: true);
+
+            ActiveSpellEffect calm = foe.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.CALM_EMOTIONS).Clone(), "AI Concentrator", 5);
+            conc.BeginConcentration(calm);
+            conc.OnOwnCountReached();
+            caster.Actions.Reset();
+            Assert(Choose(2, true), "AI: a spell that holds a foe (Calm Emotions, no tail) is worth more than another spell it would cast");
+            conc.EndConcentration(silent: true);
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, "The AI's maintain choice ran without exceptions", ex.Message);
+        }
+        finally
+        {
+            DestroyTestObject(caster);
+            DestroyTestObject(ally);
+            DestroyTestObject(foe);
         }
     }
 

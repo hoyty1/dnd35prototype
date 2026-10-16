@@ -137,6 +137,7 @@ public class CombatUI : MonoBehaviour
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Button MaintainConcentrationButton; // Maintain the concentration spell (Standard Action, PHB p.176)
     public Button UseImbuedSpellButton;    // Cast Imbued Spell (Standard Action) — Imbue with Spell Ability target
     public Button ControlFlamingSphereButton; // Move Flaming Sphere (Move Action)
     public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
@@ -417,6 +418,7 @@ public class CombatUI : MonoBehaviour
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
+            if (MaintainConcentrationButton != null) MaintainConcentrationButton.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
             if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);

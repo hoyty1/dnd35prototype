@@ -411,6 +411,8 @@ public static class CastCoreStageOrderTests
             TestHoldKeepsChoices(gm, sc, caster);
             TestHoldChoiceResume(gm, sc, caster);
             TestAiConcentration(gm, sc, caster, ally);
+            TestPcCastEndsConcentration(gm, sc, caster, ally);
+            TestDirectScrollEndsConcentration(gm, caster);
             Assert(violations.Count == violationsBeforeStep15, "No cast-core or cast-stack violation for the step 15 cases",
                 string.Join("; ", violations.GetRange(violationsBeforeStep15, violations.Count - violationsBeforeStep15)));
         }
@@ -2056,8 +2058,9 @@ public static class CastCoreStageOrderTests
     /// <summary>
     /// SPL-114 (batch 11 step 15): an AI caster's Silent Image (a Concentration-duration spell, PHB p.279) starts its
     /// concentration (BeginConcentrationTracking), and its next cast runs the casting-while-concentrating step in the
-    /// ConcentrationOnCast stage, as a PC's does: the stage's trace mark is the check's "kept" or "lost" (the caster is
-    /// concentrating), not "not-concentrating".
+    /// ConcentrationOnCast stage, as a PC's does. Since batch 11 step 16 (decision D1, PHB p.176) that step ends the
+    /// concentration with no roll: the stage's one trace mark is "ended", the caster no longer concentrates and the image
+    /// is gone. The same for a PC's cast through the UI path (<see cref="TestPcCastEndsConcentration"/>).
     /// </summary>
     private static void TestAiConcentration(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
     {
@@ -2090,9 +2093,11 @@ public static class CastCoreStageOrderTests
             SpellCastRequest missile = BeginAi(sc, caster, ally, SpellNames.RAY_OF_FROST, events, out slot);
             gm.RunCastSync(missile, out o, stage => events.Add(stage.ToString()));
             ScenarioHooks.CastStage = oldStageHook;
-            Assert(events.Contains("ConcentrationOnCast") && marks.Count == 1 && (marks[0] == "kept" || marks[0] == "lost"),
-                "Step 15: the concentrating AI caster's next cast makes the casting-while-concentrating check on its concentration (SPL-114)",
+            Assert(events.Contains("ConcentrationOnCast") && marks.Count == 1 && marks[0] == "ended",
+                "Step 16: the concentrating AI caster's next cast ends its concentration, with no check (decision D1, PHB p.176)",
                 string.Join(",", marks) + " / " + string.Join(",", events));
+            Assert(!conc.IsConcentrating && caster.StatusEffectManager != null && !caster.StatusEffectManager.HasEffect(SpellNames.SILENT_IMAGE),
+                "Step 16: the AI caster's Silent Image ends when it casts Ray of Frost (no tail; PHB p.279)");
             sc.SpellSlots.Remove(slot);
         }
         finally
@@ -2100,6 +2105,128 @@ public static class CastCoreStageOrderTests
             ScenarioHooks.CastStage = oldStageHook;
             if (conc != null && conc.IsConcentrating)
                 conc.EndConcentration();
+            if (added && conc != null)
+                Object.DestroyImmediate(conc);
+        }
+    }
+
+    /// <summary>
+    /// Batch 11 step 16 (decision D1, PHB p.176): a PC concentrating on Minor Image (concentration + 2 rounds, PHB p.254)
+    /// casts Ray of Frost through the UI path: the ConcentrationOnCast stage marks "ended" once, the PC no longer
+    /// concentrates, and the image keeps going 2 more rounds at the caster's initiative count.
+    /// </summary>
+    private static void TestPcCastEndsConcentration(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
+    {
+        ConcentrationManager conc = caster.Concentration;
+        bool added = conc == null;
+        if (added)
+        {
+            conc = caster.gameObject.AddComponent<ConcentrationManager>();
+            conc.Init(caster.Stats, caster);
+        }
+        if (caster.GetComponent<StatusEffectManager>() == null)
+            caster.gameObject.AddComponent<StatusEffectManager>().Init(caster.Stats);
+        Action<CharacterController, SpellData, string, string> oldStageHook = ScenarioHooks.CastStage;
+        ActiveSpellEffect image = null;
+        try
+        {
+            image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.MINOR_IMAGE).Clone(), caster.Stats.CharacterName, 5);
+            conc.BeginConcentration(image);
+            var marks = new List<string>();
+            ScenarioHooks.CastStage = (c, s, stage, detail) =>
+            {
+                if (stage == CastStageTrace.ConcentrationOnCast)
+                    marks.Add(detail);
+            };
+            var events = new List<string>();
+            var decider = new RecordingDecider(events);
+            CastContext ctx = Begin(gm, sc, caster, ally, SpellNames.RAY_OF_FROST, decider, out SpellSlot slot);
+            CastOutcome done = null;
+            gm.ExecuteCast(ctx, o => done = o);
+            ScenarioHooks.CastStage = oldStageHook;
+            Assert(done != null && done.Kind == CastOutcomeKind.Resolved && marks.Count == 1 && marks[0] == "ended",
+                "Step 16: a concentrating PC's cast ends its concentration once, with no check (decision D1, PHB p.176)",
+                done + " / " + string.Join(",", marks));
+            Assert(!conc.IsConcentrating && caster.StatusEffectManager.ActiveEffects.Contains(image) && image.RemainingRounds == 2 && image.DurationAnchor == caster,
+                "Step 16: the PC's Minor Image runs its 2-round tail at the caster's count (PHB p.254, p.176)",
+                "concentrating " + conc.IsConcentrating + " rounds " + image.RemainingRounds);
+            sc.SpellSlots.Remove(slot);
+        }
+        finally
+        {
+            ScenarioHooks.CastStage = oldStageHook;
+            if (conc != null && conc.IsConcentrating)
+                conc.EndConcentration();
+            if (image != null && caster.StatusEffectManager != null)
+                caster.StatusEffectManager.RemoveEffect(image);
+            if (added && conc != null)
+                Object.DestroyImmediate(conc);
+        }
+    }
+
+    /// <summary>
+    /// Batch 11 step 16 review (decision D1, DMG p.213): a scroll whose spell needs no targeting (Shield) resolves outside
+    /// the cast core (TryUseScroll's direct path, ResolveDirectItemCastChecks), and reading it still ends the reader's
+    /// concentration with no roll: one "ended" mark, the Silent Image gone. A wand use there does not (SPL-114).
+    /// </summary>
+    private static void TestDirectScrollEndsConcentration(GameManager gm, CharacterController caster)
+    {
+        MethodInfo direct = typeof(GameManager).GetMethod("ResolveDirectItemCastChecks", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(direct != null, "GameManager.ResolveDirectItemCastChecks exists");
+        if (direct == null) return;
+        ConcentrationManager conc = caster.Concentration;
+        bool added = conc == null;
+        if (added)
+        {
+            conc = caster.gameObject.AddComponent<ConcentrationManager>();
+            conc.Init(caster.Stats, caster);
+        }
+        if (caster.GetComponent<StatusEffectManager>() == null)
+            caster.gameObject.AddComponent<StatusEffectManager>().Init(caster.Stats);
+        Action<CharacterController, SpellData, string, string> oldStageHook = ScenarioHooks.CastStage;
+        ActiveSpellEffect image = null;
+        try
+        {
+            SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
+#pragma warning disable CS0618
+            ItemData scroll = ItemDatabase.CloneItem(ScrollFactory.GenerateScrollId(SpellNames.SHIELD, "Arcane"));
+            ItemData wand = ItemDatabase.CloneItem(WandFactory.GenerateWandId(SpellNames.SHIELD));
+#pragma warning restore CS0618
+            Assert(scroll != null && wand != null, "The ItemDatabase has a scroll and a wand of Shield");
+            if (scroll == null || wand == null) return;
+
+            var marks = new List<string>();
+            ScenarioHooks.CastStage = (c, s, stage, detail) =>
+            {
+                if (stage == CastStageTrace.ConcentrationOnCast)
+                    marks.Add(detail);
+            };
+            image = caster.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), caster.Stats.CharacterName, 5);
+            conc.BeginConcentration(image);
+            object[] wandArgs = { caster, wand, shield, CastSourceKind.Wand, -1, null };
+            direct.Invoke(gm, wandArgs);
+            Assert(conc.IsConcentrating && marks.Count == 0,
+                "Step 16: a wand of Shield used outside the cast core leaves the concentration (an open delegated question, SPL-114)",
+                string.Join(",", marks));
+
+            object[] args = { caster, scroll, shield, CastSourceKind.Scroll, -1, null };
+            direct.Invoke(gm, args);
+            Assert(!conc.IsConcentrating && marks.Count == 1 && marks[0] == "ended" && !caster.StatusEffectManager.ActiveEffects.Contains(image),
+                "Step 16: reading a scroll of Shield outside the cast core ends the concentration on Silent Image, with no roll (decision D1, DMG p.213)",
+                "concentrating " + conc.IsConcentrating + " / " + string.Join(",", marks));
+        }
+        catch (Exception ex)
+        {
+            Exception inner = ex is TargetInvocationException tie && tie.InnerException != null ? tie.InnerException : ex;
+            Assert(false, "The direct scroll path ran without exceptions", inner.Message);
+        }
+        finally
+        {
+            ScenarioHooks.CastStage = oldStageHook;
+            if (conc != null && conc.IsConcentrating)
+                conc.EndConcentration();
+            if (image != null && caster.StatusEffectManager != null && caster.StatusEffectManager.ActiveEffects.Contains(image))
+                caster.StatusEffectManager.RemoveEffect(image);
             if (added && conc != null)
                 Object.DestroyImmediate(conc);
         }

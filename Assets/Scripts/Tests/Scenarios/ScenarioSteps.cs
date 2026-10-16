@@ -15,7 +15,7 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -144,6 +144,12 @@ namespace Tests.Scenarios
         public static Step BardicSuggestion(string target) => new Step(StepKind.BardicSuggestion) { Target = target };
         /// <summary>Stops the bard's song (no action). Scripted: TryBardicStopForAI. Ui: the list's Stop option.</summary>
         public static Step BardicStop() => new Step(StepKind.BardicStop);
+
+        /// <summary>
+        /// Keeps the actor's concentration spell going this turn (a standard action, PHB p.176; ConcentrationRules).
+        /// Scripted: TryMaintainConcentrationForAI. Ui: the Maintain button (OnMaintainConcentrationButtonPressed).
+        /// </summary>
+        public static Step MaintainConcentration() => new Step(StepKind.MaintainConcentration);
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -636,6 +642,12 @@ namespace Tests.Scenarios
                         yield return null;
                         break;
 
+                    case StepKind.MaintainConcentration:
+                        if (!ConcentrationRules.CanMaintain(a, out string maintainRefusal)) { ok = false; note = maintainRefusal; break; }
+                        ok = gm.TryMaintainConcentrationForAI(a);
+                        yield return null;
+                        break;
+
                     case StepKind.Maneuver:
                         if (target == null) { ok = false; note = "no target"; break; }
                         // The game logs its refusal reason below Warning, which fast mode filters: note the preconditions.
@@ -1076,6 +1088,10 @@ namespace Tests.Scenarios
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnBardicMusicButtonPressed();
                     if (!gm.Harness_ChooseSelectionOption("Suggestion: " + target.Stats.CharacterName)) { _awaitNote = "no Suggestion option for " + s.Target; gm.CombatUI?.HidePickUpItemSelection(); }
+                    break;
+                case StepKind.MaintainConcentration:
+                    if (!ConcentrationRules.CanMaintain(_actor, out string maintainRefusal)) { _awaitNote = maintainRefusal; break; }
+                    gm.OnMaintainConcentrationButtonPressed();
                     break;
                 case StepKind.BardicStop:
                     gm.OnBardicMusicButtonPressed();

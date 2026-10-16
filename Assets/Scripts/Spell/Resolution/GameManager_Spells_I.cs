@@ -355,6 +355,15 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("✨", $"{targetName} begins casting imbued {entry.Spell.Name}! (CL {entry.CasterLevel}, DC {entry.SaveDC})"));
         Debug.Log($"[ImbueWithSpellAbility] {targetName} initiating imbued spell cast: {entry.Spell.Name} at CL {entry.CasterLevel}, DC {entry.SaveDC}");
 
+        // Casting an imbued spell is casting a spell, so it ends the spell the caster concentrates on (decision D1, PHB
+        // p.176): the player is told first; the cast core ends it once the cast goes ahead.
+        if (target.IsControllable)
+        {
+            string concentrationWarning = ConcentrationRules.CastWarning(target, entry.Spell, new CastSource());
+            if (concentrationWarning != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", concentrationWarning));
+        }
+
         // Open the imbued cast's own context (batch 11 step 4): its own clone of the spell, cast by the target, from no
         // item or panel, so no state of a Ui cast the UI left open can reach it (BeginCast replaces that cast).
         BeginCast(SpellCastRequest.ForUiPrebuilt(target, SpellCastRequest.CloneForCast(entry.Spell), null, new CastSource()));

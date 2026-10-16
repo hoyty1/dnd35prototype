@@ -62,6 +62,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button BardicMusicButton => _combatUI != null ? _combatUI.BardicMusicButton : null;
     private Text BardicMusicStatusText => _combatUI != null ? _combatUI.BardicMusicStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
+    private Button MaintainConcentrationButton => _combatUI != null ? _combatUI.MaintainConcentrationButton : null;
     private Button UseImbuedSpellButton => _combatUI != null ? _combatUI.UseImbuedSpellButton : null;
     private Button BreakWallButton => _combatUI != null ? _combatUI.BreakWallButton : null;
     private Button ControlFlamingSphereButton => _combatUI != null ? _combatUI.ControlFlamingSphereButton : null;
@@ -924,8 +925,30 @@ public class ActionButtonPanel : MonoBehaviour
             ? Mathf.Clamp(pc.Stats.ArcaneSpellFailure, 0, 100)
             : 0;
         string castSpellLabel = asfChance > 0 ? $"{castBaseLabel}\n⚠ ASF {asfChance}%" : castBaseLabel;
+        // A cast ends the spell the caster concentrates on (PHB p.176; decision D1, batch 11 step 16).
+        ConcentrationManager concentration = pc.Concentration;
+        bool concentrating = concentration != null && concentration.IsConcentrating;
+        if (canCast && concentrating)
+            castSpellLabel += $"\n⚠ Ends {concentration.ConcentrationSpellName}";
 
         states.Set(CastSpellButton, new ActionButtonState(hasCastableSpells, canCast, castSpellLabel));
+
+        // ── Maintain a concentration spell (PHB p.176): the standard action owed on each turn after the casting; a turn
+        // that ends without it ends the spell (ConcentrationRules, decision D2, SPL-153) ──
+        string maintainReason = null;
+        bool canMaintain = concentrating && !context.IsTurned && ConcentrationRules.CanMaintain(pc, out maintainReason);
+        string maintainLabel = "Maintain Spell";
+        if (concentrating)
+        {
+            string spellName = concentration.ConcentrationSpellName;
+            if (concentration.MaintainedThisTurn)
+                maintainLabel = $"Maintain {spellName} (kept this turn)";
+            else if (canMaintain)
+                maintainLabel = $"Maintain {spellName} (Standard)\n[or it ends at end of turn]";
+            else
+                maintainLabel = $"Maintain {spellName} ({maintainReason}; it ends at end of turn)";
+        }
+        states.Set(MaintainConcentrationButton, new ActionButtonState(concentrating, canMaintain, maintainLabel));
 
         bool hasActiveFlamingSphere = context.HasActiveFlamingSphere;
         bool canControlFlamingSphere = hasActiveFlamingSphere && context.CanControlFlamingSphere && !context.IsTurned;
@@ -1322,7 +1345,12 @@ public class ActionButtonPanel : MonoBehaviour
         bool canCast = context.Actions.HasStandardAction && !context.IsTurned && !context.IsPinned;
         string label;
         if (canCast)
+        {
             label = $"Cast Imbued Spell ({count})";
+            // Casting an imbued spell is casting a spell, so it ends the one the PC concentrates on (decision D1, PHB p.176).
+            if (pc.Concentration != null && pc.Concentration.IsConcentrating)
+                label += $"\n⚠ Ends {pc.Concentration.ConcentrationSpellName}";
+        }
         else if (context.IsPinned)
             label = "Imbued Spell (Pinned)";
         else if (context.IsTurned)
@@ -1360,6 +1388,8 @@ public class ActionButtonPanel : MonoBehaviour
         if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
         if (RageButton != null) RageButton.gameObject.SetActive(false);
         if (BardicMusicButton != null) BardicMusicButton.gameObject.SetActive(false);
+        // The Maintain button stays: a grappling or pinned caster may keep its spell up (ConcentrationRules; delegated
+        // RAW reading 2026-10-15, PHB p.156, p.176), as it may cast.
         if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
@@ -1422,6 +1452,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (RageButton != null) RageButton.gameObject.SetActive(false);
         if (BardicMusicButton != null) BardicMusicButton.gameObject.SetActive(false);
         if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
+        if (MaintainConcentrationButton != null) MaintainConcentrationButton.gameObject.SetActive(false);
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);

@@ -16,8 +16,13 @@ public enum ConcentrationCheckType
 /// Manages spell concentration mechanics per D&D 3.5e PHB rules.
 ///
 /// Core Rules:
-///   - A character can only concentrate on one spell at a time.
-///   - Casting a new concentration spell ends the previous one.
+///   - A character can only concentrate on one spell at a time, and cannot cast a spell while concentrating
+///     (PHB p.176): casting any spell first ends the maintained one, with no roll (GameManager.HandleConcentrationOnCasting,
+///     decision D1, batch 11 step 16).
+///   - Maintaining the spell is a standard action on each of the caster's turns after the casting; a turn that ends
+///     without it ends the spell (<see cref="ConcentrationRules"/>, decision D2, SPL-153).
+///   - A "concentration + N rounds" spell keeps its effect N more rounds however the concentration ends
+///     (<see cref="ConcentrationRules.TailRounds"/>); an "up to X" spell ends at its limit.
 ///   - Taking damage while concentrating requires a Concentration check:
 ///     DC = 10 + damage dealt + spell level.
 ///   - Holding a charged melee touch spell and taking damage also uses
@@ -106,6 +111,29 @@ public class ConcentrationManager : MonoBehaviour
     }
 
     public bool IsConcentrating => ConcentratingOn != null;
+
+    /// <summary>
+    /// True when the caster has kept its spell up this turn: the turn it began concentrating (the casting was the turn's
+    /// standard action) or one on which it spent the standard action (ConcentrationRules.Maintain). Reset at the caster's
+    /// initiative count (<see cref="OnOwnCountReached"/>); the bardic-music ConcentratedThisTurn model (CHR-026).
+    /// </summary>
+    public bool MaintainedThisTurn { get; private set; }
+
+    /// <summary>The initiative counts of the caster passed since it began concentrating on the current spell.</summary>
+    public int RoundsConcentrated { get; private set; }
+
+    /// <summary>The "up to X" limit of the current spell in rounds (ConcentrationRules.MaxRounds); 0 = none.</summary>
+    public int MaxRoundsForCurrent { get; private set; }
+
+    /// <summary>The tail the last ended concentration started (ConcentrationRules.TailRounds), 0 when none.</summary>
+    public int LastTailRounds { get; private set; }
+
+    /// <summary>Marks this turn's concentration as kept (ConcentrationRules.Maintain spends the standard action).</summary>
+    public void MarkMaintained()
+    {
+        if (IsConcentrating)
+            MaintainedThisTurn = true;
+    }
     /// <summary>Get the name of the spell being concentrated on.</summary>
     public string ConcentrationSpellName => ConcentratingOn?.Spell?.Name ?? "";
 
@@ -127,15 +155,19 @@ public class ConcentrationManager : MonoBehaviour
 
         string log = "";
 
-        // If already concentrating, end the previous spell
+        // If already concentrating, the previous spell ends (or runs its tail): the caster ceased concentrating on it to
+        // cast this one (PHB p.176). The cast core normally ended it already (HandleConcentrationOnCasting).
         if (IsConcentrating)
         {
-            string prevSpell = ConcentrationSpellName;
-            EndConcentration(silent: true);
-            log += $"🔴 {_stats.CharacterName} stops concentrating on {prevSpell}.\n";
+            string prevLog = CeaseConcentration("began concentrating on " + effect.Spell.Name);
+            if (!string.IsNullOrEmpty(prevLog))
+                log += prevLog + "\n";
         }
 
         ConcentratingOn = effect;
+        MaintainedThisTurn = true; // the casting was this turn's standard action (PHB p.176)
+        RoundsConcentrated = 0;
+        MaxRoundsForCurrent = ConcentrationRules.MaxRounds(effect.Spell, effect.CasterLevel);
         log += $"🔵 {_stats.CharacterName} concentrates on {effect.Spell.Name}.";
         Debug.Log($"[Concentration] {_stats.CharacterName} begins concentrating on {effect.Spell.Name}");
 
@@ -143,22 +175,17 @@ public class ConcentrationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// End concentration voluntarily or due to failure.
-    /// Removes the concentration spell effect from the character it was applied to.
+    /// End the concentration and remove the spell's effect outright, with no "+N rounds" tail: the slot reuse and the
+    /// removal of the creature the effect sits on. A caster that stops concentrating uses <see cref="CeaseConcentration"/>.
     /// </summary>
-    /// <param name="silent">If true, don't log (used when immediately replacing).</param>
+    /// <param name="silent">If true, don't log.</param>
     /// <returns>Log message describing what happened.</returns>
     public string EndConcentration(bool silent = false)
     {
         if (!IsConcentrating) return "";
 
         string spellName = ConcentrationSpellName;
-        var effect = ConcentratingOn;
-        ConcentratingOn = null;
-
-        // Remove the effect from whoever it was applied to
-        // The effect tracks its target via AffectedCharacterName
-        RemoveConcentrationEffect(effect);
+        EndInternal(runTail: false);
 
         string log = "";
         if (!silent)
@@ -168,6 +195,81 @@ public class ConcentrationManager : MonoBehaviour
         }
 
         return log;
+    }
+
+    /// <summary>
+    /// The caster stops concentrating (to cast another spell, at the end of a turn it did not keep the spell up, or by
+    /// choice, a free action; PHB p.176, p.141): the spell ends, or a "concentration + N rounds" spell keeps its effect N
+    /// more rounds (<see cref="ConcentrationRules.TailRounds"/>). Returns the log line.
+    /// </summary>
+    public string CeaseConcentration(string reason, bool silent = false)
+    {
+        if (!IsConcentrating) return "";
+
+        string spellName = ConcentrationSpellName;
+        int tail = EndInternal(runTail: true);
+        if (silent)
+            return "";
+        string why = string.IsNullOrEmpty(reason) ? "" : $" ({reason})";
+        string log = tail > 0
+            ? $"🔴 {_stats.CharacterName} stops concentrating on {spellName}{why}; it lasts {tail} more round{(tail == 1 ? "" : "s")}."
+            : $"🔴 {_stats.CharacterName} stops concentrating on {spellName}{why}; it ends.";
+        Debug.Log($"[Concentration] {log}");
+        return log;
+    }
+
+    /// <summary>
+    /// The caster's initiative count was reached: the new turn owes a new concentration, and a spell at its "up to X"
+    /// limit ends (PHB p.176; no tail, its whole duration has run). Returns the log line or an empty string.
+    /// </summary>
+    public string OnOwnCountReached()
+    {
+        if (!IsConcentrating)
+            return "";
+        MaintainedThisTurn = false;
+        RoundsConcentrated++;
+        int max = MaxRoundsForCurrent;
+        if (max <= 0 || RoundsConcentrated < max)
+            return "";
+        string spellName = ConcentrationSpellName;
+        EndInternal(runTail: false);
+        string log = $"⏱ {_stats.CharacterName}'s {spellName} reaches its duration limit ({max} rounds) and ends.";
+        Debug.Log($"[Concentration] {log}");
+        return log;
+    }
+
+    /// <summary>
+    /// Clears the concentration and either starts the spell's tail on its effect (the effect stays where it is and ticks
+    /// at the caster's initiative count, CMB-006) or removes the effect. Returns the tail rounds started (0 when none).
+    /// </summary>
+    private int EndInternal(bool runTail)
+    {
+        var effect = ConcentratingOn;
+        ConcentratingOn = null;
+        MaintainedThisTurn = false;
+        RoundsConcentrated = 0;
+        MaxRoundsForCurrent = 0;
+        LastTailRounds = 0;
+        if (effect == null)
+            return 0;
+
+        int tail = runTail ? ConcentrationRules.TailRounds(effect.Spell, effect.CasterLevel) : 0;
+        LastTailRounds = tail;
+        if (tail > 0)
+        {
+            StatusEffectManager holder = FindEffectHolder(effect);
+            if (holder != null)
+            {
+                effect.RemainingRounds = tail;
+                effect.DurationAnchor = Caster;
+            }
+            // No holder: an effect kept elsewhere (the Summon Swarm marker); its owner runs the tail (GameManager).
+            return tail;
+        }
+
+        // Remove the effect from whoever it was applied to
+        RemoveConcentrationEffect(effect);
+        return 0;
     }
 
     /// <summary>
@@ -225,25 +327,6 @@ public class ConcentrationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Perform a concentration check when casting another spell while concentrating.
-    /// DC = 15 + spell level of the NEW spell being cast.
-    /// Note: In D&D 3.5e, casting a new concentration spell automatically ends
-    /// the old one. This check is for casting a NON-concentration spell while
-    /// maintaining an existing concentration.
-    /// </summary>
-    /// <param name="newSpellLevel">Spell level of the spell being cast.</param>
-    /// <returns>A ConcentrationCheckResult with the outcome and log message.</returns>
-    public ConcentrationCheckResult CheckConcentrationOnCasting(int newSpellLevel)
-    {
-        if (!IsConcentrating)
-            return new ConcentrationCheckResult { Success = true, LogMessage = "" };
-
-        int dc = ConcentrationService.GetCastingWhileConcentratingDC(newSpellLevel);
-
-        return PerformConcentrationCheck(dc, "casting a spell");
-    }
-
-    /// <summary>
     /// Perform a concentration check for vigorous motion (e.g., riding).
     /// DC = 10 + spell level.
     /// </summary>
@@ -292,9 +375,10 @@ public class ConcentrationManager : MonoBehaviour
         if (!IsConcentrating) return "";
 
         string spellName = ConcentrationSpellName;
-        EndConcentration(silent: true);
+        int tail = EndInternal(runTail: true); // a "+N rounds" spell keeps going (delegated RAW reading 2026-10-15)
 
-        string log = $"💥 {_stats.CharacterName}'s concentration on {spellName} is broken ({reason})!";
+        string log = $"💥 {_stats.CharacterName}'s concentration on {spellName} is broken ({reason})!"
+            + (tail > 0 ? $" It lasts {tail} more round{(tail == 1 ? "" : "s")}." : "");
         Debug.Log($"[Concentration] {log}");
         return log;
     }
@@ -339,9 +423,10 @@ public class ConcentrationManager : MonoBehaviour
         }
         else
         {
-            // Concentration fails — end the spell
-            EndConcentration(silent: true);
-            result.LogMessage = $"{logLine1}\n{logLine2}\n  ❌ Concentration on {spellName} is broken!";
+            // Concentration fails: the spell ends, or runs its "+N rounds" tail (PHB p.176; delegated RAW reading 2026-10-15)
+            int tail = EndInternal(runTail: true);
+            result.LogMessage = $"{logLine1}\n{logLine2}\n  ❌ Concentration on {spellName} is broken!"
+                + (tail > 0 ? $" It lasts {tail} more round{(tail == 1 ? "" : "s")}." : "");
             Debug.Log($"[Concentration] {_stats.CharacterName}: Check DC {dc} — rolled {totalRoll} — FAILED ({spellName} ends)");
         }
 
@@ -379,6 +464,19 @@ public class ConcentrationManager : MonoBehaviour
         if (conMod != 0) parts.Add($"+ {conMod}(CON)");
 
         return parts.Count > 0 ? string.Join(" ", parts) : "";
+    }
+
+    /// <summary>The StatusEffectManager that holds <paramref name="effect"/> (this character's or another's), or null.</summary>
+    private StatusEffectManager FindEffectHolder(ActiveSpellEffect effect)
+    {
+        if (effect == null)
+            return null;
+        if (_statusEffectMgr != null && _statusEffectMgr.ActiveEffects.Contains(effect))
+            return _statusEffectMgr;
+        foreach (var mgr in FindObjectsByType<StatusEffectManager>(FindObjectsInactive.Exclude))
+            if (mgr.ActiveEffects.Contains(effect))
+                return mgr;
+        return null;
     }
 
     /// <summary>

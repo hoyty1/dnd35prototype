@@ -62,6 +62,7 @@ public partial class GameManager
                 string reason = GetUnableToActReason(npc);
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"⏭ {npc.Stats.CharacterName} {reason} and cannot act this turn."));
             }
+            MaintainConcentrationOnSkippedTurn(npc); // a pinned or paralyzed caster still concentrates (ConcentrationRules)
             NextInitiativeTurn();
             yield break;
         }

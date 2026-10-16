@@ -218,6 +218,50 @@ namespace DND35.AI
             => DefaultBardicMusicChoice(self, combatants);
 
         /// <summary>
+        /// AI choice, not a rule: whether to spend this turn's standard action keeping the caster's concentration spell
+        /// going (PHB p.176; ConcentrationRules, decision D2, batch 11 step 16) rather than use it otherwise, which ends the
+        /// spell (or starts its tail) at the end of the turn, or at once if it casts (decision D1). The rule is shared with
+        /// the PC's Maintain button. <see cref="DefaultShouldMaintainConcentration"/>.
+        /// </summary>
+        /// <param name="otherSpellLevel">The level of the spell the caster would cast now (AIService.SelectSpell), or -1 for none.</param>
+        /// <param name="canAttackNow">The caster can attack a foe without moving (in its weapon's reach or range), or is
+        /// grappling and could make a grapple attack instead.</param>
+        /// <param name="holdsSummon">The caster keeps a creature summoned by the spell (Summon Swarm).</param>
+        public virtual bool ShouldMaintainConcentration(CharacterController self, IList<CharacterController> combatants, int otherSpellLevel, bool canAttackNow, bool holdsSummon)
+            => DefaultShouldMaintainConcentration(self, combatants, otherSpellLevel, canAttackNow, holdsSummon);
+
+        /// <summary>
+        /// The default choice, also for creatures without a profile: maintain when the spell is worth more than the other
+        /// standard action, and always when there is no other (letting it lapse would gain nothing). The spell's worth: 3
+        /// when its effect sits on a foe (a foe it holds), 2 when it sits on an ally or keeps a summoned creature, 1 when it
+        /// sits on the caster or on no creature (an image, a detection); 1 less when letting it lapse still keeps it 2 rounds
+        /// or more (its "+N rounds" tail), but never below 1. The other action's worth: 2 for a spell of 1st level or higher
+        /// the AI would cast, 1 for a cantrip or an attack it can make without moving, else 0.
+        /// </summary>
+        public static bool DefaultShouldMaintainConcentration(CharacterController self, IList<CharacterController> combatants, int otherSpellLevel, bool canAttackNow, bool holdsSummon)
+        {
+            if (!ConcentrationRules.CanMaintain(self, out _))
+                return false;
+            ActiveSpellEffect effect = self.Concentration.ConcentratingOn;
+            int worth = holdsSummon ? 2 : 1;
+            if (effect != null && combatants != null)
+            {
+                for (int i = 0; i < combatants.Count; i++)
+                {
+                    CharacterController c = combatants[i];
+                    if (c == null || c == self || c.Stats == null || c.IsDead || c.StatusEffectManager == null)
+                        continue;
+                    if (c.StatusEffectManager.ActiveEffects.Contains(effect))
+                        worth = Mathf.Max(worth, TeamUtility.IsEnemy(self, c) ? 3 : 2);
+                }
+            }
+            if (effect != null && ConcentrationRules.TailRounds(effect.Spell, effect.CasterLevel) >= 2)
+                worth = Mathf.Max(1, worth - 1);
+            int other = otherSpellLevel >= 1 ? 2 : (otherSpellLevel == 0 || canAttackNow) ? 1 : 0;
+            return other == 0 || worth > other;
+        }
+
+        /// <summary>
         /// The default bardic music choice, also used for creatures without a profile:
         /// - fascinating: a suggestion to a fascinated foe when the bard has it, else concentrate to keep the song up;
         /// - inspiring competence: concentrate;

@@ -813,6 +813,8 @@ public class SceneBootstrap : MonoBehaviour
             "Bardic Music", new Color(0.45f, 0.25f, 0.65f));
         combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
+        combatUI.MaintainConcentrationButton = CreateGridButton(btnGrid.transform, "MaintainConcentrationBtn",
+            "Maintain Spell", new Color(0.2f, 0.4f, 0.7f));
         combatUI.ControlFlamingSphereButton = CreateGridButton(btnGrid.transform, "ControlFlamingSphereBtn",
             "Control Flaming Sphere", new Color(0.84f, 0.42f, 0.14f));
         combatUI.DismissDisguiseSelfButton = CreateGridButton(btnGrid.transform, "DismissDisguiseSelfBtn",
@@ -1194,6 +1196,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.BardicMusicButton.onClick.AddListener(() => GameManager.Instance.OnBardicMusicButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
+        if (ui.MaintainConcentrationButton != null)
+            ui.MaintainConcentrationButton.onClick.AddListener(() => GameManager.Instance.OnMaintainConcentrationButtonPressed());
         if (ui.BreakWallButton != null)
             ui.BreakWallButton.onClick.AddListener(() => GameManager.Instance.OnBreakWallButtonPressed());
         if (ui.UseImbuedSpellButton != null)

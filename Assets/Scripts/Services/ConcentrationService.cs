@@ -16,6 +16,10 @@ using UnityEngine;
 //   - Concentration bonus lookup helper
 //   - Utility to check if a caster is maintaining a specific concentration spell
 //
+// (The DC 15 + spell level "casting while concentrating" check is gone: a caster cannot
+// cast while concentrating, so casting ends the maintained spell with no roll; PHB p.176,
+// decision D1, batch 11 step 16.)
+//
 // The actual check ROLLING is still in ConcentrationManager (per-character
 // MonoBehaviour with state), and the orchestration (CombatUI logging,
 // Summon Swarm transitions, held charge handling) stays in GameManager.
@@ -27,7 +31,6 @@ using UnityEngine;
 //   Inline "15 + spell.SpellLevel" in 5+ locations
 //   Inline "10 + damage + spellLevel" in 3+ locations
 //   Inline "20 + spell.SpellLevel" in GrappleSystem
-//   IsCasterMaintainingSummonSwarmConcentration() in GameManager
 // ============================================================================
 
 /// <summary>
@@ -57,12 +60,6 @@ public static class ConcentrationService
 
     /// <summary>Base DC for entangled casting (PHB p.170).</summary>
     public const int ENTANGLED_DC_BASE = 15;
-
-    /// <summary>
-    /// Base DC for maintaining concentration while casting another spell (PHB p.170).
-    /// DC = 15 + spell level of the NEW spell being cast.
-    /// </summary>
-    public const int CASTING_WHILE_CONCENTRATING_DC_BASE = 15;
 
     // ════════════════════════════════════════════════════════════
     //  DC Calculation Methods
@@ -135,18 +132,6 @@ public static class ConcentrationService
     public static int GetEntangledCastingDC(int spellLevel)
     {
         return ENTANGLED_DC_BASE + spellLevel;
-    }
-
-    /// <summary>
-    /// Calculate the DC for maintaining an existing concentration spell
-    /// while casting a new (non-concentration) spell.
-    /// D&D 3.5e PHB p.170: DC = 15 + spell level of the NEW spell.
-    /// </summary>
-    /// <param name="newSpellLevel">The level of the new spell being cast.</param>
-    /// <returns>The concentration DC.</returns>
-    public static int GetCastingWhileConcentratingDC(int newSpellLevel)
-    {
-        return CASTING_WHILE_CONCENTRATING_DC_BASE + newSpellLevel;
     }
 
     // ════════════════════════════════════════════════════════════

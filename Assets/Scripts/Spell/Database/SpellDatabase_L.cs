@@ -111,8 +111,9 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     BuffDurationRounds = 10,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 1, ConcentrationTailScalesWithLevel = true, // PHB p.249: concentration + 1 round/level (ConcentrationRules.TailRounds)
                     DurationValue = 1,
-                    DurationText = "Concentration + 1 round/level (D)", // PHB p.249; the extra rounds after concentration are not modelled
+                    DurationText = "Concentration + 1 round/level (D)", // PHB p.249; the rounds after concentration: ConcentrationTailRounds
                     DurationScalesWithLevel = true, // PHB p.249: concentration + 1 round/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

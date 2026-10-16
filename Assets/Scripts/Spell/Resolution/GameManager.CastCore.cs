@@ -804,15 +804,30 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// ConcentrationOnCast: a caster concentrating on another spell checks it as it casts (HandleConcentrationOnCasting;
-    /// decision D1 replaces it in step 16), once, after the provocation stage lets the cast proceed (batch 11 step 12,
-    /// SPL-152), for every caster (batch 11 step 15, SPL-114).
+    /// ConcentrationOnCast: a caster concentrating on another spell stops concentrating as it casts, a free action with
+    /// no roll, and a "+N rounds" spell runs its tail (HandleConcentrationOnCasting; decision D1, batch 11 step 16, PHB
+    /// p.176), once per run, for every caster (batch 11 step 15, SPL-114). A threatened cast that proceeds has done it
+    /// already, before its attacks of opportunity (<see cref="EndConcentrationForCasting"/>); a cast cancelled at the AoO
+    /// prompt ends nothing (SPL-152).
     /// </summary>
     private void CastStageConcentrationOnCast(CastContext ctx, Action<CastContext> next)
     {
         EnterCastStage(ctx, CastStage.ConcentrationOnCast);
-        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+        EndConcentrationForCasting(ctx);
         next(ctx);
+    }
+
+    /// <summary>
+    /// Runs the casting-while-concentrating step of <paramref name="ctx"/> once (decision D1): the deciders call it when
+    /// a threatened caster has chosen to cast, before the defensive roll or the attacks of opportunity, since the caster
+    /// stopped concentrating to begin casting; the ConcentrationOnCast stage and a lost cast call it otherwise.
+    /// </summary>
+    internal void EndConcentrationForCasting(CastContext ctx)
+    {
+        if (ctx == null || ctx.ConcentrationHandled)
+            return;
+        ctx.ConcentrationHandled = true;
+        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell, ctx.Request.Source);
     }
 
     /// <summary>
@@ -1658,12 +1673,12 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// A spell lost to a distraction or a spell failure still runs the casting-while-concentrating step
-    /// (HandleConcentrationOnCasting), for every caster (batch 11 step 15, SPL-114).
+    /// A spell lost to a distraction or a spell failure still ends the caster's concentration, as every casting does
+    /// (HandleConcentrationOnCasting; decision D1), for every caster (batch 11 step 15, SPL-114).
     /// </summary>
     private void CheckConcentrationOnLostCast(CastContext ctx)
     {
-        HandleConcentrationOnCasting(ctx.Request.Caster, ctx.Request.Spell);
+        EndConcentrationForCasting(ctx);
     }
 
     /// <summary>Spends the cast's slot (or scroll, wand charge, converted spell) with the parameters the Cost stage set.</summary>

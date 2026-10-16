@@ -299,6 +299,7 @@ public static partial class SpellDatabase
                     IsMindAffecting = true,
                     BlockedByProtectionFromAlignment = false,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 2, ConcentrationTailScalesWithLevel = false, // PHB p.242: concentration + 2 rounds (ConcentrationRules.TailRounds)
                     DurationValue = 2, // +2 rounds after concentration ends
                     DurationScalesWithLevel = false,
                     ActionType = SpellActionType.Standard,

@@ -436,6 +436,22 @@ public class SpellData
     /// </summary>
     public string DurationText;
 
+    /// <summary>
+    /// For a Concentration-duration spell whose duration is "concentration + N rounds" (Hypnotic Pattern, Minor Image,
+    /// Summon Swarm +2; Rage, Lullaby, Rainbow Pattern +1 round/level): the rounds it keeps going after the caster stops
+    /// concentrating, however the concentration ends (PHB p.176; <see cref="ConcentrationRules.TailRounds"/>). 0 = none.
+    /// </summary>
+    public int ConcentrationTailRounds;
+    /// <summary>Whether <see cref="ConcentrationTailRounds"/> is per caster level ("+1 round/level").</summary>
+    public bool ConcentrationTailScalesWithLevel;
+    /// <summary>
+    /// For a Concentration-duration spell with an "up to X" limit (Calm Emotions 1 round/level, Detect Magic 1 min./level):
+    /// the most rounds the caster can keep it going (PHB p.176; <see cref="ConcentrationRules.MaxRounds"/>). 0 = no limit.
+    /// </summary>
+    public int ConcentrationMaxRounds;
+    /// <summary>Whether <see cref="ConcentrationMaxRounds"/> is per caster level.</summary>
+    public bool ConcentrationMaxScalesWithLevel;
+
     // ========== HEALING ==========
     public int HealDice;                // Sides of healing die
     public int HealCount;               // Number of dice

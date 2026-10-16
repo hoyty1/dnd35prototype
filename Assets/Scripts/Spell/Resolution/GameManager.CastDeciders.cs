@@ -74,12 +74,13 @@ public partial class GameManager
 
     /// <summary>
     /// The PC's answer to a threatened cast: the AoO prompt (ShowAoOActionConfirmation, through
-    /// ResolveSpellcastProvocation), whose Cast Defensively and Proceed buttons resolve the rolls through
-    /// ResolveThreatenedSpellcast and whose Cancel backs out.
+    /// ResolveSpellcastProvocation), whose Cast Defensively and Proceed buttons end the caster's concentration
+    /// (EndConcentrationForCasting, decision D1) and resolve the rolls through ResolveThreatenedSpellcast and whose Cancel
+    /// backs out.
     /// </summary>
     internal void UiChooseCastProvocation(CastContext ctx, Action<CastProvocationAnswer> answer)
     {
-        ResolveSpellcastProvocation(ctx.Request.Caster, ctx.Request.Spell, false, canProceed =>
+        ResolveSpellcastProvocation(ctx.Request.Caster, ctx.Request.Spell, false, () => EndConcentrationForCasting(ctx), canProceed =>
             answer(canProceed
                 ? CastProvocationAnswer.Proceeds
                 : _spellcastProvocationCancelled ? CastProvocationAnswer.Cancelled : CastProvocationAnswer.Lost));
@@ -143,10 +144,13 @@ public partial class GameManager
             ShowActionChoices();
     }
 
-    /// <summary>The NPC decision and rolls for a threatened cast (AiCastDecider.ChooseProvocation).</summary>
+    /// <summary>
+    /// The NPC decision and rolls for a threatened cast (AiCastDecider.ChooseProvocation): the caster's concentration
+    /// ends before the rolls (EndConcentrationForCasting, decision D1), as for a PC.
+    /// </summary>
     internal bool AiResolveCastProvocation(CastContext ctx)
     {
-        return ResolveNPCSpellcastProvocation(ctx.Request.Caster, ctx.Request.Spell);
+        return ResolveNPCSpellcastProvocation(ctx.Request.Caster, ctx.Request.Spell, () => EndConcentrationForCasting(ctx));
     }
 
     /// <summary>

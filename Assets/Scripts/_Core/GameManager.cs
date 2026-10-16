@@ -3703,6 +3703,8 @@ public partial class GameManager : MonoBehaviour
         PruneTurnUndeadTrackers();
         // A round of the bard's performance passes at his count, PC or NPC, dead or alive (BardicMusicRules, CHR-069).
         TickBardicMusicAtCount(count);
+        // A caster's new turn owes a new concentration on its maintained spell (ConcentrationRules, SPL-153).
+        TickSpellConcentrationAtCount(count);
     }
 
     /// <summary>
@@ -3843,6 +3845,9 @@ public partial class GameManager : MonoBehaviour
         WarnFlamingSphereNotMovedAtTurnEnd(endingCharacter);
         // Fascinate and Inspire Competence end when the bard spent no standard action on them this turn (PHB p.29).
         CheckBardicConcentrationAtTurnEnd(endingCharacter);
+        // A maintained spell ends (or runs its tail) when its caster spent no standard action on it this turn (PHB p.176,
+        // ConcentrationRules, decision D2, SPL-153), PC or NPC.
+        CheckSpellConcentrationAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
 
@@ -3899,6 +3904,7 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"⏭ {pc.Stats.CharacterName} {reason} and cannot act this turn."));
             }
 
+            MaintainConcentrationOnSkippedTurn(pc); // a pinned or paralyzed caster still concentrates (ConcentrationRules)
             NextInitiativeTurn();
             return;
         }
@@ -5754,6 +5760,12 @@ public partial class GameManager : MonoBehaviour
         var source = new CastSource { Kind = kind, Item = item, ItemIndex = inventoryIndex };
         string name = actor.Stats.CharacterName;
 
+        // Reading a scroll is casting its spell (DMG p.213), so it first ends the reader's concentration, with no roll,
+        // before any check can lose the spell (decision D1, PHB p.176), as the cast core's ConcentrationOnCast step does;
+        // a wand use does not (an open delegated question, SPL-114).
+        if (kind == CastSourceKind.Scroll)
+            HandleConcentrationOnCasting(actor, spell, source);
+
         if (CastComponentRules.CastingDistractionApplies(source))
         {
             if (!RollEntangledCastingConcentration(actor, spell, metamagic, out int entangledDc))
@@ -5927,6 +5939,16 @@ public partial class GameManager : MonoBehaviour
 
         if (needsTargeting && IsCombatEncounterRunning())
         {
+            // Reading a scroll is casting its spell (DMG p.213), so it ends the reader's concentration (decision D1): the
+            // player is told before the targeting; the cast core ends it once the cast goes ahead. (The direct path below
+            // ends it at once, ResolveDirectItemCastChecks, and logs that.)
+            if (actor.IsControllable)
+            {
+                string concentrationWarning = ConcentrationRules.CastWarning(actor, scrollSpell, new CastSource { Kind = CastSourceKind.Scroll });
+                if (concentrationWarning != null)
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", concentrationWarning));
+            }
+
             // Route through the full spell targeting pipeline
             if (!InitiateScrollCastThroughPipeline(actor, scrollItem, inventoryIndex, scrollSpell))
             {
@@ -6319,6 +6341,15 @@ public partial class GameManager : MonoBehaviour
             wandSpell.TargetType == SpellTargetType.SingleAlly ||
             wandSpell.TargetType == SpellTargetType.Area ||
             wandSpell.TargetType == SpellTargetType.Touch);
+
+        // A wand use does not end the user's concentration (SPL-114), but it takes the standard action that maintaining
+        // the spell needs, so the spell ends at the end of the turn (decision D2): the player is told first.
+        if (actor.IsControllable && IsCombatEncounterRunning())
+        {
+            string wandWarning = ConcentrationRules.WandUseWarning(actor, wandItem.Name);
+            if (wandWarning != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", wandWarning));
+        }
 
         if (needsTargeting && IsCombatEncounterRunning())
         {
@@ -9695,6 +9726,12 @@ public partial class GameManager : MonoBehaviour
             ShowActionChoices();
             return;
         }
+
+        // The warning before the cast ends the spell the PC concentrates on (decision D1, PHB p.176): it ends once the
+        // cast goes ahead (the cast core's ConcentrationOnCast step), not when the targeting is cancelled.
+        string concentrationWarning = ConcentrationRules.CastWarning(pc, spell, menuSource);
+        if (concentrationWarning != null)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", concentrationWarning));
 
         BeginCast(SpellCastRequest.ForUi(pc, spell, metamagic, menuSource));
         if (metamagic != null && metamagic.HasAnyMetamagic)

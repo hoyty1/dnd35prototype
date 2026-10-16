@@ -62,7 +62,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.CALM_EMOTIONS,
                     Name = "Calm Emotions",
-                    Description = "Suppresses morale bonuses, rage, fear, and confusion in 20-ft radius. Will negates. Concentration + 1 round/level. PHB p.207",
+                    Description = "Suppresses morale bonuses, rage, fear, and confusion in 20-ft radius. Will negates. Concentration, up to 1 round/level (D). PHB p.207",
                     SpellLevel = 2, School = "Enchantment",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.Area,
@@ -72,6 +72,7 @@ public static partial class SpellDatabase
                     AoESizeSquares = 4,
                     EffectType = SpellEffectType.Debuff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 1, ConcentrationMaxScalesWithLevel = true, // PHB p.207: concentration, up to 1 round/level (ConcentrationRules.MaxRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     AllowsSavingThrow = true,

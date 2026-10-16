@@ -234,6 +234,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 100, ConcentrationMaxScalesWithLevel = true, // PHB p.218: concentration, up to 10 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
                     HasVerbalComponent = true,
@@ -261,6 +262,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 100, ConcentrationMaxScalesWithLevel = true, // PHB p.218: concentration, up to 10 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
                     HasVerbalComponent = true,
@@ -288,6 +290,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 100, ConcentrationMaxScalesWithLevel = true, // PHB p.219: concentration, up to 10 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
                     HasVerbalComponent = true,
@@ -315,6 +318,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 100, ConcentrationMaxScalesWithLevel = true, // PHB p.219: concentration, up to 10 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
                     HasVerbalComponent = true,
@@ -334,6 +338,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 10, ConcentrationMaxScalesWithLevel = true, // PHB p.219: concentration, up to 1 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
@@ -371,6 +376,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 10, ConcentrationMaxScalesWithLevel = true, // PHB p.220: concentration, up to 1 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 1,
                     DurationText = "Concentration, up to 1 min./level (D)", // PHB p.220
                     DurationScalesWithLevel = true, // PHB p.220: concentration, up to 1 min./level
@@ -391,6 +397,7 @@ public static partial class SpellDatabase
                     RangeSquares = 12,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 10, ConcentrationMaxScalesWithLevel = true, // PHB p.220: concentration, up to 1 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     AllowsSavingThrow = true,
@@ -420,6 +427,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationMaxRounds = 10, ConcentrationMaxScalesWithLevel = true, // PHB p.220: concentration, up to 1 min./level (ConcentrationRules.MaxRounds)
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
                     HasVerbalComponent = true,

@@ -401,6 +401,7 @@ public static partial class SpellDatabase
                     RangeSquares = 8,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
+                    ConcentrationTailRounds = 2, ConcentrationTailScalesWithLevel = false, // PHB p.254: concentration + 2 rounds (ConcentrationRules.TailRounds)
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     ActionType = SpellActionType.Standard,

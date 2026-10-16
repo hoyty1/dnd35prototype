@@ -252,6 +252,13 @@ public class AIService : MonoBehaviour
 
         if (npc.IsGrappling())
         {
+            // A grappling caster may keep its spell up (ConcentrationRules; delegated RAW reading 2026-10-15, PHB p.156,
+            // p.176): the same choice as below, against a grapple attack as the other standard action.
+            if (TryMaintainConcentrationTurn(npc, targetPC, grappling: true))
+            {
+                yield return new WaitForSeconds(0.5f);
+                yield break;
+            }
             yield return _gameManager.StartCoroutine(RunGrappleTurnForAI(npc));
             if (CombatEnded() || !CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
         }
@@ -324,6 +331,16 @@ public class AIService : MonoBehaviour
         // ends its turn after it (a simplification: it does not move afterwards). Stopping a song costs no action, and the
         // turn goes on (to cast while Inspire Courage lingers).
         if (_gameManager.TryNPCBardicMusicTurnForAI(npc))
+        {
+            yield return new WaitForSeconds(0.5f);
+            yield break;
+        }
+
+        // A maintained spell (PHB p.176): keeping it going is this turn's standard action, through the rule the PC's
+        // Maintain button calls (ConcentrationRules, decision D2, SPL-153), when AIProfile.ShouldMaintainConcentration
+        // finds it worth more than the other standard action; the AI ends its turn after it (a simplification, as for
+        // bardic music: it does not move). Otherwise the turn goes on, and a cast or the end of the turn ends the spell.
+        if (TryMaintainConcentrationTurn(npc, targetPC))
         {
             yield return new WaitForSeconds(0.5f);
             yield break;
@@ -831,6 +848,40 @@ public class AIService : MonoBehaviour
         if (spell.EffectType == SpellEffectType.Buff)
             return true;
         return spell.EffectType == SpellEffectType.Illusion && AISpellcastingStrategist.IsAllyTargetedSpell(spell);
+    }
+
+    /// <summary>
+    /// The AI's choice to keep its concentration spell going this turn (AIProfile.ShouldMaintainConcentration), and the
+    /// shared executor when it does (GameManager.TryMaintainConcentrationForAI). True when the standard action was spent.
+    /// </summary>
+    /// <param name="grappling">The caster is grappling: its other standard action is a grapple attack, not a spell or a
+    /// weapon attack (the grapple turn's own choices, RunGrappleTurnForAI).</param>
+    private bool TryMaintainConcentrationTurn(CharacterController npc, CharacterController target, bool grappling = false)
+    {
+        if (npc == null || _gameManager == null || !ConcentrationRules.CanMaintain(npc, out _))
+            return false;
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        int otherSpellLevel = -1;
+        bool canAttackNow = true;
+        if (!grappling)
+        {
+            SpellData otherSpell = SelectSpell(npc, target);
+            otherSpellLevel = otherSpell != null ? otherSpell.SpellLevel : -1;
+            canAttackNow = false;
+            for (int i = 0; i < all.Count && !canAttackNow; i++)
+            {
+                CharacterController foe = all[i];
+                canAttackNow = foe != null && foe != npc && foe.Stats != null && !foe.IsDead && _gameManager.IsEnemyTeamForAI(npc, foe)
+                    && npc.IsTargetInCurrentWeaponRange(foe); // reach, footprint and range, as the attack branches test
+            }
+        }
+        bool holdsSummon = _gameManager.HasConcentrationSummonForAI(npc);
+        AIProfile profile = GetProfile(npc);
+        bool maintain = profile != null
+            ? profile.ShouldMaintainConcentration(npc, all, otherSpellLevel, canAttackNow, holdsSummon)
+            : AIProfile.DefaultShouldMaintainConcentration(npc, all, otherSpellLevel, canAttackNow, holdsSummon);
+        Debug.Log($"[AI][Concentration] {npc.Stats.CharacterName} on {npc.Concentration.ConcentrationSpellName}: otherSpellLevel={otherSpellLevel} attackNow={canAttackNow} summon={holdsSummon} grappling={grappling} -> {(maintain ? "maintain" : "let it lapse")}");
+        return maintain && _gameManager.TryMaintainConcentrationForAI(npc);
     }
 
     private bool HasAdjacentEnemy(CharacterController npc, List<CharacterController> allCombatants)
@@ -2938,7 +2989,8 @@ public class AIService : MonoBehaviour
                     int remaining = statusMgr.GetRemainingRounds(spell.SpellId);
                     // Allow recasting if about to expire (≤ 1 round remaining) — useful for
                     // long fights where the dragon wants to maintain its buffs.
-                    if (remaining > 1 || remaining == -1) // -1 = indefinite duration
+                    // -1 = indefinite; -2 = a spell it concentrates on, which a recast would only end and restart (PHB p.176)
+                    if (remaining > 1 || remaining == -1 || remaining == SpellDurationRules.ConcentrationRounds)
                     {
                         Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: Skipping {spell.Name} — already active ({remaining} rounds remaining)");
                         continue;

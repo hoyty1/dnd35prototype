@@ -61,6 +61,11 @@ namespace Tests.Scenarios
             yield return S("cast-free-action-threatened", FreeActionThreatened);
             yield return S("cast-full-round-after-move", FullRoundAfterMove);
             yield return S("cast-aoo-cancel-keeps-concentration", AoOCancelKeepsConcentration);
+            yield return S("concentration-cast-ends-image", () => CastEndsImage(ui: true));
+            yield return S("concentration-cast-ends-image-npc", () => CastEndsImage(ui: false));
+            yield return S("concentration-lapse-unmaintained", () => LapseUnmaintained(ui: true));
+            yield return S("concentration-lapse-unmaintained-npc", () => LapseUnmaintained(ui: false));
+            yield return S("concentration-ai-maintains", AiMaintains);
             yield return S("cast-empowered-fireball", EmpoweredFireball);
             yield return S("cast-ally-in-burning-hands", AllyInBurningHands);
             yield return S("cast-entangled", Entangled);
@@ -1885,13 +1890,14 @@ namespace Tests.Scenarios
         /// SPL-152, fixed in batch 11 step 12: the casting-while-concentrating step runs only once the AoO prompt lets the
         /// cast proceed. A Ui wizard 3 concentrating on Silent Image (a concentration spell, PHB p.279; set up directly) casts
         /// Magic Missile while threatened by a goblin first in initiative (-30 on attacks; both 100 more hit points) and
-        /// answers Cancel: the cast spends nothing, the wizard still concentrates on Silent Image, and no concentration check
-        /// is rolled. It then casts Magic Missile again and answers Proceed: that cast runs the step, so exactly one
-        /// casting-while-concentrating check is logged in the turn (decision D1 removes that check later, step 16).
+        /// answers Cancel: the cast spends nothing, the wizard still concentrates on Silent Image, and nothing is rolled. It
+        /// then casts Magic Missile again and answers Proceed: since batch 11 step 16 (decision D1, PHB p.176) that cast ends
+        /// the concentration before its attack of opportunity, with no roll, and the end is logged once.
         /// </summary>
         private static ScenarioDef AoOCancelKeepsConcentration()
         {
             const string castingCheck = "(casting a spell)";
+            const string ended = "stops concentrating on Silent Image (to cast Magic Missile)";
             return Rules("rules/cast-aoo-cancel-keeps-concentration", "A cast cancelled at the AoO prompt rolls no concentration check and keeps the maintained spell (SPL-152)")
                 .Covers("SPL-152", "PHB p.140", "batch 11 step 12")
                 .MaxRounds(1)
@@ -1924,9 +1930,186 @@ namespace Tests.Scenarios
                 .Expect("The first cast reached the AoO prompt and was cancelled", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
                 .Expect("The cancelled cast spends nothing and the wizard still concentrates on Silent Image (SPL-152)",
                     FactsAre(("cancel.spent", "none"), ("cancel.actions", "smf"), ("cancel.concentrating", "Silent Image")))
-                .Expect("Only the cast that went on rolled a casting-while-concentrating check (SPL-152)", Expect.All(
+                .Expect("The cast that went on ended the concentration once, with no casting-while-concentrating check (SPL-152; decision D1)", Expect.All(
                     Expect.StepStatus("wizard", 1, "AnswerAoO(Proceed)", 0, "done"),
-                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(castingCheck), 1, 1)))
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(castingCheck), 0, 0),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(ended), 1, 1)))
+                .Build();
+        }
+
+        // ── rules/concentration-* (batch 11 step 16: decisions D1 and D2, SPL-153) ──
+
+        /// <summary>The concentration facts of <paramref name="key"/>: tag.concentrating, tag.spell and tag.effect (the image on it).</summary>
+        private static Step FactConcentration(string tag, string key, string spellId)
+            => Step.Assert(tag, ctx =>
+            {
+                CharacterController c = ctx.Get(key);
+                ConcentrationManager conc = c.Concentration;
+                Fact(ctx, tag + ".concentrating", conc != null && conc.IsConcentrating);
+                Fact(ctx, tag + ".maintained", conc != null && conc.MaintainedThisTurn);
+                Fact(ctx, tag + ".effect", c.StatusEffectManager != null && c.StatusEffectManager.HasEffect(spellId));
+                Fact(ctx, tag + ".actions", Actions(c));
+                return true;
+            });
+
+        /// <summary>A log line that rolls a Concentration check on the maintained Silent Image (none may appear: D1 has no roll).</summary>
+        private static bool SilentImageCheckLine(TraceEvent e) => (e.Str("text") ?? "").Contains("Concentration check (Silent Image)");
+
+        /// <summary>
+        /// Decision D1 and D2 (PHB p.176), for a Ui wizard 3 and a Scripted enemy wizard 3: round 1 the caster casts Silent
+        /// Image (Concentration, PHB p.279); round 2 it spends its standard action concentrating (the Maintain step: the
+        /// PC's Maintain button, the NPC's TryMaintainConcentrationForAI), so the image is still there at its round-3 turn;
+        /// round 3 it casts Magic Missile at a foe, which first ends the concentration as a free action with no roll: the
+        /// image is gone and no Concentration check on it was rolled.
+        /// </summary>
+        private static ScenarioDef CastEndsImage(bool ui)
+        {
+            string id = ui ? "rules/concentration-cast-ends-image" : "rules/concentration-cast-ends-image-npc";
+            string caster = ui ? "wizard" : "mage";
+            string foe = ui ? "gob" : "hero";
+            ScenarioBuilder b = Rules(id, (ui ? "A Ui" : "A Scripted NPC") + " caster maintains Silent Image, then casts Magic Missile: the image ends with no roll (PHB p.176)")
+                .Covers("SPL-153", "PHB p.176", "PHB p.279", "decision D1", "decision D2", "batch 11 step 16")
+                .MaxRounds(3);
+            if (ui)
+                b = b.Pc("wizard", ActorSource.Stats(() => Wizard("Image Wizard", 3)), 5, 10, Control.Ui)
+                    .Npc("gob", "goblin", 12, 10, Control.Idle)
+                    .Tweak("wizard", c => { AddWizardSlot(c, 1, SpellNames.SILENT_IMAGE); AddWizardSlot(c, 1, SpellNames.MAGIC_MISSILE); Sturdy(c); })
+                    .Tweak("gob", Sturdy)
+                    .Initiative("wizard", "gob");
+            else
+                b = b.Pc("hero", ActorSource.Stats(() => Wizard("Image Target", 3)), 5, 10, Control.Idle)
+                    .Npc("mage", "neutral_mage_test", 12, 10, Control.Scripted)
+                    .Tweak("mage", c => { AddWizardSlot(c, 1, SpellNames.SILENT_IMAGE); AddWizardSlot(c, 1, SpellNames.MAGIC_MISSILE); Sturdy(c); })
+                    .Tweak("hero", Sturdy)
+                    .Initiative("mage", "hero");
+            return b
+                .Turn(caster, 1,
+                    Step.Cast(SpellNames.SILENT_IMAGE, caster),
+                    FactConcentration("r1", caster, SpellNames.SILENT_IMAGE))
+                .Turn(caster, 2,
+                    FactConcentration("r2.start", caster, SpellNames.SILENT_IMAGE),
+                    Step.MaintainConcentration(),
+                    FactConcentration("r2", caster, SpellNames.SILENT_IMAGE))
+                .Turn(caster, 3,
+                    FactConcentration("r3.start", caster, SpellNames.SILENT_IMAGE),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, foe),
+                    FactConcentration("r3", caster, SpellNames.SILENT_IMAGE))
+                .Expect("Round 1: the cast starts the concentration; the casting turn counts as kept (PHB p.176)",
+                    FactsAre(("r1.concentrating", true), ("r1.maintained", true), ("r1.effect", true)))
+                .Expect("Round 2: the new turn owes the concentration, and the Maintain step spends the standard action (PHB p.176, Table 8-2)",
+                    FactsAre(("r2.start.concentrating", true), ("r2.start.maintained", false), ("r2.maintained", true), ("r2.actions", "-m-")))
+                .Expect("The maintain step is done", Expect.StepStatus(caster, 2, "MaintainConcentration", 0, "done"))
+                .Expect("Round 3: the image kept up in round 2 is still there when the turn starts", FactsAre(("r3.start.concentrating", true), ("r3.start.effect", true)))
+                .Expect("Casting Magic Missile ends the concentration and the image (decision D1, PHB p.176)",
+                    FactsAre(("r3.concentrating", false), ("r3.effect", false)))
+                .Expect("The cast is in the trace once", CastEvents(caster, SpellNames.MAGIC_MISSILE, 1))
+                .Expect("No Concentration check is rolled for the image (D1: no roll)", Expect.Count("log", SilentImageCheckLine, 0, 0))
+                .Expect("The end is logged once: the caster stops concentrating to cast Magic Missile",
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("stops concentrating on Silent Image (to cast Magic Missile)"), 1, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// Decision D2 (PHB p.176): a caster who spends its standard action on something else loses the spell at the end
+        /// of that turn (delegated RAW reading 2026-10-15, the CHR-026 timing). A Ui wizard 3 and a Scripted enemy wizard 3
+        /// cast Silent Image in round 1; in round 2 each moves next to a foe and attacks it (its standard action): the image
+        /// is still there after the attack, the caster can no longer maintain it, and at its round-3 turn it is gone, with
+        /// the lapse logged once.
+        /// </summary>
+        private static ScenarioDef LapseUnmaintained(bool ui)
+        {
+            string id = ui ? "rules/concentration-lapse-unmaintained" : "rules/concentration-lapse-unmaintained-npc";
+            string caster = ui ? "wizard" : "mage";
+            string foe = ui ? "gob" : "hero";
+            ScenarioBuilder b = Rules(id, (ui ? "A Ui" : "A Scripted NPC") + " caster who attacks instead of concentrating loses Silent Image at the end of its turn (PHB p.176)")
+                .Covers("SPL-153", "PHB p.176", "PHB p.279", "decision D2", "batch 11 step 16")
+                .MaxRounds(3);
+            if (ui)
+                b = b.Pc("wizard", ActorSource.Stats(() => Wizard("Lapse Wizard", 3)), 5, 10, Control.Ui)
+                    .Npc("gob", "goblin", 8, 10, Control.Idle)
+                    .Tweak("wizard", c => { AddWizardSlot(c, 1, SpellNames.SILENT_IMAGE); Sturdy(c); })
+                    .Tweak("gob", Sturdy)
+                    .Initiative("wizard", "gob");
+            else
+                b = b.Pc("hero", ActorSource.Stats(() => Wizard("Lapse Target", 3)), 8, 10, Control.Idle)
+                    .Npc("mage", "neutral_mage_test", 5, 10, Control.Scripted)
+                    .Tweak("mage", c => { AddWizardSlot(c, 1, SpellNames.SILENT_IMAGE); Sturdy(c); })
+                    .Tweak("hero", Sturdy)
+                    .Initiative("mage", "hero");
+            return b
+                .Turn(caster, 1,
+                    Step.Cast(SpellNames.SILENT_IMAGE, caster),
+                    FactConcentration("r1", caster, SpellNames.SILENT_IMAGE))
+                .Turn(caster, 2,
+                    Step.Move(7, 10),
+                    Step.Attack(foe),
+                    FactConcentration("r2", caster, SpellNames.SILENT_IMAGE),
+                    Step.Assert("can maintain", ctx => { Fact(ctx, "r2.canMaintain", ConcentrationRules.CanMaintain(ctx.Get(caster), out _)); return true; }))
+                .Turn(caster, 3,
+                    FactConcentration("r3.start", caster, SpellNames.SILENT_IMAGE))
+                .Expect("Round 1: the cast starts the concentration", FactsAre(("r1.concentrating", true), ("r1.effect", true)))
+                .Expect("Round 2: after the attack the image is still up, but the standard action is spent, so it cannot be kept",
+                    FactsAre(("r2.concentrating", true), ("r2.effect", true), ("r2.maintained", false), ("r2.canMaintain", false)))
+                .Expect("The attack step is done", Expect.StepStatus(caster, 2, "Attack(" + foe + ")", 0, "done"))
+                .Expect("Round 3: the image ended at the end of round 2's turn (PHB p.176; delegated end-of-turn timing)",
+                    FactsAre(("r3.start.concentrating", false), ("r3.start.effect", false)))
+                .Expect("The lapse is logged once",
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("stops concentrating on Silent Image (spent no standard action concentrating on it this turn)"), 1, 1))
+                .Expect("No Concentration check is rolled for the image", Expect.Count("log", SilentImageCheckLine, 0, 0))
+                .Build();
+        }
+
+        /// <summary>Marks every prepared slot of <paramref name="c"/> used (a caster with nothing left to cast).</summary>
+        private static void SpendAll(CharacterController c)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spell slots");
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null)
+                    slot.IsUsed = true;
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        /// <summary>Starts <paramref name="c"/>'s concentration on a Silent Image effect on itself (set up before the fight).</summary>
+        private static void ConcentrateOnImage(CharacterController c)
+        {
+            ActiveSpellEffect image = c.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.SILENT_IMAGE).Clone(), c.Stats.CharacterName, 3);
+            c.Concentration.BeginConcentration(image);
+        }
+
+        /// <summary>
+        /// Decision D2 for the AI (AIProfile.DefaultShouldMaintainConcentration, an AI choice): two AI-run enemy wizards 3
+        /// start the fight concentrating on Silent Image (set up directly; the AI does not cast the placeholder spell). The
+        /// first has no spell left, no foe beside it and no ranged weapon, so keeping the image is worth more than its other
+        /// standard action and it maintains it in rounds 1 and 2; the second has Magic Missile, which is worth more, so it
+        /// casts it, which ends its image (decision D1). A Scripted hero, last in initiative, records both each round.
+        /// </summary>
+        private static ScenarioDef AiMaintains()
+        {
+            return Rules("rules/concentration-ai-maintains", "An AI caster keeps its Silent Image when it has nothing better and drops it for Magic Missile (PHB p.176)")
+                .Covers("SPL-153", "PHB p.176", "decision D1", "decision D2", "batch 11 step 16")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Wizard("AI Watcher", 3)), 3, 10, Control.Scripted)
+                .Npc("keeper", "neutral_mage_test", 14, 4, Control.Ai)
+                .Npc("caster", "neutral_mage_test", 14, 16, Control.Ai)
+                .Tweak("hero", Sturdy)
+                .Tweak("keeper", c => { SpendAll(c); Sturdy(c); ConcentrateOnImage(c); })
+                .Tweak("caster", c => { SpendAll(c); AddWizardSlot(c, 1, SpellNames.MAGIC_MISSILE); Sturdy(c); ConcentrateOnImage(c); })
+                .Initiative("keeper", "caster", "hero")
+                .Turn("hero", 1,
+                    Step.Assert("ranged", ctx => { Fact(ctx, "keeper.ranged", ctx.Get("keeper").HasRangedWeaponEquipped()); return true; }),
+                    FactConcentration("r1.keeper", "keeper", SpellNames.SILENT_IMAGE),
+                    FactConcentration("r1.caster", "caster", SpellNames.SILENT_IMAGE))
+                .Turn("hero", 2,
+                    FactConcentration("r2.keeper", "keeper", SpellNames.SILENT_IMAGE))
+                .Expect("The keeper has no ranged weapon (fixture)", FactIs("keeper.ranged", false))
+                .Expect("The keeper spent its round-1 standard action concentrating, and its image is up (AI choice; PHB p.176)",
+                    FactsAre(("r1.keeper.concentrating", true), ("r1.keeper.maintained", true), ("r1.keeper.effect", true)))
+                .Expect("The keeper kept it up again in round 2", FactsAre(("r2.keeper.concentrating", true), ("r2.keeper.maintained", true), ("r2.keeper.effect", true)))
+                .Expect("The caster with Magic Missile cast it, and its image ended (decision D1)",
+                    Expect.All(CastEvents("caster", SpellNames.MAGIC_MISSILE, 1), FactsAre(("r1.caster.concentrating", false), ("r1.caster.effect", false))))
+                .Expect("No Concentration check is rolled for an image", Expect.Count("log", SilentImageCheckLine, 0, 0))
                 .Build();
         }
 
