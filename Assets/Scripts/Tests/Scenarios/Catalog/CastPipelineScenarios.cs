@@ -50,6 +50,11 @@ namespace Tests.Scenarios
             }
             yield return S("cast-ai-spiritual-weapon", AiSpiritualWeapon);
             yield return S("cast-ai-skips-dimension-door", AiSkipsDimensionDoor);
+            yield return S("npc-resist-energy-choice", () => NpcResistEnergyChoice("rules/npc-resist-energy-choice", "dragon_red_wyrmling", "red dragon", "Fire"));
+            yield return S("npc-resist-energy-choice-cold", () => NpcResistEnergyChoice("rules/npc-resist-energy-choice-cold", "dragon_white_wyrmling", "white dragon", "Cold"));
+            yield return S("npc-magic-weapon", NpcMagicWeapon);
+            yield return S("ai-spell-retry", AiSpellRetry);
+            yield return S("ai-spell-retry-refused", AiSpellRetryRefused);
             yield return S("cast-globe-damage", GlobeDamage);
             yield return S("area-globe", AreaGlobe);
             yield return S("cast-globe-held-touch", GlobeHeldTouch);
@@ -1025,6 +1030,8 @@ namespace Tests.Scenarios
             public string CasterHasBefore;
             /// <summary>A setup both targets get after the save tweak (spell resistance, for example).</summary>
             public Action<CharacterController> TargetTweak;
+            /// <summary>A setup of the far anchor dummy, an enemy both casters see (an energy attack the AI's choice reads).</summary>
+            public Action<CharacterController> AnchorTweak;
         }
 
         private static IEnumerable<PairSpec> Pairs()
@@ -1111,24 +1118,24 @@ namespace Tests.Scenarios
                 SharedPins = b => b.Expect("The target takes only the flame's 11 fire damage (PHB p.265; SPL-124)", PairTargets(t => t.StartsWith("hp=139 ", StringComparison.Ordinal) ? null : "expected hp=139", null)) };
             yield return new PairSpec { Family = "resist-energy", SpellId = SpellNames.RESIST_ENERGY, Caster = wizard, SlotLevel = 2, Choices = new[] { "Cold" },
                 Title = "Resist Energy on the caster (PHB p.272)", Covers = new[] { "PHB p.272", "SPL-112" },
-                // The caster picks the energy (PHB p.272): the Ui caster picks cold, the NPC path forces fire.
-                KnownIssue = "SPL-112",
-                KnownName = "Today the NPC path forces fire where the Ui caster chose cold; the end states differ only in that energy (SPL-112)",
-                KnownCheck = v =>
-                {
-                    string ui = FactOf(v, "ui"), ai = FactOf(v, "scripted");
-                    if (ui == null || ai == null)
-                        return ExpectResult.Inconclusive("missing fact " + (ui == null ? "ui" : "scripted"));
-                    if (!ui.Contains("resist=Cold:") || !ai.Contains("resist=Fire:"))
-                        return ExpectResult.Fail("ui " + ui + "; scripted " + ai + ", expected cold resistance on the Ui side and fire on the Scripted side");
-                    return ui.Replace("resist=Cold:", "resist=Fire:") == ai
-                        ? ExpectResult.Pass("ui cold, scripted fire, otherwise equal: " + ai)
-                        : ExpectResult.Fail("ui " + ui + "; scripted " + ai + ": they differ beyond the energy");
-                } };
+                // The caster picks the energy (PHB p.272): the Ui caster picks cold, and the AI picks the energy of the
+                // visible enemy's breath, the anchor's cold (batch 11 step 22, SPL-112).
+                AnchorTweak = c => c.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageType = global::DamageType.Cold, DamageCount = 2, DamageDice = 6 }),
+                SharedPins = b => b.Expect("Both casters resist cold: the Ui pick and the AI's pick against the visible cold breath (SPL-112)",
+                    v =>
+                    {
+                        string ui = FactOf(v, "ui"), ai = FactOf(v, "scripted");
+                        if (ui == null || ai == null)
+                            return ExpectResult.Inconclusive("missing fact " + (ui == null ? "ui" : "scripted"));
+                        return ui.Contains("resist=Cold:") && ai.Contains("resist=Cold:")
+                            ? ExpectResult.Pass("both resist cold")
+                            : ExpectResult.Fail("ui " + ui + "; scripted " + ai + ", expected cold resistance on both");
+                    }) };
             yield return new PairSpec { Family = "magic-weapon", SpellId = SpellNames.MAGIC_WEAPON, Caster = wizard, SlotLevel = 1, Choices = new[] { "*" },
                 Title = "Magic Weapon on the caster's weapon (PHB p.251)", Covers = new[] { "PHB p.251", "SPL-113" },
-                // The weapon is picked only by the PC prompt: the NPC cast spends its slot and fizzles.
-                KnownIssue = "SPL-113", KnownUi = "caster[L0:0/4 L1:1/4 L2:0/3 hp=35 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=Quarterstaff:magic_weapon:+1:50] target[hp=35 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=Quarterstaff:magic_weapon:+1:50]", KnownScripted = "caster[L0:0/4 L1:1/4 L2:0/3 hp=35 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=] target[hp=35 nl=0 thp=0 conds= effects= silence=0 dk=0 resist= items=]" };
+                // The PC prompt picks the only weapon; the AI picks the recipient's wielded weapon (batch 11 step 22, SPL-113).
+                SharedPins = b => b.Expect("Both quarterstaffs carry Magic Weapon's +1 for 50 rounds (PHB p.251; SPL-113)",
+                    PairTargets(t => t.Contains("items=Quarterstaff:magic_weapon:+1:50") ? null : "expected the quarterstaff enchanted", "L1:1/")) };
         }
 
         /// <summary>
@@ -1139,8 +1146,9 @@ namespace Tests.Scenarios
         /// and the target fails its saves (-30). After both casts the Scripted caster's Assert step records each side's end
         /// state: the caster's slots, and the target's hit points, conditions, spell effects with rounds left, Silence flag,
         /// Resist Energy entries and weapon spell effects. RAW the two must match (PC_NPC_PARITY, owner 2026-10-07); a
-        /// family where they differ today is pinned as Known with the issue that explains it (SPL-112: caster choices;
-        /// SPL-113: the Magic Weapon pick). The handler families (Silence, Sound Burst, Hold Animal, and Ghoul Touch,
+        /// family where they differ today is pinned as Known with the issue that explains it (the caster-choice families,
+        /// Resist Energy and Magic Weapon, pass since batch 11 step 22 gives the AI its own choices, SPL-112 and SPL-113).
+        /// The handler families (Silence, Sound Burst, Hold Animal, and Ghoul Touch,
         /// Remove Curse and Remove Blindness/Deafness added with it) pass since batch 11 step 6 runs the shared handler
         /// registry on the NPC path (SPL-054).
         /// </summary>
@@ -1175,6 +1183,8 @@ namespace Tests.Scenarios
                 order.Add("scriptedTarget");
             }
             b = b.Npc("anchor", "target_dummy", 18, 9, Control.Idle);
+            if (p.AnchorTweak != null)
+                b = b.Tweak("anchor", p.AnchorTweak);
             order.Add("anchor");
             // A family with a caster setup records each caster's conditions just before its cast (only those families,
             // so the other pairs keep their step 3 traces).
@@ -1313,6 +1323,31 @@ namespace Tests.Scenarios
 
         // ── rules/cast-ai-* (batch 11 step 6) ───────────────────────────
 
+        /// <summary>Spends every prepared slot of <paramref name="c"/> except one holding each of <paramref name="keepSpellIds"/>.</summary>
+        private static void SpendAllBut(CharacterController c, params string[] keepSpellIds)
+        {
+            if (keepSpellIds.Length == 1)
+            {
+                SpendAllBut(c, keepSpellIds[0]);
+                return;
+            }
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spell slots");
+            var toKeep = new List<string>(keepSpellIds);
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (slot == null || slot.IsUsed)
+                    continue;
+                if (slot.PreparedSpell != null && toKeep.Remove(slot.PreparedSpell.SpellId))
+                    continue;
+                slot.IsUsed = true;
+            }
+            if (toKeep.Count > 0)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no unspent slot holding " + string.Join(", ", toKeep));
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
         /// <summary>Spends every prepared slot of <paramref name="c"/> except one holding <paramref name="keepSpellId"/>.</summary>
         private static void SpendAllBut(CharacterController c, string keepSpellId)
         {
@@ -1377,7 +1412,7 @@ namespace Tests.Scenarios
         /// The selection exclusion of step 6 (SPL-091): an AI-run wizard 7 whose only unspent slot holds Dimension Door, a
         /// goblin beside it (-30 on attacks, 100 more hit points), two rounds. Dimension Door's destination is the caster's
         /// choice (PHB p.221), which the AI cannot give yet, so AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive keeps
-        /// it out of AIService.SelectSpell and SelectLowerLevelAlternative: the wizard never casts it.
+        /// it out of the AI's spell candidates (AIService.ScoreCastableSpells): the wizard never casts it.
         /// </summary>
         private static ScenarioDef AiSkipsDimensionDoor()
         {
@@ -1390,6 +1425,203 @@ namespace Tests.Scenarios
                 .Tweak("goblin", c => { AttackTweak(c, -30); Sturdy(c); })
                 .Initiative("goblin", "wizard")
                 .Expect("The AI wizard never casts Dimension Door", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.DIMENSION_DOOR, 0, 0))
+                .Build();
+        }
+
+        // ── Batch 11 step 22: the AI's caster choices and ordered retries ──
+
+        /// <summary>
+        /// SPL-112 (PHB p.272: the caster picks the energy type). A Scripted wizard 5 (the NPC cast path and its AI decider)
+        /// casts Resist Energy on itself with a dragon wyrmling in sight, 35 ft away and idle: the AI guards against the
+        /// energy of the visible enemy's breath (AiCastChoiceHeuristics), fire against a red dragon, cold against a white
+        /// one. CL 5 gives resistance 10.
+        /// </summary>
+        private static ScenarioDef NpcResistEnergyChoice(string id, string dragonId, string dragonName, string expected)
+        {
+            return Rules(id, "An NPC caster's Resist Energy guards against the " + dragonName + "'s visible breath: " + expected + " (SPL-112)")
+                .Covers("SPL-112", "PHB p.272", "batch 11 step 22")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Scripted Wizard", 5)), 3, 10, Control.Scripted)
+                .Npc("dragon", dragonId, 10, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 2, SpellNames.RESIST_ENERGY))
+                .Initiative("wizard", "dragon")
+                .Turn("wizard", 1,
+                    Step.Cast(SpellNames.RESIST_ENERGY, "wizard"),
+                    Step.Assert("record", ctx => { Fact(ctx, "resist", ResistEntries(ctx.Get("wizard"))); return true; }))
+                .Expect("The Scripted cast ran", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("The AI resists " + expected + ", the " + dragonName + "'s breath (SPL-112)", FactIs("resist", expected + ":10"))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-113 (PHB p.251: Magic Weapon enchants the weapon touched). An AI-run cleric 5 (the Healer profile) whose only
+        /// unspent slot holds Magic Weapon stands beside a fighter ally; a dummy 60 ft away keeps the fight going. Nobody is
+        /// hurt, so the cleric buffs: the cleric holds no weapon itself, so its only target is the fighter, and the AI's
+        /// choice enchants the fighter's wielded weapon (+1 enhancement, 50 rounds at CL 5) where the NPC cast used to fizzle.
+        /// </summary>
+        private static ScenarioDef NpcMagicWeapon()
+        {
+            return Rules("rules/npc-magic-weapon", "An AI-run cleric casts Magic Weapon on its ally's wielded weapon (SPL-113)")
+                .Covers("SPL-113", "PHB p.251", "batch 11 step 22")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => Cleric("AI Cleric", 5)), 3, 10, Control.Ai)
+                .Pc("fighter", ActorSource.Stats(() => BardScenarios.Fighter("Fighter", 3)), 4, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 15, 10, Control.Idle)
+                .Tweak("cleric", c =>
+                {
+                    Prepare(c, 1, SpellNames.MAGIC_WEAPON);
+                    SpendAllBut(c, SpellNames.MAGIC_WEAPON);
+                    global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+                    if (inv != null)
+                    {
+                        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon) inv.RightHandSlot = null;
+                        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon) inv.LeftHandSlot = null;
+                        if (inv.HandsSlot != null && inv.HandsSlot.IsWeapon) inv.HandsSlot = null;
+                    }
+                })
+                .Initiative("cleric", "fighter", "dummy")
+                .Turn("fighter", 1,
+                    Step.Assert("record the fighter's weapon", ctx =>
+                    {
+                        ItemData w = ctx.Get("fighter").GetEquippedMainWeapon();
+                        string effects = w != null && w.ActiveSpellEffects != null
+                            ? string.Join(",", w.ActiveSpellEffects.Where(e => e != null).Select(e => e.SpellId + ":+" + e.EnhancementBonusAttack + ":" + e.RemainingRounds))
+                            : "";
+                        Fact(ctx, "fighter.weapon", w != null ? w.Name + "[" + effects + "]" : "none");
+                        return true;
+                    }))
+                .Expect("The AI cleric casts Magic Weapon once", CastEvents("cleric", SpellNames.MAGIC_WEAPON, 1))
+                .Expect("The fighter's wielded weapon carries Magic Weapon's +1 (PHB p.251; SPL-113)", v =>
+                {
+                    string fact = FactOf(v, "fighter.weapon");
+                    if (fact == null)
+                        return ExpectResult.Inconclusive("missing fact fighter.weapon");
+                    return fact.Contains("[" + SpellNames.MAGIC_WEAPON + ":+1:") ? ExpectResult.Pass(fact) : ExpectResult.Fail(fact + ", expected the weapon enchanted");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-063 (single-target part; batch 11 step 22). An AI-run wizard 5 (the Evoker profile) holds only Shocking Grasp
+        /// (touch, PHB p.279) and Ray of Frost (close range, 35 ft at CL 5, PHB p.269); the only enemy is a wolf 20 ft away.
+        /// The AI's best-scored spell is Shocking Grasp (recorded through AIService.SelectSpell, which tests no target or
+        /// range), which has no legal target: the AI's legality filter (GameManager.CheckLegalityForAI: out of range) drops
+        /// it before any cast is tried, so it costs no try, and the wizard casts its next candidate, Ray of Frost, where the
+        /// old single pick found no target and gave up its spellcasting for the turn. A cast refused after it was tried is
+        /// rules/ai-spell-retry-refused.
+        /// </summary>
+        private static ScenarioDef AiSpellRetry()
+        {
+            return Rules("rules/ai-spell-retry", "When its first spell pick is illegal the AI casts its second (AI-063)")
+                .Covers("AI-063", "PHB p.279", "PHB p.269", "batch 11 step 22")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 5)), 3, 10, Control.Ai)
+                .Npc("wolf", "wolf", 7, 10, Control.Scripted)
+                .Tweak("wizard", c =>
+                {
+                    AddWizardSlot(c, 1, SpellNames.SHOCKING_GRASP);
+                    AddWizardSlot(c, 0, SpellNames.RAY_OF_FROST);
+                    SpendAllBut(c, SpellNames.SHOCKING_GRASP, SpellNames.RAY_OF_FROST);
+                })
+                .Tweak("wolf", c => { AttackTweak(c, -30); Sturdy(c); })
+                .Initiative("wolf", "wizard")
+                .Turn("wolf", 1,
+                    Step.Assert("record the AI's first pick and its legality", ctx =>
+                    {
+                        CharacterController wizard = ctx.Get("wizard"), wolf = ctx.Get("wolf");
+                        AIService ai = ctx.Gm.GetComponent<AIService>();
+                        SpellData top = ai != null ? ai.SelectSpell(wizard, wolf) : null;
+                        Fact(ctx, "top", top != null ? top.SpellId : "none");
+                        Fact(ctx, "top.legal", top != null ? ctx.Gm.CheckLegalityForAI(wizard, wolf, top).Reason : "none");
+                        return true;
+                    }))
+                .Expect("The AI's first pick is Shocking Grasp, refused against the wolf 20 ft away (out-of-range)", FactsAre(("top", SpellNames.SHOCKING_GRASP), ("top.legal", "out-of-range")))
+                .Expect("The wizard casts Ray of Frost, its second candidate", CastEvents("wizard", SpellNames.RAY_OF_FROST, 1))
+                .Expect("The wizard never casts Shocking Grasp", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.SHOCKING_GRASP, 0, 0))
+                .Build();
+        }
+
+        // The hook state of rules/ai-spell-retry-refused: the handler counts only (a hook handler emits no trace event).
+        private static Action<CharacterController, SpellData, string, string> _retryRefusedPreviousHook;
+        private static int _retryRefusedBegins;
+
+        /// <summary>
+        /// AI-063 (single-target part; batch 11 step 22 review): a cast the cast core refuses after the AI picked it passes
+        /// the turn's spell to the next candidate, and the refused cast spends nothing. An AI-run cleric 5 (the Healer
+        /// profile) holds only Magic Weapon (1st) and Light (0, which the AI scores below Magic Weapon); a fighter ally beside it wields a weapon, a dummy 55 ft
+        /// away keeps the fight going, nobody is hurt. The AI's first pick is Magic Weapon on the fighter (recorded through
+        /// AIService.SelectSpell on the fighter's turn, which also installs the test's hook). When that cast begins
+        /// (CastStageTrace.Begin, raised before the cast core runs) the hook takes the weapon out of the fighter's hands, so
+        /// the AI decider has no weapon to choose and refuses the cast (choice-refused, before the Cost stage): no 'cast'
+        /// event, the Magic Weapon slot unspent, and the walk casts Light, its next candidate.
+        /// </summary>
+        private static ScenarioDef AiSpellRetryRefused()
+        {
+            return Rules("rules/ai-spell-retry-refused", "A cast refused after the AI picked it spends nothing and the AI casts its next candidate (AI-063)")
+                .Covers("AI-063", "SPL-113", "batch 11 step 22")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.Stats(() => Cleric("AI Cleric", 5)), 3, 10, Control.Ai)
+                .Pc("fighter", ActorSource.Stats(() => BardScenarios.Fighter("Fighter", 3)), 4, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Scripted)
+                .Tweak("cleric", c =>
+                {
+                    Prepare(c, 1, SpellNames.MAGIC_WEAPON);
+                    Prepare(c, 0, SpellNames.LIGHT);
+                    SpendAllBut(c, SpellNames.MAGIC_WEAPON, SpellNames.LIGHT);
+                    global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+                    if (inv != null)
+                    {
+                        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon) inv.RightHandSlot = null;
+                        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon) inv.LeftHandSlot = null;
+                        if (inv.HandsSlot != null && inv.HandsSlot.IsWeapon) inv.HandsSlot = null;
+                    }
+                })
+                .Initiative("fighter", "cleric", "dummy")
+                .Turn("fighter", 1,
+                    Step.Assert("record the first pick and disarm the fighter when its cast begins", ctx =>
+                    {
+                        CharacterController cleric = ctx.Get("cleric"), fighter = ctx.Get("fighter");
+                        AIService ai = ctx.Gm.GetComponent<AIService>();
+                        SpellData top = ai != null ? ai.SelectSpell(cleric, fighter) : null;
+                        Fact(ctx, "top", top != null ? top.SpellId : "none");
+                        Fact(ctx, "fighter.armed", fighter.GetEquippedMainWeapon() != null);
+                        _retryRefusedBegins = 0;
+                        Action<CharacterController, SpellData, string, string> previous = ScenarioHooks.CastStage;
+                        _retryRefusedPreviousHook = previous;
+                        ScenarioHooks.CastStage = ScenarioHooks.Safe<CharacterController, SpellData, string, string>("ai-spell-retry-refused", (c, s, stage, detail) =>
+                        {
+                            previous?.Invoke(c, s, stage, detail);
+                            if (c != cleric || s == null || s.SpellId != SpellNames.MAGIC_WEAPON || stage != CastStageTrace.Begin)
+                                return;
+                            _retryRefusedBegins++;
+                            global::Inventory inv = fighter.InventoryComp != null ? fighter.InventoryComp.CharacterInventory : null;
+                            if (inv != null)
+                            {
+                                if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon) inv.RightHandSlot = null;
+                                if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon) inv.LeftHandSlot = null;
+                                if (inv.HandsSlot != null && inv.HandsSlot.IsWeapon) inv.HandsSlot = null;
+                            }
+                        });
+                        Fact(ctx, "hook.previous", previous != null);
+                        return true;
+                    }))
+                .Turn("dummy", 1,
+                    Step.Assert("record the cleric's slots and restore the hook", ctx =>
+                    {
+                        ScenarioHooks.CastStage = _retryRefusedPreviousHook;
+                        _retryRefusedPreviousHook = null;
+                        Fact(ctx, "mw.begins", _retryRefusedBegins);
+                        SpellcastingComponent sc = ctx.Get("cleric").Spellcasting;
+                        int mwSlots = sc != null && sc.SpellSlots != null
+                            ? sc.SpellSlots.Count(s => s != null && s.CanCast && s.PreparedSpell != null && s.PreparedSpell.SpellId == SpellNames.MAGIC_WEAPON)
+                            : -1;
+                        Fact(ctx, "mw.slots", mwSlots);
+                        return true;
+                    }))
+                .Expect("The AI's first pick is Magic Weapon on the armed fighter", FactsAre(("top", SpellNames.MAGIC_WEAPON), ("fighter.armed", true), ("hook.previous", true)))
+                .Expect("Magic Weapon's cast began once and was refused: no 'cast' event, its slot unspent (nothing spent)",
+                    Expect.All(FactIs("mw.begins", 1), FactIs("mw.slots", 1), CastEvents("cleric", SpellNames.MAGIC_WEAPON, 0)))
+                .Expect("The walk casts the next candidate, Light", CastEvents("cleric", SpellNames.LIGHT, 1))
                 .Build();
         }
 
@@ -2731,7 +2963,7 @@ namespace Tests.Scenarios
         /// first in initiative, so it threatens; -30 on attacks). The cancel used to leave the cold choice in GameManager's
         /// shared field, and the Scripted wizard 5 who casts Resist Energy on itself next (away from the goblin) took that
         /// stale cold instead of its own choice. The choice is now the cancelled cast's own and ends with it; the Scripted
-        /// cast's request gets the NPC path's fire (AiCastDecider; the AI's real choice is SPL-112's open half). The cancel
+        /// cast's request gets the AI's own choice, fire (AiCastDecider: the goblin has no energy attack; batch 11 step 22). The cancel
         /// spends nothing (the AoO prompt's refund) and leaves no cast open.
         /// </summary>
         private static ScenarioDef StaleEnergyChoice()
@@ -2772,7 +3004,7 @@ namespace Tests.Scenarios
         /// <summary>
         /// Batch 11 step 4 (PHB p.230: the caster chooses warm or chill). The Fire Shield prompt re-enters the target
         /// selection (BeginPendingSpellTargeting) inside the same cast, so the Ui wizard's chill pick reaches its cast; the
-        /// Scripted wizard's cast that follows has its own request, warm (AiCastDecider, the NPC path's old default).
+        /// Scripted wizard's cast that follows has its own request, warm (AiCastDecider: no fire attack in sight).
         /// Fire Shield is in an added 4th-level slot (SPL-041; for the Scripted wizard the NPC executor's slot view is widened
         /// to it right before its cast, <see cref="WidenSlotsRemaining"/>, which is why that cast is made from an Assert step
         /// through TryNPCPerformSpellCastForAI, the call the Scripted Cast step makes).

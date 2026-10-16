@@ -85,8 +85,9 @@ public enum LegacyCastQuirk : long
     /// trace mark and no log line, a caster with no standard action left, a dead target, a caster that cannot cast
     /// spells and a spell the caster has no slot for (SpellcastingComponent.CanCast); the target test's refusal is not
     /// logged; and the Cost stage refuses a cast whose standard action cannot be committed. The PC path leaves these
-    /// to the spell menu. Batch 11 step 22 (ai-single-target-decider) moves the AI's tests into CheckLegality for every
-    /// caster and removes the bit.
+    /// to the spell menu. Moving these tests into CheckLegality for every caster and removing the bit is batch 11
+    /// step 22b (SPL-160): step 22 did only its AI part, so the AI now ranks only casts these tests accept
+    /// (GameManager.CheckLegalityForAI runs them through CheckLegality).
     /// </summary>
     NpcOwnLegalityChecks = 1 << 15,
 

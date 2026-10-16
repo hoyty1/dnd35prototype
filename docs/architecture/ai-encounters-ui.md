@@ -104,15 +104,19 @@ The live virtual hooks on `AIProfile` are `ScoreTarget`, `ShouldPreferCharge`, `
 ## NPC AI: spellcasting
 
 ```
-AIService.TryExecuteSpellcastAction (2340)       requires a standard action and Stats.IsSpellcaster
-  SelectSpell (2492)                             castable prepared spells only
+AIService.TryExecuteSpellcastAction              requires a standard action and Stats.IsSpellcaster
+  ScoreCastableSpells (behind SelectSpell)       castable prepared spells only, best score first;
+                                                 the cast core's caster tests (CheckCasterLegalityForAI)
     "AI:MagicMissileOnly" tag -> Magic Missile or nothing
     skip Buff/Illusion spells already active with > 1 round left (or indefinite)
     score = SpellcasterAIProfile.ScoreSpell      school priority x10 + EvaluateAOECast + strategist
          or AISpellcastingStrategist.ScoreSpellComprehensive (no caster profile)
-  AISpellcastingStrategist.EvaluateDefensiveCasting  0 = try SelectLowerLevelAlternative else abort,
+  per candidate, best first (RankedSpellCandidates; batch 11 step 22):
+  AISpellcastingStrategist.EvaluateDefensiveCasting  0 = skip the spell,
                                                      1 = "cast defensively" (logged; rolled at cast time)
-  AISpellcastingStrategist.SelectBestSpellTarget     self / ally (lowest HP, frontliner) / enemy
+  AISpellcastingStrategist.SelectBestSpellTarget     self / ally (lowest HP, frontliner) / enemy, only targets
+                                                     GameManager.CheckLegalityForAI accepts; none = skip
+  AiSpellCandidates.TryInOrder                       a refused cast passes to the next, at most 5 tries
   GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs) -> RunCastSync -> ExecuteCast (Spell/Resolution/GameManager.CastCore.cs, AI decider)
     ResolveNPCSpellcastProvocation                 if threatened: ShouldCastDefensively -> defensive roll or AoOs
 ```

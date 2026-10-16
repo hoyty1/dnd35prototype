@@ -5274,6 +5274,29 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// The energy type (acid, cold, electricity, fire or sonic) of the last energy damage this creature took this
+    /// encounter, before any mitigation; null when none. A fact the creature saw, kept for the AI's choices (the energy a
+    /// Resist Energy guards against, AiCastChoiceHeuristics; batch 11 step 22). No rule reads it. Cleared between
+    /// encounters (GameManager.ResetCombatStateForNextEncounter); a new creature gets new stats.
+    /// </summary>
+    public DamageType? LastEnergyDamageTaken;
+
+    private static readonly DamageType[] EnergyDamageTypes =
+        { DamageType.Fire, DamageType.Cold, DamageType.Acid, DamageType.Electricity, DamageType.Sonic };
+
+    private void RecordEnergyDamageTaken(HashSet<DamageType> types)
+    {
+        if (types == null)
+            return;
+        for (int i = 0; i < EnergyDamageTypes.Length; i++)
+            if (types.Contains(EnergyDamageTypes[i]))
+            {
+                LastEnergyDamageTaken = EnergyDamageTypes[i];
+                return;
+            }
+    }
+
+    /// <summary>
     /// Apply incoming damage through the full mitigation pipeline:
     /// immunity -> typed resistance -> DR (weapon damage only) -> HP/Temp HP.
     /// </summary>
@@ -5333,6 +5356,8 @@ public class CharacterStats
                 return result;
             }
         }
+
+        RecordEnergyDamageTaken(packet.Types);
 
         // 1) Immunity check: any matching type negates all damage
         foreach (var type in packet.Types)

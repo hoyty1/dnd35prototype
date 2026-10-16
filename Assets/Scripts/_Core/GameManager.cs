@@ -1159,6 +1159,13 @@ public partial class GameManager : MonoBehaviour
 
         ClearBattlefieldForEncounterLoopReset(safeContext);
 
+        // The energy damage a continuing party member took belongs to the last fight (the AI's energy choice reads it,
+        // CharacterStats.LastEnergyDamageTaken; batch 11 step 22).
+        if (PCs != null)
+            for (int i = 0; i < PCs.Count; i++)
+                if (PCs[i] != null && PCs[i].Stats != null)
+                    PCs[i].Stats.LastEnergyDamageTaken = null;
+
         if (Grid != null)
         {
             if (PCs != null)

@@ -176,8 +176,8 @@ public static class AISpellcastingStrategist
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            bool isAlly = candidate.Team == caster.Team;
-            bool isEnemy = !isAlly;
+            bool isAlly = candidate == caster || TeamUtility.IsAlly(caster, candidate);
+            bool isEnemy = TeamUtility.IsEnemy(caster, candidate);
 
             // Filter by spell target type
             if (isAllySpell && !isAlly) continue;
@@ -252,8 +252,10 @@ public static class AISpellcastingStrategist
     }
 
     /// <summary>
-    /// Select the best target for a spell — supports ally AND enemy targeting.
-    /// This replaces the old SelectBestSpellTarget that only iterated enemies.
+    /// Select the best target for a spell — supports ally AND enemy targeting. With a GameManager every candidate must
+    /// pass the cast core's legality test for the NPC cast (<see cref="IsLegalSpellTarget"/>, GameManager.CheckLegalityForAI:
+    /// IsValidTargetForSpell, the range to the footprint, the caster's own tests; batch 11 step 22), and allies and
+    /// enemies are told apart by TeamUtility (AI-016). Null when no candidate is legal.
     /// </summary>
     public static CharacterController SelectBestSpellTarget(
         CharacterController caster, SpellData spell,
@@ -265,7 +267,7 @@ public static class AISpellcastingStrategist
 
         // Self-targeting spells (none when a globe around the caster would stop the spell, PHB p.236)
         if (spell.TargetType == SpellTargetType.Self)
-            return IsWastedOnGlobe(spell, caster) ? null : caster;
+            return IsWastedOnGlobe(spell, caster) || !IsLegalSpellTarget(gm, caster, spell, caster, int.MaxValue) ? null : caster;
 
         bool isAllySpell = IsAllyTargetedSpell(spell);
 
@@ -293,11 +295,15 @@ public static class AISpellcastingStrategist
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (candidate.Team != caster.Team) continue;
+            if (candidate != caster && !TeamUtility.IsAlly(caster, candidate)) continue;
 
             int distance = CasterLevelRules.DistanceToTarget(caster, candidate);
             if (distance > rangeSquares) continue;
             if (IsWastedOnGlobe(spell, candidate)) continue;
+            // Magic Weapon, Greater Magic Weapon and Keen Edge need a wielded weapon the spell can enchant (the AI's
+            // weapon choice, AiCastDecider; SPL-113): an ally without one is no target.
+            if (AiCastChoiceHeuristics.IsWeaponChoiceSpell(spell) && AiCastChoiceHeuristics.ChooseWeapon(candidate, spell, caster) == null) continue;
+            if (!IsLegalSpellTarget(gm, caster, spell, candidate, rangeSquares)) continue;
 
             float score = ScoreAllyTarget(caster, candidate, spell);
             if (score > bestScore)
@@ -313,7 +319,25 @@ public static class AISpellcastingStrategist
             return null;
         if (bestTarget == null && IsWastedOnGlobe(spell, caster))
             return null;
+        if (bestTarget == null && AiCastChoiceHeuristics.IsWeaponChoiceSpell(spell))
+            return null;
+        if (bestTarget == null && !IsLegalSpellTarget(gm, caster, spell, caster, rangeSquares))
+            return null;
         return bestTarget ?? caster;
+    }
+
+    /// <summary>
+    /// The AI's legality filter for one candidate target (batch 11 step 22): with a GameManager, the cast core's
+    /// legality test of the NPC cast (GameManager.CheckLegalityForAI, the same CheckLegality the cast runs, so the AI
+    /// ranks only casts it would let through); without one (a static test), the range test alone.
+    /// </summary>
+    private static bool IsLegalSpellTarget(GameManager gm, CharacterController caster, SpellData spell, CharacterController target, int rangeSquares)
+    {
+        if (caster == null || spell == null || target == null)
+            return false;
+        if (gm != null)
+            return gm.CheckLegalityForAI(caster, target, spell).Kind != CastOutcomeKind.Refused;
+        return CasterLevelRules.DistanceToTarget(caster, target) <= rangeSquares;
     }
 
     /// <summary>Score an ally as a target for a healing or buff spell.</summary>
@@ -397,7 +421,9 @@ public static class AISpellcastingStrategist
                 int mirrorDist = CasterLevelRules.DistanceToTarget(caster, mirrorTarget);
                 int range = CasterLevelRules.RangeSquares(caster, spell);
                 if (range <= 0) range = 1;
-                if (mirrorDist <= range && !IsWastedOnGlobe(spell, mirrorTarget)) return mirrorTarget;
+                if (mirrorDist <= range && !IsWastedOnGlobe(spell, mirrorTarget)
+                    && (spell.TargetType != SpellTargetType.SingleEnemy || CanSeeSpellTarget(caster, mirrorTarget, spell))
+                    && IsLegalSpellTarget(gm, caster, spell, mirrorTarget, range)) return mirrorTarget;
             }
         }
 
@@ -412,16 +438,22 @@ public static class AISpellcastingStrategist
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (candidate.Team == caster.Team) continue; // skip allies
+            if (!TeamUtility.IsEnemy(caster, candidate)) continue; // allies and neutrals (AI-016)
 
             int distance = CasterLevelRules.DistanceToTarget(caster, candidate);
             if (distance > rangeSquares) continue;
 
-            // Line of sight check for single-target spells
+            // Sight of a single enemy target (PHB p.175: the caster must see or touch the target), with or without a
+            // GameManager: the legality test below does not cover it for every spell, because IsValidTargetForSpell
+            // returns before its sight test for Daze, Charm Person, Charm Monster, Dominate Person, Hold Monster, Touch of
+            // Idiocy and the Person transmutations (SPL-185). See Invisibility lets the caster see an invisible enemy, as
+            // in the cast core's test.
             bool requiresLOS = spell.TargetType == SpellTargetType.SingleEnemy;
-            if (requiresLOS && !caster.CanSee(candidate, spell.IsRangedTouchSpell()))
+            if (requiresLOS && !CanSeeSpellTarget(caster, candidate, spell))
                 continue;
             if (IsWastedOnGlobe(spell, candidate))
+                continue;
+            if (!IsLegalSpellTarget(gm, caster, spell, candidate, rangeSquares))
                 continue;
 
             float score = ScoreEnemyTarget(caster, candidate, spell, gm);
@@ -432,13 +464,38 @@ public static class AISpellcastingStrategist
             }
         }
 
+        // The caller's fallback only when it is an enemy (AI-016): the Healer turn passes its wounded ally, and the cast
+        // walk (AIService.TryExecuteSpellcastAction) goes on to offensive spells when the cure finds no target, so an
+        // offensive spell with no enemy in reach must not fall back to that ally.
+        if (bestTarget == null && (fallbackTarget == null || !TeamUtility.IsEnemy(caster, fallbackTarget)))
+            return null;
+        // Nor an enemy the caster cannot see, for a single-enemy spell (PHB p.175; the sight test above, SPL-185).
+        if (bestTarget == null && spell.TargetType == SpellTargetType.SingleEnemy && !CanSeeSpellTarget(caster, fallbackTarget, spell))
+            return null;
         // An inflict spell cures an undead and does nothing to a construct (SpellDiceRules, SPL-005): no such fallback.
         if (bestTarget == null && fallbackTarget != null && spell.EffectType == SpellEffectType.Damage
             && spell.Energy != SpellEnergy.None && !SpellDiceRules.Harms(spell, fallbackTarget.Stats))
             return null;
         if (bestTarget == null && IsWastedOnGlobe(spell, fallbackTarget))
             return null;
+        // The caller's fallback only when the cast at it is legal (batch 11 step 22): a refused cast spends the turn's try.
+        if (bestTarget == null && fallbackTarget != null && gm != null && !IsLegalSpellTarget(gm, caster, spell, fallbackTarget, rangeSquares))
+            return null;
         return bestTarget ?? fallbackTarget;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="caster"/> sees <paramref name="target"/> well enough to aim <paramref name="spell"/> at it
+    /// (PHB p.175): CharacterController.CanSee (ranged-touch spells by their own rule), or an invisible target that the
+    /// caster's See Invisibility reveals, the same test as GameManager.IsValidTargetForSpell's enemy sight test.
+    /// </summary>
+    private static bool CanSeeSpellTarget(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (caster == null || target == null || spell == null)
+            return false;
+        if (target.HasActiveInvisibilityEffect && caster.CanSeeInvisible(target))
+            return true;
+        return caster.CanSee(target, spell.IsRangedTouchSpell());
     }
 
     /// <summary>
@@ -834,8 +891,8 @@ public static class AISpellcastingStrategist
             {
                 var c = allCombatants[i];
                 if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-                if (c.Team == caster.Team) allyCount++;
-                else enemyCount++;
+                if (c == caster || TeamUtility.IsAlly(caster, c)) allyCount++;
+                else if (TeamUtility.IsEnemy(caster, c)) enemyCount++;
             }
         }
 
@@ -1032,7 +1089,7 @@ public static class AISpellcastingStrategist
             {
                 var c = allCombatants[i];
                 if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-                if (c.Team == caster.Team) continue;
+                if (!TeamUtility.IsEnemy(caster, c)) continue;
                 if (c.Stats.IsSpellcaster) enemyCasters++;
             }
         }
@@ -1438,7 +1495,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == caster.Team) continue;
+            if (!TeamUtility.IsEnemy(caster, c)) continue;
             enemyCount++;
             if (c.Stats.Level > maxEnemyLevel) maxEnemyLevel = c.Stats.Level;
         }
@@ -1463,7 +1520,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == caster.Team) continue;
+            if (!TeamUtility.IsEnemy(caster, c)) continue;
             // Adjacent or in the caster's own square (a square-mate threatens it, PHB p.149, CMB-131).
             if (SquareGridUtils.GetChebyshevDistance(caster.GridPosition, c.GridPosition) <= 1)
                 return true;
@@ -1479,7 +1536,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == caster.Team) continue;
+            if (!TeamUtility.IsEnemy(caster, c)) continue;
             // Adjacent or in the caster's own square (a square-mate threatens it, PHB p.149, CMB-131).
             if (SquareGridUtils.GetChebyshevDistance(caster.GridPosition, c.GridPosition) <= 1)
                 count++;
@@ -1495,7 +1552,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == caster.Team) continue;
+            if (!TeamUtility.IsEnemy(caster, c)) continue;
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, c.GridPosition);
             if (dist < minDist) minDist = dist;
         }
@@ -1510,7 +1567,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team != caster.Team) count++;
+            if (TeamUtility.IsEnemy(caster, c)) count++;
         }
         return count;
     }
@@ -1523,7 +1580,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == caster.Team) count++;
+            if (c == caster || TeamUtility.IsAlly(caster, c)) count++;
         }
         return count;
     }
@@ -1536,7 +1593,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team != caster.Team) continue;
+            if (c != caster && !TeamUtility.IsAlly(caster, c)) continue;
             if (IsFrontliner(c)) count++;
         }
         return count;
@@ -1550,7 +1607,7 @@ public static class AISpellcastingStrategist
         {
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team != caster.Team) continue;
+            if (c != caster && !TeamUtility.IsAlly(caster, c)) continue;
             if (!IsFrontliner(c)) count++;
         }
         return count;

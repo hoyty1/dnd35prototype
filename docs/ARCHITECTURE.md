@@ -258,7 +258,7 @@ Assets/Scripts/
                          AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator (+ README.md)
-    Spellcasting/ (1)    AiCastDecider (the NPC cast's choices, batch 11)
+    Spellcasting/ (3)    AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
     Profiles/ (19)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile
   Character/

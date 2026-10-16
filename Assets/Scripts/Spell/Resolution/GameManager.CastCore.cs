@@ -236,6 +236,29 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The AI's legality filter (batch 11 step 22): <see cref="CheckLegality"/> on the request the NPC cast of
+    /// <paramref name="spell"/> at <paramref name="target"/> would build (SpellCastRequest.ForAI), so the AI ranks only
+    /// casts the cast core would let through (the NPC caster tests, IsValidTargetForSpell, the range to the target's
+    /// footprint at the cast's caster level, the metamagic, the casting action, Silence and the components). The
+    /// caster's choices are not tested here: the decider makes them in the cast (AiCastDecider.FillChoices). No side effect.
+    /// </summary>
+    internal CastOutcome CheckLegalityForAI(CharacterController caster, CharacterController target, SpellData spell)
+        => CheckLegality(SpellCastRequest.ForAI(caster, target, spell));
+
+    /// <summary>
+    /// The caster's own part of <see cref="CheckLegality"/> for an NPC cast of <paramref name="spell"/>, with no target,
+    /// range or standard-action test, which the AI's planning reads (AIService.SelectSpell: the spell it would cast, also
+    /// asked to size an approach before the caster is in range): the metamagic, the casting action, Silence and the
+    /// components, the same tests in the same order as the cast core's Legality stage. Null when they pass.
+    /// </summary>
+    internal CastOutcome CheckCasterLegalityForAI(CharacterController caster, SpellData spell)
+    {
+        SpellCastRequest req = SpellCastRequest.ForAI(caster, null, spell);
+        return CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req) ?? CheckCastSpeechLegality(req)
+               ?? CheckCastComponentLegality(req);
+    }
+
+    /// <summary>
     /// The grapple test a cast meets in its targeting (BeginPendingSpellTargeting), which a hold meets here: holding the
     /// charge is casting the spell (PHB p.141), so a grappled or pinned caster can hold only a spell that the grapple
     /// allows (GrappleSpellcastRefusal: a casting time of 1 standard action or less, no somatic component, and no verbal

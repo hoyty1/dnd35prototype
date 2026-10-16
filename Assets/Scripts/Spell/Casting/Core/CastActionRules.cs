@@ -112,7 +112,7 @@ public static class CastActionRules
     /// the game cannot do yet (SPL-168). The F12 test panel's casts are not refused for a spent action (the panel casts
     /// out of turn); the quicken rules bind them too. A standard action is not tested here: the PC menu offers casting
     /// only with one, and the NPC path's own test refuses without one unless the cast costs a free or swift action
-    /// (LegacyCastQuirk.NpcOwnLegalityChecks; batch 11 step 22 moves it here).
+    /// (LegacyCastQuirk.NpcOwnLegalityChecks; moving it here for every caster is still open, SPL-160).
     /// </summary>
     public static string ActionRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
     {

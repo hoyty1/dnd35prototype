@@ -234,7 +234,7 @@ namespace DND35.AI.Profiles
             if (healer == null || candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 return false;
 
-            return candidate.Team == healer.Team;
+            return candidate == healer || TeamUtility.IsAlly(healer, candidate); // AI-016
         }
     }
 

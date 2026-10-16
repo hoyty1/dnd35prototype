@@ -1553,7 +1553,7 @@ public class AIService : MonoBehaviour
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} scans for nearest creature: {target.Stats.CharacterName}."));
 
         // Indiscriminate swarms (Summon Swarm) attack nearest creature regardless of team
-        if (indiscriminate && target.Team == swarm.Team)
+        if (indiscriminate && TeamUtility.IsAlly(swarm, target))
         {
             CharacterController summonCaster = _gameManager.GetSummonCasterForAI(swarm);
             if (summonCaster != null && target == summonCaster)
@@ -2745,6 +2745,16 @@ public class AIService : MonoBehaviour
         return Mathf.Max(1, rangeSquares);
     }
 
+    /// <summary>
+    /// The turn's spell (batch 11 step 22): the castable spells ranked by score (<see cref="ScoreCastableSpells"/>, the
+    /// order <see cref="SelectSpell"/> picks from), each with its best target among the casts the cast core would let
+    /// through (<see cref="SelectBestSpellTarget"/>, GameManager.CheckLegalityForAI), are tried best first; a cast the
+    /// NPC cast path refuses (TryNPCPerformSpellCastForAI false: nothing spent) passes to the next candidate, at most
+    /// <see cref="AiSpellCandidates.MaxTries"/> tries (AI-063, single-target part). A spell too risky to cast while
+    /// threatened (AISpellcastingStrategist.EvaluateDefensiveCasting) or with no legal target is skipped and costs no try.
+    /// Area, summon and escape spells stay out as before (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive; the NPC
+    /// path refuses an area spell, AI-001).
+    /// </summary>
     /// <param name="allow">Optional filter on the candidate spells (the dragon turn's cast-first step, AI-037); null allows all.</param>
     /// <param name="minScore">A candidate must score above this to be chosen; the default keeps the old no-floor choice.</param>
     private bool TryExecuteSpellcastAction(CharacterController caster, CharacterController fallbackTarget,
@@ -2763,108 +2773,69 @@ public class AIService : MonoBehaviour
         List<SpellData> castableSpells = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
         int castableCount = castableSpells != null ? castableSpells.Count : 0;
 
-        SpellData spell = SelectSpell(caster, fallbackTarget, allow, minScore);
-        if (spell == null)
+        List<AiScoredSpell> scored = ScoreCastableSpells(caster, fallbackTarget, allow, minScore);
+        if (scored.Count == 0)
         {
             Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} has no castable spell choice. castablePrepared={castableCount}");
             return false;
         }
 
-        // ── T1.3: Defensive casting awareness ──
-        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
-        int defensiveResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, spell, allCombatants);
-        if (defensiveResult == 0)
+        bool casted = AiSpellCandidates.TryInOrder(RankedSpellCandidates(caster, fallbackTarget, scored), AiSpellCandidates.MaxTries, candidate =>
         {
-            // Can't safely cast in melee — try a lower-level spell
-            SpellData altSpell = SelectLowerLevelAlternative(caster, fallbackTarget, spell.SpellLevel, allow, minScore);
-            if (altSpell != null)
+            SpellData spell = candidate.Spell;
+            CharacterController spellTarget = candidate.Target;
+            int targetDistance = CasterLevelRules.DistanceToTarget(caster, spellTarget);
+            int spellRange = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
+            bool isAllyTargeted = AISpellcastingStrategist.IsAllyTargetedSpell(spell);
+            string targetRelation = isAllyTargeted ? "ally" : "enemy";
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
+
+            if (!_gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell))
             {
-                int altResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, altSpell, allCombatants);
-                if (altResult > 0)
-                {
-                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} switches from {spell.Name} (too risky in melee) to {altSpell.Name}");
-                    spell = altSpell;
-                }
-                else
-                {
-                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} can't safely cast any spell while threatened — aborting spellcasting.");
-                    return false;
-                }
-            }
-            else
-            {
-                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} can't safely cast {spell.Name} while threatened and has no alternatives.");
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} on {spellTarget.Stats.CharacterName} (refused, nothing spent); trying the next candidate.");
                 return false;
             }
-        }
-        else if (defensiveResult == 1)
-        {
-            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} will cast {spell.Name} defensively (threatened in melee).");
-        }
 
-        CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
-        if (spellTarget == null)
-        {
-            int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
-            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no valid targets in range ({rangeSquares} squares).");
-            return false;
-        }
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} on {spellTarget.Stats.CharacterName}");
+            return true;
+        }, out int tries);
 
-        int targetDistance = CasterLevelRules.DistanceToTarget(caster, spellTarget);
-        int spellRange = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
-        bool isAllyTargeted = AISpellcastingStrategist.IsAllyTargetedSpell(spell);
-        string targetRelation = isAllyTargeted ? "ally" : "enemy";
-        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
-
-        bool casted = _gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell);
         if (!casted)
-        {
-            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} on {spellTarget.Stats.CharacterName}. (Likely invalid target constraints, LOS, or range race)");
-            return false;
-        }
-
-        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} on {spellTarget.Stats.CharacterName}");
-        return true;
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} cast no spell ({tries} tried of {scored.Count} scored).");
+        return casted;
     }
 
-    /// <summary>Find a lower-level spell alternative when the primary choice is too risky in melee.</summary>
-    private SpellData SelectLowerLevelAlternative(CharacterController caster, CharacterController target, int maxLevel,
-        Func<SpellData, bool> allow = null, float minScore = float.NegativeInfinity)
+    /// <summary>
+    /// The (spell, target) candidates of <paramref name="scored"/> in rank order, built as the walk asks for them: a spell
+    /// too risky to cast while threatened, or with no legal target, is left out (with a log line).
+    /// </summary>
+    private IEnumerable<AiSpellCandidate> RankedSpellCandidates(CharacterController caster, CharacterController fallbackTarget, List<AiScoredSpell> scored)
     {
-        if (caster == null || caster.Stats == null) return null;
-
-        SpellcastingComponent spellcasting = caster.Spellcasting;
-        if (spellcasting == null) return null;
-
-        List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
-        if (castable == null) return null;
-
-        SpellData best = null;
-        float bestScore = float.NegativeInfinity;
-
-        List<CharacterController> allCombatants = _gameManager?.GetAllCharactersForAI() ?? new List<CharacterController>();
-
-        for (int i = 0; i < castable.Count; i++)
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+        for (int i = 0; i < scored.Count; i++)
         {
-            SpellData spell = castable[i];
-            if (spell == null || spell.SpellLevel >= maxLevel) continue;
-            if (allow != null && !allow(spell)) continue; // AI-037
-            if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
-            if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell)) continue; // SPL-091
-            if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null) continue; // batch 11 steps 12 and 21
-            if (CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell))) continue; // batch 11 step 13, SPL-092
+            SpellData spell = scored[i].Spell;
 
-            float score = AISpellcastingStrategist.ScoreSpellComprehensive(
-                spell, caster, target, allCombatants, _gameManager);
-
-            if (score > minScore && score > bestScore)
+            // ── T1.3: Defensive casting awareness ──
+            int defensiveResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, spell, allCombatants);
+            if (defensiveResult == 0)
             {
-                bestScore = score;
-                best = spell;
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} can't safely cast {spell.Name} while threatened; it looks further down its list.");
+                continue;
             }
-        }
+            if (defensiveResult == 1)
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} will cast {spell.Name} defensively (threatened in melee).");
 
-        return best;
+            CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
+            if (spellTarget == null)
+            {
+                int rangeSquares = Mathf.Max(1, CasterLevelRules.RangeSquares(caster, spell));
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no legal target ({rangeSquares} squares).");
+                continue;
+            }
+
+            yield return new AiSpellCandidate(spell, spellTarget, scored[i].Score);
+        }
     }
 
     private CharacterController SelectBestSpellTarget(CharacterController caster, SpellData spell, CharacterController fallbackTarget)
@@ -2906,24 +2877,56 @@ public class AIService : MonoBehaviour
         return HasCreatureTag(caster, "AI:MagicMissileOnly");
     }
 
+    /// <summary>A castable spell and its score (<see cref="ScoreCastableSpells"/>).</summary>
+    private readonly struct AiScoredSpell
+    {
+        public readonly SpellData Spell;
+        public readonly float Score;
+
+        public AiScoredSpell(SpellData spell, float score)
+        {
+            Spell = spell;
+            Score = score;
+        }
+    }
+
     /// <summary>
-    /// The highest-scoring castable spell, or null. <paramref name="allow"/> filters the candidates and a candidate
-    /// must score above <paramref name="minScore"/> (both used by the dragon turn's cast-first step, AI-037); the
-    /// defaults keep every caller's old choice.
+    /// The highest-scoring castable spell, or null: the first of <see cref="ScoreCastableSpells"/>. The AI's planning reads
+    /// it (the spell it would cast, also to size an approach before the caster is in range), so it tests no target or
+    /// range; the cast itself picks among legal (spell, target) pairs (<see cref="TryExecuteSpellcastAction"/>).
+    /// <paramref name="allow"/> filters the candidates and a candidate must score above <paramref name="minScore"/>
+    /// (both used by the dragon turn's cast-first step, AI-037); the defaults keep every caller's old choice.
     /// </summary>
     public SpellData SelectSpell(CharacterController caster, CharacterController target,
         Func<SpellData, bool> allow = null, float minScore = float.NegativeInfinity)
     {
+        List<AiScoredSpell> scored = ScoreCastableSpells(caster, target, allow, minScore);
+        return scored.Count > 0 ? scored[0].Spell : null;
+    }
+
+    /// <summary>
+    /// The castable spells the AI would consider, each with its score (the profile's ScoreSpell, else
+    /// AISpellcastingStrategist.ScoreSpellComprehensive), best first; equal scores keep the spell list's order, so the
+    /// first is the spell the old single pick chose. Left out: a spell <paramref name="allow"/> refuses, one scoring
+    /// <paramref name="minScore"/> or less, one with no modelled effect (SPL-135) or a choice the AI cannot give
+    /// (SPL-091), a buff already running, and one the cast core's caster tests refuse
+    /// (GameManager.CheckCasterLegalityForAI: the metamagic, the casting action, Silence, the components; batch 11
+    /// step 22, the same CheckLegality the cast runs).
+    /// </summary>
+    private List<AiScoredSpell> ScoreCastableSpells(CharacterController caster, CharacterController target,
+        Func<SpellData, bool> allow, float minScore)
+    {
+        var result = new List<AiScoredSpell>();
         if (caster == null || caster.Stats == null)
-            return null;
+            return result;
 
         SpellcastingComponent spellcasting = caster.Spellcasting;
         if (spellcasting == null || !spellcasting.CanCastSpells || !spellcasting.HasAnyCastablePreparedSpell())
-            return null;
+            return result;
 
         List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
         if (castable == null || castable.Count == 0)
-            return null;
+            return result;
 
         if (IsMagicMissileOnlyCaster(caster))
         {
@@ -2931,17 +2934,17 @@ public class AIService : MonoBehaviour
             {
                 SpellData spell = castable[i];
                 if (spell != null && string.Equals(spell.SpellId, SpellNames.MAGIC_MISSILE, StringComparison.OrdinalIgnoreCase))
-                    return spell;
+                {
+                    result.Add(new AiScoredSpell(spell, 0f));
+                    break;
+                }
             }
 
-            return null;
+            return result;
         }
 
         AIProfile profile = GetProfile(caster);
         SpellcasterAIProfile spellcasterProfile = profile as SpellcasterAIProfile;
-
-        SpellData best = null;
-        float bestScore = float.NegativeInfinity;
 
         List<CharacterController> allCombatants = _gameManager != null
             ? _gameManager.GetAllCharactersForAI()
@@ -2966,16 +2969,18 @@ public class AIService : MonoBehaviour
             if (AISpellcastingStrategist.NeedsCasterChoiceAiCannotGive(spell))
                 continue;
 
-            // A casting action the caster cannot take now: a 1-round casting time without a full-round action left, a
-            // second quickened or free-action spell this round (CastActionRules, the cast core's Legality rule; batch 11
-            // step 12, PHB p.174, p.98, p.229); a prepared metamagic spell's metamagic the rules refuse (MetamagicSystem,
-            // batch 11 step 21: the NPC cast carries it, SpellCastRequest.AiMetamagicFor).
-            if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null)
-                continue;
-
-            // A verbal spell the caster cannot cast inside a Silence (PHB p.279; the cast core's Legality rule,
-            // CastComponentRules.SilenceBlocks; batch 11 step 13, SPL-092), with the prepared metamagic the cast carries.
-            if (CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
+            // The cast core's caster tests (batch 11 step 22): a prepared metamagic spell's metamagic the rules refuse
+            // (MetamagicSystem, batch 11 step 21), a casting action the caster cannot take now (a 1-round casting time
+            // without a full-round action left, a second quickened spell this round; CastActionRules, batch 11 step 12,
+            // PHB p.174, p.98, p.229), a verbal spell inside a Silence (PHB p.279; batch 11 step 13, SPL-092) and a
+            // missing component (PHB p.174; batch 11 step 17), with the metamagic the NPC cast carries.
+            if (_gameManager != null)
+            {
+                if (_gameManager.CheckCasterLegalityForAI(caster, spell) != null)
+                    continue;
+            }
+            else if (CastActionRules.Refusal(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)) != null
+                     || CastComponentRules.SilenceBlocks(caster, spell, SpellCastRequest.AiMetamagicFor(spell), SpellCastRequest.AiSourceFor(caster, spell)))
                 continue;
 
             // ── Buff-already-active check ──
@@ -3012,14 +3017,20 @@ public class AIService : MonoBehaviour
                     spell, caster, target, allCombatants, _gameManager);
             }
 
-            if (score > minScore && score > bestScore)
-            {
-                bestScore = score;
-                best = spell;
-            }
+            if (score > minScore)
+                result.Add(new AiScoredSpell(spell, score));
         }
 
-        return best;
+        // Best first; a stable sort keeps the list order among equal scores (the old pick took the first best).
+        var ordered = new List<AiScoredSpell>(result.Count);
+        for (int i = 0; i < result.Count; i++)
+        {
+            int at = ordered.Count;
+            while (at > 0 && ordered[at - 1].Score < result[i].Score)
+                at--;
+            ordered.Insert(at, result[i]);
+        }
+        return ordered;
     }
 
     public AIActionType SelectBestAction(CharacterController npc, CharacterController target, bool preferAggression)
@@ -3124,7 +3135,7 @@ public class AIService : MonoBehaviour
         foreach (var c in _gameManager.GetAllCharactersForAI())
         {
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.Team == npc.Team) continue; // Skip allies
+            if (!TeamUtility.IsEnemy(npc, c)) continue; // allies and neutrals (AI-016)
 
             // Check if they're a spellcaster
             if (!c.Stats.IsSpellcaster) continue;

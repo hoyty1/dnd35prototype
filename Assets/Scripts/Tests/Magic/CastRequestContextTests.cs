@@ -11,8 +11,9 @@ namespace Tests.Magic
 /// <see cref="SpellCastRequest"/> in a <see cref="CastContext"/> on GameManager's cast stack.
 /// Request builds: the spell is always the cast's own clone (a template is never touched), the UI clone reads as the
 /// menu's instance did (the MetamagicDataRef record kept without metamagic; with metamagic a plain clone carrying the
-/// pre-cast changes), and the AI request fills the choices the NPC path always made (fire for Resist Energy and
-/// Protection from Energy, warm Fire Shield; SPL-112's AI half stays open) through AiCastDecider. The source flags
+/// pre-cast changes), and the AI request's choices come from AiCastDecider (batch 11 step 22: with no enemy energy
+/// attack seen, fire for Resist Energy and Protection from Energy and the warm Fire Shield; no weapon to enchant
+/// refuses Magic Weapon; AIProfileFrameworkTests checks the real choices). The source flags
 /// (TestPanelBypass, IsItem). With a scene GameManager (Play mode): no cast open reads the defaults; setting the pending
 /// spell opens a scratch Ui cast and clearing it ends that cast; an AI cast nests over a Ui cast and shows its own state
 /// (spell, choices, source) until it ends; a new Ui cast replaces a Ui cast left open; and ending a context that is not on
@@ -54,7 +55,7 @@ public static class CastRequestContextTests
             "ForAI: the request's spell is its own clone of the template");
         Assert(!r.Choices.Energy.HasValue, "ForAI: the choices are left to the decider (the cast core's Legality stage asks it)");
         Assert(FillAi(r) == CastChoiceFill.Filled && r.Choices.Energy == ResistEnergyType.Fire,
-            "AiCastDecider.FillChoices: Resist Energy gets fire, the NPC path's old default (SPL-112 AI half)", "" + r.Choices.Energy);
+            "AiCastDecider.FillChoices: Resist Energy with no energy attack seen gets fire", "" + r.Choices.Energy);
         Assert(r.Decider is AiCastDecider && r.Decider.IsSynchronous, "ForAI: the AI decider answers inline");
         Assert(r.Metamagic == null && r.Source.Kind == CastSourceKind.PreparedSlot, "ForAI: no metamagic; a caster without spellcasting casts from a prepared slot");
         Assert(r.Quirks == LegacyCastQuirkSets.AiPath, "ForAI: the NPC path's legacy quirks (batch 11 step 8)", "" + r.Quirks);
@@ -70,8 +71,8 @@ public static class CastRequestContextTests
             "AiCastDecider.FillChoices: another spell gets no energy or shield choice");
 
         SpellCastRequest w = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.MAGIC_WEAPON));
-        Assert(FillAi(w) == CastChoiceFill.Filled && w.Choices.MagicWeaponItem == null && w.Choices.DisguiseRace == null,
-            "AiCastDecider.FillChoices: no weapon for Magic Weapon (it still fizzles for an NPC, SPL-113) and no race (own race)");
+        Assert(FillAi(w) == CastChoiceFill.Refused && w.Choices.MagicWeaponItem == null && w.Choices.DisguiseRace == null,
+            "AiCastDecider.FillChoices: Magic Weapon with no recipient weapon is refused, nothing spent (batch 11 step 22, SPL-113)");
 
         SpellCastRequest chosen = SpellCastRequest.ForAI(null, null, resist);
         chosen.Choices.Energy = ResistEnergyType.Cold;

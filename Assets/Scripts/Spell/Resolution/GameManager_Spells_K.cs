@@ -160,16 +160,24 @@ public partial class GameManager
         return weapons.Count > 0;
     }
 
+    /// <summary>
+    /// Keen Edge affects only a piercing or slashing weapon (PHB p.246): the weapon's damage type names one of them. The
+    /// PC picker and the AI's choice (AiCastChoiceHeuristics.ChooseWeapon) use this one test.
+    /// </summary>
+    internal static bool IsKeenEdgeWeapon(ItemData item)
+    {
+        if (item == null || !item.IsWeapon)
+            return false;
+        string dmgType = item.DamageType != null ? item.DamageType.ToLowerInvariant() : "";
+        return dmgType.Contains("slashing") || dmgType.Contains("piercing");
+    }
+
     private static void TryAddKeenEdgeOption(ItemData item, string locationLabel, List<ItemData> weapons, List<string> labels)
     {
         if (item == null || !item.IsWeapon || weapons == null || labels == null)
             return;
 
-        // Keen Edge only works on slashing or piercing weapons
-        string dmgType = item.DamageType != null ? item.DamageType.ToLowerInvariant() : "";
-        bool isSlashing = dmgType.Contains("slashing");
-        bool isPiercing = dmgType.Contains("piercing");
-        if (!isSlashing && !isPiercing)
+        if (!IsKeenEdgeWeapon(item))
             return;
 
         int currentThreat = item.CritThreatMin > 0 ? item.CritThreatMin : 20;

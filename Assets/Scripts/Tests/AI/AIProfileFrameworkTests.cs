@@ -53,6 +53,13 @@ namespace Tests.AI
             TestHealerChoosesRangedWithLowAC();
             TestHealerPrioritizesMostWoundedAlly();
             TestHealerIgnoresWoundedUndeadAlly();
+            TestAiEnergyChoiceReadsVisibleEnemyAttacks();
+            TestAiWeaponAndDeciderChoices();
+            TestAiSpellCandidatesTryInOrder();
+            TestAiSpellTargetingUsesTeamUtility();
+            TestAiWeaponChoiceSkipsCastsThatAddNothing();
+            TestAiEnemySpellTargetNeedsSight();
+            TestAiOffensiveSpellNeverFallsBackToAlly();
             TestRangedRiskMultiplierDefaults();
             TestConcealmentTargetingAdjustmentUsesPriorityTiers();
             TestConcealmentTargetingAdjustmentSupportsProfileMultiplier();
@@ -802,6 +809,343 @@ namespace Tests.AI
             finally
             {
                 TestHelpers.Cleanup(healer != null ? healer.gameObject : null, profile);
+            }
+        }
+
+        // ── Batch 11 step 22: the AI's caster choices, its retry walk and its side tests ──
+
+        /// <summary>
+        /// SPL-112: the AI's energy for Resist Energy and Protection from Energy is the energy of the attacks of the enemies
+        /// it can see (a breath weapon, a natural attack's energy dice), else the energy the recipient last took, else fire;
+        /// an ally's breath does not count. Fire Shield is chill against fire and warm against cold (PHB p.230).
+        /// </summary>
+        private static void TestAiEnergyChoiceReadsVisibleEnemyAttacks()
+        {
+            CharacterController caster = TestHelpers.CreateCleric("Energy_Caster", level: 5);
+            CharacterController enemy = TestHelpers.CreateWarrior("Energy_Enemy", level: 5);
+            CharacterController ally = TestHelpers.CreateWarrior("Energy_Ally", level: 5);
+            try
+            {
+                caster.IsPlayerControlled = true;
+                ally.IsPlayerControlled = true;
+                TestHelpers.SetGridPosition(caster, 0, 0);
+                TestHelpers.SetGridPosition(ally, 1, 0);
+                TestHelpers.SetGridPosition(enemy, 5, 0);
+                var all = new List<CharacterController> { caster, ally, enemy };
+
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Fire,
+                    "Energy choice: no energy attack seen and none taken gives fire (the old default)");
+
+                ally.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageType = global::DamageType.Cold, DamageCount = 6, DamageDice = 6 });
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Fire,
+                    "Energy choice: an ally's cold breath is no threat");
+
+                enemy.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageType = global::DamageType.Cold, DamageCount = 2, DamageDice = 6 });
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Cold,
+                    "Energy choice: a visible enemy's cold breath gives cold (white dragon)");
+                Assert(AiCastChoiceHeuristics.ChooseFireShieldWarm(caster, all),
+                    "Fire Shield: warm against a cold threat (PHB p.230)");
+
+                enemy.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageType = global::DamageType.Fire, DamageCount = 2, DamageDice = 10 });
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Fire,
+                    "Energy choice: a visible enemy's fire breath gives fire (red dragon)");
+                Assert(!AiCastChoiceHeuristics.ChooseFireShieldWarm(caster, all),
+                    "Fire Shield: chill against a fire threat (PHB p.230)");
+
+                enemy.ConfigureBreathWeapon(null);
+                enemy.Stats.NaturalAttacks.Add(new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusElementalDamageType = global::DamageType.Acid, BonusElementalDamageCount = 1, BonusElementalDamageDice = 6
+                });
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Acid,
+                    "Energy choice: a natural attack's acid dice give acid");
+
+                enemy.Stats.NaturalAttacks.Clear();
+                caster.Stats.ApplyIncomingDamage(4, new DamagePacket { RawDamage = 4, Types = new HashSet<global::DamageType> { global::DamageType.Sonic }, SourceName = "test" });
+                Assert(caster.Stats.LastEnergyDamageTaken == global::DamageType.Sonic,
+                    "Damage taken records its energy type (CharacterStats.LastEnergyDamageTaken)", "" + caster.Stats.LastEnergyDamageTaken);
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Sonic,
+                    "Energy choice: with no visible energy attack, the energy the recipient last took");
+
+                enemy.Stats.CurrentHP = -20;
+                enemy.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageType = global::DamageType.Electricity, DamageCount = 2, DamageDice = 6 });
+                Assert(AiCastChoiceHeuristics.ChooseProtectionEnergy(caster, caster, all) == ResistEnergyType.Sonic,
+                    "Energy choice: a dead enemy's breath does not count");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, enemy != null ? enemy.gameObject : null, ally != null ? ally.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// SPL-113: the AI enchants the recipient's wielded primary weapon (Keen Edge only a piercing or slashing one,
+        /// PHB p.246), and the decider refuses the cast (nothing spent) when there is none; Disguise Self keeps the
+        /// caster's race; an energy choice already on the request is kept.
+        /// </summary>
+        private static void TestAiWeaponAndDeciderChoices()
+        {
+            CharacterController caster = TestHelpers.CreateCleric("Weapon_Caster", level: 5);
+            CharacterController fighter = TestHelpers.CreateWarrior("Weapon_Fighter", level: 5);
+            try
+            {
+                caster.IsPlayerControlled = true;
+                fighter.IsPlayerControlled = true;
+                global::Inventory inv = fighter.GetComponent<InventoryComponent>().CharacterInventory;
+                inv.RightHandSlot = null;
+                SpellData magicWeapon = SpellDatabase.GetSpell(SpellNames.MAGIC_WEAPON);
+                SpellData keenEdge = SpellDatabase.GetSpell(SpellNames.KEEN_EDGE);
+
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon) == null, "Weapon choice: no wielded weapon, no pick");
+                SpellCastRequest none = SpellCastRequest.ForAI(caster, fighter, magicWeapon);
+                Assert(AiCastDecider.Instance.FillAiChoices(none, null) == CastChoiceFill.Refused,
+                    "AiCastDecider: Magic Weapon on a creature with no wielded weapon is refused before anything is spent");
+
+                ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+                inv.DirectEquip(sword, EquipSlot.RightHand);
+                ItemData wielded = fighter.GetEquippedMainWeapon();
+                Assert(wielded != null && AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon) == wielded,
+                    "Weapon choice: Magic Weapon takes the wielded longsword");
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, keenEdge) == wielded,
+                    "Weapon choice: Keen Edge takes a slashing weapon");
+                SpellCastRequest mw = SpellCastRequest.ForAI(caster, fighter, magicWeapon);
+                Assert(AiCastDecider.Instance.FillAiChoices(mw, null) == CastChoiceFill.Filled && mw.Choices.MagicWeaponItem == wielded,
+                    "AiCastDecider: Magic Weapon's request carries the recipient's wielded weapon (SPL-113)");
+
+                wielded.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "test", 5, 50));
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon) == null,
+                    "Weapon choice: a weapon Magic Weapon already enchants is no pick");
+
+                inv.RightHandSlot = null;
+                ItemData hammer = ItemDatabase.CloneItem(ItemID.WeaponWarhammer);
+                inv.DirectEquip(hammer, EquipSlot.RightHand);
+                Assert(fighter.GetEquippedMainWeapon() != null && AiCastChoiceHeuristics.ChooseWeapon(fighter, keenEdge) == null,
+                    "Weapon choice: Keen Edge takes no bludgeoning weapon (PHB p.246)");
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon) == fighter.GetEquippedMainWeapon(),
+                    "Weapon choice: Magic Weapon takes a bludgeoning weapon");
+
+                SpellCastRequest disguise = SpellCastRequest.ForAI(caster, caster, SpellDatabase.GetSpell(SpellNames.DISGUISE_SELF));
+                Assert(AiCastDecider.Instance.FillAiChoices(disguise, null) == CastChoiceFill.Filled && disguise.Choices.DisguiseRace == caster.ActualRace,
+                    "AiCastDecider: Disguise Self keeps the caster's own race", disguise.Choices.DisguiseRace);
+
+                SpellCastRequest kept = SpellCastRequest.ForAI(caster, caster, SpellDatabase.GetSpell(SpellNames.RESIST_ENERGY));
+                kept.Choices.Energy = ResistEnergyType.Electricity;
+                Assert(AiCastDecider.Instance.FillAiChoices(kept, null) == CastChoiceFill.Filled && kept.Choices.Energy == ResistEnergyType.Electricity,
+                    "AiCastDecider keeps an energy the request already carries");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, fighter != null ? fighter.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AI-063 (single-target part): the walk tries the ranked candidates in order, moves on after a refusal, stops at the
+        /// first cast and gives up after five tries.
+        /// </summary>
+        private static void TestAiSpellCandidatesTryInOrder()
+        {
+            var order = new List<int>();
+            bool cast = AiSpellCandidates.TryInOrder(new[] { 1, 2, 3 }, AiSpellCandidates.MaxTries, c => { order.Add(c); return c == 2; }, out int tries);
+            Assert(cast && tries == 2 && string.Join(",", order) == "1,2",
+                "Retry walk: a refused first pick passes to the second, which is cast", string.Join(",", order));
+
+            order.Clear();
+            cast = AiSpellCandidates.TryInOrder(new[] { 1, 2, 3, 4, 5, 6, 7 }, AiSpellCandidates.MaxTries, c => { order.Add(c); return false; }, out tries);
+            Assert(!cast && tries == 5 && AiSpellCandidates.MaxTries == 5 && string.Join(",", order) == "1,2,3,4,5",
+                "Retry walk: at most five tries", string.Join(",", order));
+
+            cast = AiSpellCandidates.TryInOrder(new int[0], AiSpellCandidates.MaxTries, c => true, out tries);
+            Assert(!cast && tries == 0, "Retry walk: no candidate, no try");
+        }
+
+        /// <summary>
+        /// The AI's weapon choice skips a cast that adds nothing (step 22 review): Magic Weapon (+1) or Greater Magic Weapon
+        /// at CL 5 (+1) on a +1 weapon (enhancement bonuses do not stack, PHB p.171), Magic Weapon under a running Greater
+        /// Magic Weapon +2, Keen Edge on a keen weapon (PHB p.246: threat-range effects do not stack); Greater Magic Weapon
+        /// at CL 8 (+2) still improves a +1 weapon.
+        /// </summary>
+        private static void TestAiWeaponChoiceSkipsCastsThatAddNothing()
+        {
+            CharacterController caster = TestHelpers.CreateCleric("WeaponNothing_Caster", level: 5);
+            CharacterController highCaster = TestHelpers.CreateCleric("WeaponNothing_HighCaster", level: 8);
+            CharacterController fighter = TestHelpers.CreateWarrior("WeaponNothing_Fighter", level: 5);
+            try
+            {
+                global::Inventory inv = fighter.GetComponent<InventoryComponent>().CharacterInventory;
+                inv.RightHandSlot = null;
+                ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+                inv.DirectEquip(sword, EquipSlot.RightHand);
+                ItemData wielded = fighter.GetEquippedMainWeapon();
+                SpellData magicWeapon = SpellDatabase.GetSpell(SpellNames.MAGIC_WEAPON);
+                SpellData greater = SpellDatabase.GetSpell(SpellNames.GREATER_MAGIC_WEAPON);
+                SpellData keenEdge = SpellDatabase.GetSpell(SpellNames.KEEN_EDGE);
+
+                Assert(wielded != null && AiCastChoiceHeuristics.ChooseWeapon(fighter, greater, caster) == wielded,
+                    "Weapon choice: Greater Magic Weapon takes a +0 weapon");
+
+                wielded.EnhancementBonus = 1;
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon, caster) == null,
+                    "Weapon choice: Magic Weapon adds nothing to a +1 weapon (PHB p.171), no pick");
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, greater, caster) == null,
+                    "Weapon choice: Greater Magic Weapon at CL 5 (+1) adds nothing to a +1 weapon, no pick");
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, greater, highCaster) == wielded,
+                    "Weapon choice: Greater Magic Weapon at CL 8 (+2) improves a +1 weapon");
+                SpellCastRequest refused = SpellCastRequest.ForAI(caster, fighter, magicWeapon);
+                Assert(AiCastDecider.Instance.FillAiChoices(refused, null) == CastChoiceFill.Refused,
+                    "AiCastDecider: Magic Weapon on a +1 weapon is refused before anything is spent");
+
+                wielded.EnhancementBonus = 0;
+                wielded.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.GREATER_MAGIC_WEAPON, "Greater Magic Weapon", "test", 8, 80)
+                {
+                    BonusType = BonusType.Enhancement, EnhancementBonusAttack = 2, EnhancementBonusDamage = 2, CountsAsMagicForBypass = true
+                });
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, magicWeapon, caster) == null,
+                    "Weapon choice: Magic Weapon adds nothing under a running Greater Magic Weapon +2, no pick");
+
+                if (wielded.Enchantment == null)
+                    wielded.Enchantment = new ItemEnchantmentData();
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, keenEdge, caster) == wielded,
+                    "Weapon choice: Keen Edge takes a slashing weapon that is not keen");
+                wielded.Enchantment.AddAbility(EnchantmentType.Keen);
+                Assert(AiCastChoiceHeuristics.ChooseWeapon(fighter, keenEdge, caster) == null,
+                    "Weapon choice: Keen Edge adds nothing to a keen weapon (PHB p.246), no pick");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, highCaster != null ? highCaster.gameObject : null,
+                    fighter != null ? fighter.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// PHB p.175 (the caster must see or touch the target): the AI never aims Charm Person, one of the spells
+        /// GameManager.IsValidTargetForSpell returns for before its sight test (SPL-185), at an invisible enemy, with or
+        /// without a GameManager (the scene's in the Play pass); a visible one is chosen, and See Invisibility reveals the
+        /// invisible one, as in the cast core's test.
+        /// </summary>
+        private static void TestAiEnemySpellTargetNeedsSight()
+        {
+            CharacterController caster = TestHelpers.CreateCharacter("Sight_Caster", "Wizard", level: 5, intelligence: 18);
+            CharacterController enemy = TestHelpers.CreateWarrior("Sight_Enemy", level: 3);
+            try
+            {
+                caster.IsPlayerControlled = true;
+                TestHelpers.SetGridPosition(caster, 0, 0);
+                TestHelpers.SetGridPosition(enemy, 3, 0);
+                TestHelpers.ResetActions(caster);
+                // TestHelpers builds no spellcasting; the NPC caster tests of CheckLegality need one with a slot.
+                SpellcastingComponent sc = caster.GetComponent<SpellcastingComponent>();
+                if (sc == null)
+                {
+                    sc = caster.gameObject.AddComponent<SpellcastingComponent>();
+                    sc.Init(caster.Stats);
+                }
+                SpellData charm = SpellDatabase.GetSpell(SpellNames.CHARM_PERSON).Clone();
+                if (sc != null && sc.SpellSlots != null)
+                {
+                    var slot = new SpellSlot(1, false, "Wizard");
+                    slot.PrepareWithMetamagic(charm, null);
+                    sc.SpellSlots.Add(slot);
+                    sc.SyncPreparedSpellsFromSlots();
+                }
+                var all = new List<CharacterController> { caster, enemy };
+                GameManager gm = GameManager.Instance;
+                string withGm = gm != null ? " (GameManager present)" : "";
+
+                CharacterController visible = AISpellcastingStrategist.SelectBestSpellTarget(caster, charm, null, all, gm);
+                Assert(visible == enemy, "Spell sight: a visible humanoid enemy is a Charm Person target" + withGm,
+                    (visible != null && visible.Stats != null ? visible.Stats.CharacterName : "none")
+                    + (gm != null ? " legality=" + gm.CheckLegalityForAI(caster, enemy, charm).Reason : ""));
+
+                // Invisibility as the spell gives it: the tracked effect's 50% miss chance (what CanSee reads) and the
+                // invisibility state (InvisibilityRulesTests' setup).
+                StatusEffectManager statusMgr = enemy.GetComponent<StatusEffectManager>();
+                if (statusMgr == null)
+                {
+                    statusMgr = enemy.gameObject.AddComponent<StatusEffectManager>();
+                    statusMgr.Init(enemy.Stats);
+                }
+                ActiveSpellEffect invisibility = statusMgr.AddEffect(SpellDatabase.GetSpell(SpellNames.INVISIBILITY), "Sight_Enemy", 5);
+                enemy.ApplyInvisibilityEffect(invisibility != null ? invisibility.RemainingRounds : 10, enemy, isMoving: false);
+                Assert(!caster.CanSee(enemy), "Spell sight setup: the invisible enemy has total concealment from the caster");
+                CharacterController hidden = AISpellcastingStrategist.SelectBestSpellTarget(caster, charm, null, all, gm);
+                Assert(hidden == null, "Spell sight: an invisible enemy is no Charm Person target (PHB p.175; SPL-185)" + withGm,
+                    hidden != null && hidden.Stats != null ? hidden.Stats.CharacterName : "none");
+                CharacterController fallback = AISpellcastingStrategist.SelectBestSpellTarget(caster, charm, enemy, all, gm);
+                Assert(fallback == null, "Spell sight: the caller's fallback does not bring back an invisible enemy" + withGm,
+                    fallback != null && fallback.Stats != null ? fallback.Stats.CharacterName : "none");
+
+                caster.ApplySeeInvisibilityEffect(10, caster);
+                CharacterController seen = AISpellcastingStrategist.SelectBestSpellTarget(caster, charm, null, all, gm);
+                Assert(seen == enemy, "Spell sight: See Invisibility reveals the invisible enemy as a target" + withGm,
+                    seen != null && seen.Stats != null ? seen.Stats.CharacterName : "none");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, enemy != null ? enemy.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AI-016 (step 22 review): an offensive spell with no enemy in reach never falls back to the caller's target when
+        /// that is an ally (the Healer turn passes its wounded ally, and the cast walk goes on to offensive spells).
+        /// </summary>
+        private static void TestAiOffensiveSpellNeverFallsBackToAlly()
+        {
+            CharacterController caster = TestHelpers.CreateCleric("Fallback_Caster", level: 5);
+            CharacterController ally = TestHelpers.CreateWarrior("Fallback_Ally", level: 5);
+            CharacterController enemy = TestHelpers.CreateWarrior("Fallback_Enemy", level: 5);
+            try
+            {
+                caster.IsPlayerControlled = true;
+                ally.IsPlayerControlled = true;
+                TestHelpers.SetGridPosition(caster, 0, 0);
+                TestHelpers.SetGridPosition(ally, 1, 0);
+                TestHelpers.SetGridPosition(enemy, 40, 0);
+                var all = new List<CharacterController> { caster, ally, enemy };
+                SpellData missile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
+
+                CharacterController target = AISpellcastingStrategist.SelectBestSpellTarget(caster, missile, ally, all, null);
+                Assert(target == null, "Fallback: an offensive spell with no enemy in range does not fall back to an ally (AI-016)",
+                    target != null && target.Stats != null ? target.Stats.CharacterName : "none");
+                target = AISpellcastingStrategist.SelectBestSpellTarget(caster, missile, enemy, all, null);
+                Assert(target == enemy, "Fallback: without a GameManager an enemy fallback is still returned when none is found in range",
+                    target != null && target.Stats != null ? target.Stats.CharacterName : "none");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, ally != null ? ally.gameObject : null, enemy != null ? enemy.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AI-016: the AI's spell targeting tells allies and enemies apart by TeamUtility, so a Neutral creature is neither
+        /// an enemy target of an offensive spell nor an ally target of a buff.
+        /// </summary>
+        private static void TestAiSpellTargetingUsesTeamUtility()
+        {
+            CharacterController caster = TestHelpers.CreateCleric("Team_Caster", level: 5);
+            CharacterController neutral = TestHelpers.CreateWarrior("Team_Neutral", level: 5);
+            try
+            {
+                caster.IsPlayerControlled = true;
+                neutral.SetTeam(CharacterTeam.Neutral);
+                TestHelpers.SetGridPosition(caster, 0, 0);
+                TestHelpers.SetGridPosition(neutral, 1, 0);
+                var all = new List<CharacterController> { caster, neutral };
+
+                CharacterController missileTarget = AISpellcastingStrategist.SelectBestSpellTarget(caster, SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE), null, all, null);
+                Assert(missileTarget == null, "A Neutral creature is no enemy target (TeamUtility.IsEnemy, AI-016)", missileTarget?.Stats?.CharacterName);
+
+                neutral.Stats.CurrentHP = 1;
+                CharacterController cureTarget = AISpellcastingStrategist.SelectBestSpellTarget(caster, SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS), null, all, null);
+                Assert(cureTarget != neutral, "A hurt Neutral creature is no ally target (TeamUtility.IsAlly, AI-016)", cureTarget?.Stats?.CharacterName);
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null, neutral != null ? neutral.gameObject : null);
             }
         }
 
