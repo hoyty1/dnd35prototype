@@ -71,6 +71,13 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     // Update() cycle, reset when they leave the wall so re-entry damages again.
     private HashSet<CharacterController> _damagedOnEntry = new HashSet<CharacterController>();
 
+    /// <summary>
+    /// The one 2d6 + CL roll of the wall's appearance, shared by every creature it catches (PHB p.298: evoked where
+    /// creatures are, each takes damage as if passing through; one release of the effect, decision D6; delegated RAW
+    /// reading 2026-10-14, batch 11 step 20, SPL-180). A creature passing through later rolls its own (SPL-181).
+    /// </summary>
+    private readonly AreaDamageRoll _initialCatchRoll = new AreaDamageRoll();
+
     // ── Heat wave damage tracking ──
     // Tracks which creatures have already taken heat wave damage this trigger
     // to prevent multi-square creatures from being hit multiple times.
@@ -238,7 +245,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         string timing = isInitial ? "is caught in" : "passes through";
         Debug.Log($"[WallOfFire][PassThrough] ✓ {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
             + $"— IS in wall cell, applying PASS-THROUGH damage (context: {timing}, isInitial: {isInitial})");
-        DealPassThroughDamage(character, timing);
+        DealPassThroughDamage(character, timing, isInitial ? _initialCatchRoll : null);
     }
 
     protected override void OnCreatureInAreaAtRoundStart(CharacterController character)
@@ -282,7 +289,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     /// Deals 2d6 + CL (max +20) fire damage to a creature in the wall. NO save (PHB p.298).
     /// Undead creatures take double damage (PHB 3.5e).
     /// </summary>
-    private void DealPassThroughDamage(CharacterController character, string context)
+    private void DealPassThroughDamage(CharacterController character, string context, AreaDamageRoll sharedRoll = null)
     {
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
@@ -294,7 +301,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         int clBonus = Mathf.Min(CasterLevel, 20);
         // 2d6 + CL with the cast's Empower and Maximize (SpellDiceRules; batch 11 step 19, SPL-038)
-        SpellDiceRoll passRoll = SpellDiceRules.Roll(CustomSpellDice.WallOfFirePassThrough(clBonus), Metamagic, null);
+        // The wall's appearance shares one roll among the creatures it catches (D6, batch 11 step 20); a later pass rolls anew.
+        SpellDice passDice = CustomSpellDice.WallOfFirePassThrough(clBonus);
+        SpellDiceRoll passRoll = sharedRoll != null
+            ? sharedRoll.GetOrRoll(passDice, Metamagic, null)
+            : SpellDiceRules.Roll(passDice, Metamagic, null);
         int d1 = passRoll.Rolls[0];
         int d2 = passRoll.Rolls[1];
         int baseDamage = passRoll.Total; // 2d6 + CL

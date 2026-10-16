@@ -343,34 +343,50 @@ public static class SpellSaveResolver
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Apply Evasion/Improved Evasion to a Reflex-for-half damage result.
-    /// D&D 3.5e PHB p.40: Evasion = no damage on successful Reflex save.
-    /// Improved Evasion = half damage even on failed save.
+    /// Apply Evasion/Improved Evasion to a Reflex-for-half damage result: the one Evasion rule.
+    /// D&D 3.5e PHB p.50 (rogue), p.41-42 (monk): Evasion = no damage on a successful Reflex save; Improved Evasion = also
+    /// half damage on a failed one, rounded down (PHB p.177 "Half", p.304 rounding), so 1 halves to 0.
+    /// Every Reflex-half damage path calls it: the area damage handlers (Fireball, Lightning Bolt, Call Lightning, Cone of
+    /// Cold, Chain Lightning, Sunburst) through the controller overload and SpellCaster.Cast (single-target casts and the
+    /// generic area loop) directly (batch 11 step 20, SPL-090); the armor and helpless limits are CHR-081.
     /// </summary>
-    /// <param name="damage">The current damage value (already halved if save succeeded).</param>
-    /// <param name="target">The target who may have Evasion.</param>
+    /// <param name="damage">The current damage value (already halved if the save succeeded).</param>
+    /// <param name="stats">The creature that may have Evasion.</param>
     /// <param name="saved">Whether the Reflex save was successful.</param>
-    /// <param name="sb">StringBuilder for logging (optional).</param>
+    /// <param name="note">The log line when Evasion or Improved Evasion changed the damage, else null.</param>
     /// <returns>The adjusted damage after Evasion/Improved Evasion.</returns>
-    public static int ApplyEvasion(int damage, CharacterController target, bool saved, StringBuilder sb = null)
+    public static int ApplyEvasion(int damage, CharacterStats stats, bool saved, out string note)
     {
-        if (target?.Stats == null) return damage;
+        note = null;
+        if (stats == null) return damage;
 
-        if (saved && target.Stats.HasEvasion)
+        if (saved && stats.HasEvasion)
         {
-            sb?.AppendLine($"  Evasion: no damage on successful save!");
+            note = "Evasion: no damage on successful save!";
             return 0;
         }
 
-        // Improved Evasion: half damage on failed save (if target has it)
-        if (!saved && target.Stats.HasImprovedEvasion)
+        // Improved Evasion: half damage, rounded down, on a failed save
+        if (!saved && stats.HasImprovedEvasion && damage > 0)
         {
-            int reduced = Mathf.Max(1, damage / 2);
-            sb?.AppendLine($"  Improved Evasion: damage halved ({damage} → {reduced})!");
+            int reduced = damage / 2;
+            note = $"Improved Evasion: damage halved ({damage} → {reduced})!";
             return reduced;
         }
 
         return damage;
+    }
+
+    /// <summary>
+    /// <see cref="ApplyEvasion(int, CharacterStats, bool, out string)"/> for a creature, with the note appended to
+    /// <paramref name="sb"/> (optional).
+    /// </summary>
+    public static int ApplyEvasion(int damage, CharacterController target, bool saved, StringBuilder sb = null)
+    {
+        int adjusted = ApplyEvasion(damage, target?.Stats, saved, out string note);
+        if (note != null)
+            sb?.AppendLine($"  {note}");
+        return adjusted;
     }
 
     /// <summary>

@@ -797,6 +797,11 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One roll of each damage part for the whole storm, shared by every creature and Wall of Ice section in it
+        // (AreaDamageRoll, decision D6; delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180)
+        var bludgeoningRoll = new AreaDamageRoll();
+        var coldRoll = new AreaDamageRoll();
+
         if (targets == null || targets.Count == 0)
         {
             sb.AppendLine($"  No valid targets in area!");
@@ -822,10 +827,10 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll 3d6 bludgeoning, then 2d6 cold, each with the cast's metamagic (SpellDiceRules; batch 11 step 19,
-                // SPL-038): Empower and Maximize change each part's dice.
-                int bludgeoningDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
-                int coldDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormCold());
+                // The storm's 3d6 bludgeoning, then its 2d6 cold, each rolled once with the cast's metamagic
+                // (SpellDiceRules; batch 11 step 19, SPL-038): Empower and Maximize change each part's dice.
+                int bludgeoningDamage = bludgeoningRoll.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
+                int coldDamage = coldRoll.RollFor(spell, CustomSpellDice.IceStormCold());
 
                 int totalDamage = bludgeoningDamage + coldDamage;
 
@@ -889,9 +894,9 @@ public partial class GameManager
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
-                // 3d6 bludgeoning + 2d6 cold (no save for objects)
-                int wallBludg = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
-                int wallCold = SpellDiceRules.RollFor(spell, CustomSpellDice.IceStormCold());
+                // The storm's same 3d6 bludgeoning + 2d6 cold (no save for objects; D6, batch 11 step 20)
+                int wallBludg = bludgeoningRoll.RollFor(spell, CustomSpellDice.IceStormBludgeoning());
+                int wallCold = coldRoll.RollFor(spell, CustomSpellDice.IceStormCold());
                 int wallTotal = wallBludg + wallCold;
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

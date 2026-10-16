@@ -40,6 +40,9 @@ public static class SpellCaster
     /// <summary>
     /// Spell resolution with optional controller context for situational modifiers
     /// (fighting defensively, shooting into melee penalties, etc.).
+    /// <paramref name="areaDamageRoll"/>: an area cast's one damage roll, shared by every creature in the area (the
+    /// generic area loop passes one per cast; AreaDamageRoll, decision D6, batch 11 step 20, SPL-180). The first creature
+    /// whose spell resistance does not stop the spell rolls it; each creature still makes its own save.
     /// </summary>
     public static SpellResult Cast(
         SpellData spell,
@@ -50,7 +53,8 @@ public static class SpellCaster
         bool forceTargetToFailSave,
         CharacterController casterController,
         CharacterController targetController,
-        LesserGlobeOfInvulnerabilityAreaEffect globeAgainstTouch = null)
+        LesserGlobeOfInvulnerabilityAreaEffect globeAgainstTouch = null,
+        AreaDamageRoll areaDamageRoll = null)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -531,7 +535,11 @@ public static class SpellCaster
                 result.DiceSides = dice.Sides;
                 result.DiceBonus = dice.Bonus;
 
-                SpellDiceRoll roll = SpellDiceRules.Roll(dice, metamagic, SpellDiceRules.DamageDieContext);
+                // An area cast's one roll, shared by every creature in the area (D6; batch 11 step 20, SPL-180), else this
+                // target's own.
+                SpellDiceRoll roll = areaDamageRoll != null
+                    ? areaDamageRoll.GetOrRoll(dice, metamagic, SpellDiceRules.DamageDieContext)
+                    : SpellDiceRules.Roll(dice, metamagic, SpellDiceRules.DamageDieContext);
                 result.DamageRolls = roll.Rolls;
                 int baseDmg = roll.Total;
 
@@ -553,6 +561,18 @@ public static class SpellCaster
                     result.DamageDealt = 0;
                 else
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled);
+
+                // Evasion (no damage on a made Reflex save for half) and Improved Evasion (half on a failed one), PHB
+                // p.50, p.41-42, for every caster's target through the one Evasion rule (batch 11 step 20, SPL-090).
+                if (result.RequiredSave && saveHalves && saveType == "Reflex" && targetStats != null)
+                {
+                    result.DamageDealt = SpellSaveResolver.ApplyEvasion(result.DamageDealt, targetStats, result.SaveSucceeded, out string evasionNote);
+                    if (evasionNote != null)
+                    {
+                        result.EvasionNote = evasionNote;
+                        result.DamageAfterEvasion = result.DamageDealt;
+                    }
+                }
             }
 
             if (result.DamageDealt > 0)

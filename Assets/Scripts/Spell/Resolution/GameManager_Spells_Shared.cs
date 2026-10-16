@@ -203,7 +203,10 @@ public partial class GameManager
 
     /// <summary>
     /// Resolves Lightning Bolt or Fireball as AoE damage spells with
-    /// 1d6/CL damage (max 10d6), Reflex half, and SR.
+    /// 1d6/CL damage (max 10d6), Reflex half, and SR; Call Lightning's bolt (3d6) the same way.
+    /// The damage is rolled once for the whole effect and every creature and Wall of Ice section in the area takes that
+    /// one total (AreaDamageRoll, decision D6; delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180); each creature
+    /// then rolls its own spell resistance and Reflex save (half), and Evasion or Improved Evasion applies (PHB p.50, p.42).
     /// Registered in the area handler registry (GameManager.SpellHandlerRegistry.cs, BuildAreaHandlers).
     /// </summary>
     private bool TryResolveScaledAoEDamageSpell(
@@ -250,6 +253,10 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One damage roll for the whole effect, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038),
+        // made when it first reaches a creature its SR does not stop or a Wall of Ice section (D6, batch 11 step 20, SPL-180)
+        var areaRoll = new AreaDamageRoll();
+
         if (targets == null || targets.Count == 0)
         {
             sb.AppendLine($"  No valid targets in area!");
@@ -275,17 +282,18 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
-                int damage = SpellDiceRules.RollFor(spell, scaledDice);
+                // The effect's one damage total (rolled, and logged once, at the first creature it reaches)
+                int damage = areaRoll.RollAndLog(spell, scaledDice, sb);
 
-                // Reflex save + Blink
+                // Reflex save (half, rounded down) + Blink + Evasion and Improved Evasion (PHB p.177, p.50, p.42), logged
+                // in that order
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
                 bool savePassed = saveResult.Saved;
+                saveResult.AppendHalfDamageLog(sb);
                 if (savePassed)
                     damage = Mathf.Max(0, damage / 2);
                 damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
-                damage = Mathf.Max(damage > 0 ? 1 : 0, damage);
-                saveResult.AppendHalfDamageLog(sb);
+                damage = SpellSaveResolver.ApplyEvasion(damage, target, savePassed, sb);
 
                 int hpBefore = target.Stats.CurrentHP;
                 DamageResolutionResult dealt = DealDamage(target, damage,
@@ -327,8 +335,9 @@ public partial class GameManager
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
-                // Roll separate damage for the wall (same dice as character damage, the same metamagic)
-                int wallDamage = SpellDiceRules.RollFor(spell, scaledDice);
+                // An unattended object takes the effect's same damage total (PHB p.231: objects "also take this damage";
+                // D6, batch 11 step 20, SPL-180)
+                int wallDamage = areaRoll.RollAndLog(spell, scaledDice, sb);
 
                 // No save for objects; fire is especially effective
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

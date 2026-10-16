@@ -1324,12 +1324,15 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{npc.Stats.CharacterName} unleashes Acid Spray (10-ft cone)!"));
 
+        // One damage roll for the whole spray, shared by every creature in the cone (decision D6 of the batch 11 design;
+        // delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180); the dice, labels, save and DC are still CRE-040's.
+        int rawDamage = 0;
+        for (int d = 0; d < 6; d++)
+            rawDamage += DiceService.D4("Fireball damage die");
+
         for (int i = 0; i < victims.Count; i++)
         {
             CharacterController victim = victims[i];
-            int rawDamage = 0;
-            for (int d = 0; d < 6; d++)
-                rawDamage += DiceService.D4("Fireball damage die");
 
             int saveRoll = DiceService.D20("Fireball Reflex save");
             int saveTotal = saveRoll + victim.Stats.ReflexSave;
@@ -1789,7 +1792,8 @@ public partial class GameManager
             yield break;
         }
 
-        // Roll damage: DamageCount × d(DamageDice)
+        // Roll damage: DamageCount × d(DamageDice), once for the whole breath; every creature in the area takes this one
+        // total before its own save (decision D6 of the batch 11 design, batch 11 step 20, SPL-180).
         // A breath with no damage dice (the gorgon's petrifying breath) deals none.
         int totalDamage = (bw.DamageCount > 0 && bw.DamageDice > 0)
             ? DiceService.RollMultiple(bw.DamageCount, bw.DamageDice, "Breath weapon damage")

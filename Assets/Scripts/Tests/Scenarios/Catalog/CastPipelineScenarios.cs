@@ -27,6 +27,7 @@ namespace Tests.Scenarios
         {
             yield return S("cast-ui-fireball", UiFireball);
             yield return S("cast-ui-cone-line", UiConeLine);
+            yield return S("area-damage-one-roll", AreaDamageOneRoll);
             yield return S("cast-ui-sleep", UiSleep);
             yield return S("cast-ui-sleep-quickened", UiSleepQuickened);
             yield return S("cast-scroll-ui", () => ItemCast(scroll: true));
@@ -492,6 +493,60 @@ namespace Tests.Scenarios
                 .Expect("Lightning Bolt: 5d6 = 30 failed, 15 saved, nothing outside the line (PHB p.248)",
                     FactsAre(("line.lost.b1", 0), ("line.lost.b2", 0), ("line.lost.l1", 30), ("line.lost.l2", 15)))
                 .Expect("One slot of each spell's level is spent", FactsAre(("spent.cone", "L1+1"), ("spent.line", "L3+1")))
+                .Build();
+        }
+
+        // ── rules/area-damage-one-roll (batch 11 step 20, D6) ───────────
+
+        /// <summary>
+        /// Decision D6 of the batch 11 design (delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180): an area damage
+        /// effect rolls its damage once and every creature in the area takes that one total before its own save (PHB p.231:
+        /// unattended objects "also take this damage"; p.208, Chain Lightning's half "as much"; MM p.137, a fireball's
+        /// damage total). Round 1: a Ui wizard 5 casts Fireball (PHB p.231; TryResolveScaledAoEDamageSpell) centred on d1;
+        /// d1 fails its Reflex save, d2 makes it, and a human monk 3 makes it. The first five d6 are 1 and every later d6 is
+        /// 6, so the one roll is 5: d1 loses 5, d2 half of it (2), the monk none (Evasion, PHB p.41). Rolled per creature,
+        /// d2 would have lost 15 and the monk 15. Round 2: Burning Hands (PHB p.207; the generic area loop and
+        /// SpellCaster.Cast) at b1 (fails) and b2 (saves); the first five d4 are 1, later ones 4: b1 loses 5, b2 2 (per
+        /// creature: 5 and 10). Five damage dice are drawn for each cast.
+        /// </summary>
+        private static ScenarioDef AreaDamageOneRoll()
+        {
+            return Rules("rules/area-damage-one-roll", "An area spell rolls its damage once for every creature in the area; saves and Evasion stay per creature (D6; PHB p.231, p.207, p.41)")
+                .Covers("SPL-180", "SPL-090", "PHB p.231", "PHB p.207", "PHB p.41", "PHB p.177", "batch 11 step 20")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 2, 10, Control.Ui)
+                .Npc("d1", "target_dummy", 10, 10, Control.Idle)
+                .Npc("d2", "target_dummy", 11, 10, Control.Idle)
+                .Npc("monk", "human_monk_3", 10, 12, Control.Idle)
+                .Npc("b1", "target_dummy", 4, 10, Control.Idle)
+                .Npc("b2", "target_dummy", 5, 11, Control.Idle)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.BURNING_HANDS); AddWizardSlot(c, 3, SpellNames.FIREBALL); })
+                .Tweak("d1", Fails).Tweak("d2", Saves).Tweak("monk", Saves).Tweak("b1", Fails).Tweak("b2", Saves)
+                .Initiative("wizard", "d1", "d2", "monk", "b1", "b2")
+                .Force(6, 1, null, 5)
+                .Force(6, 6, null, -1)
+                .Force(4, 1, null, 5)
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx =>
+                    {
+                        RecordHp(ctx, "d1", "d2", "monk", "b1", "b2");
+                        Fact(ctx, "monk.evasion", ctx.Get("monk").Stats.HasEvasion);
+                        return true;
+                    }),
+                    Step.Cast(SpellNames.FIREBALL, "d1"),
+                    Step.Assert("after fireball", ctx => { FactHpLost(ctx, "fireball", "d1", "d2", "monk", "b1", "b2"); RecordHp(ctx, "b1", "b2"); return true; }))
+                .Turn("wizard", 2,
+                    Step.Cast(SpellNames.BURNING_HANDS, "b1"),
+                    Step.Assert("after cone", ctx => { FactHpLost(ctx, "cone", "b1", "b2"); return true; }))
+                .Expect("Both Ui casts ran", Expect.All(Expect.StepStatus("wizard", 1, "Cast", 0, "done"), Expect.StepStatus("wizard", 2, "Cast", 0, "done")))
+                .Expect("The monk 3 has Evasion (PHB p.41)", FactIs("monk.evasion", true))
+                .Expect("Fireball: one 5d6 roll of 5; failed 5, saved 2, the monk's Evasion 0, nothing outside the burst (D6; PHB p.231, p.41)",
+                    FactsAre(("fireball.lost.d1", 5), ("fireball.lost.d2", 2), ("fireball.lost.monk", 0), ("fireball.lost.b1", 0), ("fireball.lost.b2", 0)))
+                .Expect("Burning Hands: one 5d4 roll of 5; failed 5, saved 2 (D6; PHB p.207)",
+                    FactsAre(("cone.lost.b1", 5), ("cone.lost.b2", 2)))
+                .Expect("Five d6 and five d4 are drawn: one damage roll per cast",
+                    Expect.All(Expect.Count("dice", e => e.Int("sides") == 6, 5, 5), Expect.Count("dice", e => e.Int("sides") == 4, 5, 5)))
                 .Build();
         }
 

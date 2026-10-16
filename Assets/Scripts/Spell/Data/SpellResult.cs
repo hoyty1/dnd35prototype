@@ -83,6 +83,10 @@ public class SpellResult
     public int DiceSides;
     public int DiceBonus;               // Flat bonus, caster-level part included
     public bool SaveHalves;             // A successful save halves (else negates) this cast's damage
+    /// <summary>The target's Evasion or Improved Evasion changed the damage (PHB p.50, p.42; batch 11 step 20, SPL-090): the log line, else null.</summary>
+    public string EvasionNote;
+    /// <summary>The damage after the save and Evasion, before mitigation, when <see cref="EvasionNote"/> is set (the log's raw damage line).</summary>
+    public int DamageAfterEvasion;
     /// <summary>Cure on an undead (damage) or Inflict on an undead (healing), or no effect on a construct.</summary>
     public SpellEnergyOutcome EnergyOutcome;
 
@@ -319,6 +323,11 @@ public class SpellResult
                 {
                     postSaveDamage = Mathf.Max(0, DamageRolled / 2);
                     sb.AppendLine($"    Save halves: {DamageRolled} → {postSaveDamage}");
+                }
+                if (!string.IsNullOrEmpty(EvasionNote))
+                {
+                    sb.AppendLine($"    {EvasionNote}");
+                    postSaveDamage = DamageAfterEvasion;
                 }
                 string dmgType = !string.IsNullOrEmpty(DamageTypeSummary) ? DamageTypeSummary : DamageType;
                 sb.AppendLine($"    = {postSaveDamage} raw {dmgType} damage");

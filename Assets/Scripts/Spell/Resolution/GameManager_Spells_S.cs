@@ -275,6 +275,10 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One 5d6 roll for the whole cone, shared by every creature and Wall of Ice section in it (AreaDamageRoll,
+        // decision D6; delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180). The deafness rounds stay per creature.
+        var areaRoll = new AreaDamageRoll();
+
         if (targets == null || targets.Count == 0)
         {
             sb.AppendLine($"  No valid targets in area!");
@@ -300,8 +304,8 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll 5d6 sonic damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
-                int damage = SpellDiceRules.RollFor(spell, CustomSpellDice.Shout());
+                // The cone's one 5d6 sonic total, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
+                int damage = areaRoll.RollFor(spell, CustomSpellDice.Shout());
 
                 // Fortitude save
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Fortitude, saveDc);
@@ -312,7 +316,7 @@ public partial class GameManager
 
                 if (savePassed)
                 {
-                    damage = Mathf.Max(1, damage / 2);
+                    damage /= 2; // half, rounded down (PHB p.177, p.304)
                 }
                 else
                 {
@@ -324,7 +328,7 @@ public partial class GameManager
                 // D&D 3.5e: Blinking creatures take half damage from area attacks
                 bool targetIsBlinking = target.HasActiveBlinkEffect;
                 if (targetIsBlinking)
-                    damage = Mathf.Max(1, damage / 2);
+                    damage /= 2;
 
                 sb.AppendLine($"  Fort save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full + deafened)")}");
                 if (targetIsBlinking)
@@ -375,8 +379,8 @@ public partial class GameManager
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
-                // 5d6 sonic (no save for objects), the same metamagic
-                int wallDamage = SpellDiceRules.RollFor(spell, CustomSpellDice.Shout());
+                // The cone's same 5d6 sonic total (no save for objects; D6, batch 11 step 20)
+                int wallDamage = areaRoll.RollFor(spell, CustomSpellDice.Shout());
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
                 sb.AppendLine($"  Sonic damage to overlapping sections: {wallDamage}");

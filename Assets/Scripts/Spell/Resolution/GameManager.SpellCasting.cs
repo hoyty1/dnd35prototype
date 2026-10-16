@@ -2597,7 +2597,10 @@ public partial class GameManager
         }
         else
         {
-            // Resolve spell for each target
+            // Resolve spell for each target. A damage spell's dice are rolled once for the whole area, at the first creature
+            // its spell resistance does not stop, and every creature takes that one total before its own save (AreaDamageRoll,
+            // decision D6; delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180).
+            var areaDamageRoll = new AreaDamageRoll();
             int targetIndex = 0;
             foreach (CharacterController target in targets)
             {
@@ -2632,7 +2635,8 @@ public partial class GameManager
                     // The target's own decider says whether it gives up its save (PHB p.177; batch 11 step 18, SPL-149):
                     // never against a damage spell, so an ally in its own side's Burning Hands rolls its Reflex save.
                     bool aoeForceFailSave = ctx.TargetForgoesSave(target);
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target,
+                        areaDamageRoll: areaDamageRoll);
                     if (ScenarioHooks.CastStage != null)
                         CastStageTrace.Mark(caster, _pendingSpell, CastStageTrace.SpellCasterCast, (result.Success ? "success " : "failed ") + target.Stats.CharacterName);
 
@@ -2641,6 +2645,8 @@ public partial class GameManager
                         string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
                         logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
                     }
+                    if (!string.IsNullOrEmpty(result.EvasionNote))
+                        logBuilder.AppendLine($"  {result.EvasionNote}");
 
                     if (result.DamageDealt > 0)
                     {

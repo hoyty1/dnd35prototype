@@ -1426,6 +1426,17 @@
       "notes": "Batch 11 step 14 (docs/designs/cast_core_batch11.md, raw-resources-caster-level; SPL-017, SPL-016): the one caster-level rule CasterLevelRules. The class caster level (PHB p.171) and the paladin's and ranger's one-half from 4th level, none before (PHB p.44, p.48), through CharacterStats.GetCasterLevel (these run in edit mode too); in Play mode, with built characters: a wizard 5, a cleric 5 with the Good domain (+1 on Bless, not on Cure Light Wounds), paladins 3, 4 and 8 and rangers 4 and 8 (their durations, generic dice and handler context following), a scroll's and a wand's own caster level whoever uses it (DMG p.237, p.245) and an item caster level ignored on a slot source, negative levels lowering the class level first (DMG p.293; delegated RAW reading 2026-10-14), a creature with no casting class at its Hit Dice less its negative levels plus a worn item's bonus (MM p.315; delegated RAW reading 2026-10-14), the paladin's and ranger's casting Concentration proxy on the class level (CHR-085), the range test to the target's nearest square, and an open scroll cast giving its caster level to CasterLevelRules.ForCaster, SpellCastingHelper.GetEffectiveCasterLevel and SpellDurationRules.CasterLevelFor until it ends. Added 2026-10-15; 44 in Play mode after the step 14 review fixes."
     },
     {
+      "type": "Tests.Magic.AreaDamageOneRollTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 79,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 11 step 20 (2026-10-16, decision D6, SPL-180, SPL-090): an area damage effect rolls its damage once and every creature takes that one total before its own SR, save and Evasion. AreaDamageRoll rolls on first use only; Fireball (TryResolveScaledAoEDamageSpell) by a wizard 5 over three creatures draws one 5d6 (not three), the failing creature takes 15, the saving one 7, a saving rogue 3 none (Evasion, PHB p.50); a creature whose SR stops it draws no die and a cast whose every creature resists draws none; an empowered Fireball gives both creatures 15 + 7 (PHB p.93); SpellCaster.Cast with a shared AreaDamageRoll (the generic area loop; Burning Hands) draws one 5d4 for four creatures, a saving rogue takes none (EvasionNote) and a failing monk 9 half (Improved Evasion, PHB p.42), and without one rolls per call; Cone of Cold, Ice Storm (both parts), Shout, Sunburst and Earthquake's debris draw one roll for two creatures; a Wall of Ice section in a Fireball takes the creature's same 15 and the log shows the one roll; a Wall of Fire evoked onto two creatures rolls one 2d6 + CL for both and a later pass its own; Improved Evasion halves 1 point to 0 (ApplyEvasion and SpellCaster.Cast, whose log's raw line shows 0). Every non-d20 die forced to a rising sequence, every d20 to 10. Play only (the scene GameManager's handlers, by reflection). 48/48 in its first Play pass; 79/79 after the step 20 review checks."
+    },
+    {
       "type": "Tests.Magic.CastCoreStageOrderTests",
       "needs": "play",
       "skip": "",

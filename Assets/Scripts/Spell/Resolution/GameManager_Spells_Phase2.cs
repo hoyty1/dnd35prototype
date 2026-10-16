@@ -154,6 +154,11 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One roll of the 6d6 and one of the undead's 1d6 per level for the whole burst, each shared by every creature it
+        // applies to (AreaDamageRoll, decision D6; delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180)
+        var livingRoll = new AreaDamageRoll();
+        var undeadRoll = new AreaDamageRoll();
+
         if (targets == null || targets.Count == 0)
         {
             sb.AppendLine("  No valid targets in area!");
@@ -177,18 +182,17 @@ public partial class GameManager
                 SpellDice sunDice = CustomSpellDice.Sunburst(casterLevel, isUndead);
                 int diceCount = sunDice.Count;
 
-                // With the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
-                int damage = SpellDiceRules.RollFor(spell, sunDice);
+                // The burst's one total for this kind of creature, with the cast's metamagic (SpellDiceRules; batch 11
+                // step 19, SPL-038)
+                int damage = (isUndead ? undeadRoll : livingRoll).RollFor(spell, sunDice);
                 sb.AppendLine($"    Damage roll: {diceCount}d6 = {damage}{(isUndead ? " (Undead)" : "")}");
 
-                // Reflex save + Evasion
+                // Reflex save (half) + Evasion, and Improved Evasion on a failed save (PHB p.50, p.42; SPL-090)
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
                 saveResult.AppendHalfDamageLog(sb);
                 if (saveResult.Saved)
-                {
-                    damage = Mathf.Max(1, damage / 2);
-                    damage = SpellSaveResolver.ApplyEvasion(damage, target, true, sb);
-                }
+                    damage /= 2; // half, rounded down (PHB p.177, p.304)
+                damage = SpellSaveResolver.ApplyEvasion(damage, target, saveResult.Saved, sb);
 
                 if (damage > 0)
                 {
@@ -245,6 +249,10 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One debris roll for the whole quake, shared by every creature it knocks down (AreaDamageRoll, decision D6;
+        // delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180)
+        var debrisRoll = new AreaDamageRoll();
+
         if (targets != null)
         {
             int idx = 0;
@@ -263,7 +271,7 @@ public partial class GameManager
                     sb.AppendLine($"    🔻 Knocked PRONE!");
 
                     // Debris damage: simplified (structures collapse for 8d6 in PHB, minor outdoors)
-                    int debrisDmg = SpellDiceRules.RollFor(spell, SpellDice.Of(1, 6)); // the cast's metamagic (batch 11 step 19)
+                    int debrisDmg = debrisRoll.RollFor(spell, SpellDice.Of(1, 6)); // the quake's one roll, the cast's metamagic (batch 11 steps 19-20)
                     DamageResolutionResult dealt = DealDamage(target, debrisDmg, DamagePackets.Spell(spell.Name, DamageType.Bludgeoning));
                     sb.AppendLine($"    Debris: {dealt.FinalDamage} bludgeoning damage{DescribeMitigation(dealt)}");
 

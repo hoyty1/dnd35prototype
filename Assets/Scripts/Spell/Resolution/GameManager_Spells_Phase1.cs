@@ -45,6 +45,10 @@ public partial class GameManager
         sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
         sb.AppendLine();
 
+        // One damage roll for the whole cone, shared by every creature in it (AreaDamageRoll, decision D6; delegated RAW
+        // reading 2026-10-14, batch 11 step 20, SPL-180)
+        var areaRoll = new AreaDamageRoll();
+
         if (targets == null || targets.Count == 0)
         {
             sb.AppendLine($"  No valid targets in area!");
@@ -68,17 +72,17 @@ public partial class GameManager
                     continue;
                 }
 
-                // Roll damage, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038)
-                int damage = SpellDiceRules.RollFor(spell, coneDice);
+                // The cone's one damage total, with the cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038),
+                // logged once when it is rolled
+                int damage = areaRoll.RollAndLog(spell, coneDice, sb);
 
-                // Reflex save + Evasion + Blink
+                // Reflex save (half, rounded down) + Blink + Evasion, logged in that order
                 var saveResult = RollSpellSave(caster, target, spell, SaveType.Reflex, saveDc);
+                saveResult.AppendHalfDamageLog(sb);
                 if (saveResult.Saved)
                     damage = Mathf.Max(0, damage / 2);
                 damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
                 damage = SpellSaveResolver.ApplyEvasion(damage, target, saveResult.Saved, sb);
-                damage = Mathf.Max(damage > 0 ? 1 : 0, damage);
-                saveResult.AppendHalfDamageLog(sb);
 
                 int hpBefore = target.Stats.CurrentHP;
                 DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Cold, saveResult.Saved));
