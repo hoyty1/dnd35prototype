@@ -842,7 +842,7 @@ IDs: AI-055, SPL-156. Behaviour change; AI-facing.
    - Remove the bit `HeldChargeDeliveryIsFree` (CastCore.cs ~:782-787) and `AIService._heldChargeTriedThisTurn` (~:113).
    - Give the PC Discharge button (ActionButtonPanel) the step's action gate.
    - With that last bit gone, delete `LegacyCastQuirk.cs` and its plumbing (`RequireLegacyQuirk`, the request field, `LegacyCastQuirkSets`), and update `CastCoreStageOrderTests`.
-4. **Docs.** Delete AI-055 (or narrow it per Q2) and SPL-156. Update CLAUDE.md "Architecture in brief" item 5 (no quirk bits left).
+4. **Docs.** Delete AI-055 (owner decision Q2) and SPL-156. Update CLAUDE.md "Architecture in brief" item 5 (no quirk bits left).
 
 Tests: flip `ExpectKnown("SPL-156")` at CastPipelineScenarios.cs ~:1290; new scenarios `rules/twf-full-attack-ai`, `rules/rapid-shot-ai`, `rules/held-charge-costs-attack-ui`, `rules/held-charge-costs-attack-ai`.
 
@@ -991,7 +991,7 @@ IDs: ITM-010, CRE-016 (the Level part), CRE-005, CHR-070 (the AI conversion and 
 2. **CRE-016, the Level part.**
    - The `CharacterStats.Level` sync (~:474-489) skips `InnateSpellcastingClass`.
    - Store each dragon's caster level on its definition (MM p.68-69 age table) and replace the nested scan in NPCSetup.cs ~:964-998.
-   - Spells known by PHB Table 3-16 are deferred (owner question Q3); narrow CRE-016 to that.
+   - Spells known by PHB Table 3-16 are deferred (owner decision Q3, 2026-10-23); narrow CRE-016 to that.
 3. **CRE-005.**
    - `LionsShieldBehavior.ActivateSummon` (~:239-302) spawns through `GameManager.SpawnSummonedCreature` (GameManager.SpellCasting.cs ~:146; the `_activeSummons` add ~:500): initiative, the index-parallel AI behaviour entry (AI-015), duration and despawn.
    - Delete `BuildSummonStats` and the `gm.Summoning.RegisterSummonedCreature` call. Narrow CORE-023 for the `SummoningService` tracker.
@@ -1062,16 +1062,12 @@ Change no game code; file any regression as a new issue. Then update `CLAUDE.md`
 - The `Random.Range` and `Random.value` sites outside the save, maneuver and grapple scope (CORE-030 rest).
 - Wish (9th level).
 
-## Questions for the owner
+## Owner decisions (2026-10-23)
 
-Design and game-direction choices only. Every rules question is settled above (D1-D15) under the delegation, and the owner may overrule any of them.
+The owner took the recommended default on all three design questions:
 
-- **Q1. Fleeing PCs (CMB-100, step 7).** RAW makes a panicked, turned or frightened creature flee. Until batch 13 builds the restricted PC menu, should a PC under these conditions:
-  - (a) flee automatically through the shared flee controller, as a forced turn like confusion today (default), or
-  - (b) keep control, with a log reminder, for Frightened only (which still lets the creature choose how to flee)?
-- **Q2. AI attack modes in batch 12 (AI-055, step 18).**
-  - (a) Default: the AI declares Rapid Shot and two-weapon fighting by a minimal expected-damage rule, labelled a stopgap.
-  - (b) Alternative: build only the mechanics and wait for batch 13's personality-weighted catalog.
-- **Q3. Factory-leftover scope (step 24).** The batch plan's part 9 lists CHR-070, ITM-010 and CRE-005, and puts the MM skill data in batch 19.
-  - Default: also defer CRE-058's class feats, skills and spells, CRE-016's spells known, and CHR-070's deity, specialization and familiar fields to batch 19.
-  - Batch 12 would do only the parity parts: the AI conversion, the neutral cleric's choice and the innate caster level.
+- **Q1. Fleeing PCs (CMB-100, step 7): automatic flight.** Until batch 13 builds the restricted PC menu, a panicked, turned or frightened PC flees automatically through the shared flee controller, as a forced turn like confusion today.
+- **Q2. AI attack modes (AI-055, step 18): stopgap rule now.** The AI declares Rapid Shot and two-weapon fighting by a minimal expected-damage rule, labelled a stopgap for batch 13's catalog.
+- **Q3. Factory-leftover scope (step 24): defer to batch 19.** CRE-058's class feats, skills and spells, CRE-016's spells known and CHR-070's deity, specialization and familiar fields wait for batch 19 with the MM skill data; batch 12 does only the AI conversion, the neutral cleric's choice and the innate caster level.
+
+Every rules question is settled above (D1-D15) under the delegation; the owner may overrule any of them.
