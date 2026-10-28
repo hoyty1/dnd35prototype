@@ -11074,60 +11074,38 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// The NPC cast with <paramref name="metamagic"/> (a Scripted cast step's; null: the spell's own prepared metamagic,
-    /// SpellCastRequest.ForAI; batch 11 step 21).
+    /// SpellCastRequest.ForAI; batch 11 step 21). The cast core runs the combat-end check after the cast, as for a PC's
+    /// (batch 12 step 9, CORE-039).
     /// </summary>
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell, MetamagicData metamagic)
-    {
-        bool cast = TryNPCPerformSpellCast(npc, target, spell, metamagic);
-        // A spell that drops the last creature of a side ends the combat now, as the PC cast sites do (CORE-011).
-        if (cast && EvaluateCombatEnd("TryNPCPerformSpellCast"))
-            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSpellCast");
-        return cast;
-    }
+        => TryNPCPerformSpellCast(npc, target, spell, metamagic);
 
     /// <summary>
     /// The NPC area cast of <paramref name="spell"/> aimed at <paramref name="placement"/> (batch 11 step 25; the AI's aim
-    /// search, AreaAimSearch), then the combat-end check after a cast that counts, as for a single-target NPC cast (the
-    /// area handler's own check has usually run already, CORE-039; a second check finds the combat over).
+    /// search, AreaAimSearch); the cast core's area exit runs the combat-end check (batch 12 step 9, CORE-039).
     /// <paramref name="metamagic"/>: a Scripted cast step's (null: the spell's own prepared metamagic, SpellCastRequest.ForAI).
     /// </summary>
     public bool TryNPCPerformAreaSpellCastForAI(CharacterController npc, SpellData spell, AreaPlacement placement, MetamagicData metamagic = null)
-    {
-        bool cast = TryNPCPerformAreaSpellCast(npc, spell, placement, metamagic);
-        if (cast && EvaluateCombatEnd("TryNPCPerformAreaSpellCast"))
-            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformAreaSpellCast");
-        return cast;
-    }
+        => TryNPCPerformAreaSpellCast(npc, spell, placement, metamagic);
 
     /// <summary>
-    /// The NPC summon cast of <paramref name="spell"/> (batch 11 step 27, SPL-091; TryNPCPerformSummonSpellCast), then the
-    /// combat-end check after a cast that counts, as for the other NPC casts. <paramref name="metamagic"/> and
+    /// The NPC summon cast of <paramref name="spell"/> (batch 11 step 27, SPL-091; TryNPCPerformSummonSpellCast); the cast
+    /// core runs the combat-end check (batch 12 step 9, CORE-039). <paramref name="metamagic"/> and
     /// <paramref name="destination"/>: a Scripted cast step's (null: the prepared slot's metamagic, the AI's square).
     /// </summary>
     public bool TryNPCPerformSummonSpellCastForAI(CharacterController npc, SpellData spell, MetamagicData metamagic = null, Vector2Int? destination = null)
-    {
-        bool cast = TryNPCPerformSummonSpellCast(npc, spell, metamagic, destination);
-        if (cast && EvaluateCombatEnd("TryNPCPerformSummonSpellCast"))
-            CastStageTrace.Mark(npc, spell, CastStageTrace.CombatEnd, "TryNPCPerformSummonSpellCast");
-        return cast;
-    }
+        => TryNPCPerformSummonSpellCast(npc, spell, metamagic, destination);
 
     /// <summary>The NPC hold of a melee touch spell's charge (batch 11 step 27, SPL-115; TryNPCHoldTouchCharge).</summary>
     public bool TryNPCHoldTouchChargeForAI(CharacterController npc, SpellData spell, MetamagicData metamagic = null)
         => TryNPCHoldTouchCharge(npc, spell, metamagic);
 
     /// <summary>
-    /// The NPC delivery of its held charge to <paramref name="target"/> (batch 11 step 27, SPL-115; TryNPCDeliverHeldCharge),
-    /// then the combat-end check, as the PC's delivery runs it on its target's death.
+    /// The NPC delivery of its held charge to <paramref name="target"/> (batch 11 step 27, SPL-115; TryNPCDeliverHeldCharge);
+    /// the cast core's CombatEnd stage runs the combat-end check, as for the PC's delivery (batch 12 step 9, CORE-039).
     /// </summary>
     public bool TryNPCDeliverHeldChargeForAI(CharacterController npc, CharacterController target)
-    {
-        SpellData held = npc != null && npc.Spellcasting != null ? npc.Spellcasting.HeldTouchSpell : null;
-        bool delivered = TryNPCDeliverHeldCharge(npc, target);
-        if (delivered && EvaluateCombatEnd("TryNPCDeliverHeldCharge"))
-            CastStageTrace.Mark(npc, held, CastStageTrace.CombatEnd, "TryNPCDeliverHeldCharge");
-        return delivered;
-    }
+        => TryNPCDeliverHeldCharge(npc, target);
 
     /// <summary>
     /// The AI's legality filter for a summon (batch 11 step 27): <see cref="CheckLegality"/> on the request the NPC summon

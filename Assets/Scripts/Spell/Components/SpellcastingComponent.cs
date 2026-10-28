@@ -2818,13 +2818,16 @@ public class SpellcastingComponent : MonoBehaviour
         if (IsSpontaneousCaster)
             return SpontaneousData.CanCast(spell.SpellId, spell.SpellLevel);
 
-        if (SlotsRemaining == null) return false;
-        if (spell.SpellLevel >= SlotsRemaining.Length) return false;
-
+        // A prepared caster's slots decide, as its spend does (CastSpellFromSlot reads SpellSlots): the legacy
+        // SlotsRemaining view is as long as the caster's own slot table, so a slot above it (one a test or a scenario
+        // adds) would be refused here though the spend takes it (batch 12 step 9: the cast core's slot test, SPL-160).
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;
         }
+
+        if (SlotsRemaining == null) return false;
+        if (spell.SpellLevel >= SlotsRemaining.Length) return false;
 
         return SlotsRemaining[spell.SpellLevel] > 0;
     }

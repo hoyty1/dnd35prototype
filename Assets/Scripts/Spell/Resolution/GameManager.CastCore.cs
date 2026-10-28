@@ -213,8 +213,10 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Whether <paramref name="req"/> may be cast as it stands: with <see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>
-    /// the NPC path's own tests first (the standard action, a living target, the caster's spellcasting and a slot), the
+    /// Whether <paramref name="req"/> may be cast as it stands: the caster tests first, for every caster (batch 12 step 9,
+    /// SPL-160; <see cref="CheckCastCasterLegality"/>: an action for the casting time, a living target, the caster's
+    /// spellcasting and a slot), a hold's own test (<see cref="CheckHoldChargeLegality"/>), the grapple casting rule for
+    /// every casting (<see cref="CheckCastGrappleLegality"/>, CMB-101), the
     /// decider's capability (<see cref="CheckDeciderCapability"/>: a choice its decider cannot make, batch 11 step 25), the
     /// target test (IsValidTargetForSpell; a single-target request of an Area spell is refused, "area-needs-aim"), the
     /// range at the cast's caster level (CasterLevelRules, SPL-017), and
@@ -222,14 +224,14 @@ public partial class GameManager
     /// action, Silence (a verbal component in a Silence, PHB p.279; <see cref="CheckCastSpeechLegality"/>), the
     /// component test (the pouch, a divine focus, a priced focus or material component, PHB p.174 and p.130;
     /// SpellComponentRules, one rule for every caster since batch 11 step 17; skipped for the F12 panel's Components
-    /// bypass, scrolls and wands), and for a hold the grapple test (<see cref="CheckHoldChargeLegality"/>, since step 15). No side
-    /// effect: the grapple refusal's log line is the Legality stage's, not this pre-check's. A refusal comes back with
+    /// bypass, scrolls and wands). No side
+    /// effect: every refusal's log line is the Legality stage's, not this pre-check's. A refusal comes back with
     /// Kind Refused; a legal request with Kind Resolved and reason "ok". The caster's choices are not checked here (the
     /// decider makes them).
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
-        CastOutcome refusal = CheckNpcCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckDeciderCapability(req)
+        CastOutcome refusal = CheckCastCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req) ?? CheckDeciderCapability(req)
                               ?? CheckCastTargetLegality(req) ?? CheckSummonPlacementLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
                               ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
@@ -239,7 +241,7 @@ public partial class GameManager
     /// <summary>
     /// The AI's legality filter (batch 11 step 22): <see cref="CheckLegality"/> on the request the NPC cast of
     /// <paramref name="spell"/> at <paramref name="target"/> would build (SpellCastRequest.ForAI), so the AI ranks only
-    /// casts the cast core would let through (the NPC caster tests, IsValidTargetForSpell, the range to the target's
+    /// casts the cast core would let through (the caster tests, the grapple rule, IsValidTargetForSpell, the range to the target's
     /// footprint at the cast's caster level, the metamagic, the casting action, Silence and the components). The
     /// caster's choices are not tested here: the decider makes them in the cast (AiCastDecider.FillChoices). No side effect.
     /// </summary>
@@ -250,7 +252,7 @@ public partial class GameManager
     /// The AI's legality filter for an area it aimed (batch 11 step 25): <see cref="CheckLegality"/> on the request the
     /// NPC area cast of <paramref name="spell"/> at <paramref name="placement"/> would build
     /// (<see cref="BuildAiAreaRequest"/>: the decider's capability, the point of origin's range and line of effect, the
-    /// NPC caster tests, the metamagic, the casting action, Silence and the components). No side effect.
+    /// caster tests, the grapple rule, the metamagic, the casting action, Silence and the components). No side effect.
     /// </summary>
     internal CastOutcome CheckAreaLegalityForAI(CharacterController caster, SpellData spell, AreaPlacement placement)
         => CheckLegality(BuildAiAreaRequest(caster, spell, placement, null));
@@ -289,65 +291,137 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The grapple test a cast meets in its targeting (BeginPendingSpellTargeting), which a hold meets here: holding the
-    /// charge is casting the spell (PHB p.141), so a grappled or pinned caster can hold only a spell that the grapple
-    /// allows (GrappleSpellcastRefusal: a casting time of 1 standard action or less, no somatic component, and no verbal
-    /// one while pinned; PHB p.156; batch 11 step 15, SPL-146). Holding a charge inside a Resilient Sphere is legal: the
-    /// cast and the held charge send nothing through the sphere (PHB p.258); only a delivery to a creature on the other
-    /// side crosses it, which is the delivery's test (CMB-092) (delegated RAW reading 2026-10-14). Null for any other
-    /// request, or when the hold passes; a refusal carries its log line in <see cref="CastOutcome.Detail"/>, which the
-    /// Legality stage shows, so the pre-check has no side effect.
+    /// A hold's own test: a spell that touches several targets (Chill Touch) cannot hold its charge (PHB p.176;
+    /// SpellData.CanHoldCharge). Holding the charge is casting the spell (PHB p.141), so a hold meets the grapple casting
+    /// rule as every casting does (<see cref="CheckCastGrappleLegality"/>). Holding a charge inside a Resilient Sphere is
+    /// legal: the cast and the held charge send nothing through the sphere (PHB p.258); only a delivery to a creature on
+    /// the other side crosses it, which is the delivery's test (CMB-092) (delegated RAW reading 2026-10-14). Null for any
+    /// other request, or when the hold passes; a refusal carries its log line in <see cref="CastOutcome.Detail"/>, which
+    /// the Legality stage shows, so the pre-check has no side effect.
     /// </summary>
-    private CastOutcome CheckHoldChargeLegality(SpellCastRequest req)
+    private static CastOutcome CheckHoldChargeLegality(SpellCastRequest req)
     {
         if (req == null || req.ResolveKind != CastResolveKind.HoldCharge || req.Caster == null || req.Spell == null)
             return null;
-        // A spell that touches several targets (Chill Touch) cannot be held (PHB p.176; SpellData.CanHoldCharge).
         if (!req.Spell.CanHoldCharge())
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "cannot-hold-charge")
                 { Detail = $"{req.Spell.Name}'s charge cannot be held: it touches every target in the round it is cast (PHB p.176)." };
-        string grappleRefusal = GrappleSpellcastRefusal(req.Caster, req.Spell);
-        if (grappleRefusal != null)
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple") { Detail = grappleRefusal };
         return null;
     }
 
     /// <summary>
-    /// The NPC path's own caster tests, in its old order (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160):
-    /// a standard action left, a living target, a caster that can cast spells, a slot for the spell. Null when the
-    /// request does not carry the bit or passes. The standard-action test is skipped for a cast that costs a free or
-    /// swift action (CastActionRules.CastingAction: a quickened spell, PHB p.98, now reachable for NPCs through prepared
-    /// metamagic slots and Scripted steps, batch 11 step 21), as the PC side asks it; the shared casting-action test
-    /// (<see cref="CheckCastActionLegality"/>) then holds it to the swift action and the one quickened spell a round.
+    /// The grapple casting rule, for every casting on every resolve kind (batch 12 step 9, CMB-101; batch 11 step 15 had
+    /// it for a hold only, and the PC targeting tested the other PC casts): a grappled or pinned caster can cast only a
+    /// spell whose casting time is 1 standard action or less and that has no somatic component, and no verbal one while
+    /// pinned (PHB p.156, Cast a Spell; <see cref="GrappleSpellcastRefusal"/>), PC or NPC alike. Not a held charge's
+    /// delivery (no casting, PHB p.141; its spell met the rule at its cast or hold) nor a grappler's wand use: a wand is a
+    /// spell trigger item, which a grappler may activate with no grapple check (PHB p.156, Activate a Magic Item), and its
+    /// use is no casting (DMG p.213; CastComponentRules.CastingDistractionApplies). A pinned creature may not use a wand:
+    /// the pinned rules (PHB p.157) leave it the escape attempt and the Cast a Spell option, the only grappling option that
+    /// names a pin, and a spell trigger needs a spoken word (DMG p.213), which the game holds a pinned creature cannot give
+    /// (CMB-080) (delegated RAW reading 2026-10-28, RULES_COVERAGE 4.1). The casting time is the cast's own, metamagic
+    /// included (PHB p.88: a spontaneous metamagic cast is a full-round action). A refusal carries its log line in
+    /// <see cref="CastOutcome.Detail"/>, which the Legality stage shows. No side effect. The PC targeting runs it before
+    /// its prompts (BeginPendingSpellTargeting) for early feedback; the Legality stage stays the binding test.
     /// </summary>
-    private static CastOutcome CheckNpcCasterLegality(SpellCastRequest req)
+    internal CastOutcome CheckCastGrappleLegality(SpellCastRequest req)
     {
-        if (req == null || !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks) || req.Caster == null || req.Spell == null)
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+        CastSourceKind kind = req.Source != null ? req.Source.Kind : CastSourceKind.PreparedSlot;
+        if (kind == CastSourceKind.HeldChargeDelivery)
+            return null;
+        if (kind == CastSourceKind.Wand)
+        {
+            if (!req.Caster.HasCondition(CombatConditionType.Pinned))
+                return null;
+            string userName = req.Caster.Stats != null ? req.Caster.Stats.CharacterName : req.Caster.name;
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple")
+                { Detail = $"{userName} cannot use a wand of {req.Spell.Name} while pinned: a pinned creature can only try to escape or cast a spell (PHB p.157), and cannot speak the wand's command word." };
+        }
+        string grappleRefusal = GrappleSpellcastRefusal(req.Caster, req.Spell, req.Metamagic, req.Source);
+        return grappleRefusal == null
+            ? null
+            : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "grapple") { Detail = grappleRefusal };
+    }
+
+    /// <summary>
+    /// The caster tests, one list for every request (batch 12 step 9, SPL-160 a; before it the NPC path's own, while the
+    /// PC side left them to its spell menu), in the NPC path's old order:
+    /// an action for the casting time (PHB p.140-141; CastActionRules.StandardActionRefusal: a standard action for a
+    /// standard-action, full-round or item casting, none for a quickened or free-action spell, which the shared
+    /// casting-action test, <see cref="CheckCastActionLegality"/>, holds to the round's one quickened spell, as it holds a
+    /// full-round or swift casting to its action), a living target, a caster that can cast spells, and a slot, spell per
+    /// day or convertible prepared spell for the spell with the cast's metamagic, the one the Spend stage takes
+    /// (<see cref="HasCastResource"/>). A held charge's delivery is no casting (PHB p.141): it costs no action here (free
+    /// today, SPL-156) and no slot, so only its target is tested. A scroll or wand needs the action but no slot and no
+    /// spellcasting of its user's own (the spell is in the item; DMG p.237, p.245). The F12 test panel keeps its bypass:
+    /// it casts out of turn, so no action test (as CastActionRules.ActionRefusal), and it spends what it finds, so no
+    /// spellcasting or slot test (SPL-036). Null when the request passes. No side effect.
+    /// </summary>
+    private static CastOutcome CheckCastCasterLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
             return null;
 
         CharacterController caster = req.Caster;
         CharacterController target = req.Aim != null ? req.Aim.Target : null;
+        CastSourceKind kind = req.Source != null ? req.Source.Kind : CastSourceKind.PreparedSlot;
 
-        // Delivering a held charge is no casting (PHB p.141): it needs no slot, and its action is the delivery's
-        // (free today, as for the PC, SPL-156), so only a living target is tested (batch 11 step 27, SPL-115).
-        if (req.Source != null && req.Source.Kind == CastSourceKind.HeldChargeDelivery)
-            return target != null && target.Stats != null && target.Stats.IsDead
-                ? new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "target-dead")
-                : null;
-
-        CastActionCost cost = CastActionRules.CastingAction(req.Spell, req.Metamagic, req.Source);
-        bool needsStandard = cost != CastActionCost.Free && cost != CastActionCost.Swift;
-        if (caster.Actions == null || (needsStandard && !caster.Actions.HasStandardAction))
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-standard-action");
+        string actionRefusal = CastActionRules.StandardActionRefusal(caster, req.Spell, req.Metamagic, req.Source);
+        if (actionRefusal != null)
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, actionRefusal);
         if (target != null && target.Stats != null && target.Stats.IsDead)
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "target-dead");
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, ReasonTargetDead);
+        if (kind == CastSourceKind.HeldChargeDelivery || kind == CastSourceKind.TestPanel
+            || kind == CastSourceKind.Scroll || kind == CastSourceKind.Wand)
+            return null;
         SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells)
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "no-spellcasting");
-        // A slot or spell per day for the spell with the cast's metamagic: the one the spend takes (batch 11 step 21).
-        if (!spellComp.CanCastWithMetamagic(req.Spell, req.Metamagic))
-            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "cannot-cast");
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, CastOutcome.ReasonNoSpellcasting);
+        if (!HasCastResource(spellComp, req))
+            return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, ReasonCannotCast);
         return null;
+    }
+
+    private const string ReasonTargetDead = "target-dead";
+    private const string ReasonCannotCast = "cannot-cast";
+
+    /// <summary>
+    /// Whether the caster has what the Spend stage will take for <paramref name="req"/> (SpendCastSlot): for a cleric's
+    /// conversion (a cast or a hold of one), a prepared spell it may give up at the conversion's level, or at the adjusted
+    /// level with metamagic (PHB p.32, p.88; SpellcastingComponent.CanSpontaneousCast); else a slot or spell per day for
+    /// the spell with the cast's metamagic (SpellcastingComponent.CanCastWithMetamagic; a prepared metamagic slot, SPL-012).
+    /// </summary>
+    private static bool HasCastResource(SpellcastingComponent spellComp, SpellCastRequest req)
+    {
+        if (req.Source != null && req.Source.Kind == CastSourceKind.SpontaneousConversion)
+        {
+            bool withMetamagic = req.Metamagic != null && req.Metamagic.HasAnyMetamagic;
+            return withMetamagic
+                ? spellComp.CanSpontaneousCast(req.Spell.SpellLevel, req.Metamagic)
+                : spellComp.CanSpontaneousCast(req.Source.ConversionLevel);
+        }
+        return spellComp.CanCastWithMetamagic(req.Spell, req.Metamagic);
+    }
+
+    /// <summary>The log line of a caster test's refusal (<see cref="CheckCastCasterLegality"/>).</summary>
+    private static string DescribeCasterRefusal(SpellCastRequest req, CastOutcome refusal)
+    {
+        string casterName = req.Caster.Stats != null ? req.Caster.Stats.CharacterName : req.Caster.name;
+        string spellName = req.Spell.Name;
+        switch (refusal.Reason)
+        {
+            case ReasonTargetDead:
+                string targetName = req.Aim != null && req.Aim.Target != null && req.Aim.Target.Stats != null ? req.Aim.Target.Stats.CharacterName : "The target";
+                return $"{targetName} is dead: {casterName} cannot cast {spellName} on it.";
+            case CastOutcome.ReasonNoSpellcasting:
+                return $"{casterName} cannot cast spells.";
+            case ReasonCannotCast:
+                return $"{casterName} has no prepared {spellName} or spell slot left for it.";
+            default:
+                return CastActionRules.DescribeRefusal(refusal.Reason, casterName, spellName, req.Metamagic);
+        }
     }
 
     /// <summary>
@@ -597,10 +671,10 @@ public partial class GameManager
 
     /// <summary>
     /// Legality: the target, the range at the cast's caster level (every caster, SPL-017), then the caster's choices (the
-    /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. With
-    /// the NPC bits: the NPC path's own caster tests before the target and its unlogged target and range refusals
-    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>). Before the target test, the decider's capability (batch 11
-    /// step 25): a choice the decider cannot make refuses the cast. Since batch 11 step 21 an
+    /// decider; the UI may suspend here at a dialog), then the components. Nothing is spent before the cast passes. First
+    /// the caster tests and the grapple casting rule, for every caster and resolve kind (batch 12 step 9, SPL-160, CMB-101),
+    /// and every refusal but the decider's own is logged for PC and NPC casters alike. Before the target test, the
+    /// decider's capability (batch 11 step 25): a choice the decider cannot make refuses the cast. Since batch 11 step 21 an
     /// NPC cast keeps its metamagic (a prepared metamagic slot's, SpellCastRequest.ForAI) and meets the same metamagic
     /// rules (MetamagicSystem).
     /// </summary>
@@ -617,16 +691,21 @@ public partial class GameManager
             || (req.ResolveKind == CastResolveKind.Grease && req.Choices != null && req.Choices.GreaseMode == GreaseCastMode.Area))
             FilterAreaAimByLineOfEffect(req);
 
-        CastOutcome refusal = CheckNpcCasterLegality(req);
+        // The caster tests (batch 12 step 9, SPL-160 a): an action for the casting time, a living target, spellcasting, a
+        // slot. The PC spell menu offers only casts that pass them, so a PC cast meets them only through a stale menu, a
+        // scroll or a slot mismatch.
+        CastOutcome refusal = CheckCastCasterLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", DescribeCasterRefusal(req, refusal)));
             FinishCast(ctx, refusal);
             return;
         }
 
-        // A hold meets the grapple test a cast meets in its targeting (PHB p.141, p.156; SPL-146).
-        refusal = CheckHoldChargeLegality(req);
+        // A hold's own test (Chill Touch cannot hold its charge, PHB p.176), then the grapple casting rule for every casting
+        // (PHB p.141, p.156; SPL-146 for a hold, CMB-101 for every resolve kind since batch 12 step 9).
+        refusal = CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
@@ -650,20 +729,19 @@ public partial class GameManager
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason == "area-needs-aim" || refusal.Reason == "summon-needs-placement" ? refusal.Reason : "invalid-target");
-            if (spell != null && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+            if (spell != null)
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
             FinishCast(ctx, refusal);
             return;
         }
 
         // The range at the cast's caster level (SPL-017), the same for every caster; the PC's target comes from the
-        // targeting highlight, which applies the same rule, so a PC cast meets this only through a stale target. The NPC
-        // path's refusals log nothing, as its others.
+        // targeting highlight, which applies the same rule, so a PC cast meets this only through a stale target.
         refusal = CheckCastRangeLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
-            if (refusal.Reason == "out-of-range" && !req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+            if (refusal.Reason == "out-of-range")
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{req.Aim.Target?.Stats?.CharacterName ?? "The target"} is out of range of {spell.Name}."));
             FinishCast(ctx, refusal);
             return;
@@ -672,26 +750,22 @@ public partial class GameManager
         // The metamagic (MetamagicSystem, batch 11 step 21): Quicken on a spontaneous cast, a feat the caster lacks,
         // a Heighten that raises nothing, an adjusted level above 9th. Then the casting action
         // (batch 11 step 12): a second quickened spell this round, a full-round or swift action the caster no longer has.
-        // The NPC path's refusals log nothing, as its others.
         refusal = CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
-            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name, req.Metamagic)));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", CastActionRules.DescribeRefusal(refusal.Reason, caster.Stats?.CharacterName, spell.Name, req.Metamagic)));
             FinishCast(ctx, refusal);
             return;
         }
 
-        // Silence (PHB p.279): no verbal component, and no wand's trigger word, inside one (SPL-092). The NPC path's
-        // refusals log nothing, as its others.
+        // Silence (PHB p.279): no verbal component, and no wand's trigger word, inside one (SPL-092).
         refusal = CheckCastSpeechLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
-            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", CastComponentRules.DescribeSilenceRefusal(
-                    caster.Stats?.CharacterName, spell.Name, CastComponentRules.IsSpellTrigger(req.Source))));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", CastComponentRules.DescribeSilenceRefusal(
+                caster.Stats?.CharacterName, spell.Name, CastComponentRules.IsSpellTrigger(req.Source))));
             FinishCast(ctx, refusal);
             return;
         }
@@ -714,8 +788,7 @@ public partial class GameManager
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
-            if (!req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
-                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"Cannot summon there: {DescribeSummonPlacementRefusal(refusal.Reason)}."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"Cannot summon there: {DescribeSummonPlacementRefusal(refusal.Reason)}."));
             FinishCast(ctx, refusal);
             return;
         }
@@ -808,9 +881,11 @@ public partial class GameManager
         }
         else
         {
-            if (!caster.CommitStandardAction() && req.HasQuirk(LegacyCastQuirk.NpcOwnLegalityChecks))
+            if (!caster.CommitStandardAction() && sourceKind != CastSourceKind.TestPanel)
             {
-                // The NPC path refuses a cast whose standard action cannot be committed (SPL-160); nothing was spent.
+                // A cast whose standard action cannot be committed is refused for every caster (batch 12 step 9, SPL-160;
+                // the Legality stage's action test makes this a guard); nothing was spent. The F12 panel casts out of turn.
+                Debug.LogWarning($"[CastCore] {DescribeCast(req)}: the standard action could not be committed; the cast is refused.");
                 CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "commit-failed");
                 ClearSpellcastResourceSnapshot();
                 FinishCast(ctx, new CastOutcome(CastOutcomeKind.Refused, CastStage.Cost, "commit-failed"));
@@ -1542,8 +1617,8 @@ public partial class GameManager
 
     /// <summary>
     /// PostCast: the target's concentration against the spell's damage, the held charge (kept when the delivering touch
-    /// misses, PHB p.141), the target's death, and the cast's result log with its prefixes (built, and shown at once,
-    /// before the death with <see cref="LegacyCastQuirk.NpcResultLogBeforeTargetDeath"/>).
+    /// misses, PHB p.141), the target's death, and the cast's result log with its prefixes (built after the death and
+    /// shown at the CombatEnd stage, for every caster since batch 12 step 9, SPL-160 d).
     /// </summary>
     private void CastStagePostCast(CastContext ctx)
     {
@@ -1583,22 +1658,13 @@ public partial class GameManager
             HoldChargeAfterMissedTouch(ctx);
         }
 
-        // The NPC path shows its result log before the target's death (NpcResultLogBeforeTargetDeath, SPL-160).
-        bool logBeforeDeath = ctx.Request.HasQuirk(LegacyCastQuirk.NpcResultLogBeforeTargetDeath);
-        if (logBeforeDeath)
-        {
-            BuildCastResultLog(ctx);
-            FlushCastLog(ctx);
-        }
-
         if (result.TargetKilled && target != null)
         {
             target.OnDeath();
             HandleSummonDeathCleanup(target);
         }
 
-        if (!logBeforeDeath)
-            BuildCastResultLog(ctx);
+        BuildCastResultLog(ctx);
 
         CastStageCombatEnd(ctx);
     }
@@ -1646,9 +1712,8 @@ public partial class GameManager
     /// CombatEnd: the result log goes out first, then the decider's follow-up that precedes the check (the UI's stat
     /// panels, which also refresh the Flanked conditions, and highlights, in the old order), then the shared combat-end
     /// check (EvaluateCombatEnd), also when a handler dealt the damage through DealDamage without setting
-    /// result.TargetKilled (SPL-004). With <see cref="LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath"/> (CORE-039)
-    /// only when the target was killed or is out of the fight; with <see cref="LegacyCastQuirk.NpcCombatEndCheckedByCaller"/>
-    /// (CORE-039) not here: the NPC wrapper checks after the cast returns.
+    /// result.TargetKilled (SPL-004). The check runs after every resolved cast, PC or NPC (batch 12 step 9, CORE-039), so
+    /// a cast that ends the fight some other way (a retaliation that drops the caster or the last foe) ends it at once.
     /// </summary>
     private void CastStageCombatEnd(CastContext ctx)
     {
@@ -1656,22 +1721,31 @@ public partial class GameManager
         FlushCastLog(ctx);
         ctx.Request.Decider?.BeforeCombatEndCheck(this, ctx);
 
-        CharacterController target = ctx.Request.Aim.Target;
         SpellResult result = ctx.Result;
-        // The NPC wrapper TryNPCPerformSpellCastForAI checks after the cast returns (NpcCombatEndCheckedByCaller, CORE-039).
-        bool check = !ctx.Request.HasQuirk(LegacyCastQuirk.NpcCombatEndCheckedByCaller)
-                     && (!ctx.Request.HasQuirk(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
-                         || result.TargetKilled || (target != null && CombatEndRules.IsOutOfFight(target)));
-        if (check && EvaluateCombatEnd("ResolveSingleTargetSpell"))
-        {
-            CastStageTrace.Mark(ctx.Request.Caster, ctx.Request.Spell, CastStageTrace.CombatEnd, "ResolveSingleTargetSpell");
-            ctx.CombatEnded = true;
-        }
+        RunCastCombatEndCheck(ctx, "ResolveSingleTargetSpell");
 
         FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, ctx.CombatEnded ? "combat-over" : "resolved", result)
         {
             CombatEnded = ctx.CombatEnded
         });
+    }
+
+    /// <summary>
+    /// The cast's one combat-end check (EvaluateCombatEnd under <paramref name="sourceContext"/>), once per run, for every
+    /// caster and resolve kind (batch 12 step 9, CORE-039): true, with the trace mark and <see cref="CastContext.CombatEnded"/>,
+    /// when the combat is over. EvaluateCombatEnd returns at once when the combat already ended, so the victory or defeat
+    /// is declared once (HandleCombatVictoryDetected and HandleCombatDefeatDetected run only from a fight still running).
+    /// </summary>
+    private bool RunCastCombatEndCheck(CastContext ctx, string sourceContext)
+    {
+        if (ctx.CombatEndChecked)
+            return ctx.CombatEnded;
+        ctx.CombatEndChecked = true;
+        if (!EvaluateCombatEnd(sourceContext))
+            return false;
+        CastStageTrace.Mark(ctx.Request.Caster, ctx.Request.Spell, CastStageTrace.CombatEnd, sourceContext);
+        ctx.CombatEnded = true;
+        return true;
     }
 
     // ── The area resolve variant (batch 11 step 9) ──────────────────────────────────────────────────────────────
@@ -1804,11 +1878,11 @@ public partial class GameManager
 
     /// <summary>
     /// The single exit of a resolved area cast (SPL-063): the handler's log with the cast's quickened and spontaneous
-    /// prefixes, built once (<see cref="CastContext.LogPrefix"/>; without them for the handlers that never had them,
-    /// <see cref="LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers"/>, SPL-161), goes out, then the decider's follow-up
-    /// that precedes the check (the UI's last combat log, stat panels with their Flanked refresh, and highlights, in the
-    /// old order), Rainbow Pattern's concentration call, and the combat-end check under the handler's own source context
-    /// (only for the handlers that had one, <see cref="LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers"/>, CORE-039).
+    /// prefixes, built once (<see cref="CastContext.LogPrefix"/>; every handler's since batch 12 step 9, SPL-161), goes
+    /// out, then the decider's follow-up that precedes the check (the UI's last combat log, stat panels with their Flanked
+    /// refresh, and highlights, in the old order), Rainbow Pattern's concentration call, and the combat-end check after
+    /// every area cast (batch 12 step 9, CORE-039), under the handler's own source context or, for a handler that had
+    /// none, its name.
     /// FinishCast then ends the cast, and the UI decider paces the turn (AfterAttackDelay) unless the combat ended.
     /// </summary>
     private void FinishAreaCast(CastContext ctx, AreaHandlerEntry entry, string handlerLog)
@@ -1821,8 +1895,7 @@ public partial class GameManager
         CharacterController caster = req.Caster;
         SpellData spell = req.Spell;
 
-        bool prefixed = !(entry.OmitsLogPrefix && req.HasQuirk(LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers));
-        ctx.ResultLog = handlerLog == null ? null : (prefixed ? ctx.LogPrefix : "") + handlerLog;
+        ctx.ResultLog = handlerLog == null ? null : ctx.LogPrefix + handlerLog;
         ctx.ConsoleLogLabel = entry.ConsoleLogLabel;
         FlushCastLog(ctx);
         req.Decider?.BeforeCombatEndCheck(this, ctx);
@@ -1830,14 +1903,7 @@ public partial class GameManager
         if (entry.BeginsConcentrationAfterLog && spell.DurationType == DurationType.Concentration)
             BeginConcentrationTracking(caster, null, spell);
 
-        string combatEndContext = entry.CombatEndContext;
-        if (combatEndContext == null && !req.HasQuirk(LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers))
-            combatEndContext = entry.Name;
-        if (combatEndContext != null && EvaluateCombatEnd(combatEndContext))
-        {
-            CastStageTrace.Mark(caster, spell, CastStageTrace.CombatEnd, combatEndContext);
-            ctx.CombatEnded = true;
-        }
+        RunCastCombatEndCheck(ctx, entry.CombatEndContext ?? entry.Name);
 
         FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, ctx.CombatEnded ? "combat-over" : "resolved")
         {
@@ -1911,15 +1977,15 @@ public partial class GameManager
     /// <summary>
     /// The exit of a resolved summon or hold: both logged their own lines as they resolved, so the cast has no result
     /// log; it ends at the Resolve stage, and the UI decider refreshes the stat panels, clears the highlights and pauses
-    /// (AfterAttackDelay, 1 s). No combat-end check (<see cref="LegacyCastQuirk.EffectResolveSkipsCombatEndCheck"/>,
-    /// CORE-039; step 11).
+    /// (AfterAttackDelay, 1 s) unless the combat-end check, which runs first for every caster (batch 12 step 9, CORE-039),
+    /// ended the combat.
     /// </summary>
     private void FinishEffectCast(CastContext ctx, string reason)
     {
         if (ctx.Outcome != null)
             return;
-        RequireLegacyQuirk(ctx, LegacyCastQuirk.EffectResolveSkipsCombatEndCheck);
-        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.Resolve, reason));
+        bool ended = RunCastCombatEndCheck(ctx, ctx.Request.ResolveKind == CastResolveKind.Summon ? "ResolveSummonCast" : "ResolveHoldCharge");
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.Resolve, reason) { CombatEnded = ended });
     }
 
     /// <summary>
@@ -1935,9 +2001,9 @@ public partial class GameManager
 
     /// <summary>
     /// The exit of a resolved Grease: its result log goes out, then the decider's follow-up that precedes a combat-end
-    /// check (the UI's last combat log, stat panels and highlights), and the cast ends at the CombatEnd stage, so the UI
-    /// paces the turn as after a resolved cast (AfterAttackDelay, 1.5 s). No combat-end check
-    /// (<see cref="LegacyCastQuirk.EffectResolveSkipsCombatEndCheck"/>, CORE-039; step 11).
+    /// check (the UI's last combat log, stat panels and highlights), the combat-end check (batch 12 step 9, CORE-039), and
+    /// the cast ends at the CombatEnd stage, so the UI paces the turn as after a resolved cast (AfterAttackDelay, 1.5 s)
+    /// unless the combat ended.
     /// </summary>
     private void FinishGreaseCast(CastContext ctx, string log)
     {
@@ -1948,15 +2014,18 @@ public partial class GameManager
         ctx.ConsoleLogLabel = null;
         FlushCastLog(ctx);
         ctx.Request.Decider?.BeforeCombatEndCheck(this, ctx);
-        RequireLegacyQuirk(ctx, LegacyCastQuirk.EffectResolveSkipsCombatEndCheck);
-        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, "resolved"));
+        bool ended = RunCastCombatEndCheck(ctx, "ResolveGreaseCast");
+        FinishCast(ctx, new CastOutcome(CastOutcomeKind.Resolved, CastStage.CombatEnd, ended ? "combat-over" : "resolved") { CombatEnded = ended });
     }
 
     // ── The single exit ─────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// The single exit of a run: shows the cast's result log once (if the run built one and it is not out yet), ends the
-    /// context (EndCast), then calls the decider's finish continuation and the run's own.
+    /// The single exit of a run: shows the cast's result log once (if the run built one and it is not out yet), runs the
+    /// combat-end check for a cast that counts as cast and has not run it (a spell lost to a distraction, its failure
+    /// chance or the attacks of opportunity, a countered or blocked spell: the caster or a foe may have dropped; batch 12
+    /// step 9, CORE-039, as the NPC wrappers did for every NPC cast before), ends the context (EndCast), then calls the
+    /// decider's finish continuation and the run's own.
     /// </summary>
     private void FinishCast(CastContext ctx, CastOutcome o)
     {
@@ -1965,6 +2034,8 @@ public partial class GameManager
         ctx.Outcome = o;
 
         FlushCastLog(ctx);
+        if (o.WasCast && !ctx.CombatEndChecked && RunCastCombatEndCheck(ctx, "FinishCast"))
+            o.CombatEnded = true;
         EndCast(ctx);
 
         ctx.Request.Decider?.OnCastFinished(this, ctx, o);

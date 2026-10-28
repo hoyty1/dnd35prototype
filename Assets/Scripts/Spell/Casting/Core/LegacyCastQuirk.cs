@@ -19,12 +19,11 @@ using System;
 /// without it raises a cast-core violation and gets the legacy behaviour anyway (GameManager.RequireLegacyQuirk).
 /// <para>
 /// Batch 11 step 29 (retire-legacy-cast-code, 2026-10-16) was a pure cleanup, so it kept the eight bits left, each the
-/// behaviour of a fix not built yet; deleting a bit means building its fix, which changes fights: the combat-end bits
-/// <see cref="EvaluateCombatEndOnlyOnTargetDeath"/>, <see cref="NpcCombatEndCheckedByCaller"/>,
-/// <see cref="AreaCombatEndOnlyInSomeHandlers"/> and <see cref="EffectResolveSkipsCombatEndCheck"/> (CORE-039), with
-/// <see cref="AreaLogPrefixOnlyInSomeHandlers"/> (SPL-161) and <see cref="NpcResultLogBeforeTargetDeath"/> (SPL-160 d),
-/// are step 11's item 3; <see cref="NpcOwnLegalityChecks"/> (SPL-160 a) is step 22b; <see cref="HeldChargeDeliveryIsFree"/>
-/// is SPL-156's fix in the Cost stage. The enum goes when the last of them is built.
+/// behaviour of a fix not built yet. Batch 12 step 9 (b12-cast-core-quirks, 2026-10-28) built seven of them: every cast
+/// ends with one combat-end check on every path (CORE-039), every area log carries the cast's prefix (SPL-161), and every
+/// caster logs its result after the target's death and meets one legality list (SPL-160), so the PC, NPC, area and effect
+/// paths differ by no bit any more. One is left: <see cref="HeldChargeDeliveryIsFree"/>, SPL-156's fix in the Cost stage
+/// (batch 12 step 18). The enum goes when it is built.
 /// </para>
 /// </summary>
 [Flags]
@@ -32,14 +31,8 @@ public enum LegacyCastQuirk : long
 {
     None = 0,
 
-    /// <summary>
-    /// The PC single-target cast runs the combat-end check only when its target was killed or is out of the fight, not
-    /// after every cast (CORE-039; the core's end state is "CombatEnd: EvaluateCombatEnd, always", which the NPC cast
-    /// wrapper TryNPCPerformSpellCastForAI already does for every cast that returns true). Another end is caught at the
-    /// next ShowActionChoices or turn boundary. Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) removes the bit. Without the
-    /// bit the core evaluates after every resolved cast.
-    /// </summary>
-    EvaluateCombatEndOnlyOnTargetDeath = 1 << 0,
+    // Bit 0 is unused: EvaluateCombatEndOnlyOnTargetDeath (CORE-039) was removed by batch 12 step 9
+    // (b12-cast-core-quirks); the CombatEnd stage checks for the end of combat after every resolved cast, PC or NPC.
 
     // Bit 1 is unused: GlobeAfterCast (SPL-141) was removed by batch 11 step 11 (raw-failed-cast-gating), which tests the
     // globe before SpellCaster.Cast on the single-target path and before any area handler on the area path.
@@ -93,16 +86,9 @@ public enum LegacyCastQuirk : long
     // The NPC path's own behaviours (batch 11 step 8): set only by SpellCastRequest.ForAI (LegacyCastQuirkSets.AiPath).
     // Each names a PC/NPC parity issue; the RAW-fix step that removes it applies one rule to both sides.
 
-    /// <summary>
-    /// The NPC path's own legality list (SPL-160): before the shared target test the Legality stage refuses, with a
-    /// trace mark and no log line, a caster with no standard action left, a dead target, a caster that cannot cast
-    /// spells and a spell the caster has no slot for (SpellcastingComponent.CanCast); the target test's refusal is not
-    /// logged; and the Cost stage refuses a cast whose standard action cannot be committed. The PC path leaves these
-    /// to the spell menu. Moving these tests into CheckLegality for every caster and removing the bit is batch 11
-    /// step 22b (SPL-160): step 22 did only its AI part, so the AI now ranks only casts these tests accept
-    /// (GameManager.CheckLegalityForAI runs them through CheckLegality).
-    /// </summary>
-    NpcOwnLegalityChecks = 1 << 15,
+    // Bit 15 is unused: NpcOwnLegalityChecks (SPL-160 a) was removed by batch 12 step 9 (b12-cast-core-quirks); every
+    // request meets the caster tests (an action for the casting time, a living target, spellcasting, a slot;
+    // GameManager.CheckCastCasterLegality) and every Legality refusal is logged, for PC and NPC casters alike.
 
     // Bit 16 is unused: NpcRangeUsesCasterLevel (SPL-017) was removed by batch 11 step 14 (raw-resources-caster-level);
     // every single-target cast meets one range test (CasterLevelRules.InRange: the cast's caster level, to the target's
@@ -138,18 +124,9 @@ public enum LegacyCastQuirk : long
     // (raw-distraction-failure-stages); both Blink rolls carry one label and log for every caster
     // (BlinkCastRules).
 
-    /// <summary>
-    /// The PostCast stage shows the cast's result log before the target's death (OnDeath and the summon cleanup) instead
-    /// of after it (SPL-160). Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet), which settles the CombatEnd stage, removes it.
-    /// </summary>
-    NpcResultLogBeforeTargetDeath = 1 << 25,
-
-    /// <summary>
-    /// The CombatEnd stage runs no combat-end check: the NPC wrapper TryNPCPerformSpellCastForAI runs it after every
-    /// cast that counts as cast (CastOutcome.WasCast), once the stat panels are refreshed, failed casts included
-    /// (CORE-039). Batch 11 step 11 item 3 (not built yet) puts one check after every cast in the stage for every caster and removes the bit.
-    /// </summary>
-    NpcCombatEndCheckedByCaller = 1 << 26,
+    // Bits 25 and 26 are unused: NpcResultLogBeforeTargetDeath (SPL-160 d) and NpcCombatEndCheckedByCaller (CORE-039)
+    // were removed by batch 12 step 9 (b12-cast-core-quirks); every caster's result log follows the target's death, and
+    // the cast core runs the combat-end check itself (the NPC wrappers' own checks are gone).
 
     // Bit 27 is unused: NpcNoMirrorImageSwap (SPL-117) was removed by batch 11 step 26 (raw-mirror-image, decision D7):
     // Mirror Image picks a random figure for every attack and spell against the caster, for every caster and attacker
@@ -167,22 +144,9 @@ public enum LegacyCastQuirk : long
     // a single-target cast's target: the ring counters a spell "cast upon the wearer" (DMG p.230), and an area spell is
     // cast at an area, not on the creatures in it (PHB p.175; delegated RAW reading 2026-10-14).
 
-    /// <summary>
-    /// Only some area handlers end their cast with a combat-end check (EvaluateCombatEnd): the generic loop, the scaled
-    /// damage spells (Fireball, Lightning Bolt, Call Lightning), Halt Undead, Hypnotism, Sleep, Deep Slumber, Color
-    /// Spray, Fear, Ice Storm, Shout, Cone of Cold, Chain Lightning, Circle of Death, Insect Plague, Wall of Thorns,
-    /// Sunburst and Earthquake (AreaHandlerEntry.CombatEndContext); the other handlers end without one, so an end they
-    /// cause is caught at the next ShowActionChoices or turn boundary (CORE-039). Without the bit FinishAreaCast checks
-    /// after every area cast. Batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) removes the bit with CORE-039.
-    /// </summary>
-    AreaCombatEndOnlyInSomeHandlers = 1L << 32,
-
-    /// <summary>
-    /// The Hypnotism, Sleep, Deep Slumber, Color Spray and Fear handlers log no quickened or spontaneous line
-    /// (AreaHandlerEntry.OmitsLogPrefix; SPL-161): FinishAreaCast leaves the cast's log prefix off their log. Without the
-    /// bit every area log carries it. Batch 11 step 11 item 3 (not built yet) removes the bit.
-    /// </summary>
-    AreaLogPrefixOnlyInSomeHandlers = 1L << 33,
+    // Bits 32 and 33 are unused: AreaCombatEndOnlyInSomeHandlers (CORE-039) and AreaLogPrefixOnlyInSomeHandlers
+    // (SPL-161) were removed by batch 12 step 9 (b12-cast-core-quirks); FinishAreaCast checks for the end of combat after
+    // every area cast and prefixes every area log with the cast's quickened and spontaneous lines.
 
     // The summon, Grease and held-charge paths' own behaviours (batch 11 step 10) were set only by
     // SpellCastRequest.ForUiSummon, ForUiGrease and ForUiHoldCharge (LegacyCastQuirkSets.UiSummonPath, UiGreasePath and
@@ -232,115 +196,93 @@ public enum LegacyCastQuirk : long
     // (raw-distraction-failure-stages); a summon or Grease lost to a distraction or a spell failure pauses like any lost
     // cast.
 
-    /// <summary>
-    /// A resolved summon, Grease or held charge runs no combat-end check (EvaluateCombatEnd), so an end it causes is
-    /// caught at the next ShowActionChoices or turn boundary (CORE-039). Required: the Summon, Grease and HoldCharge
-    /// resolves have no combat-end stage yet; batch 11 step 11 item 3 (raw-failed-cast-gating, not built yet) gives them one and removes the bit.
-    /// </summary>
-    EffectResolveSkipsCombatEndCheck = 1L << 53,
+    // Bit 53 is unused: EffectResolveSkipsCombatEndCheck (CORE-039) was removed by batch 12 step 9
+    // (b12-cast-core-quirks); a resolved summon, Grease or hold ends with the combat-end check too.
 }
 
-/// <summary>The quirk sets the request builders give (batch 11 steps 7, 8, 9, 10, 25 and 27; trimmed by steps 11 to 18 and 25).</summary>
+/// <summary>
+/// The quirk sets the request builders give (batch 11 steps 7, 8, 9, 10, 25 and 27; trimmed by batch 11 steps 11 to 18 and
+/// 25, and by batch 12 step 9, which left only <see cref="LegacyCastQuirk.HeldChargeDeliveryIsFree"/>). The sets keep their
+/// names so each builder still names its path; since batch 12 step 9 the PC and NPC sets of each path are equal.
+/// </summary>
 public static class LegacyCastQuirkSets
 {
-    /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider).</summary>
+    /// <summary>Today's PC single-target path (PerformSpellCast through the cast core with the UI decider): the free held-charge delivery (SPL-156).</summary>
     public const LegacyCastQuirk UiPath =
-        LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-        | LegacyCastQuirk.HeldChargeDeliveryIsFree;
+        LegacyCastQuirk.HeldChargeDeliveryIsFree;
 
     /// <summary>
-    /// Today's NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8):
-    /// the UI path's bits except the one that describes only the PC side (the combat-end check on a target's death,
-    /// CORE-039), plus the NPC path's own bits. It differs from <see cref="UiPath"/> only by bits that name a PC/NPC
-    /// parity issue (Tests.Magic.CastCoreStageOrderTests checks the list).
+    /// The NPC single-target path (TryNPCPerformSpellCast through the cast core with the AI decider, batch 11 step 8): the
+    /// UI path's set, since batch 12 step 9 removed the NPC path's own bits (SPL-160, CORE-039). The NPC held-charge
+    /// delivery (SpellCastRequest.ForAIHeldChargeDelivery) uses it too, so its delivery is free as the PC's is (SPL-156).
+    /// Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk AiPath =
-        (UiPath & ~LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath)
-        | LegacyCastQuirk.NpcOwnLegalityChecks
-        | LegacyCastQuirk.NpcResultLogBeforeTargetDeath
-        | LegacyCastQuirk.NpcCombatEndCheckedByCaller;
+        UiPath;
 
     /// <summary>
     /// Today's PC area path (PerformAoESpellCast through the cast core with the UI decider and the area resolve variant,
-    /// batch 11 step 9): the UI path's bits that an area cast exhibits (none since batch 11 step 18 removed the generic
-    /// loop's forgone saves), without the single-target ones (the combat-end check on a target's death, the held-charge
-    /// delivery), plus the area path's own bits. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// batch 11 step 9): no bit since batch 12 step 9 removed the area combat-end and log-prefix bits (CORE-039, SPL-161);
+    /// the held-charge bit belongs to the single-target delivery. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiAreaPath =
-        (UiPath & ~(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath
-                    | LegacyCastQuirk.HeldChargeDeliveryIsFree))
-        | LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers
-        | LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers;
+        UiPath & ~LegacyCastQuirk.HeldChargeDeliveryIsFree;
 
     /// <summary>
     /// The NPC area path (batch 11 step 25, SpellCastRequest.ForAIArea: an area the AI aimed with AreaAimSearch, through
-    /// the same area resolve as the PC's): the PC area path's bits plus the NPC path's own caster tests
-    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160: a standard action, a caster that can cast, a slot;
-    /// refusals unlogged). The NPC wrapper runs its combat-end check after the cast as well, which finds the combat over
-    /// when the area handler's own check ended it. Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// the same area resolve as the PC's): the PC area path's set (batch 12 step 9 removed the NPC caster-test bit,
+    /// SPL-160). Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk AiAreaPath =
-        UiAreaPath
-        | LegacyCastQuirk.NpcOwnLegalityChecks;
+        UiAreaPath;
 
     /// <summary>
-    /// The UI path's bits that every summon, Grease and hold shows (batch 11 step 10): the missing combat-end check (the
-    /// cost, provocation and concentration-order bits went in batch 11 step 12, the snapshot cleared after a failed spend
-    /// in step 14).
+    /// The bits every summon, Grease and hold shows (batch 11 step 10): none since batch 12 step 9 gave them the
+    /// combat-end check (CORE-039).
     /// </summary>
     private const LegacyCastQuirk UiEffectPathShared =
-        LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
+        LegacyCastQuirk.None;
 
     /// <summary>
     /// Today's PC summon path (PerformSummonMonsterCast and PerformSummonSwarmCast through the cast core's Summon resolve,
-    /// batch 11 step 10; formerly TryConsumePendingSpellCast): the shared bits only (the placement range is the cast's
-    /// caster level's since batch 11 step 14; the counterspell and pouch skips went in batch 11 step 15).
-    /// Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// batch 11 step 10): the shared bits only. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiSummonPath =
         UiEffectPathShared;
 
     /// <summary>
-    /// Today's PC Grease path (the three Grease casts, now one request through the cast core's Grease resolve, batch 11
-    /// step 10): the shared bits only (the counterspell, pouch and invisibility skips went in batch 11 step 15).
-    /// Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// Today's PC Grease path (the three Grease casts, one request through the cast core's Grease resolve, batch 11 step
+    /// 10): the shared bits only. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiGreasePath =
         UiEffectPathShared;
 
     /// <summary>
-    /// The NPC Grease path (batch 11 step 25, SpellCastRequest.ForAIGrease: Grease on a 10-ft. square the AI aimed): the PC
-    /// Grease path's bits plus the NPC path's own caster tests (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>,
-    /// SPL-160). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// The NPC Grease path (batch 11 step 25, SpellCastRequest.ForAIGrease: Grease on a 10-ft. square the AI aimed): the
+    /// PC Grease path's set. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk AiGreasePath =
-        UiGreasePath
-        | LegacyCastQuirk.NpcOwnLegalityChecks;
+        UiGreasePath;
 
     /// <summary>
-    /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10;
-    /// formerly HoldPendingMeleeTouchCharge): the shared bits only (the grapple, pouch, counterspell and choice skips went
-    /// in batch 11 step 15). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// Today's PC hold of a touch charge (Discharge Later through the cast core's HoldCharge resolve, batch 11 step 10):
+    /// the shared bits only. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk UiHoldPath =
         UiEffectPathShared;
 
     /// <summary>
     /// The NPC summon path (batch 11 step 27, SpellCastRequest.ForAISummon: a Summon Monster or Summon Nature's Ally whose
-    /// creature and square the AI decider chose, through the same Summon resolve as the PC's): the PC summon path's bits
-    /// plus the NPC path's own caster tests (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160).
+    /// creature and square the AI decider chose, through the same Summon resolve as the PC's): the PC summon path's set.
     /// Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk AiSummonPath =
-        UiSummonPath
-        | LegacyCastQuirk.NpcOwnLegalityChecks;
+        UiSummonPath;
 
     /// <summary>
     /// The NPC hold of a touch charge (batch 11 step 27, SpellCastRequest.ForAIHoldCharge, through the same HoldCharge
-    /// resolve as the PC's Discharge Later): the PC hold path's bits plus the NPC path's own caster tests
-    /// (<see cref="LegacyCastQuirk.NpcOwnLegalityChecks"/>, SPL-160). Tests.Magic.CastCoreStageOrderTests checks the list.
+    /// resolve as the PC's Discharge Later): the PC hold path's set. Tests.Magic.CastCoreStageOrderTests checks the list.
     /// </summary>
     public const LegacyCastQuirk AiHoldPath =
-        UiHoldPath
-        | LegacyCastQuirk.NpcOwnLegalityChecks;
+        UiHoldPath;
 }

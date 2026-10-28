@@ -164,7 +164,7 @@ public partial class GameManager
     /// returned true: a cast that counts as cast (<see cref="CastOutcome.WasCast"/>) keeps its result log, if it has one
     /// (a resolved cast or a struck mirror image), as the last combat log and refreshes the stat panels, which also
     /// applies and removes the Flanked conditions. A refused or unspendable cast (the old false returns) does neither.
-    /// The combat-end check comes after, in TryNPCPerformSpellCastForAI (LegacyCastQuirk.NpcCombatEndCheckedByCaller).
+    /// The cast core has run the combat-end check before this (batch 12 step 9, CORE-039).
     /// </summary>
     internal void AiOnCastFinished(CastContext ctx, CastOutcome outcome)
     {

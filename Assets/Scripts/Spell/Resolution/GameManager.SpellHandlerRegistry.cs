@@ -93,12 +93,11 @@ internal sealed class AreaHandlerEntry
     public bool Async;
     public AreaHandlerMark Mark;
     /// <summary>
-    /// The source context of the handler's combat-end check (EvaluateCombatEnd), or null for a handler that has none
-    /// today (<see cref="LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers"/>, CORE-039).
+    /// The source context of the area exit's combat-end check (EvaluateCombatEnd; GameManager.FinishAreaCast), the old
+    /// block's own, or null for a handler whose old block had none: the check then runs under the handler's name (every
+    /// area cast checks since batch 12 step 9, CORE-039).
     /// </summary>
     public string CombatEndContext;
-    /// <summary>The handler's log goes out without the quickened and spontaneous lines (<see cref="LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers"/>, SPL-161).</summary>
-    public bool OmitsLogPrefix;
     /// <summary>
     /// After its log and the UI refresh, a Concentration-duration cast calls the caster's concentration tracking with no
     /// tracked effect (Rainbow Pattern, as its old block did; BeginConcentrationTracking ignores a null effect, SPL-028).
@@ -349,13 +348,12 @@ public partial class GameManager
             list.Add(entry);
             return entry;
         }
-        // A Resolve*Spell handler that used to show its own log and pace the turn: marked before it runs, its log without
-        // the prefixes (SPL-161), its own combat-end check under its own name.
+        // A Resolve*Spell handler that used to show its own log and pace the turn: marked before it runs, its own combat-end
+        // check under its own name. Its log carries the cast's prefixes as every area log does (batch 12 step 9, SPL-161).
         void AddSelfPaced(string name, Func<CastContext, string> resolve, string id)
         {
             AreaHandlerEntry entry = Add(name, name, ctx => AreaHandlerResult.Claimed(resolve(ctx)), id);
             entry.Mark = AreaHandlerMark.BeforeResolve;
-            entry.OmitsLogPrefix = true;
         }
         AreaHandlerResult Claim(bool claimed, string log) => claimed ? AreaHandlerResult.Claimed(log) : AreaHandlerResult.NotClaimed;
 

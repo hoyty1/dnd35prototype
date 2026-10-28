@@ -256,6 +256,10 @@ public partial class GameManager
 
     private void HandleCombatVictoryDetected(string sourceContext)
     {
+        // Idempotent: only a fight still running is won. EvaluateCombatEnd, its only caller, already returns at once once
+        // the combat is over, and every cast, attack and turn boundary may call it (batch 12 step 9, CORE-039).
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
         Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | waitingLootBefore={WaitingForLootCollection}");
 
         CurrentPhase = TurnPhase.CombatOver;
@@ -280,6 +284,9 @@ public partial class GameManager
     /// </summary>
     private void HandleCombatDefeatDetected(string sourceContext, CombatEndRules.SideCounts sides)
     {
+        // Idempotent, as HandleCombatVictoryDetected: only a fight still running is lost.
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
         Debug.Log($"[CombatEnd] Defeat detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | party={sides.PlayersIn}/{sides.PlayersAll} in | enemies={sides.EnemiesIn}/{sides.EnemiesAll} in");
 
         CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", "DEFEAT! Every hero is dead, dying or unconscious, or under the enemy's control."));

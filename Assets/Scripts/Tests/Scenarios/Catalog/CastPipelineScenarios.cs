@@ -46,6 +46,9 @@ namespace Tests.Scenarios
             yield return S("cast-held-touch-charge", HeldTouchCharge);
             yield return S("cast-held-aoo-cancel", HeldAoOCancel);
             yield return S("cast-held-grappled", HeldGrappled);
+            yield return S("cast-combat-end-retaliation-ui", CastCombatEndRetaliationUi);
+            yield return S("grappled-caster-legality-ui-area", GrappledCasterLegalityUiArea);
+            yield return S("grapple-spontaneous-still-cast", GrappleSpontaneousStillCast);
             yield return S("npc-concentration-tracking", NpcConcentrationTracking);
             yield return S("cast-ui-summon-monster", UiSummonMonster);
             yield return S("cast-ui-summon-aoo-cancel", UiSummonAoOCancel);
@@ -589,15 +592,15 @@ namespace Tests.Scenarios
         /// The same handler with a quickened Sleep that ends the fight. A wizard 9 with Quicken Spell (Ui) casts a quickened
         /// Sleep from an added 5th-level slot (PHB p.98: free action, +4 levels; SPL-041 for the slot) at g1; both goblins
         /// fail their Will saves and fall asleep, so the hostile side is out (asleep counts as unconscious) and the cast
-        /// core's area exit (FinishAreaCast, Sleep's own combat-end check) declares the victory. Today Sleep's log has no
-        /// quickened line (SPL-161, pinned).
+        /// core's area exit (FinishAreaCast, Sleep's own combat-end check) declares the victory. Sleep's log starts with the
+        /// quickened line, as every area log does since batch 12 step 9 (SPL-161; before it the line was missing, pinned).
         /// </summary>
         private static ScenarioDef UiSleepQuickened()
         {
             var quicken = new MetamagicData();
             quicken.Toggle(MetamagicFeatId.QuickenSpell);
-            return Rules("rules/cast-ui-sleep-quickened", "A quickened Ui Sleep puts both foes to sleep and the area exit ends the fight (SPL-161 pinned)")
-                .Covers("PHB p.280", "PHB p.98", "SPL-161", "batch 11 step 9")
+            return Rules("rules/cast-ui-sleep-quickened", "A quickened Ui Sleep puts both foes to sleep, logs its quickened line, and the area exit ends the fight (SPL-161)")
+                .Covers("PHB p.280", "PHB p.98", "SPL-161", "batch 11 step 9", "batch 12 step 9")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 9, "Quicken Spell")), 2, 10, Control.Ui)
                 .Npc("g1", "goblin", 8, 10, Control.Idle)
@@ -613,8 +616,8 @@ namespace Tests.Scenarios
                     Expect.Count("cond", e => IsCondition(e, "g2", "Asleep", true), 1)))
                 .Expect("The game declares the victory itself, from the area cast's combat-end check", Expect.Outcome(Outcome.Victory))
                 .Expect("The PC area cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.SLEEP, 1))
-                .ExpectKnown("SPL-161", "Today the quickened Sleep logs no quickened line (SPL-161)",
-                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("casts QUICKENED Sleep"), 0, 0))
+                .Expect("The quickened Sleep logs its quickened line, as every area cast does (SPL-161, batch 12 step 9)",
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("casts QUICKENED Sleep"), 1, 1))
                 .Build();
         }
 
@@ -1583,6 +1586,155 @@ namespace Tests.Scenarios
                 .Expect("The refusal is logged once", Expect.Count("log", e => (e.Str("text") ?? "").Contains("spells with somatic components are blocked"), 1, 1))
                 .Expect("No Shocking Grasp is cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 0))
                 .Build();
+        }
+
+        // ── rules/cast-combat-end-retaliation-ui, rules/grappled-caster-legality-ui-area (batch 12 step 9) ──
+
+        /// <summary>
+        /// CORE-039, fixed in batch 12 step 9: every cast ends with the combat-end check, so a cast that puts a side out
+        /// other than through its target ends the fight at once. The game has no Fire Shield retribution against a touch
+        /// spell (melee reactions answer weapon and natural attacks only), so the retaliation here is the attack of
+        /// opportunity the cast provokes (PHB p.140): the Ui wizard 1, the only hero, at 1 hp, casts Magic Missile at the
+        /// adjacent goblin without casting defensively. The goblin (acting first, so not flat-footed, PHB p.137; +30 to hit,
+        /// every d6 a 6, so its morningstar deals 6) hits and drops the wizard to -5, dying (PHB p.145), so the spell is lost
+        /// and the party is out. The
+        /// cast core's exit runs the combat-end check for the lost cast (FinishCast, RunCastCombatEndCheck) and declares the
+        /// defeat inside the cast, not at the action menu after the pause (ShowActionChoices) as before.
+        /// </summary>
+        private static ScenarioDef CastCombatEndRetaliationUi()
+        {
+            return Rules("rules/cast-combat-end-retaliation-ui", "A Ui cast whose provoked AoO drops the last hero ends the fight inside the cast (CORE-039)")
+                .Covers("CORE-039", "PHB p.140", "PHB p.145", "batch 12 step 9")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Retaliation Wizard", 1)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.MAGIC_MISSILE))
+                .Tweak("gob", c => { AttackTweak(c, 30); Sturdy(c); })
+                .Hp("wizard", 1)
+                .Initiative("gob", "wizard")
+                .Force(6, 6, null, -1)
+                .Turn("wizard", 1,
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
+                    Step.AnswerAoO(AoOAnswer.Proceed))
+                .Expect("The goblin's attack of opportunity against the casting wizard hits (PHB p.140)",
+                    Expect.Count("aoo", e => e.Str("by") == "gob" && e.Str("target") == "wizard" && e.Bool("hit"), 1, 1))
+                .Expect("The wizard is struck down and the spell is lost", Expect.Count("log", e => (e.Str("text") ?? "").Contains("is struck down while casting Magic Missile"), 1, 1))
+                .Expect("The game declares the defeat itself", Expect.Outcome(Outcome.Defeat))
+                .Expect("The defeat is declared by the cast's own combat-end check, not at the action menu or a turn boundary (CORE-039)", v =>
+                {
+                    TraceEvent over = v.Of("phase").FirstOrDefault(e => e.Get("to") is GameManager.TurnPhase t && t == GameManager.TurnPhase.CombatOver);
+                    if (over == null) return ExpectResult.Fail("no CombatOver");
+                    var by = over.Get("by") as List<string>;
+                    string text = by != null ? string.Join(" < ", by) : "";
+                    return text.IndexOf("RunCastCombatEndCheck", StringComparison.Ordinal) >= 0
+                           && text.IndexOf("ShowActionChoices", StringComparison.Ordinal) < 0
+                           && text.IndexOf("NextInitiativeTurn", StringComparison.Ordinal) < 0
+                        ? ExpectResult.Pass(text, over.Seq)
+                        : ExpectResult.Fail("by " + text, over.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-101 (the cast half), fixed in batch 12 step 9: the cast core's Legality stage meets the grapple casting rule for
+        /// every resolve kind, an area cast included (before it, the PC targeting tested it and the core only for a hold;
+        /// GrappleSpellcastRefusal, PHB p.156: no somatic component while grappling). A Ui wizard 5 grappled at the start
+        /// of its turn picks Burning Hands (V, S; PHB p.207) at the goblin 10 ft away: the cast is refused with one log line,
+        /// nothing is spent and the goblin is untouched. Since the step 9 review the PC targeting runs the same test
+        /// (CheckCastGrappleLegality) before its prompts for early feedback, so the Ui refusal comes before the aim; the
+        /// Legality stage's own refusal of an area request is pinned by CastCoreStageOrderTests and by the AI's area filter.
+        /// </summary>
+        private static ScenarioDef GrappledCasterLegalityUiArea()
+        {
+            return Rules("rules/grappled-caster-legality-ui-area", "A grappled Ui caster cannot cast a somatic area spell: refused, nothing spent (PHB p.156; CMB-101)")
+                .Covers("CMB-101", "PHB p.156", "PHB p.207", "batch 12 step 9")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Grappled Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 7, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.BURNING_HANDS))
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    Step.Assert("grappled", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        w.ApplyCondition(CombatConditionType.Grappled, 10, "scenario");
+                        Fact(ctx, "grappled", w.HasCondition(CombatConditionType.Grappled));
+                        RecordHp(ctx, "gob");
+                        return true;
+                    }),
+                    RecordCaster("wizard"),
+                    Step.Cast(SpellNames.BURNING_HANDS, "gob"),
+                    FactCaster("cast", "wizard"),
+                    Step.Assert("after", ctx => { FactHpLost(ctx, "cone", "gob"); return true; }))
+                .Expect("The wizard is grappled when it casts", FactIs("grappled", true))
+                .Expect("The cast is refused: nothing is spent (PHB p.156)", FactsAre(("cast.spent", "none"), ("cast.actions", "smf")))
+                .Expect("The goblin is untouched", FactIs("cone.lost.gob", 0))
+                .Expect("The refusal is logged once", Expect.Count("log", e => (e.Str("text") ?? "").Contains("spells with somatic components are blocked"), 1, 1))
+                .Expect("No Burning Hands is cast", CastEvents("wizard", SpellNames.BURNING_HANDS, 0))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 12 step 9 review (CMB-101): the grapple casting rule counts the cast's own casting time. A grappler may cast
+        /// only a spell of 1 standard action or less with no somatic component (PHB p.156), and a spontaneous cast with a
+        /// metamagic feat takes a full-round action (PHB p.88), so a sorcerer's stilled Magic Missile (Still Spell clears
+        /// the somatic component, PHB p.101) is still refused in a grapple. Two sorcerers 6 with Still Spell, both grappled at
+        /// the start of their turns, cast a stilled Magic Missile at a dummy: the Ui one (the PC targeting's early test,
+        /// the same CheckCastGrappleLegality the Legality stage runs) and the Scripted one (the NPC cast path, refused at
+        /// the cast core's Legality stage). Each refusal is logged once; nothing is spent and the dummies are untouched.
+        /// </summary>
+        private static ScenarioDef GrappleSpontaneousStillCast()
+        {
+            var still = new MetamagicData();
+            still.Toggle(MetamagicFeatId.StillSpell);
+            return Rules("rules/grapple-spontaneous-still-cast", "A grappled sorcerer cannot cast a spontaneous stilled spell: a full-round casting (PHB p.88, p.156; CMB-101)")
+                .Covers("CMB-101", "PHB p.88", "PHB p.101", "PHB p.156", "PC_NPC_PARITY", "batch 12 step 9")
+                .MaxRounds(1)
+                .Pc("sorc", ActorSource.Stats(() => Sorcerer("Grappled Sorcerer", 6, "Still Spell")), 3, 4, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Sorcerer("Grappled Scripted Sorcerer", 6, "Still Spell")), 3, 12, Control.Scripted)
+                .Npc("d1", "target_dummy", 8, 4, Control.Idle)
+                .Npc("d2", "target_dummy", 8, 12, Control.Idle)
+                .Tweak("sorc", KnowsMagicMissile)
+                .Tweak("scripted", KnowsMagicMissile)
+                .Tweak("d1", Sturdy).Tweak("d2", Sturdy)
+                .Initiative("sorc", "scripted", "d1", "d2")
+                .Turn("sorc", 1,
+                    Step.Assert("grappled", ctx => GrappleAndRecord(ctx, "sorc", "d1")),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d1", still),
+                    Step.Assert("after", ctx => FactAfterStillCast(ctx, "sorc", "d1")))
+                .Turn("scripted", 1,
+                    Step.Assert("grappled", ctx => GrappleAndRecord(ctx, "scripted", "d2")),
+                    Step.Cast(SpellNames.MAGIC_MISSILE, "d2", still),
+                    Step.Assert("after", ctx => FactAfterStillCast(ctx, "scripted", "d2")))
+                .Expect("Both sorcerers are grappled when they cast", FactsAre(("sorc.grappled", true), ("scripted.grappled", true)))
+                .Expect("No missile: both dummies are untouched", FactsAre(("missile.lost.d1", 0), ("missile.lost.d2", 0)))
+                .Expect("Nothing is spent: spells per day and every action kept (PHB p.141)", Expect.All(
+                    FactsEqual("sorc.perday.before", "sorc.perday.after"), FactsEqual("scripted.perday.before", "scripted.perday.after"),
+                    FactsAre(("sorc.actions", "smf"), ("scripted.actions", "smf"))))
+                .Expect("Each refusal is logged once with the casting-time reason", Expect.All(
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("Grappled Sorcerer cannot cast Magic Missile") && (e.Str("text") ?? "").Contains("full-round action"), 1, 1),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("Grappled Scripted Sorcerer cannot cast Magic Missile") && (e.Str("text") ?? "").Contains("full-round action"), 1, 1)))
+                .Expect("No Magic Missile is cast", Expect.All(CastEvents("sorc", SpellNames.MAGIC_MISSILE, 0), CastEvents("scripted", SpellNames.MAGIC_MISSILE, 0)))
+                .Build();
+        }
+
+        private static bool GrappleAndRecord(ScenarioContext ctx, string key, string dummy)
+        {
+            CharacterController c = ctx.Get(key);
+            c.ApplyCondition(CombatConditionType.Grappled, 10, "scenario");
+            Fact(ctx, key + ".grappled", c.HasCondition(CombatConditionType.Grappled));
+            Fact(ctx, key + ".perday.before", SpellsPerDay(c));
+            RecordHp(ctx, dummy);
+            return true;
+        }
+
+        private static bool FactAfterStillCast(ScenarioContext ctx, string key, string dummy)
+        {
+            CharacterController c = ctx.Get(key);
+            FactHpLost(ctx, "missile", dummy);
+            Fact(ctx, key + ".perday.after", SpellsPerDay(c));
+            Fact(ctx, key + ".actions", Actions(c));
+            return true;
         }
 
         /// <summary>
@@ -3232,14 +3384,15 @@ namespace Tests.Scenarios
         /// round, so not after a move action), for a Ui and a Scripted caster (CastActionRules.Refusal, read by the PC spell
         /// menu, the cast core's Legality stage and the AI's spell choice; batch 11 step 12). A Ui wizard 1 and a Scripted
         /// wizard 1, Sleep prepared (casting time 1 round, PHB p.280), each move one square and then try Sleep at a distant
-        /// goblin: the Ui menu refuses it with a log line, the Scripted cast is refused by the Legality stage (silently, as
-        /// the NPC path's refusals are); neither spends the slot and each keeps its standard action.
+        /// goblin: the Ui menu refuses it with a log line, the Scripted cast is refused by the Legality stage with the same
+        /// line (every caster's refusals are logged since batch 12 step 9, SPL-160); neither spends the slot and each keeps
+        /// its standard action.
         /// </summary>
         private static ScenarioDef FullRoundAfterMove()
         {
             const string refusedLog = "casting it takes a full-round action";
             return Rules("rules/cast-full-round-after-move", "A 1-round casting time is refused after a move, for a Ui and a Scripted caster (PHB p.174, p.138)")
-                .Covers("PHB p.174", "PHB p.138", "PHB p.280", "SPL-162", "batch 11 step 12")
+                .Covers("PHB p.174", "PHB p.138", "PHB p.280", "SPL-162", "SPL-160", "batch 11 step 12", "batch 12 step 9")
                 .MaxRounds(1)
                 .Pc("ui", ActorSource.Stats(() => Wizard("Move Ui Wizard", 1)), 2, 10, Control.Ui)
                 .Pc("scripted", ActorSource.Stats(() => Wizard("Move Scripted Wizard", 1)), 2, 14, Control.Scripted)
@@ -3274,11 +3427,12 @@ namespace Tests.Scenarios
                     Step.Assert("after", ctx => { FactSlotsSpent(ctx, "sc.spent", "scripted"); Fact(ctx, "sc.actions", Actions(ctx.Get("scripted"))); return true; }))
                 .Expect("Both casters moved", Expect.All(Expect.StepStatus("ui", 1, "Move", 0, "done"), Expect.StepStatus("scripted", 1, "Move", 0, "done")))
                 .Expect("Ui: the spell menu refuses Sleep after the move with a log line; nothing is spent and the standard action is left (PHB p.174)", Expect.All(
-                    Expect.Count("log", e => (e.Str("text") ?? "").Contains(refusedLog), 1, 1),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("Move Ui Wizard cannot cast Sleep: " + refusedLog), 1, 1),
                     FactsAre(("ui.spent", "none"), ("ui.actions", "s--"))))
                 .Expect("Scripted: the rule allows Sleep before the move and refuses it after; the cast is refused, nothing is spent and the standard action is left (PHB p.174)", Expect.All(
                     FactsAre(("sc.rule.before", "none"), ("sc.rule.after", CastActionRules.RefusalNoFullRoundAction)),
                     Expect.StepStatus("scripted", 1, "Cast", 0, "refused"),
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("Move Scripted Wizard cannot cast Sleep: " + refusedLog), 1, 1),
                     FactsAre(("sc.spent", "none"), ("sc.actions", "s--"))))
                 .Expect("No Sleep is cast", Expect.All(CastEvents("ui", SpellNames.SLEEP, 0), CastEvents("scripted", SpellNames.SLEEP, 0)))
                 .Build();
@@ -4260,9 +4414,10 @@ namespace Tests.Scenarios
         /// <summary>
         /// SPL-147 (PHB p.141 and p.143: casting the spell is the action; a cast that never happens costs nothing). A Ui
         /// wizard 1 with Still Spell picks a stilled Magic Missile (a 2nd-level slot, which a wizard 1 does not have; the
-        /// harness selects it past the spell menu's slot filter, as a slot mismatch such as SPL-011 does). The cast core
-        /// commits the standard action, fails to spend the slot, logs an error and, since batch 11 step 14, restores the
-        /// snapshot before returning to the action menu: no spell, the slot kept, every action left.
+        /// harness selects it past the spell menu's slot filter, as a slot mismatch such as SPL-011 does). Since batch 12
+        /// step 9 (SPL-160 a) the cast core's caster tests refuse it at Legality for want of a slot, with a log line, before
+        /// anything is spent (before it, the core committed the action, failed to spend the slot and restored the snapshot,
+        /// batch 11 step 14): no spell, the slot kept, every action left.
         /// </summary>
         private static ScenarioDef SlotFailureRefund()
         {

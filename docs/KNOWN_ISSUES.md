@@ -29,10 +29,10 @@ Entries per section:
 | Section | Prefix | High | Med | Low | Total | Next ID |
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
-| [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 16 | 33 | CORE-040 |
-| [Combat](issues/CMB.md) | CMB | 0 | 54 | 68 | 122 | CMB-184 |
+| [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 15 | 32 | CORE-040 |
+| [Combat](issues/CMB.md) | CMB | 0 | 54 | 69 | 123 | CMB-185 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-024 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 58 | 85 | 143 | SPL-202 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 58 | 85 | 143 | SPL-204 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 40 | 72 | CHR-087 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 35 | 63 | CRE-075 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |

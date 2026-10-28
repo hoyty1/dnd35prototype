@@ -326,30 +326,16 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Whether a grappled or pinned caster may begin casting <paramref name="spell"/> (PHB p.156: a casting time of no
-    /// more than 1 standard action, no somatic component, and no verbal component while pinned): false with the refusal
-    /// logged. The targeting (BeginPendingSpellTargeting) calls it; the cast core's hold uses the log-free
-    /// <see cref="GrappleSpellcastRefusal"/>.
-    /// </summary>
-    private bool CanBeginSpellcastWhileGrappledOrPinned(CharacterController caster, SpellData spell)
-    {
-        if (caster == null || spell == null)
-            return false;
-
-        string refusal = GrappleSpellcastRefusal(caster, spell);
-        if (refusal == null)
-            return true;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", refusal));
-        return false;
-    }
-
-    /// <summary>
     /// The grapple casting rule with no side effect (PHB p.156): null when <paramref name="caster"/> is neither grappled
     /// nor pinned or may cast <paramref name="spell"/> (a casting time of 1 standard action or less, no somatic component,
-    /// and no verbal component while pinned), else the refusal's log text. One rule for the targeting and the hold of a
-    /// touch charge (batch 11 step 15, SPL-146), PC or NPC alike.
+    /// and no verbal component while pinned), else the refusal's log text. The cast core's Legality stage runs it for every
+    /// casting on every resolve kind, PC or NPC alike (GameManager.CheckCastGrappleLegality; batch 12 step 9, CMB-101; the
+    /// hold since batch 11 step 15, SPL-146), and logs the refusal. The casting time is the cast's own
+    /// (CastActionRules.CastingAction with <paramref name="metamagic"/> and <paramref name="source"/>): a spontaneous cast
+    /// with a metamagic feat takes a full-round action (PHB p.88), so a sorcerer's stilled spell is refused in a grapple
+    /// although its spell's casting time is 1 standard action (batch 12 step 9 review).
     /// </summary>
-    internal string GrappleSpellcastRefusal(CharacterController caster, SpellData spell)
+    internal string GrappleSpellcastRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic = null, CastSource source = null)
     {
         if (caster == null || spell == null)
             return null;
@@ -358,12 +344,14 @@ public partial class GameManager
             return null;
 
         // D&D 3.5e: While grappled/pinned, you can only cast spells with casting time
-        // of 1 standard action or less.
+        // of 1 standard action or less (PHB p.156), counted with the cast's metamagic (PHB p.88).
         bool hasAllowedCastingTime = spell.ActionType == SpellActionType.Standard
             || spell.ActionType == SpellActionType.Swift
             || spell.ActionType == SpellActionType.Free;
         if (!hasAllowedCastingTime)
             return $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less.";
+        if (CastActionRules.CastingAction(spell, metamagic, source) == CastActionCost.FullRound)
+            return $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: a spontaneous metamagic casting takes a full-round action (PHB p.88), more than 1 standard action.";
 
         bool isPinned = caster.HasCondition(CombatConditionType.Pinned);
         if (isPinned && spell.HasVerbalComponent)

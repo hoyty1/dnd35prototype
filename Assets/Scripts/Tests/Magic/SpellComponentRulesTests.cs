@@ -458,15 +458,11 @@ public static class SpellComponentRulesTests
     }
 
     /// <summary>
-    /// An AI request for Stoneskin on the caster without the NPC path's own slot pre-check (NpcOwnLegalityChecks), whose
-    /// legacy SlotsRemaining view caps a test wizard below 4th level; the slot itself is spent as usual.
+    /// An AI request for Stoneskin on the caster. The test wizard is below 7th level, so its 4th-level slot is one the test
+    /// added; the slot test reads the prepared slots, as the spend does (SpellcastingComponent.CanCast, batch 12 step 9).
     /// </summary>
     private static SpellCastRequest StoneskinRequest(CharacterController wizard)
-    {
-        SpellCastRequest req = SpellCastRequest.ForAI(wizard, wizard, Spell(SpellNames.STONESKIN));
-        req.Quirks &= ~LegacyCastQuirk.NpcOwnLegalityChecks;
-        return req;
-    }
+        => SpellCastRequest.ForAI(wizard, wizard, Spell(SpellNames.STONESKIN));
 
     /// <summary>Takes the first item with <paramref name="itemId"/> out of <paramref name="inv"/>'s pack; null when there is none.</summary>
     private static ItemData TakeItem(global::Inventory inv, string itemId)

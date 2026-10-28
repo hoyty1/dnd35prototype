@@ -83,6 +83,12 @@ public sealed class CastContext
     internal bool CombatEnded;
 
     /// <summary>
+    /// True once the run's combat-end check (GameManager.EvaluateCombatEnd) has run, at the CombatEnd stage or an
+    /// effect's exit; FinishCast runs it for a cast that counts as cast and has not (batch 12 step 9, CORE-039).
+    /// </summary>
+    internal bool CombatEndChecked;
+
+    /// <summary>
     /// The globe of invulnerability around the target of a melee touch spell it excludes, or null: the touch is still
     /// made, and a touch that lands discharges the spell with no effect (GameManager.CastStageGlobe, SpellCaster.Cast;
     /// delegated RAW reading 2026-10-14, SPL-141).
@@ -177,6 +183,7 @@ public sealed class CastContext
         ClaimedByHandler = false;
         RetainedHeldChargeOnMiss = false;
         CombatEnded = false;
+        CombatEndChecked = false;
         GlobeAgainstTouch = null;
         MissilesSpentOnImages = 0;
         ResultLog = null;

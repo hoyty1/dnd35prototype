@@ -49,7 +49,7 @@ namespace Tests.Magic
 /// one, and a quickened Sleep, a material-component spell the pouchless wizard may cast because the area path skips the
 /// pouch) run the shared stages without the Ring of Counterspells, then the area Resolve and CombatEnd stages, and finish
 /// once, Resolved at CombatEnd, ended, with the slot and action spent; the generic loop's log carries the cast's
-/// quickened prefix and Sleep's does not (SPL-161). Skipped when a side is already out (the area exit runs the
+/// quickened prefix and Sleep's did not until batch 12 step 9 (SPL-161). Skipped when a side is already out (the area exit runs the
 /// combat-end check).
 ///
 /// Batch 11 step 10 (cast-core-summon-held-grease): SpellCastRequest.ForUiSummon, ForUiGrease and ForUiHoldCharge set the
@@ -71,6 +71,14 @@ namespace Tests.Magic
 /// burst centred on the caster (Prayer); a druid's M/DF Sleet Storm needs no pouch (the divine focus) and Earthquake has no
 /// material component; a delivery is not tested for the pouch again; a hold suspended at its energy dialog resumes through
 /// ResumeCastAfterChoiceDialog and its delivery request (GameManager.BuildHeldChargeDeliveryRequest) carries the energy.
+///
+/// Batch 12 step 9 (b12-cast-core-quirks; CORE-039, SPL-160, SPL-161, CMB-101): the quirk sets lose the combat-end,
+/// log-prefix, result-log and NPC caster-test bits, so UiPath is HeldChargeDeliveryIsFree alone, the AI path's set equals
+/// the UI path's and the area, summon, Grease and hold sets are empty; every cast runs the combat-end check (none ends the
+/// fight here: the cast runs are skipped when a side is already out); the AI's refusals are logged as the PC's; the
+/// quickened Sleep's log carries the QUICKENED line; a PC with no standard action left, or with no slot for the spell, is
+/// refused at Legality with a log line and nothing spent, and a grappled PC cannot cast a somatic single-target spell
+/// (CheckLegality, no log); the missing-quirk case is a held-charge delivery without HeldChargeDeliveryIsFree.
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -92,8 +100,7 @@ public static class CastCoreStageOrderTests
     /// </summary>
     private static readonly LegacyCastQuirk[] PcPathBits =
     {
-        LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,
-        LegacyCastQuirk.HeldChargeDeliveryIsFree,
+        LegacyCastQuirk.HeldChargeDeliveryIsFree,   // SPL-156 (batch 12 step 18)
     };
 
     /// <summary>
@@ -108,26 +115,33 @@ public static class CastCoreStageOrderTests
         "decider:finished:Resolved@CombatEnd"
     };
 
-    /// <summary>Today's PC area path, bit by bit (batch 11 step 9).</summary>
-    private static readonly LegacyCastQuirk[] AreaPathBits =
-    {
-        LegacyCastQuirk.AreaCombatEndOnlyInSomeHandlers,    // CORE-039
-        LegacyCastQuirk.AreaLogPrefixOnlyInSomeHandlers,    // SPL-161
-    };
+    /// <summary>
+    /// Today's PC area path, bit by bit (batch 11 step 9): none since batch 12 step 9 removed AreaCombatEndOnlyInSomeHandlers
+    /// (CORE-039) and AreaLogPrefixOnlyInSomeHandlers (SPL-161).
+    /// </summary>
+    private static readonly LegacyCastQuirk[] AreaPathBits = { };
 
     /// <summary>
     /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
     /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017;
     /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic; step 25 removed NpcRefusesArea:
     /// an NPC casts an area spell through the area resolve, SpellCastRequest.ForAIArea; step 26 removed
-    /// NpcNoMirrorImageSwap: no swap, a random figure per attack for every caster, SPL-117).
+    /// NpcNoMirrorImageSwap: no swap, a random figure per attack for every caster, SPL-117). None since batch 12 step 9
+    /// removed EvaluateCombatEndOnlyOnTargetDeath and NpcCombatEndCheckedByCaller (CORE-039), NpcOwnLegalityChecks and
+    /// NpcResultLogBeforeTargetDeath (SPL-160): the PC and NPC paths carry the same set.
     /// </summary>
-    private static readonly LegacyCastQuirk[] AiPathDifferences =
+    private static readonly LegacyCastQuirk[] AiPathDifferences = { };
+
+    /// <summary>The bits batch 12 step 9 (b12-cast-core-quirks) removed, with their issues.</summary>
+    private static readonly string[] Batch12Step9RemovedBits =
     {
-        LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath,      // dropped: CORE-039 (the NPC wrapper checks after every cast)
-        LegacyCastQuirk.NpcOwnLegalityChecks,                    // SPL-160
-        LegacyCastQuirk.NpcResultLogBeforeTargetDeath,           // SPL-160
-        LegacyCastQuirk.NpcCombatEndCheckedByCaller,             // CORE-039
+        "EvaluateCombatEndOnlyOnTargetDeath",   // CORE-039
+        "NpcCombatEndCheckedByCaller",          // CORE-039
+        "AreaCombatEndOnlyInSomeHandlers",      // CORE-039
+        "EffectResolveSkipsCombatEndCheck",     // CORE-039
+        "AreaLogPrefixOnlyInSomeHandlers",      // SPL-161
+        "NpcResultLogBeforeTargetDeath",        // SPL-160 d
+        "NpcOwnLegalityChecks",                 // SPL-160 a
     };
 
     /// <summary>
@@ -176,6 +190,11 @@ public static class CastCoreStageOrderTests
         public bool HoldProvocation;
         public Action<CastProvocationAnswer> PendingAnswer;
         public int Finishes;
+        /// <summary>
+        /// Runs when the decider is asked for the choices, after the Legality stage's caster tests: a test takes the slot away
+        /// here so the spend fails after Legality (the SPL-147 refund paths; batch 12 step 9 moved the slot test to Legality).
+        /// </summary>
+        public Action OnFill;
 
         public RecordingDecider(List<string> events) { Events = events; }
 
@@ -186,6 +205,7 @@ public static class CastCoreStageOrderTests
         public CastChoiceFill FillChoices(GameManager gm, CastContext ctx)
         {
             Events.Add("decider:fill");
+            OnFill?.Invoke();
             return Fills.Count > 0 ? Fills.Dequeue() : CastChoiceFill.Filled;
         }
 
@@ -227,7 +247,7 @@ public static class CastCoreStageOrderTests
         Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
         Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.EvaluateCombatEndOnlyOnTargetDeath | LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk((LegacyCastQuirk)(1L << 62)),
+        Assert(ui.HasQuirk(LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk(LegacyCastQuirk.HeldChargeDeliveryIsFree | (LegacyCastQuirk)(1L << 62)),
             "HasQuirk tests every bit it is given");
 
         LegacyCastQuirk listed = LegacyCastQuirk.None;
@@ -251,15 +271,10 @@ public static class CastCoreStageOrderTests
         Assert((LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath) == differences,
             "The AI path's quirk set differs from the UI path's exactly by the listed parity bits (" + AiPathDifferences.Length + ")",
             "AiPath ^ UiPath = " + (LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath));
-        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
-        {
-            if (!name.StartsWith("Npc", StringComparison.Ordinal))
-                continue;
-            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
-            Assert((LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == bit
-                   && (LegacyCastQuirkSets.UiAreaPath & bit) == 0,
-                "The NPC bit " + name + " is set by the AI builder only");
-        }
+        Assert(LegacyCastQuirkSets.AiPath == LegacyCastQuirkSets.UiPath,
+            "Batch 12 step 9: the AI path's quirk set equals the UI path's (no NPC-only bit is left)", "" + LegacyCastQuirkSets.AiPath);
+        foreach (string name in Batch12Step9RemovedBits)
+            Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), name), "Batch 12 step 9 removed the quirk bit " + name);
 
         // Batch 11 step 9: the area path's set.
         SpellCastRequest area = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(null, missile, null, null),
@@ -275,14 +290,8 @@ public static class CastCoreStageOrderTests
         }
         Assert(LegacyCastQuirkSets.UiAreaPath == listedArea, "The area path's quirk set is exactly today's area-path bits (" + AreaPathBits.Length + ")",
             "UiAreaPath " + LegacyCastQuirkSets.UiAreaPath + " vs listed " + listedArea);
-        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
-        {
-            if (!name.StartsWith("Area", StringComparison.Ordinal))
-                continue;
-            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
-            Assert((LegacyCastQuirkSets.UiAreaPath & bit) == bit && (LegacyCastQuirkSets.UiPath & bit) == 0 && (LegacyCastQuirkSets.AiPath & bit) == 0,
-                "The area bit " + name + " is set by the area builder only");
-        }
+        Assert(LegacyCastQuirkSets.UiAreaPath == LegacyCastQuirk.None && LegacyCastQuirkSets.AiAreaPath == LegacyCastQuirk.None,
+            "Batch 12 step 9: the PC and NPC area paths carry no quirk bit", LegacyCastQuirkSets.UiAreaPath + " / " + LegacyCastQuirkSets.AiAreaPath);
 
         // Batch 11 step 25: the NPC area and Grease builders (the area half of AI-001).
         Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), "NpcRefusesArea"), "Batch 11 step 25 removed the quirk bit NpcRefusesArea (AI-001)");
@@ -293,13 +302,13 @@ public static class CastCoreStageOrderTests
                && aiArea.Aim.AreaTargets != null && aiArea.Aim.AreaOrigin == new GridIntersection(1, 1) && aiArea.Decider is AiCastDecider
                && aiArea.Quirks == LegacyCastQuirkSets.AiAreaPath && !ReferenceEquals(aiArea.Spell, burning),
             "ForAIArea makes an area request on its own clone, aimed from its origin, with the AI decider and the NPC area path's quirks", "" + aiArea.Quirks);
-        Assert(LegacyCastQuirkSets.AiAreaPath == (LegacyCastQuirkSets.UiAreaPath | LegacyCastQuirk.NpcOwnLegalityChecks),
-            "The NPC area path is the PC area path plus the NPC caster tests (SPL-160)", "" + LegacyCastQuirkSets.AiAreaPath);
+        Assert(LegacyCastQuirkSets.AiAreaPath == LegacyCastQuirkSets.UiAreaPath,
+            "The NPC area path is the PC area path (batch 12 step 9 removed the NPC caster tests' bit, SPL-160)", "" + LegacyCastQuirkSets.AiAreaPath);
         SpellCastRequest aiGrease = SpellCastRequest.ForAIGrease(null, SpellDatabase.GetSpell(SpellNames.GREASE), aiCells, null, new GridIntersection(2, 1));
         Assert(aiGrease.ResolveKind == CastResolveKind.Grease && aiGrease.Choices.GreaseMode == GreaseCastMode.Area && aiGrease.Aim.ObjectHolder == null
                && aiGrease.Quirks == LegacyCastQuirkSets.AiGreasePath
-               && LegacyCastQuirkSets.AiGreasePath == (LegacyCastQuirkSets.UiGreasePath | LegacyCastQuirk.NpcOwnLegalityChecks),
-            "ForAIGrease makes Grease's area form with the NPC Grease path's quirks (the PC Grease path plus the NPC caster tests)", "" + aiGrease.Quirks);
+               && LegacyCastQuirkSets.AiGreasePath == LegacyCastQuirkSets.UiGreasePath,
+            "ForAIGrease makes Grease's area form with the NPC Grease path's quirks (the PC Grease path's)", "" + aiGrease.Quirks);
 
         // The AI decider's capability (ICastDecider.CanFill): no wall ends, no Grease on an object or armor (nor one with no
         // form), no swarm placement; the UI decider fills everything.
@@ -321,14 +330,14 @@ public static class CastCoreStageOrderTests
         SpellCastRequest aiSummon = SpellCastRequest.ForAISummon(null, summonII, new Vector2Int(4, 5));
         Assert(aiSummon.ResolveKind == CastResolveKind.Summon && aiSummon.Aim.Target == null && aiSummon.Aim.Destination == new Vector2Int(4, 5)
                && aiSummon.Decider is AiCastDecider && aiSummon.Quirks == LegacyCastQuirkSets.AiSummonPath && !ReferenceEquals(aiSummon.Spell, summonII)
-               && LegacyCastQuirkSets.AiSummonPath == (LegacyCastQuirkSets.UiSummonPath | LegacyCastQuirk.NpcOwnLegalityChecks),
-            "ForAISummon makes a summon request on its own clone with the AI decider and the NPC summon path's quirks (the PC summon path plus the NPC caster tests)", "" + aiSummon.Quirks);
+               && LegacyCastQuirkSets.AiSummonPath == LegacyCastQuirkSets.UiSummonPath,
+            "ForAISummon makes a summon request on its own clone with the AI decider and the NPC summon path's quirks (the PC summon path's)", "" + aiSummon.Quirks);
         Assert(AiCastDecider.Instance.CanFill(aiSummon) && AiCastDecider.Instance.CanFill(SpellCastRequest.ForAISummon(null, SpellDatabase.GetSpell(SpellNames.SUMMON_NATURES_ALLY_1))),
             "The AI decider fills a Summon Monster's and a Summon Nature's Ally's creature and square (CanFill true; SPL-091)");
         SpellCastRequest aiHold = SpellCastRequest.ForAIHoldCharge(null, SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP));
         Assert(aiHold.ResolveKind == CastResolveKind.HoldCharge && aiHold.Aim.Target == null && aiHold.Decider is AiCastDecider
                && aiHold.Quirks == LegacyCastQuirkSets.AiHoldPath && aiHold.Source.Kind == CastSourceKind.HeldChargeHold
-               && LegacyCastQuirkSets.AiHoldPath == (LegacyCastQuirkSets.UiHoldPath | LegacyCastQuirk.NpcOwnLegalityChecks),
+               && LegacyCastQuirkSets.AiHoldPath == LegacyCastQuirkSets.UiHoldPath,
             "ForAIHoldCharge makes a hold as ForUiHoldCharge does, with the AI decider and the NPC hold path's quirks (SPL-115)", aiHold.Source.Kind + " " + aiHold.Quirks);
         Assert(SpellCastRequest.ForAIHeldChargeDelivery(null, null) == null, "There is no delivery without a held charge");
     }
@@ -376,6 +385,14 @@ public static class CastCoreStageOrderTests
             Debug.Log("  SKIP: the cast runs (a cast is open in this Play session: " + gm.Harness_OpenCastCount + ")");
             return;
         }
+        // Every cast runs the combat-end check since batch 12 step 9 (CORE-039): with a side already out it would end the
+        // combat of this Play session.
+        CombatEndRules.SideCounts sidesAtStart = gm.GetCombatEndSides();
+        if (sidesAtStart.PlayersOut || sidesAtStart.EnemiesOut)
+        {
+            Debug.Log("  SKIP: the cast runs (a side is out of the fight in this Play session, so every cast's combat-end check would end it)");
+            return;
+        }
 
         var violations = new List<string>();
         Action<string> oldHook = ScenarioHooks.CastStackViolation;
@@ -407,7 +424,8 @@ public static class CastCoreStageOrderTests
 
             Assert(gm.CurrentSubPhase == subPhaseBefore, "No stage set CurrentSubPhase (the UI decider's finish does)", subPhaseBefore + " -> " + gm.CurrentSubPhase);
             Assert(gm.Harness_LastCombatLog == lastLogBefore, "No stage wrote the last combat log (the UI decider's finish does)");
-            Assert(ally.Stats.CurrentHP > 0, "The ally survived the test casts (no combat-end check was due)", "" + ally.Stats.CurrentHP);
+            Assert(ally.Stats.CurrentHP > 0 && gm.CurrentPhase != GameManager.TurnPhase.CombatOver,
+                "The ally survived the test casts, and their combat-end checks ended nothing", "" + ally.Stats.CurrentHP);
 
             TestRefusal(gm, sc, caster, ally);
             TestChoiceRefused(gm, sc, caster, ally);
@@ -601,7 +619,7 @@ public static class CastCoreStageOrderTests
             label + ": the AI path runs the PC path's stages in the PC path's order (batch 11 step 15: ConcentrationOnCast, and Counterspell before InvisibilityBreak before RingCounterspell)",
             string.Join(",", events));
         Assert(cast && outcome != null && outcome.Kind == CastOutcomeKind.Resolved && outcome.At == CastStage.CombatEnd && outcome.WasCast && !outcome.CombatEnded,
-            label + ": RunCastSync returns true with Resolved at CombatEnd (no combat-end check in the stage: the NPC wrapper runs it)", "" + outcome);
+            label + ": RunCastSync returns true with Resolved at CombatEnd (the stage's combat-end check ends nothing; batch 12 step 9)", "" + outcome);
         Assert(gm.Harness_OpenCastCount == 0, label + ": the AI cast is ended when RunCastSync returns");
         Assert(slot.IsUsed && caster.Actions.StandardActionUsed, label + ": the slot and the standard action are spent");
         Assert(gm.Harness_LastCombatLog != null && gm.Harness_LastCombatLog.Contains(SpellDatabase.GetSpell(spellId).Name),
@@ -610,9 +628,10 @@ public static class CastCoreStageOrderTests
     }
 
     /// <summary>
-    /// The AI path's refusals: RunCastSync returns false (the old NPC executor's false) with nothing spent and no
-    /// combat-log line, for a caster with no standard action, a Self spell aimed at another creature, a target out of
-    /// range, a single-target request of an area spell and a choice the AI decider cannot make.
+    /// The AI path's refusals: RunCastSync returns false (the old NPC executor's false) with nothing spent, for a caster
+    /// with no standard action, a Self spell aimed at another creature, a target out of range, a single-target request of
+    /// an area spell or a summon, and a choice the AI decider cannot make. Since batch 12 step 9 (SPL-160) each refusal but
+    /// the decider's own logs its line, as a PC's does.
     /// </summary>
     private static void TestAiRefusals(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController ally)
     {
@@ -673,7 +692,9 @@ public static class CastCoreStageOrderTests
                 "AI: a cast whose choices the AI decider cannot make is refused at Legality, nothing spent (choices-incomplete)", "" + o);
             sc.SpellSlots.Remove(slot);
 
-            Assert(logs.Count == 0, "AI: the refusals log no combat-log line, as the old NPC executor did", string.Join(" | ", logs));
+            Assert(logs.Count == 5 && logs[0].Contains("no standard action left"),
+                "AI: the refusals log one line each, as a PC's do (batch 12 step 9, SPL-160); the decider's own refusal logs none",
+                logs.Count + ": " + string.Join(" | ", logs));
             Assert(gm.Harness_OpenCastCount == 0, "AI: every refused cast is ended");
         }
         finally
@@ -1010,13 +1031,21 @@ public static class CastCoreStageOrderTests
                 "Step 13: a silenced PC caster casts a Silent Spell Shield from a 2nd-level slot (PHB p.100)", "" + ctx.Outcome);
             sc.SpellSlots.Remove(silentSlot);
 
-            // CheckLegality agrees, with no side effect.
+            // CheckLegality agrees, with no side effect. The caster has a plain and a silent Shield prepared, so the slot test
+            // (batch 12 step 9) passes both and only Silence decides.
             caster.Actions.Reset();
+            var plainSlot = new SpellSlot(1, shield.Clone(), false, "Wizard");
+            var probeSilentSlot = new SpellSlot(2, false, "Wizard");
+            probeSilentSlot.PrepareWithMetamagic(shield.Clone(), Metamagic(MetamagicFeatId.SilentSpell));
+            sc.SpellSlots.Add(plainSlot);
+            sc.SpellSlots.Add(probeSilentSlot);
             SpellCastRequest probe = SpellCastRequest.ForUi(caster, shield, null, new CastSource());
             probe.Aim.Target = caster;
             CastOutcome legality = gm.CheckLegality(probe);
             probe.Metamagic = Metamagic(MetamagicFeatId.SilentSpell);
             CastOutcome silentLegality = gm.CheckLegality(probe);
+            sc.SpellSlots.Remove(plainSlot);
+            sc.SpellSlots.Remove(probeSilentSlot);
             Assert(legality.Reason == "silenced" && silentLegality.Kind == CastOutcomeKind.Resolved && !caster.Actions.StandardActionUsed,
                 "Step 13: CheckLegality refuses the verbal cast and passes the silent one", legality + " / " + silentLegality);
 
@@ -1027,12 +1056,12 @@ public static class CastCoreStageOrderTests
                    && !CastComponentRules.SilenceBlocks(caster, shield, null, new CastSource { Kind = CastSourceKind.HeldChargeDelivery }),
                 "Step 13: Silence stops a wand (spoken trigger word, DMG p.213) and a verbal scroll, not a held-charge delivery (delegated RAW reading 2026-10-14)");
 
-            // AI: refused silently, nothing spent.
+            // AI: refused with the PC's log line (batch 12 step 9, SPL-160), nothing spent.
             logs.Clear();
             SpellCastRequest ai = BeginAi(sc, caster, caster, SpellNames.SHIELD, null, out slot);
             bool cast = gm.RunCastSync(ai, out CastOutcome o);
-            Assert(!cast && o.Reason == "silenced" && !slot.IsUsed && !caster.Actions.StandardActionUsed && logs.Count == 0,
-                "Step 13: a silenced AI caster is refused a verbal spell (false, nothing spent, no log as the NPC path's other refusals)", "" + o);
+            Assert(!cast && o.Reason == "silenced" && !slot.IsUsed && !caster.Actions.StandardActionUsed && logs.Count == 1,
+                "Step 13: a silenced AI caster is refused a verbal spell (false, nothing spent, one log line as a PC's)", o + " logs " + logs.Count);
             sc.SpellSlots.Remove(slot);
 
             // AI: a prepared Silent Spell Shield is cast with its slot's metamagic (SpellCastRequest.ForAI, batch 11 step 21).
@@ -1209,9 +1238,12 @@ public static class CastCoreStageOrderTests
             if (lost)
             {
                 forced[GameManager.EntangledConcentrationDiceContext] = 1;
-                ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+                var takesSlot = new RecordingDecider(new List<string>());
+                ctx = Begin(gm, sc, caster, caster, SpellNames.SHIELD, takesSlot, out slot);
                 ctx.Request.Spell.HasSomaticComponent = false;
-                sc.SpellSlots.Remove(slot); // no slot holds the spell: the lost check has nothing to spend
+                SpellSlot entangledSlot = slot;
+                // The slot goes after the Legality stage's slot test (batch 12 step 9): the lost check has nothing to spend.
+                takesSlot.OnFill = () => sc.SpellSlots.Remove(entangledSlot);
                 gm.ExecuteCast(ctx, null);
                 Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Failed && ctx.Outcome.At == CastStage.Distraction
                        && ctx.Outcome.Reason == CastOutcome.ReasonSlotNotSpent
@@ -1452,7 +1484,7 @@ public static class CastCoreStageOrderTests
         RunArea(gm, sc, caster, SpellNames.BURNING_HANDS, true, true, "a quickened area spell through the generic loop (Burning Hands)");
         // The test wizard carries no spell component pouch: since batch 11 step 15 an area cast makes the pouch test
         // (TestPouchOnEveryPath), so this Sleep's own clone drops its material component.
-        RunArea(gm, sc, caster, SpellNames.SLEEP, true, false, "a quickened Sleep (a handler that logs no prefix, SPL-161)");
+        RunArea(gm, sc, caster, SpellNames.SLEEP, true, false, "a quickened Sleep (its own handler; its log has the prefix since batch 12 step 9, SPL-161)");
 
         Assert(gm.CurrentSubPhase == subPhaseBefore, "No area stage set CurrentSubPhase", subPhaseBefore + " -> " + gm.CurrentSubPhase);
         Assert(gm.Harness_LastCombatLog == lastLogBefore, "No area stage wrote the last combat log (the UI decider's follow-up does)");
@@ -1502,7 +1534,7 @@ public static class CastCoreStageOrderTests
     }
 
     private static void RunArea(GameManager gm, SpellcastingComponent sc, CharacterController caster, string spellId, bool quickened,
-        bool expectPrefixedLog, string label)
+        bool genericLoopLog, string label)
     {
         SpellData template = SpellDatabase.GetSpell(spellId);
         MetamagicData metamagic = null;
@@ -1554,12 +1586,10 @@ public static class CastCoreStageOrderTests
         }
 
         Assert(!quickened || ctx.LogPrefix.Contains("QUICKENED"), label + ": the Cost stage built the quickened prefix once", ctx.LogPrefix);
-        if (expectPrefixedLog)
-            Assert(ctx.ResultLog.StartsWith(ctx.LogPrefix, StringComparison.Ordinal) && ctx.ResultLog.Contains("No valid targets in area!"),
-                label + ": the generic loop's log carries the cast's prefix", ctx.ResultLog);
-        else
-            Assert(!ctx.ResultLog.Contains("QUICKENED") && ctx.ResultLog.StartsWith("═", StringComparison.Ordinal),
-                label + ": the log has no prefix", ctx.ResultLog);
+        // Every area log carries the cast's prefix (batch 12 step 9, SPL-161; the five self-paced handlers' had none).
+        Assert(ctx.ResultLog.StartsWith(ctx.LogPrefix, StringComparison.Ordinal) && (!quickened || ctx.ResultLog.Contains("casts QUICKENED"))
+               && (!genericLoopLog || ctx.ResultLog.Contains("No valid targets in area!")),
+            label + ": the area log carries the cast's prefix", ctx.ResultLog);
         sc.SpellSlots.Remove(slot);
     }
 
@@ -1583,11 +1613,11 @@ public static class CastCoreStageOrderTests
         "decider:before-combat-end", "decider:finished:Resolved@CombatEnd"
     };
 
-    /// <summary>The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared).</summary>
-    private static readonly LegacyCastQuirk[] EffectSharedBits =
-    {
-        LegacyCastQuirk.EffectResolveSkipsCombatEndCheck,   // CORE-039
-    };
+    /// <summary>
+    /// The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared): none since batch 12 step 9
+    /// removed EffectResolveSkipsCombatEndCheck (CORE-039).
+    /// </summary>
+    private static readonly LegacyCastQuirk[] EffectSharedBits = { };
 
     /// <summary>
     /// Today's PC summon path, beyond the shared bits: none since batch 11 step 15 removed SummonSkipsCounterspell and
@@ -1719,7 +1749,7 @@ public static class CastCoreStageOrderTests
             "A Grease cast runs the shared stages, then the Grease Resolve and CombatEnd stages", string.Join(",", events));
         Assert(done != null && doneCalls == 1 && decider.Finishes == 1 && done.Kind == CastOutcomeKind.Resolved && done.At == CastStage.CombatEnd
                && !done.CombatEnded && ctx.Ended && gm.Harness_OpenCastCount == 0,
-            "A Grease cast finishes once, Resolved at CombatEnd (no combat-end check), and its cast is ended", "" + done);
+            "A Grease cast finishes once, Resolved at CombatEnd (its combat-end check ends nothing), and its cast is ended", "" + done);
         StatusEffectManager allyEffects = ally.StatusEffectManager;
         Assert(slot.IsUsed && caster.Actions.StandardActionUsed && ctx.ResultLog != null && ctx.ResultLog.Contains("armor")
                && allyEffects != null && allyEffects.ActiveEffects.Exists(e => e != null && e.GreasedArmorGrappleEscapeBonus == 10),
@@ -1739,7 +1769,9 @@ public static class CastCoreStageOrderTests
         var events = new List<string>();
         var decider = new RecordingDecider(events);
         CastContext ctx = Begin(gm, sc, caster, ally, SpellNames.RAY_OF_FROST, decider, out SpellSlot slot);
-        sc.SpellSlots.Remove(slot); // no slot holds the spell: the spend fails after the Cost stage committed the action
+        // The slot goes after the Legality stage's slot test (batch 12 step 9, which refuses a cast with no slot): the spend
+        // fails after the Cost stage committed the action.
+        decider.OnFill = () => sc.SpellSlots.Remove(slot);
         CastOutcome done = null;
         gm.ExecuteCast(ctx, o => done = o);
         Assert(done != null && done.Kind == CastOutcomeKind.Failed && done.At == CastStage.Spend && done.Reason == CastOutcome.ReasonSlotNotSpent,
@@ -1752,7 +1784,8 @@ public static class CastCoreStageOrderTests
     /// <summary>
     /// Batch 11 step 14 (SPL-154): a good cleric 5 converts a prepared Bless into Cure Light Wounds (PHB p.32) and holds the
     /// charge (PHB p.141): the hold spends the Bless slot and the standard action and holds Cure Light Wounds. A second
-    /// converted hold with no Bless left fails its spend and gives the action back (SPL-147).
+    /// converted hold with no Bless left is refused at Legality (batch 12 step 9, SPL-160 a); one whose Bless goes after
+    /// Legality fails its spend and gives the action back (SPL-147).
     /// </summary>
     private static void TestConvertedHold(GameManager gm)
     {
@@ -1782,9 +1815,20 @@ public static class CastCoreStageOrderTests
             ctx = BeginConvertedHold(gm, cleric, out decider);
             done = null;
             gm.ExecuteCast(ctx, o => done = o);
+            Assert(done != null && done.Kind == CastOutcomeKind.Refused && done.At == CastStage.Legality && done.Reason == "cannot-cast"
+                   && !cleric.Actions.StandardActionUsed && !sc.HasHeldTouchCharge,
+                "A converted hold with no Bless left is refused at Legality, nothing spent (batch 12 step 9, SPL-160 a)", "" + done);
+
+            var lateBless = new SpellSlot(1, SpellDatabase.GetSpell(SpellNames.BLESS).Clone(), false, "Cleric");
+            sc.SpellSlots.Add(lateBless);
+            cleric.Actions.Reset();
+            ctx = BeginConvertedHold(gm, cleric, out decider);
+            decider.OnFill = () => sc.SpellSlots.Remove(lateBless);
+            done = null;
+            gm.ExecuteCast(ctx, o => done = o);
             Assert(done != null && done.Kind == CastOutcomeKind.Failed && done.Reason == CastOutcome.ReasonSlotNotSpent
                    && !cleric.Actions.StandardActionUsed && !sc.HasHeldTouchCharge,
-                "A converted hold with no Bless left fails its spend, holds nothing and gives the action back (SPL-147)",
+                "A converted hold whose Bless goes after Legality fails its spend, holds nothing and gives the action back (SPL-147)",
                 done + " standard used " + cleric.Actions.StandardActionUsed);
         }
         finally
@@ -2049,6 +2093,13 @@ public static class CastCoreStageOrderTests
                    && !CastComponentRules.DivineFocusReplacesMaterial(caster, sleet),
                 "Step 15: a druid's Sleet Storm (M/DF) uses the divine focus, a wizard's the material component (PHB p.175)");
 
+            // Both casters have Sleet Storm prepared, so the caster tests (batch 12 step 9) pass and the components decide.
+            SpellcastingComponent druidSc = druid.gameObject.AddComponent<SpellcastingComponent>();
+            druidSc.Init(druid.Stats);
+            druidSc.SpellSlots.Clear();
+            druidSc.SpellSlots.Add(new SpellSlot(3, sleet.Clone(), false, "Druid"));
+            var wizardSleet = new SpellSlot(3, sleet.Clone(), false, "Wizard");
+            sc.SpellSlots.Add(wizardSleet);
             SpellCastRequest druidCast = SpellCastRequest.ForUi(druid, sleet, null, new CastSource());
             SpellCastRequest.ForUiArea(druidCast, new List<CharacterController>(), new HashSet<Vector2Int> { druid.GridPosition + new Vector2Int(0, 1) });
             CastOutcome druidLegality = gm.CheckLegality(druidCast);
@@ -2056,6 +2107,7 @@ public static class CastCoreStageOrderTests
             SpellCastRequest wizardCast = SpellCastRequest.ForUi(caster, sleet, null, new CastSource());
             SpellCastRequest.ForUiArea(wizardCast, new List<CharacterController>(), new HashSet<Vector2Int> { caster.GridPosition + new Vector2Int(0, 1) });
             CastOutcome wizardLegality = gm.CheckLegality(wizardCast);
+            sc.SpellSlots.Remove(wizardSleet);
             Assert(druidCast.Spell.HasMaterialComponent && druidLegality.Reason == SpellComponentRules.ReasonNoDivineFocus && wizardLegality.Reason == "no-component-pouch",
                 "Step 15: a pouchless druid's area Sleet Storm is not refused for the pouch but, since step 17, for its divine focus (holly and mistletoe); a pouchless wizard's is refused for the pouch",
                 druidLegality + " / " + wizardLegality);
@@ -2363,25 +2415,133 @@ public static class CastCoreStageOrderTests
         }
     }
 
+    /// <summary>
+    /// A request without a quirk bit a stage still needs raises one cast-core violation and keeps the legacy behaviour:
+    /// since batch 12 step 9 the one bit left is HeldChargeDeliveryIsFree (SPL-156), which the Cost stage needs for a held
+    /// charge's delivery, so a delivery whose request lacks it still costs no action. Also batch 12 step 9 (SPL-160 a,
+    /// CMB-101): a PC with no standard action left, or with no slot for the spell, is refused at Legality with one log
+    /// line and nothing spent, and a grappled PC's somatic single-target cast is refused by CheckLegality with no log.
+    /// </summary>
     private static void TestMissingQuirk(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)
     {
+        // A held Cure Light Wounds delivered to the caster itself (a harmless touch, so the test caster takes no damage).
+        SpellData held = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS));
+        held.HasMaterialComponent = false;
+        sc.SetHeldTouchCharge(held, null);
+        caster.Actions.Reset();
         var events = new List<string>();
-        var decider = new RecordingDecider(events);
-        CastContext ctx = Begin(gm, sc, caster, null, SpellNames.SHOCKING_GRASP, decider, out SpellSlot slot);
-        SpellCastRequest.ForUiHoldCharge(ctx.Request);
-        // A hold ends with no combat-end check (EffectResolveSkipsCombatEndCheck, CORE-039), which its exit still requires
-        // (batch 11 step 18 removed AlliesForgoEverySave, the bit this test used before; step 11 removed GlobeAfterCast).
-        ctx.Request.Quirks = LegacyCastQuirkSets.UiHoldPath & ~LegacyCastQuirk.EffectResolveSkipsCombatEndCheck;
+        SpellCastRequest req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+        req.Aim.Target = caster;
+        req.Decider = new RecordingDecider(events);
+        req.Quirks &= ~LegacyCastQuirk.HeldChargeDeliveryIsFree;
+        CastContext ctx = gm.BeginCast(req);
         int before = violations.Count;
         gm.ExecuteCast(ctx, null);
 
-        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("EffectResolveSkipsCombatEndCheck"),
+        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("HeldChargeDeliveryIsFree"),
             "A request without a quirk a stage still needs raises one cast-core violation naming it", string.Join("; ", violations));
-        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Resolved && ctx.Outcome.At == CastStage.Resolve && sc.HasHeldTouchCharge,
-            "...and gets the legacy behaviour anyway (the hold ends at Resolve with no combat-end check)", ctx.Outcome + " " + string.Join(",", events));
-        if (sc.HasHeldTouchCharge)
-            sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
-        sc.SpellSlots.Remove(slot);
+        Assert(ctx.Outcome != null && ctx.Outcome.WasCast && !caster.Actions.StandardActionUsed && !caster.Actions.FullRoundActionUsed,
+            "...and gets the legacy behaviour anyway (the delivery costs no action)", ctx.Outcome + " " + string.Join(",", events));
+        violations.RemoveRange(before, violations.Count - before);
+        sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+
+        var logs = new List<string>();
+        Action<string> oldLog = ScenarioHooks.CombatLog;
+        ScenarioHooks.CombatLog = m => logs.Add(m);
+        try
+        {
+            // No standard action left: the PC's request meets the caster tests as the NPC's does (SPL-160 a).
+            CastContext noAction = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out SpellSlot slot);
+            caster.Actions.UseStandardAction();
+            gm.ExecuteCast(noAction, null);
+            Assert(noAction.Outcome != null && noAction.Outcome.Kind == CastOutcomeKind.Refused && noAction.Outcome.Reason == "no-standard-action"
+                   && !slot.IsUsed && logs.Count == 1 && logs[0].Contains("no standard action left"),
+                "Batch 12 step 9: a PC with no standard action left is refused at Legality with one log line, nothing spent (PHB p.140-141; SPL-160)",
+                noAction.Outcome + " logs " + string.Join(" | ", logs));
+            sc.SpellSlots.Remove(slot);
+
+            // No slot for the spell: refused at Legality, not at the spend.
+            logs.Clear();
+            noAction = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+            sc.SpellSlots.Remove(slot);
+            gm.ExecuteCast(noAction, null);
+            Assert(noAction.Outcome != null && noAction.Outcome.Kind == CastOutcomeKind.Refused && noAction.Outcome.Reason == "cannot-cast"
+                   && !caster.Actions.StandardActionUsed && logs.Count == 1,
+                "Batch 12 step 9: a PC with no slot for the spell is refused at Legality with one log line, nothing spent (SPL-160)",
+                noAction.Outcome + " logs " + string.Join(" | ", logs));
+
+            // A grappled caster: the grapple casting rule for a single-target cast too (PHB p.156; CMB-101), a pure pre-check.
+            logs.Clear();
+            CastContext grappled = Begin(gm, sc, caster, caster, SpellNames.SHIELD, new RecordingDecider(new List<string>()), out slot);
+            caster.ApplyCondition(CombatConditionType.Grappled, 10, "CastCoreStageOrderTests");
+            try
+            {
+                CastOutcome pre = gm.CheckLegality(grappled.Request);
+                Assert(pre.Kind == CastOutcomeKind.Refused && pre.Reason == "grapple" && logs.Count == 0,
+                    "Batch 12 step 9: CheckLegality refuses a grappled caster's somatic Shield (PHB p.156; CMB-101) and logs nothing", "" + pre);
+                gm.ExecuteCast(grappled, null);
+                Assert(grappled.Outcome != null && grappled.Outcome.Reason == "grapple" && grappled.Outcome.At == CastStage.Legality
+                       && !slot.IsUsed && !caster.Actions.StandardActionUsed && logs.Count == 1 && logs[0].Contains("somatic"),
+                    "Batch 12 step 9: the single-target cast is refused at Legality with one log line, nothing spent (CMB-101)",
+                    grappled.Outcome + " logs " + string.Join(" | ", logs));
+
+                // Step 9 review: the rule's exemptions and its casting time, pure pre-checks (CheckLegality logs nothing).
+                logs.Clear();
+                SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
+                caster.Actions.Reset();
+                SpellCastRequest wand = SpellCastRequest.ForUi(caster, shield, null, new CastSource { Kind = CastSourceKind.Wand });
+                wand.Aim.Target = caster;
+                CastOutcome wandPre = gm.CheckLegality(wand);
+                Assert(wandPre.Reason != "grapple",
+                    "Batch 12 step 9 review: a grappler may use a wand (PHB p.156, Activate a Magic Item; DMG p.213)", "" + wandPre);
+                SpellCastRequest scroll = SpellCastRequest.ForUi(caster, shield, null, new CastSource { Kind = CastSourceKind.Scroll });
+                scroll.Aim.Target = caster;
+                CastOutcome scrollPre = gm.CheckLegality(scroll);
+                Assert(scrollPre.Kind == CastOutcomeKind.Refused && scrollPre.Reason == "grapple",
+                    "Batch 12 step 9 review: a grappled reader of a scroll of a somatic spell is refused (today's scroll rule, CMB-184: a scroll is still tested as a casting)", "" + scrollPre);
+
+                SpellData heldCure = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS));
+                heldCure.HasMaterialComponent = false;
+                sc.SetHeldTouchCharge(heldCure, null);
+                try
+                {
+                    SpellCastRequest delivery = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+                    delivery.Aim.Target = caster;
+                    CastOutcome deliveryPre = gm.CheckLegality(delivery);
+                    Assert(deliveryPre.Reason != "grapple",
+                        "Batch 12 step 9 review: a held charge's delivery is no casting (PHB p.141), so the grapple casting rule skips it", "" + deliveryPre);
+                }
+                finally
+                {
+                    sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+                }
+
+                var still = new MetamagicData();
+                still.Toggle(MetamagicFeatId.StillSpell);
+                SpellData stilled = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE));
+                SpellCaster.ApplyMetamagicToSpellData(stilled, still);
+                string spontaneous = gm.GrappleSpellcastRefusal(caster, stilled, still, new CastSource { Kind = CastSourceKind.SpontaneousSlot });
+                string prepared = gm.GrappleSpellcastRefusal(caster, stilled, still, new CastSource { Kind = CastSourceKind.PreparedSlot });
+                Assert(!stilled.HasSomaticComponent && spontaneous != null && spontaneous.Contains("full-round") && prepared == null,
+                    "Batch 12 step 9 review: a spontaneous stilled spell is a full-round casting and is refused in a grapple (PHB p.88, p.156); a prepared one is not",
+                    "spontaneous=" + spontaneous + " prepared=" + prepared);
+
+                caster.ApplyCondition(CombatConditionType.Pinned, 10, "CastCoreStageOrderTests");
+                CastOutcome pinnedWand = gm.CheckLegality(wand);
+                Assert(pinnedWand.Kind == CastOutcomeKind.Refused && pinnedWand.Reason == "grapple" && logs.Count == 0,
+                    "Batch 12 step 9 review: a pinned creature cannot use a wand (PHB p.157; delegated RAW reading 2026-10-28)", "" + pinnedWand);
+            }
+            finally
+            {
+                caster.RemoveCondition(CombatConditionType.Pinned);
+                caster.RemoveCondition(CombatConditionType.Grappled);
+                sc.SpellSlots.Remove(slot);
+            }
+        }
+        finally
+        {
+            ScenarioHooks.CombatLog = oldLog;
+        }
     }
 
     /// <summary>

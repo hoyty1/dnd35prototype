@@ -57,6 +57,7 @@ public static class CastActionRules
     public const string RefusalNoFullRoundAction = "no-full-round-action";
     public const string RefusalNoSwiftAction = "no-swift-action";
     public const string RefusalNoFurtherActions = "no-further-actions";
+    public const string RefusalNoStandardAction = "no-standard-action";
 
     /// <summary>True when <paramref name="metamagic"/> quickens the cast (MetamagicSystem.IsQuickened; a held charge's delivery is not a casting, PHB p.141).</summary>
     public static bool IsQuickened(MetamagicData metamagic, CastSource source)
@@ -111,9 +112,9 @@ public static class CastActionRules
     /// p.174). A caster limited to a single action (disabled, staggered) is refused a full-round casting outright: PHB
     /// p.142 (Start/Complete Full-Round Action) would let it start the casting this round and finish it next round, which
     /// the game cannot do yet (SPL-168). The F12 test panel's casts are not refused for a spent action (the panel casts
-    /// out of turn); the quicken rules bind them too. A standard action is not tested here: the PC menu offers casting
-    /// only with one, and the NPC path's own test refuses without one unless the cast costs a free or swift action
-    /// (LegacyCastQuirk.NpcOwnLegalityChecks; moving it here for every caster is still open, SPL-160).
+    /// out of turn); the quicken rules bind them too. A standard action is not tested here but in
+    /// <see cref="StandardActionRefusal"/>, which the cast core's caster tests run for every caster (batch 12 step 9,
+    /// SPL-160) and the AI's planning leaves out (it sizes an approach before the caster has acted).
     /// </summary>
     public static string ActionRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
     {
@@ -145,6 +146,26 @@ public static class CastActionRules
         }
     }
 
+    /// <summary>
+    /// Why the caster lacks the action its casting needs, or null (batch 12 step 9, SPL-160 a; one test for every caster,
+    /// formerly the NPC path's own): a casting that costs a standard action, a full round or an item's activation (a
+    /// scroll or wand, a standard action at least, DMG p.213) needs a standard action left this round (PHB p.140-141); a
+    /// quickened or free-action spell, or a swift one, does not (PHB p.98, p.174), and <see cref="ActionRefusal"/> holds it
+    /// to its own action. A held charge's delivery is no casting (PHB p.141; free today, SPL-156) and the F12 test panel
+    /// casts out of turn, so neither is tested.
+    /// </summary>
+    public static string StandardActionRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
+    {
+        if (caster == null || spell == null)
+            return null;
+        if (source != null && (source.Kind == CastSourceKind.TestPanel || source.Kind == CastSourceKind.HeldChargeDelivery))
+            return null;
+        CastActionCost cost = CastingAction(spell, metamagic, source);
+        if (cost == CastActionCost.Free || cost == CastActionCost.Swift)
+            return null;
+        return caster.Actions != null && caster.Actions.HasStandardAction ? null : RefusalNoStandardAction;
+    }
+
     /// <summary>The player-facing text of a <see cref="Refusal"/> code (a metamagic one through MetamagicSystem.DescribeRefusal).</summary>
     public static string DescribeRefusal(string refusal, string casterName, string spellName, MetamagicData metamagic = null)
     {
@@ -161,6 +182,8 @@ public static class CastActionRules
                 return $"{casterName} cannot cast {spellName}: no swift action left this round.";
             case RefusalNoFurtherActions:
                 return $"{casterName} cannot cast {spellName}: acting while disabled has spent this turn (PHB p.145).";
+            case RefusalNoStandardAction:
+                return $"{casterName} cannot cast {spellName}: no standard action left this round (PHB p.140-141).";
             default:
                 return $"{casterName} cannot cast {spellName} now.";
         }

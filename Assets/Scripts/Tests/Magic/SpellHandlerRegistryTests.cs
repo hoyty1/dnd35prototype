@@ -100,57 +100,57 @@ public static class SpellHandlerRegistryTests
 
     /// <summary>
     /// The old PerformAoESpellCast blocks (before batch 11 step 9), in order: the handler method, the source context of
-    /// the combat-end check its block ran (null: none), whether its log had no quickened or spontaneous prefix (the five
-    /// Resolve*Spell methods that showed their own log), whether it answered through a callback (the walls), whether its
+    /// the combat-end check its block ran (null: none; the area exit then checks under the handler's name, every area cast
+    /// checking since batch 12 step 9, CORE-039), whether it answered through a callback (the walls), whether its
     /// "handler" cast-stage mark came before the call ("before") or after the claim ("after"), and the spell ids its own
     /// guard accepts.
     /// </summary>
-    private static readonly (string name, string combatEnd, bool noPrefix, bool async, string mark, string[] ids)[] AreaManifest =
+    private static readonly (string name, string combatEnd, bool async, string mark, string[] ids)[] AreaManifest =
     {
-        ("TryHandleConcealmentAreaSpellCast", null, false, false, "after", new[] { SpellNames.OBSCURING_MIST, SpellNames.FOG_CLOUD, SpellNames.DARKNESS, SpellNames.GUST_OF_WIND, SpellNames.SLEET_STORM, SpellNames.STINKING_CLOUD, SpellNames.SOLID_FOG }),
-        ("TryResolveConsecrateAreaEffect", null, false, false, "after", new[] { SpellNames.CONSECRATE }),
-        ("TryResolveDesecrateAreaEffect", null, false, false, "after", new[] { SpellNames.DESECRATE }),
-        ("TryResolveScaledAoEDamageSpell", "ResolveScaledAoEDamageSpell", false, false, "after", new[] { SpellNames.FIREBALL, SpellNames.LIGHTNING_BOLT, SpellNames.CALL_LIGHTNING }),
-        ("TryResolveDaylightSpell", null, false, false, "after", new[] { SpellNames.DAYLIGHT }),
-        ("TryResolveWindWallSpell", null, false, false, "after", new[] { SpellNames.WIND_WALL }),
-        ("TryResolveHaltUndeadSpell", "ResolveHaltUndeadSpell", false, false, "after", new[] { SpellNames.HALT_UNDEAD }),
-        ("ResolveHypnotismSpell", "ResolveHypnotismSpell", true, false, "before", new[] { SpellNames.HYPNOTISM }),
-        ("ResolveSleepSpell", "ResolveSleepSpell", true, false, "before", new[] { SpellNames.SLEEP }),
-        ("ResolveDeepSlumberSpell", "ResolveDeepSlumberSpell", true, false, "before", new[] { SpellNames.DEEP_SLUMBER }),
-        ("ResolveColorSpraySpell", "ResolveColorSpraySpell", true, false, "before", new[] { SpellNames.COLOR_SPRAY }),
-        ("ResolveFearSpell", "ResolveFearSpell", true, false, "before", new[] { SpellNames.FEAR }),
-        ("TryResolveGlitterdustSpell", null, false, false, "after", new[] { SpellNames.GLITTERDUST }),
-        ("TryResolveWebSpell", null, false, false, "after", new[] { SpellNames.WEB }),
-        ("TryResolveRainbowPatternAoE", null, false, false, "after", new[] { SpellNames.RAINBOW_PATTERN }),
-        ("TryResolveIceStormAoE", "IceStorm", false, false, "after", new[] { SpellNames.ICE_STORM }),
-        ("TryResolveShoutAoE", "Shout", false, false, "after", new[] { SpellNames.SHOUT }),
-        ("TryResolveWallOfFireSpell", null, false, false, "after", new[] { SpellNames.WALL_OF_FIRE }),
-        ("ResolveWallOfIceWithReflexSaves", null, false, true, "before", new[] { SpellNames.WALL_OF_ICE }),
-        ("ResolveWallOfForce", null, false, true, "before", new[] { SpellNames.WALL_OF_FORCE }),
-        ("TryResolveFlamingSphereAoECast", null, false, false, "after", new[] { SpellNames.FLAMING_SPHERE }),
-        ("TryResolveEntangleSpell", null, false, false, "after", new[] { SpellNames.ENTANGLE }),
-        ("TryResolveSoftenEarthSpell", null, false, false, "after", new[] { SpellNames.SOFTEN_EARTH }),
-        ("TryResolveSpikeStoneSpell", null, false, false, "after", new[] { SpellNames.SPIKE_STONES }),
-        ("TryResolvePlantGrowthSpell", null, false, false, "after", new[] { SpellNames.PLANT_GROWTH }),
-        ("TryResolveCalmAnimalsSpell", null, false, false, "after", new[] { SpellNames.CALM_ANIMALS }),
-        ("TryResolveCalmEmotionsSpell", null, false, false, "after", new[] { SpellNames.CALM_EMOTIONS }),
-        ("TryResolveConeOfColdSpell", "ConeOfCold", false, false, "after", new[] { SpellNames.CONE_OF_COLD }),
-        ("TryResolveChainLightningSpell", "ChainLightning", false, false, "after", new[] { SpellNames.CHAIN_LIGHTNING }),
-        ("TryResolveCircleOfDeathSpell", "CircleOfDeath", false, false, "after", new[] { SpellNames.CIRCLE_OF_DEATH }),
-        ("TryResolveCrushingDespairSpell", null, false, false, "after", new[] { SpellNames.CRUSHING_DESPAIR }),
-        ("TryResolveMindFogSpell", null, false, false, "after", new[] { SpellNames.MIND_FOG }),
-        ("TryResolveMassSuggestionSpell", null, false, false, "after", new[] { SpellNames.MASS_SUGGESTION }),
-        ("TryResolveInsectPlagueSpell", "InsectPlague", false, false, "after", new[] { SpellNames.INSECT_PLAGUE }),
-        ("TryResolveWallOfThornsSpell", "WallOfThorns", false, false, "after", new[] { SpellNames.WALL_OF_THORNS }),
-        ("TryResolvePersistentImageSpell", null, false, false, "after", new[] { SpellNames.PERSISTENT_IMAGE }),
-        ("TryResolveSunburstSpell", "Sunburst", false, false, "after", new[] { SpellNames.SUNBURST }),
-        ("TryResolveEarthquakeSpell", "Earthquake", false, false, "after", new[] { SpellNames.EARTHQUAKE }),
-        ("TryResolveShieldOfLawSpell", null, false, false, "after", new[] { SpellNames.SHIELD_OF_LAW }),
-        ("TryResolveBlackTentaclesAoECast", null, false, false, "after", new[] { SpellNames.EVARDS_BLACK_TENTACLES }),
+        ("TryHandleConcealmentAreaSpellCast", null, false, "after", new[] { SpellNames.OBSCURING_MIST, SpellNames.FOG_CLOUD, SpellNames.DARKNESS, SpellNames.GUST_OF_WIND, SpellNames.SLEET_STORM, SpellNames.STINKING_CLOUD, SpellNames.SOLID_FOG }),
+        ("TryResolveConsecrateAreaEffect", null, false, "after", new[] { SpellNames.CONSECRATE }),
+        ("TryResolveDesecrateAreaEffect", null, false, "after", new[] { SpellNames.DESECRATE }),
+        ("TryResolveScaledAoEDamageSpell", "ResolveScaledAoEDamageSpell", false, "after", new[] { SpellNames.FIREBALL, SpellNames.LIGHTNING_BOLT, SpellNames.CALL_LIGHTNING }),
+        ("TryResolveDaylightSpell", null, false, "after", new[] { SpellNames.DAYLIGHT }),
+        ("TryResolveWindWallSpell", null, false, "after", new[] { SpellNames.WIND_WALL }),
+        ("TryResolveHaltUndeadSpell", "ResolveHaltUndeadSpell", false, "after", new[] { SpellNames.HALT_UNDEAD }),
+        ("ResolveHypnotismSpell", "ResolveHypnotismSpell", false, "before", new[] { SpellNames.HYPNOTISM }),
+        ("ResolveSleepSpell", "ResolveSleepSpell", false, "before", new[] { SpellNames.SLEEP }),
+        ("ResolveDeepSlumberSpell", "ResolveDeepSlumberSpell", false, "before", new[] { SpellNames.DEEP_SLUMBER }),
+        ("ResolveColorSpraySpell", "ResolveColorSpraySpell", false, "before", new[] { SpellNames.COLOR_SPRAY }),
+        ("ResolveFearSpell", "ResolveFearSpell", false, "before", new[] { SpellNames.FEAR }),
+        ("TryResolveGlitterdustSpell", null, false, "after", new[] { SpellNames.GLITTERDUST }),
+        ("TryResolveWebSpell", null, false, "after", new[] { SpellNames.WEB }),
+        ("TryResolveRainbowPatternAoE", null, false, "after", new[] { SpellNames.RAINBOW_PATTERN }),
+        ("TryResolveIceStormAoE", "IceStorm", false, "after", new[] { SpellNames.ICE_STORM }),
+        ("TryResolveShoutAoE", "Shout", false, "after", new[] { SpellNames.SHOUT }),
+        ("TryResolveWallOfFireSpell", null, false, "after", new[] { SpellNames.WALL_OF_FIRE }),
+        ("ResolveWallOfIceWithReflexSaves", null, true, "before", new[] { SpellNames.WALL_OF_ICE }),
+        ("ResolveWallOfForce", null, true, "before", new[] { SpellNames.WALL_OF_FORCE }),
+        ("TryResolveFlamingSphereAoECast", null, false, "after", new[] { SpellNames.FLAMING_SPHERE }),
+        ("TryResolveEntangleSpell", null, false, "after", new[] { SpellNames.ENTANGLE }),
+        ("TryResolveSoftenEarthSpell", null, false, "after", new[] { SpellNames.SOFTEN_EARTH }),
+        ("TryResolveSpikeStoneSpell", null, false, "after", new[] { SpellNames.SPIKE_STONES }),
+        ("TryResolvePlantGrowthSpell", null, false, "after", new[] { SpellNames.PLANT_GROWTH }),
+        ("TryResolveCalmAnimalsSpell", null, false, "after", new[] { SpellNames.CALM_ANIMALS }),
+        ("TryResolveCalmEmotionsSpell", null, false, "after", new[] { SpellNames.CALM_EMOTIONS }),
+        ("TryResolveConeOfColdSpell", "ConeOfCold", false, "after", new[] { SpellNames.CONE_OF_COLD }),
+        ("TryResolveChainLightningSpell", "ChainLightning", false, "after", new[] { SpellNames.CHAIN_LIGHTNING }),
+        ("TryResolveCircleOfDeathSpell", "CircleOfDeath", false, "after", new[] { SpellNames.CIRCLE_OF_DEATH }),
+        ("TryResolveCrushingDespairSpell", null, false, "after", new[] { SpellNames.CRUSHING_DESPAIR }),
+        ("TryResolveMindFogSpell", null, false, "after", new[] { SpellNames.MIND_FOG }),
+        ("TryResolveMassSuggestionSpell", null, false, "after", new[] { SpellNames.MASS_SUGGESTION }),
+        ("TryResolveInsectPlagueSpell", "InsectPlague", false, "after", new[] { SpellNames.INSECT_PLAGUE }),
+        ("TryResolveWallOfThornsSpell", "WallOfThorns", false, "after", new[] { SpellNames.WALL_OF_THORNS }),
+        ("TryResolvePersistentImageSpell", null, false, "after", new[] { SpellNames.PERSISTENT_IMAGE }),
+        ("TryResolveSunburstSpell", "Sunburst", false, "after", new[] { SpellNames.SUNBURST }),
+        ("TryResolveEarthquakeSpell", "Earthquake", false, "after", new[] { SpellNames.EARTHQUAKE }),
+        ("TryResolveShieldOfLawSpell", null, false, "after", new[] { SpellNames.SHIELD_OF_LAW }),
+        ("TryResolveBlackTentaclesAoECast", null, false, "after", new[] { SpellNames.EVARDS_BLACK_TENTACLES }),
         // Batch 11 step 23 (SPL-046): the six burst spells that used to resolve against one clicked creature.
-        ("TryResolveAlignmentBurstAoE", "AlignmentBurst", false, false, "after", new[] { SpellNames.CHAOS_HAMMER, SpellNames.HOLY_SMITE, SpellNames.ORDERS_WRATH, SpellNames.UNHOLY_BLIGHT }),
-        ("TryResolveSoundBurstAoE", "SoundBurst", false, false, "after", new[] { SpellNames.SOUND_BURST }),
-        ("ResolveBaneAoE", null, false, false, "after", new[] { SpellNames.BANE }),
+        ("TryResolveAlignmentBurstAoE", "AlignmentBurst", false, "after", new[] { SpellNames.CHAOS_HAMMER, SpellNames.HOLY_SMITE, SpellNames.ORDERS_WRATH, SpellNames.UNHOLY_BLIGHT }),
+        ("TryResolveSoundBurstAoE", "SoundBurst", false, "after", new[] { SpellNames.SOUND_BURST }),
+        ("ResolveBaneAoE", null, false, "after", new[] { SpellNames.BANE }),
     };
 
     public static void RunAll()
@@ -195,9 +195,14 @@ public static class SpellHandlerRegistryTests
                 fallbacks++;
         AreaHandlerEntry last = area[area.Count - 1];
         Assert(fallbacks == 1 && last != null && last.IsFallback && last.Name == "ResolveGenericAreaSpell"
-               && last.CombatEndContext == "ResolveAOESpell" && last.ConsoleLogLabel == "[AoE Spell] " && !last.Async && !last.OmitsLogPrefix
+               && last.CombatEndContext == "ResolveAOESpell" && last.ConsoleLogLabel == "[AoE Spell] " && !last.Async
                && last.Mark == AreaHandlerMark.ByHandler,
             "the generic per-target loop is the one fallback, last, with its old combat-end context, console label and own mark");
+
+        // Batch 12 step 9 (SPL-161): every area log carries the cast's quickened and spontaneous prefix, so no entry can
+        // opt out of it any more.
+        Assert(typeof(AreaHandlerEntry).GetField("OmitsLogPrefix") == null && typeof(AreaHandlerEntry).GetProperty("OmitsLogPrefix") == null,
+            "AreaHandlerEntry has no OmitsLogPrefix flag (SPL-161: every area log gets the prefix)");
 
         var owner = new Dictionary<string, string>(StringComparer.Ordinal);
         int n = Math.Min(area.Count - 1, AreaManifest.Length);
@@ -212,8 +217,7 @@ public static class SpellHandlerRegistryTests
 
             Assert(e.CombatEndContext == row.combatEnd, "combat-end context as the old block: " + row.name,
                 "registry " + (e.CombatEndContext ?? "none") + ", manifest " + (row.combatEnd ?? "none"));
-            Assert(e.OmitsLogPrefix == row.noPrefix && e.Async == row.async, "prefix and async flags as the old block: " + row.name,
-                "omits prefix " + e.OmitsLogPrefix + ", async " + e.Async);
+            Assert(e.Async == row.async, "async flag as the old block: " + row.name, "async " + e.Async);
             AreaHandlerMark mark = row.mark == "before" ? AreaHandlerMark.BeforeResolve : AreaHandlerMark.AfterClaim;
             Assert(e.Mark == mark, "handler mark placed as the old block's: " + row.name, "registry " + e.Mark);
             Assert(e.BeginsConcentrationAfterLog == (row.name == "TryResolveRainbowPatternAoE"),

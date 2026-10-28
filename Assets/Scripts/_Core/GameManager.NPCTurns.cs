@@ -1270,7 +1270,7 @@ public partial class GameManager
     /// own context on the cast stack, so it nests cleanly over a Ui cast the player left open. Returns whether the cast
     /// counts as cast (CastOutcome.WasCast): false when it was refused (no standard action, a dead or invalid target, no
     /// slot, out of range, an area spell) or its slot could not be spent; true once the slot is spent, whatever came of
-    /// the spell. TryNPCPerformSpellCastForAI runs the combat-end check after a true return.
+    /// the spell. The cast core runs the combat-end check (batch 12 step 9).
     /// </summary>
     private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell, MetamagicData metamagic = null)
     {
@@ -1288,7 +1288,7 @@ public partial class GameManager
     /// Grease's 10-ft. square) and run through the shared cast core at once (RunCastSync), the same stages, area handler
     /// registry and Grease resolve as a PC's area cast: the Legality stage filters the area by line of effect from the
     /// placement's origin and tests the origin's range and line of effect and the decider's capability. Returns whether the
-    /// cast counts as cast (CastOutcome.WasCast). TryNPCPerformAreaSpellCastForAI runs the combat-end check after a true return.
+    /// cast counts as cast (CastOutcome.WasCast). The cast core's area exit runs the combat-end check (batch 12 step 9).
     /// </summary>
     private bool TryNPCPerformAreaSpellCast(CharacterController npc, SpellData spell, AreaPlacement placement, MetamagicData metamagic = null)
     {
@@ -1306,7 +1306,7 @@ public partial class GameManager
     /// stage, AiFillSummonChoices) run through the shared cast core at once (RunCastSync): the same stages and the same
     /// Summon resolve as a PC's summon, which inserts each creature into the initiative after the caster and registers it.
     /// <paramref name="destination"/>: a square the caller chose (a scenario), else the AI's. Returns whether the cast
-    /// counts as cast (CastOutcome.WasCast). TryNPCPerformSummonSpellCastForAI runs the combat-end check after a true return.
+    /// counts as cast (CastOutcome.WasCast). The cast core runs the combat-end check (batch 12 step 9).
     /// </summary>
     private bool TryNPCPerformSummonSpellCast(CharacterController npc, SpellData spell, MetamagicData metamagic = null, Vector2Int? destination = null)
     {

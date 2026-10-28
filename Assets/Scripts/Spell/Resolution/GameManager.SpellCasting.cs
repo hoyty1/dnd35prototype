@@ -773,8 +773,12 @@ public partial class GameManager
             return;
         }
 
-        if (!CanBeginSpellcastWhileGrappledOrPinned(caster, _pendingSpell))
+        // The grapple casting rule as early feedback, before any prompt: the same actor-agnostic test the cast core's
+        // Legality stage applies to every caster (CheckCastGrappleLegality, CMB-101), which stays the binding test.
+        CastOutcome grappleRefusal = CurrentCast != null ? CheckCastGrappleLegality(CurrentCast.Request) : null;
+        if (grappleRefusal != null)
         {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", grappleRefusal.Detail));
             EndPendingCast();
             ShowActionChoices();
             return;
