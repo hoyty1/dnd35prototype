@@ -186,8 +186,9 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} attacks {target.Stats.CharacterName}{flankIndicator}");
         }
 
-        RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
-        if (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown && rangeInfo != null)
+        AttackIntent uiIntent = AttackIntent.ForUi(_gameManager, attacker);
+        RangeInfo rangeInfo = CalculateRangeInfo(attacker, target, uiIntent);
+        if (uiIntent.ThrownSelected && rangeInfo != null)
         {
             Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} -> {target.Stats.CharacterName}: distance={rangeInfo.DistanceFeet} ft, increment={rangeInfo.IncrementNumber}, penalty={rangeInfo.Penalty}, inRange={rangeInfo.IsInRange}");
         }
@@ -214,11 +215,15 @@ public class CombatFlowService : MonoBehaviour
         }
     }
 
-    public RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
+    /// <summary>
+    /// The attack's range information for the mode of <paramref name="intent"/> (AttackIntent.ForUi for the PC flows,
+    /// AttackIntent.ForAI for an NPC, whose mode still copies the PC selection: AttackIntentQuirk.NpcIntentReadsUiThrownGlobal).
+    /// </summary>
+    public RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target, AttackIntent intent)
     {
         ItemData weapon = attacker != null ? attacker.GetEquippedMainWeapon() : null;
-        bool usingThrownAttack = _gameManager != null && _gameManager.Combat_IsUsingThrownAttackMode(attacker, weapon);
-        bool isRangedAttack = _gameManager != null && _gameManager.Combat_IsAttackModeRanged(attacker, weapon);
+        bool usingThrownAttack = _gameManager != null && _gameManager.Combat_IsUsingThrownAttackMode(attacker, weapon, intent);
+        bool isRangedAttack = _gameManager != null && _gameManager.Combat_IsAttackModeRanged(attacker, weapon, intent);
 
         int sqDist = attacker != null && target != null
             ? attacker.GetMinimumDistanceToTarget(target, chebyshev: false)
@@ -317,16 +322,18 @@ public class CombatFlowService : MonoBehaviour
         return true;
     }
 
-    private bool IsRangedOrThrownAttack(RangeInfo rangeInfo)
+    /// <summary>
+    /// True when the attack is ranged or thrown (it provokes from threatening foes, PHB p.137): the range info when there
+    /// is one, else the intent's mode (read from the UI by <see cref="AttackIntent.ForUi"/> just before; the off-hand path
+    /// always has range info and passes null).
+    /// </summary>
+    private static bool IsRangedOrThrownAttack(RangeInfo rangeInfo, AttackIntent intent)
     {
         if (rangeInfo != null)
             return !rangeInfo.IsMelee;
 
-        if (_gameManager == null)
-            return false;
-
-        GameManager.AttackType currentType = _gameManager.Combat_GetCurrentAttackType();
-        return currentType == GameManager.AttackType.Ranged || currentType == GameManager.AttackType.Thrown;
+        AttackMode? mode = intent?.Mode;
+        return mode == AttackMode.Ranged || mode == AttackMode.Thrown;
     }
 
     /// <summary>
@@ -424,7 +431,7 @@ public class CombatFlowService : MonoBehaviour
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
 
-        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        if (IsRangedOrThrownAttack(rangeInfo, null) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return null;
 
         CombatResult result = attacker.Attack(
@@ -520,19 +527,21 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
-            ? (_gameManager.Combat_GetEquippedWeapon() ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
+        // The PC UI's attack selection, read once for this step (AttackIntent.ForUi): the mode and the weapon (the thrown
+        // weapon in hand for a throw).
+        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
+        GameManager.AttackType attackType = intent.UiAttackType;
+        ItemData attackWeapon = intent.Weapon;
 
         bool isMeleeFearBreakAttack = _gameManager.Combat_IsMeleeFearBreakAttack(
             attacker,
             attackWeapon,
             rangeInfo,
-            treatAsThrownAttack: _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown);
+            treatAsThrownAttack: attackType == GameManager.AttackType.Thrown);
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
-        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
         {
             Debug.Log("[AttackFlow] Early return in PerformIterativeSequenceAttack: attacker died/aborted from AoO before attack resolution.");
             _gameManager.Combat_EndAttackSequence();
@@ -548,8 +557,9 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        bool useNaturalFullAttackStep = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+        bool useNaturalFullAttackStep = attackType == GameManager.AttackType.Melee
             && ShouldUseNaturalAttackStep(attacker, attackWeapon);
+        intent.Hand = useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
 
         CombatResult result;
         string attackModeLog;
@@ -597,7 +607,6 @@ public class CombatFlowService : MonoBehaviour
             }
 
             _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
-            _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
 
             string naturalLabel = !string.IsNullOrEmpty(naturalStepLabel)
                 ? naturalStepLabel
@@ -630,71 +639,55 @@ public class CombatFlowService : MonoBehaviour
                 return;
             }
 
-            _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
-            _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
-            // Consume ammunition for projectile weapons (1 per shot in iterative sequence)
-            if (attackWeapon != null && attackWeapon.IsProjectileWeapon)
-                ConsumeAmmoForAttack(attacker, attackWeapon);
-
-            string modeLabel = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
+            string modeLabel = attackType == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
             string dwPenaltyInfo = _gameManager.Combat_IsDualWielding()
-                && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown)
+                && (attackType == GameManager.AttackType.Melee || attackType == GameManager.AttackType.Thrown)
                     ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetMainHandPenalty())}"
                     : string.Empty;
 
             attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}{strengthPenaltySuffix}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
         }
 
-        _gameManager.CombatUI?.ShowCombatLog(attackModeLog);
-
-        string attackLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        _gameManager.Combat_SetLastCombatLog(attackLog);
-        _gameManager.CombatUI?.ShowCombatLog(attackLog);
-
-        if (GameManager.LogAttacksToConsole)
-            Debug.Log("[Combat] " + attackLog);
-
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-
-        if (result.Hit && result.TotalDamage > 0)
-            _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-        if (result.Hit && !result.IsRangedAttack)
-            MeleeReactionService.TriggerReactions(attacker, target, result);
-
-        if (result.TargetKilled)
+        // The one post-attack hook (origin B): the free trip, the thrown drop and the ammunition before this step's log;
+        // then Concentration, melee reactions, the summon cleanup and the combat-end check (CORE-011, CORE-037).
+        string attackLog = null;
+        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSequence, attacker, target, intent).With(result);
+        resolution.RangeInfo = rangeInfo;
+        resolution.CombatEndContext = "PerformIterativeSequenceAttack";
+        resolution.ReportStep = () =>
         {
-            LogDeathPoint("PerformIterativeSequenceAttack:TargetKilled", attacker, target);
-            _gameManager.Combat_HandleSummonDeathCleanup(target);
-        }
+            _gameManager.CombatUI?.ShowCombatLog(attackModeLog);
 
-        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-        if (CombatEndRules.IsOutOfFight(target))
-        {
+            attackLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
+            _gameManager.Combat_SetLastCombatLog(attackLog);
+            _gameManager.CombatUI?.ShowCombatLog(attackLog);
+
+            if (GameManager.LogAttacksToConsole)
+                Debug.Log("[Combat] " + attackLog);
+
             _gameManager.Combat_UpdateAllStatsUI();
-            Debug.Log("[AttackFlow] Target is out of the fight, checking combat end");
-            if (TryHandleVictoryAfterEnemyDeath("PerformIterativeSequenceAttack", attacker, target))
-            {
-                _gameManager.Combat_EndAttackSequence();
-                return;
-            }
-
-            if (result.TargetKilled && target.Team == CharacterTeam.Enemy)
-                _gameManager.CombatUI?.ShowCombatLog(attackLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
+            _gameManager.Combat_ClearHighlights();
+        };
+        var outcome = new PostAttackOutcome();
+        _gameManager.RunAttackResolvedSync(resolution, outcome);
+        if (outcome.CombatEnded)
+        {
+            _gameManager.Combat_EndAttackSequence();
+            return;
         }
+
+        if (outcome.TargetOutOfFight && result.TargetKilled && target.Team == CharacterTeam.Enemy)
+            _gameManager.CombatUI?.ShowCombatLog(attackLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
 
         attacker.RegisterAttackMade(useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
 
         if (_gameManager.Combat_HasMoreAttacksAvailable())
         {
             int nextAttackIndex = _gameManager.Combat_GetTotalAttacksUsed();
-            int nextBaseBab = GetSequenceAttackBaseBonus(attacker, _gameManager.Combat_GetCurrentAttackType(), nextAttackIndex);
+            int nextBaseBab = GetSequenceAttackBaseBonus(attacker, attackType, nextAttackIndex);
             int nextBab = nextBaseBab;
             if (_gameManager.Combat_IsDualWielding()
-                && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown))
+                && (attackType == GameManager.AttackType.Melee || attackType == GameManager.AttackType.Thrown))
             {
                 nextBab += _gameManager.Combat_GetMainHandPenalty();
             }
@@ -756,6 +749,7 @@ public class CombatFlowService : MonoBehaviour
         // The lost step is the one the normal path would have made, so the natural-attack bookkeeping matches it: a
         // natural-button pick (or its Haste extra attack) is used up; the sequence's auto natural step uses the next
         // unused natural attack, or Haste's extra one when all are used (as PerformIterativeSequenceAttack does).
+        GameManager.AttackType attackType = AttackIntent.ForUi(_gameManager, attacker).UiAttackType;
         bool naturalStep = _gameManager.Combat_HasPendingNaturalAttackSelection()
             && attacker.GetEquippedMainWeapon() == null && attacker.Stats != null && attacker.Stats.HasNaturalAttacks;
         if (naturalStep)
@@ -766,7 +760,7 @@ public class CombatFlowService : MonoBehaviour
                 _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex()));
             _gameManager.Combat_ClearPendingNaturalAttackSelection();
         }
-        else if (!endSequence && _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+        else if (!endSequence && attackType == GameManager.AttackType.Melee
             && ShouldUseNaturalAttackStep(attacker, attacker.GetEquippedMainWeapon()))
         {
             naturalStep = true;
@@ -782,9 +776,9 @@ public class CombatFlowService : MonoBehaviour
         if (endSequence || !_gameManager.Combat_HasMoreAttacksAvailable())
             _gameManager.Combat_EndAttackSequence();
         else
-            _gameManager.Combat_SetCurrentAttackBAB(GetSequenceAttackBaseBonus(attacker, _gameManager.Combat_GetCurrentAttackType(), _gameManager.Combat_GetTotalAttacksUsed())
+            _gameManager.Combat_SetCurrentAttackBAB(GetSequenceAttackBaseBonus(attacker, attackType, _gameManager.Combat_GetTotalAttacksUsed())
                 + (_gameManager.Combat_IsDualWielding()
-                   && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown)
+                   && (attackType == GameManager.AttackType.Melee || attackType == GameManager.AttackType.Thrown)
                     ? _gameManager.Combat_GetMainHandPenalty() : 0));
 
         _gameManager.Combat_UpdateAllStatsUI();
@@ -846,19 +840,21 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
-            ? (_gameManager.Combat_GetEquippedWeapon() ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
+        // The PC UI's attack selection, read once for this attack (AttackIntent.ForUi): the mode and the weapon (the thrown
+        // weapon in hand for a throw).
+        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
+        GameManager.AttackType attackType = intent.UiAttackType;
+        ItemData attackWeapon = intent.Weapon;
 
         bool isMeleeFearBreakAttack = _gameManager.Combat_IsMeleeFearBreakAttack(
             attacker,
             attackWeapon,
             rangeInfo,
-            treatAsThrownAttack: _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown);
+            treatAsThrownAttack: attackType == GameManager.AttackType.Thrown);
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
-        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return;
 
         // Ammo check for projectile weapons (before attack resolution)
@@ -873,7 +869,7 @@ public class CombatFlowService : MonoBehaviour
         int selectedNaturalAttackIndex = -1;
 
         bool useSelectedNaturalAttack = _gameManager.Combat_HasPendingNaturalAttackSelection()
-            && _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+            && attackType == GameManager.AttackType.Melee
             && attackWeapon == null
             && attacker.Stats != null
             && attacker.Stats.HasNaturalAttacks;
@@ -921,154 +917,150 @@ public class CombatFlowService : MonoBehaviour
             result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
         }
 
-        _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
-        _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+        intent.Hand = useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
 
-        // Consume ammunition for projectile weapons (1 per shot)
-        if (attackWeapon != null && attackWeapon.IsProjectileWeapon)
-            ConsumeAmmoForAttack(attacker, attackWeapon);
-
-        // Every attack uses one step of the creature's attack ladder: a natural-button attack one
-        // natural attack, anything else (e.g. Fighting Defensively (Std)) a main-hand step, so a later
-        // Attack or maneuver cannot add attacks past the creature's iteratives or natural attacks
-        // (PHB p.141 Table 8-2 note 7, p.143).
-        attacker.RegisterAttackMade(useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
-
-        if (useSelectedNaturalAttack)
-            _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(selectedNaturalAttackIndex);
-
-        if (!string.IsNullOrEmpty(naturalAttackModeLog))
-            _gameManager.CombatUI?.ShowCombatLog(naturalAttackModeLog);
-
-        string log = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        _gameManager.Combat_SetLastCombatLog(log);
-
-        if (GameManager.LogAttacksToConsole)
-            Debug.Log("[Combat] " + log);
-
-        _gameManager.CombatUI?.ShowCombatLog(log);
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-
-        if (result.Hit && result.TotalDamage > 0)
-            _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-        if (result.Hit && !result.IsRangedAttack)
-            MeleeReactionService.TriggerReactions(attacker, target, result);
-
-        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-        if (!result.TargetKilled && CombatEndRules.IsOutOfFight(target))
+        // The one post-attack hook (origin A): the free trip, the thrown drop and the ammunition before the log; then
+        // Concentration, melee reactions, the summon cleanup and the combat-end check (CORE-011, CORE-037); then the
+        // slain line, Cleave and Great Cleave, the end of the sequence, and Improved Grab (the choice by the attacker's
+        // decider: the PC's prompt, MM p.310).
+        string log = null;
+        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSingle, attacker, target, intent).With(result);
+        resolution.RangeInfo = rangeInfo;
+        resolution.CombatEndContext = "PerformSingleAttack";
+        resolution.ReportStep = () =>
         {
-            _gameManager.Combat_UpdateAllStatsUI();
-            if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
-                return;
-        }
+            // Every attack uses one step of the creature's attack ladder: a natural-button attack one
+            // natural attack, anything else (e.g. Fighting Defensively (Std)) a main-hand step, so a later
+            // Attack or maneuver cannot add attacks past the creature's iteratives or natural attacks
+            // (PHB p.141 Table 8-2 note 7, p.143).
+            attacker.RegisterAttackMade(useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
 
-        if (result.TargetKilled)
+            if (useSelectedNaturalAttack)
+                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(selectedNaturalAttackIndex);
+
+            if (!string.IsNullOrEmpty(naturalAttackModeLog))
+                _gameManager.CombatUI?.ShowCombatLog(naturalAttackModeLog);
+
+            log = BuildAttackLog(attacker, isFlanking, partnerName, result);
+            _gameManager.Combat_SetLastCombatLog(log);
+
+            if (GameManager.LogAttacksToConsole)
+                Debug.Log("[Combat] " + log);
+
+            _gameManager.CombatUI?.ShowCombatLog(log);
+            _gameManager.Combat_UpdateAllStatsUI();
+            _gameManager.Combat_ClearHighlights();
+        };
+        resolution.OnFightContinues = () =>
         {
-            LogDeathPoint("PerformSingleAttack:TargetKilled", attacker, target);
-            _gameManager.Combat_HandleSummonDeathCleanup(target);
-            _gameManager.Combat_UpdateAllStatsUI();
-            if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
-                return;
-
-            if (target.Team == CharacterTeam.Enemy)
+            if (result.TargetKilled && target.Team == CharacterTeam.Enemy)
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
-
-            // === CLEAVE / GREAT CLEAVE ===
-            // After dropping a foe with a melee attack, grant bonus attack(s) against adjacent enemies.
-            if (!result.IsRangedAttack && attacker.Stats != null &&
-                (FeatManager.HasCleave(attacker.Stats) || FeatManager.HasGreatCleave(attacker.Stats)))
+        };
+        resolution.BeforeLateGrab = () =>
+        {
+            if (useSelectedNaturalAttack && wasFirstWeaponAttackBeforeThis)
             {
-                bool isGreatCleave = FeatManager.HasGreatCleave(attacker.Stats);
-                bool cleaving = true;
-                int cleaveCount = 0;
+                PreserveSingleNaturalAttackActionEconomy(
+                    attacker,
+                    moveActionWasAvailableBeforeAttack,
+                    moveActionUsedBeforeAttack,
+                    fullRoundActionUsedBeforeAttack,
+                    standardConvertedToMoveBeforeAttack);
+            }
 
-                while (cleaving)
+            // Single-attack natural weapon actions should always return to main action choices
+            // (move + 5-foot-step may remain available). Clear any stale attack-sequence state.
+            _gameManager.Combat_EndAttackSequence();
+        };
+
+        var outcome = new PostAttackOutcome();
+        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome,
+            onResumedDone: () => _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f));
+        if (waitingOnDecider || outcome.CombatEnded)
+            return;
+
+        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
+    }
+
+    /// <summary>
+    /// Cleave and Great Cleave after <paramref name="result"/> dropped <paramref name="target"/> (path A's code, run by the
+    /// post-attack hook, GameManager.OnAttackResolved, for that origin only; PHB p.92). True when a cleave attack ended
+    /// the combat.
+    /// </summary>
+    public bool ResolveCleaveAfterDrop(CharacterController attacker, CharacterController target, CombatResult result, ItemData attackWeapon)
+    {
+        if (_gameManager == null || attacker == null || result == null)
+            return false;
+
+        // === CLEAVE / GREAT CLEAVE ===
+        // After dropping a foe with a melee attack, grant bonus attack(s) against adjacent enemies.
+        if (!result.IsRangedAttack && attacker.Stats != null &&
+            (FeatManager.HasCleave(attacker.Stats) || FeatManager.HasGreatCleave(attacker.Stats)))
+        {
+            bool isGreatCleave = FeatManager.HasGreatCleave(attacker.Stats);
+            bool cleaving = true;
+            int cleaveCount = 0;
+
+            while (cleaving)
+            {
+                // Find an alive enemy adjacent to the attacker (within melee reach)
+                CharacterController cleaveTarget = FindAdjacentEnemy(attacker, target);
+                if (cleaveTarget == null)
                 {
-                    // Find an alive enemy adjacent to the attacker (within melee reach)
-                    CharacterController cleaveTarget = FindAdjacentEnemy(attacker, target);
-                    if (cleaveTarget == null)
-                    {
-                        if (cleaveCount == 0)
-                            Debug.Log($"[Cleave] {attacker.Stats.CharacterName} has no adjacent enemies for cleave.");
-                        break;
-                    }
+                    if (cleaveCount == 0)
+                        Debug.Log($"[Cleave] {attacker.Stats.CharacterName} has no adjacent enemies for cleave.");
+                    break;
+                }
 
-                    cleaveCount++;
-                    string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
-                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!"));
+                cleaveCount++;
+                string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!"));
 
-                    // Cleave attack uses the same weapon at full BAB. It is a melee attack,
-                    // so flanking the new target still grants +2 (PHB p.153, CMB-001).
-                    bool cleaveFlanking = CombatUtils.IsAttackerFlanking(attacker, cleaveTarget, _gameManager.Combat_GetAllCharacters(), out CharacterController cleavePartner);
-                    int cleaveFlankBonus = cleaveFlanking ? CombatUtils.FlankingAttackBonus : 0;
-                    string cleavePartnerName = cleavePartner != null && cleavePartner.Stats != null ? cleavePartner.Stats.CharacterName : null;
-                    // The cleave attack is a direct attack too: a failed ward save loses it (D6).
-                    if (AttackLegality.CommitWard(attacker, cleaveTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
-                        break;
-                    CombatResult cleaveResult = attacker.Attack(cleaveTarget, cleaveFlanking, cleaveFlankBonus, cleavePartnerName, null, null, attackWeapon);
-                    string cleaveLog = BuildAttackLog(attacker, cleaveFlanking, cleavePartnerName, cleaveResult);
-                    _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
+                // Cleave attack uses the same weapon at full BAB. It is a melee attack,
+                // so flanking the new target still grants +2 (PHB p.153, CMB-001).
+                bool cleaveFlanking = CombatUtils.IsAttackerFlanking(attacker, cleaveTarget, _gameManager.Combat_GetAllCharacters(), out CharacterController cleavePartner);
+                int cleaveFlankBonus = cleaveFlanking ? CombatUtils.FlankingAttackBonus : 0;
+                string cleavePartnerName = cleavePartner != null && cleavePartner.Stats != null ? cleavePartner.Stats.CharacterName : null;
+                // The cleave attack is a direct attack too: a failed ward save loses it (D6).
+                if (AttackLegality.CommitWard(attacker, cleaveTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
+                    break;
+                CombatResult cleaveResult = attacker.Attack(cleaveTarget, cleaveFlanking, cleaveFlankBonus, cleavePartnerName, null, null, attackWeapon);
+                string cleaveLog = BuildAttackLog(attacker, cleaveFlanking, cleavePartnerName, cleaveResult);
+                _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
 
-                    if (cleaveResult.Hit && cleaveResult.TotalDamage > 0)
-                        _gameManager.Combat_CheckConcentrationOnDamage(cleaveTarget, cleaveResult.TotalDamage);
+                if (cleaveResult.Hit && cleaveResult.TotalDamage > 0)
+                    _gameManager.Combat_CheckConcentrationOnDamage(cleaveTarget, cleaveResult.TotalDamage);
 
-                    if (cleaveResult.Hit && !cleaveResult.IsRangedAttack)
-                        MeleeReactionService.TriggerReactions(attacker, cleaveTarget, cleaveResult);
+                if (cleaveResult.Hit && !cleaveResult.IsRangedAttack)
+                    MeleeReactionService.TriggerReactions(attacker, cleaveTarget, cleaveResult);
 
-                    if (!cleaveResult.TargetKilled && CombatEndRules.IsOutOfFight(cleaveTarget)
-                        && TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
-                        return;
+                if (!cleaveResult.TargetKilled && CombatEndRules.IsOutOfFight(cleaveTarget)
+                    && TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
+                    return true;
 
-                    if (cleaveResult.TargetKilled)
-                    {
-                        LogDeathPoint("Cleave:TargetKilled", attacker, cleaveTarget);
-                        _gameManager.Combat_HandleSummonDeathCleanup(cleaveTarget);
-                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!"));
-                        _gameManager.Combat_UpdateAllStatsUI();
+                if (cleaveResult.TargetKilled)
+                {
+                    LogDeathPoint("Cleave:TargetKilled", attacker, cleaveTarget);
+                    _gameManager.Combat_HandleSummonDeathCleanup(cleaveTarget);
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!"));
+                    _gameManager.Combat_UpdateAllStatsUI();
 
-                        if (TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
-                            return;
+                    if (TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
+                        return true;
 
-                        // Great Cleave: continue cleaving. Regular Cleave: stop after first.
-                        if (!isGreatCleave)
-                            cleaving = false;
-                    }
-                    else
-                    {
-                        // Cleave target survived — stop cleaving
+                    // Great Cleave: continue cleaving. Regular Cleave: stop after first.
+                    if (!isGreatCleave)
                         cleaving = false;
-                    }
+                }
+                else
+                {
+                    // Cleave target survived — stop cleaving
+                    cleaving = false;
                 }
             }
         }
 
-        if (useSelectedNaturalAttack && wasFirstWeaponAttackBeforeThis)
-        {
-            PreserveSingleNaturalAttackActionEconomy(
-                attacker,
-                moveActionWasAvailableBeforeAttack,
-                moveActionUsedBeforeAttack,
-                fullRoundActionUsedBeforeAttack,
-                standardConvertedToMoveBeforeAttack);
-        }
-
-        // Single-attack natural weapon actions should always return to main action choices
-        // (move + 5-foot-step may remain available). Clear any stale attack-sequence state.
-        _gameManager.Combat_EndAttackSequence();
-
-        bool waitingOnImprovedGrabPrompt = _gameManager.Combat_TryResolveImprovedGrabAfterSingleAttack(
-            attacker,
-            target,
-            result,
-            onResolved: () => _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f));
-
-        if (waitingOnImprovedGrabPrompt)
-            return;
-
-        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
+        return false;
     }
 
     public void PerformFullAttack(CharacterController attacker, CharacterController target,
@@ -1169,32 +1161,18 @@ public class CombatFlowService : MonoBehaviour
         _gameManager.Combat_UpdateAllStatsUI();
         _gameManager.Combat_ClearHighlights();
 
-        if (result.TotalDamageDealt > 0)
-            _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-        if (result.Attacks != null)
-        {
-            foreach (var attack in result.Attacks)
-            {
-                if (attack.Hit && !attack.IsRangedAttack)
-                    MeleeReactionService.TriggerReactions(attacker, target, attack);
-            }
-        }
-
-        if (result.TargetKilled)
-        {
-            LogDeathPoint("PerformDualWieldAttack:TargetKilled", attacker, target);
-            _gameManager.Combat_HandleSummonDeathCleanup(target);
-        }
-
-        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-        if (CombatEndRules.IsOutOfFight(target))
-        {
-            _gameManager.Combat_UpdateAllStatsUI();
-            if (TryHandleVictoryAfterEnemyDeath("PerformDualWieldAttack", attacker, target))
-                return;
-        }
+        // The one post-attack hook (origin D): Concentration on the summed damage, melee reactions per hit, the summon
+        // cleanup and the combat-end check (CORE-011, CORE-037).
+        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
+        intent.TwoWeapon = true;
+        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcDualWield, attacker, target, intent).With(result.Attacks);
+        resolution.FullResult = result;
+        resolution.RangeInfo = rangeInfo;
+        resolution.CombatEndContext = "PerformDualWieldAttack";
+        var outcome = new PostAttackOutcome();
+        _gameManager.RunAttackResolvedSync(resolution, outcome);
+        if (outcome.CombatEnded)
+            return;
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
     }

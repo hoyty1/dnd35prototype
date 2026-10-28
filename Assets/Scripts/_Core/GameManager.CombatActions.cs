@@ -187,7 +187,7 @@ public partial class GameManager
                 case PendingAttackMode.LayOnHands: modeStr = "LAY ON HANDS"; break;
             }
 
-            if (_pendingAttackMode == PendingAttackMode.Single && _currentAttackType == AttackType.Thrown)
+            if (_pendingAttackMode == PendingAttackMode.Single && AttackIntent.ForUi(this, pc).ThrownSelected)
                 modeStr = "THROWN ATTACK";
             else if (_pendingAttackMode == PendingAttackMode.Single && pc.IsUsingFlurryOfBlows)
                 modeStr = "FLURRY OF BLOWS";
@@ -234,10 +234,10 @@ public partial class GameManager
             && (!isRanged || pc.CanLocateForRangedAttack(o)));
     }
 
-    private List<CharacterController> GetValidRangedTargets(CharacterController attacker)
+    private List<CharacterController> GetValidRangedTargets(CharacterController attacker, AttackIntent intent = null)
     {
         var valid = new List<CharacterController>();
-        if (attacker == null || !IsAttackModeRanged(attacker))
+        if (attacker == null || !IsAttackModeRanged(attacker, null, intent))
             return valid;
 
         // Every enemy, not one occupant per square, so a creature sharing a square with another (or with the
@@ -298,22 +298,24 @@ public partial class GameManager
     private static bool IsDirectlyAttackableNoReach(CharacterController attacker, CharacterController target)
         => AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok;
 
-    private List<CharacterController> GetValidTargetsForCurrentWeapon(CharacterController attacker)
+    /// <summary>The targets of the attack mode of <paramref name="intent"/> (null: the PC UI's, AttackIntent.ForUi).</summary>
+    private List<CharacterController> GetValidTargetsForCurrentWeapon(CharacterController attacker, AttackIntent intent = null)
     {
         if (attacker == null)
             return new List<CharacterController>();
 
-        return IsAttackModeRanged(attacker)
-            ? GetValidRangedTargets(attacker)
+        return IsAttackModeRanged(attacker, null, intent)
+            ? GetValidRangedTargets(attacker, intent)
             : GetValidMeleeTargets(attacker);
     }
 
-    private bool IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target)
+    /// <summary>Reach or range for the attack mode of <paramref name="intent"/> (null: the PC UI's, AttackIntent.ForUi).</summary>
+    private bool IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target, AttackIntent intent = null)
     {
         if (attacker == null || target == null || target.Stats == null || target.Stats.IsDead)
             return false;
 
-        if (IsUsingThrownAttackMode(attacker))
+        if (IsUsingThrownAttackMode(attacker, null, intent))
             return attacker.IsTargetInThrownWeaponRange(target);
 
         return attacker.IsTargetInCurrentWeaponRange(target);
@@ -1557,7 +1559,7 @@ public partial class GameManager
         }
 
         bool useThrownRange = _isSelectingOffHandThrownTarget
-            || (offHandWeapon.IsThrown && _currentAttackType == AttackType.Thrown);
+            || (offHandWeapon.IsThrown && AttackIntent.ForUi(this, attacker).ThrownSelected);
 
         Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name} BAB={_currentOffHandBAB}");
 
@@ -1600,13 +1602,17 @@ public partial class GameManager
         Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
 
         if (result != null)
+        {
             attacker.RegisterAttackMade(AttackStepKind.OffHand);
 
-        if (result != null && result.Hit && result.TotalDamage > 0)
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        if (result != null && result.TargetKilled)
-            HandleSummonDeathCleanup(target);
+            // The one post-attack hook (origin E): Concentration and the summon cleanup; the combat-end check and the
+            // thrown drop below stay this method's.
+            AttackIntent offHandIntent = AttackIntent.ForUi(this, attacker);
+            offHandIntent.Hand = AttackStepKind.OffHand;
+            offHandIntent.Weapon = offHandWeapon;
+            offHandIntent.Mode = useThrownRange ? AttackMode.Thrown : AttackMode.Melee;
+            RunAttackResolvedSync(AttackResolution.Create(AttackOrigin.PcOffHand, attacker, target, offHandIntent).With(result), new PostAttackOutcome());
+        }
 
         // Victory or defeat when the off-hand attack dropped the last creature of a side (CORE-011).
         if (CombatEndRules.IsOutOfFight(target))
@@ -2668,10 +2674,11 @@ public partial class GameManager
         StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
 
-    private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
+    /// <summary>The attack's range for the mode of <paramref name="intent"/> (AttackIntent.ForUi for a PC flow, ForAI for an NPC).</summary>
+    private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target, AttackIntent intent)
     {
         if (_combatFlowService != null)
-            return _combatFlowService.CalculateRangeInfo(attacker, target);
+            return _combatFlowService.CalculateRangeInfo(attacker, target, intent);
 
         return RangeCalculator.GetRangeInfo(0, 0, false);
     }
@@ -2721,10 +2728,12 @@ public partial class GameManager
 
         attacker.Actions.UseFullRoundAction();
 
-        bool rangedMode = IsAttackModeRanged(attacker);
+        // The PC UI's attack selection, read once (AttackIntent.ForUi); every step of this full attack uses it.
+        AttackIntent sequenceIntent = AttackIntent.ForUi(this, attacker);
+        bool rangedMode = IsAttackModeRanged(attacker, null, sequenceIntent);
         string modeLabel = rangedMode ? "ranged" : "melee";
 
-        RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget);
+        RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget, sequenceIntent);
         int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
         if (plannedAttackCount <= 0)
         {
@@ -2755,7 +2764,7 @@ public partial class GameManager
             bool needsRetarget = currentTarget == null
                 || currentTarget.Stats == null
                 || currentTarget.Stats.IsDead
-                || !IsTargetInCurrentWeaponRange(attacker, currentTarget)
+                || !IsTargetInCurrentWeaponRange(attacker, currentTarget, sequenceIntent)
                 // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163); nothing passes a
                 // Resilient Sphere (CMB-092); a failed ward save bars the target (D6): the shared gate.
                 || !IsDirectlyAttackableNoReach(attacker, currentTarget);
@@ -2771,7 +2780,7 @@ public partial class GameManager
                         : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
                 }
 
-                List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker);
+                List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker, sequenceIntent);
 
                 if (validTargets.Count == 0 && CanTakeFiveFootStep(attacker))
                 {
@@ -2789,7 +2798,7 @@ public partial class GameManager
                         break;
                     }
 
-                    validTargets = GetValidTargetsForCurrentWeapon(attacker);
+                    validTargets = GetValidTargetsForCurrentWeapon(attacker, sequenceIntent);
                 }
 
                 if (validTargets.Count == 0)
@@ -2818,7 +2827,9 @@ public partial class GameManager
             int hasteNaturalAttackIndex = -1;
             if (!rangedMode && attacker.IsHasteExtraNaturalStep(attackIndex) && attacker.CanUseHasteExtraNaturalAttack())
             {
-                yield return StartCoroutine(PromptHasteNaturalAttackChoice(attacker, currentTarget, choice => hasteNaturalAttackIndex = choice));
+                Coroutine hasteChoice = AttackDeciders.For(attacker).ChooseHasteNaturalAttack(this, attacker, currentTarget, null, 0, choice => hasteNaturalAttackIndex = choice);
+                if (hasteChoice != null)
+                    yield return hasteChoice;
                 if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead
                     || currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
                     break;
@@ -2840,7 +2851,7 @@ public partial class GameManager
             bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, currentTarget, allCombatants, out flankPartner);
             int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
             string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
-            RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget);
+            RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget, sequenceIntent);
 
             bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
                 attacker,
@@ -2873,27 +2884,21 @@ public partial class GameManager
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
 
-            if (attack.Hit && attack.TotalDamage > 0)
-                CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
-
-            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-            if (attack.Hit && !rangedMode)
-                MeleeReactionService.TriggerReactions(attacker, currentTarget, attack);
-
-            TryResolveFreeTripFromAttackResults(attacker, currentTarget, stepResult.Attacks, rangeInfo);
+            // The one post-attack hook (origin C): Concentration per hit, melee reactions (by the sequence's mode), the
+            // free trip and the summon cleanup. The combat-end check below stays this coroutine's.
+            AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.PcFullAttackButton, attacker, currentTarget, sequenceIntent).With(stepResult.Attacks);
+            stepResolution.RangeInfo = rangeInfo;
+            stepResolution.SequenceIsRanged = rangedMode;
+            IEnumerator stepPost = OnAttackResolved(stepResolution, new PostAttackOutcome());
+            while (stepPost.MoveNext())
+                yield return stepPost.Current;
 
             // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-            if (!attack.TargetKilled && CombatEndRules.IsOutOfFight(currentTarget)
-                && EvaluateCombatEnd("ExecuteFullAttackSequence"))
+            if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("ExecuteFullAttackSequence"))
                 yield break;
 
             if (attack.TargetKilled)
             {
-                HandleSummonDeathCleanup(currentTarget);
-
-                if (EvaluateCombatEnd("ExecuteFullAttackSequence"))
-                    yield break;
-
                 int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
                 if (attacksRemainingAfterKill > 0)
                 {

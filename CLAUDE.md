@@ -55,7 +55,7 @@ Where to look first:
 
 | Concern | Start at |
 |---|---|
-| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack` (a flurry is `TryBeginFlurryOfBlows`, then the shared sequence) (modifier from `BuildAttackBonus`, damage modifier from `BuildWeaponDamageBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
+| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack` (a flurry is `TryBeginFlurryOfBlows`, then the shared sequence) (modifier from `BuildAttackBonus`, damage modifier from `BuildWeaponDamageBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack`; after the roll, every path's `GameManager.OnAttackResolved` (`_Core/GameManager.AttackResolved.cs`, per-path `PostAttackQuirk` bits) |
 | Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; non-weapon damage `GameManager.DealDamage` (`_Core/GameManager.Damage.cs`); `Combat/Core/DamageModel.cs` (`DamagePackets`) |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |

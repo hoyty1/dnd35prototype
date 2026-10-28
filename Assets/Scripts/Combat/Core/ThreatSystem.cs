@@ -758,35 +758,33 @@ public static class ThreatSystem
         // Inert test hook; the trigger names what provoked the AoO (movement, spellcast, maneuver, standup, ...).
         ScenarioHooks.AoOResolved?.Invoke(threatener, target, trigger ?? (isFromMovement ? "movement" : "other"), result);
 
-        // Innate trip follow-up (e.g., wolf bite) is a free action and should not consume AoO economy.
-        // The one shared rule decides it (only an AoO made with the trigger attack, MM Trip (Ex), CMB-125) and
-        // writes its log line and reactions, as on a turn; the aftermath waits for the AoO's own log below.
-        SpecialAttackResult freeTripResult = gm != null ? gm.ResolveFreeTripAfterHit(threatener, target, result, null) : null;
-
-        // Log the result
         if (result.Hit)
         {
             string critStr = result.CritConfirmed ? " (CRITICAL HIT!)" : "";
             Debug.Log($"[ThreatSystem] AoO HIT! {threatener.Stats.CharacterName} deals {result.TotalDamage} damage to {target.Stats.CharacterName}{critStr}");
             Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} HP: {result.DefenderHPBefore} → {result.DefenderHPAfter}");
-
-            // Melee reaction effects (Fire Shield, Thorns, etc.) — AoO is a melee attack
-            MeleeReactionService.TriggerReactions(threatener, target, result);
-
             if (result.TargetKilled)
-            {
                 Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} was SLAIN by the Attack of Opportunity!");
-            }
         }
         else
         {
             Debug.Log($"[ThreatSystem] AoO MISS! {threatener.Stats.CharacterName} rolled {result.DieRoll} + mods = {result.TotalRoll} vs AC {result.TargetAC}");
         }
 
-        // The Improved Trip attack after a free trip that landed (PHB p.96, CMB-079), after the AoO's own
-        // log and melee reactions; a free trip gets no counter-trip.
-        if (freeTripResult != null)
-            gm?.HandleTripAftermath(threatener, target, freeTripResult, null);
+        // The one post-attack hook (origin I): the innate free trip (e.g., a wolf's bite; a free action that spends no AoO,
+        // only after the trigger attack, MM Trip (Ex), CMB-125) with its log line and reactions, then the AoO's melee
+        // reactions (Fire Shield and the like), then the trip's aftermath (the Improved Trip attack, PHB p.96, CMB-079; a
+        // free trip gets no counter-trip). Concentration, the summon cleanup and combat end are the callers'.
+        if (gm != null)
+        {
+            AttackIntent aooIntent = AttackIntent.ForMode(AttackMode.Melee, aooWeapon);
+            aooIntent.IsAoO = true;
+            gm.RunAttackResolvedSync(AttackResolution.Create(AttackOrigin.AoO, threatener, target, aooIntent, ActorSource.AI).With(result), new PostAttackOutcome());
+        }
+        else if (result.Hit)
+        {
+            MeleeReactionService.TriggerReactions(threatener, target, result);
+        }
 
         Debug.Log($"[ThreatSystem] === END AoO ===");
         return result;

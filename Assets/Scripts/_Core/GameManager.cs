@@ -4147,11 +4147,12 @@ public partial class GameManager : MonoBehaviour
             {
                 if (HasMoreAttacksAvailable())
                 {
+                    AttackType uiAttackType = AttackIntent.ForUi(this, pc).UiAttackType;
                     int attacksRemaining = pc.GetRemainingMainHandAttackSteps(
-                        UsesInnateNaturalAttackSequence(pc, _currentAttackType, pc.GetEquippedMainWeapon()) ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
+                        UsesInnateNaturalAttackSequence(pc, uiAttackType, pc.GetEquippedMainWeapon()) ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
                     // From the creature's own sequence, so a maneuver step taken mid-sequence is counted.
-                    int nextStepBab = GetAttackSequenceBaseAttackBonus(pc, _currentAttackType, pc.ProgressiveAttackPool.MainHandStepsUsed);
-                    if (_isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown))
+                    int nextStepBab = GetAttackSequenceBaseAttackBonus(pc, uiAttackType, pc.ProgressiveAttackPool.MainHandStepsUsed);
+                    if (_isDualWielding && (uiAttackType == AttackType.Melee || uiAttackType == AttackType.Thrown))
                         nextStepBab += _mainHandPenalty;
                     CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextStepBab)}). Use Attack (Melee - Full Round) or Attack (Thrown - Full Round), or End Turn.");
                 }
@@ -4943,9 +4944,13 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
-    private void ResolveThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
+    /// <summary>
+    /// After a throw (<paramref name="intent"/>'s mode Thrown) with a throwable melee weapon: the weapon lands in the
+    /// target's square and the next throwable weapon is drawn. Run by the post-attack hook (OnAttackResolved).
+    /// </summary>
+    private void ResolveThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon, AttackIntent intent)
     {
-        if (_currentAttackType != AttackType.Thrown)
+        if (intent == null || !intent.ThrownSelected)
             return;
 
         if (!IsThrowableMeleeWeapon(thrownWeapon))
@@ -8720,7 +8725,7 @@ public partial class GameManager : MonoBehaviour
 
     private void ContinueAttackSequence(CharacterController attacker)
     {
-        ContinueAttackSequence(attacker, _currentAttackType);
+        ContinueAttackSequence(attacker, AttackIntent.ForUi(this, attacker).UiAttackType);
     }
 
     private void ContinueAttackSequence(CharacterController attacker, AttackType attackType)
@@ -11659,9 +11664,14 @@ public partial class GameManager : MonoBehaviour
 
     // ========== ATTACK TARGET SELECTION ==========
 
-    private bool IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null)
+    /// <summary>
+    /// Whether <paramref name="intent"/> throws <paramref name="weapon"/> (the main weapon when null): a declared throw
+    /// with a throwable melee weapon that has a range increment. A null intent is the PC UI's (AttackIntent.ForUi).
+    /// </summary>
+    private bool IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null)
     {
-        if (_currentAttackType != AttackType.Thrown)
+        intent ??= AttackIntent.ForUi(this, attacker);
+        if (!intent.ThrownSelected)
             return false;
 
         if (attacker == null)
@@ -11674,7 +11684,8 @@ public partial class GameManager : MonoBehaviour
             && weapon.RangeIncrement > 0;
     }
 
-    private bool IsAttackModeRanged(CharacterController attacker, ItemData weapon = null)
+    /// <summary>A ranged weapon, or a throw (<see cref="IsUsingThrownAttackMode"/>); a null intent is the PC UI's.</summary>
+    private bool IsAttackModeRanged(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null)
     {
         if (attacker == null)
             return false;
@@ -11686,7 +11697,7 @@ public partial class GameManager : MonoBehaviour
         if (weapon.WeaponCat == WeaponCategory.Ranged)
             return true;
 
-        return IsUsingThrownAttackMode(attacker, weapon);
+        return IsUsingThrownAttackMode(attacker, weapon, intent);
     }
 
 }

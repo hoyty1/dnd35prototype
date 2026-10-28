@@ -666,31 +666,8 @@ public partial class GameManager
         return true;
     }
 
-    private IEnumerator ResolveImprovedGrabWithPromptCoroutine(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
-    {
-        ImprovedGrabChoice choice = ImprovedGrabChoice.GrappleNormally;
-        if (attacker != null && attacker.IsControllable)
-        {
-            ImprovedGrabChoice playerChoice = ImprovedGrabChoice.Skip;
-            yield return StartCoroutine(PromptImprovedGrabChoice(attacker, target, attackResult != null ? attackResult.WeaponName : null, decision => playerChoice = decision));
-            choice = playerChoice;
-        }
-
-        if (choice == ImprovedGrabChoice.Skip)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{attacker?.Stats?.CharacterName ?? "Attacker"} declines to start a grapple."));
-            onResolved?.Invoke();
-            yield break;
-        }
-
-        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, choice);
-        string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
-        onResolved?.Invoke();
-    }
-
     /// <summary>The controller's choice after an Improved Grab trigger hit (MM p.310; CMB-148).</summary>
-    private enum ImprovedGrabChoice
+    public enum ImprovedGrabChoice
     {
         Skip,
         GrappleNormally,
@@ -701,7 +678,7 @@ public partial class GameManager
     /// The AI's Improved Grab choice (MM p.310; owner ruling 2026-10-11, CMB-148): its profile's
     /// (AIProfile.ShouldHoldWithImprovedGrab), else the default, between grappling normally and the -20 hold.
     /// </summary>
-    private ImprovedGrabChoice ChooseImprovedGrabForAI(CharacterController attacker, CharacterController target)
+    internal ImprovedGrabChoice ChooseImprovedGrabForAI(CharacterController attacker, CharacterController target)
     {
         List<CharacterController> all = GetAllCharacters();
         bool hold = attacker != null && attacker.aiProfile != null
@@ -719,45 +696,6 @@ public partial class GameManager
     {
         NaturalAttackDefinition establishingAttack = attacker != null ? attacker.GetNaturalAttackForAttackResult(attackResult) : null;
         return attacker.ResolveImprovedGrabFreeAttempt(target, establishingAttack, choice == ImprovedGrabChoice.HoldWithBodyPart);
-    }
-
-    private bool TryResolveImprovedGrabAfterSingleAttack(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
-    {
-        if (!CanAttemptImprovedGrabFromAttack(attacker, target, attackResult))
-            return false;
-
-        if (attacker != null && attacker.IsControllable)
-        {
-            StartCoroutine(ResolveImprovedGrabWithPromptCoroutine(attacker, target, attackResult, onResolved));
-            return true;
-        }
-
-        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, ChooseImprovedGrabForAI(attacker, target));
-        string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
-        return false;
-    }
-
-    private void TryResolveImprovedGrabFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks)
-    {
-        if (attacker?.Stats == null || target?.Stats == null || attacks == null || attacks.Count == 0)
-            return;
-
-        if (!attacker.Stats.HasImprovedGrab || target.Stats.IsDead)
-            return;
-
-        for (int i = 0; i < attacks.Count; i++)
-        {
-            CombatResult attackResult = attacks[i];
-            if (!CanAttemptImprovedGrabFromAttack(attacker, target, attackResult))
-                continue;
-
-            SpecialAttackResult grabResult = ResolveImprovedGrabChoice(attacker, target, attackResult, ChooseImprovedGrabForAI(attacker, target));
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackResult.WeaponName} hit): {grabResult.Log}"));
-
-            if (grabResult.Success || target.Stats.IsDead)
-                break;
-        }
     }
 
     /// <summary>
@@ -1003,7 +941,9 @@ public partial class GameManager
                 ? flankPartner.Stats.CharacterName
                 : null;
 
-            RangeInfo rangeInfo = CalculateRangeInfo(npc, currentTarget);
+            AttackIntent stepIntent = AttackIntent.ForAI(this, npc, currentTarget);
+            stepIntent.Hand = stepKind;
+            RangeInfo rangeInfo = CalculateRangeInfo(npc, currentTarget, stepIntent);
             bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
                 npc,
                 npc.GetEquippedMainWeapon(),
@@ -1011,10 +951,10 @@ public partial class GameManager
                 treatAsThrownAttack: false);
             ProcessTurnUndeadMeleeFearBreak(npc, currentTarget, isMeleeFearBreakAttack);
 
-            // Haste's extra natural attack (CMB-106): the AI picks which natural attack it uses.
-            int hasteNaturalAttackIndex = stepKind == AttackStepKind.NaturalSequence && npc.IsHasteExtraNaturalStep(step)
-                ? ChooseHasteNaturalAttackIndexForAI(npc, currentTarget, profile)
-                : -1;
+            // Haste's extra natural attack (CMB-106): the AI picks which natural attack it uses (the NPC turn path is AI-run).
+            int hasteNaturalAttackIndex = -1;
+            if (stepKind == AttackStepKind.NaturalSequence && npc.IsHasteExtraNaturalStep(step))
+                AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, currentTarget, profile, 0, choice => hasteNaturalAttackIndex = choice);
 
             // Weapon steps run through CharacterController.Attack, so its charm, fascination and
             // command-undead breaks apply to NPC full attacks too (CMB-090).
@@ -1042,20 +982,11 @@ public partial class GameManager
 
             CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
 
-            // Concentration per damage instance (PHB p.70).
-            if (attack.Hit && attack.TotalDamage > 0)
-                CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
-
-            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-            if (attack.Hit && !attack.IsRangedAttack)
-                MeleeReactionService.TriggerReactions(npc, currentTarget, attack);
-
-            var stepAttacks = new List<CombatResult> { attack };
-            TryResolveFreeTripFromAttackResults(npc, currentTarget, stepAttacks, rangeInfo);
-            TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepAttacks);
-
-            if (currentTarget.Stats.IsDead)
-                HandleSummonDeathCleanup(currentTarget);
+            // The one post-attack hook (origin F): Concentration per hit (PHB p.70), melee reactions, the free trip,
+            // Improved Grab (the AI's choice) and the summon cleanup. The combat-end check below stays this method's.
+            AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.NpcMelee, npc, currentTarget, stepIntent, ActorSource.AI).With(attack);
+            stepResolution.RangeInfo = rangeInfo;
+            RunAttackResolvedSync(stepResolution, new PostAttackOutcome());
 
             // A target dead, dying or unconscious may be the last of its side: victory or defeat at once (CORE-011).
             if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("NPCPerformAttack.Sequence"))
@@ -1602,7 +1533,8 @@ public partial class GameManager
             yield break;
         }
 
-        RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
+        AttackIntent npcIntent = AttackIntent.ForAI(this, npc, target);
+        RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target, npcIntent);
 
         CharacterController flankPartner;
         bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
@@ -1688,24 +1620,14 @@ public partial class GameManager
             CombatUI.ShowCombatLog(_lastCombatLog);
             UpdateAllStatsUI();
 
-            if (fullResult.TotalDamageDealt > 0)
-                CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
-
-            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call per hit
-            if (fullResult.Attacks != null)
-            {
-                foreach (var atk in fullResult.Attacks)
-                {
-                    if (atk.Hit && !atk.IsRangedAttack)
-                        MeleeReactionService.TriggerReactions(npc, target, atk);
-                }
-            }
-
-            TryResolveFreeTripFromAttackResults(npc, target, fullResult.Attacks, npcRangeInfo);
-            TryResolveImprovedGrabFromAttackResults(npc, target, fullResult.Attacks);
-
-            if (fullResult.TargetKilled)
-                HandleSummonDeathCleanup(target);
+            // The one post-attack hook (origin G): Concentration on the summed damage, melee reactions per hit, the free
+            // trip, Improved Grab after all attacks (the AI's choice) and the summon cleanup.
+            AttackResolution fullResolution = AttackResolution.Create(AttackOrigin.NpcRangedFull, npc, target, npcIntent, ActorSource.AI).With(fullResult.Attacks);
+            fullResolution.FullResult = fullResult;
+            fullResolution.RangeInfo = npcRangeInfo;
+            IEnumerator fullPost = OnAttackResolved(fullResolution, new PostAttackOutcome());
+            while (fullPost.MoveNext())
+                yield return fullPost.Current;
 
             // Victory or defeat when the target was the last of its side (CORE-011).
             if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.FullAttack"))
@@ -1745,27 +1667,23 @@ public partial class GameManager
 
         CombatResult result = npc.Attack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
 
-        TryResolveFreeTripOnHit(npc, target, result, npcRangeInfo);
+        // The one post-attack hook (origin H): the free trip before the log, the log, Concentration, melee reactions,
+        // Improved Grab (the AI's choice) and the summon cleanup.
+        AttackResolution singleResolution = AttackResolution.Create(AttackOrigin.NpcRangedSingle, npc, target, npcIntent, ActorSource.AI).With(result);
+        singleResolution.RangeInfo = npcRangeInfo;
+        singleResolution.ReportStep = () =>
+        {
+            _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
 
-        _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
+            if (LogAttacksToConsole)
+                Debug.Log("[Combat] " + _lastCombatLog);
 
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-
-        if (result.Hit && result.TotalDamage > 0)
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-        if (result.Hit && !result.IsRangedAttack)
-            MeleeReactionService.TriggerReactions(npc, target, result);
-
-        TryResolveImprovedGrabFromAttackResults(npc, target, new List<CombatResult> { result });
-
-        if (result.TargetKilled)
-            HandleSummonDeathCleanup(target);
+            CombatUI.ShowCombatLog(_lastCombatLog);
+            UpdateAllStatsUI();
+        };
+        IEnumerator singlePost = OnAttackResolved(singleResolution, new PostAttackOutcome());
+        while (singlePost.MoveNext())
+            yield return singlePost.Current;
 
         // Victory or defeat when the target was the last of its side (CORE-011).
         if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.Single"))

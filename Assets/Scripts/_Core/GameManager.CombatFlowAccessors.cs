@@ -62,8 +62,8 @@ public partial class GameManager
 
     public List<CharacterController> Combat_GetAllCharacters() => GetAllCharacters();
         public bool Combat_IsEnemyTeam(CharacterController source, CharacterController target) => TeamUtility.IsEnemy(source, target);
-    public bool Combat_IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null) => IsUsingThrownAttackMode(attacker, weapon);
-    public bool Combat_IsAttackModeRanged(CharacterController attacker, ItemData weapon = null) => IsAttackModeRanged(attacker, weapon);
+    public bool Combat_IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null) => IsUsingThrownAttackMode(attacker, weapon, intent);
+    public bool Combat_IsAttackModeRanged(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null) => IsAttackModeRanged(attacker, weapon, intent);
     public bool Combat_IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target) => IsTargetInCurrentWeaponRange(attacker, target);
 
     public bool Combat_IsMeleeFearBreakAttack(CharacterController attacker, ItemData weapon, RangeInfo rangeInfo, bool treatAsThrownAttack)
@@ -71,9 +71,6 @@ public partial class GameManager
 
     public void Combat_ProcessTurnUndeadMeleeFearBreak(CharacterController attacker, CharacterController target, bool isMeleeFearBreakAttack)
         => ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-
-    public void Combat_ResolveThrownWeaponAfterAttack(CharacterController attacker, CharacterController target, ItemData weapon)
-        => ResolveThrownWeaponAfterAttack(attacker, target, weapon);
 
     public bool Combat_HasMoreAttacksAvailable() => HasMoreAttacksAvailable();
     public void Combat_EndAttackSequence() => EndAttackSequence();
@@ -91,11 +88,10 @@ public partial class GameManager
     public void Combat_BreakCharmOnHostileAction(CharacterController attacker, CharacterController target)
         => BreakCharmOnHostileAction(attacker, target);
 
+
+    // Only the uncalled legacy CombatFlowService.PerformFullAttack still uses it (deleted in batch 12 step 17).
     public void Combat_TryResolveFreeTripOnHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
         => TryResolveFreeTripOnHit(attacker, target, attackResult, attackRange);
-
-    public bool Combat_TryResolveImprovedGrabAfterSingleAttack(CharacterController attacker, CharacterController target, CombatResult attackResult, System.Action onResolved)
-        => TryResolveImprovedGrabAfterSingleAttack(attacker, target, attackResult, onResolved);
 
     public void Combat_HandleSummonDeathCleanup(CharacterController target)
         => HandleSummonDeathCleanup(target);

@@ -601,6 +601,17 @@
       "notes": "CMB-092, CMB-093, CMB-104, AI-005, batch 12 step 12 decision D6 (2026-10-28): AttackLegality.CanDirectlyAttack as a pure table (the Resilient Sphere both ways and inside one sphere, the Improved Grab hold bar not refusing a spell, maneuver reach: nothing at 10 ft without reach, a longspear trips and grapples adjacent and disarms only at 10 ft) and WardSaveLedger (Predict never rolls, Commit rolls one Sanctuary save per attacker and casting, a failure bars later attacks and AoOs, a new casting rolls again, an ally's spell meets no ward, a feint is no attack; Hide from Undead: mindless undead never see through it with no save, a living attacker is not bound, an intelligent undead's success keeps the spell). Dice forced through ScenarioHooks.RollFilter. Play only: CharacterController.Init needs Awake (TST-009). 28/28 in its first Play pass (20261028T191943Z-play)."
     },
     {
+      "type": "Tests.Combat.PostAttackQuirkSetsTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 51,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 12 step 13 (2026-10-28, preparation for CMB-090, CMB-096, CMB-097, CMB-017, CMB-019): the PostAttackQuirk bits of every attack origin A-J (PostAttackQuirkSets.For, the charge pounce set included; Cleave only on the PC single attack; the hook checks combat end only for A, B and D), the attack decider factory (AttackDeciders.For and its override) and the AttackIntent mode mapping (ForAI carries NpcIntentReadsUiThrownGlobal). Pure: no scene, no dice."
+    },
+    {
       "type": "Tests.Combat.AnimateRopeRulesTests",
       "needs": "either",
       "skip": "",

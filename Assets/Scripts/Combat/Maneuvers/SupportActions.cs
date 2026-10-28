@@ -1464,7 +1464,7 @@ public partial class GameManager
     /// with the body part that hit (-20 on grapple checks, not grappled; offered when the hit was a natural attack), or
     /// skip. The AI makes the same choice with ChooseImprovedGrabForAI; both resolve through ResolveImprovedGrabChoice.
     /// </summary>
-    private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<ImprovedGrabChoice> onResolved)
+    internal IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<ImprovedGrabChoice> onResolved)
     {
         if (attacker == null || target == null || !attacker.IsControllable || CombatUI == null)
         {
@@ -1624,8 +1624,12 @@ public partial class GameManager
                 // chooser's labels add the charge's +2 (PHB p.154), which is applied just below.
                 int pounceHasteNaturalAttackIndex = -1;
                 if (charger.CanUseHasteExtraNaturalAttack())
-                    yield return StartCoroutine(PromptHasteNaturalAttackChoice(charger, target,
-                        choice => pounceHasteNaturalAttackIndex = choice, labelBonusOffset: 2));
+                {
+                    Coroutine hasteChoice = AttackDeciders.For(charger).ChooseHasteNaturalAttack(this, charger, target, null, 2,
+                        choice => pounceHasteNaturalAttackIndex = choice);
+                    if (hasteChoice != null)
+                        yield return hasteChoice;
+                }
 
                 charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
                 FullAttackResult pounceResult;
@@ -1646,83 +1650,23 @@ public partial class GameManager
                     charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
                 }
 
-                // MM p.310 resolves Improved Grab right after its triggering hit; here it follows the whole pounce (CMB-169).
-                bool improvedGrabAttempted = false;
-                bool improvedGrabSucceeded = false;
-
                 if (pounceResult != null)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Pounce (+2): {pounceResult.GetFullSummary()}"));
 
-                    // Melee reaction effects (Fire Shield, Thorns, etc.) — pounce triggers per hit
-                    if (pounceResult.Attacks != null)
-                    {
-                        foreach (var pounceAtk in pounceResult.Attacks)
-                        {
-                            if (pounceAtk.Hit && !pounceAtk.IsRangedAttack)
-                                MeleeReactionService.TriggerReactions(charger, target, pounceAtk);
-                        }
-                    }
-
-                    if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
-                    {
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🦶", $"{charger.Stats.CharacterName} pounces and rakes with hind claws!"));
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"Pounce Rake: {pounceRakeResult.GetFullSummary()}"));
-
-                        for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
-                        {
-                            CombatResult rakeAttack = pounceRakeResult.Attacks[i];
-                            if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
-                            {
-                                Debug.Log($"[Charge] Rake attack dealt {rakeAttack.TotalDamage} damage to {target?.Stats?.CharacterName ?? target?.name ?? "<null>"}.");
-                                CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
-                            }
-                            // Melee reaction effects for rake attacks
-                            if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack)
-                                MeleeReactionService.TriggerReactions(charger, target, rakeAttack);
-                        }
-                    }
-
-                    // Trip (Ex) after the trigger attack's hit, as on any full attack, before Improved Grab (CMB-125).
-                    TryResolveFreeTripFromAttackResults(charger, target, pounceResult.Attacks, CalculateRangeInfo(charger, target));
-
-                    for (int i = 0; i < pounceResult.Attacks.Count; i++)
-                    {
-                        CombatResult attackResult = pounceResult.Attacks[i];
-                        if (attackResult == null)
-                            continue;
-
-                        if (attackResult.Hit && attackResult.TotalDamage > 0)
-                        {
-                            Debug.Log($"[Charge] Pounce attack dealt {attackResult.TotalDamage} damage to {target?.Stats?.CharacterName ?? target?.name ?? "<null>"}.");
-                            CheckConcentrationOnDamage(target, attackResult.TotalDamage);
-                        }
-
-                        if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
-                            continue;
-
-                        if (!CanAttemptImprovedGrabFromAttack(charger, target, attackResult))
-                            continue;
-
-                        ImprovedGrabChoice grabChoice = charger.IsControllable ? ImprovedGrabChoice.Skip : ChooseImprovedGrabForAI(charger, target);
-                        if (charger.IsControllable)
-                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, attackResult.WeaponName, decision => grabChoice = decision));
-
-                        improvedGrabAttempted = true;
-                        if (grabChoice == ImprovedGrabChoice.Skip)
-                        {
-                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{charger.Stats.CharacterName} declines to start a grapple."));
-                            continue;
-                        }
-
-                        SpecialAttackResult grabResult = ResolveImprovedGrabChoice(charger, target, attackResult, grabChoice);
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                        improvedGrabSucceeded = grabResult.Success;
-
-                        // The pounce's rakes came with its full attack; grapple actions begin next turn.
-                        if (grabResult.Success)
-                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
-                    }
+                    // The one post-attack hook (origin J, the pounce): melee reactions per hit, the rakes, the free trip
+                    // (Trip (Ex), before Improved Grab, CMB-125), then each hit's Concentration with the one Improved Grab
+                    // attempt after the whole pounce (MM p.310 resolves it right after its triggering hit, CMB-169), the
+                    // choice by the charger's decider.
+                    AttackIntent pounceIntent = AttackIntent.ForUi(this, charger);
+                    pounceIntent.IsCharge = true;
+                    pounceIntent.IsPounce = true;
+                    AttackResolution pounceResolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, pounceIntent, pounce: true).With(pounceResult.Attacks);
+                    pounceResolution.RangeInfo = CalculateRangeInfo(charger, target, pounceIntent);
+                    pounceResolution.AfterReactions = () => ResolvePounceRakeAftermath(charger, target, pounceRakeResult);
+                    IEnumerator pouncePost = OnAttackResolved(pounceResolution, new PostAttackOutcome());
+                    while (pouncePost.MoveNext())
+                        yield return pouncePost.Current;
                 }
             }
             else
@@ -1751,39 +1695,17 @@ public partial class GameManager
                         }
                     }
 
-                    RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
-                    TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
-
-                    CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Attack (+2): {result.GetDetailedSummary()}"));
-                    if (result.Hit && result.TotalDamage > 0)
-                    {
-                        Debug.Log($"[Charge] Target {target?.Stats?.CharacterName ?? target?.name ?? "<null>"} took {result.TotalDamage} charge damage.");
-                        CheckConcentrationOnDamage(target, result.TotalDamage);
-                    }
-
-                    // Melee reaction effects (Fire Shield, Thorns, etc.) — charge is a melee attack
-                    if (result.Hit && !result.IsRangedAttack)
-                        MeleeReactionService.TriggerReactions(charger, target, result);
-
-                    Debug.Log($"[Charge] Post-hit target state | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | hp={target?.Stats?.CurrentHP ?? 0} | dead={(target != null && target.Stats != null && target.Stats.IsDead)}");
-
-                    if (CanAttemptImprovedGrabFromAttack(charger, target, result))
-                    {
-                        ImprovedGrabChoice grabChoice = charger.IsControllable ? ImprovedGrabChoice.Skip : ChooseImprovedGrabForAI(charger, target);
-                        if (charger.IsControllable)
-                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, result.WeaponName, decision => grabChoice = decision));
-
-                        // No rake: a creature cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
-                        if (grabChoice != ImprovedGrabChoice.Skip)
-                        {
-                            SpecialAttackResult grabResult = ResolveImprovedGrabChoice(charger, target, result, grabChoice);
-                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                        }
-                        else
-                        {
-                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{charger.Stats.CharacterName} declines to start a grapple."));
-                        }
-                    }
+                    // The one post-attack hook (origin J): the free trip before the charge's log, the log, Concentration,
+                    // melee reactions and Improved Grab, the choice by the charger's decider. No rake: a creature cannot
+                    // begin a grapple and rake in the same turn (MM p.314, CMB-144).
+                    AttackIntent chargeIntent = AttackIntent.ForUi(this, charger);
+                    chargeIntent.IsCharge = true;
+                    AttackResolution chargeResolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, chargeIntent).With(result);
+                    chargeResolution.RangeInfo = CalculateRangeInfo(charger, target, chargeIntent);
+                    chargeResolution.ReportStep = () => CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Attack (+2): {result.GetDetailedSummary()}"));
+                    IEnumerator chargePost = OnAttackResolved(chargeResolution, new PostAttackOutcome());
+                    while (chargePost.MoveNext())
+                        yield return chargePost.Current;
                 }
             }
         }
@@ -1809,6 +1731,29 @@ public partial class GameManager
             yield break;
 
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
+    }
+
+    /// <summary>
+    /// A pounce's rakes (MM p.313; no grapple needed, delegated RAW reading 2026-10-14, CMB-144), run by the post-attack
+    /// hook right after the pounce's reactions: their log lines, then each rake hit's Concentration check and melee
+    /// reactions. Step 16 makes the rakes steps of the attack sequence.
+    /// </summary>
+    private void ResolvePounceRakeAftermath(CharacterController attacker, CharacterController target, FullAttackResult rakeResult)
+    {
+        if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
+            return;
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🦶", $"{attacker.Stats.CharacterName} pounces and rakes with hind claws!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"Pounce Rake: {rakeResult.GetFullSummary()}"));
+
+        for (int i = 0; i < rakeResult.Attacks.Count; i++)
+        {
+            CombatResult rakeAttack = rakeResult.Attacks[i];
+            if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
+                CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
+            if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack)
+                MeleeReactionService.TriggerReactions(attacker, target, rakeAttack);
+        }
     }
 
     /// <summary>Diagonal steps on a path from <paramref name="start"/> (the 5-10-5 count a bull rush follow continues, PHB p.148).</summary>
@@ -2046,9 +1991,11 @@ public partial class GameManager
             {
                 ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
                 // A pounce is a full attack, so Haste adds one natural attack, the AI's pick (CMB-106).
+                int npcPounceHasteIndex = -1;
+                AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, target, null, 0, choice => npcPounceHasteIndex = choice);
                 pounceResult = npc.FullAttack(target, isFlankingCharge, flankingBonus,
                     flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
-                    hasteNaturalAttackIndex: ChooseHasteNaturalAttackIndexForAI(npc, target));
+                    hasteNaturalAttackIndex: npcPounceHasteIndex);
 
                 // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
                 if (npc.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
@@ -2067,62 +2014,16 @@ public partial class GameManager
                 string flankText = isFlankingCharge ? " + Flanking" : "";
                 CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}"));
 
-                // Melee reaction effects (Fire Shield, Thorns, etc.) — NPC pounce triggers per hit
-                if (pounceResult.Attacks != null)
-                {
-                    foreach (var pounceAtk in pounceResult.Attacks)
-                    {
-                        if (pounceAtk.Hit && !pounceAtk.IsRangedAttack)
-                            MeleeReactionService.TriggerReactions(npc, target, pounceAtk);
-                    }
-                }
-
-                if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🦶", $"{npc.Stats.CharacterName} pounces and rakes with hind claws!"));
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"Pounce Rake: {pounceRakeResult.GetFullSummary()}"));
-
-                    for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
-                    {
-                        CombatResult rakeAttack = pounceRakeResult.Attacks[i];
-                        if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
-                            CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
-                        // Melee reaction effects for NPC rake attacks
-                        if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack)
-                            MeleeReactionService.TriggerReactions(npc, target, rakeAttack);
-                    }
-                }
-
-                // Trip (Ex) after the trigger attack's hit, as on any full attack, before Improved Grab (CMB-125).
-                TryResolveFreeTripFromAttackResults(npc, target, pounceResult.Attacks, CalculateRangeInfo(npc, target));
-
-                // MM p.310 resolves Improved Grab right after its triggering hit; here it follows the whole pounce (CMB-169).
-                bool improvedGrabAttempted = false;
-                bool improvedGrabSucceeded = false;
-                for (int i = 0; i < pounceResult.Attacks.Count; i++)
-                {
-                    CombatResult attackResult = pounceResult.Attacks[i];
-                    if (attackResult == null)
-                        continue;
-
-                    if (attackResult.Hit && attackResult.TotalDamage > 0)
-                        CheckConcentrationOnDamage(target, attackResult.TotalDamage);
-
-                    if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
-                        continue;
-
-                    if (!CanAttemptImprovedGrabFromAttack(npc, target, attackResult))
-                        continue;
-
-                    improvedGrabAttempted = true;
-                    SpecialAttackResult grabResult = ResolveImprovedGrabChoice(npc, target, attackResult, ChooseImprovedGrabForAI(npc, target));
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                    improvedGrabSucceeded = grabResult.Success;
-
-                    // The pounce's rakes came with its full attack; grapple actions begin next turn.
-                    if (grabResult.Success)
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
-                }
+                // The one post-attack hook (origin J, the pounce), as on the PC charge, with the AI's choices (the NPC turn path is AI-run).
+                AttackIntent npcPounceIntent = AttackIntent.ForAI(this, npc, target);
+                npcPounceIntent.IsCharge = true;
+                npcPounceIntent.IsPounce = true;
+                AttackResolution npcPounceResolution = AttackResolution.Create(AttackOrigin.Charge, npc, target, npcPounceIntent, ActorSource.AI, pounce: true).With(pounceResult.Attacks);
+                npcPounceResolution.RangeInfo = CalculateRangeInfo(npc, target, npcPounceIntent);
+                npcPounceResolution.AfterReactions = () => ResolvePounceRakeAftermath(npc, target, pounceRakeResult);
+                IEnumerator npcPouncePost = OnAttackResolved(npcPounceResolution, new PostAttackOutcome());
+                while (npcPouncePost.MoveNext())
+                    yield return npcPouncePost.Current;
             }
         }
         else
@@ -2135,24 +2036,17 @@ public partial class GameManager
 
             if (result != null)
             {
-                RangeInfo chargeRangeInfo = CalculateRangeInfo(npc, target);
-                TryResolveFreeTripOnHit(npc, target, result, chargeRangeInfo);
-
+                // The one post-attack hook (origin J), as on the PC charge, with the AI's choices. No rake: a creature
+                // cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
+                AttackIntent npcChargeIntent = AttackIntent.ForAI(this, npc, target);
+                npcChargeIntent.IsCharge = true;
+                AttackResolution npcChargeResolution = AttackResolution.Create(AttackOrigin.Charge, npc, target, npcChargeIntent, ActorSource.AI).With(result);
+                npcChargeResolution.RangeInfo = CalculateRangeInfo(npc, target, npcChargeIntent);
                 string flankText = isFlankingCharge ? " + Flanking" : "";
-                CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Attack (+2{flankText}): {result.GetDetailedSummary()}"));
-                if (result.Hit && result.TotalDamage > 0)
-                    CheckConcentrationOnDamage(target, result.TotalDamage);
-
-                // Melee reaction effects (Fire Shield, Thorns, etc.) — NPC charge is a melee attack
-                if (result.Hit && !result.IsRangedAttack)
-                    MeleeReactionService.TriggerReactions(npc, target, result);
-
-                // No rake: a creature cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
-                if (CanAttemptImprovedGrabFromAttack(npc, target, result))
-                {
-                    SpecialAttackResult grabResult = ResolveImprovedGrabChoice(npc, target, result, ChooseImprovedGrabForAI(npc, target));
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
-                }
+                npcChargeResolution.ReportStep = () => CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Attack (+2{flankText}): {result.GetDetailedSummary()}"));
+                IEnumerator npcChargePost = OnAttackResolved(npcChargeResolution, new PostAttackOutcome());
+                while (npcChargePost.MoveNext())
+                    yield return npcChargePost.Current;
             }
         }
 

@@ -4232,7 +4232,7 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// The PC path (CombatFlowService single attack -> TryResolveImprovedGrabAfterSingleAttack): a Medium hero with
+        /// The PC path (CombatFlowService single attack -> GameManager.OnAttackResolved, origin A, Improved Grab through the UI decider): a Medium hero with
         /// Improved Grab on its claw hits a Medium orc with the claw button. The orc is too large, so no Improved Grab
         /// prompt opens (the harness answers none, so a prompt would stall the turn) and no grapple check is rolled.
         /// </summary>
