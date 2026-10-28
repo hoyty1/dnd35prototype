@@ -4590,6 +4590,7 @@ public class CharacterController : MonoBehaviour
         _activeFeintWindows.Clear();
         _incomingFeintSources.Clear();
         _turnsStartedCount = 0;
+        CurrentTurnStart.Clear();
         _lastKnownTargetPositions.Clear();
         WasSummoned = false;
 
@@ -5583,6 +5584,13 @@ public class CharacterController : MonoBehaviour
     /// <see cref="ResetForNewCreature"/>; a refunded cast puts back its value from before the cast.
     /// </summary>
     public bool StrenuousDamagePending { get; private set; }
+
+    /// <summary>
+    /// What this creature's current turn start decided, PC or NPC: the compulsions it is under this turn
+    /// (<see cref="TurnStartState.Compulsion"/>, set by GameManager.TryRunCompulsionTurn; batch 12 step 7). Cleared at
+    /// every turn start and by <see cref="ResetForNewCreature"/>.
+    /// </summary>
+    public TurnStartState CurrentTurnStart { get; } = new TurnStartState();
 
     /// <summary>
     /// Spend the standard action. A disabled creature's standard action is strenuous (<see cref="MarkStrenuousAction"/>).

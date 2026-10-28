@@ -141,7 +141,12 @@ public class AIService : MonoBehaviour
         if (CombatEnded())
             yield break;
 
-        if (_gameManager.TryGetConfusedTurnDecisionForAI(npc, out ConfusedBehaviorController.ConfusedTurnDecision confusedDecision))
+        // The turn's compulsions were evaluated once at its start, for every actor (GameManager.TryRunCompulsionTurn, batch 12
+        // step 7, decision D4): the branches below read them instead of rolling or building them again.
+        TurnCompulsion compulsion = npc.CurrentTurnStart.Compulsion ?? new TurnCompulsion();
+
+        ConfusedBehaviorController.ConfusedTurnDecision confusedDecision = compulsion.Confused;
+        if (confusedDecision != null)
         {
             if (confusedDecision.Mode != ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
             {
@@ -152,7 +157,10 @@ public class AIService : MonoBehaviour
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{npc.Stats.CharacterName} is confused but acts normally."));
         }
 
-        if (_gameManager.TryGetCharmedTurnDecisionForAI(npc, out CharmedBehaviorController.CharmedTurnDecision charmedDecision))
+        // Charm only restricts targets: a suggestion, fear or turning takes the turn over first, as on a PC's turn
+        // (GameManager.TryRunCompulsionTurn; one precedence for both sides, batch 12 step 7).
+        bool compelledBeyondCharm = compulsion.Suggested != null || compulsion.Fear != null || compulsion.Turned;
+        if (!compelledBeyondCharm && _gameManager.TryGetCharmedTurnDecisionForAI(npc, out CharmedBehaviorController.CharmedTurnDecision charmedDecision))
         {
             // A charmed creature still acts on its own, so it stands up first like any other
             // prone NPC (CMB-074); a fascinated one takes no actions.
@@ -167,37 +175,32 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // A fascinated creature takes no actions: the turn-skip gate skips it (decision D4), and a fascination whose source
+        // is gone ends at its turn start for both sides (GameManager.BeginCombatantTurn), so this is only a safety net.
         if (_gameManager.TryGetFascinatedTurnDecisionForAI(npc, out FascinatedBehaviorController.FascinatedTurnDecision fascinatedDecision))
         {
             CharacterController source = fascinatedDecision != null ? fascinatedDecision.CasterSource : null;
-            if (source == null || source.Stats == null || source.Stats.IsDead)
-            {
-                _gameManager.RemoveCondition(npc, CombatConditionType.Fascinated);
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} is no longer fascinated."));
-            }
-            else
-            {
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} stares blankly at {source.Stats.CharacterName} and takes no actions."));
-            }
-
+            string sourceName = source != null && source.Stats != null ? source.Stats.CharacterName : "nothing";
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} stares blankly at {sourceName} and takes no actions."));
             yield return new WaitForSeconds(0.25f);
             yield break;
         }
 
         // A creature under a suggestion follows its course instead of acting (the bard's Suggestion, PHB p.29 and p.285;
         // the same behaviour as a suggested PC's forced turn, CHR-026).
-        if (_gameManager.TryGetSuggestedTurnDecisionForAI(npc, out SuggestedBehaviorController.SuggestedTurnDecision suggestedDecision))
+        if (compulsion.Suggested != null)
         {
-            yield return _gameManager.StartCoroutine(_gameManager.ExecuteSuggestedTurnDecisionForAI(npc, suggestedDecision));
+            yield return _gameManager.StartCoroutine(_gameManager.ExecuteSuggestedTurnDecisionForAI(npc, compulsion.Suggested));
             yield break;
         }
 
         // ── Scenario harness scripted turn (test instrumentation; null in normal play) ──
-        // Runs after the turn-start rules and the HP, confused, charmed and fascinated gates. A script
-        // replaces everything below: the automatic stand-up, the frightened/panicked gate, the Animate
-        // Rope escape, the no-target search, the turned-undead gate, the grapple turn, free auras and
-        // spittle and the Resilient Sphere restriction. The harness returns null for Frightened,
-        // Panicked or Turned actors and for any actor it wants the AI to run (ScenarioHooks.ScriptedTurn).
+        // Runs after the turn-start rules and the HP, confused, charmed, fascinated and suggested gates. A
+        // script replaces everything below: the automatic stand-up, the frightened, panicked and turned
+        // flight, the Animate Rope escape, the no-target search, the grapple turn, free auras and spittle
+        // and the Resilient Sphere restriction. The harness returns null for Frightened, Panicked or Turned
+        // actors, so the forced kinds stay with the AI, and for any actor it wants the AI to run
+        // (ScenarioHooks.ScriptedTurn).
         IEnumerator scripted = ScenarioHooks.ScriptedTurn?.Invoke(npc);
         if (scripted != null)
         {
@@ -220,9 +223,19 @@ public class AIService : MonoBehaviour
             }
         }
 
-        if (_gameManager.TryGetFrightenedTurnDecisionForAI(npc, out FrightenedBehaviorController.FrightenedTurnDecision frightenedDecision))
+        // A frightened or panicked creature flees from the fear's source (PHB glossary p.310, p.311); the same controller
+        // runs a PC's forced flight (GameManager.TryRunCompulsionTurn, owner decision 2026-10-23, Q1).
+        if (compulsion.Fear != null)
         {
-            yield return _gameManager.StartCoroutine(_gameManager.ExecuteFrightenedTurnDecisionForAI(npc, frightenedDecision));
+            yield return _gameManager.StartCoroutine(_gameManager.ExecuteFrightenedTurnDecisionForAI(npc, compulsion.Fear));
+            yield break;
+        }
+
+        // A turned creature flees from the turner, or cowers when it cannot (PHB p.159; decision D4). Before the target
+        // search, so a turned creature that sees no foe still flees instead of searching.
+        if (compulsion.Turned)
+        {
+            yield return _gameManager.StartCoroutine(ExecuteTurnedTurn(npc));
             yield break;
         }
 
@@ -268,12 +281,6 @@ public class AIService : MonoBehaviour
             }
 
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} spots {targetPC.Stats.CharacterName} after searching."));
-        }
-
-        if (npc.HasCondition(CombatConditionType.Turned) && _gameManager.IsUndeadCharacterForAI(npc))
-        {
-            yield return _gameManager.StartCoroutine(ExecuteTurnedUndeadTurn(npc));
-            yield break;
         }
 
         if (npc.IsGrappling())
@@ -625,7 +632,14 @@ public class AIService : MonoBehaviour
         return true;
     }
 
-    private IEnumerator ExecuteTurnedUndeadTurn(CharacterController npc)
+    /// <summary>
+    /// The turned creature's turn, PC or NPC (PHB p.159): it flees from the turner by the best and fastest means, through
+    /// the one flight search (<see cref="FrightenedBehaviorController.Flee"/>: a grapple escape first, then withdraw, run
+    /// or a move), and when it cannot flee it cowers (the Cowering condition until its next turn, decision D4; the
+    /// glossary condition, Dex denial included, is the delegated reading recorded in RULES_COVERAGE 4.1). The AI turn
+    /// calls it for an NPC, <c>GameManager.TryRunCompulsionTurn</c> for a PC's forced turn (owner decision 2026-10-23, Q1).
+    /// </summary>
+    public IEnumerator ExecuteTurnedTurn(CharacterController npc)
     {
         if (npc == null || npc.Stats == null)
             yield break;
@@ -665,24 +679,17 @@ public class AIService : MonoBehaviour
         if (source == null)
             source = _gameManager.GetClosestAliveEnemyToForAI(npc);
 
-        if (source != null && npc.Actions.HasMoveAction && !npc.Stats.MovementBlockedByCondition)
-        {
-            SquareCell retreatCell = EvaluateMovementOptions(npc, source.GridPosition, retreat: true);
-            if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
-            {
-                yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
-                if (!npc.CanTakeTurnActions())
-                    yield break; // dropped by an AoO or area damage while moving (CMB-073)
-                npc.Actions.UseMoveAction();
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} flees from divine turning!"));
-                yield return new WaitForSeconds(0.45f);
-                yield break;
-            }
-        }
+        var flight = new FrightenedBehaviorController.FlightResult();
+        if (source != null)
+            yield return _gameManager.StartCoroutine(FrightenedBehaviorController.Flee(_gameManager, npc, source, " (turned)", flight));
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
+        if (flight.Outcome == FrightenedBehaviorController.FlightOutcome.Fled)
+            yield break;
 
-        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} is turned and cowers, unable to attack."));
+        // Cornered: it cowers (PHB p.159; the glossary's cowering, p.307: no actions, -2 AC, no Dex bonus) until its next
+        // turn, when the compulsion pass looks again.
+        _gameManager.ApplyCondition(npc, CombatConditionType.Cowering, 1, source, sourceNameOverride: "Turned (cornered)", sourceCategory: "Turned");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} is turned and cannot flee: it cowers, unable to act."));
         yield return new WaitForSeconds(0.35f);
     }
 

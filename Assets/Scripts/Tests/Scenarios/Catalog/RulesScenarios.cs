@@ -3007,16 +3007,19 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// A grappling creature takes no ordinary movement (PHB p.156). Grapplers share a square and path-finding accepts a
-        /// shared start (CMB-122), so the movement budget keeps a frightened grappler in the grapple: the fear compulsion
-        /// finds no square to flee to and falls to its cornered branch. The harness applies the Frightened condition (the
-        /// effect of a failed save against Cause Fear) from the priest after the hero grapples the orc.
+        /// shared start (CMB-122), so the movement budget keeps a frightened grappler in the grapple: it flees by trying to
+        /// escape the grapple (FrightenedBehaviorController.Flee, batch 12 step 7), and with every grapple d20 a 20 and
+        /// ties to the higher modifier (hero +13, orc +5) the escape fails, so it stays. The harness applies the Frightened
+        /// condition (the effect of a failed save against Cause Fear) from the priest after the hero grapples the orc. The
+        /// hero is Scripted, because a Ui grappler is asked whether to oppose the escape, a prompt the harness does not
+        /// answer.
         /// </summary>
         private static ScenarioDef GrapplerFearedStays()
         {
-            return Rules("rules/grappler-feared-stays", "A frightened grappler does not flee out of the grapple (PHB p.156; CMB-122)")
-                .Covers("CMB-122", "PHB p.156", "PC_NPC_PARITY")
+            return Rules("rules/grappler-feared-stays", "A frightened grappler flees by trying to escape, not by moving out of the grapple (PHB p.156; CMB-122)")
+                .Covers("CMB-122", "PHB p.156", "PHB p.310", "PC_NPC_PARITY")
                 .MaxRounds(2)
-                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Scripted)
                 .Pc("priest", ActorSource.Stats(() => Fighter("Priest", 4)), 5, 10, Control.Scripted)
                 .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
                 .Tweak("hero", StripOffHand)
@@ -3024,6 +3027,7 @@ namespace Tests.Scenarios
                 .Force(20, 20, "Touch attack")
                 .Force(20, 20, "Grapple check", -1)
                 .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("hero", 2, Step.Pass())
                 .Script("priest", FrightenOrc)
                 .Expect("The orc is frightened and grappling at its round-1 turn", v =>
                 {
@@ -3038,6 +3042,14 @@ namespace Tests.Scenarios
                     if (turns.Count == 0) return ExpectResult.Fail("no orc turn");
                     TraceEvent other = turns.FirstOrDefault(e => e.Str("controller") != "ai");
                     return other == null ? ExpectResult.Pass(turns.Count + " ai turns") : ExpectResult.Fail("controller " + other.Str("controller"), other.Seq);
+                })
+                .Expect("The frightened orc's grapple choices are escapes (its flight)", v =>
+                {
+                    var r = new System.Text.RegularExpressions.Regex(@"Orc Grapple Drill chooses grapple action \[(\w+)\]");
+                    List<string> choices = v.Of("log").Where(e => r.IsMatch(e.Str("text") ?? "")).Select(e => r.Match(e.Str("text")).Groups[1].Value).ToList();
+                    if (choices.Count == 0) return ExpectResult.Fail("no grapple choice by the orc");
+                    string bad = choices.FirstOrDefault(c => c != "OpposedGrappleEscape" && c != "EscapeArtist");
+                    return bad == null ? ExpectResult.Pass(string.Join(",", choices)) : ExpectResult.Fail("chose " + bad);
                 })
                 .Expect("Neither grappler moves after the grapple, and both end in the shared square still grappling", v =>
                 {
@@ -3166,7 +3178,8 @@ namespace Tests.Scenarios
                 .Turn("dummy", 0, Step.Pass())
                 .AiWhenUnscripted("hero")
                 // BAB +4 gives one attack a round (PHB p.141); no ally and a non-caster target, so renewing would only
-                // trade grapple damage for a turn the pinned dummy loses anyway (CMB-075). The AI pins at its own
+                // trade grapple damage for a hold that helps no one (a pinned creature may only try to escape, PHB p.156,
+                // decision D4; this dummy is scripted to pass). The AI pins at its own
                 // discretion (ChooseNPCGrappleAction), so a seed range is needed.
                 .Expect("Each hero turn that starts with the dummy pinned deals grapple damage, and the pin ends", v =>
                 {

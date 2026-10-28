@@ -3791,16 +3791,14 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
     }
 
+    /// <summary>
+    /// The turn-skip gate of both turn routines: the turn is skipped only when the creature can take no action at all
+    /// (<see cref="ConditionRules.DeniesAllActions(CharacterController)"/>, decision D4, CMB-075). A nauseated, pinned,
+    /// panicked or turned creature gets its turn: a single move action, the grapple escape options, or the flight
+    /// (<see cref="TryRunCompulsionTurn"/>).
+    /// </summary>
     private bool ShouldSkipTurnDueToHPState(CharacterController character)
-    {
-        if (character == null || character.Stats == null)
-            return true;
-
-        if (!character.CanTakeTurnActions())
-            return true;
-
-        return !character.CanTakeActions();
-    }
+        => ConditionRules.DeniesAllActions(character);
 
     private string GetUnableToActReason(CharacterController character)
     {
@@ -3941,9 +3939,6 @@ public partial class GameManager : MonoBehaviour
         EndAttackSequence();
         EndThrownAttackSequence();
 
-        // The Turn Undead proximity check (GameManager.TurnStart.cs).
-        BeginActingTurn(pc);
-
         _loggedHeldChargeNoActionsReminder = false;
 
         CurrentPhase = TurnPhase.PCTurn;
@@ -3966,34 +3961,15 @@ public partial class GameManager : MonoBehaviour
         // Update initiative UI to highlight current character
         UpdateInitiativeUI();
 
-        if (TryBeginConfusedPCTurn(pc))
-            return;
-        // A creature under a suggestion follows its course (the bard's Suggestion, PHB p.29; CHR-026).
-        if (TryBeginSuggestedPCTurn(pc))
+        // The Turn Undead proximity check and the compulsion pass (GameManager.TurnStart.cs): a confused, suggested,
+        // frightened, panicked or turned PC gets a forced turn (batch 12 step 7, owner decision 2026-10-23, Q1).
+        if (BeginActingTurn(pc))
             return;
 
         Debug.Log($"[Turn] Beginning turn for {pc.Stats.CharacterName}");
         Debug.Log("[Turn] Showing action buttons");
         ShowActionChoices();
         Debug.Log("[Turn] Player turn ready");
-    }
-
-    private bool TryBeginConfusedPCTurn(CharacterController pc)
-    {
-        _confusedBehaviorController ??= new ConfusedBehaviorController();
-        if (!_confusedBehaviorController.TryRollDecision(this, pc, out ConfusedBehaviorController.ConfusedTurnDecision decision))
-            return false;
-
-        if (decision.Mode == ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{pc.Stats.CharacterName} is confused but acts normally this turn."));
-            return false;
-        }
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.SetActionButtonsVisible(false);
-        StartCoroutine(ExecuteConfusedForcedPCTurn(pc, decision));
-        return true;
     }
 
     private IEnumerator ExecuteConfusedForcedPCTurn(CharacterController pc, ConfusedBehaviorController.ConfusedTurnDecision decision)
@@ -11000,10 +10976,11 @@ public partial class GameManager : MonoBehaviour
         return _frightenedBehaviorController.TryBuildDecision(this, actor, out decision);
     }
 
-    public IEnumerator ExecuteFrightenedTurnDecisionForAI(CharacterController actor, FrightenedBehaviorController.FrightenedTurnDecision decision)
+    public IEnumerator ExecuteFrightenedTurnDecisionForAI(CharacterController actor, FrightenedBehaviorController.FrightenedTurnDecision decision,
+        FrightenedBehaviorController.FlightResult result = null)
     {
         _frightenedBehaviorController ??= new FrightenedBehaviorController();
-        yield return StartCoroutine(_frightenedBehaviorController.ExecuteDecision(this, actor, decision));
+        yield return StartCoroutine(_frightenedBehaviorController.ExecuteDecision(this, actor, decision, result));
     }
 
     // Public delegation helpers for AIService.

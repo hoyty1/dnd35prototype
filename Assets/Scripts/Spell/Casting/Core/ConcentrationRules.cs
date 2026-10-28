@@ -20,8 +20,9 @@ using UnityEngine;
 /// broken by a distraction or by the caster's death (the spell's own duration line, specific, beats p.176's general "the
 /// spell ends"); a grappled or pinned caster may maintain (PHB p.156 lets it cast, so it can concentrate; the grapple
 /// Concentration check while maintaining is SPL-172), and so may a paralyzed one, since concentrating is a purely mental
-/// action (PHB p.311); the turn-skip gate gives a pinned or paralyzed creature no turn (CMB-075), so its spell is kept up
-/// on that skipped turn (<see cref="MaintainOnSkippedTurn"/>). Open (SPL-114): whether a wand or a spell-like ability counts as casting; until it
+/// action (PHB p.311); the turn-skip gate skips a paralyzed creature's turn (decision D4), so its spell is kept up on that
+/// skipped turn, while a pinned caster gets its turn and maintains with its standard action on that turn (batch 12
+/// step 7) (<see cref="MaintainOnSkippedTurn"/>). Open (SPL-114): whether a wand or a spell-like ability counts as casting; until it
 /// is decided a wand use does not end the concentration at once (<see cref="CastEndsConcentration"/>), and the wand's
 /// standard action leaves none to maintain the spell, so it lapses at the end of the turn.
 /// </summary>
@@ -99,9 +100,9 @@ public static class ConcentrationRules
     }
 
     /// <summary>
-    /// A turn the turn-skip gate gives no actions (CMB-075) for a caster whose only bar is one that still lets it
-    /// concentrate (pinned or paralyzed: <see cref="StandardActionBar"/>): concentrating is the one thing it can do with
-    /// that turn's standard action, so the spell is kept up, for PCs and NPCs alike (delegated RAW reading 2026-10-15).
+    /// A turn the turn-skip gate skips (decision D4) for a caster whose only bar is one that still lets it concentrate
+    /// (<see cref="StandardActionBar"/>; since batch 12 step 7 only a paralyzed one reaches it, as a pinned caster gets
+    /// its turn and maintains there): concentrating is the one thing it can do with that turn's standard action, so the spell is kept up, for PCs and NPCs alike (delegated RAW reading 2026-10-15).
     /// Returns the log line, or null when the caster is not concentrating or cannot concentrate.
     /// </summary>
     public static string MaintainOnSkippedTurn(CharacterController caster)

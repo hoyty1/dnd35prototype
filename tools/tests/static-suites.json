@@ -231,7 +231,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 43,
+      "passed": 44,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -719,7 +719,7 @@
       "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 17,
+      "passed": 18,
       "failed": 1,
       "flakyFailures": 0,
       "knownFailures": [

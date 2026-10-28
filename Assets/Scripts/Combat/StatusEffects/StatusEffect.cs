@@ -865,6 +865,59 @@ public static class ConditionRules
         ConditionDefinition def = GetDefinition(type);
         return def.CoupDeGraceVulnerable || Normalize(type) == CombatConditionType.Helpless;
     }
+
+    /// <summary>
+    /// True for a condition under which a creature can take no action at all, so its whole turn is skipped (delegated
+    /// RAW reading 2026-10-23, decision D4, docs/systems/RULES_COVERAGE.md 4.1; DMG p.301 conditions, PHB glossary
+    /// p.305-313): dead, dying, stable, unconscious or asleep; helpless, paralyzed or petrified; stunned, dazed or
+    /// cowering; fascinated, under Hideous Laughter, or blown away. Nauseated (a single move action), Pinned (grapple
+    /// escape), Panicked and Turned (flight) deny most actions but not all, so the creature still gets its turn.
+    /// </summary>
+    public static bool DeniesAllActions(CombatConditionType type)
+    {
+        switch (Normalize(type))
+        {
+            case CombatConditionType.Dead:
+            case CombatConditionType.Dying:
+            case CombatConditionType.Stable:
+            case CombatConditionType.Unconscious:
+            case CombatConditionType.Asleep:
+            case CombatConditionType.Helpless:
+            case CombatConditionType.Paralyzed:
+            case CombatConditionType.Petrified:
+            case CombatConditionType.Stunned:
+            case CombatConditionType.Dazed:
+            case CombatConditionType.Cowering:
+            case CombatConditionType.Fascinated:
+            case CombatConditionType.HideousLaughter:
+            case CombatConditionType.BlownAway:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// The turn-skip gate of both turn routines, PC and NPC (decision D4): true when the creature's HP state allows no
+    /// turn actions (dead, dying, stable, unconscious) or it has a condition that denies every action
+    /// (<see cref="DeniesAllActions(CombatConditionType)"/>). Not the same test as
+    /// <c>CharacterController.CanTakeActions</c>, which also refuses Nauseated, Pinned, Panicked and Turned.
+    /// </summary>
+    public static bool DeniesAllActions(CharacterController c)
+    {
+        if (c == null || c.Stats == null)
+            return true;
+        if (!c.CanTakeTurnActions())
+            return true;
+
+        List<StatusEffect> active = c.GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            if (active[i] != null && DeniesAllActions(active[i].Type))
+                return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>

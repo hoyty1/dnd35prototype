@@ -2087,7 +2087,18 @@ public partial class GameManager
         yield return new WaitForSeconds(0.45f);
     }
 
-    private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc)
+    /// <summary>
+    /// A grappling creature that must flee (frightened, panicked or turned; PC or NPC) escapes the grapple as its flight:
+    /// it releases a pin it holds (a free action that ends the grapple, PHB p.157, CMB-089), else makes the opposed
+    /// grapple check or the Escape Artist check (PHB p.156). The shared AI grapple turn limited to those choices
+    /// (batch 12 step 7; FrightenedBehaviorController.Flee).
+    /// </summary>
+    public IEnumerator RunGrappleEscapeForFlight(CharacterController actor)
+    {
+        yield return StartCoroutine(AI_GrappleRestrictedTurn(actor, escapeOnly: true));
+    }
+
+    private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc, bool escapeOnly = false)
     {
         if (npc == null || npc.Stats == null)
             yield break;
@@ -2099,6 +2110,10 @@ public partial class GameManager
         {
             attempts++;
 
+            // A fleeing creature stops once it is free (its escape won).
+            if (escapeOnly && !npc.IsGrappling())
+                yield break;
+
             if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action."));
@@ -2106,7 +2121,9 @@ public partial class GameManager
                 yield break;
             }
 
-            GrappleActionType? chosenAction = ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
+            GrappleActionType? chosenAction = escapeOnly
+                ? ChooseNPCGrappleEscapeForFlight(npc, opponent, actorPinned, opponentPinned)
+                : ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
             if (chosenAction == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no legal grapple actions available."));
@@ -2231,6 +2248,19 @@ public partial class GameManager
         }
     }
 
+    /// <summary>The escape choice of a fleeing grappler (<see cref="RunGrappleEscapeForFlight"/>), or null when none is legal.</summary>
+    private GrappleActionType? ChooseNPCGrappleEscapeForFlight(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
+    {
+        List<GrappleActionType> legalActions = BuildNPCLegalGrappleActions(npc, opponent, actorPinned, opponentPinned);
+        if (legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && npc.IsPinningOpponent())
+            return GrappleActionType.ReleasePinnedOpponent;
+        if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
+            return GrappleActionType.OpposedGrappleEscape;
+        if (legalActions.Contains(GrappleActionType.EscapeArtist))
+            return GrappleActionType.EscapeArtist;
+        return null;
+    }
+
     private GrappleActionType? ChooseNPCGrappleAction(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
     {
         List<GrappleActionType> legalActions = BuildNPCLegalGrappleActions(npc, opponent, actorPinned, opponentPinned);
@@ -2309,8 +2339,8 @@ public partial class GameManager
     /// renews only when it keeps a grapple attack for damage this turn, or when holding the target helps its side:
     /// another able ally of the pinner is in the fight and the target is a spellcaster (a pinned creature cannot cast)
     /// or that ally is adjacent to the target (pinned: -4 AC against it and no Dex bonus). Otherwise a one-attack
-    /// pinner in a lone fight would renew every round and neither creature would ever act or take damage, because a
-    /// pinned creature loses its turn (CMB-075).
+    /// pinner in a lone fight would renew every round and deal no damage while the pinned creature could only try to
+    /// escape (a pinned creature's turn offers only the escape options, PHB p.156, decision D4).
     /// </summary>
     private bool ShouldNPCRenewDuePin(CharacterController npc, CharacterController target)
     {

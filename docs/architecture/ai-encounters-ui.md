@@ -39,15 +39,17 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
                            once-per-round flags, Aid Another expiry, StartNewTurn,
                            combat-end check (ended -> stop)
     non-PC branch: StartCoroutine(SingleNPCTurnFromInitiative)  _Core/GameManager.NPCTurns.cs:35
-      ShouldSkipTurnDueToHPState -> NextInitiativeTurn, stop (a disabled NPC acts, PHB p.145)
+      ShouldSkipTurnDueToHPState (ConditionRules.DeniesAllActions, D4) -> NextInitiativeTurn, stop
+                           (a disabled NPC acts, PHB p.145; nauseated, pinned, panicked, turned act)
       ProcessNPCRoundStartPerception (Listen checks; NPC path only, CMB-094)
-      BeginActingTurn(npc): Turn Undead proximity
+      BeginActingTurn(npc): Turn Undead proximity, compulsion pass (TryRunCompulsionTurn ->
+                           npc.CurrentTurnStart.Compulsion; batch 12 step 7)
       behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs
       yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs
-        Confused / Charmed / Fascinated / Frightened controllers (may end the turn)
+        Confused / Charmed / Fascinated / Suggested / Frightened-Panicked / Turned (the stored
+        compulsions; the Turned flight is ExecuteTurnedTurn; may end the turn)
         Animate Rope escape attempt
         SelectBestTarget; none -> ExecuteSearchTurnWhenNoTargets (300), reselect, else stop
-        Turned undead -> ExecuteTurnedUndeadTurn (419, flee)
         grappling -> GameManager.ExecuteGrappleRestrictedTurnForAI -> GameManager.AI_GrappleRestrictedTurn
                      (a GameManager partial inside Combat/Maneuvers/GrappleSystem.cs)
         aura (free action), free-action ranged special such as Spittle

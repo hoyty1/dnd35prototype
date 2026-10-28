@@ -226,6 +226,7 @@ public static class NpcSlotReuseTests
             slot.SetRapidShot(true);
             slot.HasMovedThisTurn = true;
             slot.Actions.MoveActionUsed = true;
+            slot.CurrentTurnStart.Compulsion = new TurnCompulsion { Turned = true };
             slot.Tags.AddTag("ScenarioOverride:CRE046");
             slot.gameObject.AddComponent<LastKnownPositionTracker>();
             slot.SetAcidSprayUsedThisRound(true);
@@ -248,6 +249,7 @@ public static class NpcSlotReuseTests
             Assert(slot.PowerAttackValue == 0 && !slot.RapidShotEnabled && slot.CurrentAttackDamageMode == fresh.CurrentAttackDamageMode,
                 "CRE-046: Power Attack, Rapid Shot and the damage mode start from the defaults");
             Assert(!slot.HasMovedThisTurn && !slot.Actions.MoveActionUsed, "CRE-046: turn and action-economy state start fresh");
+            Assert(slot.CurrentTurnStart.Compulsion == null, "CRE-046: the old creature's turn-start compulsions are gone (batch 12 step 7)");
             Assert(!slot.Tags.HasTag("ScenarioOverride:CRE046") && TagSet(slot) == TagSet(fresh),
                 "CRE-046: the tags equal a fresh orc warrior's (" + TagSet(slot) + " vs " + TagSet(fresh) + ")");
             Assert(slot.GetComponent<LastKnownPositionTracker>() == null, "CRE-046: the old creature's AI position tracker is gone");

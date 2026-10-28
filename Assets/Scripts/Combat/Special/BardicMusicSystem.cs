@@ -380,21 +380,9 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// A suggested PC follows the course on its own (a forced turn, as for confusion); a fascinated one is held by the
-    /// fascination first. True when the turn was taken over.
+    /// A suggested PC follows the course on its own (a forced turn, as for confusion), started by the compulsion pass
+    /// (GameManager.TryRunCompulsionTurn, batch 12 step 7); a fascinated one is held by the fascination first.
     /// </summary>
-    private bool TryBeginSuggestedPCTurn(CharacterController pc)
-    {
-        if (pc == null || pc.HasCondition(CombatConditionType.Fascinated))
-            return false;
-        if (!TryGetSuggestedTurnDecisionForAI(pc, out SuggestedBehaviorController.SuggestedTurnDecision decision))
-            return false;
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.SetActionButtonsVisible(false);
-        StartCoroutine(ExecuteSuggestedForcedPCTurn(pc, decision));
-        return true;
-    }
-
     private IEnumerator ExecuteSuggestedForcedPCTurn(CharacterController pc, SuggestedBehaviorController.SuggestedTurnDecision decision)
     {
         yield return StartCoroutine(ExecuteSuggestedTurnDecisionForAI(pc, decision));

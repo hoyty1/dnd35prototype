@@ -6917,8 +6917,8 @@ public partial class GameManager
     public bool TryMaintainConcentrationForAI(CharacterController npc) => ExecuteMaintainConcentration(npc);
 
     /// <summary>
-    /// A turn the turn-skip gate skips (CMB-075), PC or NPC: a pinned or paralyzed caster still concentrates on its
-    /// spell, the one thing that turn lets it do (ConcentrationRules.MaintainOnSkippedTurn; delegated RAW reading
+    /// A turn the turn-skip gate skips (decision D4), PC or NPC: a paralyzed caster still concentrates on its spell (a
+    /// pinned one gets its turn since batch 12 step 7 and maintains with its standard action), the one thing that turn lets it do (ConcentrationRules.MaintainOnSkippedTurn; delegated RAW reading
     /// 2026-10-15, PHB p.156, p.311). Any other caster's spell ends at the end of the turn.
     /// </summary>
     private void MaintainConcentrationOnSkippedTurn(CharacterController character)

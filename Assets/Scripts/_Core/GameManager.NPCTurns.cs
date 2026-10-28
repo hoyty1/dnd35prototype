@@ -65,7 +65,8 @@ public partial class GameManager
 
         // Only the NPC path checks for unseen creatures at turn start (CMB-094, batch 12 step 8).
         ProcessNPCRoundStartPerception(npc);
-        // The Turn Undead proximity check of a creature that acts (GameManager.TurnStart.cs).
+        // The Turn Undead proximity check and the compulsion pass of a creature that acts (GameManager.TurnStart.cs): an
+        // NPC's compulsions are stored on CurrentTurnStart and run in its AI turn (batch 12 step 7).
         BeginActingTurn(npc);
 
         // Determine AI behavior for this NPC

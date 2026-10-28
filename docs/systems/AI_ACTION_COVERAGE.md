@@ -47,7 +47,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Aid another (+2 attack or AC, or wake a sleeping ally) | Never | `UseAidAnother` unread; executor is PC-bound | Yes | AI-026, AI-054; 11.8.1 |
 | Coup de grace | Used | profiles or data override, helpless adjacent | Yes | provokes from all threatening enemies, as for PCs; damage is the shared critical roll (`WeaponDamageRoll`, sneak attack once; CMB-004 fixed 2026-10-09) |
 | Grapple start / in-grapple | Used | 8.6; a natural-attack creature's grapple attack is one natural attack the AI picks (`ChooseGrappleNaturalAttackForAI`, CMB-127), one per step of the BAB ladder (CMB-146); a raker rakes first (CMB-144); the Improved Grab hold choice is `AIProfile.ShouldHoldWithImprovedGrab` (CMB-148); the AI deals hold damage lethal (the default; a PC may pick nonlethal at -4) and lets go of a hold before its Damage check when no other foe is in reach (AI-064) | Yes | CMB-033, CMB-083, CMB-121 (cannot join a grapple in progress), CMB-145, CMB-163, CMB-169, CMB-170, AI-058, AI-064 |
-| Grapple escape | Partial | animals <25% HP only in practice | Yes | CMB-075, AI-029 |
+| Grapple escape | Partial | pinned NPCs, and grappling ones that are frightened, panicked or turned (their flight), try to escape since batch 12 step 7; unpinned, animals <25% HP only | Yes | AI-029 |
 | Improved Grab | Auto | free on hit, only against a target at least one size smaller unless the entry names a maximum (MM p.310; `CharacterController.CanImprovedGrabTargetBySize`) | Prompt (same size test, no prompt against a target too large) | AI-061 |
 | Constrict, blood drain, swallow whole, trample | Never | text or unread data | n/a | CRE-031, CRE-018 |
 | Breath weapon | Partial | Dragon profile; recharges per its MM entry (batch 12 step 6) | n/a | AI-033, AI-040, AI-008 |
@@ -55,7 +55,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Frightful presence | Auto | first attack or breath | n/a | AI-041 |
 | Engulf, spittle, bombardier spray | Used | 8.4 | n/a | AI-006, CMB-024 |
 | Spell-like abilities | Never | no system | n/a | CRE-015, CRE-017 |
-| Turn undead | Never | PC menu flow; NPC undead that are turned lose their turns | Yes (turn only; no rebuke, command or bolster; turning level by class level since CHR-020) | CMB-026, CMB-075, AI-054; 11.8.6, 11.8.7 |
+| Turn undead | Never | PC menu flow; turned NPCs flee or cower since batch 12 step 7 | Yes (turn only; no rebuke, command or bolster; turning level by class level since CHR-020) | CMB-026, AI-054; 11.8.6, 11.8.7 |
 | Rage | Never | PC-only button; the rules core works for any actor | Yes | 11.8.7 |
 | Flurry of Blows | Yes, since 2026-10-14 (CHR-003) | `GameManager.TryNPCDeclareFlurryOfBlows` before the NPC melee sequence: `AIProfile.ShouldUseFlurryOfBlows` (default: the flurry's expected hits against the target's AC beat the plain iteratives), then `CharacterController.TryBeginFlurryOfBlows`, the core the PC button calls; each flurry step then runs through `ResolveAttackSequenceStep`, so a maneuver may replace one | No | 11.8.7 |
 | Maintain a concentration spell | Yes, since 2026-10-15 (batch 11 step 16, decision D2) | `AIService.TryMaintainConcentrationTurn` (gate 15b): `AIProfile.ShouldMaintainConcentration` (a short value rule, AI-068), then the shared `ConcentrationRules.Maintain` | Yes (Maintain button; PHB p.176) | AI-068, SPL-172 |

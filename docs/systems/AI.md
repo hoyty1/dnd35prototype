@@ -46,7 +46,7 @@ Contents:
 
 1. **Narrow action set.** No double move, run, total defense, ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another, dropping prone or crawling, weapon switching, item use, turning, class abilities such as Rage (11.8.7; Flurry of Blows since CHR-003, Smite, Lay on Hands and Wild Shape since CHR-020, 2026-10-14, bardic music since CHR-026, 2026-10-15), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Several PC executors for these are bound to the PC turn flow and cannot be called by the AI as they are (AI-054).
 2. **Asymmetries that favour NPCs.** Breath weapons cost no action (AI-040), and monster ranged specials skip the attack calculator (AI-006); since batch 11 step 13 a silenced NPC, like a PC, cannot cast a verbal spell (the cast core's Legality stage, and the AI's spell choice skips such a spell). Damage from spells, breath and specials is shared since 2026-10-09 (`GameManager.DealDamage`, SPL-004). Casting (7.6), movement and maneuver attacks of opportunity (4.5) use the same helpers for PCs and NPCs.
-3. **Asymmetries that cripple NPCs.** A prone confused NPC never stands up and the AI never crawls (CMB-074; other prone NPCs, charmed ones included, stand at turn start). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire only for the Dragon profile (AI-033); they recharge as their MM entries say since batch 12 step 6 (D14). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
+3. **Asymmetries that cripple NPCs.** A prone confused NPC never stands up and the AI never crawls (CMB-074; other prone NPCs, charmed ones included, stand at turn start). Since batch 12 step 7 (2026-10-28, decision D4) panicked and turned NPCs flee, pinned ones try to escape and nauseated ones take their single move action, as PCs do. Breath weapons fire only for the Dragon profile (AI-033); they recharge as their MM entries say since batch 12 step 6 (D14). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
 4. **No decision layer.** Each routine is a fixed script. There is no comparison of the expected value of a spell, a breath, a full attack or a maneuver; `SelectBestAction` computes six results but its callers act only on `Charge` (AI-027). Profiles that set Trip trip every standing target in reach with their first attack, with no odds check (AI-035); a per-turn stopgap (AI-060) only stops them chaining maneuvers or retrying a failed one.
 5. **No group play.** Every NPC scores alone. There is no focus fire, flank pairing, protection of casters, morale or retreat policy (AI-010).
 
@@ -77,17 +77,19 @@ Contents:
           |--(IsControllable)--> StartPCTurn (player)
           | not controllable
  GameManager.SingleNPCTurnFromInitiative
-          |-- ShouldSkipTurnDueToHPState? --> log, NextInitiativeTurn   (CMB-075)
-          |-- perception (NPC path only, CMB-094), BeginActingTurn (Turn Undead proximity)
+          |-- ShouldSkipTurnDueToHPState (DeniesAllActions, D4)? --> log, NextInitiativeTurn
+          |-- perception (NPC path only, CMB-094), BeginActingTurn (Turn Undead proximity,
+          |                       compulsion pass -> npc.CurrentTurnStart)
           v
  AIService.ExecuteNPCTurn
-   Confused / Charmed / Fascinated ----> BehaviorController (whole turn; charmed stands up first)
+   Confused / Charmed / Suggested ----> BehaviorController (whole turn; charmed stands up first)
    Prone (not grappling) -> TryStandUpFromProneForAI (move action, AoOs)
-   Frightened ----> BehaviorController (whole turn)
+   Frightened or Panicked ----> BehaviorController (whole turn)
+   Turned -> flee, or cower when cornered (whole turn)
    Animate Rope escape
    SelectBestTarget ----------------------------+--> profile.ScoreTarget / GetTargetPriority
    (none -> search move)                        +--> perception terms, LastKnownPositionTracker
-   Turned undead -> flee | Grappling -> AI_GrappleRestrictedTurn
+   Grappling -> AI_GrappleRestrictedTurn (a pinned NPC: the escape options only)
    Aura (free) ; free-action ranged special
    Resilient Sphere -> end
    Lay on Hands (paladin; AIProfile.ChooseLayOnHandsTarget) -> end
@@ -166,34 +168,36 @@ The `SkeletonCreatureTemplate` and `ZombieCreatureTemplate` registry adapters do
 
 ### 3.2 The turn-skip gate
 
-`ShouldSkipTurnDueToHPState` (GameManager.cs:3912) skips the turn when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or when `CharacterConditions.CanTakeActions()` is false. The latter is false for any active condition whose `ConditionDefinition` sets both `PreventsStandardActions` and `PreventsFullRoundActions` (Combat/StatusEffects/StatusEffect.cs). Those conditions are: BlownAway, Cowering, Dazed, HideousLaughter, Dead, Dying, Fascinated, Asleep, Helpless, Nauseated, Panicked, Paralyzed, Petrified, Pinned, Stable, Stunned, Turned, Unconscious.
+`ShouldSkipTurnDueToHPState` (GameManager.cs) returns `ConditionRules.DeniesAllActions(creature)` (Combat/StatusEffects/StatusEffect.cs; batch 12 step 7, 2026-10-28, delegated RAW reading D4): the turn is skipped when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or the creature has a condition that denies every action: Dead, Dying, Stable, Unconscious, Asleep, Helpless, Paralyzed, Petrified, Stunned, Dazed, Cowering, Fascinated, HideousLaughter or BlownAway. `CharacterConditions.CanTakeActions()` is unchanged (it also refuses Nauseated, Panicked, Pinned and Turned); only `GrappleSystem.ShouldNPCRenewDuePin` still reads it. The PC path uses the same gate.
 
-Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3992):
+What now reaches the turn:
 
-- **Panicked** creatures never flee (PHB ch.8 / DMG ch.8 Condition Summary: a panicked creature drops what it holds and flees). The Panicked branch of `FrightenedBehaviorController` is unreachable, so frightful presence that panics a creature just freezes it.
-- **Turned** undead never flee; `AIService.ExecuteTurnedUndeadTurn` (443) is unreachable. `TurnUndeadSystem` logs "continues fleeing" without moving anything.
-- **Fascinated**: the `ExecuteNPCTurn` Fascinated branch (99-114), including its "source dead, remove the condition" cleanup, is unreachable.
-- **Pinned** creatures lose their turn, so the pinned branch of `ChooseNPCGrappleAction` (the escape checks) never runs for a pinned NPC. PHB ch.8 (Grapple) lets a pinned creature try to escape.
-- **Nauseated** creatures (swarm distraction) lose the whole turn; DMG ch.8 allows a single move action.
-- Since batch 12 step 6 (2026-10-28, decision D3) a skipped creature, PC or NPC, still gets its turn start: `GameManager.OnTurnStarted` calls `BeginCombatantTurn` (`_Core/GameManager.TurnStart.cs`) before the fork and the gate, so it regenerates, takes its Melf's Acid Arrow tick, its cooldowns pass and `StartNewTurn` resets it. Only perception (CMB-094) and the Turn Undead proximity check (`BeginActingTurn`) still wait for an acting turn. Combat end counts a dying or unconscious troll as out, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
+- **Nauseated**: the turn runs with `ActionEconomy.MoveActionOnly` (batch 12 step 3), a single move action (`rules/nauseated-move-only-ai`).
+- **Pinned**: the grapple branch (gate 11) offers only the escape options (`BuildNPCLegalGrappleActions`), so the pinned NPC tries an opposed check or Escape Artist (`rules/pinned-escape-ai`).
+- **Panicked**: `FrightenedBehaviorController.Flee` flees (a grappling creature first tries to escape the grapple, `rules/panicked-pinned-escapes-ai`); cornered, the creature cowers without attacking (no condition; total defense is not modelled, CMB-179).
+- **Turned** (any creature type, not only undead): `AIService.ExecuteTurnedTurn` flees through the same `FrightenedBehaviorController.Flee` (grapple escape, withdraw, run or a move); cornered, the creature cowers (Cowering until its next turn; `rules/turned-undead-flees-ai`).
+- **Fascinated** stays a skip; a bard's fascination whose bard is gone or dead ends in `BeginCombatantTurn`, before the gate, for both sides; a spell's fascination lasts its duration (`rules/rainbow-pattern-fascination-holds`).
+- Since batch 12 step 6 (2026-10-28, decision D3) a skipped creature, PC or NPC, still gets its turn start: `GameManager.OnTurnStarted` calls `BeginCombatantTurn` (`_Core/GameManager.TurnStart.cs`) before the fork and the gate, so it regenerates, takes its Melf's Acid Arrow tick, its cooldowns pass and `StartNewTurn` resets it. Only perception (CMB-094), the Turn Undead proximity check and the compulsion pass (`BeginActingTurn`) wait for an acting turn. Combat end counts a dying or unconscious troll as out, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
+
+The compulsion pass (`GameManager.TryRunCompulsionTurn`, called by `BeginActingTurn`) evaluates Confused (the d% once), Suggested, Frightened or Panicked, and Turned for every acting creature and stores them on `CharacterController.CurrentTurnStart.Compulsion`; gates 4, 5, 6a, 7 and 7a read them; a fear whose source is dead or unresolved ends there and is not stored (CMB-178). For a PC it starts a forced turn instead (owner decision 2026-10-23, Q1); a cornered frightened PC gets its menu back.
 
 ### 3.3 `ExecuteNPCTurn` gate order
 
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate, round-start perception (`ProcessRoundStartPerception`: tracker update plus a Listen check) and `BeginActingTurn` (turn-undead tracker pruning and proximity) |
+| 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate, round-start perception (`ProcessRoundStartPerception`: tracker update plus a Listen check) and `BeginActingTurn` (turn-undead tracker pruning and proximity, and the compulsion pass, batch 12 step 7) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | | (no HP gate since batch 12 step 6) | the skip gate already ended the turn of a creature that cannot act; a disabled NPC (0 hp, or below 0 with Diehard) takes its single action (PHB p.145, decision D5, batch 12 step 3) |
-| 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
-| 5 | 84 | Charmed | stands up first when prone, not grappling and not fascinated (same call as 6a; ends the turn if an AoO drops it), then controller, end |
-| 6 | 99 | Fascinated | no action, end (unreachable, 3.2) |
-| 6a | | Suggested (the bard's Suggestion, CHR-026) | `SuggestedBehaviorController`: move away from the suggester (withdraw, else move), no hostile action, end; the same behaviour runs a suggested PC's forced turn |
+| 4 | 73 | Confused | the stored d% roll (`CurrentTurnStart.Compulsion.Confused`); any result except ActNormally runs the controller and ends the turn |
+| 5 | 84 | Charmed, unless a stored suggestion, fear or turning takes the turn (one precedence with the PC side, batch 12 step 7) | stands up first when prone, not grappling and not fascinated (same call as 6a; ends the turn if an AoO drops it), then controller, end |
+| 6 | 99 | Fascinated | no action, end (a safety net: the skip gate skips a fascinated creature, 3.2) |
+| 6a | | Suggested (the bard's Suggestion, CHR-026; the stored decision) | `SuggestedBehaviorController`: move away from the suggester (withdraw, else move), no hostile action, end; the same behaviour runs a suggested PC's forced turn |
 | 6a | 119 | Prone and not `IsGrappling` | `GameManager.TryStandUpFromProneForAI` stands it up through `ResolveStandUpFromProne`, shared with the PC Stand Up button: spends the move action (or the standard converted to a move), AoOs from `ThreatSystem.GetStandUpAoOProvokers`, then removes Prone. Ends the turn if an AoO drops it. Stays prone, and cannot move, when `GetStandUpDisabledReason` refuses (CMB-074) |
-| 7 | 129 | Frightened (or Panicked, unreachable) | controller, end |
+| 7 | 129 | Frightened or Panicked (the stored decision) | controller (`Flee`: a grapple escape first when grappling), end; a cornered frightened one fights defensively (AI-044), a cornered panicked one cowers without attacking (CMB-179) |
+| 7a | | Turned (any creature type, batch 12 step 7) | `ExecuteTurnedTurn`: flee through `FrightenedBehaviorController.Flee`, or cower (Cowering until its next turn); end |
 | 8 | 135 | `TryExecuteAnimateRopeEscapeForNpc` | an NPC entangled by Animate Rope spends its standard action on STR/Escape Artist; turn continues |
 | 9 | 140-153 | `SelectBestTarget` | none: `ExecuteSearchTurnWhenNoTargets`, reselect; still none: end |
-| 10 | 155 | Turned and undead | `ExecuteTurnedUndeadTurn` (unreachable) |
 | 11 | 161 | `IsGrappling` | first the maintain choice of gate 15b against a grapple attack (a grappling caster may maintain, delegated RAW reading 2026-10-15; end if it does); then `RunGrappleTurnForAI` -> `AI_GrappleRestrictedTurn`; end, unless the grapple ended with the standard action unspent (`CanContinueTurnAfterGrappleEnded`, after a free pin release), then continue to gate 12 |
 | 12 | 170 | `HasAuraAbility` | `ProcessAuraAbility` (free) |
 | 13 | 179-192 | Free-action ranged special ready | fire at the closest enemy in range (gibbering mouther Spittle) |
@@ -364,7 +368,7 @@ Reached only by non-controllable summons: a summon follows its caster's control 
 ### 5.8 Search, Turned, grapple-restricted
 
 - `ExecuteSearchTurnWhenNoTargets` (322): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
-- `ExecuteTurnedUndeadTurn` (443): flee one move from the turner; unreachable (3.2).
+- `ExecuteTurnedTurn`: flee one move from the turner, or cower when cornered (Cowering until its next turn); since batch 12 step 7 it runs for every turned creature, and also as a turned PC's forced turn (3.2).
 - `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1637): see 8.8.
 
 ### 5.9 How attacks resolve: `GameManager.NPCPerformAttack` (NPCTurns.cs)
@@ -591,18 +595,18 @@ The damage estimates of the strategist and of the profile casters (`AISpellcasti
 
 | Controller | Reached? | Behaviour | Deviation |
 |---|---|---|---|
-| Confused | yes (also forces PC turns, `TryBeginConfusedPCTurn`) | d%: 01-10 attack the source if in reach else **hit itself**; 11-20 act normally; 21-50 babble; 51-70 flee one move; 71-100 attack the nearest creature of any team | PHB ch.11 (Confusion): 01-10 attacks the caster or closes with it; no self-damage; no "attacked creature retaliates" rule; flee should be at top speed (AI-043) |
+| Confused | yes (also forces PC turns through the compulsion pass, `TryRunCompulsionTurn`) | d%: 01-10 attack the source if in reach else **hit itself**; 11-20 act normally; 21-50 babble; 51-70 flee one move; 71-100 attack the nearest creature of any team | PHB ch.11 (Confusion): 01-10 attacks the caster or closes with it; no self-damage; no "attacked creature retaliates" rule; flee should be at top speed (AI-043) |
 | Charmed | yes | caster dead → remove, lose turn; caster injured → move adjacent (awaited) and heal it by spell or potion; else attack the nearest enemy of the caster | PHB ch.11 (Charm Person): friendly, not controlled; attacking its own allies is Dominate behaviour (AI-042). Charm breaks only when the charmer attacks the subject |
-| Fascinated | no (turn skipped, 3.2) | stares | |
-| Frightened | Frightened yes; Panicked no | source dead → clear; withdraw (2× move) with a full-round action, else "run" at 1× move (it provokes like any move); cornered Frightened fights defensively and **never attacks**; cornered Panicked logs "cowers" with no condition | PHB ch.8 run is ×4; DMG ch.8 a cornered frightened creature may fight (AI-044) |
+| Fascinated | no (turn skipped, 3.2); the source-gone release runs in `BeginCombatantTurn` for both sides | stares | |
+| Frightened | yes, Frightened and Panicked, for NPCs and (forced turns, Q1) PCs | source dead → clear; withdraw (2× move) with a full-round action, else "run" at 1× move (it provokes like any move); cornered Frightened fights defensively and **never attacks**; cornered Panicked cowers (Cowering until its next turn) | PHB ch.8 run is ×4; DMG ch.8 a cornered frightened creature may fight (AI-044) |
 
-The source of each condition comes from `ActiveCondition.Source`, then a typed payload, then a display-name match (CORE-017). Frightened PCs get no forced behaviour.
+The source of each condition comes from `ActiveCondition.Source`, then a typed payload, then a display-name match (CORE-017). Since batch 12 step 7 frightened, panicked and turned PCs get a forced flight turn (owner decision 2026-10-23, Q1); a charmed PC is not restricted yet (CMB-100).
 
 ### 8.2 Dragons
 
 - 60 generated dragons (10 types × Wyrmling-Adult) plus hell_hound use `DragonAIProfile`. Turn order: cast (≤2 adjacent enemies), breath with positioning, melee (5.2).
 - **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:2027): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The recharge is rolled on use (`BreathWeaponDefinition.RechargeDice`, for example a dragon's 1d4 rounds, MM p.69; else the fixed `RechargeRounds`; the gorgon's `UsesPerDay` 5) and its rounds pass at the creature's turn start (`CharacterController.TickTurnCooldowns` from `GameManager.BeginCombatantTurn`, batch 12 step 6, D14).
-- **Frightful presence** (`ResolveFrightfulPresence`, 1570; Young Adult and Adult dragons, and the lich's "fear aura"): fires once per combat on the first attack or breath, not on charge; Manhattan-distance range; no "fewer HD than the dragon" filter; HD ≤4 panicked else shaken for 4d6 rounds; raw d20 save (AI-041). Panicked targets then lose their turns (CMB-075). MM (Dragons, Frightful Presence) triggers it on attacks and charges, and a creature that saves is immune for 24 hours.
+- **Frightful presence** (`ResolveFrightfulPresence`, 1570; Young Adult and Adult dragons, and the lich's "fear aura"): fires once per combat on the first attack or breath, not on charge; Manhattan-distance range; no "fewer HD than the dragon" filter; HD ≤4 panicked else shaken for 4d6 rounds; raw d20 save (AI-041). Panicked targets then flee (cowering when cornered) since batch 12 step 7. MM (Dragons, Frightful Presence) triggers it on attacks and charges, and a creature that saves is immune for 24 hours.
 - Secondary (metallic) breath: AI-008. Dragon SLAs: CRE-015. Dragon spell-versus-breath choice: AI-037.
 
 ### 8.3 Undead, animals, swarms
@@ -632,7 +636,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 ### 8.6 Grapple AI
 
 - **Starting a grapple:** via `GetPreferredManeuver`/`ShouldInitiateGrapple` (Aggressive always; InitiateWhenSafe if STR mod ≥ target's; never with Improved Grab), or the legacy chooser (STR mod ≥4). Improved Grab is a free attempt on a qualifying hit, automatic for NPCs.
-- **In a grapple** (`AI_GrappleRestrictedTurn`, up to 8 iterations, 20% random early stop): a raker that began its turn grappling rakes first (any profile; the rake makes the turn a full attack, MM p.314, CMB-144); predatory animals then attack with a natural weapon on every grapple action (one natural attack each, the highest bonus unless another has a rider that matters, `ChooseGrappleNaturalAttackForAI`; one grapple action per step of the BAB ladder, so a lion makes one, PHB p.156, MM p.314, CMB-127, CMB-146), escape below 25% HP and deal grapple damage while pinning; an AI pinner whose pin is due (its next turn after pinning; PHB p.156, a pin lasts 1 round, CMB-120) pins again first only when that pays (`ShouldNPCRenewDuePin`: it keeps a grapple attack for damage this turn, or another able ally is in the fight and the target is a spellcaster or that ally is adjacent to it); otherwise it takes the pinning choices below, which let the pin lapse, so a lone one-attack pinner keeps dealing damage instead of renewing every round while the pinned target loses its turns (CMB-075); a predator below 25% HP that pins releases the pin (free, ends the grapple) before any escape check; others, when pinning, Damage > Use Opponent's Weapon > Disarm 50% > Move 20% > Release 5%; otherwise Pin 35% (STR mod ≥3), light weapon 45%, opponent's weapon 30%, unarmed 20%, then Damage. Releasing a pin is a free action that ends the grapple for both creatures and moves neither (PHB p.157, CMB-089 fixed; `CharacterController.IsFreeGrappleAction`). The AI rolls the release only before it has spent an attack this turn, so no iterative attacks are lost, and `AIService.RunGrappleTurnForAI` / `CanContinueTurnAfterGrappleEnded` then let `ExecuteNPCTurn` carry on with a normal turn (standing up first if prone) while the standard action is unspent (not verified in Play mode). Several chosen sub-actions are stubs (CMB-033). Non-animal NPCs escape only when pinned, which never happens because pinned turns are skipped (CMB-075). `GrappleBehavior.EscapeOnly`/`Avoid` are ignored once grappled (AI-029). After an Improved Grab trigger hit the AI chooses between grappling normally and holding with the body part that hit (`AIProfile.ShouldHoldWithImprovedGrab`, default `DefaultShouldHoldWithImprovedGrab`: hold only while another able foe is in reach and the -20 check keeps even odds; MM p.310, CMB-148); a holder lets go at the start of its turn when no other foe is in reach (before its Damage check, so it deals no hold damage then, AI-064), and otherwise opens its turn with the hold's Damage check (at -20, in place of its first attack) when that check keeps even odds (`AI_ImprovedGrabHoldDamageCheck`, CMB-163); the AI always deals hold damage lethal (the default; nonlethal at -4 is the PC's choice, delegated RAW reading 2026-10-14); it starts no second grab while it holds. A grab that takes hold during the attack sequence turns the remaining steps into grapple actions, and a confused or charmed grappler's attack becomes its grapple turn (PHB p.156, CMB-149).
+- **In a grapple** (`AI_GrappleRestrictedTurn`, up to 8 iterations, 20% random early stop): a raker that began its turn grappling rakes first (any profile; the rake makes the turn a full attack, MM p.314, CMB-144); predatory animals then attack with a natural weapon on every grapple action (one natural attack each, the highest bonus unless another has a rider that matters, `ChooseGrappleNaturalAttackForAI`; one grapple action per step of the BAB ladder, so a lion makes one, PHB p.156, MM p.314, CMB-127, CMB-146), escape below 25% HP and deal grapple damage while pinning; an AI pinner whose pin is due (its next turn after pinning; PHB p.156, a pin lasts 1 round, CMB-120) pins again first only when that pays (`ShouldNPCRenewDuePin`: it keeps a grapple attack for damage this turn, or another able ally is in the fight and the target is a spellcaster or that ally is adjacent to it); otherwise it takes the pinning choices below, which let the pin lapse, so a lone one-attack pinner keeps dealing damage instead of renewing every round while the pinned target can only try to escape (D4); a predator below 25% HP that pins releases the pin (free, ends the grapple) before any escape check; others, when pinning, Damage > Use Opponent's Weapon > Disarm 50% > Move 20% > Release 5%; otherwise Pin 35% (STR mod ≥3), light weapon 45%, opponent's weapon 30%, unarmed 20%, then Damage. Releasing a pin is a free action that ends the grapple for both creatures and moves neither (PHB p.157, CMB-089 fixed; `CharacterController.IsFreeGrappleAction`). The AI rolls the release only before it has spent an attack this turn, so no iterative attacks are lost, and `AIService.RunGrappleTurnForAI` / `CanContinueTurnAfterGrappleEnded` then let `ExecuteNPCTurn` carry on with a normal turn (standing up first if prone) while the standard action is unspent (not verified in Play mode). Several chosen sub-actions are stubs (CMB-033). Non-animal NPCs escape only when pinned (since batch 12 step 7 a pinned NPC gets its turn, `rules/pinned-escape-ai`). `GrappleBehavior.EscapeOnly`/`Avoid` are ignored once grappled (AI-029). After an Improved Grab trigger hit the AI chooses between grappling normally and holding with the body part that hit (`AIProfile.ShouldHoldWithImprovedGrab`, default `DefaultShouldHoldWithImprovedGrab`: hold only while another able foe is in reach and the -20 check keeps even odds; MM p.310, CMB-148); a holder lets go at the start of its turn when no other foe is in reach (before its Damage check, so it deals no hold damage then, AI-064), and otherwise opens its turn with the hold's Damage check (at -20, in place of its first attack) when that check keeps even odds (`AI_ImprovedGrabHoldDamageCheck`, CMB-163); the AI always deals hold damage lethal (the default; nonlethal at -4 is the PC's choice, delegated RAW reading 2026-10-14); it starts no second grab while it holds. A grab that takes hold during the attack sequence turns the remaining steps into grapple actions, and a confused or charmed grappler's attack becomes its grapple turn (PHB p.156, CMB-149).
 
 ### 8.7 Summons and allied NPCs
 
@@ -655,7 +659,7 @@ NPCs summon since batch 11 step 27 (7.9); their creatures join the initiative af
 
 ### 8.9 Morale and fleeing
 
-There is no morale system, surrender or rout. The only retreats are: DefensiveMelee withdraw below 30% HP, summon retreat at 30%, the animal grapple escape below 25%, the dragon's post-breath step, the kiter's distance keeping, and condition-forced fleeing (Confused 51-70 and Frightened work; Panicked and Turned do not, CMB-075). `FleeHealthThreshold`, `GaseousFormFleeThreshold` and `Aggression` are unread (AI-010, AI-026). The 3.5 core books leave monster morale to the DM; the DMG offers guidance rather than a mechanic. What blocks a morale system (no map exit, victory and XP only at HP ≤ 0) is in 11.8.5.
+There is no morale system, surrender or rout. The only retreats are: DefensiveMelee withdraw below 30% HP, summon retreat at 30%, the animal grapple escape below 25%, the dragon's post-breath step, the kiter's distance keeping, and condition-forced fleeing (Confused 51-70, Frightened, Panicked and, since batch 12 step 7, Turned). `FleeHealthThreshold`, `GaseousFormFleeThreshold` and `Aggression` are unread (AI-010, AI-026). The 3.5 core books leave monster morale to the DM; the DMG offers guidance rather than a mechanic. What blocks a morale system (no map exit, victory and XP only at HP ≤ 0) is in 11.8.5.
 
 ## 9. Action coverage matrix
 
@@ -683,7 +687,6 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | ID | Issue |
 |---|---|
 | CMB-074 | Confused turns never stand up from prone; the AI never crawls (narrowed 2026-10-07: other NPCs, charmed ones included, now stand up, and nobody moves normally while prone) |
-| CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action (skipped turns get their turn-start effects since batch 12 step 6) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
 | AI-035 | Trip-flagged profiles and null-profile NPCs trip every standing target in reach (one attack step), with no odds check |
 | AI-036 (fixed 2026-10-16) | The Mirror Image priority target overrode all targeting map-wide; removed with the image tokens in batch 11 step 26 |
@@ -759,7 +762,7 @@ Maneuvers go through `ManeuverPreferences` → `GetPreferredManeuver` → `Shoul
 
 ### 11.5 Add a condition-forced turn
 
-Write `Combat/Behaviors/<Name>BehaviorController.cs` with `TryBuildDecision` and `ExecuteDecision`; add a lazy field and `TryGet...TurnDecisionForAI` / `Execute...TurnDecisionForAI` wrappers in GameManager; call them in `ExecuteNPCTurn` before targeting (73-111). **Check the condition's `PreventsStandardActions`/`PreventsFullRoundActions` flags first**: if both are set the turn is skipped before your controller runs (CMB-075).
+Write `Combat/Behaviors/<Name>BehaviorController.cs` with `TryBuildDecision` and `ExecuteDecision`; add a lazy field and `TryGet...TurnDecisionForAI` / `Execute...TurnDecisionForAI` wrappers in GameManager; call them in `ExecuteNPCTurn` before targeting (73-111). Evaluate it in the compulsion pass (`GameManager.EvaluateTurnCompulsion`, a field on `TurnCompulsion`) so it is decided once per turn for PCs and NPCs, and give a PC a forced turn in `TryRunCompulsionTurn`. A condition in `ConditionRules.DeniesAllActions` skips the turn before any controller runs.
 
 ### 11.6 Add a spell-scoring term
 
@@ -845,7 +848,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 Ordered by how much they distort what the AI experiences:
 
-1. Rules parity on NPC paths: the turn-skip gate versus controllers (CMB-075), stand up in confused turns and crawl (CMB-074), breath and special saves and attack rolls through the standard pipeline (AI-040, AI-006; damage is shared since SPL-004, recharge since batch 12 step 6).
+1. Rules parity on NPC paths: stand up in confused turns and crawl (CMB-074), breath and special saves and attack rolls through the standard pipeline (AI-040, AI-006; damage is shared since SPL-004, recharge since batch 12 step 6).
 2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons equipped (ITM-004, done 2026-10-08) and a draw or swap action for NPCs; null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (AI-005, AI-049, AI-050); a decision trace log.
 

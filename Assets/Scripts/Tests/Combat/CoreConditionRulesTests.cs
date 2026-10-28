@@ -29,8 +29,35 @@ public static class CoreConditionRulesTests
         TestStunnedDropsHeldItemsAndBlocksActions();
         TestBlindedAppliesMissChanceMovementAndSkillPenalties();
         TestSpellConditionMappingsPresent();
+        TestDeniesAllActionsList();
 
         Debug.Log($"====== Core Condition Rules Results: {_passed} passed, {_failed} failed ======");
+    }
+
+    /// <summary>
+    /// The turn-skip gate's condition list (decision D4, batch 12 step 7): these deny every action, and Nauseated,
+    /// Pinned, Panicked, Turned, Frightened and Confused do not (a single move, the grapple escape, the flight).
+    /// </summary>
+    private static void TestDeniesAllActionsList()
+    {
+        CombatConditionType[] skip =
+        {
+            CombatConditionType.Dead, CombatConditionType.Dying, CombatConditionType.Stable, CombatConditionType.Unconscious,
+            CombatConditionType.Asleep, CombatConditionType.Helpless, CombatConditionType.Paralyzed, CombatConditionType.Petrified,
+            CombatConditionType.Stunned, CombatConditionType.Dazed, CombatConditionType.Cowering, CombatConditionType.Fascinated,
+            CombatConditionType.HideousLaughter, CombatConditionType.BlownAway
+        };
+        CombatConditionType[] act =
+        {
+            CombatConditionType.Nauseated, CombatConditionType.Pinned, CombatConditionType.Panicked, CombatConditionType.Turned,
+            CombatConditionType.Frightened, CombatConditionType.Confused, CombatConditionType.Grappled, CombatConditionType.Staggered
+        };
+        var wrong = new System.Collections.Generic.List<string>();
+        foreach (CombatConditionType t in skip)
+            if (!ConditionRules.DeniesAllActions(t)) wrong.Add(t + " should deny all actions");
+        foreach (CombatConditionType t in act)
+            if (ConditionRules.DeniesAllActions(t)) wrong.Add(t + " should leave the turn");
+        Assert(wrong.Count == 0, "D4: the turn-skip gate denies all actions for exactly the D4 conditions", string.Join("; ", wrong));
     }
 
     private static void Assert(bool condition, string testName, string detail = "")

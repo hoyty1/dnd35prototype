@@ -303,6 +303,15 @@ public sealed class ConfusedBehaviorController
         if (actor == null || actor.Stats == null)
             yield break;
 
+        // Hitting itself is an attack, a standard action: a nauseated creature (a single move action) or a pinned one
+        // (escape only, PHB p.156) cannot make it (batch 12 step 7: both now reach the confusion roll, decision D4).
+        if (actor.IsPinned() || actor.Actions == null || !actor.CommitStandardAction())
+        {
+            gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actor.Stats.CharacterName} flails in confusion but cannot attack this turn."));
+            yield return new WaitForSeconds(0.25f);
+            yield break;
+        }
+
         gameManager.CombatUI?.ShowCombatLog(log);
 
         int raw = Mathf.Max(1, actor.Stats.RollDamage());
