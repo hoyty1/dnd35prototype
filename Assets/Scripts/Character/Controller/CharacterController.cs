@@ -503,6 +503,13 @@ public class CharacterController : MonoBehaviour
     /// <see cref="ClearOncePerRoundFlags"/> at its turn start and on slot reuse (CRE-046).
     /// </summary>
     [SerializeField] private bool _acidSprayUsedThisRound;
+
+    /// <summary>
+    /// True once this creature made its Cleave attack this round (PHB p.92: once per round; Great Cleave has no limit;
+    /// decision D7 of batch 12). Read as the acid spray's round: between the start of one of its turns and the start of
+    /// the next. Cleared by <see cref="ClearOncePerRoundFlags"/> at its turn start and on slot reuse.
+    /// </summary>
+    [SerializeField] private bool _cleaveUsedThisRound;
     [SerializeField] private int _regenerationAmountPerRound;
     [SerializeField] private DamageBypassTag _regenerationSuppressedBy = DamageBypassTag.None;
     [SerializeField] private int _regenerationSuppressedRoundsRemaining;
@@ -519,8 +526,8 @@ public class CharacterController : MonoBehaviour
     [SerializeField] private int _breathWeaponUsesToday;
     public bool HasBreathWeapon => _breathWeapon != null;
     /// <summary>True when the generic breath path (NPCExecuteBreathWeaponForAI, DragonAIProfile) may use the breath now. A
-    /// once-per-round use (the bombardier beetle's acid spray, MM p.285) is never ready here: its own routine
-    /// (GameManager.TryNPCUseBombardierAcidSpray) reads <see cref="AcidSprayUsedThisRound"/> instead (CRE-040).</summary>
+    /// once-per-round use (the bombardier beetle's acid spray, MM p.285) is never ready here: it is a reaction to being
+    /// attacked or disturbed (GameManager.AttackedReactions.cs, D1), which reads <see cref="AcidSprayUsedThisRound"/>.</summary>
     public bool IsBreathWeaponReady => _breathWeapon != null && !_breathWeapon.OncePerRound && _breathWeaponCooldownRemaining <= 0
         && (_breathWeapon.UsesPerDay <= 0 || _breathWeaponUsesToday < _breathWeapon.UsesPerDay);
     /// <summary>Rounds until the breath weapon recharges (0: ready, if a daily limit leaves a use).</summary>
@@ -584,6 +591,12 @@ public class CharacterController : MonoBehaviour
     /// <summary>True when the once-per-round acid spray was already used this round (MM p.285, D1).</summary>
     public bool AcidSprayUsedThisRound => _acidSprayUsedThisRound;
     public bool HasBombardierAcidSprayReady => !_acidSprayUsedThisRound;
+
+    /// <summary>True when this creature already made its once-per-round Cleave attack this round (PHB p.92, D7).</summary>
+    public bool CleaveUsedThisRound => _cleaveUsedThisRound;
+
+    /// <summary>Marks the once-per-round Cleave attack as made (true) or available (false) this round.</summary>
+    public void SetCleaveUsedThisRound(bool used) => _cleaveUsedThisRound = used;
     public bool HasRegeneration => _regenerationAmountPerRound > 0;
 
     // Tracks attackers that currently have an active feint window against this defender.
@@ -1549,6 +1562,102 @@ public class CharacterController : MonoBehaviour
         {
             _resolvingFlurryOfBlowsAttack = false;
         }
+    }
+
+    /// <summary>
+    /// The extra attack of Cleave or Great Cleave against <paramref name="target"/> (PHB p.92; decision D7 of batch 12):
+    /// "with the same weapon and at the same bonus" as <paramref name="dropping"/>, the attack that dropped the previous
+    /// foe. The same weapon (<paramref name="weapon"/>, the dropping attack's), or the same natural attack when the dropping
+    /// attack was natural (<paramref name="natural"/>); the same base attack bonus step (its iterative or flurry step), the
+    /// same sequence penalty (a secondary natural attack, two-weapon fighting, the off hand) and the same one-attack bonus
+    /// (the charge's +2). What depends on the new target is the new target's: flanking (<paramref name="isFlanking"/>), its
+    /// AC, concealment and the like (delegated RAW reading 2026-10-28, docs/systems/RULES_COVERAGE.md 4.1). It is an extra
+    /// attack: it uses no step of the attack ladder and no natural attack. Returns null when nothing was resolved.
+    /// </summary>
+    public CombatResult ResolveCleaveAttack(CharacterController target, CombatResult dropping, ItemData weapon,
+        NaturalAttackDefinition natural, bool isFlanking, int flankBonus, string partnerName, out string label)
+    {
+        label = null;
+        if (target == null || target.Stats == null || dropping == null || Stats == null)
+            return null;
+
+        if (natural != null)
+        {
+            int stepIndex = CleaveNaturalStepIndex(natural);
+            if (stepIndex < 0)
+                return null;
+            // The dropping attack's one-attack bonus (a pounce's or natural charge's +2, stamped on its result) applies
+            // again, as a bonus entry for the length of this one attack, the way the pounce applies it (PHB p.92 "same bonus").
+            bool repeatBonus = dropping.SituationalAttackBonus != 0;
+            if (repeatBonus)
+                Stats.Bonuses.Set(CleaveRepeatBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, dropping.SituationalAttackBonus,
+                    string.IsNullOrEmpty(dropping.SituationalAttackLabel) ? "Cleave (same bonus)" : dropping.SituationalAttackLabel);
+            FullAttackResult step;
+            try
+            {
+                step = FullAttack(target, isFlanking, flankBonus, partnerName, null,
+                    startAttackIndex: stepIndex, maxAttacks: 1, markNaturalAttackUsed: false);
+            }
+            finally
+            {
+                if (repeatBonus)
+                    Stats.Bonuses.Set(CleaveRepeatBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
+            }
+            if (step == null || step.Attacks == null || step.Attacks.Count == 0)
+                return null;
+            label = natural.Name;
+            CombatResult made = step.Attacks[0];
+            if (made != null && repeatBonus)
+            {
+                made.SituationalAttackBonus = dropping.SituationalAttackBonus;
+                made.SituationalAttackLabel = dropping.SituationalAttackLabel;
+            }
+            return made;
+        }
+
+        // An unarmed strike while holding a weapon is forced; otherwise Attack uses the weapon passed in.
+        bool unarmed = weapon == null && GetEquippedMainWeapon() != null;
+        bool flurryStep = IsUsingFlurryOfBlows && IsFlurryOfBlowsWeapon(weapon);
+        label = (weapon != null ? weapon.Name : "Unarmed strike") + $" (BAB {CharacterStats.FormatMod(dropping.BreakdownBAB)})";
+        _resolvingFlurryOfBlowsAttack = flurryStep;
+        try
+        {
+            return Attack(target, isFlanking, flankBonus, partnerName, null, dropping.BreakdownBAB, weapon,
+                dropping.BreakdownDualWieldPenalty, dropping.IsOffHandAttack, unarmed,
+                dropping.SituationalAttackBonus, 0, dropping.SituationalAttackLabel);
+        }
+        finally
+        {
+            _resolvingFlurryOfBlowsAttack = false;
+        }
+    }
+
+    /// <summary>The bonus owner of a natural Cleave attack's repeated one-attack bonus (<see cref="ResolveCleaveAttack"/>).</summary>
+    private const string CleaveRepeatBonusSource = "cleave_same_bonus";
+
+    /// <summary>
+    /// The natural-sequence step a Cleave attack with <paramref name="natural"/> runs as, or -1 when it cannot be resolved:
+    /// the natural sequence runs only without a held weapon (FullAttack, as the natural steps of every path), so a creature
+    /// that holds a weapon cannot cleave with a natural attack yet (CMB-195).
+    /// </summary>
+    public int CleaveNaturalStepIndex(NaturalAttackDefinition natural)
+        => natural != null && GetEquippedMainWeapon() == null ? NaturalSequenceIndexOf(natural) : -1;
+
+    /// <summary>The natural-sequence index of <paramref name="natural"/>'s first attack (FullAttack's step order), or -1.</summary>
+    private int NaturalSequenceIndexOf(NaturalAttackDefinition natural)
+    {
+        if (natural == null || Stats == null)
+            return -1;
+        List<NaturalAttackDefinition> attacks = Stats.GetValidNaturalAttacks();
+        int index = 0;
+        for (int i = 0; i < attacks.Count; i++)
+        {
+            NaturalAttackDefinition a = attacks[i];
+            if (a == natural || (a != null && string.Equals(a.Name, natural.Name, StringComparison.OrdinalIgnoreCase)))
+                return index;
+            index += Mathf.Max(1, a != null ? a.Count : 1);
+        }
+        return -1;
     }
 
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
@@ -4395,12 +4504,13 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The creature's turn start (GameManager.BeginCombatantTurn, every creature, acting or not): a new round of its own
-    /// begins, so its once-per-round acid spray is available again (MM p.285; D1, CRE-040). The Cleave flag joins it
-    /// later in batch 12.
+    /// begins, so its once-per-round acid spray (MM p.285, D1) and its once-per-round Cleave attack (PHB p.92, D7) are
+    /// available again.
     /// </summary>
     public void ClearOncePerRoundFlags()
     {
         _acidSprayUsedThisRound = false;
+        _cleaveUsedThisRound = false;
     }
 
     /// <summary>
@@ -4654,6 +4764,7 @@ public class CharacterController : MonoBehaviour
 
         // Innate monster abilities: every one back to "none" (the spawn configures the new creature's own).
         SetAcidSprayUsedThisRound(false);
+        SetCleaveUsedThisRound(false);
         ConfigureRegeneration(0, DamageBypassTag.None);
         ConfigureIncorporeal(false);
         ConfigureBreathWeapon(null);
@@ -6252,6 +6363,8 @@ public class CharacterController : MonoBehaviour
         result.IsDualWieldAttack = isOffHandAttack || additionalAttackModifier != 0;
         result.IsOffHandAttack = isOffHandAttack;
         result.BreakdownDualWieldPenalty = additionalAttackModifier;
+        result.SituationalAttackBonus = situationalAttackBonus;
+        result.SituationalAttackLabel = situationalLabel;
 
         result.WeaponName = attackLabel;
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
@@ -6349,7 +6462,7 @@ public class CharacterController : MonoBehaviour
     /// at that attack's normal bonus (PHB p.239; owner decision 2026-10-07, CMB-106).
     /// </summary>
     public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null, int startAttackIndex = 0, int maxAttacks = int.MaxValue,
-        int hasteNaturalAttackIndex = -1)
+        int hasteNaturalAttackIndex = -1, bool markNaturalAttackUsed = true)
     {
         var result = new FullAttackResult();
         result.Type = FullAttackResult.AttackType.FullAttack;
@@ -6459,10 +6572,14 @@ public class CharacterController : MonoBehaviour
                 atk.DefenderHPAfter = target.Stats.CurrentHP;
 
                 TryApplyNaturalAttackOnHitEffects(target, atk, naturalAttack);
-                if (isHasteExtraAttack)
-                    MarkHasteExtraNaturalAttackUsed();
-                else
-                    ProgressiveAttackPool.MarkNaturalAttackUsed(stepIndex); // its natural-sequence index (CMB-127)
+                // A Cleave attack with a natural weapon (ResolveCleaveAttack) is an extra attack: it uses no natural attack.
+                if (markNaturalAttackUsed)
+                {
+                    if (isHasteExtraAttack)
+                        MarkHasteExtraNaturalAttackUsed();
+                    else
+                        ProgressiveAttackPool.MarkNaturalAttackUsed(stepIndex); // its natural-sequence index (CMB-127)
+                }
 
                 result.Attacks.Add(atk);
                 string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
@@ -7576,12 +7693,19 @@ public class CharacterController : MonoBehaviour
         // The turned-undead fear break comes before the roll (PHB p.159; GameManager.BreakTurningBeforeSwing).
         if (GameManager.Instance != null && target != null)
             GameManager.Instance.BreakTurningBeforeSwing(this, target, weapon);
+        // Whether the defender was already down before this roll (Cleave's "drop", PHB p.92, D7).
+        bool defenderDownBefore = target != null && (target.IsDead || target.IsUnconscious || (target.Stats != null && target.Stats.IsDead));
         CombatResult result = PerformSingleAttackWithCritCore(target, totalAtkMod,
             isFlanking, flankingBonus, flankingPartnerName,
             damageDice, damageCount, damageBonus,
             critThreatMin, critMultiplier,
             weapon, situationalTargetAcBonus,
             dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
+        if (result != null)
+        {
+            result.DefenderDownBefore = defenderDownBefore;
+            result.DefenderDownAfter = target != null && (target.IsDead || target.IsUnconscious || (target.Stats != null && target.Stats.IsDead));
+        }
         if (GameManager.Instance != null && target != null)
             GameManager.Instance.NotifyWeaponAttackAgainst(this, target, weapon);
         // A hit on the real figure of a Mirror Image caster shows who is real to everyone watching (decision D7 (6)).
@@ -12944,19 +13068,29 @@ public class CharacterController : MonoBehaviour
         // hostile action against it), ends a charm by the attacker's side (PHB p.209; D15) and a command undead (PHB p.211),
         // and a melee maneuver ends the attacker's turning of the target (PHB p.159). Here, past the initiation AoOs, the
         // PC wrapper and the NPC executor send it identically (delegated RAW reading 2026-10-14, CHR-026; CMB-090).
-        if (GameManager.Instance != null && target != null)
-            GameManager.Instance.NotifyManeuverAgainst(this, target, type);
+        // The target's reaction to the maneuver (the bombardier beetle's acid spray, MM p.285, D1) comes once it resolved.
+        GameManager gm = GameManager.Instance;
+        gm?.DeferAttackedReactions();
+        try
+        {
+            if (gm != null && target != null)
+                gm.NotifyManeuverAgainst(this, target, type);
 
-        SpecialAttackResult result = ExecuteSpecialAttackCore(type, target,
-            disarmTargetSlot, disarmAttackBonusOverride, grappleAttackBonusOverride,
-            bullRushChargeBonusOverride, disarmAttackerWeaponOverride, tripAttackBonusOverride,
-            disarmUsedOffHand, disarmDualWieldPenaltyForLog,
-            sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride,
-            sunderUsedOffHand, sunderDualWieldPenaltyForLog);
-        ScenarioHooks.ManeuverResolved?.Invoke(this, target, type, result);
-        if (type == SpecialAttackType.Trip)
-            PrepareImprovedTripFollowUp(result, tripAttackBonusOverride, freeTripTrigger: null);
-        return result;
+            SpecialAttackResult result = ExecuteSpecialAttackCore(type, target,
+                disarmTargetSlot, disarmAttackBonusOverride, grappleAttackBonusOverride,
+                bullRushChargeBonusOverride, disarmAttackerWeaponOverride, tripAttackBonusOverride,
+                disarmUsedOffHand, disarmDualWieldPenaltyForLog,
+                sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride,
+                sunderUsedOffHand, sunderDualWieldPenaltyForLog);
+            ScenarioHooks.ManeuverResolved?.Invoke(this, target, type, result);
+            if (type == SpecialAttackType.Trip)
+                PrepareImprovedTripFollowUp(result, tripAttackBonusOverride, freeTripTrigger: null);
+            return result;
+        }
+        finally
+        {
+            gm?.ResumeAttackedReactions();
+        }
     }
 
     private SpecialAttackResult ExecuteSpecialAttackCore(

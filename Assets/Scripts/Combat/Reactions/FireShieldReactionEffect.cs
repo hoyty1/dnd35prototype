@@ -79,6 +79,7 @@ public class FireShieldReactionEffect : IMeleeReactionEffect
         // Spell damage of the shield's type: the attacker's immunity and resistance apply, damage reduction does not
         // (MM p.307); then the shared concentration and death checks (SPL-004).
         DamagePacket packet = DamagePackets.Spell("Fire Shield", isWarm ? DamageType.Fire : DamageType.Cold);
+        packet.SourceCreature = defender;
         GameManager gm = GameManager.Instance;
         DamageResolutionResult dealt = gm != null
             ? gm.DealDamage(attacker, damage, packet)

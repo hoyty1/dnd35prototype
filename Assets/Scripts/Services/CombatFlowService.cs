@@ -341,41 +341,6 @@ public class CombatFlowService : MonoBehaviour
         return mode == AttackMode.Ranged || mode == AttackMode.Thrown;
     }
 
-    /// <summary>
-    /// Find an alive enemy adjacent to the attacker for Cleave/Great Cleave.
-    /// Excludes the original target (already dead). Returns null if none found.
-    /// </summary>
-    private CharacterController FindAdjacentEnemy(CharacterController attacker, CharacterController excludeTarget)
-    {
-        if (_gameManager == null || attacker == null)
-            return null;
-
-        var allChars = _gameManager.Combat_GetAllCharacters();
-        if (allChars == null)
-            return null;
-
-        foreach (var candidate in allChars)
-        {
-            if (candidate == null || candidate == attacker || candidate == excludeTarget)
-                continue;
-            if (candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-            if (candidate.Team == attacker.Team)
-                continue; // Skip allies
-            if (!SquareGridUtils.IsAdjacent(attacker.GridPosition, candidate.GridPosition))
-                continue;
-            // The Improved Grab hold bar: no cleave into the creature this attacker holds (MM p.310, CMB-163); nor across a
-            // Resilient Sphere or into a creature whose ward this attacker failed to overcome (AttackLegality, D6).
-            if (!AttackLegality.Check(attacker, candidate, DirectAttackKind.Weapon, null,
-                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
-                continue;
-
-            return candidate;
-        }
-
-        return null;
-    }
-
     private void LogDeathPoint(string context, CharacterController attacker, CharacterController target)
     {
         string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>";
@@ -923,9 +888,9 @@ public class CombatFlowService : MonoBehaviour
         intent.Hand = useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
 
         // The one post-attack hook (origin A): the log, the thrown drop and the ammunition, Concentration, melee reactions,
-        // the free trip, Improved Grab (the choice by the attacker's decider: the PC's prompt, MM p.310), the summon cleanup
-        // and the combat-end check (CORE-011, CORE-037); then the slain line, Cleave and Great Cleave and the end of the
-        // sequence.
+        // the target's reaction (the acid spray, D1), the free trip, Improved Grab (the choice by the attacker's decider:
+        // the PC's prompt, MM p.310), Cleave and Great Cleave (PHB p.92, D7), the summon cleanup and the combat-end check
+        // (CORE-011, CORE-037); then the slain line and the end of the sequence.
         string log = null;
         AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSingle, attacker, target, intent).With(result);
         resolution.RangeInfo = rangeInfo;
@@ -983,87 +948,6 @@ public class CombatFlowService : MonoBehaviour
             return;
 
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
-    }
-
-    /// <summary>
-    /// Cleave and Great Cleave after <paramref name="result"/> dropped <paramref name="target"/> (path A's code, run by the
-    /// post-attack hook, GameManager.OnAttackResolved, for that origin only; PHB p.92). True when a cleave attack ended
-    /// the combat.
-    /// </summary>
-    public bool ResolveCleaveAfterDrop(CharacterController attacker, CharacterController target, CombatResult result, ItemData attackWeapon)
-    {
-        if (_gameManager == null || attacker == null || result == null)
-            return false;
-
-        // === CLEAVE / GREAT CLEAVE ===
-        // After dropping a foe with a melee attack, grant bonus attack(s) against adjacent enemies.
-        if (!result.IsRangedAttack && attacker.Stats != null &&
-            (FeatManager.HasCleave(attacker.Stats) || FeatManager.HasGreatCleave(attacker.Stats)))
-        {
-            bool isGreatCleave = FeatManager.HasGreatCleave(attacker.Stats);
-            bool cleaving = true;
-            int cleaveCount = 0;
-
-            while (cleaving)
-            {
-                // Find an alive enemy adjacent to the attacker (within melee reach)
-                CharacterController cleaveTarget = FindAdjacentEnemy(attacker, target);
-                if (cleaveTarget == null)
-                {
-                    if (cleaveCount == 0)
-                        Debug.Log($"[Cleave] {attacker.Stats.CharacterName} has no adjacent enemies for cleave.");
-                    break;
-                }
-
-                cleaveCount++;
-                string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!"));
-
-                // Cleave attack uses the same weapon at full BAB. It is a melee attack,
-                // so flanking the new target still grants +2 (PHB p.153, CMB-001).
-                bool cleaveFlanking = CombatUtils.IsAttackerFlanking(attacker, cleaveTarget, _gameManager.Combat_GetAllCharacters(), out CharacterController cleavePartner);
-                int cleaveFlankBonus = cleaveFlanking ? CombatUtils.FlankingAttackBonus : 0;
-                string cleavePartnerName = cleavePartner != null && cleavePartner.Stats != null ? cleavePartner.Stats.CharacterName : null;
-                // The cleave attack is a direct attack too: a failed ward save loses it (D6).
-                if (AttackLegality.CommitWard(attacker, cleaveTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
-                    break;
-                CombatResult cleaveResult = attacker.Attack(cleaveTarget, cleaveFlanking, cleaveFlankBonus, cleavePartnerName, null, null, attackWeapon);
-                string cleaveLog = BuildAttackLog(attacker, cleaveFlanking, cleavePartnerName, cleaveResult);
-                _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
-
-                if (cleaveResult.Hit && cleaveResult.TotalDamage > 0)
-                    _gameManager.Combat_CheckConcentrationOnDamage(cleaveTarget, cleaveResult.TotalDamage);
-
-                if (cleaveResult.Hit && !cleaveResult.IsRangedAttack)
-                    MeleeReactionService.TriggerReactions(attacker, cleaveTarget, cleaveResult);
-
-                if (!cleaveResult.TargetKilled && CombatEndRules.IsOutOfFight(cleaveTarget)
-                    && TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
-                    return true;
-
-                if (cleaveResult.TargetKilled)
-                {
-                    LogDeathPoint("Cleave:TargetKilled", attacker, cleaveTarget);
-                    _gameManager.Combat_HandleSummonDeathCleanup(cleaveTarget);
-                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!"));
-                    _gameManager.Combat_UpdateAllStatsUI();
-
-                    if (TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
-                        return true;
-
-                    // Great Cleave: continue cleaving. Regular Cleave: stop after first.
-                    if (!isGreatCleave)
-                        cleaving = false;
-                }
-                else
-                {
-                    // Cleave target survived — stop cleaving
-                    cleaving = false;
-                }
-            }
-        }
-
-        return false;
     }
 
     public void PerformFullAttack(CharacterController attacker, CharacterController target,

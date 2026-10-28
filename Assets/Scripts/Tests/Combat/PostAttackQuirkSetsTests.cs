@@ -4,12 +4,12 @@ using UnityEngine;
 namespace Tests.Combat
 {
 /// <summary>
-/// The post-attack hook's quirk sets (batch 12 steps 13 and 14, docs/designs/pc_npc_parity_batch12.md; the
-/// CastCoreStageOrderTests pattern): since step 14 every attack origin A-J runs GameManager.OnAttackResolved's stages alike,
-/// and only the Cleave <see cref="PostAttackQuirk"/> bits are left, pinned here so that step 15 (Cleave everywhere) removes
-/// them on purpose. Also the thrown drop's intent test (AttackIntent.IsThrowOf, GameManager.IsThrowableWeapon), the decider
-/// factory (AttackDeciders.For: the IsControllable read and its override) and the intent's mode mapping. Pure: no scene,
-/// no dice; runs in edit or Play mode.
+/// The post-attack hook's shared rules (batch 12 steps 13-15, docs/designs/pc_npc_parity_batch12.md; the
+/// CastCoreStageOrderTests pattern): since step 15 every attack origin A-J runs GameManager.OnAttackResolved's stages alike
+/// and the PostAttackQuirk type is gone (pinned here); Cleave's "drop" test (CleaveRules.DroppedTarget, PHB p.92, D7); the
+/// thrown drop's intent test (AttackIntent.IsThrowOf, GameManager.IsThrowableWeapon), the decider factory
+/// (AttackDeciders.For: the IsControllable read and its override) and its Cleave and reaction answers without a scene, and
+/// the intent's mode mapping. Pure: no scene, no dice; runs in edit or Play mode. The suite keeps its step 13 name.
 /// </summary>
 public static class PostAttackQuirkSetsTests
 {
@@ -20,12 +20,10 @@ public static class PostAttackQuirkSetsTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== POST-ATTACK QUIRK SETS TESTS (batch 12 steps 13-14) ==========");
+        Debug.Log("========== POST-ATTACK QUIRK SETS TESTS (batch 12 steps 13-15) ==========");
 
-        TestEveryOriginHasASet();
-        TestOriginSets();
-        TestCleaveOnlyOnPcSingle();
-        TestOnlyCleaveBitsLeft();
+        TestNoQuirksLeft();
+        TestCleaveDrop();
         TestThrowIntent();
         TestDeciderFactory();
         TestIntentModeMapping();
@@ -47,44 +45,55 @@ public static class PostAttackQuirkSetsTests
         }
     }
 
-    private static void TestEveryOriginHasASet()
+    /// <summary>Step 15 removed the last origin differences (the Cleave bits, CMB-017): no quirk type or field is left.</summary>
+    private static void TestNoQuirksLeft()
     {
-        foreach (AttackOrigin origin in Enum.GetValues(typeof(AttackOrigin)))
-            Assert(PostAttackQuirkSets.For(origin) != PostAttackQuirk.None,
-                $"{origin} has a quirk set", PostAttackQuirkSets.For(origin).ToString());
-    }
-
-    private static void Pin(AttackOrigin origin, PostAttackQuirk expected)
-    {
-        PostAttackQuirk actual = PostAttackQuirkSets.For(origin);
-        Assert(actual == expected, $"{origin}: {expected}", "actual " + actual);
-    }
-
-    private static void TestOriginSets()
-    {
-        // Step 14: every origin runs the same stages (grab, breaks, ammunition, thrown drop, Concentration, reactions,
-        // the free trip, the summon cleanup and the combat-end check); only the Cleave bits are left (step 15).
-        Pin(AttackOrigin.PcSingle, PostAttackQuirk.CleaveAfterCombatEnd);
-        foreach (AttackOrigin origin in Enum.GetValues(typeof(AttackOrigin)))
-            if (origin != AttackOrigin.PcSingle)
-                Pin(origin, PostAttackQuirk.NoCleave);
-    }
-
-    private static void TestCleaveOnlyOnPcSingle()
-    {
+        Assert(typeof(AttackResolution).Assembly.GetType("PostAttackQuirk") == null, "the PostAttackQuirk type is gone");
+        Assert(typeof(AttackResolution).Assembly.GetType("PostAttackQuirkSets") == null, "the PostAttackQuirkSets table is gone");
+        Assert(typeof(AttackResolution).GetField("Quirks") == null, "AttackResolution has no quirk field");
         foreach (AttackOrigin origin in Enum.GetValues(typeof(AttackOrigin)))
         {
-            bool noCleave = PostAttackQuirkSets.Has(PostAttackQuirkSets.For(origin), PostAttackQuirk.NoCleave);
-            Assert(noCleave == (origin != AttackOrigin.PcSingle), $"{origin}: Cleave {(noCleave ? "off" : "on")}");
+            AttackResolution r = AttackResolution.Create(origin, null, null, null);
+            Assert(r.Origin == origin && !r.IsCleave && r.CallerCanWait && r.Decider is AiAttackDecider,
+                $"{origin}: a plain resolution (no cleave, may wait, the AI decider without a creature)");
         }
     }
 
-    private static void TestOnlyCleaveBitsLeft()
+    private static CombatResult Melee(bool hit, int before, int after, bool killed = false, bool downBefore = false, bool? downAfter = null)
+        => new CombatResult { Hit = hit, DefenderHPBefore = before, DefenderHPAfter = after, TargetKilled = killed, DefenderDownBefore = downBefore,
+            DefenderDownAfter = downAfter ?? (downBefore || killed || after < 0) };
+
+    /// <summary>Cleave's trigger (PHB p.92; decision D7): killed, below 0, or knocked unconscious; never disabled at 0.</summary>
+    private static void TestCleaveDrop()
     {
-        PostAttackQuirk all = PostAttackQuirk.None;
-        foreach (PostAttackQuirk bit in Enum.GetValues(typeof(PostAttackQuirk)))
-            all |= bit;
-        Assert(all == (PostAttackQuirk.NoCleave | PostAttackQuirk.CleaveAfterCombatEnd), "only the Cleave bits are left", all.ToString());
+        Assert(CleaveRules.DroppedTarget(Melee(true, 5, -12, killed: true), null), "a kill drops the foe");
+        Assert(CleaveRules.DroppedTarget(Melee(true, 5, -1), null), "5 hp to -1 drops the foe (below 0)");
+        Assert(CleaveRules.DroppedTarget(Melee(true, 0, -2), null), "a disabled foe taken below 0 drops");
+        Assert(!CleaveRules.DroppedTarget(Melee(true, 5, 0), null), "5 hp to exactly 0 (disabled) does not drop the foe");
+        Assert(!CleaveRules.DroppedTarget(Melee(true, -2, -5, downBefore: true), null), "a dying foe hit again but not killed did not drop now");
+        Assert(CleaveRules.DroppedTarget(Melee(true, -2, -10, killed: true, downBefore: true), null), "killing a dying foe kills it, which drops it (D7)");
+        Assert(!CleaveRules.DroppedTarget(Melee(false, 5, 5), null), "a miss drops nothing");
+        var ranged = Melee(true, 5, -1);
+        ranged.IsRangedAttack = true;
+        Assert(!CleaveRules.DroppedTarget(ranged, null), "a ranged attack never cleaves");
+        var notMade = Melee(true, 5, -1);
+        notMade.NotMade = true;
+        Assert(!CleaveRules.DroppedTarget(notMade, null), "an attack never made drops nothing");
+        var figure = Melee(true, 5, -1);
+        figure.MirrorImageFigure = true;
+        Assert(!CleaveRules.DroppedTarget(figure, null), "a hit on a Mirror Image figure drops nothing");
+        Assert(CleaveRules.DroppedTarget(Melee(true, 5, 5, downAfter: true), null), "nonlethal damage that knocks the foe unconscious drops it");
+        // A two-weapon batch (path D): the main hand leaves the foe standing, the off hand drops it. The per-result
+        // snapshot (DefenderDownAfter) picks the off-hand result, never the earlier one.
+        CombatResult mainHand = Melee(true, 10, 4);
+        CombatResult offHand = Melee(true, 4, -2);
+        offHand.IsOffHandAttack = true;
+        CombatResult picked = CleaveRules.FirstDropping(new System.Collections.Generic.List<CombatResult> { mainHand, offHand }, null);
+        Assert(picked == offHand, "FirstDropping picks the result that dropped the foe (the off hand), not an earlier hit");
+        CombatResult knockout = Melee(true, 6, 6, downAfter: true);
+        Assert(CleaveRules.FirstDropping(new System.Collections.Generic.List<CombatResult> { Melee(true, 9, 6), knockout }, null) == knockout,
+            "FirstDropping picks the later nonlethal knockout, not the earlier hit");
+        Assert(!CleaveRules.MayCleave(null, out bool great) && !great, "no attacker, no cleave");
     }
 
     /// <summary>The thrown drop's test (AttackIntent.IsThrowOf; CMB-174, CMB-096 drop; PHB p.113).</summary>
@@ -126,12 +135,16 @@ public static class PostAttackQuirkSetsTests
         Assert(AttackDeciders.For(null, ActorSource.AI) is AiAttackDecider, "override AI: the AI decider");
         Assert(AiAttackDecider.Instance.IsSynchronous && !UiAttackDecider.Instance.IsSynchronous, "only the AI decider is synchronous");
 
-        bool declined = true;
-        AiAttackDecider.Instance.ChooseAttackedReaction(null, null, null, "acid spray", b => declined = !b);
+        bool sprays = true;
+        Coroutine reactionWait = AiAttackDecider.Instance.ChooseAttackedReaction(null, null, null, "Acid Spray", b => sprays = b);
+        Assert(!sprays && reactionWait == null, "the AI decider without a GameManager declines the reaction at once");
         CharacterController picked = null;
         bool answered = false;
         Coroutine wait = AiAttackDecider.Instance.ChooseCleaveTarget(null, null, new System.Collections.Generic.List<CharacterController>(), c => { picked = c; answered = true; });
-        Assert(declined && answered && picked == null && wait == null, "the unwired choices answer at once (step 15 wires them)");
+        Assert(answered && picked == null && wait == null, "no Cleave candidate: the AI answers none at once");
+        answered = false;
+        Coroutine uiWait = UiAttackDecider.Instance.ChooseCleaveTarget(null, null, new System.Collections.Generic.List<CharacterController>(), c => { picked = c; answered = true; });
+        Assert(answered && picked == null && uiWait == null, "no Cleave candidate: the UI asks nothing (D7)");
     }
 
     private static void TestIntentModeMapping()

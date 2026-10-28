@@ -51,7 +51,7 @@ public static class AiCastChoiceHeuristics
 
     /// <summary>
     /// The expected energy damage per type of the known attacks of every living enemy the caster can see
-    /// (TeamUtility.IsEnemy, CharacterController.CanSee): a breath weapon's dice and bonus (the bombardier beetle's acid spray counts too, CRE-040), each natural attack's bonus energy dice
+    /// (TeamUtility.IsEnemy, CharacterController.CanSee): a breath weapon's dice and bonus (the bombardier beetle's acid spray counts too, MM p.285), each natural attack's bonus energy dice
     /// times its count, and the energy enchantments of the weapons in its hands. Average dice, no hit chance.
     /// </summary>
     public static Dictionary<global::DamageType, float> VisibleEnemyEnergyThreat(CharacterController caster, IList<CharacterController> all)

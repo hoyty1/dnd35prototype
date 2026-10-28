@@ -55,14 +55,24 @@ public class AreaEffectManager : MonoBehaviour
 
     public void OnCombatRoundStart()
     {
-        var copy = new List<PersistentAreaEffect>(activeEffects);
-        for (int i = 0; i < copy.Count; i++)
+        // The area ticks resolve as one effect: a reaction to their damage (the acid spray, D1) comes after every tick.
+        GameManager gm = GameManager.Instance;
+        gm?.DeferAttackedReactions();
+        try
         {
-            PersistentAreaEffect effect = copy[i];
-            if (effect == null)
-                continue;
+            var copy = new List<PersistentAreaEffect>(activeEffects);
+            for (int i = 0; i < copy.Count; i++)
+            {
+                PersistentAreaEffect effect = copy[i];
+                if (effect == null)
+                    continue;
 
-            effect.OnRoundStart();
+                effect.OnRoundStart();
+            }
+        }
+        finally
+        {
+            gm?.ResumeAttackedReactions();
         }
 
         activeEffects.RemoveAll(e => e == null);

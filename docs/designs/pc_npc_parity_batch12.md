@@ -786,6 +786,8 @@ TEST BUDGET: step 13's set, CharmPersonRulesTests, GrappleDamageRulesTests, Rapi
 
 ### 15. Cleave everywhere, and the acid spray as a reaction (`b12-cleave-and-attacked-triggers`)
 
+> Built 2026-10-28. Differences from the plan below, found in code: a Cleave candidate must be a foe (TeamUtility.IsEnemy; RAW says "another creature", but no attack path lets a creature attack an ally by choice); the cleave attack repeats the dropping attack's base attack bonus step, sequence penalty and one-attack bonus (the charge's +2), the target-dependent terms are the new target's (delegated RAW reading, RULES_COVERAGE 4.1); a natural-weapon cleave repeats that natural attack without using one (`FullAttack(markNaturalAttackUsed: false)`); the AI cleaves into a downed foe only when no foe in the fight is in reach and its profile does not ignore downed targets. The reactions wait in a queue while an attack hook's first stages, a maneuver, a cast or a turn start's ongoing effects resolve (`DeferAttackedReactions`) and are resolved after them; a controlled beetle gets the AI's choice where the trigger cannot wait (CRE-075). `PostAttackQuirkSetsTests` keeps its name.
+
 IDs: CMB-017, CRE-040 (the trigger); D7, D1. Behaviour change.
 
 1. **Cleave and Great Cleave in the hook (D7).**

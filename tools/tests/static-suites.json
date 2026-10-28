@@ -605,11 +605,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 54,
+      "passed": 52,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 12 steps 13 and 14 (2026-10-28; step 14: CMB-097, CMB-169, CMB-170, CMB-090, CMB-019, CMB-174, CMB-096 drop): only the Cleave PostAttackQuirk bits are left (CleaveAfterCombatEnd on the PC single attack, NoCleave on every other origin A-J), the thrown drop's test (GameManager.IsThrowableWeapon with meleeOnly, AttackIntent.IsThrowOf: a javelin or dart thrown by an NPC intent, never a dagger from the copied PC selection, nothing on a melee intent, never a bow), the attack decider factory (AttackDeciders.For and its override) and the AttackIntent mode mapping (ForAI carries NpcIntentReadsUiThrownGlobal). Pure apart from ItemDatabase reads: no scene, no dice. 54/54 in its Play pass of 2026-10-28 (20261028T214929Z-play)."
+      "notes": "Batch 12 steps 13-15 (2026-10-28; step 15: CMB-017, D7): the PostAttackQuirk type and table are gone and every origin A-J gets a plain resolution (no cleave flag, may wait, the AI decider without a creature); Cleave's drop test (CleaveRules.DroppedTarget, PHB p.92: a kill, below 0 hp or newly unconscious; never disabled at exactly 0, a ranged attack, an attack not made or a Mirror Image figure); the thrown drop's test (GameManager.IsThrowableWeapon with meleeOnly, AttackIntent.IsThrowOf: a javelin or dart thrown by an NPC intent, never a dagger from the copied PC selection, nothing on a melee intent, never a bow), the attack decider factory (AttackDeciders.For and its override; without a scene the AI declines the acid spray and neither decider asks with no Cleave candidate) and the AttackIntent mode mapping. Pure apart from ItemDatabase reads: no scene, no dice. After the step 15 review the drop test is per result (DefenderDownAfter: a later nonlethal knockout and an off-hand drop in a two-result batch are picked, not an earlier hit). 52/52 in its Play pass of 2026-10-28 (20261028T235610Z-play)."
     },
     {
       "type": "Tests.Combat.AnimateRopeRulesTests",

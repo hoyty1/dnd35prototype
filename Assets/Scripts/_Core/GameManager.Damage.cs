@@ -23,6 +23,15 @@ public partial class GameManager
     {
         DamageResolutionResult result = ApplyDamagePacket(target, rawDamage, packet);
         AfterDamageTaken(target, result.FinalDamage);
+
+        // A foe's effect that damages a creature disturbs it (the bombardier beetle's acid spray, MM p.285, D1): the
+        // packet's source creature, else the caster of the cast that is resolving (never a context that is only open). The
+        // reaction comes once the effect resolved (held while a cast, an attack hook, a maneuver or a multi-victim effect
+        // is still resolving).
+        CharacterController source = packet != null && packet.SourceCreature != null ? packet.SourceCreature : ResolvingCast?.Request.Caster;
+        if (result.FinalDamage > 0 && source != null && target != null && source != target && TeamUtility.IsEnemy(source, target))
+            NotifyAttackedOrDisturbed(target, source);
+        FlushAttackedReactions();
         return result;
     }
 

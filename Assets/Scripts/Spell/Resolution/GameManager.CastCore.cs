@@ -1697,6 +1697,15 @@ public partial class GameManager
         EnterCastStage(ctx, CastStage.Handlers);
         SpellData spell = ctx.Request.Spell;
         ctx.ClaimedByHandler = RunSingleTargetHandlers(ctx.Request.Caster, ctx.Request.Aim.Target, spell, ctx.Result, ctx.EffectNegatedBySave, out _);
+
+        // A hostile spell aimed at a creature, or one that damaged it, attacks it (the bombardier beetle's acid spray,
+        // MM p.285, D1): the notice waits for the end of the cast (FinishCast).
+        CharacterController caster = ctx.Request.Caster;
+        CharacterController target = ctx.Request.Aim.Target;
+        if (target != null && caster != null && target != caster
+            && (AttackLegality.IsHostileSpellAt(spell, caster, target) || (ctx.Result != null && ctx.Result.DamageDealt > 0 && TeamUtility.IsEnemy(caster, target))))
+            NotifyAttackedOrDisturbed(target, caster);
+
         CastStageBuff(ctx);
     }
 
@@ -2145,6 +2154,17 @@ public partial class GameManager
         if (o.WasCast && !ctx.CombatEndChecked && RunCastCombatEndCheck(ctx, "FinishCast"))
             o.CombatEnded = true;
         EndCast(ctx);
+
+        // The reactions the cast triggered (the acid spray, D1) come now that it has resolved, unless the combat ended.
+        if (o.CombatEnded)
+            _pendingAttackedReactions.Clear();
+        else
+        {
+            FlushAttackedReactions();
+            // A reaction can end the combat (the spray drops the caster's side): the outcome says so.
+            if (CurrentPhase == TurnPhase.CombatOver)
+                o.CombatEnded = true;
+        }
 
         ctx.Request.Decider?.OnCastFinished(this, ctx, o);
         Action<CastOutcome> done = ctx.Done;

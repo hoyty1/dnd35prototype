@@ -1743,6 +1743,13 @@ public partial class GameManager
 
             string label = stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0 ? stepResult.AttackLabels[0] : $"Attack {step + 1}";
             CombatResult attack = stepResult.Attacks[0];
+            // The charge's +2 was a bonus entry for this step only: record it on the result, so a Cleave attack after this
+            // step repeats it ("at the same bonus", PHB p.92, D7; CharacterController.ResolveCleaveAttack).
+            if (attack != null && attack.SituationalAttackBonus == 0)
+            {
+                attack.SituationalAttackBonus = 2;
+                attack.SituationalAttackLabel = "Charge";
+            }
             AttackResolution resolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, intent, deciderSource).With(attack);
             resolution.RangeInfo = CalculateRangeInfo(charger, target, intent);
             resolution.CombatEndContext = "Charge.Pounce";

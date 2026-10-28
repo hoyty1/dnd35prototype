@@ -244,8 +244,8 @@ public static partial class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 13,
             // Acid Spray (Ex), MM p.285: when attacked or disturbed, once per round, a 10-ft cone; Fortitude DC 13 or
-            // 1d4+2 acid (a success negates). Resolved by GameManager.TryNPCUseBombardierAcidSpray, never by the generic
-            // breath executor; the trigger is still the beetle's own attack (CRE-040, batch 12 step 15, D1).
+            // 1d4+2 acid (a success negates). A reaction that costs no action (MM p.315, D1), resolved by
+            // GameManager.AttackedReactions.cs (ResolveAcidSpray), never by the generic breath executor.
             BreathWeapon = new BreathWeaponDefinition
             {
                 Shape = BreathWeaponShape.Cone,

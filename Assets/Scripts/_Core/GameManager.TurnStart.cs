@@ -35,14 +35,24 @@ public partial class GameManager
         if (actor == null || actor.Stats == null)
             return false;
 
-        // Ongoing damage and healing at the start of the turn.
-        HandleFlamingSphereTurnStart(actor);
-        ApplyMelfsAcidArrowTurnStartDamage(actor);
-        actor.ApplyRegenerationAtTurnStart();
+        // Ongoing damage and healing at the start of the turn. A reaction to that damage (the bombardier beetle's acid
+        // spray, D1) waits until the once-per-round flags are cleared, so it belongs to the new round.
+        DeferAttackedReactions();
+        try
+        {
+            HandleFlamingSphereTurnStart(actor);
+            ApplyMelfsAcidArrowTurnStartDamage(actor);
+            actor.ApplyRegenerationAtTurnStart();
 
-        // Breath weapon, ranged special and terrain manipulation cooldowns (AI-032), and the once-per-round flags.
-        actor.TickTurnCooldowns();
-        actor.ClearOncePerRoundFlags();
+            // Breath weapon, ranged special and terrain manipulation cooldowns (AI-032), and the once-per-round flags
+            // (the acid spray, MM p.285, D1; Cleave, PHB p.92, D7).
+            actor.TickTurnCooldowns();
+            actor.ClearOncePerRoundFlags();
+        }
+        finally
+        {
+            ResumeAttackedReactions();
+        }
 
         // Aid Another expiry counters tick before actions; this keeps bonuses available for one full beneficiary turn.
         ExpireAidBonusesAtTurnStart(actor);

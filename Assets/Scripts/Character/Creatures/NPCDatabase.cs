@@ -322,7 +322,7 @@ public class BreathWeaponDefinition
     public int UsesPerDay;
     /// <summary>
     /// Usable at most once per round instead of on a recharge (the bombardier beetle's acid spray, MM p.285). Such a use
-    /// is the creature's own routine (TryNPCUseBombardierAcidSpray), never the generic breath executor.
+    /// is a reaction to being attacked or disturbed (GameManager.AttackedReactions.cs, D1), never the generic breath executor.
     /// </summary>
     public bool OncePerRound;
 

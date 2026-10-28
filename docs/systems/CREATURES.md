@@ -93,7 +93,7 @@ For the step-by-step recipe and its pitfalls, follow "Add a monster or NPC" and 
 | AI | `AIBehavior`, `AIProfileArchetype`, `CreatureTags` | See [AI.md](AI.md#24-where-configuration-comes-from) and [AI.md section 6](AI.md#6-profiles-and-archetypes) |
 | Templates | `AppliedTemplateIds`, `BakedTemplateIds` | `AppliedTemplateIds` lists every template the creature has, requested or applied; `BakedTemplateIds` those already in its statistics, which `CreatureTemplateRegistry.ApplyTemplatesClone` skips (CRE-001, fixed 2026-10-14) |
 
-`SpecialAbilities` and `Description` are display text only. Before declaring an ability missing, check all three places mechanics can live: an ability payload on NPCDefinition, an on-hit field on NaturalAttackDefinition, and bespoke ID-checked code (for example `giant_bombardier_beetle` in `GameManager.TryNPCUseBombardierAcidSpray`).
+`SpecialAbilities` and `Description` are display text only. Before declaring an ability missing, check all three places mechanics can live: an ability payload on NPCDefinition, an on-hit field on NaturalAttackDefinition, and bespoke ID-checked code (for example `giant_bombardier_beetle` in `GameManager.AttackedReactions.cs`, the acid spray reaction).
 
 ## 3. Special abilities
 

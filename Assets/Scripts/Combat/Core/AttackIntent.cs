@@ -7,7 +7,7 @@ public enum AttackMode
 }
 
 /// <summary>
-/// Named differences in what an attack intent reads (batch 12 step 13, the <see cref="PostAttackQuirk"/> pattern): each
+/// Named differences in what an attack intent reads (batch 12 step 13, the batch 11 LegacyCastQuirk pattern): each
 /// bit is a legacy read that a later step removes.
 /// </summary>
 [System.Flags]

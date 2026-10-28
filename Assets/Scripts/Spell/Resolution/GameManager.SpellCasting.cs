@@ -4289,8 +4289,9 @@ public partial class GameManager
 
         // Acid spell damage through the shared damage path: mitigation, then the concentration check and the death handling
         // (DealDamage, AfterDamageTaken; SPL-200, SPL-004). The packet keeps the old flags (ranged, no bypass tags).
-        DamageResolutionResult mitigation = DealDamage(character, rolledDamage,
-            DamagePackets.Spell("Melf's Acid Arrow (Lingering)", DamageType.Acid, isRanged: true));
+        DamagePacket arrowPacket = DamagePackets.Spell("Melf's Acid Arrow (Lingering)", DamageType.Acid, isRanged: true);
+        arrowPacket.SourceCreature = effectData.Caster;
+        DamageResolutionResult mitigation = DealDamage(character, rolledDamage, arrowPacket);
         int damageDealt = mitigation.FinalDamage;
 
         int roundsLeft = Mathf.Max(0, effectData.RemainingDamageRounds - 1);

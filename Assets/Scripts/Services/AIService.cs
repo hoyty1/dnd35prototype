@@ -1669,70 +1669,81 @@ public class AIService : MonoBehaviour
         if (allChars == null)
             yield break;
 
-        for (int i = 0; i < allChars.Count; i++)
+        // The swarm's damage resolves for every creature in its space first: a reaction to it (the acid spray, D1) comes
+        // once all of it has resolved.
+        _gameManager.DeferAttackedReactions();
+        try
         {
-            CharacterController victim = allChars[i];
-            if (victim == null || victim == swarm || victim.Stats == null || victim.Stats.IsDead)
-                continue;
-
-            // Swarms only damage creatures sharing their space
-            if (victim.GridPosition != swarmPos)
-                continue;
-
-            // Skip friendly creatures unless this is an indiscriminate swarm
-            if (!indiscriminate && !TeamUtility.IsEnemy(swarm, victim))
-                continue;
-
-            // ── Roll swarm damage ──
-            int damage = RollSwarmDamage(traits);
-            if (damage <= 0)
-                continue;
-
-            // A swarm attack is a nonmagical natural attack: damage reduction applies unless the swarm's damage type
-            // bypasses it (MM p.316), and so do immunity and resistance; then the shared concentration and death
-            // checks (SPL-004, AI-006).
-            string dmgTypeStr = traits.SwarmDamageType.ToString();
-            DamageResolutionResult dealt = _gameManager.DealDamage(victim, damage,
-                DamagePackets.CreatureAttack(swarm.Stats.CharacterName + " swarm", traits.SwarmDamageType));
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {dealt.FinalDamage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll){GameManager.DescribeMitigation(dealt)}"));
-
-            yield return new WaitForSeconds(0.25f);
-
-            // Check if victim died from swarm damage
-            if (victim.Stats.IsDead)
+            for (int i = 0; i < allChars.Count; i++)
             {
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{victim.Stats.CharacterName} is killed by the swarm!"));
-                continue;
-            }
+                CharacterController victim = allChars[i];
+                if (victim == null || victim == swarm || victim.Stats == null || victim.Stats.IsDead)
+                    continue;
 
-            // Distraction does not yet check MM p.316's "vulnerable to the swarm's damage" (immune, incorporeal, or
-            // damage reduction that stops the swarm's maximum) or living creatures only (CRE-060).
+                // Swarms only damage creatures sharing their space
+                if (victim.GridPosition != swarmPos)
+                    continue;
 
-            // ── Distraction: Fort save or nauseated 1 round (MM p.239) ──
-            if (traits.DistractionDC > 0)
-            {
-                var saveResult = SavingThrowResolver.ResolveFortitudeSave(
-                    victim.Stats, traits.DistractionDC, $"{swarm.Stats.CharacterName} distraction",
-                    SaveContext.CreatureAbility($"{swarm.Stats.CharacterName} distraction", swarm));
+                // Skip friendly creatures unless this is an indiscriminate swarm
+                if (!indiscriminate && !TeamUtility.IsEnemy(swarm, victim))
+                    continue;
 
-                if (saveResult.Succeeded)
+                // ── Roll swarm damage ──
+                int damage = RollSwarmDamage(traits);
+                if (damage <= 0)
+                    continue;
+
+                // A swarm attack is a nonmagical natural attack: damage reduction applies unless the swarm's damage type
+                // bypasses it (MM p.316), and so do immunity and resistance; then the shared concentration and death
+                // checks (SPL-004, AI-006).
+                string dmgTypeStr = traits.SwarmDamageType.ToString();
+                DamagePacket swarmPacket = DamagePackets.CreatureAttack(swarm.Stats.CharacterName + " swarm", traits.SwarmDamageType);
+                swarmPacket.SourceCreature = swarm;
+                DamageResolutionResult dealt = _gameManager.DealDamage(victim, damage, swarmPacket);
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {dealt.FinalDamage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll){GameManager.DescribeMitigation(dealt)}"));
+
+                yield return new WaitForSeconds(0.25f);
+
+                // Check if victim died from swarm damage
+                if (victim.Stats.IsDead)
                 {
-                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"{victim.Stats.CharacterName} resists distraction (Fort {saveResult.Total} vs DC {traits.DistractionDC})."));
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{victim.Stats.CharacterName} is killed by the swarm!"));
+                    continue;
                 }
-                else
-                {
-                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!"));
-                    victim.ApplyNauseatedCondition(1, $"{swarm.Stats.CharacterName} Distraction");
-                }
-                yield return new WaitForSeconds(0.2f);
-            }
 
-            // ── Poison rider (if applicable) ──
-            if (traits.HasPoison && !string.IsNullOrEmpty(traits.PoisonId))
-            {
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{victim.Stats.CharacterName} is exposed to {swarm.Stats.CharacterName}'s poison!"));
-                // Poison application handled by existing poison system if available
+                // Distraction does not yet check MM p.316's "vulnerable to the swarm's damage" (immune, incorporeal, or
+                // damage reduction that stops the swarm's maximum) or living creatures only (CRE-060).
+
+                // ── Distraction: Fort save or nauseated 1 round (MM p.239) ──
+                if (traits.DistractionDC > 0)
+                {
+                    var saveResult = SavingThrowResolver.ResolveFortitudeSave(
+                        victim.Stats, traits.DistractionDC, $"{swarm.Stats.CharacterName} distraction",
+                        SaveContext.CreatureAbility($"{swarm.Stats.CharacterName} distraction", swarm));
+
+                    if (saveResult.Succeeded)
+                    {
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"{victim.Stats.CharacterName} resists distraction (Fort {saveResult.Total} vs DC {traits.DistractionDC})."));
+                    }
+                    else
+                    {
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!"));
+                        victim.ApplyNauseatedCondition(1, $"{swarm.Stats.CharacterName} Distraction");
+                    }
+                    yield return new WaitForSeconds(0.2f);
+                }
+
+                // ── Poison rider (if applicable) ──
+                if (traits.HasPoison && !string.IsNullOrEmpty(traits.PoisonId))
+                {
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{victim.Stats.CharacterName} is exposed to {swarm.Stats.CharacterName}'s poison!"));
+                    // Poison application handled by existing poison system if available
+                }
             }
+        }
+        finally
+        {
+            _gameManager.ResumeAttackedReactions();
         }
 
         _gameManager.EvaluateCombatEnd("AI.SwarmDamage");
@@ -3981,30 +3992,41 @@ public class AIService : MonoBehaviour
         // Apply cooldown
         npc.ApplyRangedSpecialAttackCooldown();
 
-        // Determine hit/miss and apply damage
-        bool isHit = RollRangedTouchAttack(npc, target);
-        
-        if (isHit)
+        // Determine hit/miss and apply damage. The ranged touch attack attacks the target (the acid spray's trigger, D1),
+        // whose reaction comes once the attack and its on-hit effect have resolved.
+        _gameManager.DeferAttackedReactions();
+        try
         {
-            // Energy damage (spittle acid) ignores damage reduction, physical damage takes it as a natural attack
-            // (MM p.307); immunity and resistance apply either way; then the shared concentration and death checks
-            // (SPL-004, AI-006).
-            int damage = RollDamage(attack.DamageDice, attack.DamageCount);
-            DamageResolutionResult dealt = _gameManager.DealDamage(target, damage,
-                DamagePackets.CreatureAttack($"{npc.Stats.CharacterName}'s {attack.Name}", attack.DamageType, true));
-            _gameManager.CombatUI?.ShowCombatLog(
-                CombatLogHelper.Damage("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {dealt.FinalDamage} {attack.DamageType} damage{GameManager.DescribeMitigation(dealt)}!"));
+            _gameManager.NotifyAttackedOrDisturbed(target, npc);
+            bool isHit = RollRangedTouchAttack(npc, target);
 
-            // Check for on-hit effects (blinding on crit, etc.)
-            if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
+            if (isHit)
             {
-                ApplyStatusEffectFromSpecialAttack(target, attack, npc);
+                // Energy damage (spittle acid) ignores damage reduction, physical damage takes it as a natural attack
+                // (MM p.307); immunity and resistance apply either way; then the shared concentration and death checks
+                // (SPL-004, AI-006).
+                int damage = RollDamage(attack.DamageDice, attack.DamageCount);
+                DamagePacket specialPacket = DamagePackets.CreatureAttack($"{npc.Stats.CharacterName}'s {attack.Name}", attack.DamageType, true);
+                specialPacket.SourceCreature = npc;
+                DamageResolutionResult dealt = _gameManager.DealDamage(target, damage, specialPacket);
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Damage("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {dealt.FinalDamage} {attack.DamageType} damage{GameManager.DescribeMitigation(dealt)}!"));
+
+                // Check for on-hit effects (blinding on crit, etc.)
+                if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
+                {
+                    ApplyStatusEffectFromSpecialAttack(target, attack, npc);
+                }
+            }
+            else
+            {
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Failure("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
             }
         }
-        else
+        finally
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                CombatLogHelper.Failure("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
+            _gameManager.ResumeAttackedReactions();
         }
 
         return true;

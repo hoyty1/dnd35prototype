@@ -223,6 +223,27 @@ public class CombatResult
     public int DefenderHPBefore;
     public int DefenderHPAfter;
 
+    /// <summary>
+    /// The defender was already out of the fight (dead, dying, stable or unconscious) before this attack's roll, set by
+    /// every weapon attack's core (CharacterController.PerformSingleAttackWithCrit). Cleave reads it: only damage that
+    /// knocks a creature unconscious drops it (PHB p.92, D7; <see cref="CleaveRules.DroppedTarget"/>).
+    /// </summary>
+    public bool DefenderDownBefore;
+
+    /// <summary>
+    /// The defender was out of the fight (dead, dying, stable or unconscious) right after this attack's roll and damage,
+    /// set next to <see cref="DefenderDownBefore"/>. Cleave reads the pair per result, never the live target, so a step
+    /// with several results (a two-weapon batch) finds the one that dropped the foe (<see cref="CleaveRules.DroppedTarget"/>).
+    /// </summary>
+    public bool DefenderDownAfter;
+
+    /// <summary>
+    /// The one-attack bonus the caller passed to CharacterController.Attack (the charge's +2, PHB p.154) and its label.
+    /// A Cleave attack repeats it: it is made "at the same bonus" as the attack that dropped the foe (PHB p.92, D7).
+    /// </summary>
+    public int SituationalAttackBonus;
+    public string SituationalAttackLabel;
+
     public int TotalDamage => FinalDamageDealt > 0 || ImmunityPrevented || ResistancePrevented > 0 || DRPrevented > 0
         ? FinalDamageDealt
         : Damage + SneakAttackDamage;

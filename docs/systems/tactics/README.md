@@ -242,7 +242,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-040, AI-008, CRE-017 |
 | 13 | Senses for fair sight: scent (47, partial), tremorsense 15, blindsense 6, blindsight 5, all-around vision 5 | 78 | Med (knowledge increment 2) | High | AI-051 |
 | 14 | Template defences: SR HD+5 at all HD; DR bypass combos; energy riders on natural attacks (data-only); trample | 14+53+4+2 | Low | Med | CRE-008, CRE-018, new CRE (riders) |
-| 15 | Feat modes for NPCs: Power Attack (profile flag unread); Rapid Shot and TWF (no NPC caller); Cleave; natural attacks plus weapon | many humanoids | Med | Med | AI-026, new AI (Rapid Shot/TWF), CMB-017, CMB-077 |
+| 15 | Feat modes for NPCs: Power Attack (profile flag unread); Rapid Shot and TWF (no NPC caller); Cleave; natural attacks plus weapon | many humanoids | Med | Med | AI-026, new AI (Rapid Shot/TWF), CMB-077 (Cleave works for NPCs since batch 12 step 15) |
 | 16 | NPC class features: rage, turn/rebuke, sneak-attack positioning (flurry done 2026-10-14, CHR-003; smite and lay on hands done 2026-10-14, CHR-020; turning level by class level, CMB-016 fixed) | DMG class NPCs | Med | Med | CMB-026, CMB-028 |
 | 17 | Consumables for the AI (potions first) | DMG NPC gear | Med | Med | AI-009, AI-054 |
 | 18 | Remaining PHB actions: double move, run, total defense, aid another (AI path + expiry fix), withdraw, cover | all | Med | Low to Med | AI-010, GRID-009, new CMB (aid another) |

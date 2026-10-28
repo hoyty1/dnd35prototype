@@ -87,6 +87,12 @@ public class DamagePacket
     /// the character takes 0 damage instead (50% of half = 0). PHB p.230
     /// </summary>
     public bool SavedForHalf;
+    /// <summary>
+    /// The creature whose effect deals the damage (a Fire Shield's wearer, a breath weapon's breather, a swarm), or null
+    /// when the caller does not name one (GameManager.DealDamage then takes the caster of the cast in progress, if any).
+    /// Read only by the "disturbed by a foe's effect" trigger of the bombardier beetle's acid spray (MM p.285, D1).
+    /// </summary>
+    public CharacterController SourceCreature;
 }
 
 public class DamageResolutionResult

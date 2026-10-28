@@ -615,6 +615,21 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
     protected void UpdateCharacterTracking()
     {
+        // Every creature's entry resolves as one effect: a reaction to its damage (the acid spray, D1) comes after all.
+        GameManager gm = gameManager != null ? gameManager : GameManager.Instance;
+        gm?.DeferAttackedReactions();
+        try
+        {
+            UpdateCharacterTrackingCore();
+        }
+        finally
+        {
+            gm?.ResumeAttackedReactions();
+        }
+    }
+
+    private void UpdateCharacterTrackingCore()
+    {
         CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
         var currentlyInArea = new HashSet<CharacterController>();
 
@@ -642,6 +657,21 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     }
 
     protected void ApplyInitialEffect()
+    {
+        // Every creature's initial effect resolves as one effect (the acid spray, D1, comes after all).
+        GameManager gm = gameManager != null ? gameManager : GameManager.Instance;
+        gm?.DeferAttackedReactions();
+        try
+        {
+            ApplyInitialEffectCore();
+        }
+        finally
+        {
+            gm?.ResumeAttackedReactions();
+        }
+    }
+
+    private void ApplyInitialEffectCore()
     {
         CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
 
@@ -706,6 +736,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     protected DamageResolutionResult DealSpellDamage(CharacterController character, int rawDamage, DamageType type, bool savedForHalf = false)
     {
         DamagePacket packet = DamagePackets.Spell(EffectName, type, savedForHalf);
+        packet.SourceCreature = Caster;
         GameManager gm = gameManager != null ? gameManager : GameManager.Instance;
         if (gm != null)
             return gm.DealDamage(character, rawDamage, packet);

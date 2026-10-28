@@ -2246,6 +2246,14 @@ public partial class GameManager
             ClearSunderSequenceState();
         }
 
+        // The target's reaction to the maneuver (the bombardier beetle's acid spray, D1) resolves as ExecuteSpecialAttack
+        // returns and can end the combat: nothing of the maneuver's aftermath follows a victory or defeat.
+        if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            FinalizeSpecialAttackResolution(attacker, target);
+            return;
+        }
+
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
         if (type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm)
             MeleeReactionService.TriggerReactions(attacker, target, null);

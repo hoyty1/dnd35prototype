@@ -535,6 +535,16 @@ public partial class GameManager
             sunderAttackBonusOverride: choice.Value == SpecialAttackType.Sunder ? stepBab : null);
         CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"{npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}"));
 
+        // The target's reaction (the acid spray, D1) resolves as ExecuteSpecialAttack returns and can end the combat or
+        // drop the NPC: no aftermath then (the caller's loop stops on CombatOver).
+        if (CurrentPhase == TurnPhase.CombatOver || CombatEndRules.IsOutOfFight(npc))
+        {
+            UpdateAllStatsUI();
+            attempted = choice.Value;
+            succeeded = result != null && result.Success;
+            return true;
+        }
+
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
         if (choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm)
             MeleeReactionService.TriggerReactions(npc, target, null);
@@ -898,7 +908,7 @@ public partial class GameManager
                         break;
                     }
 
-                    if (npc.Stats.IsDead || !npc.CanTakeTurnActions())
+                    if (npc.Stats.IsDead || !npc.CanTakeTurnActions() || CurrentPhase == TurnPhase.CombatOver)
                         break;
 
                     // A failed trip waits on a controllable defender's counter-trip choice (PHB p.158,
@@ -1345,117 +1355,6 @@ public partial class GameManager
         => AIService.IsGiantBombardierBeetle(npc);
 
     /// <summary>
-    /// The giant bombardier beetle's Acid Spray (Ex), MM p.285, read from its breath definition (OncePerRound): a 10-ft
-    /// cone that covers <paramref name="primaryTarget"/> (AoESystem.BestDirectedAimAt), at most once per round
-    /// (<see cref="CharacterController.AcidSprayUsedThisRound"/>, cleared at the beetle's turn start; D1 of batch 12).
-    /// Its damage (1d4+2 acid) is rolled once for the whole spray (AreaDamageRoll, decision D6 of batch 11, SPL-180), and
-    /// each creature in the cone makes its own save (DC 13 Fortitude: 10 + half its 2 HD + Con +2) through
-    /// SavingThrowResolver with a creature-ability context; a success negates. Acid from an extraordinary ability goes
-    /// through DealDamage (immunity and resistance, no DR; MM p.307). Still CRE-040: the trigger is the beetle's own
-    /// attack and it costs its standard action (batch 12 step 15 makes it a reaction to being attacked or disturbed).
-    /// </summary>
-    private bool TryNPCUseBombardierAcidSpray(CharacterController npc, CharacterController primaryTarget)
-    {
-        if (!IsGiantBombardierBeetle(npc) || npc == null || npc.Stats == null || primaryTarget == null || primaryTarget.Stats == null)
-            return false;
-
-        BreathWeaponDefinition spray = npc.GetBreathWeaponDefinition();
-        if (spray == null || !spray.OncePerRound)
-            return false;
-
-        if (npc.AcidSprayUsedThisRound || !npc.Actions.HasStandardAction)
-            return false;
-
-        int rangeSquares = Mathf.Max(1, spray.RangeFeet / 5);
-        int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, primaryTarget.GridPosition);
-        if (distanceSquares > rangeSquares)
-            return false;
-
-        // The 10-ft. cone (MM p.285) starts at a corner of the beetle's square and covers the target, the best such aim for
-        // its side (AoESystem.BestDirectedAimAt; PHB p.175, batch 11 step 24).
-        AoEShape shape = spray.Shape == BreathWeaponShape.Line ? AoEShape.Line : AoEShape.Cone;
-        AreaAim sprayAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition, shape, rangeSquares, primaryTarget, Grid);
-        HashSet<Vector2Int> coneCells = sprayAim != null ? sprayAim.Cells : null;
-        if (coneCells == null || coneCells.Count == 0)
-            return false;
-
-        // Every creature with a square of its space in the cone (as BestDirectedAimAt counted it).
-        List<CharacterController> victims = new List<CharacterController>();
-        List<CharacterController> everyone = GetAllCharacters();
-        for (int i = 0; i < everyone.Count; i++)
-        {
-            CharacterController c = everyone[i];
-            if (c == null || c == npc || c.Stats == null || c.Stats.IsDead)
-                continue;
-            if (AoESystem.IsCreatureInCells(coneCells, c) && !victims.Contains(c))
-                victims.Add(c);
-        }
-
-        if (victims.Count == 0)
-            return false;
-
-        if (!npc.CommitStandardAction())
-            return false;
-
-        npc.SetAcidSprayUsedThisRound(true);
-
-        const string sprayName = "Acid Spray";
-        string saveName = spray.SaveType == SavingThrowType.Fortitude ? "Fortitude" : "Reflex";
-        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{npc.Stats.CharacterName} unleashes {sprayName} ({spray.RangeFeet}-ft {(shape == AoEShape.Line ? "line" : "cone")}; {saveName} DC {spray.SaveDC} {(spray.SaveNegates ? "negates" : "half")})!"));
-
-        // One damage roll for the whole spray, shared by every creature in the cone (decision D6 of the batch 11 design;
-        // delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180), made when it first reaches a creature.
-        var damageRoll = new AreaDamageRoll();
-        SpellDice dice = SpellDice.Of(spray.DamageCount, spray.DamageDice, spray.DamageBonus);
-        SaveContext saveContext = SaveContext.CreatureAbility(sprayName, npc);
-
-        for (int i = 0; i < victims.Count; i++)
-        {
-            CharacterController victim = victims[i];
-            int rawDamage = damageRoll.GetOrRoll(dice, null, sprayName + " damage").Total;
-            if (i == 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   " + damageRoll.Describe(spray.DamageType.ToString())));
-
-            SavingThrowResolver.SaveResult save = spray.SaveType == SavingThrowType.Fortitude
-                ? SavingThrowResolver.ResolveFortitudeSave(victim.Stats, spray.SaveDC, sprayName, saveContext)
-                : SavingThrowResolver.ResolveReflexSave(victim.Stats, spray.SaveDC, sprayName, saveContext);
-            bool saveSuccess = save.Succeeded;
-
-            int damageToApply = saveSuccess ? (spray.SaveNegates ? 0 : rawDamage / 2) : rawDamage;
-
-            // Evasion and Improved Evasion apply to every Reflex-half damage (PHB p.50, p.41-42; D13, SPL-090).
-            string evasionNote = string.Empty;
-            if (spray.SaveType == SavingThrowType.Reflex && !spray.SaveNegates)
-                damageToApply = SpellSaveResolver.ApplyEvasion(damageToApply, victim.Stats, saveSuccess, out evasionNote);
-
-            // D&D 3.5e: Blinking creatures take half damage from area attacks
-            if (damageToApply > 0 && victim.HasActiveBlinkEffect)
-                damageToApply = Mathf.Max(1, damageToApply / 2);
-
-            string saveText = $"{saveName} d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {spray.SaveDC} {(saveSuccess ? "SUCCESS" : "FAIL")}{save.NaturalSuffix}{(string.IsNullOrEmpty(evasionNote) ? "" : " " + evasionNote)}";
-            if (damageToApply <= 0)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: {saveText} | no damage{(saveSuccess && spray.SaveNegates ? " (negated)" : "")}"));
-                continue;
-            }
-
-            // Acid (energy) from an extraordinary ability: immunity and resistance apply, damage reduction does not
-            // (MM p.307); then the shared concentration and death checks (SPL-004).
-            DamagePacket packet = DamagePackets.CreatureAttack("Bombardier Beetle Acid Spray", spray.DamageType, true);
-            packet.SavedForHalf = saveSuccess;
-            DamageResolutionResult mitigation = DealDamage(victim, damageToApply, packet);
-            int finalDamage = mitigation.FinalDamage;
-
-            string blinkAreaNote = victim.HasActiveBlinkEffect ? " [Blink: halved]" : "";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: {saveText} | {spray.DamageType} {finalDamage} damage{blinkAreaNote}{DescribeMitigation(mitigation)}"));
-        }
-
-        UpdateAllStatsUI();
-        EvaluateCombatEnd("BombardierAcidSpray");
-        return true;
-    }
-
-    /// <summary>
     /// NPC attack action. Melee runs step by step through the creature's attack sequence
     /// (<see cref="NPCMeleeAttackSequence"/>); before each step <paramref name="tryStepManeuver"/>
     /// (the AI's maneuver evaluation) may replace that attack (CMB-102). Summons pass a trip-only
@@ -1547,11 +1446,8 @@ public partial class GameManager
             ? flankPartner.Stats.CharacterName
             : null;
 
-        if (TryNPCUseBombardierAcidSpray(npc, target))
-        {
-            yield return new WaitForSeconds(1.0f);
-            yield break;
-        }
+        // The bombardier beetle's acid spray is a reaction to being attacked or disturbed, not part of its own attack
+        // (MM p.285, D1; GameManager.AttackedReactions.cs).
 
         // Melee: one step at a time through the shared attack sequence (CMB-102). The split reads
         // the NPC's own weapon, not the PC thrown-mode global (NPCs never throw melee weapons, CMB-096).
@@ -1915,7 +1811,7 @@ public partial class GameManager
         if (npc == null || aimTarget == null || !npc.HasBreathWeapon || !npc.IsBreathWeaponReady)
             yield break;
 
-        // A once-per-round use (the bombardier beetle's acid spray, MM p.285) has its own routine (TryNPCUseBombardierAcidSpray);
+        // A once-per-round use (the bombardier beetle's acid spray, MM p.285) is a reaction (GameManager.AttackedReactions.cs);
         // IsBreathWeaponReady is already false for it, and this guard runs before Frightful Presence so nothing is spent.
         if (npc.GetBreathWeaponDefinition().OncePerRound)
             yield break;
@@ -1975,51 +1871,62 @@ public partial class GameManager
         log.AppendLine($"  Targets: {targets.Count} creature(s) in {cells.Count} squares");
         log.AppendLine();
 
-        for (int t = 0; t < targets.Count; t++)
+        // The breath resolves for every creature in the area first: a reaction to its damage (the acid spray, D1) comes
+        // once the whole breath has resolved.
+        DeferAttackedReactions();
+        try
         {
-            CharacterController target = targets[t];
-            log.AppendLine($"  --- {target.Stats.CharacterName} ---");
-
-            // The one save roll (SaveRollRules, D13): the Luck reroll, natural 1 and 20 (PHB p.177), and the bonuses that
-            // depend on the breathing creature (SaveContext.CreatureAbility: an alignment ward; SPL-018).
-            SaveRoll breathSave = SaveRollRules.Roll(target.Stats,
-                bw.IsReflexSave ? SavingThrowType.Reflex : SavingThrowType.Fortitude, bw.SaveDC,
-                SaveContext.CreatureAbility(npc.Stats.CharacterName + "'s breath weapon", npc), BreathWeaponSaveContext);
-            int saveBonus = breathSave.Modifier;
-            int saveRoll = breathSave.Roll;
-            int saveTotal = breathSave.Total;
-            bool saved = breathSave.Succeeded;
-
-            int damageRolled = saved ? (bw.SaveNegates ? 0 : totalDamage / 2) : totalDamage;
-
-            // Evasion and Improved Evasion on a Reflex-half breath (PHB p.50, p.41-42; SpellSaveResolver.ApplyEvasion, SPL-090).
-            string evasionNote = null;
-            if (bw.IsReflexSave && !bw.SaveNegates)
-                damageRolled = SpellSaveResolver.ApplyEvasion(damageRolled, target.Stats, saved, out evasionNote);
-
-            string saveResult = saved ? "SAVED" : "FAILED";
-            log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}{breathSave.NaturalSuffix}!");
-            if (evasionNote != null)
-                log.AppendLine($"  {evasionNote}");
-
-            // A breath weapon is a supernatural ability: immunity, Protection from Energy, resistance and Fire Shield
-            // apply by its energy type, damage reduction does not (MM p.307); then the concentration and death checks
-            // (SPL-004). The combat-end check runs once after every target.
-            if (damageRolled > 0)
+            for (int t = 0; t < targets.Count; t++)
             {
-                int hpBefore = target.Stats.CurrentHP;
-                DamageResolutionResult dealt = DealDamage(target, damageRolled,
-                    DamagePackets.Supernatural(npc.Stats.CharacterName + "'s breath weapon", bw.DamageType, saved && bw.IsReflexSave));
-                int hpAfter = target.Stats.CurrentHP;
+                CharacterController target = targets[t];
+                log.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-                log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved && !bw.SaveNegates ? " (half)" : "")}{DescribeMitigation(dealt)}");
-                log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
+                // The one save roll (SaveRollRules, D13): the Luck reroll, natural 1 and 20 (PHB p.177), and the bonuses that
+                // depend on the breathing creature (SaveContext.CreatureAbility: an alignment ward; SPL-018).
+                SaveRoll breathSave = SaveRollRules.Roll(target.Stats,
+                    bw.IsReflexSave ? SavingThrowType.Reflex : SavingThrowType.Fortitude, bw.SaveDC,
+                    SaveContext.CreatureAbility(npc.Stats.CharacterName + "'s breath weapon", npc), BreathWeaponSaveContext);
+                int saveBonus = breathSave.Modifier;
+                int saveRoll = breathSave.Roll;
+                int saveTotal = breathSave.Total;
+                bool saved = breathSave.Succeeded;
+
+                int damageRolled = saved ? (bw.SaveNegates ? 0 : totalDamage / 2) : totalDamage;
+
+                // Evasion and Improved Evasion on a Reflex-half breath (PHB p.50, p.41-42; SpellSaveResolver.ApplyEvasion, SPL-090).
+                string evasionNote = null;
+                if (bw.IsReflexSave && !bw.SaveNegates)
+                    damageRolled = SpellSaveResolver.ApplyEvasion(damageRolled, target.Stats, saved, out evasionNote);
+
+                string saveResult = saved ? "SAVED" : "FAILED";
+                log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}{breathSave.NaturalSuffix}!");
+                if (evasionNote != null)
+                    log.AppendLine($"  {evasionNote}");
+
+                // A breath weapon is a supernatural ability: immunity, Protection from Energy, resistance and Fire Shield
+                // apply by its energy type, damage reduction does not (MM p.307); then the concentration and death checks
+                // (SPL-004). The combat-end check runs once after every target.
+                if (damageRolled > 0)
+                {
+                    int hpBefore = target.Stats.CurrentHP;
+                    DamagePacket breathPacket = DamagePackets.Supernatural(npc.Stats.CharacterName + "'s breath weapon", bw.DamageType, saved && bw.IsReflexSave);
+                    breathPacket.SourceCreature = npc;
+                    DamageResolutionResult dealt = DealDamage(target, damageRolled, breathPacket);
+                    int hpAfter = target.Stats.CurrentHP;
+
+                    log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved && !bw.SaveNegates ? " (half)" : "")}{DescribeMitigation(dealt)}");
+                    log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
+                }
+
+                if (target.Stats.IsDead)
+                    log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+
+                log.AppendLine();
             }
-
-            if (target.Stats.IsDead)
-                log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-
-            log.AppendLine();
+        }
+        finally
+        {
+            ResumeAttackedReactions(flush: false);
         }
 
         log.Append("═══════════════════════════════════");
@@ -2027,6 +1934,9 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(log.ToString());
         if (LogAttacksToConsole)
             Debug.Log(log.ToString());
+
+        // The reactions the breath triggered, after its log.
+        FlushAttackedReactions();
 
         UpdateAllStatsUI();
         EvaluateCombatEnd("NPCBreathWeapon");

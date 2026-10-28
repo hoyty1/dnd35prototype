@@ -13,9 +13,9 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, Flurry, Smite, LayOnHands,
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -103,6 +103,11 @@ namespace Tests.Scenarios
         /// </summary>
         public static Step FullAttack(string target, string hasteAttack = null)
             => new Step(StepKind.FullAttack) { Target = target, NaturalAttackName = hasteAttack };
+        /// <summary>
+        /// Ui only: the PC's two-weapon full attack (the Dual Wield button, then the target; CombatFlowService
+        /// .PerformDualWieldAttack, origin D): every main-hand and off-hand attack against that one target.
+        /// </summary>
+        public static Step DualWield(string target) => new Step(StepKind.DualWield) { Target = target };
         /// <summary>
         /// A monk's flurry of blows (PHB p.40-41; CHR-003); refused when the shared rules refuse it. Scripted:
         /// CharacterController.TryBeginFlurryOfBlows, then NPCPerformAttackForAI, which steps the flurry. Ui: the Flurry of
@@ -197,6 +202,14 @@ namespace Tests.Scenarios
         /// is answered "skip". Skipped on the AI path (the AI chooses with AIProfile.ShouldHoldWithImprovedGrab).
         /// </summary>
         public static Step AnswerImprovedGrab(string choice) => new Step(StepKind.AnswerImprovedGrab) { MenuChoice = choice };
+
+        /// <summary>
+        /// Ui: answers the PC's Cleave target menu (PHB p.92; D7) that the step before it opens when it drops a foe (the
+        /// menu opens unless the only candidate is a foe still in the fight): the option for actor <paramref name="target"/>,
+        /// or "No Cleave attack" with null. With no
+        /// such step the menu is answered "No Cleave attack". Skipped on the AI path (the AI picks with ChooseCleaveTargetForAI).
+        /// </summary>
+        public static Step AnswerCleave(string target) => new Step(StepKind.AnswerCleave) { Target = target };
 
         /// <summary>The ImprovedGrabMenu label prefix for an <see cref="AnswerImprovedGrab"/> choice.</summary>
         internal static string ImprovedGrabOptionPrefix(string choice)
@@ -303,6 +316,10 @@ namespace Tests.Scenarios
                         + (HasCell ? "," + Cell.x + "," + Cell.y : "") + ")";
                 case StepKind.AnswerImprovedGrab:
                     return "AnswerImprovedGrab(" + MenuChoice + ")";
+                case StepKind.AnswerCleave:
+                    return "AnswerCleave(" + (Target ?? "none") + ")";
+                case StepKind.DualWield:
+                    return "DualWield(" + Target + ")";
                 case StepKind.Cast:
                     return "Cast(" + SpellId + "," + (HasCell ? Cell.x + "," + Cell.y : Target) + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "")
                         + (Choices != null ? ",choose=" + string.Join("|", Choices) : "") + ")";
@@ -342,7 +359,7 @@ namespace Tests.Scenarios
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
-                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert;
+                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert || Kind == StepKind.DualWield;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
@@ -356,6 +373,8 @@ namespace Tests.Scenarios
                 return "UseItem without an item id";
             if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
                 return Describe() + ": no bestiary entry '" + FormId + "'";
+            if (Kind == StepKind.AnswerCleave && Target != null && def.Find(Target) == null)
+                return Describe() + ": target '" + Target + "' is not an actor";
             if (Kind == StepKind.BardicSuggestion && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             if (Kind == StepKind.BardicMusic && Targets != null)
@@ -373,7 +392,8 @@ namespace Tests.Scenarios
             if (control != Control.Ui)
             {
                 if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
-                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert)
+                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert
+                    || Kind == StepKind.DualWield)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 // A summon aimed at a square is the one square cast the NPC path has (batch 11 step 27, SPL-091).
                 bool summonAtSquare = Kind == StepKind.Cast && SummoningService.IsSummonMonsterSpell(SpellDatabase.GetSpell(SpellId));
@@ -528,7 +548,7 @@ namespace Tests.Scenarios
                     RunAssert(job, a, s, path, i);
                     continue;
                 }
-                if (s.Kind == StepKind.AnswerAoO || s.Kind == StepKind.AnswerImprovedGrab)
+                if (s.Kind == StepKind.AnswerAoO || s.Kind == StepKind.AnswerImprovedGrab || s.Kind == StepKind.AnswerCleave)
                 {
                     EmitStep(job, a, path, i, s, "skipped", "no prompts on the AI path");
                     continue;
@@ -922,6 +942,15 @@ namespace Tests.Scenarios
                 _actionTime = Time.time;
                 return;
             }
+            // The Cleave target menu a drop opens with several foes in reach (PHB p.92; D7): answered from the next
+            // AnswerCleave step, else "No Cleave attack".
+            if (prompt == "submenu" && gm.CombatUI != null && gm.CombatUI.Harness_OpenSpecialStyleMenuName() == GameManager.CleaveTargetMenuName)
+            {
+                AnswerCleaveMenu(gm);
+                _actionFrame = frame;
+                _actionTime = Time.time;
+                return;
+            }
 
             // A UseItem step's target selection opens only after the item use (and any AoO it provoked) resolved.
             if (_awaiting && _pendingClick != null && prompt == null && ClickPendingTarget(gm))
@@ -955,10 +984,12 @@ namespace Tests.Scenarios
                 return;
             }
 
-            while (_index < _steps.Count && (_steps[_index].Kind == StepKind.AnswerAoO || _steps[_index].Kind == StepKind.AnswerImprovedGrab))
+            while (_index < _steps.Count && (_steps[_index].Kind == StepKind.AnswerAoO || _steps[_index].Kind == StepKind.AnswerImprovedGrab
+                       || _steps[_index].Kind == StepKind.AnswerCleave))
             {
                 ScriptedSteps.EmitStep(_job, _actor, PathName, _index, _steps[_index], "skipped",
-                    _steps[_index].Kind == StepKind.AnswerAoO ? "no AoO confirmation open" : "no Improved Grab menu open");
+                    _steps[_index].Kind == StepKind.AnswerAoO ? "no AoO confirmation open"
+                    : _steps[_index].Kind == StepKind.AnswerCleave ? "no Cleave menu open" : "no Improved Grab menu open");
                 _index++;
             }
 
@@ -1077,6 +1108,11 @@ namespace Tests.Scenarios
                 case StepKind.FullAttack:
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnFullAttackButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.DualWield:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnDualWieldButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
                     break;
                 case StepKind.Flurry:
@@ -1445,6 +1481,42 @@ namespace Tests.Scenarios
             else
             {
                 string note = "Improved Grab menu answered Skip (no AnswerImprovedGrab step)";
+                _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
+            }
+        }
+
+        /// <summary>
+        /// Answers the PC's Cleave target menu (PHB p.92; D7): with the next step an AnswerCleave, clicks the option of its
+        /// target actor ("Cleave: Name") or "No Cleave attack", and records that step; otherwise clicks "No Cleave attack"
+        /// and notes it on the step in flight.
+        /// </summary>
+        private void AnswerCleaveMenu(GameManager gm)
+        {
+            Step answer = _index < _steps.Count && _steps[_index].Kind == StepKind.AnswerCleave ? _steps[_index] : null;
+            CharacterController target = answer != null && answer.Target != null ? _job.Ctx.Get(answer.Target) : null;
+            string prefix = target != null && target.Stats != null ? "Cleave: " + target.Stats.CharacterName + " (" : "No Cleave attack";
+            UnityEngine.UI.Button option = gm.CombatUI.Harness_FindSpecialStyleOption(prefix);
+            bool clicked = option != null && option.interactable;
+            if (clicked)
+                option.onClick.Invoke();
+            else
+            {
+                UnityEngine.UI.Button cancel = gm.CombatUI.Harness_FindSpecialStyleCancel();
+                if (cancel != null)
+                    cancel.onClick.Invoke();
+                else
+                    gm.CombatUI.HideSpecialStyleSelectionMenu();
+            }
+
+            if (answer != null)
+            {
+                ScriptedSteps.EmitStep(_job, _actor, PathName, _index, answer, clicked ? "done" : "refused",
+                    clicked ? null : "no option starting with " + prefix + "; no Cleave attack");
+                _index++;
+            }
+            else
+            {
+                string note = "Cleave menu answered No Cleave attack (no AnswerCleave step)";
                 _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
             }
         }

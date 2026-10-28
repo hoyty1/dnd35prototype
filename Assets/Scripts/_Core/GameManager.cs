@@ -1088,8 +1088,9 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log($"[CombatReset] ENTER | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderCount} | currentCharacter={currentCharacterName} | activeNPCs={activeNpcs}");
 
-        // No ward save outlives its encounter (WardSaveLedger, D6).
+        // No ward save outlives its encounter (WardSaveLedger, D6), nor a pending reaction (the acid spray, D1).
         WardSaveLedger.Clear();
+        ClearAttackedReactions();
 
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();
@@ -3300,6 +3301,8 @@ public partial class GameManager : MonoBehaviour
         BreakCharmOnHostileAction(attacker, target);
         BreakCommandUndeadOnHostileAction(attacker, target);
         BreakFascinationOnHostileAction(attacker, target, FascinationThreatManeuver);
+        // Attempting a maneuver against a creature (a grapple included) attacks or disturbs it (the acid spray, D1).
+        NotifyAttackedOrDisturbed(target, attacker);
 
         bool meleeManeuver = type == SpecialAttackType.Trip
             || type == SpecialAttackType.Disarm

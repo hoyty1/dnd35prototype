@@ -33,21 +33,24 @@ public interface IAttackDecider
         DND35.AI.AIProfile profile, int labelBonusOffset, Action<int> answer);
 
     /// <summary>
-    /// The Cleave target among <paramref name="candidates"/> (PHB p.92, D7). Not called yet: step 15 wires Cleave through
-    /// it, with the UI prompt for more than one candidate and the AI's target scoring. Today both answer the first.
+    /// The Cleave target among <paramref name="candidates"/> (PHB p.92, D7: every creature in reach the attacker
+    /// perceives), or null to make no Cleave attack. The UI attacks a lone candidate at once only when it is a foe still in
+    /// the fight (a design choice to save a click, recorded with D7 in RULES_COVERAGE 4.1) and prompts otherwise, with "No
+    /// Cleave attack"; the AI picks among the foes by its target scoring (GameManager.ChooseCleaveTargetForAI).
     /// </summary>
     Coroutine ChooseCleaveTarget(GameManager gm, CharacterController attacker, IList<CharacterController> candidates,
         Action<CharacterController> answer);
 
     /// <summary>
-    /// Whether <paramref name="reactor"/> uses <paramref name="reaction"/> against the creature that attacked it (the
-    /// bombardier beetle's acid spray as a reaction, D1). Not called yet: step 15 wires it. Today both decline.
+    /// Whether <paramref name="reactor"/> uses <paramref name="reaction"/> against the creature that attacked or disturbed
+    /// it (the bombardier beetle's acid spray as a reaction, MM p.285, D1). The UI prompts; the AI uses it when the spray's
+    /// cone would catch more foes than allies (GameManager.ShouldUseAttackedReactionForAI).
     /// </summary>
     Coroutine ChooseAttackedReaction(GameManager gm, CharacterController reactor, CharacterController attacker, string reaction,
         Action<bool> answer);
 }
 
-/// <summary>The player's choices, through the existing prompts (GameManager.PromptImprovedGrabChoice, PromptHasteNaturalAttackChoice).</summary>
+/// <summary>The player's choices, through the prompts (GameManager.PromptImprovedGrabChoice, PromptHasteNaturalAttackChoice, PromptCleaveTarget, PromptAttackedReaction).</summary>
 public sealed class UiAttackDecider : IAttackDecider
 {
     public static readonly UiAttackDecider Instance = new UiAttackDecider();
@@ -67,19 +70,39 @@ public sealed class UiAttackDecider : IAttackDecider
     public Coroutine ChooseCleaveTarget(GameManager gm, CharacterController attacker, IList<CharacterController> candidates,
         Action<CharacterController> answer)
     {
-        answer?.Invoke(candidates != null && candidates.Count > 0 ? candidates[0] : null);
-        return null;
+        if (candidates == null || candidates.Count == 0)
+        {
+            answer?.Invoke(null);
+            return null;
+        }
+        // A lone foe still in the fight is attacked at once (D7's design choice); a lone ally, a lone downed creature or
+        // several candidates are asked, with the option to decline.
+        if (candidates.Count == 1 && TeamUtility.IsEnemy(attacker, candidates[0]) && !CombatEndRules.IsOutOfFight(candidates[0]))
+        {
+            answer?.Invoke(candidates[0]);
+            return null;
+        }
+        if (gm == null)
+        {
+            answer?.Invoke(null);
+            return null;
+        }
+        return gm.StartCoroutine(gm.PromptCleaveTarget(attacker, candidates, answer));
     }
 
     public Coroutine ChooseAttackedReaction(GameManager gm, CharacterController reactor, CharacterController attacker, string reaction,
         Action<bool> answer)
     {
-        answer?.Invoke(false);
-        return null;
+        if (gm == null)
+        {
+            answer?.Invoke(false);
+            return null;
+        }
+        return gm.StartCoroutine(gm.PromptAttackedReaction(reactor, attacker, reaction, answer));
     }
 }
 
-/// <summary>The AI's choices, answered at once from the creature's AIProfile (GameManager.ChooseImprovedGrabForAI, ChooseHasteNaturalAttackIndexForAI).</summary>
+/// <summary>The AI's choices, answered at once from the creature's AIProfile (GameManager.ChooseImprovedGrabForAI, ChooseHasteNaturalAttackIndexForAI, ChooseCleaveTargetForAI, ShouldUseAttackedReactionForAI).</summary>
 public sealed class AiAttackDecider : IAttackDecider
 {
     public static readonly AiAttackDecider Instance = new AiAttackDecider();
@@ -105,14 +128,17 @@ public sealed class AiAttackDecider : IAttackDecider
     public Coroutine ChooseCleaveTarget(GameManager gm, CharacterController attacker, IList<CharacterController> candidates,
         Action<CharacterController> answer)
     {
-        answer?.Invoke(candidates != null && candidates.Count > 0 ? candidates[0] : null);
+        CharacterController pick = gm != null
+            ? gm.ChooseCleaveTargetForAI(attacker, candidates)
+            : (candidates != null && candidates.Count > 0 ? candidates[0] : null);
+        answer?.Invoke(pick);
         return null;
     }
 
     public Coroutine ChooseAttackedReaction(GameManager gm, CharacterController reactor, CharacterController attacker, string reaction,
         Action<bool> answer)
     {
-        answer?.Invoke(false);
+        answer?.Invoke(gm != null && gm.ShouldUseAttackedReactionForAI(reactor, attacker, reaction));
         return null;
     }
 }
