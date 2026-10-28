@@ -264,11 +264,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 60,
+      "passed": 68,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-045: Multiattack only with three or more natural attacks (MM p.304) and the MM attack-math feats and primary/secondary flags the 2026-10-08 audit corrected, plus the blue slaad and giant maneuver feats; reads the NPC templates only"
+      "notes": "CRE-045: Multiattack only with three or more natural attacks (MM p.304) and the MM attack-math feats and primary/secondary flags the 2026-10-08 audit corrected, plus the blue slaad and giant maneuver feats, and the giant bombardier beetle acid spray data (MM p.285: 10-ft cone, 1d4+2 acid, Fortitude DC 13 negates, once per round; Clone copies every field; CRE-040, batch 12 step 2); reads the NPC templates only"
     },
     {
       "type": "Tests.Character.MulticlassSaveCalculationTests",

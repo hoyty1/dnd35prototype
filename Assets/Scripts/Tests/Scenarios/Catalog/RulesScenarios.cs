@@ -135,7 +135,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 157;
+        public const int Count = 159;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -230,6 +230,8 @@ namespace Tests.Scenarios
             yield return S("haste-natural-full-attack-ui", () => HasteNaturalChooserUi(pounce: false, hasteAttack: "Claw"));
             yield return S("haste-natural-full-attack-ui-default", () => HasteNaturalChooserUi(pounce: false, hasteAttack: null));
             yield return S("haste-natural-pounce-ui", () => HasteNaturalChooserUi(pounce: true, hasteAttack: "Claw"));
+            yield return S("charge-flanking-ui", ChargeFlankingUi);
+            yield return S("bombardier-acid-spray", BombardierAcidSpray);
             yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
             yield return S("ai-maneuver-stopgap-trip-fail", () => AiManeuverStopgap(false));
             yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
@@ -3599,6 +3601,176 @@ namespace Tests.Scenarios
 
             return b.Build();
         }
+
+        /// <summary>
+        /// CMB-018 (batch 12 step 2): a Ui fighter 3 charges a dummy from three squares away and ends opposite an ally
+        /// fighter that threatens it, so the charge attack gets the flanking +2 as well as the charge's +2 (PHB p.153,
+        /// p.154). Flanking is computed from the square where the charge ends, as NPCExecuteCharge does.
+        /// </summary>
+        private static ScenarioDef ChargeFlankingUi()
+        {
+            return Rules("rules/charge-flanking-ui", "A Ui PC's charge that ends opposite an ally gets the flanking +2 on top of the charge's +2 (PHB p.153-154, CMB-018)")
+                .Covers("CMB-018", "PHB p.153", "PHB p.154", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 3)), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => Fighter("Ally", 1)), 14, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 13, 10, Control.Scripted)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative("dummy", "ally", "hero")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn("ally", 0, Step.Pass())
+                .Turn("hero", 1, Step.Charge("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The Charge step is done", Expect.StepStatus("hero", 1, "Charge", 0, "done"))
+                .Expect("The charge attack flanks the dummy with the ally: +2 flanking (PHB p.153)", v =>
+                {
+                    TraceEvent atk = v.Of("attack").FirstOrDefault(e => e.Str("attacker") == "hero" && e.Str("target") == "dummy");
+                    if (atk == null)
+                        return ExpectResult.Fail("no charge attack");
+                    return atk.Bool("flank") && atk.Int("flankBonus") == 2
+                        ? ExpectResult.Pass("flank true, flankBonus 2, mod " + atk.Int("mod"), atk.Seq)
+                        : ExpectResult.Fail("flank " + atk.Bool("flank") + ", flankBonus " + atk.Int("flankBonus") + ", mod " + atk.Int("mod"), atk.Seq);
+                })
+                // BAB 3 + Str 3 + charge 2 + flanking 2 = +10 at least (the kit weapon may add its own enhancement).
+                .Expect("The charge attack's modifier carries both +2s: at least +10 (BAB 3, Str 3, charge 2, flanking 2)", v =>
+                {
+                    TraceEvent atk = v.Of("attack").FirstOrDefault(e => e.Str("attacker") == "hero" && e.Str("target") == "dummy");
+                    if (atk == null)
+                        return ExpectResult.Fail("no charge attack");
+                    return atk.Int("mod") >= 10
+                        ? ExpectResult.Pass("mod " + atk.Int("mod"), atk.Seq)
+                        : ExpectResult.Fail("mod " + atk.Int("mod") + ", expected at least +10", atk.Seq);
+                })
+                .Build();
+        }
+
+        private const string AcidSprayNotePrefix = "cre040 ";
+
+        /// <summary>
+        /// CRE-040 (batch 12 step 2): an AI giant bombardier beetle (its HP raised by 200) sprays acid at two Scripted
+        /// fighter 3s adjacent to it, as part of its own attack (that trigger stays until batch 12 step 15, D1). MM p.285: a
+        /// 10-ft cone, Fortitude DC 13 or 1d4+2 acid, a success negates, once per round. Every d4 of the spray's damage is
+        /// 3 (one roll: 5). Both fighters have Fortitude +5 (base 3, Con +2; pinned by a fact), so the forced d20s land on
+        /// the DC's edge: "Failer" rolls 7 (12, one short of DC 13) and "Passer" 8 (exactly 13), and a wrong DC or save
+        /// modifier changes the outcome. The cone the routine aims (AoESystem.BestDirectedAimAt, 2 squares) is pinned to
+        /// reach no square more than 10 ft from the beetle (a third fighter 3 squares away drew the AI's attack instead,
+        /// so the reach is checked on the aim, not by position). Both fighters attack the beetle in round 1. Round 1: the Failer loses 5, the Passer
+        /// 0, and a second spray in the same round (the routine called again with the beetle's standard action restored)
+        /// is refused. Round 2: the flag is cleared at the beetle's turn start and it sprays again.
+        /// </summary>
+        private static ScenarioDef BombardierAcidSpray()
+        {
+            return Rules("rules/bombardier-acid-spray", "A bombardier beetle's acid spray: 10-ft cone, Fortitude DC 13 negates, 1d4+2 acid rolled once, once per round (MM p.285, CRE-040)")
+                .Covers("CRE-040", "MM p.285", "SPL-180", "D1")
+                .MaxRounds(2)
+                .Npc("beetle", "giant_bombardier_beetle", 10, 10, Control.Ai)
+                .Pc("fail", ActorSource.Stats(() => Fighter("Failer", 3)), 11, 10, Control.Scripted)
+                .Pc("pass", ActorSource.Stats(() => Fighter("Passer", 3)), 11, 11, Control.Scripted)
+                .Tweak("beetle", SturdyDummy)
+                .Initiative("beetle", "fail", "pass")
+                .Force(20, 7, "Failer Fortitude save vs Acid Spray", -1)
+                .Force(20, 8, "Passer Fortitude save vs Acid Spray", -1)
+                .Force(4, 3, "Acid Spray damage", -1)
+                .Turn("fail", 1,
+                    Step.Assert("record round 1 and try a second spray", ctx => { AcidSprayFacts(ctx, 1, trySecond: true); return true; }),
+                    Step.Attack("beetle"))
+                .Turn("pass", 1, Step.Attack("beetle"))
+                .Turn("fail", 2,
+                    Step.Assert("record round 2", ctx => { AcidSprayFacts(ctx, 2, trySecond: false); return true; }),
+                    Step.Pass())
+                .Turn("pass", 2, Step.Pass())
+                .Expect("Both near fighters save at Fortitude +5 against the spray, so d20 7 fails and d20 8 makes DC 13",
+                    Expect.All(AcidSprayFact("fortmod.fail", "5"), AcidSprayFact("fortmod.pass", "5")))
+                .Expect("The spray's cone at the Failer covers both fighters and no square beyond 10 ft of the beetle (MM p.285; PHB p.175)",
+                    Expect.All(AcidSprayFact("cone.within10ft", "True"), AcidSprayFact("cone.covers", "True True")))
+                .Expect("The beetle's definition: 10-ft cone, 1d4+2 acid, Fortitude DC 13, negates, once per round (MM p.285)",
+                    AcidSprayFact("def", "Cone 10 1d4+2 Acid Fortitude DC13 negates once"))
+                .Expect("One spray in each round (MM p.285: once per round; the flag clears at the beetle's turn start)",
+                    Expect.All(
+                        Expect.Count("log", e => e.Round == 1 && (e.Str("text") ?? "").Contains("unleashes Acid Spray"), 1, 1),
+                        Expect.Count("log", e => e.Round == 2 && (e.Str("text") ?? "").Contains("unleashes Acid Spray"), 1, 1)))
+                .Expect("Round 1: the failed save takes the one 1d4+2 roll (5), the made save negates it (0)",
+                    Expect.All(AcidSprayFact("r1.lost.fail", "5"), AcidSprayFact("r1.lost.pass", "0")))
+                .Expect("Round 1: a second spray in the same round is refused and the used flag is set (MM p.285: once per round)",
+                    Expect.All(AcidSprayFact("r1.second", "False"), AcidSprayFact("r1.used", "True"), AcidSprayFact("r1.second.lost.fail", "0")))
+                .Expect("Round 2: the second round's spray takes the Failer to 10 down, the Passer still 0",
+                    Expect.All(AcidSprayFact("r2.lost.fail", "10"), AcidSprayFact("r2.lost.pass", "0")))
+                .Expect("Each spray rolls one d4 and one Fortitude save per fighter through SavingThrowResolver (no 'Fireball' dice)",
+                    Expect.All(
+                        Expect.Count("dice", e => (e.Str("ctx") ?? "").Contains("Fortitude save vs Acid Spray"), 4, 4),
+                        Expect.Count("dice", e => (e.Str("ctx") ?? "").Contains("Acid Spray damage"), 2, 2),
+                        Expect.None("dice", e => (e.Str("ctx") ?? "").Contains("Fireball"))))
+                .Build();
+        }
+
+        /// <summary>Notes the acid spray facts of <paramref name="round"/> for <see cref="BombardierAcidSpray"/>.</summary>
+        private static void AcidSprayFacts(ScenarioContext ctx, int round, bool trySecond)
+        {
+            CharacterController beetle = ctx.Get("beetle");
+            CharacterController fail = ctx.Get("fail");
+            CharacterController pass = ctx.Get("pass");
+            string r = "r" + round + ".";
+            if (round == 1)
+            {
+                BreathWeaponDefinition d = beetle.GetBreathWeaponDefinition();
+                ctx.Note(AcidSprayNotePrefix + "def=" + (d == null ? "none"
+                    : d.Shape + " " + d.RangeFeet + " " + d.DamageCount + "d" + d.DamageDice + "+" + d.DamageBonus + " " + d.DamageType
+                      + " " + d.SaveType + " DC" + d.SaveDC + (d.SaveNegates ? " negates" : " half") + (d.OncePerRound ? " once" : " recharge")));
+            }
+            ctx.Note(AcidSprayNotePrefix + r + "lost.fail=" + (fail.Stats.TotalMaxHP - fail.Stats.CurrentHP));
+            ctx.Note(AcidSprayNotePrefix + r + "lost.pass=" + (pass.Stats.TotalMaxHP - pass.Stats.CurrentHP));
+            if (round == 1)
+            {
+                AreaAim aim = AoESystem.BestDirectedAimAt(beetle, beetle.GridPosition, AoEShape.Cone, 2, fail, ctx.Gm.Grid);
+                bool within = aim != null && aim.Cells != null && aim.Cells.Count > 0;
+                if (within)
+                    foreach (Vector2Int cell in aim.Cells)
+                        if (SquareGridUtils.GetDistance(beetle.GridPosition, cell) > 2)
+                            within = false;
+                ctx.Note(AcidSprayNotePrefix + "cone.within10ft=" + within);
+                ctx.Note(AcidSprayNotePrefix + "cone.covers=" + (aim != null && AoESystem.IsCreatureInCells(aim.Cells, fail))
+                    + " " + (aim != null && AoESystem.IsCreatureInCells(aim.Cells, pass)));
+                SaveContext sc = SaveContext.CreatureAbility("Acid Spray", beetle);
+                ctx.Note(AcidSprayNotePrefix + "fortmod.fail=" + SaveRules.Modifier(fail.Stats, SavingThrowType.Fortitude, sc));
+                ctx.Note(AcidSprayNotePrefix + "fortmod.pass=" + SaveRules.Modifier(pass.Stats, SavingThrowType.Fortitude, sc));
+            }
+            if (!trySecond)
+                return;
+
+            ctx.Note(AcidSprayNotePrefix + r + "used=" + beetle.AcidSprayUsedThisRound);
+            int failHp = fail.Stats.CurrentHP;
+            bool hadStandard = beetle.Actions.StandardActionUsed;
+            beetle.Actions.StandardActionUsed = false;
+            string second;
+            try
+            {
+                // TST-006: a renamed or re-signed routine notes "missing", which fails the expectation (never a vacuous False).
+                System.Reflection.MethodInfo m = typeof(GameManager).GetMethod("TryNPCUseBombardierAcidSpray",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null,
+                    new[] { typeof(CharacterController), typeof(CharacterController) }, null);
+                second = m == null || m.ReturnType != typeof(bool)
+                    ? "missing"
+                    : ((bool)m.Invoke(ctx.Gm, new object[] { beetle, fail })).ToString();
+            }
+            finally
+            {
+                beetle.Actions.StandardActionUsed = hadStandard;
+            }
+            ctx.Note(AcidSprayNotePrefix + r + "second=" + second);
+            ctx.Note(AcidSprayNotePrefix + r + "second.lost.fail=" + (failHp - fail.Stats.CurrentHP));
+        }
+
+        /// <summary>The last acid spray fact <paramref name="key"/> equals <paramref name="want"/>.</summary>
+        private static Func<TraceView, ExpectResult> AcidSprayFact(string key, string want)
+            => v =>
+            {
+                string prefix = AcidSprayNotePrefix + key + "=";
+                TraceEvent n = v.Of("note").LastOrDefault(e => (e.Str("text") ?? "").StartsWith(prefix, StringComparison.Ordinal));
+                if (n == null)
+                    return ExpectResult.Inconclusive("no fact " + key);
+                string got = n.Str("text").Substring(prefix.Length);
+                return got == want ? ExpectResult.Pass(key + "=" + got, n.Seq) : ExpectResult.Fail(key + "=" + got + ", expected " + want, n.Seq);
+            };
 
         private static ScenarioDef HasteNaturalMoved()
         {

@@ -173,7 +173,7 @@ public static class NpcSlotReuseTests
         if (cc.HasTerrainManipulation) t.Add("terrain manipulation");
         if (cc.HasStenchAura) t.Add("stench");
         if (cc.HasRegeneration) t.Add("regeneration");
-        if (!cc.HasBombardierAcidSprayReady) t.Add("acid spray cooldown");
+        if (!cc.HasBombardierAcidSprayReady) t.Add("acid spray used this round");
         return t;
     }
 
@@ -187,7 +187,7 @@ public static class NpcSlotReuseTests
 
     /// <summary>
     /// Kitchen sink creature, dirtied at runtime (grapple, spell effect, condition, haste, Power Attack, spent move,
-    /// tag, AI tracker component, sprite tint, acid spray cooldown, target priority), then an orc warrior in the same
+    /// tag, AI tracker component, sprite tint, acid spray used this round, target priority), then an orc warrior in the same
     /// controller: none of it may remain, and the controller must match an orc warrior spawned into a fresh one.
     /// </summary>
     private static void TestTraitCreatureThenPlainCreature()
@@ -228,7 +228,7 @@ public static class NpcSlotReuseTests
             slot.Actions.MoveActionUsed = true;
             slot.Tags.AddTag("ScenarioOverride:CRE046");
             slot.gameObject.AddComponent<LastKnownPositionTracker>();
-            slot.ConfigureBombardierAcidSprayCooldown(3);
+            slot.SetAcidSprayUsedThisRound(true);
             slot.MarkFrightfulPresenceTriggered();
             slot.PriorityTargetName = "Someone";
             SpriteRenderer sr = slot.GetComponent<SpriteRenderer>();

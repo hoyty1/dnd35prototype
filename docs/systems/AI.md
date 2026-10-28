@@ -180,7 +180,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3992):
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10935) | acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10935) | acid arrow damage, the bombardier once-per-round spray flag reset (`TickBombardierAcidSprayCooldown`), `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 66 | `CurrentHP <= 0` | end. A Disabled (0 HP) NPC never takes its single action (AI-053) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
@@ -618,7 +618,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 | Engulf (cloaker, gelatinous_cube, gibbering_mouther, ochre_jelly) | AggressiveMelee, adjacent target, replaces the attack | Reflex save then permanent Helpless (CMB-024); no action spent |
 | Ranged special (gibbering mouther Spittle) | free-action version at turn start; standard-action versions in AggressiveMelee | touch roll bypasses the attack calculator (AI-006); damage through `GameManager.DealDamage` (SPL-004); spends no action |
 | Terrain manipulation | after moving in AggressiveMelee | log only (CRE-013) |
-| Bombardier acid spray | inside `NPCPerformAttack` by creature ID | typed damage via `ApplyIncomingDamage`; dice labelled "Fireball"; cooldown does tick |
+| Bombardier acid spray | inside `NPCPerformAttack` by creature ID (CRE-040) | reads the beetle's `BreathWeapon` definition (10-ft cone, 1d4+2 acid rolled once, Fortitude DC 13 negates through `SavingThrowResolver`); once per round, the flag cleared at its turn start (batch 12 step 2). The generic breath path never uses it (`IsBreathWeaponReady` is false for a once-per-round entry), but AI casters' energy-threat estimate (`AiCastChoiceHeuristics.VisibleEnemyEnergyThreat`) now counts it as 4.5 acid |
 | Auras and gazes (14 definitions) | `ProcessAuraAbility` (3312) each non-skipped turn | enemies in range, mind-affecting immunity, save via `SpellSaveResolver.RollSave` (no Luck reroll, CORE-030), condition for 1dN or fixed rounds; 24-hour immunity in a static set never cleared after ordinary victories (CORE-002); unmapped effects become Confused (AI-013); placeholders such as the beholder antimagic cone (CRE-012). Gazes are modelled as auras: no averting eyes |
 | Stench (ghast, nightmare, troglodyte), grapple blood drain | none | configured, never read (CRE-031) |
 | Constrict, swallow whole, trample, rock throwing | none | text only (CRE-018, CREATURES.md) |

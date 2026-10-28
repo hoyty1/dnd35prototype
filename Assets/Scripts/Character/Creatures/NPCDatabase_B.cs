@@ -218,6 +218,9 @@ public static partial class NPCDatabase
 
     private static void RegisterGiantBombardierBeetle()
     {
+        // MM p.285: 2d8 HD, Con 14. The acid spray's DC is Constitution-based: 10 + half its HD + its Con modifier = 13.
+        const int beetleHitDice = 2;
+        const int beetleCon = 14;
         Register(new NPCDefinition
         {
             Id = "giant_bombardier_beetle",
@@ -228,10 +231,10 @@ public static partial class NPCDatabase
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
             CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
-            HitDice = 2,
+            HitDice = beetleHitDice,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
-            STR = 13, DEX = 10, CON = 14, WIS = 10, INT = 1, CHA = 9,
+            STR = 13, DEX = 10, CON = beetleCon, WIS = 10, INT = 1, CHA = 9,
             BAB = 2,
             NaturalArmorBonus = 6,
             NaturalAttacks = new List<NaturalAttackDefinition>
@@ -240,10 +243,27 @@ public static partial class NPCDatabase
             },
             BaseSpeed = 6,
             BaseHitDieHP = 13,
+            // Acid Spray (Ex), MM p.285: when attacked or disturbed, once per round, a 10-ft cone; Fortitude DC 13 or
+            // 1d4+2 acid (a success negates). Resolved by GameManager.TryNPCUseBombardierAcidSpray, never by the generic
+            // breath executor; the trigger is still the beetle's own attack (CRE-040, batch 12 step 15, D1).
+            BreathWeapon = new BreathWeaponDefinition
+            {
+                Shape = BreathWeaponShape.Cone,
+                RangeFeet = 10,
+                DamageDice = 4,
+                DamageCount = 1,
+                DamageBonus = 2,
+                DamageType = DamageType.Acid,
+                SaveDC = 10 + beetleHitDice / 2 + (beetleCon - 10) / 2,
+                SaveType = SavingThrowType.Fortitude,
+                SaveNegates = true,
+                OncePerRound = true,
+                RechargeRounds = 0
+            },
             CreatureTags = new List<string> { "Vermin", "MM35" },
             SpecialAbilities = new List<string>
             {
-                "Acid Spray (10-ft cone, 6d4 acid, Reflex DC 12 half, usable once every 1d4 rounds)",
+                "Acid Spray (when attacked or disturbed, once per round: 10-ft cone, 1d4+2 acid, Fortitude DC 13 negates)",
                 "Darkvision 60 ft",
                 "Vermin traits",
                 "Mindless"

@@ -879,7 +879,7 @@ public partial class GameManager
         }
 
         npc.Init(stats, pos, alive, dead);
-        npc.ConfigureBombardierAcidSprayCooldown(0);
+        npc.SetAcidSprayUsedThisRound(false);
         npc.ConfigureRegeneration(def.RegenerationAmount, def.RegenerationSuppressedBy);
 
         // Monster special abilities (Tiers 1-3). Each call takes the definition's value, so a trait the definition

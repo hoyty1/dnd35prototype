@@ -1570,6 +1570,14 @@ public partial class GameManager
 
         InvalidatePreviewThreats();
 
+        // Flanking from the square the charge ended in, as NPCExecuteCharge does (PHB p.153; CMB-018).
+        CharacterController chargeFlankPartner;
+        bool isFlankingCharge = CombatUtils.IsAttackerFlanking(charger, target, GetAllCharacters(), out chargeFlankPartner);
+        int chargeFlankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
+        string chargeFlankPartnerName = chargeFlankPartner != null && chargeFlankPartner.Stats != null
+            ? chargeFlankPartner.Stats.CharacterName
+            : null;
+
         if (_pendingChargeBullRush)
         {
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
@@ -1603,12 +1611,13 @@ public partial class GameManager
                 try
                 {
                     ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                    pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null,
-                        hasteNaturalAttackIndex: pounceHasteNaturalAttackIndex);
+                    pounceResult = charger.FullAttack(target, isFlanking: isFlankingCharge, flankingBonus: chargeFlankingBonus,
+                        flankingPartnerName: chargeFlankPartnerName, hasteNaturalAttackIndex: pounceHasteNaturalAttackIndex);
 
                     // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
                     if (charger.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
-                        pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+                        pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: isFlankingCharge, flankingBonus: chargeFlankingBonus,
+                            flankingPartnerName: chargeFlankPartnerName);
                 }
                 finally
                 {
@@ -1698,7 +1707,7 @@ public partial class GameManager
             {
                 // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
                 ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                CombatResult result = charger.Attack(target, false, 0, null, null,
+                CombatResult result = charger.Attack(target, isFlankingCharge, chargeFlankingBonus, chargeFlankPartnerName, null,
                     situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
 
                 if (result != null)

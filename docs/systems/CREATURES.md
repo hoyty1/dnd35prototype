@@ -135,7 +135,7 @@ Status key: **Implemented** = has a runtime effect that matches the rule in outl
 - **Data present, never used:** five non-dragon breath weapons, metallic gas breaths (AI-008), stench (3 creatures) and `BloodDrainDefinition` (2) (CRE-031), `BonusElementalDamage*` (9), `HasTrample`.
 - **Partial, remaining work:**
   - Engulf: damage per round, paralysis, an escape check, a size check (Medium or smaller), removing Helpless when the target escapes or the engulfer dies, skipping already-engulfed targets, and falling through to melee (CMB-024).
-  - Breath weapons: tick the breath and ranged-special recharges in `GameManager.BeginNPCTurnForAI`, which today ticks only the bombardier cooldown; let non-dragon archetypes breathe.
+  - Breath weapons: tick the breath and ranged-special recharges in `GameManager.BeginNPCTurnForAI`, which today only resets the bombardier beetle's once-per-round spray flag; let non-dragon archetypes breathe.
   - Regeneration: express energy suppression and make damage nonlethal. Add a separate fast-healing field.
 - **Not in the database:** blink dog, roper, grell.
 - **Clone hazard:** `NPCDefinition.Clone` shares `RangedSpecialAttack`, `BloodDrain` and `TerrainManipulation`, and the undead and lycanthrope templates do not clear them, so a templated mouther would keep its spittle (CRE-023).

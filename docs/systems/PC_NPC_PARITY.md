@@ -100,7 +100,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | ITM-069 (new) | Equipment changes | Free for PCs via the sheet; only mindless undead NPCs can re-equip (free) | PC | Med | InventoryUI.cs:576-606; UndeadMindlessAIProfile.cs:93-126 |
 | CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3981-3992 vs NPCTurns.cs:46-49 |
 | CMB-017 | Cleave | NPCs never cleave; PCs only on defensive or natural single attacks | PC | Med | CombatFlowService.cs:887-947 |
-| CMB-018 | Charge end | Flanking only on NPC charge; bull-rush charge and Spirited Charge PC only | NPC | Med | SupportActions.cs:1674 vs 1968 |
+| CMB-018 | Charge end | Spirited Charge PC only (flanking on both sides since batch 12 step 2, 2026-10-28; the bull-rush charge shared, CMB-102) | NPC | Med | SupportActions.cs (`ExecuteCharge` vs `NPCExecuteCharge`) |
 | CMB-015 | Overrun | Separate PC and NPC paths (AoO, prone, push, defender choice); the opposed check is shared since 2026-10-07 | depends | Med | OverrunSystem.cs (move-through, `ResolveOverrunOpposedCheck`); CharacterController.cs (`ResolveOverrun`) |
 | CMB-019 | Ammunition | Only PC attacks check and spend ammo | NPC | Med | CombatFlowService.cs:565-847 |
 | AI-055 | TWF, off-hand (flurry shared since CHR-003, 2026-10-14) | No NPC executor | PC | Med | NPCTurns.cs:1213, 1286 |
@@ -118,7 +118,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CMB-101 (new) | Casting while grappled | NPC has no path; NPC core lacks legality check | PC | Low | AIService.cs:161-165 |
 | CMB-103 (new) | Grapple Move | NPC spends action, never moves | PC | Low | GrappleSystem.cs:1552-1556, 1696 |
 | CMB-104 (new) | Maneuver reach | Kiter AI can trip or disarm at range | NPC | Low | AIService.cs:1010-1019 |
-| CRE-040 (new) | Bombardier acid spray | Made-up save and damage | NPC | Low | NPCTurns.cs (`TryNPCUseBombardierAcidSpray`) |
+| CRE-040 (new) | Bombardier acid spray | Trigger is the beetle's own attack, not a reaction (numbers, save and once per round RAW since batch 12 step 2, 2026-10-28) | NPC | Low | NPCTurns.cs (`TryNPCUseBombardierAcidSpray`) |
 | SPL-115 (fixed 2026-10-16) | Held charge | Fixed by batch 11 step 27: NPCs hold and deliver touch charges through the PC's hold and delivery requests, and a melee touch that misses in its casting round holds the charge for every caster (delegated RAW reading 2026-10-14; `rules/npc-held-touch`, `rules/npc-hold-charge-approach`, `rules/ui-touch-miss-holds-charge`), and a held charge dissipates at one step for every caster (`rules/held-charge-dissipates-ui`, `-npc`) | both | n/a | `AiCastDecider.TouchDeliveryFor`, `GameManager.MissedTouchHoldsCharge`, `AIService.TryDeliverHeldChargeTurn` |
 | SPL-116 (fixed 2026-10-15) | Cast-source flags | The leak of PC wand, scroll and F12 flags into NPC casts was fixed in batch 11 step 4 (the source is per cast), and scroll casts roll arcane spell failure for a somatic spell of an arcane scroll since step 13 (DMG p.238), for every reader, also when the scroll resolves outside the cast core (`ResolveDirectItemCastChecks`) | both | Low | `CastComponentRules.ArcaneFailureApplies`, `TryRollArcaneSpellFailure` |
 | SPL-117 (fixed 2026-10-16) | Mirror Image swap | Fixed by batch 11 step 26 (decision D7): the swap is gone; every attack and spell against a Mirror Image caster picks a random figure (`MirrorImageRules`), for PC and NPC casters and attackers alike (`Tests.Combat.MirrorImageRulesTests`, `rules/mirror-image-figure-pick`, `rules/mirror-image-pc-attacker`) | both | Low | `MirrorImageRules`, `GameManager_MirrorImage.cs` |
@@ -142,8 +142,8 @@ Cheap first, all localized:
    - (done 2026-10-09) a crit-immunity filter in `GetAdjacentHelplessEnemiesForCoupDeGrace` (CMB-099);
    - (done 2026-10-15, batch 11 step 15) one counterspell, invisibility and Ring of Counterspells order for both sides: readied counterspell, invisibility break, then the ring (decision D4; SPL-118 closed);
    - (done 2026-10-15, batch 11 step 16) one concentration rule for both sides (`ConcentrationRules`, decisions D1 and D2): casting ends the maintained spell with no roll, maintaining costs a standard action (the PC's Maintain button, the AI's `TryMaintainConcentrationForAI`), an unmaintained turn ends it, "+N rounds" tails (SPL-153 closed);
-   - fix the acid spray numbers (CRE-040);
-   - compute flanking in the PC charge (CMB-018).
+   - (done 2026-10-28, batch 12 step 2) fix the acid spray numbers (CRE-040, narrowed to its trigger);
+   - (done 2026-10-28, batch 12 step 2) compute flanking in the PC charge (CMB-018, narrowed to the charge core).
    - Batch 12 implements this step (planned 2026-10-23, not built yet): `docs/designs/pc_npc_parity_batch12.md`.
 2. **More cheap fixes.** These close CMB-095, AI-053, SPL-119 and CHR-067 (partly):
    - set `SingleActionOnly` while Slowed (CMB-095);

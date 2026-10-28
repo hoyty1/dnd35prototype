@@ -8,7 +8,8 @@ namespace Tests.Character
 /// CRE-045: the NPC data's attack-math feats and natural-attack sequences against the Monster Manual.
 /// Multiattack (MM p.304) needs three or more natural weapons; a definition that lists it with fewer is wrong data,
 /// since CharacterStats.GetNaturalAttackSequencePenalty reads the feat by name (secondary attacks -2 instead of -5).
-/// The other checks pin the MM entries the 2026-10-08 audit corrected, so a later edit cannot quietly undo them.
+/// The other checks pin the MM entries the 2026-10-08 audit corrected, so a later edit cannot quietly undo them, and the
+/// giant bombardier beetle's acid spray data (MM p.285; CRE-040, batch 12 step 2).
 /// Reads the shared NPCDatabase templates only (never mutates them); runs in edit or Play mode.
 /// </summary>
 public static class NpcFeatDataTests
@@ -34,6 +35,7 @@ public static class NpcFeatDataTests
         TestLycanthropeAttackFeats();
         TestManeuverFeats();
         TestEtherealFilcherNotStable();
+        TestBombardierBeetleAcidSpray();
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -249,6 +251,37 @@ public static class NpcFeatDataTests
         NPCDefinition def = Get("ethereal_filcher");
         if (def != null)
             Assert(!def.IsExceptionallyStable && !def.Clone().IsExceptionallyStable, "ethereal_filcher is not exceptionally stable (one leg, MM p.104)");
+    }
+
+    // MM p.285 Acid Spray (Ex): a 10-ft cone once per round, Fortitude DC 13 or 1d4+2 acid (a success negates); the DC is
+    // Constitution-based (10 + half of 2 HD + Con +2). NPCDefinition.Clone copies every BreathWeaponDefinition field (CRE-023).
+    private static void TestBombardierBeetleAcidSpray()
+    {
+        NPCDefinition def = Get("giant_bombardier_beetle");
+        if (def == null)
+            return;
+        BreathWeaponDefinition spray = def.BreathWeapon;
+        Assert(spray != null, "giant_bombardier_beetle has its acid spray definition (MM p.285)");
+        if (spray == null)
+            return;
+        Assert(spray.Shape == BreathWeaponShape.Cone && spray.RangeFeet == 10, "acid spray is a 10-ft cone (MM p.285)",
+            $"(shape {spray.Shape}, {spray.RangeFeet} ft)");
+        Assert(spray.DamageCount == 1 && spray.DamageDice == 4 && spray.DamageBonus == 2 && spray.DamageType == DamageType.Acid,
+            "acid spray deals 1d4+2 acid (MM p.285)", $"({spray.DamageCount}d{spray.DamageDice}+{spray.DamageBonus} {spray.DamageType})");
+        int conMod = (def.CON - 10) / 2;
+        Assert(spray.SaveDC == 13 && spray.SaveDC == 10 + def.HitDice / 2 + conMod,
+            "acid spray DC 13 = 10 + half HD + Con modifier (MM p.285)", $"(DC {spray.SaveDC}, HD {def.HitDice}, Con {def.CON})");
+        Assert(spray.SaveType == SavingThrowType.Fortitude && !spray.IsReflexSave && spray.SaveNegates,
+            "acid spray: a Fortitude save negates (MM p.285)", $"({spray.SaveType}, negates {spray.SaveNegates})");
+        Assert(spray.OncePerRound && string.IsNullOrEmpty(spray.RechargeDice), "acid spray is usable once per round, no recharge dice (MM p.285)");
+        Assert(def.SpecialAbilities != null && def.SpecialAbilities.Any(a => a.StartsWith("Acid Spray") && a.Contains("1d4+2") && a.Contains("Fortitude DC 13")),
+            "the beetle's acid spray text matches MM p.285");
+
+        NPCDefinition clone = def.Clone();
+        BreathWeaponDefinition c = clone.BreathWeapon;
+        Assert(c != null && !ReferenceEquals(c, spray) && c.DamageBonus == 2 && c.SaveType == SavingThrowType.Fortitude
+            && c.SaveNegates && c.OncePerRound && c.RechargeDice == spray.RechargeDice,
+            "NPCDefinition.Clone deep-copies every acid spray field (CRE-023)");
     }
 }
 }

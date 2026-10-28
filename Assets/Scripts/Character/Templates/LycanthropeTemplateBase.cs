@@ -127,6 +127,13 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         // Ranger choices (CHR-020; CRE-023): a lycanthrope keeps its class levels.
         target.RangerStyle = source.RangerStyle;
         target.RangerFavoredEnemies = NPCDefinition.CloneFavoredEnemies(source.RangerFavoredEnemies);
+
+        // Breath weapons, frightful presence and engulf (every BreathWeaponDefinition field included: damage bonus, save type, recharge dice, once per round;
+        // CRE-023, CRE-040): the template result's own, which the factory clears (the hybrid form has none of the base creature's breath).
+        target.BreathWeapon = source.BreathWeapon?.Clone();
+        target.SecondaryBreathWeapon = source.SecondaryBreathWeapon?.Clone();
+        target.FrightfulPresence = source.FrightfulPresence?.Clone();
+        target.Engulf = source.Engulf?.Clone();
     }
 }
 

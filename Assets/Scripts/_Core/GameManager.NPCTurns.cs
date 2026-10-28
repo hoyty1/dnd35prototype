@@ -1355,38 +1355,51 @@ public partial class GameManager
     private static bool IsGiantBombardierBeetle(CharacterController npc)
         => AIService.IsGiantBombardierBeetle(npc);
 
+    /// <summary>
+    /// The giant bombardier beetle's Acid Spray (Ex), MM p.285, read from its breath definition (OncePerRound): a 10-ft
+    /// cone that covers <paramref name="primaryTarget"/> (AoESystem.BestDirectedAimAt), at most once per round
+    /// (<see cref="CharacterController.AcidSprayUsedThisRound"/>, cleared at the beetle's turn start; D1 of batch 12).
+    /// Its damage (1d4+2 acid) is rolled once for the whole spray (AreaDamageRoll, decision D6 of batch 11, SPL-180), and
+    /// each creature in the cone makes its own save (DC 13 Fortitude: 10 + half its 2 HD + Con +2) through
+    /// SavingThrowResolver with a creature-ability context; a success negates. Acid from an extraordinary ability goes
+    /// through DealDamage (immunity and resistance, no DR; MM p.307). Still CRE-040: the trigger is the beetle's own
+    /// attack and it costs its standard action (batch 12 step 15 makes it a reaction to being attacked or disturbed).
+    /// </summary>
     private bool TryNPCUseBombardierAcidSpray(CharacterController npc, CharacterController primaryTarget)
     {
         if (!IsGiantBombardierBeetle(npc) || npc == null || npc.Stats == null || primaryTarget == null || primaryTarget.Stats == null)
             return false;
 
-        if (!npc.HasBombardierAcidSprayReady || !npc.Actions.HasStandardAction)
+        BreathWeaponDefinition spray = npc.GetBreathWeaponDefinition();
+        if (spray == null || !spray.OncePerRound)
             return false;
 
+        if (npc.AcidSprayUsedThisRound || !npc.Actions.HasStandardAction)
+            return false;
+
+        int rangeSquares = Mathf.Max(1, spray.RangeFeet / 5);
         int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, primaryTarget.GridPosition);
-        if (distanceSquares > 2)
+        if (distanceSquares > rangeSquares)
             return false;
 
         // The 10-ft. cone (MM p.285) starts at a corner of the beetle's square and covers the target, the best such aim for
         // its side (AoESystem.BestDirectedAimAt; PHB p.175, batch 11 step 24).
-        AreaAim sprayAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition, AoEShape.Cone, 2, primaryTarget, Grid);
+        AoEShape shape = spray.Shape == BreathWeaponShape.Line ? AoEShape.Line : AoEShape.Cone;
+        AreaAim sprayAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition, shape, rangeSquares, primaryTarget, Grid);
         HashSet<Vector2Int> coneCells = sprayAim != null ? sprayAim.Cells : null;
         if (coneCells == null || coneCells.Count == 0)
             return false;
 
+        // Every creature with a square of its space in the cone (as BestDirectedAimAt counted it).
         List<CharacterController> victims = new List<CharacterController>();
-        foreach (Vector2Int pos in coneCells)
+        List<CharacterController> everyone = GetAllCharacters();
+        for (int i = 0; i < everyone.Count; i++)
         {
-            SquareCell cell = Grid != null ? Grid.GetCell(pos) : null;
-            if (cell == null || !cell.IsOccupied || cell.Occupant == null)
+            CharacterController c = everyone[i];
+            if (c == null || c == npc || c.Stats == null || c.Stats.IsDead)
                 continue;
-
-            CharacterController occupant = cell.Occupant;
-            if (occupant == npc || occupant.Stats == null || occupant.Stats.IsDead)
-                continue;
-
-            if (!victims.Contains(occupant))
-                victims.Add(occupant);
+            if (AoESystem.IsCreatureInCells(coneCells, c) && !victims.Contains(c))
+                victims.Add(c);
         }
 
         if (victims.Count == 0)
@@ -1395,41 +1408,53 @@ public partial class GameManager
         if (!npc.CommitStandardAction())
             return false;
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{npc.Stats.CharacterName} unleashes Acid Spray (10-ft cone)!"));
+        npc.SetAcidSprayUsedThisRound(true);
+
+        const string sprayName = "Acid Spray";
+        string saveName = spray.SaveType == SavingThrowType.Fortitude ? "Fortitude" : "Reflex";
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{npc.Stats.CharacterName} unleashes {sprayName} ({spray.RangeFeet}-ft {(shape == AoEShape.Line ? "line" : "cone")}; {saveName} DC {spray.SaveDC} {(spray.SaveNegates ? "negates" : "half")})!"));
 
         // One damage roll for the whole spray, shared by every creature in the cone (decision D6 of the batch 11 design;
-        // delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180); the dice, labels, save and DC are still CRE-040's.
-        int rawDamage = 0;
-        for (int d = 0; d < 6; d++)
-            rawDamage += DiceService.D4("Fireball damage die");
+        // delegated RAW reading 2026-10-14, batch 11 step 20, SPL-180), made when it first reaches a creature.
+        var damageRoll = new AreaDamageRoll();
+        SpellDice dice = SpellDice.Of(spray.DamageCount, spray.DamageDice, spray.DamageBonus);
+        SaveContext saveContext = SaveContext.CreatureAbility(sprayName, npc);
 
         for (int i = 0; i < victims.Count; i++)
         {
             CharacterController victim = victims[i];
+            int rawDamage = damageRoll.GetOrRoll(dice, null, sprayName + " damage").Total;
+            if (i == 0)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   " + damageRoll.Describe(spray.DamageType.ToString())));
 
-            int saveRoll = DiceService.D20("Fireball Reflex save");
-            int saveTotal = saveRoll + victim.Stats.ReflexSave;
-            bool saveSuccess = saveTotal >= 12;
-            int damageToApply = saveSuccess ? Mathf.FloorToInt(rawDamage * 0.5f) : rawDamage;
+            SavingThrowResolver.SaveResult save = spray.SaveType == SavingThrowType.Fortitude
+                ? SavingThrowResolver.ResolveFortitudeSave(victim.Stats, spray.SaveDC, sprayName, saveContext)
+                : SavingThrowResolver.ResolveReflexSave(victim.Stats, spray.SaveDC, sprayName, saveContext);
+            bool saveSuccess = save.Succeeded;
+
+            int damageToApply = saveSuccess ? (spray.SaveNegates ? 0 : rawDamage / 2) : rawDamage;
 
             // D&D 3.5e: Blinking creatures take half damage from area attacks
-            if (victim.HasActiveBlinkEffect)
-                damageToApply = Mathf.Max(damageToApply > 0 ? 1 : 0, damageToApply / 2);
+            if (damageToApply > 0 && victim.HasActiveBlinkEffect)
+                damageToApply = Mathf.Max(1, damageToApply / 2);
+
+            string saveText = $"{saveName} d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {spray.SaveDC} {(saveSuccess ? "SUCCESS" : "FAIL")}";
+            if (damageToApply <= 0)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: {saveText} | no damage{(saveSuccess && spray.SaveNegates ? " (negated)" : "")}"));
+                continue;
+            }
 
             // Acid (energy) from an extraordinary ability: immunity and resistance apply, damage reduction does not
             // (MM p.307); then the shared concentration and death checks (SPL-004).
-            DamagePacket packet = DamagePackets.CreatureAttack("Bombardier Beetle Acid Spray", DamageType.Acid, true);
+            DamagePacket packet = DamagePackets.CreatureAttack("Bombardier Beetle Acid Spray", spray.DamageType, true);
             packet.SavedForHalf = saveSuccess;
             DamageResolutionResult mitigation = DealDamage(victim, damageToApply, packet);
             int finalDamage = mitigation.FinalDamage;
 
             string blinkAreaNote = victim.HasActiveBlinkEffect ? " [Blink: halved]" : "";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}{DescribeMitigation(mitigation)}"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: {saveText} | {spray.DamageType} {finalDamage} damage{blinkAreaNote}{DescribeMitigation(mitigation)}"));
         }
-
-        int cooldown = DiceService.D4("Acid spray cooldown 1d4");
-        npc.ConfigureBombardierAcidSprayCooldown(cooldown);
-        CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Acid spray recharges in {cooldown} rounds."));
 
         UpdateAllStatsUI();
         EvaluateCombatEnd("BombardierAcidSpray");
@@ -1839,6 +1864,11 @@ public partial class GameManager
         if (npc == null || aimTarget == null || !npc.HasBreathWeapon || !npc.IsBreathWeaponReady)
             yield break;
 
+        // A once-per-round use (the bombardier beetle's acid spray, MM p.285) has its own routine (TryNPCUseBombardierAcidSpray);
+        // IsBreathWeaponReady is already false for it, and this guard runs before Frightful Presence so nothing is spent.
+        if (npc.GetBreathWeaponDefinition().OncePerRound)
+            yield break;
+
         // --- Frightful Presence (dragons) triggers on first attack/breath ---
         if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
         {
@@ -1869,7 +1899,7 @@ public partial class GameManager
         // total before its own save (decision D6 of the batch 11 design, batch 11 step 20, SPL-180).
         // A breath with no damage dice (the gorgon's petrifying breath) deals none.
         int totalDamage = (bw.DamageCount > 0 && bw.DamageDice > 0)
-            ? DiceService.RollMultiple(bw.DamageCount, bw.DamageDice, "Breath weapon damage")
+            ? DiceService.RollMultiple(bw.DamageCount, bw.DamageDice, "Breath weapon damage") + bw.DamageBonus
             : 0;
 
         // Gather targets in the area
@@ -1889,8 +1919,8 @@ public partial class GameManager
         var log = new System.Text.StringBuilder();
         log.AppendLine("═══════════════════════════════════");
         log.AppendLine($"🔥 {npc.Stats.CharacterName} unleashes a {bw.RangeFeet}-ft {shapeName} of {bw.DamageType}!");
-        log.AppendLine($"  Damage: {bw.DamageCount}d{bw.DamageDice} = {totalDamage}");
-        log.AppendLine($"  Save DC {bw.SaveDC} ({(bw.IsReflexSave ? "Reflex" : "Fortitude")}) for half damage");
+        log.AppendLine($"  Damage: {bw.DamageCount}d{bw.DamageDice}{(bw.DamageBonus != 0 ? (bw.DamageBonus > 0 ? "+" : "") + bw.DamageBonus : "")} = {totalDamage}");
+        log.AppendLine($"  Save DC {bw.SaveDC} ({(bw.IsReflexSave ? "Reflex" : "Fortitude")}) {(bw.SaveNegates ? "negates" : "for half damage")}");
         log.AppendLine($"  Targets: {targets.Count} creature(s) in {cells.Count} squares");
         log.AppendLine();
 
@@ -1905,7 +1935,7 @@ public partial class GameManager
             int saveTotal = saveRoll + saveBonus;
             bool saved = saveTotal >= bw.SaveDC;
 
-            int damageRolled = saved ? totalDamage / 2 : totalDamage;
+            int damageRolled = saved ? (bw.SaveNegates ? 0 : totalDamage / 2) : totalDamage;
 
             string saveResult = saved ? "SAVED" : "FAILED";
             log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}!");
@@ -1920,7 +1950,7 @@ public partial class GameManager
                     DamagePackets.Supernatural(npc.Stats.CharacterName + "'s breath weapon", bw.DamageType, saved && bw.IsReflexSave));
                 int hpAfter = target.Stats.CurrentHP;
 
-                log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved ? " (half)" : "")}{DescribeMitigation(dealt)}");
+                log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved && !bw.SaveNegates ? " (half)" : "")}{DescribeMitigation(dealt)}");
                 log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
             }
 

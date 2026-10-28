@@ -284,7 +284,8 @@ public static partial class NPCDatabase
 public enum BreathWeaponShape { Cone, Line }
 
 /// <summary>
-/// Breath weapon definition (Hell Hound, future dragons, etc.).
+/// Breath weapon definition (dragons, behir, chimera, digester, the bombardier beetle's acid spray, etc.).
+/// Every field is a value type or an immutable string, so <see cref="Clone"/> (MemberwiseClone) copies them all.
 /// </summary>
 [System.Serializable]
 public class BreathWeaponDefinition
@@ -293,10 +294,31 @@ public class BreathWeaponDefinition
     public int RangeFeet = 30;          // e.g., 30 ft. cone or 60 ft. line
     public int DamageDice = 6;          // die size (d6, d8, etc.)
     public int DamageCount = 2;         // number of dice
+    /// <summary>Fixed damage added to the dice (the bombardier beetle's 1d4+2, MM p.285).</summary>
+    public int DamageBonus;
     public DamageType DamageType = DamageType.Fire;
     public int SaveDC = 13;
-    public bool IsReflexSave = true;    // true = Reflex, false = Fort
+    /// <summary>The save against it: Reflex (most breaths) or Fortitude (the bombardier beetle's spray, MM p.285).</summary>
+    public SavingThrowType SaveType = SavingThrowType.Reflex;
+    /// <summary>True when a successful save negates the damage (MM p.285 acid spray); false for half damage.</summary>
+    public bool SaveNegates;
+    /// <summary>Compatibility view of <see cref="SaveType"/>: true = Reflex, false = Fortitude.</summary>
+    public bool IsReflexSave
+    {
+        get => SaveType == SavingThrowType.Reflex;
+        set => SaveType = value ? SavingThrowType.Reflex : SavingThrowType.Fortitude;
+    }
     public int RechargeRounds = 3;      // min rounds between uses (1d4 = avg 2-3)
+    /// <summary>
+    /// The MM's recharge dice ("1d4" rounds), or null for the fixed <see cref="RechargeRounds"/>. Data only until
+    /// batch 12 step 6 rolls it (CRE-073, D14).
+    /// </summary>
+    public string RechargeDice;
+    /// <summary>
+    /// Usable at most once per round instead of on a recharge (the bombardier beetle's acid spray, MM p.285). Such a use
+    /// is the creature's own routine (TryNPCUseBombardierAcidSpray), never the generic breath executor.
+    /// </summary>
+    public bool OncePerRound;
 
     public BreathWeaponDefinition Clone()
     {

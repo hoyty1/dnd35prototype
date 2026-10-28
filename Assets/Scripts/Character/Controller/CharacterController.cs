@@ -497,7 +497,12 @@ public class CharacterController : MonoBehaviour
     public List<ActivePoison> ActivePoisons => _activePoisons;
 
     [Header("Innate Monster Abilities")]
-    [SerializeField] private int _bombardierAcidSprayCooldownRounds;
+    /// <summary>
+    /// True once the bombardier beetle's acid spray was used this round: MM p.285 allows it once per round, read as
+    /// between the start of one of its turns and the start of the next (decision D1 of batch 12). Cleared by
+    /// <see cref="TickBombardierAcidSprayCooldown"/> at its turn start and on slot reuse (CRE-046).
+    /// </summary>
+    [SerializeField] private bool _acidSprayUsedThisRound;
     [SerializeField] private int _regenerationAmountPerRound;
     [SerializeField] private DamageBypassTag _regenerationSuppressedBy = DamageBypassTag.None;
     [SerializeField] private int _regenerationSuppressedRoundsRemaining;
@@ -511,7 +516,10 @@ public class CharacterController : MonoBehaviour
     [SerializeField] private BreathWeaponDefinition _breathWeapon;
     [SerializeField] private int _breathWeaponCooldownRemaining;
     public bool HasBreathWeapon => _breathWeapon != null;
-    public bool IsBreathWeaponReady => _breathWeapon != null && _breathWeaponCooldownRemaining <= 0;
+    /// <summary>True when the generic breath path (NPCExecuteBreathWeaponForAI, DragonAIProfile) may use the breath now. A
+    /// once-per-round use (the bombardier beetle's acid spray, MM p.285) is never ready here: its own routine
+    /// (GameManager.TryNPCUseBombardierAcidSpray) reads <see cref="AcidSprayUsedThisRound"/> instead (CRE-040).</summary>
+    public bool IsBreathWeaponReady => _breathWeapon != null && !_breathWeapon.OncePerRound && _breathWeaponCooldownRemaining <= 0;
     /// <summary>Read-only access to breath weapon definition (does NOT consume/trigger cooldown).</summary>
     public BreathWeaponDefinition GetBreathWeaponDefinition() => _breathWeapon;
 
@@ -562,8 +570,9 @@ public class CharacterController : MonoBehaviour
     public bool HasTerrainManipulation => _terrainManipulation != null;
     public TerrainManipulationDefinition GetTerrainManipulationDefinition() => _terrainManipulation;
 
-    public int BombardierAcidSprayCooldownRounds => Mathf.Max(0, _bombardierAcidSprayCooldownRounds);
-    public bool HasBombardierAcidSprayReady => _bombardierAcidSprayCooldownRounds <= 0;
+    /// <summary>True when the once-per-round acid spray was already used this round (MM p.285, D1).</summary>
+    public bool AcidSprayUsedThisRound => _acidSprayUsedThisRound;
+    public bool HasBombardierAcidSprayReady => !_acidSprayUsedThisRound;
     public bool HasRegeneration => _regenerationAmountPerRound > 0;
 
     // Tracks attackers that currently have an active feint window against this defender.
@@ -4361,15 +4370,19 @@ public class CharacterController : MonoBehaviour
         LogAbilityScoreMessage($"⚠ {Stats.CharacterName} contracts {disease.Name}! Incubation: {added.DaysUntilActive} day(s).");
     }
 
-    public void ConfigureBombardierAcidSprayCooldown(int rounds)
+    /// <summary>Marks the once-per-round acid spray as used (true) or available (false) this round.</summary>
+    public void SetAcidSprayUsedThisRound(bool used)
     {
-        _bombardierAcidSprayCooldownRounds = Mathf.Max(0, rounds);
+        _acidSprayUsedThisRound = used;
     }
 
+    /// <summary>
+    /// The creature's turn start (both turn paths): a new round of its own begins, so its once-per-round acid spray is
+    /// available again (MM p.285; D1). The name is kept from the old 1d4-round cooldown (CRE-040).
+    /// </summary>
     public void TickBombardierAcidSprayCooldown()
     {
-        if (_bombardierAcidSprayCooldownRounds > 0)
-            _bombardierAcidSprayCooldownRounds--;
+        _acidSprayUsedThisRound = false;
     }
 
     public void ConfigureRegeneration(int amountPerRound, DamageBypassTag suppressedBy)
@@ -4581,7 +4594,7 @@ public class CharacterController : MonoBehaviour
         _activePoisons.Clear();
 
         // Innate monster abilities: every one back to "none" (the spawn configures the new creature's own).
-        ConfigureBombardierAcidSprayCooldown(0);
+        SetAcidSprayUsedThisRound(false);
         ConfigureRegeneration(0, DamageBypassTag.None);
         ConfigureIncorporeal(false);
         ConfigureBreathWeapon(null);

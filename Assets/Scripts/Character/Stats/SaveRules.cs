@@ -76,6 +76,14 @@ public sealed class SaveContext
     /// <summary>A trap.</summary>
     public static readonly SaveContext Trap = new SaveContext(trap: true, label: "trap");
 
+    /// <summary>
+    /// A creature's extraordinary or supernatural ability that is neither a spell nor a poison, fear or charm effect (the
+    /// bombardier beetle's acid spray, MM p.285): the bonuses that apply to every save, plus those that depend on the
+    /// creature that made the effect (<paramref name="source"/>, e.g. an alignment ward).
+    /// </summary>
+    public static SaveContext CreatureAbility(string label, CharacterController source = null)
+        => new SaveContext(label: label, sourceCaster: source);
+
     /// <summary>A poison, by its PoisonDatabase id or name; a spider's poison (an id or name containing "spider") is marked as such.</summary>
     public static SaveContext Poison(string poisonIdOrName = null)
     {
