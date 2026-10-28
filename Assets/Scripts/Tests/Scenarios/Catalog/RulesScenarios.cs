@@ -5419,11 +5419,11 @@ namespace Tests.Scenarios
                         return ExpectResult.Fail("declared at the turn boundary: " + text, over.Seq);
                     if (text.IndexOf("EvaluateCombatEnd", StringComparison.Ordinal) < 0)
                         return ExpectResult.Fail("not through EvaluateCombatEnd: " + text, over.Seq);
-                    // CallerFrames keeps 3 GameManager frames: HandleCombatVictoryDetected < EvaluateCombatEnd < the caller. On the
-                    // NPC path that is the melee sequence itself; on the PC path the attack flow's own check
-                    // (CombatFlowService -> Combat_CheckCombatVictory -> CheckCombatVictory), not the end-of-turn safety net
-                    // (EndActivePCTurn -> EndAttackSequence) and not the menu after the attack (ShowActionChoices).
-                    string expected = ui ? "CheckCombatVictory" : "PerformNPCMeleeAttackSequence";
+                    // CallerFrames keeps 3 GameManager frames: HandleCombatVictoryDetected < EvaluateCombatEnd < the caller. Since
+                    // batch 12 step 14 the caller is the post-attack hook on both paths (OnAttackResolved, run for the NPC
+                    // melee step and the PC Attack button alike), not the end-of-turn safety net (EndActivePCTurn ->
+                    // EndAttackSequence) and not the menu after the attack (ShowActionChoices).
+                    string expected = "OnAttackResolved";
                     return text.IndexOf(expected, StringComparison.Ordinal) >= 0
                         ? ExpectResult.Pass(text, over.Seq)
                         : ExpectResult.Fail("by " + text + ", expected " + expected, over.Seq);

@@ -3064,6 +3064,10 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd(msg));
     }
 
+    /// <summary>
+    /// Ends the Charm Person (or other charm) on <paramref name="target"/> when <paramref name="attacker"/> is its charmer or
+    /// one of the charmer's apparent allies (PHB p.209: any threatening act by the charmer or its apparent allies; D15).
+    /// </summary>
     public void BreakCharmOnHostileAction(CharacterController attacker, CharacterController target)
     {
         if (attacker == null || target == null || target.Stats == null)
@@ -3092,7 +3096,11 @@ public partial class GameManager : MonoBehaviour
                     && attacker.Stats != null
                     && string.Equals(condition.SourceName, attacker.Stats.CharacterName, StringComparison.Ordinal));
 
-            if (!casterMatch)
+            // Any threatening act by the charmer or the charmer's apparent allies breaks the charm (PHB p.209; decision D15
+            // of batch 12): the attacker's side is the charmer's, the same test as Command Undead (PHB p.211).
+            bool charmerAlly = !casterMatch && source != null && source != target && !TeamUtility.IsEnemy(attacker, source);
+
+            if (!casterMatch && !charmerAlly)
                 continue;
 
             if (RemoveCondition(target, CombatConditionType.Charmed))
@@ -3230,7 +3238,7 @@ public partial class GameManager : MonoBehaviour
     /// the target. The noise is sent once per attacker, target and turn, so a full attack is one noise as a single attack
     /// is (CHR-026).
     /// </summary>
-    public void NotifyWeaponAttackAgainst(CharacterController attacker, CharacterController target)
+    public void NotifyWeaponAttackAgainst(CharacterController attacker, CharacterController target, ItemData weapon = null)
     {
         if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
             return;
@@ -3243,6 +3251,65 @@ public partial class GameManager : MonoBehaviour
             return;
         _lastWeaponAttackNoise[attacker] = noiseKey;
         BreakFascinationFromLoudNoise(attacker, target.GridPosition, radiusSquares: 4);
+    }
+
+    /// <summary>
+    /// The turned-undead fear break of one weapon attack, sent by every swing before its roll
+    /// (CharacterController.PerformSingleAttackWithCrit: single attacks, AoOs, full attacks, two-weapon fighting, flurries,
+    /// natural, rake and grapple attacks), PC or NPC: the turner's attack on an undead it turned ends the turning unless it is
+    /// a ranged attack from at least 10 feet away (PHB p.159; CMB-090). Before the roll, so the breaking attack gets no
+    /// cowering +2, as the approach that RAW names as the break comes before a melee swing and as a maneuver's break does
+    /// (NotifyManeuverAgainst; delegated RAW reading 2026-10-28, docs/systems/RULES_COVERAGE.md 4.1).
+    /// </summary>
+    public void BreakTurningBeforeSwing(CharacterController attacker, CharacterController target, ItemData weapon)
+    {
+        if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
+            return;
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, BreaksTurning(attacker, target, weapon));
+    }
+
+    /// <summary>
+    /// Whether a swing of <paramref name="weapon"/> (null: unarmed or natural) at <paramref name="target"/> breaks a turning
+    /// (PHB p.159): a melee attack always does (a weapon that can also be thrown is melee only with the target in its melee
+    /// reach), and a ranged attack does from closer than 10 feet (one square).
+    /// </summary>
+    private static bool BreaksTurning(CharacterController attacker, CharacterController target, ItemData weapon)
+    {
+        if (weapon == null)
+            return true;
+        bool melee = weapon.WeaponCat != WeaponCategory.Ranged
+            && (!weapon.IsThrown || weapon.RangeIncrement <= 0
+                || attacker.CanMeleeAttackDistance(attacker.GetMinimumDistanceToTarget(target), weapon));
+        return melee || attacker.GetMinimumDistanceToTarget(target, chebyshev: true) < 2;
+    }
+
+    /// <summary>
+    /// The hostile-action notices of a combat maneuver against <paramref name="target"/> (batch 12 step 14, CMB-090), sent
+    /// by CharacterController.ExecuteSpecialAttack for the PC wrapper and the NPC executor alike: a maneuver is a
+    /// threatening act, so it ends a charm by the attacker's side (PHB p.209; D15) and a command undead (PHB p.211), breaks
+    /// a fascination (an obvious threat, PHB p.29), and, for the maneuvers that are melee attacks, ends the turning of an
+    /// undead the attacker turned (PHB p.159). Waking an ally and turning undead are not maneuvers against the target.
+    /// </summary>
+    public void NotifyManeuverAgainst(CharacterController attacker, CharacterController target, SpecialAttackType type)
+    {
+        if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
+            return;
+        if (type == SpecialAttackType.WakeSleepingAlly || type == SpecialAttackType.TurnUndead)
+            return;
+
+        BreakCharmOnHostileAction(attacker, target);
+        BreakCommandUndeadOnHostileAction(attacker, target);
+        BreakFascinationOnHostileAction(attacker, target, FascinationThreatManeuver);
+
+        bool meleeManeuver = type == SpecialAttackType.Trip
+            || type == SpecialAttackType.Disarm
+            || type == SpecialAttackType.Grapple
+            || type == SpecialAttackType.Sunder
+            || type == SpecialAttackType.BullRushAttack
+            || type == SpecialAttackType.BullRushCharge
+            || type == SpecialAttackType.Overrun
+            || type == SpecialAttackType.CoupDeGrace;
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, meleeManeuver);
     }
 
     public void BreakFascinationOnHostileAction(CharacterController attacker, CharacterController target, string disturbanceReason = "hostile action")
@@ -4436,8 +4503,6 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs item use: {aooResult.GetDetailedSummary()}"));
             UpdateAllStatsUI();
 
-            if (aooResult.Hit && aooResult.TotalDamage > 0)
-                CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
 
             yield return new WaitForSeconds(0.65f);
         }
@@ -4832,8 +4897,6 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs pick up: {aooResult.GetDetailedSummary()}"));
             UpdateAllStatsUI();
 
-            if (aooResult.Hit && aooResult.TotalDamage > 0)
-                CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
 
             yield return new WaitForSeconds(0.65f);
         }
@@ -4945,46 +5008,52 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// After a throw (<paramref name="intent"/>'s mode Thrown) with a throwable melee weapon: the weapon lands in the
-    /// target's square and the next throwable weapon is drawn. Run by the post-attack hook (OnAttackResolved).
+    /// After a throw (<see cref="AttackIntent.IsThrowOf"/>: every weapon with IsThrown and a range increment, javelins and
+    /// darts included; PHB p.113) the weapon lands in the target's square and the thrower draws the next throwable weapon
+    /// into the same hand, through its own inventory (an off-hand throw, the intent's OffHand step, into the left hand).
+    /// True when the weapon was dropped. Run by the post-attack hook (OnAttackResolved) for PCs and NPCs alike; the PC
+    /// attack paths read their UI fields back from the inventory afterwards.
     /// </summary>
-    private void ResolveThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon, AttackIntent intent)
+    private bool ResolveThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon, AttackIntent intent)
     {
-        if (intent == null || !intent.ThrownSelected)
-            return;
-
-        if (!IsThrowableMeleeWeapon(thrownWeapon))
-            return;
+        if (intent == null || !intent.IsThrowOf(thrownWeapon))
+            return false;
 
         if (thrower == null || thrower.Stats == null)
-            return;
+            return false;
 
+        bool offHand = intent.Hand == AttackStepKind.OffHand;
         Vector2Int landingPosition = target != null ? target.GridPosition : thrower.GridPosition;
-        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.RightHand, out string dropFeedback))
+        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, offHand ? EquipSlot.LeftHand : EquipSlot.RightHand, out string dropFeedback))
         {
             Debug.LogWarning($"[Attack][Thrown] {dropFeedback}");
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{dropFeedback}"));
-            return;
+            return false;
         }
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y})."));
 
-        if (TryEquipNextThrowableWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
-        {
-            Debug.Log($"[Attack][Thrown] {equipFeedback}");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}."));
-            _equippedWeapon = nextWeapon;
-            return;
-        }
-
+        ItemData nextWeapon;
+        string equipFeedback;
+        bool drew = offHand
+            ? TryEquipNextThrowableOffHandWeapon(thrower, out nextWeapon, out equipFeedback)
+            : TryEquipNextThrowableWeapon(thrower, thrownWeapon, out nextWeapon, out equipFeedback);
         Debug.Log($"[Attack][Thrown] {equipFeedback}");
-        _equippedWeapon = thrower.GetEquippedMainWeapon();
-
-        if (!thrower.HasThrowableWeaponEquipped())
+        if (drew)
         {
-            Debug.Log($"[Attack][Thrown] {thrower.Stats.CharacterName} has no throwable weapon equipped after the throw.");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{thrower.Stats.CharacterName} has no more throwable weapons equipped."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", offHand
+                ? $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand."
+                : $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}."));
+            return true;
         }
+
+        bool stillArmed = offHand ? thrower.HasThrowableOffHandWeaponEquipped() : thrower.HasThrowableWeaponEquipped();
+        if (!stillArmed)
+        {
+            Debug.Log($"[Attack][Thrown] {thrower.Stats.CharacterName} has no throwable {(offHand ? "off-hand " : "")}weapon equipped after the throw.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{thrower.Stats.CharacterName} has no more throwable {(offHand ? "off-hand " : "")}weapons equipped."));
+        }
+        return true;
     }
 
     private bool TryDropThrownWeaponToGround(CharacterController thrower, ItemData thrownWeapon, Vector2Int targetPosition, EquipSlot preferredSlot, out string feedback)
@@ -5108,7 +5177,12 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
-    private bool TryEquipNextThrowableWeapon(CharacterController character, out ItemData equippedWeapon, out string feedback)
+    /// <summary>
+    /// Draws the next throwable weapon from <paramref name="character"/>'s pack into a free hand after a throw: one like
+    /// <paramref name="thrownWeapon"/> (the same item id) first, else another of its category (a melee throwable after a
+    /// melee throwable, a javelin or dart after a ranged one).
+    /// </summary>
+    private bool TryEquipNextThrowableWeapon(CharacterController character, ItemData thrownWeapon, out ItemData equippedWeapon, out string feedback)
     {
         equippedWeapon = null;
         feedback = string.Empty;
@@ -5134,20 +5208,36 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+        int pick = -1;
+        for (int pass = 0; pass < 2 && pick < 0; pass++)
         {
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+            {
+                ItemData candidate = inv.GeneralSlots[i];
+                if (!IsThrowableWeapon(candidate))
+                    continue;
+                bool alike = thrownWeapon == null
+                    || (pass == 0 ? candidate.Id == thrownWeapon.Id : candidate.WeaponCat == thrownWeapon.WeaponCat);
+                if (!alike)
+                    continue;
+                if ((rightAvailable && candidate.CanEquipIn(EquipSlot.RightHand)) || (leftAvailable && candidate.CanEquipIn(EquipSlot.LeftHand)))
+                {
+                    pick = i;
+                    break;
+                }
+            }
+        }
+
+        if (pick >= 0)
+        {
+            int i = pick;
             ItemData candidate = inv.GeneralSlots[i];
-            if (!IsThrowableMeleeWeapon(candidate))
-                continue;
 
             EquipSlot slotToUse = EquipSlot.None;
             if (rightAvailable && candidate.CanEquipIn(EquipSlot.RightHand))
                 slotToUse = EquipSlot.RightHand;
             else if (leftAvailable && candidate.CanEquipIn(EquipSlot.LeftHand))
                 slotToUse = EquipSlot.LeftHand;
-
-            if (slotToUse == EquipSlot.None)
-                continue;
 
             inv.GeneralSlots[i] = null;
             if (slotToUse == EquipSlot.RightHand)
@@ -5167,7 +5257,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        feedback = $"[Attack][Thrown] No more throwable melee weapons available for {character.Stats.CharacterName}.";
+        feedback = $"[Attack][Thrown] No more throwable weapons available for {character.Stats.CharacterName}.";
         return false;
     }
 
@@ -5198,7 +5288,7 @@ public partial class GameManager : MonoBehaviour
         for (int i = 0; i < inv.GeneralSlots.Length; i++)
         {
             ItemData candidate = inv.GeneralSlots[i];
-            if (!IsThrowableMeleeWeapon(candidate) || !candidate.CanEquipIn(EquipSlot.LeftHand))
+            if (!IsThrowableWeapon(candidate, meleeOnly: true) || !candidate.CanEquipIn(EquipSlot.LeftHand))
                 continue;
 
             inv.GeneralSlots[i] = null;
@@ -5213,13 +5303,18 @@ public partial class GameManager : MonoBehaviour
         return false;
     }
 
-    private static bool IsThrowableMeleeWeapon(ItemData item)
+    /// <summary>
+    /// A weapon that can be thrown: IsThrown with a range increment (PHB p.113: the thrown weapons, javelins and darts as
+    /// well as the melee weapons with a range increment). <paramref name="meleeOnly"/> keeps only the melee weapons that
+    /// can be thrown (the off-hand throw's UI flow, which handles only those).
+    /// </summary>
+    internal static bool IsThrowableWeapon(ItemData item, bool meleeOnly = false)
     {
         return item != null
             && item.IsWeapon
-            && item.WeaponCat == WeaponCategory.Melee
             && item.IsThrown
-            && item.RangeIncrement > 0;
+            && item.RangeIncrement > 0
+            && (!meleeOnly || item.WeaponCat == WeaponCategory.Melee);
     }
 
     private bool TryPickUpGroundItem(CharacterController actor, SquareCell cell, ItemData item, out string feedback)
@@ -7279,8 +7374,6 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (standing up): {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
 
-                if (aooResult.Hit && aooResult.TotalDamage > 0)
-                    CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
 
                 yield return new WaitForSeconds(secondsAfterEachAoO);
             }

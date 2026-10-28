@@ -838,9 +838,6 @@ public partial class GameManager
             if (LogAttacksToConsole)
                 Debug.Log("[Combat] " + aooLog);
 
-            if (aooResult.Hit && aooResult.TotalDamage > 0)
-                CheckConcentrationOnDamage(mover, aooResult.TotalDamage);
-
             if (ThreatSystem.ShouldStopMovementAfterAoO(mover, before, out string reason))
             {
                 outcome.StopMovement = true;
@@ -1601,44 +1598,53 @@ public partial class GameManager
         CombatResult result = ExecuteOffHandAttack(attacker, target, _currentOffHandBAB, offHandWeapon, useThrownRange);
         Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
 
-        if (result != null)
+        if (result == null)
         {
-            attacker.RegisterAttackMade(AttackStepKind.OffHand);
-
-            // The one post-attack hook (origin E): Concentration and the summon cleanup; the combat-end check and the
-            // thrown drop below stay this method's.
-            AttackIntent offHandIntent = AttackIntent.ForUi(this, attacker);
-            offHandIntent.Hand = AttackStepKind.OffHand;
-            offHandIntent.Weapon = offHandWeapon;
-            offHandIntent.Mode = useThrownRange ? AttackMode.Thrown : AttackMode.Melee;
-            RunAttackResolvedSync(AttackResolution.Create(AttackOrigin.PcOffHand, attacker, target, offHandIntent).With(result), new PostAttackOutcome());
+            FinishOffHandAttack(attacker, useThrownRange);
+            return;
         }
 
-        // Victory or defeat when the off-hand attack dropped the last creature of a side (CORE-011).
-        if (CombatEndRules.IsOutOfFight(target))
+        attacker.RegisterAttackMade(AttackStepKind.OffHand);
+
+        // The one post-attack hook (origin E): the thrown drop and the next draw into the off hand, Concentration, melee
+        // reactions, the free trip, Improved Grab (the attacker's decider), the summon cleanup and the combat-end check.
+        AttackIntent offHandIntent = AttackIntent.ForUi(this, attacker);
+        offHandIntent.Hand = AttackStepKind.OffHand;
+        offHandIntent.Weapon = offHandWeapon;
+        offHandIntent.Mode = useThrownRange ? AttackMode.Thrown : AttackMode.Melee;
+        AttackResolution offHandResolution = AttackResolution.Create(AttackOrigin.PcOffHand, attacker, target, offHandIntent).With(result);
+        offHandResolution.CombatEndContext = "ResolveOffHandAttack";
+        var offHandOutcome = new PostAttackOutcome();
+        bool waiting = RunAttackResolved(offHandResolution, offHandOutcome, () =>
         {
-            UpdateAllStatsUI();
-            if (EvaluateCombatEnd("ResolveOffHandAttack"))
-            {
-                _offHandAttackUsedThisTurn = true;
-                _isSelectingOffHandTarget = false;
-                _isSelectingOffHandThrownTarget = false;
-                return;
-            }
+            if (!offHandOutcome.CombatEnded)
+                FinishOffHandAttack(attacker, useThrownRange);
+        });
+        if (waiting)
+            return;
+        if (offHandOutcome.CombatEnded)
+        {
+            _offHandAttackUsedThisTurn = true;
+            _isSelectingOffHandTarget = false;
+            _isSelectingOffHandThrownTarget = false;
+            return;
         }
 
+        FinishOffHandAttack(attacker, useThrownRange);
+    }
+
+    /// <summary>The off-hand attack's end: the UI's off-hand fields (read back from the inventory after a throw) and the after-attack delay.</summary>
+    private void FinishOffHandAttack(CharacterController attacker, bool useThrownRange)
+    {
         if (useThrownRange)
-            ResolveOffHandThrownWeaponAfterAttack(attacker, target, offHandWeapon);
+            _currentOffHandWeapon = attacker.GetOffHandAttackWeapon();
 
         _offHandAttackUsedThisTurn = true;
         _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
 
-        Debug.Log("[OffHand] Off-hand attack used this turn");
-        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={attacker.ProgressiveAttackPool.MainHandStepsUsed}/{attacker.ProgressiveAttackPool.MainHandBudget} thrown={useThrownRange}");
+        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={attacker.ProgressiveAttackPool.MainHandStepsUsed}/{attacker.ProgressiveAttackPool.MainHandBudget} thrown={useThrownRange} offHandAvailable={_offHandAttackAvailableThisTurn}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
     }
@@ -1649,42 +1655,6 @@ public partial class GameManager
             return _combatFlowService.ExecuteOffHandAttack(attacker, target, attackBab, offHandWeapon, useThrownRange);
 
         return null;
-    }
-
-    private void ResolveOffHandThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
-    {
-        if (!IsThrowableMeleeWeapon(thrownWeapon))
-            return;
-
-        if (thrower == null || thrower.Stats == null)
-            return;
-
-        Vector2Int landingPosition = target != null ? target.GridPosition : thrower.GridPosition;
-        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.LeftHand, out string dropFeedback))
-        {
-            Debug.LogWarning($"[Attack][OffHand][Thrown] {dropFeedback}");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{dropFeedback}"));
-            return;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y})."));
-
-        if (TryEquipNextThrowableOffHandWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
-        {
-            Debug.Log($"[Attack][OffHand][Thrown] {equipFeedback}");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand."));
-            _currentOffHandWeapon = nextWeapon;
-            return;
-        }
-
-        Debug.Log($"[Attack][OffHand][Thrown] {equipFeedback}");
-        _currentOffHandWeapon = thrower.GetOffHandAttackWeapon();
-
-        if (!thrower.HasThrowableOffHandWeaponEquipped())
-        {
-            Debug.Log($"[Attack][OffHand][Thrown] {thrower.Stats.CharacterName} has no throwable off-hand weapon equipped after the throw.");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{thrower.Stats.CharacterName} has no more throwable off-hand weapons equipped."));
-        }
     }
 
     private void ShowSpecialAttackTargets(CharacterController attacker, SpecialAttackType type)
@@ -1962,16 +1932,6 @@ public partial class GameManager
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-
-        bool specialAttackCountsAsMeleeFearBreak = type == SpecialAttackType.Trip
-            || type == SpecialAttackType.Disarm
-            || type == SpecialAttackType.Grapple
-            || type == SpecialAttackType.Sunder
-            || type == SpecialAttackType.BullRushAttack
-            || type == SpecialAttackType.BullRushCharge
-            || type == SpecialAttackType.Overrun
-            || type == SpecialAttackType.CoupDeGrace;
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, specialAttackCountsAsMeleeFearBreak);
 
         string actionLabel = "standard action";
         int? disarmAttackBonusOverride = null;
@@ -2732,6 +2692,8 @@ public partial class GameManager
         AttackIntent sequenceIntent = AttackIntent.ForUi(this, attacker);
         bool rangedMode = IsAttackModeRanged(attacker, null, sequenceIntent);
         string modeLabel = rangedMode ? "ranged" : "melee";
+        // A thrown full attack (a javelin, a thrown dagger): each step needs a throwable weapon in hand (PHB p.113).
+        bool thrownSequence = sequenceIntent.IsThrowOf(sequenceIntent.Weapon);
 
         RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget, sequenceIntent);
         int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
@@ -2851,14 +2813,31 @@ public partial class GameManager
             bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, currentTarget, allCombatants, out flankPartner);
             int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
             string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
+            // The weapon in hand for this step: after a throw the hook drew the next one (or none is left).
+            ItemData stepWeapon = attacker.GetEquippedMainWeapon();
+            sequenceIntent.Weapon = stepWeapon;
             RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget, sequenceIntent);
 
-            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-                attacker,
-                attacker.GetEquippedMainWeapon(),
-                rangeInfo,
-                treatAsThrownAttack: false);
-            ProcessTurnUndeadMeleeFearBreak(attacker, currentTarget, isMeleeFearBreakAttack);
+            // A ranged or thrown attack provokes from each threatening foe, step by step (PHB p.141 Table 8-2), and a
+            // projectile weapon needs a piece of ammunition for each shot (PHB p.113): the same helpers as the Attack
+            // button's sequence (CombatFlowService; step 17 merges the copies).
+            if (rangedMode && _combatFlowService != null)
+            {
+                if (stepWeapon != null && stepWeapon.IsProjectileWeapon && !_combatFlowService.CheckAmmoAvailable(attacker, stepWeapon))
+                {
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early: no ammunition. {remainingAttacks} attack(s) unused."));
+                    break;
+                }
+                if (thrownSequence && !sequenceIntent.IsThrowOf(stepWeapon))
+                {
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} has no throwable weapon in hand. {remainingAttacks} attack(s) unused."));
+                    break;
+                }
+                if (!_combatFlowService.ResolveRangedAttackAoOIfProvoked(attacker))
+                    break;
+                if (CurrentPhase == TurnPhase.CombatOver)
+                    yield break;
+            }
 
             FullAttackResult stepResult = attacker.FullAttack(
                 currentTarget,
@@ -2884,18 +2863,32 @@ public partial class GameManager
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
 
-            // The one post-attack hook (origin C): Concentration per hit, melee reactions (by the sequence's mode), the
-            // free trip and the summon cleanup. The combat-end check below stays this coroutine's.
+            // The one post-attack hook (origin C): the thrown drop and the ammunition, Concentration per hit, melee
+            // reactions, the free trip, Improved Grab (the player's prompt, MM p.310), the summon cleanup and the
+            // combat-end check for the target and the attacker (CORE-011, CORE-037).
             AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.PcFullAttackButton, attacker, currentTarget, sequenceIntent).With(stepResult.Attacks);
             stepResolution.RangeInfo = rangeInfo;
-            stepResolution.SequenceIsRanged = rangedMode;
-            IEnumerator stepPost = OnAttackResolved(stepResolution, new PostAttackOutcome());
+            stepResolution.CombatEndContext = "ExecuteFullAttackSequence";
+            var stepOutcome = new PostAttackOutcome();
+            IEnumerator stepPost = OnAttackResolved(stepResolution, stepOutcome);
             while (stepPost.MoveNext())
                 yield return stepPost.Current;
 
-            // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-            if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("ExecuteFullAttackSequence"))
+            if (stepOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
                 yield break;
+            if (stepOutcome.AttackerOutOfFight)
+                break;
+
+            // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): once its Improved Grab takes
+            // hold, this button's remaining attacks are not made as ordinary attacks. A hold with one body part (MM p.310)
+            // leaves it ungrappled, so its remaining attacks go on against other opponents.
+            if (attacker.IsGrappling())
+            {
+                int attacksLeft = plannedAttackCount - (attackIndex + 1);
+                if (attacksLeft > 0)
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{attacker.Stats.CharacterName} is grappling: its {attacksLeft} remaining attack(s) are not made as ordinary attacks (PHB p.156)."));
+                break;
+            }
 
             if (attack.TargetKilled)
             {
@@ -2920,8 +2913,8 @@ public partial class GameManager
             yield return new WaitForSeconds(0.35f);
         }
 
-        // D&D 3.5: You can also 5-foot step after attacks.
-        if (CanTakeFiveFootStep(attacker) && CurrentPhase != TurnPhase.CombatOver)
+        // D&D 3.5: You can also 5-foot step after attacks (not an attacker a reaction or an AoO dropped).
+        if (CanTakeFiveFootStep(attacker) && CurrentPhase != TurnPhase.CombatOver && !CombatEndRules.IsOutOfFight(attacker))
         {
             yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
                 attacker,
@@ -3026,6 +3019,14 @@ public partial class GameManager
         if (CurrentPhase == TurnPhase.CombatOver)
         {
             LogMenuFlow("AfterAttackDelay:ABORT_COMBAT_OVER", pc);
+            yield break;
+        }
+
+        // An attacker a reaction or an AoO dropped (dead, dying, unconscious) has no more choices this turn.
+        if (pc != null && pc == ActivePC && CombatEndRules.IsOutOfFight(pc))
+        {
+            LogMenuFlow("AfterAttackDelay:ATTACKER_OUT_OF_FIGHT", pc);
+            EndActivePCTurn();
             yield break;
         }
 

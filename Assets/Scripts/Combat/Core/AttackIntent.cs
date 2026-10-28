@@ -29,9 +29,9 @@ public enum AttackIntentQuirk
 /// What an attacker means to do with one attack (batch 12 steps 12 and 13, docs/designs/pc_npc_parity_batch12.md): the
 /// mode (melee, ranged, thrown), the hand, the weapon, the round's declarations (Rapid Shot, flurry, two-weapon fighting,
 /// fighting defensively), the held-charge touch, an AoO, and the charge. The legality gate (<see cref="AttackLegality"/>)
-/// reads the mode, the weapon and the maneuver; the range math (CombatFlowService.CalculateRangeInfo), the thrown-mode
-/// test (GameManager.IsUsingThrownAttackMode) and the thrown drop (GameManager.ResolveThrownWeaponAfterAttack) read the
-/// mode, and the post-attack hook (GameManager.OnAttackResolved) the weapon.
+/// reads the mode, the weapon and the maneuver; the range math (CombatFlowService.CalculateRangeInfo) and the thrown-mode
+/// test (GameManager.IsUsingThrownAttackMode) read the mode, and the post-attack hook (GameManager.OnAttackResolved) the
+/// weapon and, for the thrown drop, <see cref="IsThrowOf"/>.
 /// Builders: <see cref="ForUi"/> is the attack paths' one reader of the PC UI's attack type (GameManager._currentAttackType,
 /// which the UI keeps writing; <see cref="ForAI"/> still copies it under <see cref="AttackIntentQuirk.NpcIntentReadsUiThrownGlobal"/>).
 /// ForUi also records _pendingAttackMode, but the UI's own dispatch (CombatFlowService.OnAttackTargetSelected, the
@@ -112,6 +112,22 @@ public sealed class AttackIntent
     /// </summary>
     public bool ThrownSelected => Mode == AttackMode.Thrown
         || (Mode == null && (Quirks & AttackIntentQuirk.NpcIntentReadsUiThrownGlobal) != 0 && LegacyUiMode == AttackMode.Thrown);
+
+    /// <summary>
+    /// True when this attack throws <paramref name="weapon"/> (batch 12 step 14, CMB-174, CMB-096 drop): a weapon with
+    /// IsThrown and a range increment (GameManager.IsThrowableWeapon) used with the mode Thrown, or a ranged thrown weapon
+    /// (a javelin, a dart) in any mode but Melee (it has no other use; an NPC intent leaves the mode null). The PC selection
+    /// an NPC intent copies (<see cref="LegacyUiMode"/>) is not read here: NPCs throw melee weapons only once they choose
+    /// the mode themselves (step 18), so the copy never drops an NPC's dagger or spear after a melee swing.
+    /// </summary>
+    public bool IsThrowOf(ItemData weapon)
+    {
+        if (!GameManager.IsThrowableWeapon(weapon))
+            return false;
+        if (Mode == AttackMode.Thrown)
+            return true;
+        return weapon.WeaponCat == WeaponCategory.Ranged && Mode != AttackMode.Melee;
+    }
 
     public static AttackIntent ForMode(AttackMode mode, ItemData weapon = null) => new AttackIntent { Mode = mode, Weapon = weapon };
 

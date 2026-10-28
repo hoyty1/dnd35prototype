@@ -771,10 +771,11 @@ public static class ThreatSystem
             Debug.Log($"[ThreatSystem] AoO MISS! {threatener.Stats.CharacterName} rolled {result.DieRoll} + mods = {result.TotalRoll} vs AC {result.TargetAC}");
         }
 
-        // The one post-attack hook (origin I): the innate free trip (e.g., a wolf's bite; a free action that spends no AoO,
-        // only after the trigger attack, MM Trip (Ex), CMB-125) with its log line and reactions, then the AoO's melee
-        // reactions (Fire Shield and the like), then the trip's aftermath (the Improved Trip attack, PHB p.96, CMB-079; a
-        // free trip gets no counter-trip). Concentration, the summon cleanup and combat end are the callers'.
+        // The one post-attack hook (origin I), as for every attack: Concentration per hit (PHB p.70), the AoO's melee
+        // reactions (Fire Shield and the like), the innate free trip (e.g., a wolf's bite; a free action that spends no AoO,
+        // MM Trip (Ex), CMB-125) with its aftermath, Improved Grab (MM p.310; D8, CMB-170: the AI decider, since an AoO
+        // happens inside another creature's action and cannot wait on a prompt), the summon cleanup and the combat-end
+        // check for both creatures. The turned-undead fear break is the swing's own, before its roll (BreakTurningBeforeSwing, CMB-090).
         if (gm != null)
         {
             AttackIntent aooIntent = AttackIntent.ForMode(AttackMode.Melee, aooWeapon);
@@ -801,6 +802,7 @@ public static class ThreatSystem
     {
         public bool WasProne;
         public bool WasMovementBlocked;
+        public bool WasGrappled;
     }
 
     public static MoverAoOSnapshot CaptureMoverState(CharacterController mover)
@@ -811,6 +813,7 @@ public static class ThreatSystem
 
         snapshot.WasProne = mover.Stats.IsProne;
         snapshot.WasMovementBlocked = mover.Stats.MovementBlockedByCondition;
+        snapshot.WasGrappled = mover.IsGrappling() || mover.HasCondition(CombatConditionType.Grappled);
         return snapshot;
     }
 
@@ -852,6 +855,14 @@ public static class ThreatSystem
         if (!before.WasMovementBlocked && mover.Stats.MovementBlockedByCondition)
         {
             reason = "unable to move";
+            return true;
+        }
+
+        // An AoO's Improved Grab that takes hold (MM p.310; D8, CMB-170) ends the move: a grappled creature moves only
+        // through the grapple (PHB p.156).
+        if (!before.WasGrappled && (mover.IsGrappling() || mover.HasCondition(CombatConditionType.Grappled)))
+        {
+            reason = "grappled";
             return true;
         }
 

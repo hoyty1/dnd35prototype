@@ -962,6 +962,8 @@ public partial class GameManager
                 inv.CharacterInventory.AddItem(item);
         }
 
+        GrantDefaultAmmunition(inv.CharacterInventory, def.Name);
+
         inv.CharacterInventory.RecalculateStats();
 
         // --- Dragon innate sorcerer spellcasting ---
@@ -1169,4 +1171,48 @@ public partial class GameManager
         }
     }
 
+
+    /// <summary>
+    /// Every attack spends its ammunition for PCs and NPCs alike since batch 12 step 14 (PHB p.113; CMB-019), and most
+    /// creature entries list a bow, crossbow or sling without ammunition. A creature whose starting gear has a projectile
+    /// weapon and no ammunition for it carries one stack of it from the item database (20 arrows, 20 bolts, 10 sling
+    /// bullets). Delegated RAW reading 2026-10-28 (docs/systems/RULES_COVERAGE.md 4.1):
+    /// the MM lists weapons but no ammunition counts, and a monster that carries a bow is read as carrying its normal
+    /// load of arrows. A creature whose entry lists ammunition keeps exactly that.
+    /// </summary>
+    private static void GrantDefaultAmmunition(Inventory inventory, string creatureName)
+    {
+        if (inventory == null)
+            return;
+
+        var seen = new HashSet<AmmunitionType>();
+        var carried = new List<ItemData> { inventory.RightHandSlot, inventory.LeftHandSlot };
+        if (inventory.GeneralSlots != null)
+            carried.AddRange(inventory.GeneralSlots);
+        foreach (ItemData item in carried)
+        {
+            if (item == null || !item.IsProjectileWeapon || !seen.Add(item.RequiresAmmoType))
+                continue;
+            if (inventory.GetTotalAmmoCount(item.RequiresAmmoType) > 0)
+                continue;
+
+            ItemID? ammoId = DefaultAmmunitionId(item.RequiresAmmoType);
+            ItemData ammo = ammoId.HasValue ? ItemDatabase.CloneItem(ammoId.Value) : null;
+            if (ammo == null)
+                continue;
+            inventory.AddItem(ammo);
+            Debug.Log($"[NPCSetup] {creatureName}: no {item.RequiresAmmoType} ammunition listed for {item.Name}; carries {ammo.Name} (delegated RAW reading 2026-10-28, CMB-019).");
+        }
+    }
+
+    private static ItemID? DefaultAmmunitionId(AmmunitionType type)
+    {
+        switch (type)
+        {
+            case AmmunitionType.Arrow: return ItemID.AmmoArrow;
+            case AmmunitionType.Bolt: return ItemID.AmmoBolt;
+            case AmmunitionType.SlingBullet: return ItemID.AmmoSlingBullet;
+            default: return null;
+        }
+    }
 }

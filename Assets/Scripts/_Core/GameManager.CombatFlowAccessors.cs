@@ -66,11 +66,7 @@ public partial class GameManager
     public bool Combat_IsAttackModeRanged(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null) => IsAttackModeRanged(attacker, weapon, intent);
     public bool Combat_IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target) => IsTargetInCurrentWeaponRange(attacker, target);
 
-    public bool Combat_IsMeleeFearBreakAttack(CharacterController attacker, ItemData weapon, RangeInfo rangeInfo, bool treatAsThrownAttack)
-        => IsMeleeAttackForTurnUndeadFearBreak(attacker, weapon, rangeInfo, treatAsThrownAttack);
 
-    public void Combat_ProcessTurnUndeadMeleeFearBreak(CharacterController attacker, CharacterController target, bool isMeleeFearBreakAttack)
-        => ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
     public bool Combat_HasMoreAttacksAvailable() => HasMoreAttacksAvailable();
     public void Combat_EndAttackSequence() => EndAttackSequence();

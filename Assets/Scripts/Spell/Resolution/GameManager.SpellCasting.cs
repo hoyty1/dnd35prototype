@@ -6455,9 +6455,8 @@ public partial class GameManager
 
             if (aooResult.Hit && aooResult.TotalDamage > 0)
             {
-                // Existing concentration effects / held charges can also be disrupted by this damage.
-                CheckConcentrationOnDamage(caster, aooResult.TotalDamage);
-
+                // Existing concentration effects and held charges were checked against this damage by the AoO's
+                // post-attack hook (ThreatSystem.ExecuteAoO); this is the casting's own check (PHB p.70).
                 int dc = ConcentrationService.GetDamageDC(aooResult.TotalDamage, spell.SpellLevel);
                 var check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
                     caster,

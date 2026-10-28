@@ -6109,6 +6109,7 @@ public class CharacterController : MonoBehaviour
                     ? (attackWeaponOverride ?? GetEquippedMainWeapon()).Name
                     : "Unarmed strike",
                 Hit = false,
+                NotMade = true,
                 DieRoll = 1,
                 TotalRoll = 1,
                 TargetAC = 0,
@@ -6128,6 +6129,7 @@ public class CharacterController : MonoBehaviour
                 Defender = target,
                 WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
                 Hit = false,
+                NotMade = true,
                 // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
                 DieRoll = 1,
                 TotalRoll = 1,
@@ -6158,6 +6160,7 @@ public class CharacterController : MonoBehaviour
                 Defender = target,
                 WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
                 Hit = false,
+                NotMade = true,
                 // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
                 DieRoll = 1,
                 TotalRoll = 1,
@@ -7570,6 +7573,9 @@ public class CharacterController : MonoBehaviour
         ItemData weapon, int situationalTargetAcBonus = 0,
         bool dealNonlethalDamage = false, int damageModeAttackPenalty = 0, string damageModePenaltySource = "")
     {
+        // The turned-undead fear break comes before the roll (PHB p.159; GameManager.BreakTurningBeforeSwing).
+        if (GameManager.Instance != null && target != null)
+            GameManager.Instance.BreakTurningBeforeSwing(this, target, weapon);
         CombatResult result = PerformSingleAttackWithCritCore(target, totalAtkMod,
             isFlanking, flankingBonus, flankingPartnerName,
             damageDice, damageCount, damageBonus,
@@ -7577,7 +7583,7 @@ public class CharacterController : MonoBehaviour
             weapon, situationalTargetAcBonus,
             dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
         if (GameManager.Instance != null && target != null)
-            GameManager.Instance.NotifyWeaponAttackAgainst(this, target);
+            GameManager.Instance.NotifyWeaponAttackAgainst(this, target, weapon);
         // A hit on the real figure of a Mirror Image caster shows who is real to everyone watching (decision D7 (6)).
         if (result != null && result.Hit && !result.MirrorImageFigure && MirrorImageRules.HasImages(target))
             MirrorImageRules.RevealRealFigure(target, this);
@@ -12934,13 +12940,12 @@ public class CharacterController : MonoBehaviour
         bool sunderUsedOffHand = false,
         int sunderDualWieldPenaltyForLog = 0)
     {
-        // A combat maneuver against a creature is an obvious threat to it: it breaks a bard's fascination at once (PHB
-        // p.29) and is a hostile action against it. Here, past the initiation AoOs, the PC wrapper and the NPC executor
-        // send it identically (delegated RAW reading 2026-10-14, CHR-026). Waking an ally and turning undead are not
-        // maneuvers against the target.
-        if (GameManager.Instance != null && target != null
-            && type != SpecialAttackType.WakeSleepingAlly && type != SpecialAttackType.TurnUndead)
-            GameManager.Instance.BreakFascinationOnHostileAction(this, target, GameManager.FascinationThreatManeuver);
+        // A combat maneuver against a creature is a threatening act: it breaks a bard's fascination at once (PHB p.29; a
+        // hostile action against it), ends a charm by the attacker's side (PHB p.209; D15) and a command undead (PHB p.211),
+        // and a melee maneuver ends the attacker's turning of the target (PHB p.159). Here, past the initiation AoOs, the
+        // PC wrapper and the NPC executor send it identically (delegated RAW reading 2026-10-14, CHR-026; CMB-090).
+        if (GameManager.Instance != null && target != null)
+            GameManager.Instance.NotifyManeuverAgainst(this, target, type);
 
         SpecialAttackResult result = ExecuteSpecialAttackCore(type, target,
             disarmTargetSlot, disarmAttackBonusOverride, grappleAttackBonusOverride,

@@ -278,7 +278,12 @@ public class CombatFlowService : MonoBehaviour
         return penalty > 0 ? $" (Str -{penalty})" : string.Empty;
     }
 
-    private bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker)
+    /// <summary>
+    /// The AoOs a ranged attack provokes from each threatening foe (PHB p.141 Table 8-2), before the attack; false when
+    /// the attacker is slain by them. Used by the Attack button's sequence and the Full Attack button (step 17 merges it
+    /// with the NPC copy, GameManager.ResolveRangedAttackAoOForNPCAttackIfProvoked).
+    /// </summary>
+    public bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker)
     {
         if (_gameManager == null || attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
             return true;
@@ -423,13 +428,6 @@ public class CombatFlowService : MonoBehaviour
             ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
             : RangeCalculator.GetRangeInfo(sqDist, 0, false);
 
-        bool isMeleeFearBreak = _gameManager.Combat_IsMeleeFearBreakAttack(
-            attacker,
-            offHandWeapon,
-            rangeInfo,
-            treatAsThrownAttack: useThrownRange);
-
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
 
         if (IsRangedOrThrownAttack(rangeInfo, null) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return null;
@@ -533,13 +531,6 @@ public class CombatFlowService : MonoBehaviour
         GameManager.AttackType attackType = intent.UiAttackType;
         ItemData attackWeapon = intent.Weapon;
 
-        bool isMeleeFearBreakAttack = _gameManager.Combat_IsMeleeFearBreakAttack(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: attackType == GameManager.AttackType.Thrown);
-
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
         if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
         {
@@ -648,8 +639,9 @@ public class CombatFlowService : MonoBehaviour
             attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}{strengthPenaltySuffix}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
         }
 
-        // The one post-attack hook (origin B): the free trip, the thrown drop and the ammunition before this step's log;
-        // then Concentration, melee reactions, the summon cleanup and the combat-end check (CORE-011, CORE-037).
+        // The one post-attack hook (origin B): this step's log, the thrown drop and the ammunition, Concentration, melee
+        // reactions, the free trip, Improved Grab (the player's prompt, MM p.310; CMB-097), the summon cleanup and the
+        // combat-end check for the target and the attacker (CORE-011, CORE-037).
         string attackLog = null;
         AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSequence, attacker, target, intent).With(result);
         resolution.RangeInfo = rangeInfo;
@@ -669,7 +661,18 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.Combat_ClearHighlights();
         };
         var outcome = new PostAttackOutcome();
-        _gameManager.RunAttackResolvedSync(resolution, outcome);
+        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome,
+            onResumedDone: () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, useNaturalFullAttackStep, result, attackLog, outcome));
+        if (waitingOnDecider)
+            return;
+
+        ContinueIterativeSequenceAfterStep(attacker, target, attackType, useNaturalFullAttackStep, result, attackLog, outcome);
+    }
+
+    /// <summary>The rest of an Attack-button sequence step after the post-attack hook: the slain line, the step count and the next attack's BAB.</summary>
+    private void ContinueIterativeSequenceAfterStep(CharacterController attacker, CharacterController target, GameManager.AttackType attackType,
+        bool useNaturalFullAttackStep, CombatResult result, string attackLog, PostAttackOutcome outcome)
+    {
         if (outcome.CombatEnded)
         {
             _gameManager.Combat_EndAttackSequence();
@@ -681,7 +684,14 @@ public class CombatFlowService : MonoBehaviour
 
         attacker.RegisterAttackMade(useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
 
-        if (_gameManager.Combat_HasMoreAttacksAvailable())
+        // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): after its Improved Grab takes hold the
+        // sequence ends, and its remaining attacks are grapple actions through the grapple menu. A hold with one body part
+        // (MM p.310) leaves it ungrappled.
+        if (attacker.IsGrappling() || outcome.AttackerOutOfFight)
+        {
+            _gameManager.Combat_EndAttackSequence();
+        }
+        else if (_gameManager.Combat_HasMoreAttacksAvailable())
         {
             int nextAttackIndex = _gameManager.Combat_GetTotalAttacksUsed();
             int nextBaseBab = GetSequenceAttackBaseBonus(attacker, attackType, nextAttackIndex);
@@ -846,13 +856,6 @@ public class CombatFlowService : MonoBehaviour
         GameManager.AttackType attackType = intent.UiAttackType;
         ItemData attackWeapon = intent.Weapon;
 
-        bool isMeleeFearBreakAttack = _gameManager.Combat_IsMeleeFearBreakAttack(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: attackType == GameManager.AttackType.Thrown);
-
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
         if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return;
@@ -919,10 +922,10 @@ public class CombatFlowService : MonoBehaviour
 
         intent.Hand = useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
 
-        // The one post-attack hook (origin A): the free trip, the thrown drop and the ammunition before the log; then
-        // Concentration, melee reactions, the summon cleanup and the combat-end check (CORE-011, CORE-037); then the
-        // slain line, Cleave and Great Cleave, the end of the sequence, and Improved Grab (the choice by the attacker's
-        // decider: the PC's prompt, MM p.310).
+        // The one post-attack hook (origin A): the log, the thrown drop and the ammunition, Concentration, melee reactions,
+        // the free trip, Improved Grab (the choice by the attacker's decider: the PC's prompt, MM p.310), the summon cleanup
+        // and the combat-end check (CORE-011, CORE-037); then the slain line, Cleave and Great Cleave and the end of the
+        // sequence.
         string log = null;
         AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSingle, attacker, target, intent).With(result);
         resolution.RangeInfo = rangeInfo;
@@ -956,7 +959,7 @@ public class CombatFlowService : MonoBehaviour
             if (result.TargetKilled && target.Team == CharacterTeam.Enemy)
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
         };
-        resolution.BeforeLateGrab = () =>
+        resolution.OnStepEnd = () =>
         {
             if (useSelectedNaturalAttack && wasFirstWeaponAttackBeforeThis)
             {
@@ -1071,8 +1074,6 @@ public class CombatFlowService : MonoBehaviour
 
         attacker.Actions.UseFullRoundAction();
 
-        bool isMeleeFearBreak = _gameManager.Combat_IsMeleeFearBreakAttack(attacker, attacker.GetEquippedMainWeapon(), rangeInfo, false);
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
 
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankPrefix = isFlanking
@@ -1143,8 +1144,6 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        bool isMeleeFearBreak = _gameManager.Combat_IsMeleeFearBreakAttack(attacker, attacker.GetEquippedMainWeapon(), rangeInfo, false);
-        _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
 
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankPrefix = isFlanking
@@ -1161,8 +1160,8 @@ public class CombatFlowService : MonoBehaviour
         _gameManager.Combat_UpdateAllStatsUI();
         _gameManager.Combat_ClearHighlights();
 
-        // The one post-attack hook (origin D): Concentration on the summed damage, melee reactions per hit, the summon
-        // cleanup and the combat-end check (CORE-011, CORE-037).
+        // The one post-attack hook (origin D): Concentration per hit (PHB p.70), melee reactions per hit, the free trip,
+        // Improved Grab, the summon cleanup and the combat-end check (CORE-011, CORE-037).
         AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
         intent.TwoWeapon = true;
         AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcDualWield, attacker, target, intent).With(result.Attacks);
@@ -1170,8 +1169,12 @@ public class CombatFlowService : MonoBehaviour
         resolution.RangeInfo = rangeInfo;
         resolution.CombatEndContext = "PerformDualWieldAttack";
         var outcome = new PostAttackOutcome();
-        _gameManager.RunAttackResolvedSync(resolution, outcome);
-        if (outcome.CombatEnded)
+        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome, () =>
+        {
+            if (!outcome.CombatEnded)
+                _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
+        });
+        if (waitingOnDecider || outcome.CombatEnded)
             return;
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);

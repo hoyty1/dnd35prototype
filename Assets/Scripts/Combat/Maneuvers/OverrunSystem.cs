@@ -784,9 +784,6 @@ public partial class GameManager
             {
                 CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Overrun AoO: {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
-
-                if (aooResult.Hit && aooResult.TotalDamage > 0)
-                    CheckConcentrationOnDamage(attacker, aooResult.TotalDamage);
             }
         }
 

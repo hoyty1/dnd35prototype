@@ -639,6 +639,10 @@ public partial class GameManager
         if (!attacker.Stats.HasImprovedGrab || target.Stats.IsDead || !attackResult.Hit)
             return false;
 
+        // Only a melee hit triggers it (MM p.310: "hits with a melee weapon"), whatever the trigger attack's name.
+        if (attackResult.IsRangedAttack)
+            return false;
+
         if (!IsImprovedGrabTriggerAttack(attacker, attackResult))
             return false;
 
@@ -944,12 +948,6 @@ public partial class GameManager
             AttackIntent stepIntent = AttackIntent.ForAI(this, npc, currentTarget);
             stepIntent.Hand = stepKind;
             RangeInfo rangeInfo = CalculateRangeInfo(npc, currentTarget, stepIntent);
-            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-                npc,
-                npc.GetEquippedMainWeapon(),
-                rangeInfo,
-                treatAsThrownAttack: false);
-            ProcessTurnUndeadMeleeFearBreak(npc, currentTarget, isMeleeFearBreakAttack);
 
             // Haste's extra natural attack (CMB-106): the AI picks which natural attack it uses (the NPC turn path is AI-run).
             int hasteNaturalAttackIndex = -1;
@@ -982,15 +980,21 @@ public partial class GameManager
 
             CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
 
-            // The one post-attack hook (origin F): Concentration per hit (PHB p.70), melee reactions, the free trip,
-            // Improved Grab (the AI's choice) and the summon cleanup. The combat-end check below stays this method's.
+            // The one post-attack hook (origin F): the thrown drop and ammunition, Concentration per hit (PHB p.70), melee
+            // reactions, the free trip, Improved Grab (the AI's choice), the summon cleanup and the combat-end check for the
+            // target and the attacker: a target or attacker dead, dying or unconscious may be the last of its side (CORE-011).
             AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.NpcMelee, npc, currentTarget, stepIntent, ActorSource.AI).With(attack);
             stepResolution.RangeInfo = rangeInfo;
-            RunAttackResolvedSync(stepResolution, new PostAttackOutcome());
-
-            // A target dead, dying or unconscious may be the last of its side: victory or defeat at once (CORE-011).
-            if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("NPCPerformAttack.Sequence"))
+            stepResolution.CombatEndContext = "NPCPerformAttack.Sequence";
+            var stepOutcome = new PostAttackOutcome();
+            RunAttackResolvedSync(stepResolution, stepOutcome);
+            if (stepOutcome.CombatEnded)
                 break;
+            if (stepOutcome.AttackerOutOfFight)
+            {
+                stopReason = "the attacker is out of the fight";
+                break;
+            }
 
             // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): once its Improved Grab takes
             // hold, the remaining steps become grapple actions against the grappled creature, through the same step
@@ -1573,6 +1577,16 @@ public partial class GameManager
             yield break;
         }
 
+        // A projectile weapon needs a piece of ammunition to shoot (PHB p.113; CMB-019). With none, no attack is attempted:
+        // no ward save, no ranged-attack AoO (PHB p.141: the attack provokes, and none is made) and no action spent. The AI
+        // does not yet route an archer with an empty quiver to melee (AI-073).
+        ItemData rangedWeapon = npc.GetEquippedMainWeapon();
+        if (rangedWeapon != null && rangedWeapon.IsProjectileWeapon && _combatFlowService != null && !_combatFlowService.CheckAmmoAvailable(npc, rangedWeapon))
+        {
+            yield return new WaitForSeconds(0.6f);
+            yield break;
+        }
+
         // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the ranged attack's attempt rolls the NPC's one save. This
         // one-target ranged branch cannot retarget, so a failure loses its first attack step, the standard action (as a
         // single attack would); the turn may go on with its move action.
@@ -1598,14 +1612,64 @@ public partial class GameManager
 
             npc.Actions.UseFullRoundAction();
 
-            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-                npc,
-                npc.GetEquippedMainWeapon(),
-                npcRangeInfo,
-                treatAsThrownAttack: false);
-            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeFearBreakAttack);
+            // One step at a time (batch 12 step 14; CMB-019, CMB-091): each shot checks its ammunition (PHB p.113) and a
+            // thrown full attack the weapon in hand, and each goes through the post-attack hook (origin G): the thrown drop
+            // and the next draw, one piece of ammunition, Concentration per hit, melee reactions, the free trip, Improved
+            // Grab, the summon cleanup and the combat-end check. A crossbow's reload is checked by each step (FullAttack's
+            // CanAttackWithWeapon), so an unloaded crossbow ends the sequence. The AoOs the shots provoke are resolved once
+            // above, before the full-round action (CMB-091; step 17 makes them per shot).
+            ItemData firstWeapon = npc.GetEquippedMainWeapon();
+            bool thrownSequence = npcIntent.IsThrowOf(firstWeapon);
+            var fullResult = new FullAttackResult { Type = FullAttackResult.AttackType.FullAttack, Attacker = npc, Defender = target, DefenderHPBefore = target.Stats.CurrentHP };
+            const int MaxRangedSteps = 16;
+            for (int stepIndex = 0; stepIndex < MaxRangedSteps; stepIndex++)
+            {
+                if (npc.Stats.IsDead || CombatEndRules.IsOutOfFight(npc) || target.Stats.IsDead)
+                    break;
 
-            FullAttackResult fullResult = npc.FullAttack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
+                ItemData stepWeapon = npc.GetEquippedMainWeapon();
+                if (thrownSequence && !npcIntent.IsThrowOf(stepWeapon))
+                {
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no more weapons to throw."));
+                    break;
+                }
+                if (stepWeapon != null && stepWeapon.IsProjectileWeapon && _combatFlowService != null && !_combatFlowService.CheckAmmoAvailable(npc, stepWeapon))
+                    break;
+
+                npcIntent.Weapon = stepWeapon;
+                RangeInfo stepRangeInfo = CalculateRangeInfo(npc, target, npcIntent);
+                FullAttackResult stepResult = npc.FullAttack(target, isFlanking, flankBonus, partnerName, stepRangeInfo,
+                    startAttackIndex: stepIndex, maxAttacks: 1);
+                if (stepResult == null || stepResult.Attacks.Count == 0)
+                    break;
+
+                CombatResult shot = stepResult.Attacks[0];
+                string shotLabel = stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0 ? stepResult.AttackLabels[0] : $"Attack {stepIndex + 1}";
+                fullResult.Attacks.Add(shot);
+                fullResult.AttackLabels.Add(shotLabel);
+
+                AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.NpcRangedFull, npc, target, npcIntent, ActorSource.AI).With(shot);
+                stepResolution.RangeInfo = stepRangeInfo;
+                stepResolution.CombatEndContext = "NPCPerformAttack.FullAttack";
+                stepResolution.ReportStep = () =>
+                {
+                    CombatUI?.ShowCombatLog(shot.GetAttackBreakdown(shotLabel));
+                    UpdateAllStatsUI();
+                };
+                var stepOutcome = new PostAttackOutcome();
+                IEnumerator stepPost = OnAttackResolved(stepResolution, stepOutcome);
+                while (stepPost.MoveNext())
+                    yield return stepPost.Current;
+
+                if (stepOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
+                    yield break;
+                // Grappling after a grab, or holding the target with one body part (MM p.310; CMB-163): no more shots at it.
+                if (npc.IsGrappling() || npc.IsBarredFromOrdinaryAttackOn(target, out _))
+                    break;
+            }
+
+            fullResult.DefenderHPAfter = target.Stats.CurrentHP;
+            fullResult.TargetKilled = target.Stats.IsDead;
             string flankPrefix = isFlanking
                 ? $"⚔ {npc.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
                 : string.Empty;
@@ -1617,26 +1681,10 @@ public partial class GameManager
             if (LogAttacksToConsole)
                 LogFullAttackToConsole(fullResult);
 
-            CombatUI.ShowCombatLog(_lastCombatLog);
             UpdateAllStatsUI();
 
-            // The one post-attack hook (origin G): Concentration on the summed damage, melee reactions per hit, the free
-            // trip, Improved Grab after all attacks (the AI's choice) and the summon cleanup.
-            AttackResolution fullResolution = AttackResolution.Create(AttackOrigin.NpcRangedFull, npc, target, npcIntent, ActorSource.AI).With(fullResult.Attacks);
-            fullResolution.FullResult = fullResult;
-            fullResolution.RangeInfo = npcRangeInfo;
-            IEnumerator fullPost = OnAttackResolved(fullResolution, new PostAttackOutcome());
-            while (fullPost.MoveNext())
-                yield return fullPost.Current;
-
-            // Victory or defeat when the target was the last of its side (CORE-011).
-            if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.FullAttack"))
-                yield break;
-
             if (fullResult.TargetKilled)
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
-            }
+                CombatUI.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} has fallen, but the fight continues!"));
 
             if (FullAttackHadLastKnownPositionMiss(fullResult) && HandleConsecutiveLastKnownAutoMiss(npc, target))
                 yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
@@ -1652,25 +1700,24 @@ public partial class GameManager
             yield break;
         }
 
-        bool singleAttackFearBreak = IsMeleeAttackForTurnUndeadFearBreak(
-            npc,
-            npc.GetEquippedMainWeapon(),
-            npcRangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(npc, target, singleAttackFearBreak);
-
         if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
         {
             yield return new WaitForSeconds(0.8f);
             yield break;
         }
 
+        // The ammunition was checked before the action and the AoOs (above; PHB p.113, CMB-019).
+        ItemData singleWeapon = npc.GetEquippedMainWeapon();
+
         CombatResult result = npc.Attack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
 
-        // The one post-attack hook (origin H): the free trip before the log, the log, Concentration, melee reactions,
-        // Improved Grab (the AI's choice) and the summon cleanup.
+        // The one post-attack hook (origin H): the log, the thrown drop and the ammunition, Concentration, melee reactions,
+        // the free trip, Improved Grab (the AI's choice), the summon cleanup and the combat-end check for the target and the
+        // attacker (CORE-011).
+        npcIntent.Weapon = singleWeapon;
         AttackResolution singleResolution = AttackResolution.Create(AttackOrigin.NpcRangedSingle, npc, target, npcIntent, ActorSource.AI).With(result);
         singleResolution.RangeInfo = npcRangeInfo;
+        singleResolution.CombatEndContext = "NPCPerformAttack.Single";
         singleResolution.ReportStep = () =>
         {
             _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
@@ -1681,12 +1728,12 @@ public partial class GameManager
             CombatUI.ShowCombatLog(_lastCombatLog);
             UpdateAllStatsUI();
         };
-        IEnumerator singlePost = OnAttackResolved(singleResolution, new PostAttackOutcome());
+        var singleOutcome = new PostAttackOutcome();
+        IEnumerator singlePost = OnAttackResolved(singleResolution, singleOutcome);
         while (singlePost.MoveNext())
             yield return singlePost.Current;
 
-        // Victory or defeat when the target was the last of its side (CORE-011).
-        if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.Single"))
+        if (singleOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
             yield break;
 
         if (result.TargetKilled)

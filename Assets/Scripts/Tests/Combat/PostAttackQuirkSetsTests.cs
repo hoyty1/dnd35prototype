@@ -4,11 +4,12 @@ using UnityEngine;
 namespace Tests.Combat
 {
 /// <summary>
-/// The post-attack hook's quirk sets (batch 12 step 13, docs/designs/pc_npc_parity_batch12.md; the CastCoreStageOrderTests
-/// pattern): every attack origin A-J keeps today's differences from GameManager.OnAttackResolved's order as named
-/// <see cref="PostAttackQuirk"/> bits, pinned here so that step 14 (the after-attack effects for every step) and step 15
-/// (Cleave everywhere) remove them on purpose. Also the decider factory (AttackDeciders.For: the IsControllable read and
-/// its override) and the intent's mode mapping. Pure: no scene, no dice; runs in edit or Play mode.
+/// The post-attack hook's quirk sets (batch 12 steps 13 and 14, docs/designs/pc_npc_parity_batch12.md; the
+/// CastCoreStageOrderTests pattern): since step 14 every attack origin A-J runs GameManager.OnAttackResolved's stages alike,
+/// and only the Cleave <see cref="PostAttackQuirk"/> bits are left, pinned here so that step 15 (Cleave everywhere) removes
+/// them on purpose. Also the thrown drop's intent test (AttackIntent.IsThrowOf, GameManager.IsThrowableWeapon), the decider
+/// factory (AttackDeciders.For: the IsControllable read and its override) and the intent's mode mapping. Pure: no scene,
+/// no dice; runs in edit or Play mode.
 /// </summary>
 public static class PostAttackQuirkSetsTests
 {
@@ -19,12 +20,13 @@ public static class PostAttackQuirkSetsTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== POST-ATTACK QUIRK SETS TESTS (batch 12 step 13) ==========");
+        Debug.Log("========== POST-ATTACK QUIRK SETS TESTS (batch 12 steps 13-14) ==========");
 
         TestEveryOriginHasASet();
         TestOriginSets();
         TestCleaveOnlyOnPcSingle();
-        TestPounceSet();
+        TestOnlyCleaveBitsLeft();
+        TestThrowIntent();
         TestDeciderFactory();
         TestIntentModeMapping();
 
@@ -60,47 +62,12 @@ public static class PostAttackQuirkSetsTests
 
     private static void TestOriginSets()
     {
-        // A: the PC single attack. Trip, thrown drop and ammunition before its log; Cleave and Improved Grab after the
-        // combat-end check (the only origin with Cleave).
-        Pin(AttackOrigin.PcSingle, PostAttackQuirk.FreeTripBeforeLog | PostAttackQuirk.ThrownAndAmmoBeforeLog
-            | PostAttackQuirk.CleaveAfterCombatEnd | PostAttackQuirk.GrabAfterCombatEnd);
-
-        // B: a PC sequence step. No grab (CMB-097).
-        Pin(AttackOrigin.PcSequence, PostAttackQuirk.NoImprovedGrab | PostAttackQuirk.FreeTripBeforeLog
-            | PostAttackQuirk.ThrownAndAmmoBeforeLog | PostAttackQuirk.NoCleave);
-
-        // C: the Full Attack button. No grab, ranged AoO, ammunition or thrown drop (CMB-019); reactions by the sequence's mode.
-        Pin(AttackOrigin.PcFullAttackButton, PostAttackQuirk.NoImprovedGrab | PostAttackQuirk.NoRangedAttackAoO | PostAttackQuirk.NoThrownDrop
-            | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.ReactionsBySequenceMode | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
-
-        // D: the legacy two-weapon full attack. No trip, thrown drop or grab; Concentration on the summed damage.
-        Pin(AttackOrigin.PcDualWield, PostAttackQuirk.NoFreeTrip | PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend
-            | PostAttackQuirk.NoImprovedGrab | PostAttackQuirk.NoRangedAttackAoO | PostAttackQuirk.ConcentrationSummed | PostAttackQuirk.NoCleave);
-
-        // E: the off-hand attack. No trip, reactions or grab; its thrown drop comes after the caller's combat-end check.
-        Pin(AttackOrigin.PcOffHand, PostAttackQuirk.NoFreeTrip | PostAttackQuirk.NoReactions | PostAttackQuirk.NoImprovedGrab
-            | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.ThrownDropByCaller | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
-
-        // F: an NPC melee step. Its own frame ends the combat (rules/combat-end-* expects PerformNPCMeleeAttackSequence).
-        Pin(AttackOrigin.NpcMelee, PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.SummonCleanupWhenDead
-            | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
-
-        // G: the NPC ranged full attack. No ammunition or thrown drop; Concentration summed; the grab after all attacks.
-        Pin(AttackOrigin.NpcRangedFull, PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.ConcentrationSummed
-            | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
-
-        // H: the NPC ranged single attack. No ammunition (CMB-019).
-        Pin(AttackOrigin.NpcRangedSingle, PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.FreeTripBeforeLog
-            | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
-
-        // I: the AoO. No grab (CMB-170), Cleave or fear break (CMB-090); the callers do Concentration, summon cleanup and combat end.
-        Pin(AttackOrigin.AoO, PostAttackQuirk.NoImprovedGrab | PostAttackQuirk.NoCleave | PostAttackQuirk.NoFearBreak | PostAttackQuirk.NoThrownDrop
-            | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.FreeTripBeforeLog | PostAttackQuirk.TripAftermathAfterReactions
-            | PostAttackQuirk.ReactionsOnAnyHit | PostAttackQuirk.NoConcentration | PostAttackQuirk.NoSummonCleanup | PostAttackQuirk.CombatEndByCaller);
-
-        // J: the charge's single attack. The charge's one grab attempt; no summon cleanup; the charge ends the combat.
-        Pin(AttackOrigin.Charge, PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.FreeTripBeforeLog
-            | PostAttackQuirk.ChargeGrab | PostAttackQuirk.NoSummonCleanup | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave);
+        // Step 14: every origin runs the same stages (grab, breaks, ammunition, thrown drop, Concentration, reactions,
+        // the free trip, the summon cleanup and the combat-end check); only the Cleave bits are left (step 15).
+        Pin(AttackOrigin.PcSingle, PostAttackQuirk.CleaveAfterCombatEnd);
+        foreach (AttackOrigin origin in Enum.GetValues(typeof(AttackOrigin)))
+            if (origin != AttackOrigin.PcSingle)
+                Pin(origin, PostAttackQuirk.NoCleave);
     }
 
     private static void TestCleaveOnlyOnPcSingle()
@@ -110,21 +77,46 @@ public static class PostAttackQuirkSetsTests
             bool noCleave = PostAttackQuirkSets.Has(PostAttackQuirkSets.For(origin), PostAttackQuirk.NoCleave);
             Assert(noCleave == (origin != AttackOrigin.PcSingle), $"{origin}: Cleave {(noCleave ? "off" : "on")}");
         }
-        Assert(PostAttackQuirkSets.Has(PostAttackQuirkSets.For(AttackOrigin.Charge, pounce: true), PostAttackQuirk.NoCleave), "Charge pounce: no Cleave");
     }
 
-    private static void TestPounceSet()
+    private static void TestOnlyCleaveBitsLeft()
     {
-        // J (the pounce, CMB-169): the grab after all attacks, each hit's Concentration inside the grab loop.
-        PostAttackQuirk pounce = PostAttackQuirkSets.For(AttackOrigin.Charge, pounce: true);
-        Assert(pounce == (PostAttackQuirk.NoThrownDrop | PostAttackQuirk.NoAmmoSpend | PostAttackQuirk.ConcentrationWithGrab
-                          | PostAttackQuirk.ChargeGrab | PostAttackQuirk.NoSummonCleanup | PostAttackQuirk.CombatEndByCaller | PostAttackQuirk.NoCleave),
-            "Charge pounce set", pounce.ToString());
-        Assert(!PostAttackQuirkSets.Has(pounce, PostAttackQuirk.FreeTripBeforeLog), "Charge pounce: the free trip after the reactions");
+        PostAttackQuirk all = PostAttackQuirk.None;
+        foreach (PostAttackQuirk bit in Enum.GetValues(typeof(PostAttackQuirk)))
+            all |= bit;
+        Assert(all == (PostAttackQuirk.NoCleave | PostAttackQuirk.CleaveAfterCombatEnd), "only the Cleave bits are left", all.ToString());
+    }
 
-        // A combat-end check stays its caller's wherever the caller's frame names the end in a trace.
-        foreach (AttackOrigin origin in new[] { AttackOrigin.PcSingle, AttackOrigin.PcSequence, AttackOrigin.PcDualWield })
-            Assert(!PostAttackQuirkSets.Has(PostAttackQuirkSets.For(origin), PostAttackQuirk.CombatEndByCaller), $"{origin}: the hook checks combat end");
+    /// <summary>The thrown drop's test (AttackIntent.IsThrowOf; CMB-174, CMB-096 drop; PHB p.113).</summary>
+    private static void TestThrowIntent()
+    {
+        ItemData javelin = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponJavelin);
+#pragma warning disable CS0618 // the dart has no ItemID value; the string id is the only key
+        ItemData dart = ItemDatabase.Get(DND35e.Identifiers.ItemIDs.DART);
+#pragma warning restore CS0618
+        ItemData dagger = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponDagger);
+        ItemData longsword = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponLongsword);
+        ItemData longbow = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponLongbow);
+        if (javelin == null || dart == null || dagger == null || longsword == null || longbow == null)
+        {
+            Assert(false, "the thrown-drop items exist in ItemDatabase");
+            return;
+        }
+
+        Assert(GameManager.IsThrowableWeapon(javelin) && GameManager.IsThrowableWeapon(dart) && GameManager.IsThrowableWeapon(dagger),
+            "javelin, dart and dagger are throwable weapons");
+        Assert(!GameManager.IsThrowableWeapon(longsword) && !GameManager.IsThrowableWeapon(longbow), "a longsword and a longbow are not");
+        Assert(GameManager.IsThrowableWeapon(dagger, meleeOnly: true) && !GameManager.IsThrowableWeapon(javelin, meleeOnly: true),
+            "meleeOnly keeps the melee throwables (the off-hand draw)");
+
+        var npc = new AttackIntent { Quirks = AttackIntentQuirk.NpcIntentReadsUiThrownGlobal, LegacyUiMode = AttackMode.Thrown };
+        Assert(npc.IsThrowOf(javelin) && npc.IsThrowOf(dart), "an NPC intent (no mode) throws a javelin or a dart");
+        Assert(!npc.IsThrowOf(dagger), "an NPC intent never throws a dagger from the PC's copied selection (CMB-096)");
+        Assert(AttackIntent.ForMode(AttackMode.Thrown).IsThrowOf(dagger), "a declared throw throws a dagger");
+        Assert(!AttackIntent.ForMode(AttackMode.Melee).IsThrowOf(dagger) && !AttackIntent.ForMode(AttackMode.Melee).IsThrowOf(javelin),
+            "a melee intent (an AoO, a charge) throws nothing");
+        Assert(AttackIntent.ForMode(AttackMode.Ranged).IsThrowOf(javelin) && !AttackIntent.ForMode(AttackMode.Ranged).IsThrowOf(longbow),
+            "a ranged intent throws a javelin, never a bow");
     }
 
     private static void TestDeciderFactory()

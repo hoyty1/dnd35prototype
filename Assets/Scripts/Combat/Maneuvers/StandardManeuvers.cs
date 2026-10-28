@@ -1660,8 +1660,6 @@ public partial class GameManager
             return;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Unarmed attack AoO (Improved Trip attack, PHB p.139): {aoo.GetDetailedSummary()}"));
-        if (aoo.Hit && aoo.TotalDamage > 0)
-            CheckConcentrationOnDamage(attacker, aoo.TotalDamage);
         if (attacker.Stats.IsDead)
             CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is slain by {target.Stats.CharacterName}'s attack of opportunity!"));
 

@@ -1631,48 +1631,21 @@ public partial class GameManager
                         yield return hasteChoice;
                 }
 
-                charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
-                FullAttackResult pounceResult;
-                FullAttackResult pounceRakeResult = null;
-                try
-                {
-                    ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                    pounceResult = charger.FullAttack(target, isFlanking: isFlankingCharge, flankingBonus: chargeFlankingBonus,
-                        flankingPartnerName: chargeFlankPartnerName, hasteNaturalAttackIndex: pounceHasteNaturalAttackIndex);
-
-                    // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
-                    if (charger.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
-                        pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: isFlankingCharge, flankingBonus: chargeFlankingBonus,
-                            flankingPartnerName: chargeFlankPartnerName);
-                }
-                finally
-                {
-                    charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
-                }
-
-                if (pounceResult != null)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Pounce (+2): {pounceResult.GetFullSummary()}"));
-
-                    // The one post-attack hook (origin J, the pounce): melee reactions per hit, the rakes, the free trip
-                    // (Trip (Ex), before Improved Grab, CMB-125), then each hit's Concentration with the one Improved Grab
-                    // attempt after the whole pounce (MM p.310 resolves it right after its triggering hit, CMB-169), the
-                    // choice by the charger's decider.
-                    AttackIntent pounceIntent = AttackIntent.ForUi(this, charger);
-                    pounceIntent.IsCharge = true;
-                    pounceIntent.IsPounce = true;
-                    AttackResolution pounceResolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, pounceIntent, pounce: true).With(pounceResult.Attacks);
-                    pounceResolution.RangeInfo = CalculateRangeInfo(charger, target, pounceIntent);
-                    pounceResolution.AfterReactions = () => ResolvePounceRakeAftermath(charger, target, pounceRakeResult);
-                    IEnumerator pouncePost = OnAttackResolved(pounceResolution, new PostAttackOutcome());
-                    while (pouncePost.MoveNext())
-                        yield return pouncePost.Current;
-                }
+                // One step at a time through the post-attack hook (D8, CMB-169), the choices by the charger's decider.
+                AttackIntent pounceIntent = AttackIntent.ForUi(this, charger);
+                pounceIntent.Mode = AttackMode.Melee;
+                pounceIntent.IsCharge = true;
+                pounceIntent.IsPounce = true;
+                IEnumerator pounce = RunPounceSequence(charger, target, pounceIntent, null, isFlankingCharge, chargeFlankingBonus,
+                    chargeFlankPartnerName, pounceHasteNaturalAttackIndex, "⚡", "Charge Pounce (+2)");
+                while (pounce.MoveNext())
+                    yield return pounce.Current;
+                if (CurrentPhase == TurnPhase.CombatOver)
+                    yield break;
             }
             else
             {
                 // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
-                ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
                 CombatResult result = charger.Attack(target, isFlankingCharge, chargeFlankingBonus, chargeFlankPartnerName, null,
                     situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
 
@@ -1699,6 +1672,7 @@ public partial class GameManager
                     // melee reactions and Improved Grab, the choice by the charger's decider. No rake: a creature cannot
                     // begin a grapple and rake in the same turn (MM p.314, CMB-144).
                     AttackIntent chargeIntent = AttackIntent.ForUi(this, charger);
+                    chargeIntent.Mode = AttackMode.Melee;
                     chargeIntent.IsCharge = true;
                     AttackResolution chargeResolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, chargeIntent).With(result);
                     chargeResolution.RangeInfo = CalculateRangeInfo(charger, target, chargeIntent);
@@ -1734,10 +1708,86 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// A pounce's rakes (MM p.313; no grapple needed, delegated RAW reading 2026-10-14, CMB-144), run by the post-attack
-    /// hook right after the pounce's reactions: their log lines, then each rake hit's Concentration check and melee
-    /// reactions. Step 16 makes the rakes steps of the attack sequence.
+    /// A pounce (MM p.313: a full attack at the end of a charge), PC and NPC alike: each natural attack is one step
+    /// (CharacterController.FullAttack with startAttackIndex and maxAttacks 1, as the Full Attack button steps), with the
+    /// charge's +2 (PHB p.154), and each step goes through the post-attack hook, so an Improved Grab follows its trigger hit
+    /// at once (MM p.310; decision D8, CMB-169). Once the grab takes hold the charger is grappling and makes no more
+    /// ordinary attacks (PHB p.156; CMB-149); a hold with one body part (MM p.310) leaves it free to go on. Then the
+    /// pounce's rakes (no grapple needed, MM p.313; delegated RAW reading 2026-10-14, CMB-144), whose Concentration checks
+    /// and melee reactions follow (step 16 makes them steps of the sequence).
     /// </summary>
+    private IEnumerator RunPounceSequence(CharacterController charger, CharacterController target, AttackIntent intent, ActorSource? deciderSource,
+        bool isFlanking, int flankingBonus, string flankingPartnerName, int hasteNaturalAttackIndex, string logIcon, string logLabel)
+    {
+        const int MaxPounceSteps = 16;
+        for (int step = 0; step < MaxPounceSteps; step++)
+        {
+            if (charger == null || charger.Stats == null || CombatEndRules.IsOutOfFight(charger)
+                || target == null || target.Stats == null || target.Stats.IsDead)
+                break;
+
+            FullAttackResult stepResult;
+            charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
+            try
+            {
+                stepResult = charger.FullAttack(target, isFlanking, flankingBonus, flankingPartnerName, null,
+                    startAttackIndex: step, maxAttacks: 1, hasteNaturalAttackIndex: hasteNaturalAttackIndex);
+            }
+            finally
+            {
+                charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
+            }
+
+            if (stepResult == null || stepResult.Attacks.Count == 0)
+                break;
+
+            string label = stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0 ? stepResult.AttackLabels[0] : $"Attack {step + 1}";
+            CombatResult attack = stepResult.Attacks[0];
+            AttackResolution resolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, intent, deciderSource).With(attack);
+            resolution.RangeInfo = CalculateRangeInfo(charger, target, intent);
+            resolution.CombatEndContext = "Charge.Pounce";
+            resolution.ReportStep = () => CombatUI?.ShowCombatLog(CombatLogHelper.Damage(logIcon, $"{logLabel}: {attack.GetAttackBreakdown(label)}"));
+            var outcome = new PostAttackOutcome();
+            IEnumerator post = OnAttackResolved(resolution, outcome);
+            while (post.MoveNext())
+                yield return post.Current;
+
+            if (outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
+                yield break;
+
+            if (charger.IsGrappling())
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{charger.Stats.CharacterName} is grappling: the pounce's remaining attacks are not made as ordinary attacks (PHB p.156)."));
+                break;
+            }
+
+            // A hold with one body part bars every attack on the held creature (MM p.310; CMB-163): the pounce has no other target.
+            if (charger.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", holdReason));
+                break;
+            }
+        }
+
+        // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
+        if (charger == null || charger.Stats == null || !charger.Stats.HasRake || CombatEndRules.IsOutOfFight(charger)
+            || target == null || target.Stats == null || target.Stats.IsDead)
+            yield break;
+
+        FullAttackResult rakeResult;
+        charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge");
+        try
+        {
+            rakeResult = charger.PerformRakeAttacks(target, isFlanking, flankingBonus, flankingPartnerName);
+        }
+        finally
+        {
+            charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
+        }
+        ResolvePounceRakeAftermath(charger, target, rakeResult);
+    }
+
+    /// <summary>A pounce's rakes: their log lines, then each rake hit's Concentration check and melee reactions.</summary>
     private void ResolvePounceRakeAftermath(CharacterController attacker, CharacterController target, FullAttackResult rakeResult)
     {
         if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
@@ -1821,8 +1871,6 @@ public partial class GameManager
             yield break;
         }
 
-        // A bull rush is a melee attack for turning (same as the standard bull rush and the charge attack).
-        ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
 
         SpecialAttackResult bullRushResult = charger.ExecuteSpecialAttack(
             SpecialAttackType.BullRushCharge,
@@ -1984,52 +2032,27 @@ public partial class GameManager
         else if (usedPounce)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{npc.Stats.CharacterName} uses Pounce!"));
-            npc.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
-            FullAttackResult pounceResult;
-            FullAttackResult pounceRakeResult = null;
-            try
-            {
-                ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
-                // A pounce is a full attack, so Haste adds one natural attack, the AI's pick (CMB-106).
-                int npcPounceHasteIndex = -1;
-                AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, target, null, 0, choice => npcPounceHasteIndex = choice);
-                pounceResult = npc.FullAttack(target, isFlankingCharge, flankingBonus,
-                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
-                    hasteNaturalAttackIndex: npcPounceHasteIndex);
+            // A pounce is a full attack, so Haste adds one natural attack, the AI's pick (CMB-106).
+            int npcPounceHasteIndex = -1;
+            AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, target, null, 0, choice => npcPounceHasteIndex = choice);
 
-                // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
-                if (npc.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
-                {
-                    pounceRakeResult = npc.PerformRakeAttacks(target, isFlankingCharge, flankingBonus,
-                        flankPartner != null ? flankPartner.Stats.CharacterName : null);
-                }
-            }
-            finally
-            {
-                npc.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
-            }
-
-            if (pounceResult != null)
-            {
-                string flankText = isFlankingCharge ? " + Flanking" : "";
-                CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}"));
-
-                // The one post-attack hook (origin J, the pounce), as on the PC charge, with the AI's choices (the NPC turn path is AI-run).
-                AttackIntent npcPounceIntent = AttackIntent.ForAI(this, npc, target);
-                npcPounceIntent.IsCharge = true;
-                npcPounceIntent.IsPounce = true;
-                AttackResolution npcPounceResolution = AttackResolution.Create(AttackOrigin.Charge, npc, target, npcPounceIntent, ActorSource.AI, pounce: true).With(pounceResult.Attacks);
-                npcPounceResolution.RangeInfo = CalculateRangeInfo(npc, target, npcPounceIntent);
-                npcPounceResolution.AfterReactions = () => ResolvePounceRakeAftermath(npc, target, pounceRakeResult);
-                IEnumerator npcPouncePost = OnAttackResolved(npcPounceResolution, new PostAttackOutcome());
-                while (npcPouncePost.MoveNext())
-                    yield return npcPouncePost.Current;
-            }
+            // One step at a time through the post-attack hook (D8, CMB-169), as on the PC charge, with the AI's choices (the
+            // NPC turn path is AI-run).
+            AttackIntent npcPounceIntent = AttackIntent.ForAI(this, npc, target);
+            npcPounceIntent.Mode = AttackMode.Melee;
+            npcPounceIntent.IsCharge = true;
+            npcPounceIntent.IsPounce = true;
+            string flankText = isFlankingCharge ? " + Flanking" : "";
+            IEnumerator npcPounce = RunPounceSequence(npc, target, npcPounceIntent, ActorSource.AI, isFlankingCharge, flankingBonus,
+                flankPartner != null ? flankPartner.Stats.CharacterName : null, npcPounceHasteIndex, "☠", $"Charge Pounce (+2{flankText})");
+            while (npcPounce.MoveNext())
+                yield return npcPounce.Current;
+            if (CurrentPhase == TurnPhase.CombatOver)
+                yield break;
         }
         else
         {
             // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
-            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
             CombatResult result = npc.Attack(target, isFlankingCharge, flankingBonus,
                 flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
                 situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
@@ -2039,6 +2062,7 @@ public partial class GameManager
                 // The one post-attack hook (origin J), as on the PC charge, with the AI's choices. No rake: a creature
                 // cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
                 AttackIntent npcChargeIntent = AttackIntent.ForAI(this, npc, target);
+                npcChargeIntent.Mode = AttackMode.Melee;
                 npcChargeIntent.IsCharge = true;
                 AttackResolution npcChargeResolution = AttackResolution.Create(AttackOrigin.Charge, npc, target, npcChargeIntent, ActorSource.AI).With(result);
                 npcChargeResolution.RangeInfo = CalculateRangeInfo(npc, target, npcChargeIntent);

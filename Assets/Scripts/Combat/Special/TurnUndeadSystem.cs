@@ -253,31 +253,6 @@ public partial class GameManager
             BreakTurnUndeadFear(target, attacker, "melee");
     }
 
-    private bool IsMeleeAttackForTurnUndeadFearBreak(
-        CharacterController attacker,
-        ItemData weapon,
-        RangeInfo rangeInfo,
-        bool treatAsThrownAttack = false)
-    {
-        if (attacker == null)
-            return false;
-
-        if (treatAsThrownAttack)
-            return false;
-
-        weapon ??= attacker.GetEquippedMainWeapon();
-
-        // Projectile weapons (bows/crossbows/etc.) never break Turn Undead fear.
-        if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
-            return false;
-
-        if (rangeInfo != null)
-            return rangeInfo.IsMelee;
-
-        // Fallback when range info is unavailable.
-        return !IsAttackModeRanged(attacker, weapon);
-    }
-
     private void PruneTurnUndeadTrackers()
     {
         if (_activeTurnUndeadTrackers.Count == 0)

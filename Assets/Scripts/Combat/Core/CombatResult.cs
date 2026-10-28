@@ -92,6 +92,13 @@ public class CombatResult
     public string DamageModifierDesc;
 
     public bool IsRangedAttack;
+
+    /// <summary>
+    /// The attack was never made: CharacterController.Attack refused it before any roll (an invalid target, a weapon it
+    /// cannot attack with, the target out of range) and returned this placeholder miss. The post-attack hook skips it: no
+    /// ammunition spent, no thrown drop, no AttackResolvedEvent (GameManager.OnAttackResolved).
+    /// </summary>
+    public bool NotMade;
     public int RangeDistanceFeet;
     public int RangeDistanceSquares;
     public int RangeIncrementNumber;
