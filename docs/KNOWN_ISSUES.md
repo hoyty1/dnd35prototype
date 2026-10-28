@@ -33,14 +33,14 @@ Entries per section:
 | [Combat](issues/CMB.md) | CMB | 0 | 54 | 69 | 123 | CMB-185 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-024 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 0 | 58 | 83 | 141 | SPL-204 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 40 | 72 | CHR-087 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-088 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 35 | 63 | CRE-075 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 37 | 42 | 79 | ITM-088 |
 | [AI](issues/AI.md) | AI | 0 | 22 | 41 | 63 | AI-073 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 40 | 52 | UI-054 |
-| [Tests](issues/TST.md) | TST | 0 | 8 | 28 | 36 | TST-043 |
-| **All** | | 1 | 287 | 428 | 716 | |
+| [Tests](issues/TST.md) | TST | 0 | 8 | 30 | 38 | TST-045 |
+| **All** | | 1 | 287 | 431 | 719 | |
 
 ## Top issues
 
