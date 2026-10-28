@@ -13,8 +13,8 @@ namespace Tests.Scenarios
     {
         public static readonly IReadOnlyList<Waiver> Global = new List<Waiver>
         {
-            // StartPCTurn and other paths can set the phase again after CombatOver (tick kills, safety-net victory).
-            new Waiver { IssueId = "CORE-003", Invariant = ScenarioChecks.PhaseAfterCombatOver },
+            // Empty since batch 12 step 6: CORE-003's phase-after-CombatOver waiver went when every turn-start effect ran
+            // before the one turn-start combat-end check (rules/turn-start-acid-arrow-last-enemy).
         };
     }
 }

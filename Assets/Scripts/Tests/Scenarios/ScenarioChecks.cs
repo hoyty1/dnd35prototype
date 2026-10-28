@@ -188,7 +188,9 @@ namespace Tests.Scenarios
             _speedSquaresAtTurnStart[a] = a.Stats != null ? Math.Max(0, a.Stats.EffectiveSpeedFeet / 5) : 0;
             // Disabled, staggered or slowed when the turn starts (CharacterController.RefreshActionLimits; the flag is
             // read again at turn end only if it was already set here, so a creature dropped to 0 HP mid-charge is not
-            // flagged). Nauseated likewise for the move-only limit.
+            // flagged). Nauseated likewise for the move-only limit. The turn_start event fires in GameManager.OnTurnStarted
+            // before BeginCombatantTurn runs StartNewTurn for every creature (batch 12 step 6), so these are the limits the
+            // conditions set (ConditionManager refreshes them on every change), not yet this turn's reset.
             _singleActionAtTurnStart = a.Actions != null && a.Actions.SingleActionOnly;
             _moveOnlyAtTurnStart = a.Actions != null && a.Actions.MoveActionOnly;
 

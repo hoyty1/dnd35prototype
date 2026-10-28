@@ -629,7 +629,7 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Fire,
                 SaveDC = 17,
                 IsReflexSave = true,
-                RechargeRounds = 3
+                RechargeDice = "1d4" // MM p.34: once every 1d4 rounds
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

@@ -56,7 +56,7 @@ public static partial class NPCDatabase
             DamageType = template.BreathDamageType,
             SaveDC = stats.BreathSaveDC,
             IsReflexSave = true,
-            RechargeRounds = 3  // 1d4 average ≈ 2.5, round to 3
+            RechargeDice = "1d4" // MM p.69: once a dragon breathes, it can't breathe again until 1d4 rounds later
         };
 
         // --- Secondary breath weapon (metallic dragons only) ---
@@ -360,7 +360,7 @@ public static partial class NPCDatabase
                 case SecondaryBreathType.SleepGas: effectName = $"Sleep Gas (1d6+{ageVal} rds, Will negates)"; break;
                 default: effectName = template.SecondaryBreath.ToString(); break;
             }
-            abilities.Add($"Secondary Breath: {effectName}, {stats.SecondaryBreathUsesPerDay}/day, DC {stats.SecondaryBreathSaveDC}");
+            abilities.Add($"Secondary Breath: {effectName}, DC {stats.SecondaryBreathSaveDC}, shares the 1d4 rds recharge");
         }
 
         // Frightful Presence

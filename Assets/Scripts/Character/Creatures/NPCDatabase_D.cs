@@ -453,7 +453,7 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Acid,
                 SaveDC = 17,
                 IsReflexSave = true,
-                RechargeRounds = 2
+                RechargeDice = "1d4" // MM p.59: again 1d4 rounds later
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

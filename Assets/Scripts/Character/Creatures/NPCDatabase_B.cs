@@ -593,7 +593,7 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Electricity,
                 SaveDC = 19,
                 IsReflexSave = true,
-                RechargeRounds = 3
+                RechargeRounds = 10 // MM p.25: once every 10 rounds
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

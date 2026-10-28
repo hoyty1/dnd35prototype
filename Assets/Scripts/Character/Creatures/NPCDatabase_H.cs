@@ -154,7 +154,7 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Fire,
                 SaveDC = 13,
                 IsReflexSave = true,
-                RechargeRounds = 3 // 1d4 rounds average
+                RechargeDice = "2d4" // MM p.151: once every 2d4 rounds
             },
             SpecialAbilities = new List<string> { "Breath weapon (10-ft. cone, 2d6 fire, Ref DC 13 half, 1/2d4 rds)", "Fiery bite (+1d6 fire)", "Immunity to fire", "Vulnerability to cold (+50%)", "Darkvision 60 ft.", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Dragon,

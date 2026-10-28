@@ -500,7 +500,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// True once the bombardier beetle's acid spray was used this round: MM p.285 allows it once per round, read as
     /// between the start of one of its turns and the start of the next (decision D1 of batch 12). Cleared by
-    /// <see cref="TickBombardierAcidSprayCooldown"/> at its turn start and on slot reuse (CRE-046).
+    /// <see cref="ClearOncePerRoundFlags"/> at its turn start and on slot reuse (CRE-046).
     /// </summary>
     [SerializeField] private bool _acidSprayUsedThisRound;
     [SerializeField] private int _regenerationAmountPerRound;
@@ -515,18 +515,29 @@ public class CharacterController : MonoBehaviour
     // Breath weapon tracking
     [SerializeField] private BreathWeaponDefinition _breathWeapon;
     [SerializeField] private int _breathWeaponCooldownRemaining;
+    /// <summary>Breath weapon uses spent by this creature (the gorgon's five per day, MM p.138); cleared with the breath.</summary>
+    [SerializeField] private int _breathWeaponUsesToday;
     public bool HasBreathWeapon => _breathWeapon != null;
     /// <summary>True when the generic breath path (NPCExecuteBreathWeaponForAI, DragonAIProfile) may use the breath now. A
     /// once-per-round use (the bombardier beetle's acid spray, MM p.285) is never ready here: its own routine
     /// (GameManager.TryNPCUseBombardierAcidSpray) reads <see cref="AcidSprayUsedThisRound"/> instead (CRE-040).</summary>
-    public bool IsBreathWeaponReady => _breathWeapon != null && !_breathWeapon.OncePerRound && _breathWeaponCooldownRemaining <= 0;
+    public bool IsBreathWeaponReady => _breathWeapon != null && !_breathWeapon.OncePerRound && _breathWeaponCooldownRemaining <= 0
+        && (_breathWeapon.UsesPerDay <= 0 || _breathWeaponUsesToday < _breathWeapon.UsesPerDay);
+    /// <summary>Rounds until the breath weapon recharges (0: ready, if a daily limit leaves a use).</summary>
+    public int BreathWeaponCooldownRemaining => _breathWeaponCooldownRemaining;
+    /// <summary>Breath weapon uses spent so far (against <see cref="BreathWeaponDefinition.UsesPerDay"/>).</summary>
+    public int BreathWeaponUsesToday => _breathWeaponUsesToday;
     /// <summary>Read-only access to breath weapon definition (does NOT consume/trigger cooldown).</summary>
     public BreathWeaponDefinition GetBreathWeaponDefinition() => _breathWeapon;
 
     // Secondary breath weapon (metallic dragons)
     [SerializeField] private SecondaryBreathWeaponDefinition _secondaryBreathWeapon;
     public bool HasSecondaryBreathWeapon => _secondaryBreathWeapon != null;
-    public bool IsSecondaryBreathWeaponReady => _secondaryBreathWeapon != null && _secondaryBreathWeapon.UsesRemaining > 0;
+    /// <summary>
+    /// A dragon with more than one breath weapon still breathes only once every 1d4 rounds (MM p.69): the secondary breath
+    /// shares the primary breath's recharge and has no daily count (CRE-073).
+    /// </summary>
+    public bool IsSecondaryBreathWeaponReady => _secondaryBreathWeapon != null && _breathWeaponCooldownRemaining <= 0;
     public SecondaryBreathWeaponDefinition GetSecondaryBreathWeaponDefinition() => _secondaryBreathWeapon;
 
     // Frightful Presence (Young Adult+ dragons)
@@ -4379,12 +4390,41 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// The creature's turn start (both turn paths): a new round of its own begins, so its once-per-round acid spray is
-    /// available again (MM p.285; D1). The name is kept from the old 1d4-round cooldown (CRE-040).
+    /// The creature's turn start (GameManager.BeginCombatantTurn, every creature, acting or not): a new round of its own
+    /// begins, so its once-per-round acid spray is available again (MM p.285; D1, CRE-040). The Cleave flag joins it
+    /// later in batch 12.
     /// </summary>
-    public void TickBombardierAcidSprayCooldown()
+    public void ClearOncePerRoundFlags()
     {
         _acidSprayUsedThisRound = false;
+    }
+
+    /// <summary>
+    /// The creature's turn start (GameManager.BeginCombatantTurn, every creature, acting or not; decision D3): a round of
+    /// each recharge passes, the breath weapon's, the ranged special's and the terrain manipulation's (AI-032).
+    /// </summary>
+    public void TickTurnCooldowns()
+    {
+        TickBreathWeaponCooldown();
+        TickRangedSpecialAttackCooldown();
+        TickTerrainManipulationDuration();
+    }
+
+    /// <summary>
+    /// The rounds before a recharging ability is usable again: <paramref name="rechargeDice"/> (the MM's "1d4" rounds) rolled
+    /// when it is set, else the fixed <paramref name="fixedRounds"/> ("once every 10 rounds"). Each die passes the scenario
+    /// roll filter with the context <paramref name="context"/> (CRE-073, D14).
+    /// </summary>
+    public static int RollRechargeRounds(string rechargeDice, int fixedRounds, string context)
+    {
+        if (!string.IsNullOrEmpty(rechargeDice) && DiceExpression.TryParse(rechargeDice, out DiceExpression dice))
+        {
+            int rolled = dice.IsFixed
+                ? dice.Modifier
+                : DiceService.RollMultiple(dice.NumDice, dice.DiceSides, context) + dice.Modifier;
+            return Mathf.Max(0, rolled);
+        }
+        return Mathf.Max(0, fixedRounds);
     }
 
     public void ConfigureRegeneration(int amountPerRound, DamageBypassTag suppressedBy)
@@ -4405,6 +4445,7 @@ public class CharacterController : MonoBehaviour
     {
         _breathWeapon = bw?.Clone();
         _breathWeaponCooldownRemaining = 0;
+        _breathWeaponUsesToday = 0;
     }
 
     /// <summary>Configure secondary breath weapon (metallic dragons: paralysis gas, sleep gas, etc.).</summary>
@@ -4420,12 +4461,16 @@ public class CharacterController : MonoBehaviour
         _hasFrightfulPresenceTriggered = false;
     }
 
-    /// <summary>Use secondary breath weapon (decrements uses remaining). Returns the definition for resolution.</summary>
+    /// <summary>
+    /// Use the secondary breath weapon: it starts the one recharge both breaths share (MM p.69: 1d4 rounds; CRE-073).
+    /// Returns the definition for resolution.
+    /// </summary>
     public SecondaryBreathWeaponDefinition UseSecondaryBreathWeapon()
     {
-        if (_secondaryBreathWeapon == null || _secondaryBreathWeapon.UsesRemaining <= 0)
+        if (!IsSecondaryBreathWeaponReady)
             return null;
-        _secondaryBreathWeapon.UsesRemaining--;
+        _breathWeaponCooldownRemaining = RollRechargeRounds(_breathWeapon != null ? _breathWeapon.RechargeDice : "1d4",
+            _breathWeapon != null ? _breathWeapon.RechargeRounds : 0, $"{Stats?.CharacterName} breath weapon recharge");
         return _secondaryBreathWeapon;
     }
 
@@ -4693,11 +4738,15 @@ public class CharacterController : MonoBehaviour
             _rangedSpecialAttackCooldownRounds--;
     }
 
-    /// <summary>Apply ranged special attack cooldown after use.</summary>
+    /// <summary>Apply the ranged special attack's recharge after use: its recharge dice when set, else its fixed rounds (CRE-073).</summary>
     public void ApplyRangedSpecialAttackCooldown()
     {
-        if (_rangedSpecialAttack != null && _rangedSpecialAttack.CooldownRounds > 0)
-            _rangedSpecialAttackCooldownRounds = _rangedSpecialAttack.CooldownRounds;
+        if (_rangedSpecialAttack == null)
+            return;
+        int rounds = RollRechargeRounds(_rangedSpecialAttack.RechargeDice, _rangedSpecialAttack.CooldownRounds,
+            $"{Stats?.CharacterName} {_rangedSpecialAttack.Name} recharge");
+        if (rounds > 0)
+            _rangedSpecialAttackCooldownRounds = rounds;
     }
 
     /// <summary>Tick terrain manipulation duration (for non-caster-following effects).</summary>
@@ -4720,12 +4769,21 @@ public class CharacterController : MonoBehaviour
             _breathWeaponCooldownRemaining--;
     }
 
-    /// <summary>Use breath weapon (sets cooldown). Returns the definition for resolution.</summary>
+    /// <summary>
+    /// Use the breath weapon: it recharges after its MM recharge, rolled (<see cref="BreathWeaponDefinition.RechargeDice"/>,
+    /// "1d4" rounds) or fixed (<see cref="BreathWeaponDefinition.RechargeRounds"/>), and spends one use of a daily limit
+    /// (D14, CRE-073). Its rounds pass at this creature's turn start (<see cref="TickTurnCooldowns"/>), so a breath that
+    /// recharges in 1 round is ready on the next turn. Returns the definition for resolution, or null when not ready.
+    /// </summary>
     public BreathWeaponDefinition UseBreathWeapon()
     {
         if (_breathWeapon == null || _breathWeaponCooldownRemaining > 0)
             return null;
-        _breathWeaponCooldownRemaining = _breathWeapon.RechargeRounds;
+        if (_breathWeapon.UsesPerDay > 0 && _breathWeaponUsesToday >= _breathWeapon.UsesPerDay)
+            return null;
+        _breathWeaponCooldownRemaining = RollRechargeRounds(_breathWeapon.RechargeDice, _breathWeapon.RechargeRounds,
+            $"{Stats?.CharacterName} breath weapon recharge");
+        _breathWeaponUsesToday++;
         return _breathWeapon;
     }
 
@@ -12727,8 +12785,10 @@ public class CharacterController : MonoBehaviour
         }
 
         // PHB p.156 (CMB-120): the pin held for 1 round. It ends at the end of the pinner's next turn unless the
-        // pinner pinned again that turn; it also ends when the pinner's turn passed while it could not act
-        // (that turn may have been skipped without StartNewTurn, so the round counter alone would miss it).
+        // pinner pinned again that turn; it also ends when the pinner's turn passed while it could not act.
+        // Since batch 12 step 6 a skipped turn also runs StartNewTurn (BeginCombatantTurn), so IsPinRenewalDue
+        // already turns true then; the could-not-act branch still covers a pinner that lost its ability to act
+        // during the turn, or a turn end that runs without a new turn count.
         if (link.PinMaintainer != this)
             return;
 

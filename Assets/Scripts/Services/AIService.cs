@@ -129,7 +129,7 @@ public class AIService : MonoBehaviour
         if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
             yield break;
 
-        _gameManager.BeginActingTurn(npc, GameManager.TurnStartPath.Npc);
+        // The turn-start effects, resets and perception already ran (GameManager.OnTurnStarted, SingleNPCTurnFromInitiative).
 
         bool isSummon = _gameManager.IsSummonedCreature(npc);
         string turnColor = isSummon ? "#66E8FF" : "#FF6666";
@@ -140,16 +140,6 @@ public class AIService : MonoBehaviour
         yield return new WaitForSeconds(0.6f);
         if (CombatEnded())
             yield break;
-
-        // ── Death/disable check after turn-start effects ──
-        // The NPC may have been dropped by start-of-turn area damage
-        // (e.g., standing in Wall of Fire, heat wave at caster's turn start, etc.)
-        if (!npc.CanTakeTurnActions())
-        {
-            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} cannot act (HP={npc.Stats.CurrentHP}) after turn-start effects — turn ended immediately");
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{npc.Stats.CharacterName} cannot act (dead, dying or unconscious)."));
-            yield break;
-        }
 
         if (_gameManager.TryGetConfusedTurnDecisionForAI(npc, out ConfusedBehaviorController.ConfusedTurnDecision confusedDecision))
         {

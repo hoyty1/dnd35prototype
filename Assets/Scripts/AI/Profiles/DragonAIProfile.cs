@@ -228,8 +228,9 @@ namespace DND35.AI.Profiles
         /// Evaluates whether the dragon should use its secondary breath weapon
         /// (paralysis gas, sleep gas, etc.) instead of its primary. Returns true
         /// if the secondary breath is available and tactically preferable.
-        /// Priority: use secondary when primary is on cooldown, or when the
-        /// secondary effect (disable/CC) would be more valuable than damage.
+        /// Both breaths share one 1d4-round recharge (MM p.69, CRE-073), so on a
+        /// ready turn this only chooses between primary and secondary; the old
+        /// "primary on cooldown" case cannot occur. Still uncalled (AI-008).
         /// </summary>
         public bool EvaluateSecondaryBreathWeapon(
             CharacterController self,
@@ -241,8 +242,8 @@ namespace DND35.AI.Profiles
             if (self == null || !self.HasSecondaryBreathWeapon || !self.IsSecondaryBreathWeaponReady)
                 return false;
 
-            // Only use secondary if primary is on cooldown, OR if we're facing many enemies
-            // (CC is more valuable than raw damage against groups)
+            // The breaths share one recharge (MM p.69), so primaryAvailable is true whenever the secondary is
+            // ready; the choice is by tactics: CC beats raw damage against groups of 3+ enemies.
             bool primaryAvailable = self.HasBreathWeapon && self.IsBreathWeaponReady;
             int enemyCount = 0;
             for (int i = 0; i < allCombatants.Count; i++)
@@ -253,7 +254,7 @@ namespace DND35.AI.Profiles
                     enemyCount++;
             }
 
-            // Use secondary when: primary is on cooldown, or 3+ enemies (CC value)
+            // Use secondary against 3+ enemies (CC value)
             if (primaryAvailable && enemyCount < 3)
                 return false;
 

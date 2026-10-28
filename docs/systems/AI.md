@@ -46,7 +46,7 @@ Contents:
 
 1. **Narrow action set.** No double move, run, total defense, ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another, dropping prone or crawling, weapon switching, item use, turning, class abilities such as Rage (11.8.7; Flurry of Blows since CHR-003, Smite, Lay on Hands and Wild Shape since CHR-020, 2026-10-14, bardic music since CHR-026, 2026-10-15), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Several PC executors for these are bound to the PC turn flow and cannot be called by the AI as they are (AI-054).
 2. **Asymmetries that favour NPCs.** Breath weapons cost no action (AI-040), and monster ranged specials skip the attack calculator (AI-006); since batch 11 step 13 a silenced NPC, like a PC, cannot cast a verbal spell (the cast core's Legality stage, and the AI's spell choice skips such a spell). Damage from spells, breath and specials is shared since 2026-10-09 (`GameManager.DealDamage`, SPL-004). Casting (7.6), movement and maneuver attacks of opportunity (4.5) use the same helpers for PCs and NPCs.
-3. **Asymmetries that cripple NPCs.** A prone confused NPC never stands up and the AI never crawls (CMB-074; other prone NPCs, charmed ones included, stand at turn start). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire once per spawn (AI-032) and only for the Dragon profile (AI-033). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
+3. **Asymmetries that cripple NPCs.** A prone confused NPC never stands up and the AI never crawls (CMB-074; other prone NPCs, charmed ones included, stand at turn start). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire only for the Dragon profile (AI-033); they recharge as their MM entries say since batch 12 step 6 (D14). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
 4. **No decision layer.** Each routine is a fixed script. There is no comparison of the expected value of a spell, a breath, a full attack or a maneuver; `SelectBestAction` computes six results but its callers act only on `Charge` (AI-027). Profiles that set Trip trip every standing target in reach with their first attack, with no odds check (AI-035); a per-turn stopgap (AI-060) only stops them chaining maneuvers or retrying a failed one.
 5. **No group play.** Every NPC scores alone. There is no focus fire, flank pairing, protection of casters, morale or retreat policy (AI-010).
 
@@ -71,15 +71,16 @@ Contents:
 ```
  TurnService.OnTurnStarted
           |
- GameManager.OnTurnStarted --(IsControllable)--> StartPCTurn (player)
+ GameManager.OnTurnStarted
+          |-- BeginCombatantTurn (every creature: sphere, acid arrow, regeneration, cooldowns,
+          |                       once-per-round flags, Aid expiry, StartNewTurn, combat-end check)
+          |--(IsControllable)--> StartPCTurn (player)
           | not controllable
  GameManager.SingleNPCTurnFromInitiative
-          |-- BeginCombatantTurn (NPC path: Aid expiry, Flaming Sphere, combat-end check)
           |-- ShouldSkipTurnDueToHPState? --> log, NextInitiativeTurn   (CMB-075)
+          |-- perception (NPC path only, CMB-094), BeginActingTurn (Turn Undead proximity)
           v
  AIService.ExecuteNPCTurn
-   GameManager.BeginActingTurn (NPC path: ticks, regen, perception)
-   !CanTakeTurnActions()? -> end   (dead, dying, stable, unconscious; a disabled NPC acts)
    Confused / Charmed / Fascinated ----> BehaviorController (whole turn; charmed stands up first)
    Prone (not grappling) -> TryStandUpFromProneForAI (move action, AoOs)
    Frightened ----> BehaviorController (whole turn)
@@ -174,16 +175,16 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3992):
 - **Fascinated**: the `ExecuteNPCTurn` Fascinated branch (99-114), including its "source dead, remove the condition" cleanup, is unreachable.
 - **Pinned** creatures lose their turn, so the pinned branch of `ChooseNPCGrappleAction` (the escape checks) never runs for a pinned NPC. PHB ch.8 (Grapple) lets a pinned creature try to escape.
 - **Nauseated** creatures (swarm distraction) lose the whole turn; DMG ch.8 allows a single move action.
-- A skipped NPC also skips the NPC path of `BeginActingTurn` (`_Core/GameManager.TurnStart.cs`): no regeneration, no Melf's Acid Arrow tick, no `StartNewTurn`, no perception. `StartPCTurn` applies regeneration and acid arrow *before* its skip check. A troll at negative HP therefore never regenerates (CMB-075); combat end counts it as out while it is dying or unconscious, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
+- Since batch 12 step 6 (2026-10-28, decision D3) a skipped creature, PC or NPC, still gets its turn start: `GameManager.OnTurnStarted` calls `BeginCombatantTurn` (`_Core/GameManager.TurnStart.cs`) before the fork and the gate, so it regenerates, takes its Melf's Acid Arrow tick, its cooldowns pass and `StartNewTurn` resets it. Only perception (CMB-094) and the Turn Undead proximity check (`BeginActingTurn`) still wait for an acting turn. Combat end counts a dying or unconscious troll as out, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
 
 ### 3.3 `ExecuteNPCTurn` gate order
 
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 132 | `GameManager.BeginActingTurn(npc, TurnStartPath.Npc)` (`_Core/GameManager.TurnStart.cs`; `BeginNPCTurnForAI` until batch 12 step 5) | acid arrow damage, the bombardier once-per-round spray flag reset (`TickBombardierAcidSprayCooldown`), `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate, round-start perception (`ProcessRoundStartPerception`: tracker update plus a Listen check) and `BeginActingTurn` (turn-undead tracker pruning and proximity) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
-| 3 | 147 | `!CanTakeTurnActions()` | end. Since batch 12 step 3 (2026-10-28) a disabled NPC (0 hp, or below 0 with Diehard) passes and takes its single action (PHB p.145, decision D5) |
+| 3 | | (no HP gate since batch 12 step 6) | the skip gate already ended the turn of a creature that cannot act; a disabled NPC (0 hp, or below 0 with Diehard) takes its single action (PHB p.145, decision D5, batch 12 step 3) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
 | 5 | 84 | Charmed | stands up first when prone, not grappling and not fascinated (same call as 6a; ends the turn if an AoO drops it), then controller, end |
 | 6 | 99 | Fascinated | no action, end (unreachable, 3.2) |
@@ -327,7 +328,7 @@ Never casts (AI-002), never runs or double-moves, never uses Total Defense, Powe
 3. Breath ready: `DragonAIProfile.FindBestBreathPosition` tries the current square plus every reachable placeable cell (A* per cell), and every enemy as the aim point; picks most enemy hits, then fewest ally hits (0 allowed, `MaxAcceptableAllyHits`), then not moving; needs at least 1 enemy (`MinEnemiesForBreath`). Since batch 11 step 24 (2026-10-16) each simulated breath is the best cone or line that starts at an intersection on the edge of the dragon's space and covers the aim target (`AoESystem.BestDirectedAimAt`: most enemies less allies; MM p.69, PHB p.175), the aim `NPCExecuteBreathWeaponForAI` then fires, and the bombardier beetle's spray picks its 10-ft. cone the same way (`rules/area-origin-breath-ai`). Moves if needed, re-evaluates from the actual square, breathes, then retreats one move if an enemy is adjacent (block duplicated, AI-020). Positioning ignores AoOs and multi-square footprints.
 4. If breath is not viable, falls through to melee with the move possibly already spent. Then charge (needs a full-round action), approach only if `HasMoveAction`, re-target, maneuver or attack.
 
-Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread (AI-026). Breath recharge never ticks (AI-032).
+Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread (AI-026). Breath recharge ticks at the dragon's turn start and rolls the MM's 1d4 rounds (batch 12 step 6, D14); the secondary breath shares it.
 
 ### 5.3 `ExecuteRangedKiterTurn` (861)
 
@@ -600,7 +601,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 ### 8.2 Dragons
 
 - 60 generated dragons (10 types × Wyrmling-Adult) plus hell_hound use `DragonAIProfile`. Turn order: cast (≤2 adjacent enemies), breath with positioning, melee (5.2).
-- **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:2027): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The cooldown is set but `TickBreathWeaponCooldown` has no callers, so each creature breathes at most once per spawn (AI-032).
+- **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:2027): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The recharge is rolled on use (`BreathWeaponDefinition.RechargeDice`, for example a dragon's 1d4 rounds, MM p.69; else the fixed `RechargeRounds`; the gorgon's `UsesPerDay` 5) and its rounds pass at the creature's turn start (`CharacterController.TickTurnCooldowns` from `GameManager.BeginCombatantTurn`, batch 12 step 6, D14).
 - **Frightful presence** (`ResolveFrightfulPresence`, 1570; Young Adult and Adult dragons, and the lich's "fear aura"): fires once per combat on the first attack or breath, not on charge; Manhattan-distance range; no "fewer HD than the dragon" filter; HD ≤4 panicked else shaken for 4d6 rounds; raw d20 save (AI-041). Panicked targets then lose their turns (CMB-075). MM (Dragons, Frightful Presence) triggers it on attacks and charges, and a creature that saves is immune for 24 hours.
 - Secondary (metallic) breath: AI-008. Dragon SLAs: CRE-015. Dragon spell-versus-breath choice: AI-037.
 
@@ -626,7 +627,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 
 ### 8.5 Regeneration
 
-`ApplyRegenerationAtTurnStart` heals a fixed amount unless suppressed by the right damage tag or HP ≤ -10. It runs only at PC turn start (before the skip gate) and in the NPC path of `BeginActingTurn` (after it), so an NPC at negative HP never regenerates (CMB-075). MM regeneration (damage becomes nonlethal) is not modelled; troll and others behave as fast healing (CRE-017). No profile reasons about regeneration (own or enemy).
+`ApplyRegenerationAtTurnStart` heals a fixed amount unless suppressed by the right damage tag or HP ≤ -10. It runs at every creature's turn start, before the skip gate (`BeginCombatantTurn`, batch 12 step 6, D3), so a paralyzed or dying troll regenerates too. MM regeneration (damage becomes nonlethal) is not modelled; troll and others behave as fast healing (CRE-017). No profile reasons about regeneration (own or enemy).
 
 ### 8.6 Grapple AI
 
@@ -682,8 +683,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | ID | Issue |
 |---|---|
 | CMB-074 | Confused turns never stand up from prone; the AI never crawls (narrowed 2026-10-07: other NPCs, charmed ones included, now stand up, and nobody moves normally while prone) |
-| CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action, and skipped turns miss regeneration and acid-arrow ticks |
-| AI-032 | Breath weapons, ranged specials and terrain manipulation never recharge (their tick methods have no callers) |
+| CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action (skipped turns get their turn-start effects since batch 12 step 6) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
 | AI-035 | Trip-flagged profiles and null-profile NPCs trip every standing target in reach (one attack step), with no odds check |
 | AI-036 (fixed 2026-10-16) | The Mirror Image priority target overrode all targeting map-wide; removed with the image tokens in batch 11 step 26 |
@@ -752,7 +752,7 @@ AIService may use only public GameManager members (docs/ARCHITECTURE.md conventi
 2. **Action economy:** spend the action yourself (`CommitStandardAction`, `UseFullRoundAction`, `UseMoveAction`); the breath weapon still does not (AI-040).
 3. **Rules plumbing:** resolve AoOs where PHB ch.8 says the action provokes (movement: `ResolveMovementAoOsBeforeStep`; maneuvers: `ResolveManeuverInitiationAoOs`; casting: `ResolveNPCSpellcastProvocation`); route damage through `Stats.ApplyIncomingDamage` with a typed `DamagePacket` (do not copy AI-006 or the breath code); saves through `SavingThrowResolver`; end with `EvaluateCombatEnd` (both sides; CORE-011) when the action can drop a creature.
 4. **Call site:** free actions at the top of `ExecuteNPCTurn` (after the condition gates); standard actions before or after movement in the routines that should use it. Prefer a capability check usable by every routine over adding it to AggressiveMelee only.
-5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, a clear in `CharacterController.ResetForNewCreature` (CRE-046), and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown at the turn start (`CharacterController.TickTurnCooldowns` from `BeginCombatantTurn` once batch 12 step 6 lands; today the NPC branch of `BeginActingTurn`, AI-032).
+5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, a clear in `CharacterController.ResetForNewCreature` (CRE-046), and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown at the turn start (`CharacterController.TickTurnCooldowns`, called from `GameManager.BeginCombatantTurn` for every creature) and roll its recharge with `CharacterController.RollRechargeRounds`.
 6. **Feedback:** `CombatUI?.ShowCombatLog(CombatLogHelper...)`, a `[AI][Tag]` `Debug.Log`, and a `WaitForSeconds`.
 
 Maneuvers go through `ManeuverPreferences` → `GetPreferredManeuver` → `ShouldUseManeuver` → `TryNPCSpecialAttackByTypeForAI`; see DEVELOPMENT_RECIPES "Add a combat maneuver".
@@ -845,7 +845,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 Ordered by how much they distort what the AI experiences:
 
-1. Rules parity on NPC paths: the turn-skip gate versus controllers (CMB-075), stand up in confused turns and crawl (CMB-074), breath and special saves, attack rolls and recharge through the standard pipeline (AI-032, AI-040, AI-006; damage is shared since SPL-004).
+1. Rules parity on NPC paths: the turn-skip gate versus controllers (CMB-075), stand up in confused turns and crawl (CMB-074), breath and special saves and attack rolls through the standard pipeline (AI-040, AI-006; damage is shared since SPL-004, recharge since batch 12 step 6).
 2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons equipped (ITM-004, done 2026-10-08) and a draw or swap action for NPCs; null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (AI-005, AI-049, AI-050); a decision trace log.
 

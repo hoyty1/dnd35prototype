@@ -33,7 +33,7 @@ namespace Tests.Scenarios
         {
             return Scenario.Define(DmgId, "AI-vs-AI soak: the AI-run Quick Start party against a DMG dungeon random encounter (dungeon level 1-3 by seed)")
                 .Tags(SoakStats.Tag)
-                .Covers("DMG p.78 Random Dungeon Encounters", "CORE-011", "CORE-037", "CORE-003", "AI depth baseline")
+                .Covers("DMG p.78 Random Dungeon Encounters", "CORE-011", "CORE-037", "AI depth baseline")
                 .MaxRounds(30)
                 .WallCap(600f)
                 .Pc("fighter", ActorSource.QuickStart("Fighter"), 6, 9)

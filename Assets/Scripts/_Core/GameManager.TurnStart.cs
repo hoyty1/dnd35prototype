@@ -1,109 +1,89 @@
 /// <summary>
-/// GameManager partial class: the start of a combatant's turn (batch 12 step 5, docs/designs/pc_npc_parity_batch12.md;
+/// GameManager partial class: the start of a combatant's turn (batch 12 steps 5-6, docs/designs/pc_npc_parity_batch12.md;
 /// docs/systems/PC_NPC_PARITY.md section 5).
 ///
-/// Two routines hold the rules work of a turn start:
-/// - <see cref="BeginCombatantTurn"/> runs before the turn-skip gate (<c>ShouldSkipTurnDueToHPState</c>): the ongoing
-///   effects of the turn start and the turn-start combat-end check.
-/// - <see cref="BeginActingTurn"/> runs after the gate, only for a creature that acts: the rage tick (PC path),
-///   the per-turn resets (<see cref="CharacterController.StartNewTurn"/>), perception (NPC path) and the Turn Undead
-///   proximity check.
+/// Two routines hold the rules work of a turn start, the same for a PC and an NPC:
+/// - <see cref="BeginCombatantTurn"/> runs once per turn from <c>OnTurnStarted</c>, before the turn routine's turn-skip
+///   gate (<c>ShouldSkipTurnDueToHPState</c>), whether or not the creature can act: the ongoing effects, the cooldowns,
+///   the per-turn resets and the turn-start combat-end check (decision D3).
+/// - <see cref="BeginActingTurn"/> runs after the gate, only for a creature that acts: the Turn Undead proximity check.
 ///
-/// Step 5 is a pure move: each routine still has one branch per turn path, holding exactly what that path ran
-/// before, so the PC and NPC turn starts still differ in order and content (CMB-075, CHR-069, CMB-094, CORE-003,
-/// AI-032). <see cref="TurnStartPath"/> names the caller's path; it never reads <c>IsControllable</c>.
-/// Step 6 (<c>b12-turn-start-raw</c>) merges the branches into one RAW order (decision D3) and removes the parameter.
+/// Barbarian rage passes at the barbarian's initiative count (<c>OnInitiativeCountReached</c>, <see cref="TickRageAtCount"/>),
+/// like bardic music. Only the NPC path checks for unseen creatures at turn start (CMB-094, batch 12 step 8).
 /// <see cref="BeginCombatantTurn"/> never yields: the skip gate advances the turn synchronously (CORE-012).
 /// </summary>
 public partial class GameManager
 {
-    /// <summary>Which turn routine started this turn: <c>StartPCTurn</c> (UI input) or <c>SingleNPCTurnFromInitiative</c>
-    /// (AI choice). Temporary: batch 12 step 6 deletes it with the per-path branches.</summary>
-    public enum TurnStartPath
-    {
-        Pc,
-        Npc
-    }
-
     /// <summary>
-    /// The turn-start work that runs before the turn-skip gate. Returns true when the combat is over, in which case the
-    /// caller returns at once. The scenario trace treats this method as transparent when it names the callers of a
-    /// combat end (ScenarioTrace.CallerFrames), so its check reports the turn routine that called it.
+    /// The turn-start work of every creature, before the turn-skip gate (delegated RAW reading 2026-10-23, decision D3,
+    /// docs/systems/RULES_COVERAGE.md 4.1: MM p.314, regeneration works every
+    /// round; PHB p.138, durations run on the creature's own initiative count; PHB p.142, fighting defensively lasts until
+    /// the creature's next turn). Returns true when the combat is over, in which case <c>OnTurnStarted</c> starts no turn
+    /// routine. Concentration on a skipped turn keeps its own rule (<c>MaintainConcentrationOnSkippedTurn</c>).
     /// </summary>
-    private bool BeginCombatantTurn(CharacterController actor, TurnStartPath path)
+    private bool BeginCombatantTurn(CharacterController actor)
     {
-        if (path == TurnStartPath.Pc)
-        {
-            // PC path (CMB-075: these effects run before the gate here but after it on the NPC path).
-            HandleFlamingSphereTurnStart(actor);
-            ApplyMelfsAcidArrowTurnStartDamage(actor);
-            actor.TickBombardierAcidSprayCooldown();
-            actor.ApplyRegenerationAtTurnStart();
-            CloseInventoryIfOpen(); // UI: only the PC path has an inventory window open
-
-            // Ongoing damage at the start of the turn can drop the last creature of a side.
-            if (EvaluateCombatEnd("StartPCTurn.TurnStartEffects"))
-                return true;
-
-            // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
-            ExpireAidBonusesAtTurnStart(actor);
+        if (actor == null || actor.Stats == null)
             return false;
-        }
 
-        // NPC path: Melf's Acid Arrow, regeneration and the bombardier cooldown run after the gate, in
-        // BeginActingTurn (CMB-075), so this check runs before the Acid Arrow tick (CORE-003).
-        ExpireAidBonusesAtTurnStart(actor);
+        // Ongoing damage and healing at the start of the turn.
         HandleFlamingSphereTurnStart(actor);
+        ApplyMelfsAcidArrowTurnStartDamage(actor);
+        actor.ApplyRegenerationAtTurnStart();
 
-        // Ongoing damage at the start of the turn can drop the last creature of a side.
-        return EvaluateCombatEnd("SingleNPCTurn.TurnStartEffects");
+        // Breath weapon, ranged special and terrain manipulation cooldowns (AI-032), and the once-per-round flags.
+        actor.TickTurnCooldowns();
+        actor.ClearOncePerRoundFlags();
+
+        // Aid Another expiry counters tick before actions; this keeps bonuses available for one full beneficiary turn.
+        ExpireAidBonusesAtTurnStart(actor);
+
+        // The per-turn resets: actions, attacks of opportunity, fighting defensively, a readied counterspell, movement.
+        actor.StartNewTurn();
+
+        // Ongoing damage at the start of the turn can drop the last creature of a side: one check for both sides (CORE-003).
+        return EvaluateCombatEnd("TurnStart");
     }
 
     /// <summary>
-    /// The turn-start rules work that runs after the turn-skip gate, only for a creature that acts this turn.
-    /// The PC path's UI resets (off-hand and dual-wield fields, the attack sequence, the logs) stay in
-    /// <c>StartPCTurn</c>. AIService.ExecuteNPCTurnBody calls the NPC path.
+    /// The turn-start rules work that runs after the turn-skip gate, only for a creature that acts this turn, PC or NPC:
+    /// the Turn Undead tracker prune and proximity check. The PC path's UI resets (off-hand and dual-wield fields, the
+    /// attack sequence, the logs) stay in <c>StartPCTurn</c>.
     /// </summary>
-    public void BeginActingTurn(CharacterController actor, TurnStartPath path)
+    private void BeginActingTurn(CharacterController actor)
     {
         if (actor == null)
             return;
 
-        if (path == TurnStartPath.Pc)
-        {
-            // Barbarian rage passes on the PC path only, and only on a turn the PC acts (CHR-069).
-            if (actor.Stats.IsBarbarian && actor.Stats.IsRaging)
-            {
-                actor.Stats.TickRage();
-                if (!actor.Stats.IsRaging)
-                {
-                    CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"😫 {actor.Stats.CharacterName}'s rage has ended! Now fatigued."));
-                    UpdateAllStatsUI();
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{actor.Stats.CharacterName}: Rage - {actor.Stats.RageRoundsRemaining} rounds remaining"));
-                }
-            }
-
-            // Bardic music rounds pass at the bard's initiative count for PCs and NPCs alike (OnInitiativeCountReached, CHR-069).
-
-            actor.StartNewTurn();
-
-            PruneTurnUndeadTrackers();
-            CheckTurnUndeadProximityBreakingForCleric(actor);
-            return;
-        }
-
-        // NPC path. ConditionService.OnTurnStart already ran in OnTurnStarted, before the turn-skip check (CMB-006).
-        // These three ticks run before the gate on the PC path (CMB-075).
-        ApplyMelfsAcidArrowTurnStartDamage(actor);
-        actor.TickBombardierAcidSprayCooldown();
-        actor.ApplyRegenerationAtTurnStart();
-        actor.StartNewTurn();
-        // Only the NPC path checks for unseen creatures at turn start (CMB-094).
-        ProcessNPCRoundStartPerception(actor);
         PruneTurnUndeadTrackers();
         CheckTurnUndeadProximityBreakingForCleric(actor);
+    }
+
+    /// <summary>
+    /// A round of a raging barbarian's rage passes at its initiative count, PC or NPC, whether or not it can act (PHB p.25,
+    /// rage lasts a number of rounds; decision D3; CHR-069). Called from <c>OnInitiativeCountReached</c>.
+    /// </summary>
+    private void TickRageAtCount(CharacterController count)
+    {
+        if (count == null || count.Stats == null || !count.Stats.IsBarbarian || !count.Stats.IsRaging)
+            return;
+
+        count.Stats.TickRage();
+        LogRageTick(count);
+    }
+
+    /// <summary>The combat log line of a rage tick: the rounds left, or the end of the rage and the fatigue.</summary>
+    private void LogRageTick(CharacterController barbarian)
+    {
+        CharacterStats s = barbarian.Stats;
+        if (!s.IsRaging)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"😫 {s.CharacterName}'s rage has ended! Now fatigued."));
+            UpdateAllStatsUI();
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{s.CharacterName}: Rage - {s.RageRoundsRemaining} rounds remaining"));
+        }
     }
 }

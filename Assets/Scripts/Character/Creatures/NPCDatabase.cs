@@ -308,12 +308,18 @@ public class BreathWeaponDefinition
         get => SaveType == SavingThrowType.Reflex;
         set => SaveType = value ? SavingThrowType.Reflex : SavingThrowType.Fortitude;
     }
-    public int RechargeRounds = 3;      // min rounds between uses (1d4 = avg 2-3)
     /// <summary>
-    /// The MM's recharge dice ("1d4" rounds), or null for the fixed <see cref="RechargeRounds"/>. Data only until
-    /// batch 12 step 6 rolls it (CRE-073, D14).
+    /// The fixed rounds before the breath can be used again ("once every 10 rounds", MM p.25), used when
+    /// <see cref="RechargeDice"/> is null. Its rounds pass at the creature's turn start (CharacterController.TickTurnCooldowns).
+    /// </summary>
+    public int RechargeRounds = 3;
+    /// <summary>
+    /// The MM's recharge dice ("1d4" rounds, MM p.69), rolled on each use by CharacterController.UseBreathWeapon, or null
+    /// for the fixed <see cref="RechargeRounds"/> (CRE-073, D14).
     /// </summary>
     public string RechargeDice;
+    /// <summary>The most uses per day (the gorgon's "no more than five times per day", MM p.138), or 0 for no daily limit.</summary>
+    public int UsesPerDay;
     /// <summary>
     /// Usable at most once per round instead of on a recharge (the bombardier beetle's acid spray, MM p.285). Such a use
     /// is the creature's own routine (TryNPCUseBombardierAcidSpray), never the generic breath executor.
@@ -433,6 +439,8 @@ public class RangedSpecialAttackDefinition
     public int SaveDC;                       // 0 = no save, otherwise Reflex or Will
     public bool IsSaveReflex = true;         // true = Reflex, false = Will
     public int CooldownRounds = 0;           // 0 = at-will, X = must wait X rounds between uses
+    /// <summary>Recharge dice ("1d4" rounds) rolled on each use instead of the fixed <see cref="CooldownRounds"/>, or null (CRE-073).</summary>
+    public string RechargeDice;
     /// <summary>
     /// If true, this attack is a FREE ACTION and fires every round at the start of turn
     /// without consuming any action economy. The creature can still take standard/move/full actions.

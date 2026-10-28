@@ -277,7 +277,7 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Acid,
                 SaveDC = 14,
                 IsReflexSave = true,
-                RechargeRounds = 999 // Once every 6 hours — effectively once per combat
+                RechargeRounds = 3600 // MM p.15: once every 6 hours (3,600 rounds), so once per fight
             },
             DamageResistances = new List<DamageResistanceEntry>(),
             CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "Darkvision60", "MM35" },

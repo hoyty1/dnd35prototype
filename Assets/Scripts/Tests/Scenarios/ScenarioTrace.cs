@@ -819,12 +819,8 @@ namespace Tests.Scenarios
                 string name = m.Name;
                 if (name == "set_CurrentPhase")
                     continue;
-                // The turn-start routine is transparent: its combat-end check reports the turn routine that called it
-                // (StartPCTurn, SingleNPCTurnFromInitiative), as before batch 12 step 5 moved the check into it.
-                // Matched by name (TST-006): renaming the method changes the hashes of the jobs that end at turn start.
-                // Batch 12 step 6 moves the only call into OnTurnStarted and decides whether to keep this skip.
-                if (name == "BeginCombatantTurn")
-                    continue;
+                // A combat that ends at the turn-start check reports BeginCombatantTurn (called from OnTurnStarted for
+                // every creature since batch 12 step 6), no longer StartPCTurn or SingleNPCTurnFromInitiative.
                 if (t != owner)
                 {
                     // <SingleNPCTurnFromInitiative>d__12.MoveNext -> SingleNPCTurnFromInitiative

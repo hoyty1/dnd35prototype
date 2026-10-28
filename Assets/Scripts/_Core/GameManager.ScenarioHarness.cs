@@ -208,7 +208,7 @@ public partial class GameManager
     /// on GameManager and TurnService is stopped first, so an NPC turn in progress cannot reach
     /// NextInitiativeTurn after the halt; the harness must therefore run on its own MonoBehaviour.
     /// EndTurn is a no-op afterwards, so a running skip chain unwinds (CORE-012). StartPCTurn can still
-    /// set the phase again in the same frame (CORE-003), so callers re-check the phase on the next frame.
+    /// set the phase again in the same frame, so callers re-check the phase on the next frame.
     /// Follow a halt with <see cref="Harness_ResetWorld"/> before reading results, and ignore events
     /// that arrive after the halt.
     /// </summary>

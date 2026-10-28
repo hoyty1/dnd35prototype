@@ -4282,33 +4282,16 @@ public partial class GameManager
         // The arrow's 2d4 with its cast's metamagic (SpellDiceRules; batch 11 step 19, SPL-038). The dice keep their old label.
         int rolledDamage = SpellDiceRules.Roll(SpellDice.Of(diceCount, diceSides), effectData.Metamagic, "Spectral Hand damage die");
 
-        var packet = new DamagePacket
-        {
-            RawDamage = rolledDamage,
-            Types = new HashSet<DamageType> { DamageType.Acid },
-            AttackTags = DamageBypassTag.None,
-            IsRanged = true,
-            IsNonlethal = false,
-            Source = AttackSource.Spell,
-            SourceName = "Melf's Acid Arrow (Lingering)"
-        };
-
-        DamageResolutionResult mitigation = character.Stats.ApplyIncomingDamage(rolledDamage, packet);
+        // Acid spell damage through the shared damage path: mitigation, then the concentration check and the death handling
+        // (DealDamage, AfterDamageTaken; SPL-200, SPL-004). The packet keeps the old flags (ranged, no bypass tags).
+        DamageResolutionResult mitigation = DealDamage(character, rolledDamage,
+            DamagePackets.Spell("Melf's Acid Arrow (Lingering)", DamageType.Acid, isRanged: true));
         int damageDealt = mitigation.FinalDamage;
 
         int roundsLeft = Mathf.Max(0, effectData.RemainingDamageRounds - 1);
         character.UpdateMelfsAcidArrowDuration(roundsLeft);
 
-        if (damageDealt > 0)
-            CheckConcentrationOnDamage(character, damageDealt);
-
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"Acid continues to burn for {damageDealt} damage ({roundsLeft} rounds left)"));
-
-        if (character.Stats.IsDead)
-        {
-            character.OnDeath();
-            HandleSummonDeathCleanup(character);
-        }
 
         if (roundsLeft <= 0)
         {

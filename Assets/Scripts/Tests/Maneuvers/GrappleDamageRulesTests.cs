@@ -670,7 +670,8 @@ public static class GrappleDamageRulesTests
         SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
         Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the could-not-act test");
 
-        // A turn skipped because the pinner cannot act never calls StartNewTurn; only its turn end runs.
+        // The could-not-act branch: the pinner cannot act and its turn end runs without a new turn count
+        // (a pinner stunned during the turn; since batch 12 step 6 a skipped turn does run StartNewTurn).
         attacker.ApplyCondition(CombatConditionType.Stunned, 2, "CMB-120 test");
         Assert(!attacker.CanTakeActions(), "CMB-120: the stunned pinner cannot act (precondition)");
         attacker.ProcessPinnedDurationAtTurnEnd();

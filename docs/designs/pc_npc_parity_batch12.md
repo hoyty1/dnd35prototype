@@ -506,6 +506,15 @@ Tests (new scenarios):
 
 TEST BUDGET: step 5's set, `rules/dragon-ai-breath-*`, `rules/bombardier-*` and the new scenarios (seeds 1-3); MelfsAcidArrowRulesTests, TurnDurationRulesTests, CombatEndRulesTests, NpcSlotReuseTests; `smoke/*` seeds 1-3.
 
+As built (2026-10-28):
+- `GameManager.TurnStartPath` is gone. `BeginCombatantTurn(actor)` runs the D3 order from `OnTurnStarted` and checks `EvaluateCombatEnd("TurnStart")`; `BeginActingTurn(actor)` keeps only the Turn Undead prune and proximity check. Perception stays on the NPC path, called by `SingleNPCTurnFromInitiative` just before `BeginActingTurn` (CMB-094, step 8), so no `IsControllable` read is added. `CloseInventoryIfOpen` stays in `StartPCTurn`, which now runs it after the turn-start check instead of before.
+- The once-per-round flag reset is `CharacterController.ClearOncePerRoundFlags` (the renamed `TickBombardierAcidSprayCooldown`); `TickTurnCooldowns` ticks the breath, ranged-special and terrain counters.
+- The recharge dice are rolled with `DiceService.RollMultiple` (an NdS roll like `DiceRoller.Roll`, but with a context string, so a scenario can force them; context "<name> breath weapon recharge"), parsed by `DiceExpression`, in `CharacterController.RollRechargeRounds`. `RangedSpecialAttackDefinition.RechargeDice` was added for symmetry; no entry uses it.
+- Audit (D14): dragons, chimera, digester 1d4; hell hound 2d4; gorgon 1d4 with `UsesPerDay` 5 (`BreathWeaponDefinition.UsesPerDay`, copied by its `MemberwiseClone`; the per-creature count is cleared by `ConfigureBreathWeapon`, so by slot reuse); behir a fixed 10; ankheg a fixed 3,600 (6 hours). The metallic secondary breath now shares the primary's recharge and no longer spends a daily count (MM p.69). Two MM details found on the way are filed as CRE-074 (the ankheg's acid supply, the digester's stream).
+- The scenario trace no longer skips `BeginCombatantTurn`, so a combat that ends at the turn-start check reports it in `by`. Only the 12 `combat-end-petrified-*` and `-tie-*` jobs (an Idle hero, the NPC path, out at its turn start) moved: the check now runs before `SingleNPCTurnFromInitiative` sets the phase, so their traces lose a `PCTurn -> NPCTurn` phase event. The other 96 budget jobs of step 5's set kept their hashes.
+- The `AIService` HP gate and the `BeginActingTurn` call in `ExecuteNPCTurnBody` are gone. The CORE-003 waiver is deleted (`KnownIssueWaivers.Global` is empty); no run of the budget hit a phase change after CombatOver.
+- New scenarios in `Catalog/TurnStartScenarios.cs`. The Ui rage scenario paralyzes the barbarian for its round-2 turn, so it also shows rage passing on a turn the barbarian cannot use.
+
 ### 7. Skip a turn only when no action is possible, and run compulsions for everyone (`b12-skip-gate-compulsions`)
 
 IDs: CMB-075 (the skip gate), CMB-100 (the base); D4. Behaviour change; *broad*.

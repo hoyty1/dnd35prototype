@@ -787,7 +787,7 @@ namespace Tests.Scenarios
                 WriteStatus(false);
             }
 
-            // Halt, and halt again next frame: StartPCTurn or a started NPC coroutine can still change the phase (CORE-003).
+            // Halt, and halt again next frame: StartPCTurn or a started NPC coroutine can still change the phase.
             if (job.Started)
             {
                 job.Halting = true;

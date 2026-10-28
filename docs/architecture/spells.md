@@ -231,11 +231,9 @@ TurnService.OnNewRound -> GameManager.OnNewRound (_Core/GameManager.cs)
   TickSummonDurations
   TickEmanations -> EffectService.TickEmanations
   TickActiveGreaseEffects -> WindEffectManager, AreaEffectManager.OnCombatRoundStart, greased objects
-Turn start: StartPCTurn -> BeginCombatantTurn (TurnStart.cs) -> HandleFlamingSphereTurnStart,
-                                                                 ApplyMelfsAcidArrowTurnStartDamage
-            SingleNPCTurnFromInitiative (NPCTurns.cs) -> BeginCombatantTurn -> HandleFlamingSphereTurnStart
-            AIService.ExecuteNPCTurnBody -> BeginActingTurn (NPC path) -> ApplyMelfsAcidArrowTurnStartDamage
-            OnTurnStarted -> TickDomainPowerDurations
+Turn start: OnTurnStarted -> TickDomainPowerDurations
+            OnTurnStarted -> BeginCombatantTurn (TurnStart.cs, every creature, before the skip gate)
+                          -> HandleFlamingSphereTurnStart, ApplyMelfsAcidArrowTurnStartDamage (DealDamage)
 ```
 
 **Side-state cleanup lists.** Many spells keep state outside `StatusEffectManager`: `CharacterStats` flags and counters (Death Ward, Divine Power, Silence, Prayer, Death Knell, Align Weapon, Spiritual Weapon) or `CharacterController` `*EffectData` objects (Haste, Slow, Invisibility, Glitterdust, Stoneskin, Protection from Arrows, Dimensional Anchor, Disguise Self and others). Each removal route keeps its own list of spells. A spell missing from one list leaks state on that route; for example, a dispelled Dimensional Anchor stays in force until combat ends. When you add a spell with side state, update every row:

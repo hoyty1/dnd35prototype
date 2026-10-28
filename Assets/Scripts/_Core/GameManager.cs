@@ -3631,6 +3631,11 @@ public partial class GameManager : MonoBehaviour
         // Tick domain power durations at start of turn
         TickDomainPowerDurations(character);
 
+        // Every creature's turn-start effects, cooldowns and per-turn resets, before either turn routine's skip gate, and
+        // the one turn-start combat-end check (GameManager.TurnStart.cs; decision D3, CMB-075, CORE-003).
+        if (BeginCombatantTurn(character))
+            return;
+
         if (IsPC(character))
         {
             Debug.Log($"[CombatPhase] Entering player turn for {characterName}");
@@ -3697,6 +3702,8 @@ public partial class GameManager : MonoBehaviour
         PruneTurnUndeadTrackers();
         // A round of the bard's performance passes at his count, PC or NPC, dead or alive (BardicMusicRules, CHR-069).
         TickBardicMusicAtCount(count);
+        // A round of rage passes at the barbarian's count, PC or NPC, acting or not (PHB p.25, decision D3, CHR-069).
+        TickRageAtCount(count);
         // A caster's new turn owes a new concentration on its maintained spell (ConcentrationRules, SPL-153).
         TickSpellConcentrationAtCount(count);
     }
@@ -3859,7 +3866,7 @@ public partial class GameManager : MonoBehaviour
         // Threat map may have changed (NPC moved, character died, etc.)
         InvalidatePreviewThreats();
 
-        // No next turn once the combat is over: an NPC turn would set the phase again (CORE-003).
+        // No next turn once the combat is over: an NPC turn would set the phase again.
         if (combatOver)
         {
             UpdateInitiativeUI();
@@ -3879,10 +3886,9 @@ public partial class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
-        // ConditionService.OnTurnStart already ran in OnTurnStarted (CMB-006). The turn-start effects, the combat-end
-        // check and Aid Another expiry (GameManager.TurnStart.cs).
-        if (BeginCombatantTurn(pc, TurnStartPath.Pc))
-            return;
+        // ConditionService.OnTurnStart and the turn-start effects, resets and combat-end check (BeginCombatantTurn,
+        // GameManager.TurnStart.cs) already ran in OnTurnStarted (CMB-006, D3).
+        CloseInventoryIfOpen(); // UI: only the PC path has an inventory window open
 
         // If this PC is unconscious/dead, skip their actions.
         if (ShouldSkipTurnDueToHPState(pc))
@@ -3930,14 +3936,13 @@ public partial class GameManager : MonoBehaviour
         if (pc.IsGrappling())
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", "You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions)."));
 
-        // UI flow reset. Until batch 12 step 5 it ran between the rage tick and StartNewTurn; neither reads its fields,
-        // and its combat-end safety check finds the same sides either way (ending a rage lowers max hp and clamps current hp
-        // to it, so the HP state only changes if max hp drops to 0 or below). Step 6 moves the rage tick out of BeginActingTurn.
+        // UI flow reset. StartNewTurn already ran in BeginCombatantTurn; this touches only the UI attack-flow fields, and its
+        // combat-end safety check finds the sides BeginCombatantTurn's check just found.
         EndAttackSequence();
         EndThrownAttackSequence();
 
-        // The rage tick, the per-turn resets and the Turn Undead proximity check (GameManager.TurnStart.cs).
-        BeginActingTurn(pc, TurnStartPath.Pc);
+        // The Turn Undead proximity check (GameManager.TurnStart.cs).
+        BeginActingTurn(pc);
 
         _loggedHeldChargeNoActionsReminder = false;
 

@@ -868,7 +868,8 @@ public static partial class NPCDatabase
                 DamageType = DamageType.Force, // Closest type for petrification
                 SaveDC = 19,
                 IsReflexSave = false, // Fort save
-                RechargeRounds = 4
+                RechargeDice = "1d4", // MM p.138: once every 1d4 rounds,
+                UsesPerDay = 5        // but no more than five times per day
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

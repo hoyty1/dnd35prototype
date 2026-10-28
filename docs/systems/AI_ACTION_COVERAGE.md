@@ -50,7 +50,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Grapple escape | Partial | animals <25% HP only in practice | Yes | CMB-075, AI-029 |
 | Improved Grab | Auto | free on hit, only against a target at least one size smaller unless the entry names a maximum (MM p.310; `CharacterController.CanImprovedGrabTargetBySize`) | Prompt (same size test, no prompt against a target too large) | AI-061 |
 | Constrict, blood drain, swallow whole, trample | Never | text or unread data | n/a | CRE-031, CRE-018 |
-| Breath weapon | Partial | Dragon profile, once per spawn | n/a | AI-032, AI-033, AI-040, AI-008 |
+| Breath weapon | Partial | Dragon profile; recharges per its MM entry (batch 12 step 6) | n/a | AI-033, AI-040, AI-008 |
 | Gaze / aura | Used | `ProcessAuraAbility` | n/a | AI-013, CRE-012, CORE-002 |
 | Frightful presence | Auto | first attack or breath | n/a | AI-041 |
 | Engulf, spittle, bombardier spray | Used | 8.4 | n/a | AI-006, CMB-024 |

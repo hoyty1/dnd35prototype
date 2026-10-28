@@ -34,7 +34,7 @@ public partial class GameManager
     /// </summary>
     private IEnumerator SingleNPCTurnFromInitiative(CharacterController npc)
     {
-        // A combat that ended before this turn began (for example by a tick at the round boundary) stays ended (CORE-003).
+        // A combat that ended before this turn began (for example by a tick at the round boundary) stays ended.
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;
 
@@ -47,9 +47,8 @@ public partial class GameManager
         // Update initiative UI to highlight current NPC
         UpdateInitiativeUI();
 
-        // Aid Another expiry, Flaming Sphere and the combat-end check (GameManager.TurnStart.cs).
-        if (BeginCombatantTurn(npc, TurnStartPath.Npc))
-            yield break;
+        // The turn-start effects, resets and combat-end check (BeginCombatantTurn, GameManager.TurnStart.cs) already ran in
+        // OnTurnStarted, for this NPC as for a PC (D3, CMB-075, CORE-003).
 
         if (ShouldSkipTurnDueToHPState(npc))
         {
@@ -63,6 +62,11 @@ public partial class GameManager
             NextInitiativeTurn();
             yield break;
         }
+
+        // Only the NPC path checks for unseen creatures at turn start (CMB-094, batch 12 step 8).
+        ProcessNPCRoundStartPerception(npc);
+        // The Turn Undead proximity check of a creature that acts (GameManager.TurnStart.cs).
+        BeginActingTurn(npc);
 
         // Determine AI behavior for this NPC
         NPCAIBehavior behavior = GetNPCBehaviorForAI(npc);

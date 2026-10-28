@@ -84,6 +84,8 @@ public class DragonAgeStats
 
     // Secondary breath (metallic only, 0 = not available at this age)
     public int SecondaryBreathSaveDC;
+    // Only marks that the secondary breath exists (> 0). Not a RAW daily limit and not enforced:
+    // MM p.69 gives both breaths one shared 1d4-round recharge (CRE-073, batch 12 step 6).
     public int SecondaryBreathUsesPerDay;
 
     // Damage reduction (Young Adult+)
@@ -168,6 +170,8 @@ public class SecondaryBreathWeaponDefinition
     public int RangeFeet;
     public int SaveDC;
     public bool IsWillSave;            // true = Will save, false = Fort save
+    // UsesPerDay and UsesRemaining are unused since batch 12 step 6: MM p.69 gives no daily limit; both
+    // breaths share the primary breath's 1d4-round recharge (CharacterController.UseSecondaryBreathWeapon, CRE-073).
     public int UsesPerDay = 3;
     public int UsesRemaining;
     public int DurationDice = 6;       // Die size for duration (d6 for most, d4 for Gold weakening gas)

@@ -32,18 +32,18 @@ Check these before changing either axis:
 
 ```
 TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
-  GameManager.OnTurnStarted (_Core/GameManager.cs:3767), non-PC branch
-    StartCoroutine(SingleNPCTurnFromInitiative)            _Core/GameManager.NPCTurns.cs:35
-      BeginCombatantTurn(npc, Npc): Aid Another expiry, Flaming Sphere, combat-end check
-                                                           _Core/GameManager.TurnStart.cs
-      ShouldSkipTurnDueToHPState -> NextInitiativeTurn, stop
-      behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs:10927
-      yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs:48
-        GameManager.BeginActingTurn(npc, Npc): Melf's Acid Arrow damage, bombardier cooldown,
-                           regeneration (ConditionService.OnTurnStart already ran in
-                           GameManager.OnTurnStarted, CMB-006), StartNewTurn,
-                           ProcessRoundStartPerception (Listen checks), Turn Undead proximity
-        !CanTakeTurnActions() -> stop (a disabled NPC acts, PHB p.145)
+  GameManager.OnTurnStarted (_Core/GameManager.cs)
+    ConditionService.OnTurnStart (CMB-006), TurnStartedEvent, domain powers
+    BeginCombatantTurn(actor), every creature (_Core/GameManager.TurnStart.cs; batch 12 step 6, D3):
+                           Flaming Sphere, Melf's Acid Arrow, regeneration, TickTurnCooldowns,
+                           once-per-round flags, Aid Another expiry, StartNewTurn,
+                           combat-end check (ended -> stop)
+    non-PC branch: StartCoroutine(SingleNPCTurnFromInitiative)  _Core/GameManager.NPCTurns.cs:35
+      ShouldSkipTurnDueToHPState -> NextInitiativeTurn, stop (a disabled NPC acts, PHB p.145)
+      ProcessNPCRoundStartPerception (Listen checks; NPC path only, CMB-094)
+      BeginActingTurn(npc): Turn Undead proximity
+      behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs
+      yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs
         Confused / Charmed / Fascinated / Frightened controllers (may end the turn)
         Animate Rope escape attempt
         SelectBestTarget; none -> ExecuteSearchTurnWhenNoTargets (300), reselect, else stop
