@@ -168,12 +168,13 @@ The other conditions do not skip the turn:
 ### D14. Breath weapon recharge (explicit RAW)
 
 **Decision.** Each creature recharges as its MM entry says. Examples to verify while auditing:
-- dragons: 1d4 rounds (MM p.68);
+- dragons: 1d4 rounds (MM p.69);
 - hell hound: 2d4 rounds (MM p.151);
 - chimera: 1d4 rounds;
 - behir: once every 10 rounds;
 - gorgon: 5 times per day;
-- ankheg: once every 6 hours.
+- ankheg: once every 6 hours;
+- digester (acid spray): 1d4 rounds (MM p.59).
 
 Today every entry uses a fixed `RechargeRounds`, and nothing ticks it (AI-032).
 
@@ -303,7 +304,7 @@ New entries:
 - **CMB-174 (Med).**
   - Javelins and darts (Ranged category, `IsThrown`) are never dropped on either side and spend no ammunition, so they can be thrown without limit (evidence above; `RequiresAmmoType` None in CombatFlowService around :1162).
   - RAW: a thrown weapon leaves the hand (PHB p.113, p.158 thrown weapons).
-- **CMB-175 (Med).** No partial charge. Every charge gate requires `HasFullRoundAction` (SupportActions.cs :984, :1086, :1518, :1929), so slowed, disabled, staggered and surprise-round creatures cannot charge on either side. RAW: PHB p.154 (decision D2).
+- **CMB-175 (Med; filed as CMB-108, CMB-175 retired, see "Filed" below).** No partial charge. Every charge gate requires `HasFullRoundAction` (SupportActions.cs :984, :1086, :1518, :1929), so slowed, disabled, staggered and surprise-round creatures cannot charge on either side. RAW: PHB p.154 (decision D2).
 - **SPL-200 (Low).** `ApplyMelfsAcidArrowTurnStartDamage` (GameManager.SpellCasting.cs around :4271-4318) calls `ApplyIncomingDamage`, `CheckConcentrationOnDamage` and the death and summon cleanup by hand instead of `GameManager.DealDamage`. This is a leftover of SPL-004.
 - **CRE-073 (Med).** Breath weapon and ranged-special recharge is a fixed `RechargeRounds` per entry (NPCDatabase.cs:299, the entries in NPCDatabase_A/B/C/D/G/H/Dragons). The MM gives per-creature forms (D14). Verify each against its MM page.
 - **CHR-086 (Low).** `CharacterStats.RollSkillCheck` (around :7145) omits `GetFamiliarSkillModifier`, which `GetSkillBonus` adds (:7087 vs :7177-7187). The Skills dictionary lookup is case-sensitive.
@@ -326,6 +327,12 @@ In `docs/systems/PC_NPC_PARITY.md` section 5, add a one-line pointer under steps
 Commit subject: `File parity findings found mapping batch 12`, with the new IDs listed in the body.
 
 TEST BUDGET: none (docs only). Check the counts and Next IDs add up, and that `git diff --stat` shows only docs/.
+
+**Filed (2026-10-28).** CMB-173, CMB-174, SPL-200, CRE-073 and CHR-086, and the refreshes, with these changes found while re-verifying at HEAD:
+- The partial charge was already filed as CMB-108. CMB-175 was not filed and is retired (the CMB Next ID is CMB-176), so wherever this plan or its queue says CMB-175 it means CMB-108; CMB-108 was raised to Med and refreshed (zombies, MM p.266), and step 21 closes CMB-108. Today a slowed creature still charges at double speed, because Slow sets no single-action limit (CMB-095), and the game has no surprise round.
+- `RollSkillCheck`'s missing familiar bonus was already in CHR-014. It moved to CHR-086 with the case-sensitive skill lookup, and CHR-014 now holds only synergies, Craft and Profession. A step 4 that fixes only the familiar term narrows CHR-086 to the lookup instead of deleting it.
+- CRE-073 also covers the metallic dragons' secondary breath: a daily count instead of sharing the primary breath's 1d4-round recharge (MM p.69; latent, AI-008).
+- The dragon recharge is on MM p.69 (D14 said p.68), and the digester's acid spray (MM p.59) joins the D14 list.
 
 ### 2. Make the acid spray's numbers RAW and give the PC charge flanking (`b12-acid-spray-numbers-charge-flanking`)
 
@@ -416,7 +423,7 @@ IDs: CHR-067 (the fallback part), CHR-086. Behaviour change.
    - A trained-only skill with 0 ranks keeps today's results: -1 from `RollSkillCheck` and 0 from `GetSkillBonus` (PHB p.62-63).
    - Keep `IsSkillBlockedByMindless` and the deafened Listen failure (~:7162).
 3. Both methods compute the total through one private helper that includes `GetFamiliarSkillModifier` (CHR-086).
-4. **Docs.** Narrow CHR-067 to the skill-rank data (MM skills, batch 19 per the batch plan) and delete CHR-086.
+4. **Docs.** Narrow CHR-067 to the skill-rank data (MM skills, batch 19 per the batch plan) Delete CHR-086 only if the lookup is also case-insensitive end to end (for example `Skills` built with `StringComparer.OrdinalIgnoreCase`); otherwise narrow it to the lookup. Leave CHR-014 (synergies, Craft and Profession).
 
 Real NPC readers that change: Listen and Spot (LastKnownPositionTracker.cs ~:307, :323), Balance (GreaseAreaEffect.cs ~:57, SleetStormAreaEffect.cs ~:128), Escape Artist (GrappleSystem.cs ~:1815, CharacterController.cs ~:11215, GameManager.cs ~:10269, BlackTentaclesAreaEffect.cs ~:255), Sense Motive against a feint (CharacterController.cs ~:14738) and Spellcraft (AIService.cs ~:3504).
 
@@ -910,7 +917,7 @@ TEST BUDGET: those, `rules/movement-aoo-*`, `rules/maneuver-*`, `rules/shared-sq
 
 ### 21. One charge core with the partial charge (`b12-charge-core`)
 
-IDs: CMB-018 (the core), CMB-013, CMB-175; D2. Behaviour change.
+IDs: CMB-018 (the core), CMB-013, CMB-108 (planned as CMB-175; see step 1); D2. Behaviour change.
 
 1. **`Combat/Maneuvers/ChargeCore.cs`.**
    - `ChargeRequest { Charger, Target, Path, Partial, BullRush, Overrun }`.
@@ -923,11 +930,11 @@ IDs: CMB-018 (the core), CMB-013, CMB-175; D2. Behaviour change.
      - `ApplyChargePenaltyUntilStartOfNextTurn`.
    - It replaces the bodies of `SupportActions.ExecuteCharge` (~:1499-1781) and `NPCExecuteCharge` (~:1920-2130). Both become thin wrappers: the PC one keeps its UI fields and `AfterAttackDelay`, and the NPC one keeps the 0.8 s wait.
    - `EndChargeBullRushForDroppedCharger` (~:1872) returns its result in `ChargeOutcome` and no longer ends the PC turn while an NPC charges.
-2. **The partial charge (CMB-175).** The charge gates (~:984, ~:1086, ~:1518, ~:1929) call `CanCharge` instead of requiring `HasFullRoundAction`. The PC charge button and the AI charge choice offer the partial charge when it is legal.
+2. **The partial charge (CMB-108).** The charge gates (~:984, ~:1086, ~:1518, ~:1929) call `CanCharge` instead of requiring `HasFullRoundAction`. The PC charge button and the AI charge choice offer the partial charge when it is legal.
 3. **CMB-013.**
    - Spirited Charge passes its multiplier into `WeaponDamageRoll.Roll`. It multiplies the weapon damage per PHB p.134, not `TotalDamage` after extra dice (PHB p.100).
    - Snatch Arrows (CharacterController.cs ~:8171), DemonArmorBehavior.cs ~:98, MaceOfSmitingBehavior.cs ~:77 and MountedCombatSystem.cs ~:188, ~:268 deal damage through `GameManager.DealDamage` packets or the weapon roll.
-4. **Docs.** Delete CMB-018, CMB-013 and CMB-175. Record D2.
+4. **Docs.** Delete CMB-018, CMB-013 and CMB-108. Record D2.
 
 Tests: new scenarios `rules/charge-partial-disabled`, `rules/charge-partial-slowed-ai`, `rules/spirited-charge-dr`, `rules/charge-flanking-ai`. Re-run `rules/haste-natural-pounce-ui`, `rules/pin-release-*-charge`, `rules/improved-grab-size-charge`, `rules/maneuver-bullrush-charge-*` and `rules/charge-flanking-ui`.
 
