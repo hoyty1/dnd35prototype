@@ -228,7 +228,17 @@ public static class NpcSlotReuseTests
             slot.Actions.MoveActionUsed = true;
             slot.CurrentTurnStart.Compulsion = new TurnCompulsion { Turned = true };
             slot.Tags.AddTag("ScenarioOverride:CRE046");
-            slot.gameObject.AddComponent<LastKnownPositionTracker>();
+            LastKnownPositionTracker oldTracker = slot.GetComponent<LastKnownPositionTracker>();
+            Assert(oldTracker != null, "CMB-094: a spawned creature has a LastKnownPositionTracker from Init");
+            if (oldTracker != null)
+            {
+                oldTracker.UpdateLastKnownPosition(partner);
+                oldTracker.Pinpoint(partner);
+                oldTracker.RegisterLastKnownAutoMiss(partner);
+            }
+            Assert(oldTracker != null && oldTracker.HasLastKnownPosition(partner) && oldTracker.IsPinpointedThisRound(partner)
+                    && oldTracker.GetConsecutiveLastKnownAutoMisses(partner) == 1,
+                "CMB-094 control: the old creature tracks its partner's square, has pinpointed it and counts an auto-miss");
             slot.SetAcidSprayUsedThisRound(true);
             slot.MarkFrightfulPresenceTriggered();
             slot.PriorityTargetName = "Someone";
@@ -252,7 +262,8 @@ public static class NpcSlotReuseTests
             Assert(slot.CurrentTurnStart.Compulsion == null, "CRE-046: the old creature's turn-start compulsions are gone (batch 12 step 7)");
             Assert(!slot.Tags.HasTag("ScenarioOverride:CRE046") && TagSet(slot) == TagSet(fresh),
                 "CRE-046: the tags equal a fresh orc warrior's (" + TagSet(slot) + " vs " + TagSet(fresh) + ")");
-            Assert(slot.GetComponent<LastKnownPositionTracker>() == null, "CRE-046: the old creature's AI position tracker is gone");
+            Assert(slot.GetComponents<LastKnownPositionTracker>().Length == 1 && slot.GetComponent<LastKnownPositionTracker>().IsEmpty,
+                "CRE-046, CMB-094: the reused slot keeps one position tracker, cleared of the old creature's squares, pinpoints and auto-miss counts");
             Assert(ComponentSet(slot) == ComponentSet(fresh),
                 "CRE-046: the reused slot has the components of a fresh spawn (" + ComponentSet(slot) + " vs " + ComponentSet(fresh) + ")");
             Assert(slot.PriorityTargetName == null && slot.aiProfile != null && fresh.aiProfile != null && slot.aiProfile.GetType() == fresh.aiProfile.GetType(),
@@ -332,7 +343,10 @@ public static class NpcSlotReuseTests
             gm.NPCs.Add(observer);
             listed = true;
 
-            LastKnownPositionTracker tracker = observer.gameObject.AddComponent<LastKnownPositionTracker>();
+            LastKnownPositionTracker tracker = observer.GetComponent<LastKnownPositionTracker>();
+            Assert(tracker != null, "CMB-094: the observer has a LastKnownPositionTracker from Init");
+            if (tracker == null)
+                return;
             tracker.UpdateLastKnownPosition(slot);
             Assert(tracker.HasLastKnownPosition(slot), "CRE-046 control: the observer remembers the creature's square");
 
@@ -411,7 +425,11 @@ public static class NpcSlotReuseTests
             pc.SetRapidShot(true);
             pc.HasMovedThisTurn = true;
             pc.Tags.AddTag("ScenarioOverride:CRE046Party");
-            pc.gameObject.AddComponent<LastKnownPositionTracker>();
+            LastKnownPositionTracker pcTracker = pc.GetComponent<LastKnownPositionTracker>();
+            Assert(pcTracker != null, "CMB-094: a party character has a LastKnownPositionTracker from Init, as an NPC does");
+            if (pcTracker != null)
+                pcTracker.Pinpoint(partner);
+            Assert(pcTracker != null && pcTracker.IsPinpointedThisRound(partner), "CMB-094 control: the old party character has pinpointed its partner");
             MethodInfo feint = typeof(CharacterController).GetMethod("RegisterSuccessfulFeint", BindingFlags.Instance | BindingFlags.NonPublic);
             if (feint != null)
                 feint.Invoke(pc, new object[] { partner });
@@ -425,7 +443,8 @@ public static class NpcSlotReuseTests
                 "CRE-046: the new party character starts without the old one's Power Attack, Fighting Defensively and Rapid Shot");
             Assert(!pc.HasMovedThisTurn, "CRE-046: the new party character's turn state starts fresh");
             Assert(!pc.Tags.HasTag("ScenarioOverride:CRE046Party"), "CRE-046: the old party character's tag is gone");
-            Assert(pc.GetComponent<LastKnownPositionTracker>() == null, "CRE-046: the old party character's AI position tracker is gone");
+            Assert(pc.GetComponents<LastKnownPositionTracker>().Length == 1 && pc.GetComponent<LastKnownPositionTracker>().IsEmpty,
+                "CRE-046, CMB-094: the party slot keeps one position tracker, cleared of the old character's squares");
             Assert(FeintWindowCount(pc) == 0, "CRE-046: the old party character's feint window is gone");
             Assert(pc.StatusEffectManager != null && pc.StatusEffectManager.ActiveEffects.Count == 0 && pc.Stats.STR == 16,
                 "CRE-046: no spell effect of the old party character remains (STR 16, no Bull's Strength)");

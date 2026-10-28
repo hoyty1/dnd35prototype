@@ -1184,9 +1184,7 @@ public class AIService : MonoBehaviour
             yield break;
 
         bool preferRangedVisibility = npc.IsEquippedWeaponRanged();
-        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
-        if (tracker == null)
-            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+        LastKnownPositionTracker tracker = LastKnownPositionTracker.Ensure(npc);
 
         if (npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
         {
@@ -1195,9 +1193,8 @@ public class AIService : MonoBehaviour
 
         if (!npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
         {
-            var concealedSingleTarget = new List<CharacterController> { closestPC };
-            tracker.AttemptListenChecks(concealedSingleTarget, _gameManager);
-
+            // The turn-start check (PerceptionRules.ProcessTurnStart) made this turn's one Listen check; read its result
+            // (DMG p.295: one check per round; AI-007).
             Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
             if (tracker.IsPinpointedThisRound(closestPC))
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position."));
@@ -1832,9 +1829,7 @@ public class AIService : MonoBehaviour
         if (npc == null || allCombatants == null)
             return null;
 
-        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
-        if (tracker == null)
-            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+        LastKnownPositionTracker tracker = LastKnownPositionTracker.Ensure(npc);
 
         var visibleTargets = new List<CharacterController>();
         var concealedTrackedTargets = new List<CharacterController>();
@@ -1883,8 +1878,8 @@ public class AIService : MonoBehaviour
 
         if (concealedTrackedTargets.Count > 0)
         {
-            tracker.AttemptListenChecks(concealedTrackedTargets, _gameManager);
-
+            // The pinpoints of this turn's one Listen check, made at turn start for every creature
+            // (PerceptionRules.ProcessTurnStart, DMG p.295; AI-007): target choice reads them and rolls nothing.
             var pinpointedTargets = new List<CharacterController>();
             for (int i = 0; i < concealedTrackedTargets.Count; i++)
             {
@@ -3760,52 +3755,6 @@ public class AIService : MonoBehaviour
         }
 
         return nearest;
-    }
-
-    /// <summary>
-    /// Processes NPC round-start perception: identifies visible enemies and attempts listen checks
-    /// for concealed targets tracked by the LastKnownPositionTracker.
-    /// D&D 3.5e: NPCs must attempt Listen checks to detect concealed enemies each round.
-    /// </summary>
-    /// <param name="npc">The NPC whose perception is being processed.</param>
-    /// <param name="allCharacters">All characters in combat.</param>
-    /// <param name="logCallback">Optional callback for combat log messages.</param>
-    public void ProcessRoundStartPerception(CharacterController npc, List<CharacterController> allCharacters, System.Action<string> logCallback = null)
-    {
-        if (npc == null || npc.Stats == null || npc.Stats.IsDead)
-            return;
-
-        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
-        if (tracker == null)
-            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
-
-        var visibleEnemies = new List<CharacterController>();
-        var concealedTrackedEnemies = new List<CharacterController>();
-
-        bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
-
-        for (int i = 0; i < allCharacters.Count; i++)
-        {
-            CharacterController enemy = allCharacters[i];
-            if (enemy == null || enemy == npc || enemy.Stats == null || enemy.Stats.IsDead)
-                continue;
-            if (!TeamUtility.IsEnemy(npc, enemy))
-                continue;
-
-            if (npc.CanSee(enemy, incomingIsRangedAttack))
-                visibleEnemies.Add(enemy);
-            else if (tracker.HasLastKnownPosition(enemy))
-                concealedTrackedEnemies.Add(enemy);
-        }
-
-        tracker.UpdateVisibleCharacters(visibleEnemies);
-
-        if (concealedTrackedEnemies.Count > 0)
-        {
-            string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
-            logCallback?.Invoke($"{npcName} attempts to locate concealed targets:");
-            tracker.AttemptListenChecks(concealedTrackedEnemies, _gameManager);
-        }
     }
 
     /// <summary>

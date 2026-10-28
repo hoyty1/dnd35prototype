@@ -9,16 +9,17 @@ using UnityEngine;
 /// - <see cref="BeginCombatantTurn"/> runs once per turn from <c>OnTurnStarted</c>, before the turn routine's turn-skip
 ///   gate (<c>ShouldSkipTurnDueToHPState</c>), whether or not the creature can act: the ongoing effects, the cooldowns,
 ///   the per-turn resets and the turn-start combat-end check (decision D3).
-/// - <see cref="BeginActingTurn"/> runs after the gate, only for a creature that acts: the Turn Undead proximity check and
-///   the compulsion pass (<see cref="TryRunCompulsionTurn"/>, batch 12 step 7), which stores the turn's compulsions on
+/// - <see cref="BeginActingTurn"/> runs after the gate, only for a creature that acts: the perception check
+///   (<see cref="PerceptionRules.ProcessTurnStart"/>, batch 12 step 8), the Turn Undead proximity check and the
+///   compulsion pass (<see cref="TryRunCompulsionTurn"/>, batch 12 step 7), which stores the turn's compulsions on
 ///   <c>CurrentTurnStart</c> for both sides and starts a PC's forced turn.
 ///
 /// The gate itself is <see cref="ConditionRules.DeniesAllActions(CharacterController)"/> (decision D4): only a creature
 /// that can take no action at all loses its turn.
 ///
 /// Barbarian rage passes at the barbarian's initiative count (<c>OnInitiativeCountReached</c>, <see cref="TickRageAtCount"/>),
-/// like bardic music. Only the NPC path checks for unseen creatures at turn start (CMB-094, batch 12 step 8).
-/// <see cref="BeginCombatantTurn"/> never yields: the skip gate advances the turn synchronously (CORE-012).
+/// like bardic music. <see cref="BeginCombatantTurn"/> never yields: the skip gate advances the turn synchronously
+/// (CORE-012).
 /// </summary>
 public partial class GameManager
 {
@@ -61,7 +62,9 @@ public partial class GameManager
 
     /// <summary>
     /// The turn-start rules work that runs after the turn-skip gate, only for a creature that acts this turn, PC or NPC:
-    /// the Turn Undead tracker prune and proximity check, then the compulsion pass (<see cref="TryRunCompulsionTurn"/>).
+    /// the perception check (<see cref="PerceptionRules.ProcessTurnStart"/>: the squares of the enemies it sees, then one
+    /// Listen check to pinpoint the unseen ones it tracks, DMG p.295; CMB-094, batch 12 step 8), the Turn Undead tracker
+    /// prune and proximity check, then the compulsion pass (<see cref="TryRunCompulsionTurn"/>).
     /// Returns true when a compulsion took a PC's turn over as a forced turn. The PC path calls it once the turn's phase
     /// and sub-phase are set; its UI resets (off-hand and dual-wield fields, the attack sequence, the logs) stay in
     /// <c>StartPCTurn</c>.
@@ -71,6 +74,7 @@ public partial class GameManager
         if (actor == null)
             return false;
 
+        PerceptionRules.ProcessTurnStart(actor, GetAllCharacters(), msg => CombatUI?.ShowCombatLog(msg), this);
         PruneTurnUndeadTrackers();
         CheckTurnUndeadProximityBreakingForCleric(actor);
         return TryRunCompulsionTurn(actor);

@@ -97,7 +97,7 @@ What does exist is 19 profile classes:
   - `AISpellcastingStrategist.GetSaveExploitScore` (544) and its SR and resistance reads.
 - **The player is also omniscient.** `CharacterInfoPanel.UpdateCharacterStats` (145-240) shows exact HP, the AC breakdown, BAB and six ability scores. The hover tooltip shows SR and immunities. The combat log prints "vs AC N" and "HP before -> after".
 - **Partial, mostly dead knowledge pieces.**
-  - `LastKnownPositionTracker` stores positions only and rolls Listen against a flat DC 20 on every call (AI-007). A duplicate store sits at `CharacterController.cs:546` (AI-021).
+  - `LastKnownPositionTracker` stores positions only and rolls Listen against a flat DC 20, once per turn at turn start since batch 12 step 8 (CMB-182). A duplicate store sits at `CharacterController.cs:546` (AI-021).
   - The strategist's learning memory has writers with no callers (AI-011).
   - `RollSpellcraftIdentification` (`CharacterController.cs:12416`) exists and is used only for counterspelling.
   - Events such as `AttackResolvedEvent`, `SpellCastEvent` and `DamageTakenEvent` are declared but never published.
@@ -416,7 +416,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-004** | Brute (29 definitions) and Caster get a null Role. |
 | | **AI-017** | `OnEnable` overwrites tuning, and summon and spawn-override instances leak (a reused slot's old instance is destroyed since 2026-10-08, CRE-046). Apply params after `OnEnable`, and destroy the remaining instances. |
 | | **AI-018** | `CombatUI` null dereference at `AIService.cs:59-60`. The static-suite runner and its curated baseline exist since 2026-10-07 (TST-002 closed), but without the AI-018 fix the turn tests below cannot run headless. The Play-mode scenario harness (docs/TESTING.md 3.4, 2026-10-07) can run them in the real scene instead. |
-| | **AI-005 / AI-007** | `SelectBestTarget` re-rolls Sanctuary and Listen on every call, so cached decisions would still flip within a turn. |
+| | **AI-005** | `SelectBestTarget` re-rolls Sanctuary on every call, so cached decisions would still flip within a turn (the Listen re-roll, AI-007, was fixed in batch 12 step 8). |
 | | **AI-021** | Two position stores. The tag and store leak across encounters on reused slots was fixed on 2026-10-08 (CRE-046: `CharacterController.ResetForNewCreature`). |
 | Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |
 | | **AI-047** | The healer never moves to touch (the shaman example). |
@@ -463,7 +463,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 - **Build:**
   - `KnowledgeService`, `SideKnowledgeStore`, `VisualFactExtractor` and `ConditionVisibility`.
   - `PerceivedKnowledgeProvider` with tier filtering and `EncounterEntityId` keys.
-  - Sighting in `ProcessRoundStartPerception` (`AIService.cs:2934`) and at the start of each PC turn.
+  - Sighting in `PerceptionRules.ProcessTurnStart`, which runs at the start of every acting creature's turn, PC or NPC, since batch 12 step 8.
   - Publish `AttackResolvedEvent` and `SpellCastEvent`, which give AC bounds and caster or role facts.
   - Port base `ScoreTarget`, `GetTargetPriority`, `CalculateThreat`, Humanoid, Berserk, Grappler, Ranged and Animal to the view.
   - Information Mode (default Omniscient), the wound-band setting, party UI and log redaction in Rules mode, and the Enemy-view overlay.

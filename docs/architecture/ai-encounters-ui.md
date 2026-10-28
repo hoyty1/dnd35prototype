@@ -41,8 +41,8 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
     non-PC branch: StartCoroutine(SingleNPCTurnFromInitiative)  _Core/GameManager.NPCTurns.cs:35
       ShouldSkipTurnDueToHPState (ConditionRules.DeniesAllActions, D4) -> NextInitiativeTurn, stop
                            (a disabled NPC acts, PHB p.145; nauseated, pinned, panicked, turned act)
-      ProcessNPCRoundStartPerception (Listen checks; NPC path only, CMB-094)
-      BeginActingTurn(npc): Turn Undead proximity, compulsion pass (TryRunCompulsionTurn ->
+      BeginActingTurn(npc): perception (PerceptionRules.ProcessTurnStart, every actor, batch 12
+                           step 8), Turn Undead proximity, compulsion pass (TryRunCompulsionTurn ->
                            npc.CurrentTurnStart.Compulsion; batch 12 step 7)
       behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs
       yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs
@@ -133,10 +133,11 @@ AIService.TryExecuteSpellcastAction              requires a standard action and 
 
 ## NPC AI: perception
 
-- `LastKnownPositionTracker` (AI/LastKnownPositionTracker.cs) is a MonoBehaviour that AIService adds to an NPC on first use (AIService.cs:855, 1487, 2941). It stores last-known enemy squares, runs Listen DC 20 checks (`AttemptListenChecks`, 132) to pinpoint concealed targets, and runs a Spot-vs-Hide check for See Invisibility.
+- `LastKnownPositionTracker` (AI/LastKnownPositionTracker.cs) is a MonoBehaviour every combatant, PC or NPC, gets in `CharacterController.Init` (batch 12 step 8, CMB-094; `LastKnownPositionTracker.Ensure` is the null-safe fallback the AI calls). A reused slot keeps it and `ResetForNewCreature` clears it. It stores last-known enemy squares, runs Listen DC 20 checks (`AttemptListenChecks`) to pinpoint concealed targets (the DMG p.295 DC table is CMB-182; a deafened creature fails automatically, PHB p.307), and runs a Spot-vs-Hide check for See Invisibility. A pinpoint (`Pinpoint`) records the square, makes it the last-known square and lapses once the creature leaves it (`IsPinpointedThisRound`, DMG p.295). `CharacterController.HasPinpointed` and `CanLocateForRangedAttack` read it; the PC ranged target list uses the latter.
+- The turn-start check is `PerceptionRules.ProcessTurnStart` (`Combat/Core/PerceptionRules.cs`), called by `GameManager.BeginActingTurn` for every acting creature: it records the squares of the enemies the creature sees, then rolls one Listen check against the tracked unseen ones, or drops last turn's pinpoints when there are none. Only tracked unseen enemies are checked (CMB-183). The Invisibility casts record the recipient's square for the enemies that see it vanish, before the effect applies (`GameManager.UpdateEnemyLastKnownPositionForInvisibility`).
 - "Visible" means `CharacterController.CanSee` (total concealment only); there is no geometric line of sight (see [Grid](combat-and-grid.md#grid)).
-- `AttemptListenChecks` is called from `ProcessRoundStartPerception` (2968), `SelectBestTarget` (1536) and `ExecuteRangedKiterTurn` (865). Each call re-rolls, so an NPC can get several Listen checks per turn even though the comments say one per round.
-- A second store, `CharacterController._lastKnownTargetPositions`, feeds `AIService.GetPerceptionTargetingAdjustment`. Nothing calls `LastKnownPositionTracker.ClearAllPositions`, and NPC GameObjects are reused across encounters, so old positions probably carry over into the next fight (not verified in Play mode).
+- `AttemptListenChecks` is called only from `PerceptionRules.ProcessTurnStart`: one Listen check per turn for PCs and NPCs alike (DMG p.295). `SelectBestTarget` and `ExecuteRangedKiterTurn` read its pinpoints and roll nothing (AI-007 fixed in batch 12 step 8).
+- A second store, `CharacterController._lastKnownTargetPositions`, feeds `AIService.GetPerceptionTargetingAdjustment` (AI-021). A reused slot clears both stores (CRE-046); a continuing party member keeps its tracker's squares between encounters, and the respawn of an enemy slot drops that slot from it (`ForgetCreature`).
 
 ## NPC AI: what it cannot do
 

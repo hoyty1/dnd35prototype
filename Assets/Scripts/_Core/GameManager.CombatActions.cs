@@ -218,7 +218,8 @@ public partial class GameManager
 
     /// <summary>
     /// The creature a normal attack by <paramref name="pc"/> on <paramref name="cell"/> targets: a living occupant other
-    /// than the attacker that is in range of the current weapon and, for a ranged attack, visible; an enemy first
+    /// than the attacker that is in range of the current weapon and, for a ranged attack, visible or pinpointed by the
+    /// attacker's turn-start Listen check (CharacterController.CanLocateForRangedAttack, DMG p.295; CMB-094); an enemy first
     /// (SquareCell.GetOccupantOtherThan). The attack highlight and the click use this one choice, so a square shared
     /// by an ally and an enemy (a pin release, CMB-089/CMB-131) highlights and attacks the enemy. Null when none.
     /// </summary>
@@ -230,7 +231,7 @@ public partial class GameManager
         bool isRanged = IsAttackModeRanged(pc, pc.GetEquippedMainWeapon());
         return cell.GetOccupantOtherThan(pc, o => o.Stats != null && !o.Stats.IsDead
             && pc.IsTargetInCurrentWeaponRange(o)
-            && (!isRanged || pc.CanSee(o, incomingIsRangedAttack: true)));
+            && (!isRanged || pc.CanLocateForRangedAttack(o)));
     }
 
     private List<CharacterController> GetValidRangedTargets(CharacterController attacker)
@@ -251,7 +252,9 @@ public partial class GameManager
             if (!attacker.IsTargetInCurrentWeaponRange(candidate))
                 continue;
 
-            if (!attacker.CanSee(candidate, incomingIsRangedAttack: true))
+            // Seen, or pinpointed by the attacker's turn-start Listen check (DMG p.295; CMB-094): the attack keeps the
+            // target's miss chance.
+            if (!attacker.CanLocateForRangedAttack(candidate))
                 continue;
 
             // The Improved Grab hold bar (MM p.310, CMB-163).
@@ -277,6 +280,8 @@ public partial class GameManager
             if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
+            // No visibility filter: a pinpointed creature is a target, and so (until the believed-square UI, CMB-094) is an
+            // unseen one the PC has not pinpointed; the attack's last-known-square auto-miss and miss chance apply.
             if (attacker.IsTargetInCurrentWeaponRange(candidate) && !attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
                 valid.Add(candidate);
         }

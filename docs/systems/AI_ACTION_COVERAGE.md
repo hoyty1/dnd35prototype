@@ -85,7 +85,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Potions, wands, scrolls | Never | charmed-heals-charmer exception | Yes | AI-009, ITM-005, AI-054; 11.8.3 |
 | Rods, staves, activated rings and wondrous items | Never | | No (unreachable for PCs too) | ITM-018, ITM-019, ITM-024 |
 | Whirlwind Attack, Manyshot, Stunning Fist, Spring Attack, Shot on the Run, Tumble, mounted combat | Never | | No (unusable for PCs too) | CMB-022, CMB-023, CMB-027, CMB-031 |
-| Invisible/concealed targets | Used | tiers, Listen, last-known attacks | Manual | AI-007, AI-021, GRID-009 |
+| Invisible/concealed targets | Used | tiers, Listen, last-known attacks (the turn-start Listen check is shared with PCs, `PerceptionRules.ProcessTurnStart`, batch 12 step 8) | Manual (a pinpointed target in the ranged list since batch 12 step 8; no believed-square attack, CMB-094) | AI-021, GRID-009, CMB-094, CMB-182, CMB-183 |
 | Retreat, morale, surrender | Partial | 8.9 | n/a | AI-010; 11.8.5 |
 | Protect allies, focus fire | Never | each NPC scores alone | n/a | gap |
 

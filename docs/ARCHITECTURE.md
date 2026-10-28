@@ -271,8 +271,9 @@ Assets/Scripts/
     CreatureClass/ (5), Familiar/ (1), Feats/ (3), Progression/ (3), Races/ (2),
     Religion/ (4), Skills/ (2), Specialization/ (1)
   Combat/
-    Core/ (15)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
-                         DamageModel, BullRushRules, dormant CombatStateMachine/InitiativeSystem
+    Core/ (17)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
+                         DamageModel, BullRushRules, PerceptionRules (turn-start Listen check, every actor, CMB-094),
+                         dormant CombatStateMachine/InitiativeSystem
     Conditions/ (11), Behaviors/ (4), Maneuvers/ (6), Special/ (3), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
   Spell/ (1: BonusType)

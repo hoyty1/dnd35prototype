@@ -78,8 +78,8 @@ Contents:
           | not controllable
  GameManager.SingleNPCTurnFromInitiative
           |-- ShouldSkipTurnDueToHPState (DeniesAllActions, D4)? --> log, NextInitiativeTurn
-          |-- perception (NPC path only, CMB-094), BeginActingTurn (Turn Undead proximity,
-          |                       compulsion pass -> npc.CurrentTurnStart)
+          |-- BeginActingTurn (perception, every actor since batch 12 step 8; Turn Undead
+          |                       proximity; compulsion pass -> npc.CurrentTurnStart)
           v
  AIService.ExecuteNPCTurn
    Confused / Charmed / Suggested ----> BehaviorController (whole turn; charmed stands up first)
@@ -186,7 +186,7 @@ The compulsion pass (`GameManager.TryRunCompulsionTurn`, called by `BeginActingT
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate, round-start perception (`ProcessRoundStartPerception`: tracker update plus a Listen check) and `BeginActingTurn` (turn-undead tracker pruning and proximity, and the compulsion pass, batch 12 step 7) |
+| 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate and `BeginActingTurn` (the shared turn-start perception `PerceptionRules.ProcessTurnStart`: tracker update plus a Listen check, run for PCs too since batch 12 step 8; turn-undead tracker pruning and proximity; and the compulsion pass, batch 12 step 7) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | | (no HP gate since batch 12 step 6) | the skip gate already ended the turn of a creature that cannot act; a disabled NPC (0 hp, or below 0 with Diehard) takes its single action (PHB p.145, decision D5, batch 12 step 3) |
 | 4 | 73 | Confused | the stored d% roll (`CurrentTurnStart.Compulsion.Confused`); any result except ActNormally runs the controller and ends the turn |
@@ -235,10 +235,10 @@ The routine returns; unused actions are discarded (no Delay, Ready, Total Defens
 
 ### 4.1 `SelectBestTarget` (AIService.cs:1499)
 
-1. Ensures a `LastKnownPositionTracker` on the NPC. (The Mirror Image override that came first, the nearest image token or caster anywhere on the map, AI-036, went in batch 11 step 26 with the tokens: images are a count on the caster and every attack picks a random figure, `MirrorImageRules`, so the AI targets the caster like any creature.)
+1. Takes the NPC's `LastKnownPositionTracker` (every combatant has one from `Init` since batch 12 step 8; `LastKnownPositionTracker.Ensure` adds one to a controller built another way). (The Mirror Image override that came first, the nearest image token or caster anywhere on the map, AI-036, went in batch 11 step 26 with the tokens: images are a count on the caster and every attack picks a random figure, `MirrorImageRules`, so the AI targets the caster like any creature.)
 2. For each living candidate that `TeamUtility.IsEnemy` accepts, applies exclusions in order: charm source (`ShouldExcludeTargetBecauseOfCharm`), fear source, Sanctuary (a fresh Will save each call, AI-005), Hide from Undead (undead attackers only; mindless excluded automatically; a successful save ends the spell, AI-005).
 3. Partitions into **visible** (`npc.CanSee(target, ranged)`, which only means "miss chance below 50%"; no line of sight, GRID-009) and **concealed but tracked** (has a last-known square).
-4. Returns the best visible target. If none, runs `AttemptListenChecks` on the concealed set (re-rolled per call, AI-007) and returns the best pinpointed, else the best tracked. Unseen enemies with no last-known square do not exist for the AI.
+4. Returns the best visible target. If none, returns the best concealed target the turn-start check pinpointed (`IsPinpointedThisRound`; the AI rolls no Listen check of its own since batch 12 step 8), else the best tracked. Unseen enemies with no last-known square do not exist for the AI (CMB-183).
 
 `SelectBestTargetFromCandidates` (1586) tries, in order: `PriorityTargetName` exact name match (from `AITargetPriority`; 4 definitions, `grease_test_grappler1`-`4`, all naming "Slippery Sam"), then the profile scorer, then armor-priority targeting (unreachable in practice: its only writer also assigns a profile, AI-053), then the default heuristic. With a profile, the profile scorer always returns a target.
 
@@ -337,7 +337,7 @@ Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread 
 ### 5.3 `ExecuteRangedKiterTurn` (861)
 
 1. Target `SelectBestTarget` (variable named `closestPC`). Update tracker if visible.
-2. Not visible: Listen (AI-007); if pinpointed or tracked, attack the last-known square (`NPCPerformAttackForAI`); else advance and end.
+2. Not visible: if the turn-start check pinpointed it or it is tracked, attack (`NPCPerformAttackForAI`; the last-known-square auto-miss applies when it moved); else advance and end.
 3. `TryExecuteSpellcastAction`; success ends the turn.
 4. Only with a ranged weapon equipped: `AssessRangedAoORisk` (threatening enemies that can make AoOs, expected damage) against `CalculateRangedRiskTolerance` (fraction of max HP: 0.25 above 75% HP, 0.10 above 50%, else 0.05; × profile multiplier clamped 0.25-2; +0.05 vs a target at ≤25% HP or a Wizard or Cleric; final 0.02-0.35). Too risky and threatened → `TryTakeTacticalFiveFootStep`.
 5. Retreat a move if the target is within 2 squares or risk is too high (not gated on a ranged weapon, so melee-armed kiters back away from melee, AI-039).
@@ -653,8 +653,8 @@ NPCs summon since batch 11 step 27 (7.9); their creatures join the initiative af
 ### 8.8 Perception and wards
 
 - `CanSee` = miss chance below 50% (`GetMissChance`: invisibility unless See Invisibility or Glitterdust, Darkness, Wall of Fire, Entropic Shield, incorporeal, Displacement). No line of sight (GRID-009); no blindsight, tremorsense or blindsense.
-- Two last-known stores: `LastKnownPositionTracker` and `CharacterController._lastKnownTargetPositions`; cleared only when a controller is reused for a new creature (CRE-046 fix, AI-021). Going invisible writes both for all enemies.
-- `AttemptListenChecks`: See Invisibility users roll opposed Spot vs Hide; everyone else rolls one Listen vs a flat DC 20 that pinpoints all concealed targets (re-rolled per call, AI-007). PHB ch.4 (Listen) and DMG (Invisibility) use opposed Move Silently with distance penalties and a higher DC to pinpoint.
+- Two last-known stores: `LastKnownPositionTracker` and `CharacterController._lastKnownTargetPositions`; cleared only when a controller is reused for a new creature (CRE-046 fix, AI-021). Going invisible writes both for all enemies (every enemy has a tracker since batch 12 step 8, so a creature that has not acted yet records the square too).
+- `AttemptListenChecks`: See Invisibility users roll opposed Spot vs Hide; everyone else rolls one Listen vs a flat DC 20 that pinpoints all concealed targets (one check per turn, at turn start). A pinpoint records the square and lapses when the creature leaves it; a deafened creature fails automatically (PHB p.307). DMG p.295 (Invisibility) opposes the Listen check with Move Silently (DC 0 in combat), adds distance and obstacles, and pinpoints only when the check beats the DC by 20 (CMB-182). The turn-start call is shared with PCs (`PerceptionRules.ProcessTurnStart`, CMB-094).
 - Sanctuary and Hide from Undead: see 4.1 and AI-005. `BreakProtectiveWardsOnAttack` runs on the PC attack path and `NPCPerformAttack` only, not on charges, maneuvers, grapples or spells (SPL-094, partly unverified).
 
 ### 8.9 Morale and fleeing
@@ -673,7 +673,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 
 - **Casting:** AI-001 (fixed 2026-10-16: area spells in batch 11 step 25, the metamagic choice in step 28), AI-071 (walls, Grease on an object, swarm placement, Imbue with Spell Ability, areas with no judged value), AI-002 (melee routines never cast), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
 - **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-017 (profile leak, `OnEnable` overwrites, dragon per-turn state), AI-031 (enum docs lie).
-- **Targeting and perception:** AI-005 (ward saves re-rolled), AI-007 (Listen re-rolled), AI-021 (two last-known stores).
+- **Targeting and perception:** AI-005 (ward saves re-rolled), AI-021 (two last-known stores), CMB-183 (never-seen unseen enemies get no Listen check).
 - **Monster abilities:** AI-006 (special touch rolls bypass the attack calculator), AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (overrun target placeholder; bull rush and overrun never chosen).
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
@@ -791,6 +791,7 @@ Worked playbooks for likely requests (flanking and Aid Another, area spells and 
 |---|---|
 | `Tests.AI.AIProfileFrameworkTests.RunAll` (38 test methods, no callers) | profile scoring (Berserk, Ranged, Animal), maneuver preferences, coup de grace defaults, NPC data archetypes, Evoker/Abjurer/Spellcaster AoE settings, Healer priorities, concealment tiers, ThreatSystem estimates, swarm targeting, `ActionEconomy.UseMoveAction` failure and the one-move gate. 2-3 tests are stale (TST-025) |
 | `Tests.AI.AiMetamagicPlannerTests` | the metamagic planner (7.10: a sorcerer's candidates, Empowered Fireball outranking the plain one against three foes and not one, the finishing blow, Extend, Heighten, a prepared Quickened slot, the candidate cap's order, an Enlarged range, a bard's refused Silent Spell) and the SR chance (AI-046); `Tests.AI.AreaAimSearchTests`: the area aim (7.8) |
+| `Tests.AI.LastKnownPositionTrackerTests` | the perception tracker every combatant has (batch 12 step 8, CMB-094): a Listen pinpoint records the square, becomes the last-known square and lapses when the creature moves (DMG p.295); a deafened creature pinpoints nothing (PHB p.307); a PC-side turn-start check (`PerceptionRules.ProcessTurnStart`) pinpoints a tracked invisible enemy; Play mode |
 | `Tests.Classes.NPCTemplateSystemTests` | configurator class maps and `AIConsumableManager` (test-only paths; TST-003, TST-008) |
 | `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image by RAW (the figure pick, its distribution, image AC and destruction, PC and NPC attackers and spells; batch 11 step 26), Frightened decision, confusion d% distribution |
 

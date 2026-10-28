@@ -621,6 +621,8 @@ public partial class GameManager
         recipientStatusMgr.Init(recipient.Stats);
 
         int casterLevel = CasterLevelRules.ForCaster(caster, spell);
+        // The enemies that see the recipient now learn the square it vanishes in (before the effect hides it, CMB-094).
+        UpdateEnemyLastKnownPositionForInvisibility(recipient);
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
@@ -672,7 +674,6 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"  Duration: {effect.GetDurationDisplayString()}. Leaving the sphere or attacking ends invisibility."));
 
-        UpdateEnemyLastKnownPositionForInvisibility(recipient);
         UpdateAllStatsUI();
         return effect;
     }

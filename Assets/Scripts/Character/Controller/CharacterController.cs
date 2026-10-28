@@ -3735,6 +3735,10 @@ public class CharacterController : MonoBehaviour
             _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
         _conditionManager.Init(Stats);
 
+        // Every combatant, PC or NPC, tracks the squares of unseen enemies and pinpoints them by Listen at turn start
+        // (PerceptionRules.ProcessTurnStart, DMG p.295; CMB-094, batch 12 step 8).
+        LastKnownPositionTracker.Ensure(this);
+
         EnsureConditions();
 
         SyncHPStateFromCurrentHP(emitLog: false);
@@ -4518,10 +4522,10 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Components a freshly built character GameObject carries (SceneBootstrap and Awake add them) and that
     /// <see cref="ResetForNewCreature"/> keeps, re-initialised by the spawn. Every other component (spellcasting,
-    /// spell effects, concentration, AI position memory, True Strike, ring regeneration, summon visuals and any
-    /// behaviour a later system attaches) belongs to the creature that held the controller and is destroyed.
-    /// InventoryComponent is kept because every spawn path re-initialises it with a new Inventory (and reuses the
-    /// existing component rather than adding a second one).
+    /// spell effects, concentration, True Strike, ring regeneration, summon visuals and any behaviour a later system
+    /// attaches) belongs to the creature that held the controller and is destroyed. InventoryComponent is kept because
+    /// every spawn path re-initialises it with a new Inventory (and reuses the existing component rather than adding a
+    /// second one); LastKnownPositionTracker is kept and cleared (every combatant has one from Init, CMB-094).
     /// </summary>
     private static readonly HashSet<Type> SlotReuseKeptComponentTypes = new HashSet<Type>
     {
@@ -4535,6 +4539,8 @@ public class CharacterController : MonoBehaviour
         typeof(ConditionManager),
         typeof(StatusEffectIndicator),
         typeof(InventoryComponent),
+        // Every combatant has one from Init (CMB-094); ResetForNewCreature clears it instead of destroying it.
+        typeof(LastKnownPositionTracker),
     };
 
     /// <summary>
@@ -4695,11 +4701,16 @@ public class CharacterController : MonoBehaviour
         _statusEffectManager = null;
         _spellcastingComponent = null;
         _concentrationManager = null;
+
+        // The old creature's last-known squares, pinpoints and auto-miss counts (the component stays, CMB-094).
+        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+        if (tracker != null)
+            tracker.ClearAllPositions();
     }
 
     /// <summary>
     /// Drops what this character remembers about <paramref name="other"/>: its feint window against it, the feint
-    /// marker it set here, a counterspell readied against it, and its last-known square (also in an attached AI
+    /// marker it set here, a counterspell readied against it, and its last-known square (also in its
     /// LastKnownPositionTracker). Used when
     /// <paramref name="other"/>'s controller is about to hold a different creature (CRE-046).
     /// </summary>
@@ -7452,6 +7463,25 @@ public class CharacterController : MonoBehaviour
 
         return false;
     }
+
+    /// <summary>
+    /// True when this creature's last perception check (its turn-start Listen check, or Spot against Hide with See
+    /// Invisibility; <see cref="PerceptionRules.ProcessTurnStart"/>) pinpointed <paramref name="target"/>'s square, PC or
+    /// NPC (DMG p.295; CMB-094). The target keeps its concealment: the attack still rolls the miss chance.
+    /// </summary>
+    public bool HasPinpointed(CharacterController target)
+    {
+        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+        return tracker != null && target != null && tracker.IsPinpointedThisRound(target);
+    }
+
+    /// <summary>
+    /// True when this creature can aim a ranged attack at <paramref name="target"/>: it sees it, or it has pinpointed its
+    /// square (<see cref="HasPinpointed"/>; DMG p.295, PHB p.152; CMB-094). The PC target list and target click use it;
+    /// a ranged attack into a square merely believed to hold the target needs a believed-square UI (CMB-094).
+    /// </summary>
+    public bool CanLocateForRangedAttack(CharacterController target)
+        => target != null && (CanSee(target, incomingIsRangedAttack: true) || HasPinpointed(target));
 
     // ========== INTERNAL: Single attack with critical hit support ==========
 

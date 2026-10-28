@@ -3177,6 +3177,11 @@ public partial class GameManager : MonoBehaviour
         CastStageTrace.Mark(caster, spell, CastStageTrace.InvisibilityBreak, "broken");
     }
 
+    /// <summary>
+    /// Records <paramref name="invisibleCharacter"/>'s square in the memory of every enemy that sees it, PC or NPC (the
+    /// controller store and the LastKnownPositionTracker). Called by the invisibility spells just before the effect is
+    /// applied, so the enemies that watched it vanish know where it was (PHB p.152, DMG p.295; CMB-094).
+    /// </summary>
     private void UpdateEnemyLastKnownPositionForInvisibility(CharacterController invisibleCharacter)
     {
         if (invisibleCharacter == null || invisibleCharacter.Stats == null)
@@ -3192,7 +3197,14 @@ public partial class GameManager : MonoBehaviour
             if (!TeamUtility.IsEnemy(observer, invisibleCharacter))
                 continue;
 
-            observer.UpdateLastKnownPosition(invisibleCharacter, incomingIsRangedAttack: observer.IsEquippedWeaponRanged());
+            // Only an observer that sees the creature as it vanishes learns its square (both stores agree): the caller runs
+            // this before the invisibility effect is applied, so a blinded observer or one without line of sight learns
+            // nothing (DMG p.295; CMB-094).
+            bool incomingIsRangedAttack = observer.IsEquippedWeaponRanged();
+            if (!observer.CanSee(invisibleCharacter, incomingIsRangedAttack))
+                continue;
+
+            observer.UpdateLastKnownPosition(invisibleCharacter, incomingIsRangedAttack);
 
             LastKnownPositionTracker tracker = observer.GetComponent<LastKnownPositionTracker>();
             tracker?.UpdateLastKnownPosition(invisibleCharacter);
@@ -3961,8 +3973,8 @@ public partial class GameManager : MonoBehaviour
         // Update initiative UI to highlight current character
         UpdateInitiativeUI();
 
-        // The Turn Undead proximity check and the compulsion pass (GameManager.TurnStart.cs): a confused, suggested,
-        // frightened, panicked or turned PC gets a forced turn (batch 12 step 7, owner decision 2026-10-23, Q1).
+        // The perception check (PerceptionRules.ProcessTurnStart), the Turn Undead proximity check and the compulsion
+        // pass (GameManager.TurnStart.cs): a confused, suggested, frightened, panicked or turned PC gets a forced turn (batch 12 step 7, owner decision 2026-10-23, Q1).
         if (BeginActingTurn(pc))
             return;
 
@@ -10992,11 +11004,6 @@ public partial class GameManager : MonoBehaviour
             : NPCAIBehavior.AggressiveMelee;
     }
 
-    /// <summary>Delegates to AIService.ProcessRoundStartPerception for centralized perception logic.</summary>
-    private void ProcessNPCRoundStartPerception(CharacterController npc)
-    {
-        _aiService?.ProcessRoundStartPerception(npc, GetAllCharacters(), msg => CombatUI?.ShowCombatLog(msg));
-    }
 
     public IEnumerator ExecuteGrappleRestrictedTurnForAI(CharacterController npc)
         => AI_GrappleRestrictedTurn(npc);

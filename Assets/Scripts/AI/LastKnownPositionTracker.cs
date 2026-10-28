@@ -2,26 +2,57 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Tracks per-NPC last-known enemy positions and Listen-based pinpointing for concealed targets.
+/// Tracks one combatant's last-known enemy positions and Listen-based pinpointing for concealed targets, PC or NPC.
+/// Every combatant gets one when its slot is initialised (<see cref="CharacterController.Init"/>, batch 12 step 8,
+/// CMB-094); a reused slot keeps the component and clears it (<see cref="CharacterController.ResetForNewCreature"/>).
+/// The turn-start check is <see cref="PerceptionRules.ProcessTurnStart"/>.
 /// D&D 3.5e behavior:
 /// - If target has total concealment, attack last known square.
 /// - If target moved from that square, attack misses automatically.
 /// - Listen DC 20 can pinpoint current square (still concealed, concealment miss chance still applies).
+/// - A pinpoint names the square the creature was heard in and lapses once it leaves that square (DMG p.295: a creature
+///   that moves is again of unknown location); the pinpointed square becomes the last-known square.
+/// - A deafened creature automatically fails Listen checks (PHB p.307, DMG p.300), so it pinpoints nothing by hearing.
 /// </summary>
 public class LastKnownPositionTracker : MonoBehaviour
 {
     private const int MaxConsecutiveLastKnownAutoMisses = 3;
 
     private readonly Dictionary<CharacterController, Vector2Int> _lastKnownGridPositions = new Dictionary<CharacterController, Vector2Int>();
-    private readonly HashSet<CharacterController> _pinpointedThisRound = new HashSet<CharacterController>();
+    /// <summary>The creatures pinpointed by this turn's check, each with the square it was pinpointed in.</summary>
+    private readonly Dictionary<CharacterController, Vector2Int> _pinpointedThisRound = new Dictionary<CharacterController, Vector2Int>();
     private readonly Dictionary<CharacterController, int> _consecutiveLastKnownAutoMisses = new Dictionary<CharacterController, int>();
 
-    private CharacterController _owner;
+    private CharacterController _ownerCache;
 
-    private void Awake()
+    /// <summary>The combatant this tracker belongs to (resolved on first use too, for a tracker added to an inactive object).</summary>
+    private CharacterController _owner
     {
-        _owner = GetComponent<CharacterController>();
+        get
+        {
+            if (_ownerCache == null)
+                _ownerCache = GetComponent<CharacterController>();
+            return _ownerCache;
+        }
     }
+
+    /// <summary>
+    /// The tracker of <paramref name="character"/>, added when it has none. Every combatant gets one at slot init
+    /// (<see cref="CharacterController.Init"/>); this is the null-safe fallback for a controller built another way.
+    /// </summary>
+    public static LastKnownPositionTracker Ensure(CharacterController character)
+    {
+        if (character == null)
+            return null;
+
+        LastKnownPositionTracker tracker = character.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            tracker = character.gameObject.AddComponent<LastKnownPositionTracker>();
+        return tracker;
+    }
+
+    /// <summary>True when nothing is tracked: no last-known square, no pinpoint, no auto-miss count (a fresh or reused slot).</summary>
+    public bool IsEmpty => _lastKnownGridPositions.Count == 0 && _pinpointedThisRound.Count == 0 && _consecutiveLastKnownAutoMisses.Count == 0;
 
     public void UpdateLastKnownPosition(CharacterController character)
     {
@@ -71,9 +102,30 @@ public class LastKnownPositionTracker : MonoBehaviour
         return character.GridPosition == lastKnownPos;
     }
 
+    /// <summary>
+    /// True while <paramref name="character"/> stands in the square this creature's last check pinpointed it in. A pinpoint
+    /// lapses once the creature moves out of that square (DMG p.295), even before the observer's next check.
+    /// </summary>
     public bool IsPinpointedThisRound(CharacterController character)
     {
-        return character != null && _pinpointedThisRound.Contains(character);
+        return character != null
+            && _pinpointedThisRound.TryGetValue(character, out Vector2Int square)
+            && character.GridPosition == square;
+    }
+
+    /// <summary>
+    /// Records that this creature has pinpointed <paramref name="character"/> in its current square (a Listen or Spot
+    /// success): the pinpoint holds while the creature stays there, the square becomes the last-known square (so a later
+    /// failed check still attacks the square it was heard in, PHB p.152) and the auto-miss count restarts.
+    /// </summary>
+    public void Pinpoint(CharacterController character)
+    {
+        if (character == null || character.Stats == null || character.Stats.IsDead)
+            return;
+
+        _pinpointedThisRound[character] = character.GridPosition;
+        _lastKnownGridPositions[character] = character.GridPosition;
+        _consecutiveLastKnownAutoMisses[character] = 0;
     }
 
     public int RegisterLastKnownAutoMiss(CharacterController character)
@@ -127,7 +179,8 @@ public class LastKnownPositionTracker : MonoBehaviour
 
     /// <summary>
     /// Attempt ONE Listen check per round to pinpoint concealed characters.
-    /// D&D 3.5e: this is a single perception check for the round, not one roll per target.
+    /// D&D 3.5e: this is a single perception check for the round, not one roll per target. Its only caller is the
+    /// turn-start check (<see cref="PerceptionRules.ProcessTurnStart"/>); the AI reads the result (AI-007 fixed).
     /// </summary>
     public void AttemptListenChecks(List<CharacterController> concealedTargets, GameManager gameManager)
     {
@@ -156,9 +209,7 @@ public class LastKnownPositionTracker : MonoBehaviour
                 bool spotted = TryResolveSpotAgainstHide(target, out int spotRoll, out int spotTotal, out int hideRoll, out int hideTotal);
                 if (spotted)
                 {
-                    _pinpointedThisRound.Add(target);
-                    _consecutiveLastKnownAutoMisses[target] = 0;
-                    UpdateLastKnownPosition(target);
+                    Pinpoint(target);
 
                     if (gameManager != null && gameManager.CombatUI != null)
                     {
@@ -186,6 +237,16 @@ public class LastKnownPositionTracker : MonoBehaviour
         //   creatures of a favored type (PHB p.47), so the same roll can pinpoint those and miss the others
         //   (delegated RAW reading 2026-10-14, CHR-020). Without that bonus it is all or nothing.
         // ═══════════════════════════════════════════════════════════════
+        string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
+
+        // A deafened creature automatically fails Listen checks (PHB p.307; DMG p.300), as CharacterStats.RollSkillCheck rules.
+        if (_owner.IsDeaf())
+        {
+            if (gameManager != null && gameManager.CombatUI != null)
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{ownerName} is deafened and cannot pinpoint concealed enemies by Listen."));
+            return;
+        }
+
         int listenDC = 20;
         int listenBonus = GetListenBonus();
         int d20Roll = DiceRoller.D20();
@@ -204,8 +265,6 @@ public class LastKnownPositionTracker : MonoBehaviour
             if (listenTotal + favoredBonus >= listenDC)
                 located.Add(target);
         }
-
-        string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
 
         if (gameManager != null && gameManager.CombatUI != null)
         {
@@ -236,10 +295,7 @@ public class LastKnownPositionTracker : MonoBehaviour
         }
 
         for (int i = 0; i < located.Count; i++)
-        {
-            _pinpointedThisRound.Add(located[i]);
-            _consecutiveLastKnownAutoMisses[located[i]] = 0;
-        }
+            Pinpoint(located[i]);
 
         if (located.Count > 0)
         {

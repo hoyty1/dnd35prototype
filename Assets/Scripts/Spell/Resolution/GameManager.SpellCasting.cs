@@ -4893,6 +4893,8 @@ public partial class GameManager
             recipientStatusMgr.Init(recipient.Stats);
 
             int casterLevel = CasterLevelRules.ForCaster(caster, spell); // the cast's caster level, not the character level (SPL-017)
+            // The enemies that see the recipient now learn the square it vanishes in (before the effect hides it, CMB-094).
+            UpdateEnemyLastKnownPositionForInvisibility(recipient);
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -4902,7 +4904,6 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                UpdateEnemyLastKnownPositionForInvisibility(recipient);
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("👁", $"{recipient.Stats.CharacterName} becomes invisible ({effect.GetDurationDisplayString()})."));
             }
 
