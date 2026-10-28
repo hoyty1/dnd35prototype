@@ -160,7 +160,7 @@ public static class WandValidator
 
         // Step 2: No class match and no Magic domain match — check if Use Magic Device is available
         int umdBonus = stats.GetSkillBonus("Use Magic Device");
-        if (umdBonus > 0)
+        if (stats.CanAttemptSkill("Use Magic Device")) // trained only, PHB p.64, p.85; not umdBonus > 0, a real total can be 0
         {
             // UMD is available — flag that a UMD check (DC 20) will be needed
             result.CanUse = true;

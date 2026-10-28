@@ -1067,7 +1067,7 @@ public class CharacterSheetUI : MonoBehaviour
             // Only show skills with ranks or class skills
             if (skill.Ranks > 0 || skill.IsClassSkill)
             {
-                AddSkillRow(content, skill, totalBonus, abilityMod, featBonus, classBonus);
+                AddSkillRow(content, skill, totalBonus, abilityMod, featBonus, classBonus, stats.CanAttemptSkill(skill.SkillName));
             }
         }
 
@@ -1104,7 +1104,7 @@ public class CharacterSheetUI : MonoBehaviour
             V2(260, 0), V2(40, 0), "Abil", 10, DimText, TextAnchor.MiddleCenter, FontStyle.Bold);
     }
 
-    private void AddSkillRow(Transform content, Skill skill, int totalBonus, int abilityMod, int featBonus, int classBonus)
+    private void AddSkillRow(Transform content, Skill skill, int totalBonus, int abilityMod, int featBonus, int classBonus, bool canAttempt)
     {
         var rowGO = new GameObject($"Skill_{skill.SkillName}");
         rowGO.transform.SetParent(content, false);
@@ -1119,9 +1119,11 @@ public class CharacterSheetUI : MonoBehaviour
         MakeText(rowGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
             V2(10, 0), V2(150, 0), $"{classMarker}{skill.SkillName}", 11, nameColor, TextAnchor.MiddleLeft);
 
-        Color bonusColor = totalBonus > 0 ? new Color(0.5f, 0.9f, 0.5f) : (totalBonus < 0 ? HealthRed : LightText);
+        // A skill this character cannot attempt (trained only with 0 ranks, PHB p.64) shows a dash, not a usable +0.
+        Color bonusColor = !canAttempt ? DimText
+            : totalBonus > 0 ? new Color(0.5f, 0.9f, 0.5f) : (totalBonus < 0 ? HealthRed : LightText);
         MakeText(rowGO.transform, "Total", V2(0, 0), V2(0, 1), V2(0, 0.5f),
-            V2(170, 0), V2(40, 0), FormatMod(totalBonus), 12, bonusColor, TextAnchor.MiddleCenter, FontStyle.Bold);
+            V2(170, 0), V2(40, 0), canAttempt ? FormatMod(totalBonus) : "—", 12, bonusColor, TextAnchor.MiddleCenter, FontStyle.Bold);
 
         MakeText(rowGO.transform, "Ranks", V2(0, 0), V2(0, 1), V2(0, 0.5f),
             V2(215, 0), V2(40, 0), skill.Ranks.ToString(), 11, LightText, TextAnchor.MiddleCenter);

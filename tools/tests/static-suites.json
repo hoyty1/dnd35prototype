@@ -271,6 +271,17 @@
       "notes": "CRE-045: Multiattack only with three or more natural attacks (MM p.304) and the MM attack-math feats and primary/secondary flags the 2026-10-08 audit corrected, plus the blue slaad and giant maneuver feats, and the giant bombardier beetle acid spray data (MM p.285: 10-ft cone, 1d4+2 acid, Fortitude DC 13 negates, once per round; Clone copies every field; CRE-040, batch 12 step 2); reads the NPC templates only"
     },
     {
+      "type": "Tests.Character.NpcSkillFallbackTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 56,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-067 (fallback), CHR-086, batch 12 step 4: a creature without a skill entry makes untrained checks with its ability modifier (PHB p.63-64) through TryGetSkillOrUntrained, never adding the entry; trained-only skills with 0 ranks give 0 and -1 for PCs and NPCs alike and cannot be attempted (CanAttemptSkill: ranks decide, not the total), so counterspell identification fails unrolled without Spellcraft ranks (PHB p.64, p.170); names match ignoring case; GetSkillBonus and RollSkillCheck share one total with the familiar's bonus; the mindless and Blinded rules reach untrained skills. Bare CharacterStats, plus a bare CharacterController for the identification roll; 56/56 in edit and Play mode on 2026-10-28."
+    },
+    {
       "type": "Tests.Character.MulticlassSaveCalculationTests",
       "needs": "either",
       "skip": "",
@@ -708,20 +719,16 @@
       "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 16,
-      "failed": 2,
+      "passed": 17,
+      "failed": 1,
       "flakyFailures": 0,
       "knownFailures": [
         {
           "match": "Stunned target drops held items",
           "issue": "TST-029"
-        },
-        {
-          "match": "Blinded applies at least -4 to STR/DEX-based skills",
-          "issue": "TST-029"
         }
       ],
-      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed. Its two edit-mode failures are also TST-029: without Awake the ConditionManager stun hook (drop held items) never runs, and the suite never initializes skills."
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed. Its edit-mode failure is also TST-029: without Awake the ConditionManager stun hook (drop held items) never runs. The Blinded STR/DEX skill check passes since batch 12 step 4 (2026-10-28): a skill without an entry is used untrained (CHR-067 fallback), so Climb has its key ability without InitializeSkills."
     },
     {
       "type": "Tests.Combat.CounterspellRulesTests",

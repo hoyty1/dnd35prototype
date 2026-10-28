@@ -161,7 +161,7 @@ public static class StaffValidator
 
         // ── Use Magic Device fallback (DC 20) ──
         int umdBonus = stats.GetSkillBonus("Use Magic Device");
-        if (umdBonus > 0)
+        if (stats.CanAttemptSkill("Use Magic Device")) // trained only, PHB p.64, p.85; not umdBonus > 0, a real total can be 0
         {
             result.CanUse = true;
             result.NeedsUMDCheck = true;

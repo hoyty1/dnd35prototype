@@ -52,6 +52,7 @@ namespace Tests.Scenarios
             yield return S("cast-ui-summon-entangled", UiSummonEntangled);
             yield return S("cast-ui-summon-swarm", UiSummonSwarm);
             yield return S("cast-ui-grease", UiGrease);
+            yield return S("npc-untrained-skills", NpcUntrainedSkills);
             foreach (PairSpec pair in Pairs())
             {
                 PairSpec p = pair;
@@ -1454,6 +1455,72 @@ namespace Tests.Scenarios
                     FactsAre(("area.spent", "L1+1"), ("area.actions", "-m-"), ("object.spent", "L1+1"), ("object.actions", "-m-"), ("armor.spent", "L1+1"), ("armor.actions", "-m-")))
                 .Expect("Greased armor gives +10 on grapple escapes (PHB p.237)", FactIs("armor.effect", true))
                 .Expect("Three Grease casts are in the trace", CastEvents("wizard", SpellNames.GREASE, 3))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 12 step 4 (CHR-067 fallback, CHR-086): a spawned goblin has no skill ranks (NPCs get none yet), and its skill
+        /// checks use the untrained skill (PHB p.63-64) through the same <c>CharacterStats.GetSkillBonus</c> and
+        /// <c>RollSkillCheck</c> as a PC's. The Stats wizard is given a created PC's skill list (every skill at 0 ranks,
+        /// <c>RulesScenarios.GiveClassSkills</c>), so the PC side runs through real 0-rank dictionary entries. On the
+        /// wizard's turn an Assert step reads both: the goblin's Listen is its Wisdom modifier plus its Alertness feat (+2,
+        /// MM p.133, PHB p.89), a rolled Balance is d20 plus its total (not the automatic failure -1 of before), Spellcraft
+        /// (trained only) is still -1 and cannot be attempted, a lowercase name finds the same skill; the wizard's 0-rank
+        /// Listen entry follows the same rule and its 0-rank Spellcraft entry gives 0 and -1; neither can attempt to identify
+        /// a spell for a counterspell without Spellcraft ranks (PHB p.64, p.170). The checks hold for every d20, so every
+        /// seed agrees.
+        /// </summary>
+        private static ScenarioDef NpcUntrainedSkills()
+        {
+            return Scenario.Define("rules/npc-untrained-skills", "An NPC without skill ranks makes untrained skill checks with its ability modifier (PHB p.63-64; CHR-067)")
+                .Tags("rules", "skills")
+                .Covers("PHB p.63", "PHB p.64", "PHB p.170", "CHR-067", "CHR-086", "PC_NPC_PARITY", "batch 12 step 4")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Skill Wizard", 3)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 9, 10, Control.Idle)
+                .Tweak("gob", Sturdy)
+                .Tweak("wizard", RulesScenarios.GiveClassSkills)
+                .Initiative("wizard", "gob")
+                .Turn("wizard", 1,
+                    Step.Assert("skills", ctx =>
+                    {
+                        CharacterStats g = ctx.Get("gob").Stats;
+                        CharacterStats w = ctx.Get("wizard").Stats;
+                        Fact(ctx, "gob.ranked", g.Skills.Values.Count(s => s != null && s.Ranks > 0));
+                        Fact(ctx, "gob.listen.feat", g.GetFeatSkillBonus("Listen"));
+                        Fact(ctx, "gob.listen", g.GetSkillBonus("Listen") == g.WISMod + g.GetFeatSkillBonus("Listen")
+                            + g.GetRacialSkillModifier("Listen") + g.GetConditionSkillModifier("Listen")
+                            + g.SpellAndEffectSkillModifier("Listen"));
+                        int balance = g.RollSkillCheck("Balance");
+                        int d20 = balance - g.GetSkillBonus("Balance");
+                        Fact(ctx, "gob.balance.d20", d20 >= 1 && d20 <= 20);
+                        Fact(ctx, "gob.spellcraft", g.RollSkillCheck("Spellcraft"));
+                        Fact(ctx, "gob.spellcraft.bonus", g.GetSkillBonus("Spellcraft"));
+                        Fact(ctx, "gob.lowercase", g.GetSkillBonus("escape artist") == g.GetSkillBonus("Escape Artist"));
+                        Fact(ctx, "gob.attempt", g.CanAttemptSkill("Listen") && !g.CanAttemptSkill("Spellcraft"));
+                        Fact(ctx, "wizard.entries", w.Skills.ContainsKey("Listen") && w.Skills.ContainsKey("Spellcraft")
+                            && w.Skills["Spellcraft"].Ranks == 0);
+                        Fact(ctx, "wizard.listen", w.GetSkillBonus("Listen") == w.WISMod + w.GetRacialSkillModifier("Listen")
+                            + w.GetConditionSkillModifier("Listen") + w.SpellAndEffectSkillModifier("Listen"));
+                        Fact(ctx, "wizard.spellcraft", w.RollSkillCheck("Spellcraft"));
+                        Fact(ctx, "wizard.spellcraft.bonus", w.GetSkillBonus("Spellcraft"));
+                        bool wizIdentified = ctx.Get("wizard").RollSpellcraftIdentification(1, out int wRoll, out _, out _);
+                        bool gobIdentified = ctx.Get("gob").RollSpellcraftIdentification(1, out int gRoll, out _, out _);
+                        Fact(ctx, "identify.untrained", !wizIdentified && !gobIdentified && wRoll == 0 && gRoll == 0);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("The goblin has no skill ranks (NPCs get none yet, CHR-067)", FactIs("gob.ranked", 0))
+                .Expect("Untrained Listen is the goblin's Wisdom modifier plus its Alertness +2 (PHB p.64, p.89; MM p.133)",
+                    FactsAre(("gob.listen.feat", 2), ("gob.listen", true)))
+                .Expect("A rolled untrained Balance is d20 plus the total, not an automatic failure", FactIs("gob.balance.d20", true))
+                .Expect("Spellcraft is trained only: -1 rolled, 0 bonus, cannot be attempted (PHB p.63-64)",
+                    FactsAre(("gob.spellcraft", -1), ("gob.spellcraft.bonus", 0), ("gob.attempt", true)))
+                .Expect("A lowercase skill name finds the same skill (CHR-086)", FactIs("gob.lowercase", true))
+                .Expect("The PC wizard's 0-rank entries follow the same rule: Listen untrained, Spellcraft 0 and -1 (PC_NPC_PARITY)",
+                    FactsAre(("wizard.entries", true), ("wizard.listen", true), ("wizard.spellcraft", -1), ("wizard.spellcraft.bonus", 0)))
+                .Expect("Without Spellcraft ranks neither side can attempt to identify a spell for a counterspell (PHB p.64, p.170)",
+                    FactIs("identify.untrained", true))
                 .Build();
         }
 

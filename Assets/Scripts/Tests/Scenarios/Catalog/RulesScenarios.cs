@@ -9016,7 +9016,7 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// Gives a Stats-built character its skill list (every skill at 0 ranks, its class skills marked), as a created
-        /// PC has: without it <c>GetSkillBonus</c> returns 0 for any skill (TST-039; CHR-067 for NPCs).
+        /// PC has (TST-039). Without it every skill is used untrained (CharacterStats.TryGetSkillOrUntrained, CHR-067).
         /// </summary>
         internal static void GiveClassSkills(CharacterController c)
         {

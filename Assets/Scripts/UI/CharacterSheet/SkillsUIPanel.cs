@@ -653,18 +653,18 @@ public class SkillsUIPanel : MonoBehaviour
     {
         if (_allocationMode || _stats == null) return;
 
-        // Roll a skill check
-        int result = _stats.RollSkillCheck(skill.SkillName);
-        if (result < 0)
+        // A skill that cannot be attempted is decided before the roll: RollSkillCheck's -1 sentinel overlaps a real
+        // negative total of an untrained check (PHB p.64).
+        if (!_stats.CanAttemptSkill(skill.SkillName))
         {
             _logText.text = $"<color=#FF6666>Cannot use {skill.SkillName} — requires training!</color>";
+            return;
         }
-        else
-        {
-            int abilityMod = _stats.GetAbilityModForSkill(skill);
-            _logText.text = $"<color=#88FF88>{skill.SkillName} check = {result}</color>  " +
-                           $"(ranks:{skill.Ranks} + {skill.KeyAbility}:{abilityMod})";
-        }
+
+        int result = _stats.RollSkillCheck(skill.SkillName);
+        int abilityMod = _stats.GetAbilityModForSkill(skill);
+        _logText.text = $"<color=#88FF88>{skill.SkillName} check = {result}</color>  " +
+                       $"(ranks:{skill.Ranks} + {skill.KeyAbility}:{abilityMod})";
     }
 
     private void OnConfirmClicked()

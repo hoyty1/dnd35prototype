@@ -186,7 +186,7 @@ public static class ScrollValidator
         {
             // Check if Use Magic Device can help
             int umdBonus = stats.GetSkillBonus("Use Magic Device");
-            if (umdBonus > 0)
+            if (stats.CanAttemptSkill("Use Magic Device")) // trained only, PHB p.64, p.85; not umdBonus > 0, a real total can be 0
             {
                 int umdDC = 20 + scrollCasterLevel;
                 result.CanUse = true;
@@ -219,7 +219,7 @@ public static class ScrollValidator
 
             // Check UMD as fallback
             int umdBonus = stats.GetSkillBonus("Use Magic Device");
-            if (umdBonus > 0)
+            if (stats.CanAttemptSkill("Use Magic Device")) // trained only, PHB p.64, p.85; not umdBonus > 0, a real total can be 0
             {
                 int umdDC = 20 + scrollCasterLevel;
                 result.CanUse = true;

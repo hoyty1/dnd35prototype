@@ -1044,7 +1044,7 @@ public static class BardicMusicRules
     {
         if (stats == null || BardLevel(stats) < 1 || PerformRanks(stats) > 0)
             return;
-        stats.Skills ??= new Dictionary<string, Skill>();
+        stats.Skills ??= new Dictionary<string, Skill>(System.StringComparer.OrdinalIgnoreCase);
         int ranks = Mathf.Max(1, stats.GetHitDice()) + 3;
         if (!stats.Skills.TryGetValue(PerformSkill, out Skill perform) || perform == null)
         {

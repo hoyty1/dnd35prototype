@@ -15793,7 +15793,9 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Roll a Spellcraft check to identify a spell being cast.
-    /// DC = 15 + spell level (PHB).
+    /// DC = 15 + spell level (PHB p.82). Spellcraft is trained only: a creature without ranks cannot attempt the check at
+    /// all and fails without a roll (PHB p.64, whose example is exactly this; <see cref="CharacterStats.CanAttemptSkill"/>).
+    /// Identification is a step of a specific-spell counter only; Dispel Magic counters without it (PHB p.170).
     /// </summary>
     /// <param name="spellLevel">Level of the spell being cast.</param>
     /// <param name="roll">The d20 roll result.</param>
@@ -15803,6 +15805,13 @@ public class CharacterController : MonoBehaviour
     public bool RollSpellcraftIdentification(int spellLevel, out int roll, out int total, out int dc)
     {
         dc = 15 + spellLevel;
+        if (!Stats.CanAttemptSkill("Spellcraft"))
+        {
+            roll = 0;
+            total = 0;
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: cannot attempt Spellcraft untrained (trained only, PHB p.64) → FAILED");
+            return false;
+        }
         int bonus = Stats.GetSkillBonus("Spellcraft");
         roll = DiceService.D20("Counterspell Spellcraft check");
         total = roll + bonus;

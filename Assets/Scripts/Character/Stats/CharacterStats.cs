@@ -6766,8 +6766,12 @@ public class CharacterStats
 
     // ========== SKILLS SYSTEM (D&D 3.5) ==========
 
-    /// <summary>Dictionary of all skills this character has, keyed by skill name.</summary>
-    public Dictionary<string, Skill> Skills = new Dictionary<string, Skill>();
+    /// <summary>
+    /// The skills this character has entries for, keyed by skill name, ignoring case (CHR-086). A created PC has every
+    /// skill (<see cref="InitializeSkills"/>); an NPC may have none or only some (CHR-067), and
+    /// <see cref="TryGetSkillOrUntrained"/> gives the untrained skill for the rest.
+    /// </summary>
+    public Dictionary<string, Skill> Skills = new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Number of unspent skill points available for allocation.</summary>
     public int AvailableSkillPoints;
@@ -6974,9 +6978,7 @@ public class CharacterStats
     {
         int total = 0;
 
-        Skill skill = null;
-        if (!string.IsNullOrEmpty(skillName))
-            Skills.TryGetValue(skillName, out skill);
+        TryGetSkillOrUntrained(skillName, out Skill skill);
 
         for (int i = 0; i < ActiveConditions.Count; i++)
         {
@@ -7068,28 +7070,105 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Get the total bonus for a skill (ranks + ability mod + feat bonuses + condition modifiers).
-    /// Returns 0 if skill not found.
+    /// The skill a check by this creature uses: its entry in <see cref="Skills"/>, or, when it has none (an NPC: no skill
+    /// ranks yet, CHR-067), a transient untrained skill built as <see cref="InitializeSkills"/> builds it from
+    /// <see cref="ClassSkillDefinitions.AllSkills"/> (key ability, trained only, 0 ranks, not a class skill). The name is
+    /// matched ignoring case (CHR-086). The transient skill is never added to <see cref="Skills"/>. False for a name that
+    /// is no skill. PHB p.63-64: any creature may attempt a skill that is not trained only, using its ability modifier.
+    /// </summary>
+    public bool TryGetSkillOrUntrained(string skillName, out Skill skill)
+    {
+        skill = null;
+        if (string.IsNullOrWhiteSpace(skillName))
+            return false;
+
+        string name = skillName.Trim();
+        if (Skills != null && Skills.TryGetValue(name, out skill) && skill != null)
+            return true;
+
+        foreach (var skillDef in ClassSkillDefinitions.AllSkills)
+        {
+            if (!string.Equals(skillDef.name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            skill = new Skill(skillDef.name, skillDef.ability, false, skillDef.trainedOnly);
+            return true;
+        }
+
+        skill = null;
+        return false;
+    }
+
+    /// <summary>
+    /// The modifier of a check with <paramref name="skill"/> (without the d20), the one total behind
+    /// <see cref="GetSkillBonus"/> and <see cref="RollSkillCheck"/> so they cannot drift (CHR-086): ranks, key ability,
+    /// feats, armor check penalty, conditions, spells and effects, the familiar's bonus to its master, wondrous items,
+    /// racial and size modifiers and class features. The terms are read under the skill's canonical name.
+    /// <paramref name="breakdown"/> is the log text of the terms when <paramref name="withBreakdown"/> is set.
+    /// </summary>
+    private int SkillCheckModifier(Skill skill, bool withBreakdown, out string breakdown)
+    {
+        string name = skill.SkillName;
+        int abilityMod = GetAbilityModForSkill(skill);
+        int featBonus = GetFeatSkillBonus(name);
+        int acpPenalty = GetArmorCheckPenaltyForSkill(name);
+        int conditionModifier = GetConditionSkillModifier(name);
+        int spellModifier = SpellAndEffectSkillModifier(name);
+        int familiarModifier = GetFamiliarSkillModifier(name);
+        int wondrousBonus = GetWondrousSkillModifier(name);
+        int racialModifier = GetRacialSkillModifier(name);
+        int classFeatureBonus = GetClassFeatureSkillModifier(name);
+        int total = skill.GetTotalBonus(abilityMod) + featBonus + acpPenalty + conditionModifier + spellModifier
+            + familiarModifier + wondrousBonus + racialModifier + classFeatureBonus;
+
+        breakdown = null;
+        if (withBreakdown)
+        {
+            breakdown = $"{skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility})"
+                + (featBonus > 0 ? $" + {featBonus}(feat)" : "")
+                + (acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "")
+                + (conditionModifier != 0 ? $" {conditionModifier}(condition)" : "")
+                + (spellModifier != 0 ? $" + {spellModifier}(spell)" : "")
+                + (familiarModifier != 0 ? $" {FormatMod(familiarModifier)}(familiar)" : "")
+                + (wondrousBonus != 0 ? $" + {wondrousBonus}(wondrous)" : "")
+                + (racialModifier != 0 ? $" {FormatMod(racialModifier)}(racial/size)" : "")
+                + (classFeatureBonus != 0 ? $" {FormatMod(classFeatureBonus)}(class feature)" : "");
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// The total modifier of a check with this skill (see <see cref="SkillCheckModifier"/>), for any creature: a skill
+    /// the creature has no entry for is used untrained (<see cref="TryGetSkillOrUntrained"/>, CHR-067). 0 for a name
+    /// that is no skill, a skill a mindless creature cannot use, and a trained-only skill with 0 ranks, which cannot be
+    /// used untrained (PHB p.63-64).
     /// </summary>
     public int GetSkillBonus(string skillName)
     {
-        if (!Skills.ContainsKey(skillName)) return 0;
-        Skill skill = Skills[skillName];
-
-        if (IsSkillBlockedByMindless(skillName, skill))
+        if (!TryGetAttemptableSkill(skillName, out Skill skill))
             return 0;
 
-        int baseBonus = skill.GetTotalBonus(GetAbilityModForSkill(skill));
-        int featBonus = GetFeatSkillBonus(skillName);
-        int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
-        int conditionModifier = GetConditionSkillModifier(skillName);
-        int spellModifier = SpellAndEffectSkillModifier(skillName);
-        int familiarModifier = GetFamiliarSkillModifier(skillName);
-        int wondrousBonus = GetWondrousSkillModifier(skillName);
-        int racialModifier = GetRacialSkillModifier(skillName);
-        int classFeatureBonus = GetClassFeatureSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus + racialModifier
-            + classFeatureBonus;
+        return SkillCheckModifier(skill, false, out _);
+    }
+
+    /// <summary>
+    /// Whether this creature may attempt a check with this skill at all, for any creature (PC or NPC): the name is a
+    /// skill (<see cref="TryGetSkillOrUntrained"/>), a mindless creature is not barred from it
+    /// (<see cref="IsSkillBlockedByMindless"/>), and it is not a trained-only skill with 0 ranks (PHB p.63-64, Table 4-2
+    /// and Untrained Skill Checks: without Spellcraft you cannot identify a spell, without Use Magic Device you cannot
+    /// try one). Callers that gate an action on a skill use this, never <c>GetSkillBonus(...) &gt; 0</c>: 0 is also a
+    /// real total. The deafened Listen failure is an automatic failure, not a bar, and stays in
+    /// <see cref="RollSkillCheck"/>. Not modelled: the untrained uses RAW gives two trained-only skills (Knowledge, an
+    /// INT check of DC 10 or lower, PHB p.78; Handle Animal with domestic animals, PHB p.75); see RULES_COVERAGE Ch.4.
+    /// </summary>
+    public bool CanAttemptSkill(string skillName) => TryGetAttemptableSkill(skillName, out _);
+
+    private bool TryGetAttemptableSkill(string skillName, out Skill skill)
+    {
+        if (!TryGetSkillOrUntrained(skillName, out skill))
+            return false;
+        if (IsSkillBlockedByMindless(skill.SkillName, skill))
+            return false;
+        return !(skill.TrainedOnly && skill.Ranks == 0);
     }
 
     /// <summary>
@@ -7138,29 +7217,28 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Roll a skill check for a specific skill.
-    /// Returns d20 + total bonus, or -1 if trained only and untrained.
-    /// Logs full breakdown to console.
+    /// Roll a skill check for a specific skill, for any creature (a skill without an entry is used untrained, CHR-067):
+    /// d20 + <see cref="SkillCheckModifier"/>. -1 (the check cannot be made) for a name that is no skill, a skill a
+    /// mindless creature cannot use, Listen while deafened, and a trained-only skill with 0 ranks (PHB p.63-64).
+    /// Logs the full breakdown to the console.
     /// </summary>
     public int RollSkillCheck(string skillName)
     {
-        if (!Skills.ContainsKey(skillName))
+        if (!TryGetSkillOrUntrained(skillName, out Skill skill))
         {
             Debug.LogWarning($"[Skills] Skill '{skillName}' not found for {CharacterName}.");
             return -1;
         }
 
-        Skill skill = Skills[skillName];
-        if (IsSkillBlockedByMindless(skillName, skill))
+        string name = skill.SkillName;
+        if (IsSkillBlockedByMindless(name, skill))
         {
-            Debug.Log($"[Skills] {GetMindlessSkillRestrictionMessage(skillName)}");
+            Debug.Log($"[Skills] {GetMindlessSkillRestrictionMessage(name)}");
             return -1;
         }
 
-        int abilityMod = GetAbilityModForSkill(skill);
-
         if (HasNormalizedCondition(CombatConditionType.Deafened)
-            && string.Equals(skillName, "Listen", System.StringComparison.OrdinalIgnoreCase))
+            && string.Equals(name, "Listen", System.StringComparison.OrdinalIgnoreCase))
         {
             Debug.Log($"[Skills] {CharacterName} automatically fails Listen while deafened.");
             return -1;
@@ -7168,32 +7246,16 @@ public class CharacterStats
 
         if (skill.TrainedOnly && skill.Ranks == 0)
         {
-            Debug.Log($"[Skills] {CharacterName} cannot use {skillName} - requires training (0 ranks)");
+            Debug.Log($"[Skills] {CharacterName} cannot use {name} - requires training (0 ranks)");
             return -1;
         }
 
         int d20 = DiceRoller.D20();
-        d20 = ApplyLuckReroll(d20, $"{skillName} skill check");
+        d20 = ApplyLuckReroll(d20, $"{name} skill check");
         GameManager.Instance?.LogLuckRerollIfTriggered(this);
-        int totalBonus = skill.GetTotalBonus(abilityMod);
-        int featBonus = GetFeatSkillBonus(skillName);
-        int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
-        int conditionModifier = GetConditionSkillModifier(skillName);
-        int spellModifier = SpellAndEffectSkillModifier(skillName);
-        int wondrousBonus = GetWondrousSkillModifier(skillName);
-        int racialModifier = GetRacialSkillModifier(skillName);
-        int classFeatureBonus = GetClassFeatureSkillModifier(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus + racialModifier
-            + classFeatureBonus;
-
-        string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
-        string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
-        string conditionStr = conditionModifier != 0 ? $" {conditionModifier}(condition)" : "";
-        string spellStr = spellModifier != 0 ? $" + {spellModifier}(spell)" : "";
-        string wondrousStr = wondrousBonus != 0 ? $" + {wondrousBonus}(wondrous)" : "";
-        string racialStr = racialModifier != 0 ? $" {FormatMod(racialModifier)}(racial/size)" : "";
-        string classFeatureStr = classFeatureBonus != 0 ? $" {FormatMod(classFeatureBonus)}(class feature)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr}{racialStr}{classFeatureStr} = {total}");
+        int modifier = SkillCheckModifier(skill, true, out string breakdown);
+        int total = d20 + modifier;
+        Debug.Log($"[Skills] {CharacterName} rolls {name}: d20({d20}) + {breakdown} = {total}");
 
         return total;
     }
