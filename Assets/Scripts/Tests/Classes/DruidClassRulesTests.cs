@@ -612,14 +612,16 @@ public static class DruidClassRulesTests
             Assert(b.Stats.CurrentHP == -11 && b.IsDead && b.Stats.IsDead, "At -6 the change back puts her at -11: dead (controller.IsDead)",
                 $"{b.Stats.CurrentHP} {b.CurrentHPState}");
 
-            // A disabled druid at 0 hp wild shapes: the standard action takes her to -1, the change heals her above 0.
+            // A disabled druid at 0 hp wild shapes: the change heals her above 0, and the standard action costs her 1 hp
+            // once the act is complete (PHB p.145, CharacterController.ResolvePendingStrenuousDamage at the turn end).
             c = Create("DisabledDruid", 5, new Vector2Int(-80, -262));
             c.Stats.CurrentHP = 0;
             c.SyncHPStateFromCurrentHP();
             Assert(c.CurrentHPState == HPState.Disabled, "At 0 hp she is disabled");
             WildShapeRules.Assume(c, "black_bear");
+            c.ResolvePendingStrenuousDamage();
             Assert(c.Stats.CurrentHP == 9 && c.CurrentHPState == HPState.Healthy && c.CanTakeTurnActions(),
-                "After the change (-1, then +5 Con and +5 rest) she is at 9 hp and no longer disabled", $"{c.Stats.CurrentHP} {c.CurrentHPState}");
+                "After the change (+5 Con and +5 rest, then -1 for the strenuous act) she is at 9 hp and no longer disabled", $"{c.Stats.CurrentHP} {c.CurrentHPState}");
 
             // The post-combat rest ends the form of a dying druid without the Constitution loss: no death.
             e = Create("RestingDyingDruid", 5, new Vector2Int(-80, -264));

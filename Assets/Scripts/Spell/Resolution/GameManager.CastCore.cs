@@ -791,6 +791,9 @@ public partial class GameManager
             var casterSpellComp = caster.Spellcasting;
             if (casterSpellComp != null)
                 casterSpellComp.MarkQuickenedSpellCast();
+            // Casting a quickened spell is strenuous: a disabled caster takes 1 damage after it (PHB p.145, p.93).
+            if (isQuickened)
+                caster.MarkStrenuousAction();
             CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, isQuickened ? "quickened" : "free");
         }
         else if (actionCost == CastActionCost.FullRound)

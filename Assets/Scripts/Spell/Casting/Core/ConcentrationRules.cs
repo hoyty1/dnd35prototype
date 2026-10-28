@@ -93,7 +93,7 @@ public static class ConcentrationRules
         if (!CanMaintain(caster, out reason))
             return null;
         ConcentrationManager conc = caster.Concentration;
-        caster.CommitStandardAction(); // checked above; a disabled caster at 0 hp drops to -1 (PHB p.145), as for bardic music
+        caster.CommitStandardAction(); // checked above; a disabled caster takes 1 damage once the act is done (PHB p.145), as for bardic music
         conc.MarkMaintained();
         return $"{caster.Stats.CharacterName} concentrates on {conc.ConcentrationSpellName} (standard action).";
     }

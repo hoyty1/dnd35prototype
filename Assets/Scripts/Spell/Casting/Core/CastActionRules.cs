@@ -56,6 +56,7 @@ public static class CastActionRules
     public const string RefusalQuickenOncePerRound = "quicken-once-per-round";
     public const string RefusalNoFullRoundAction = "no-full-round-action";
     public const string RefusalNoSwiftAction = "no-swift-action";
+    public const string RefusalNoFurtherActions = "no-further-actions";
 
     /// <summary>True when <paramref name="metamagic"/> quickens the cast (MetamagicSystem.IsQuickened; a held charge's delivery is not a casting, PHB p.141).</summary>
     public static bool IsQuickened(MetamagicData metamagic, CastSource source)
@@ -129,6 +130,10 @@ public static class CastActionRules
         ActionEconomy actions = caster.Actions;
         if (actions == null)
             return null;
+        // A disabled caster whose strenuous act will leave it dying takes nothing further this turn, a quickened spell
+        // included (ActionEconomy.NoFurtherActions, PHB p.145).
+        if (actions.NoFurtherActions && CountsAsQuickenedSpell(spell, metamagic, source))
+            return RefusalNoFurtherActions;
         switch (CastingAction(spell, metamagic, source))
         {
             case CastActionCost.FullRound:
@@ -154,6 +159,8 @@ public static class CastActionRules
                 return $"{casterName} cannot cast {spellName}: casting it takes a full-round action (PHB p.174, p.88).";
             case RefusalNoSwiftAction:
                 return $"{casterName} cannot cast {spellName}: no swift action left this round.";
+            case RefusalNoFurtherActions:
+                return $"{casterName} cannot cast {spellName}: acting while disabled has spent this turn (PHB p.145).";
             default:
                 return $"{casterName} cannot cast {spellName} now.";
         }

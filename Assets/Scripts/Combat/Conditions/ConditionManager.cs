@@ -274,11 +274,15 @@ public class ConditionManager : MonoBehaviour
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (action-limiting stub hook)");
                 break;
             }
+            case CombatConditionType.Nauseated:
+                // A single move action per turn (PHB p.310; CharacterController.RefreshActionLimits, CMB-095).
+                Owner?.RefreshActionLimits();
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (move action only)");
+                break;
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
             case CombatConditionType.Asleep:
             case CombatConditionType.Dazed:
-            case CombatConditionType.Nauseated:
             case CombatConditionType.Panicked:
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (action-limiting stub hook)");
                 break;
@@ -301,12 +305,15 @@ public class ConditionManager : MonoBehaviour
 
         switch (ConditionRules.Normalize(condition.Type))
         {
+            case CombatConditionType.Nauseated:
+                Owner?.RefreshActionLimits(); // never gives back an action already spent
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} removed (move-only limit lifted)");
+                break;
             case CombatConditionType.Stunned:
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
             case CombatConditionType.Asleep:
             case CombatConditionType.Dazed:
-            case CombatConditionType.Nauseated:
             case CombatConditionType.Panicked:
             case CombatConditionType.Invisible:
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} removed (stub hook)");

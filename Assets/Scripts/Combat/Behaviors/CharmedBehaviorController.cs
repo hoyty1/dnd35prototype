@@ -86,7 +86,7 @@ public sealed class CharmedBehaviorController
                     // Wait for the move: it can provoke AoOs that drop the actor (CMB-073).
                     yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, adjacentCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
                     ConsumeMoveAction(actor);
-                    if (actor.Stats.CurrentHP <= 0)
+                    if (!actor.CanTakeTurnActions())
                         yield break;
                     yield return new WaitForSeconds(0.35f);
                 }
@@ -110,7 +110,7 @@ public sealed class CharmedBehaviorController
             {
                 yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, consumableCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
                 ConsumeMoveAction(actor);
-                if (actor.Stats.CurrentHP <= 0)
+                if (!actor.CanTakeTurnActions())
                     yield break;
             }
 
@@ -134,7 +134,7 @@ public sealed class CharmedBehaviorController
         {
             yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approachCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
             ConsumeMoveAction(actor);
-            if (actor.Stats.CurrentHP <= 0)
+            if (!actor.CanTakeTurnActions())
                 yield break;
             yield return new WaitForSeconds(0.35f);
         }
@@ -208,7 +208,7 @@ public sealed class CharmedBehaviorController
                 continue;
 
             inventory.RemoveItemAt(i);
-            actor.Actions.UseStandardAction();
+            actor.CommitStandardAction(); // a disabled actor takes its strenuous 1 hp (PHB p.145)
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{actor.Stats.CharacterName} uses {item.Name} to heal {caster.Stats.CharacterName} for {healed} HP."));
             gameManager.Combat_UpdateAllStatsUI();
             return true;

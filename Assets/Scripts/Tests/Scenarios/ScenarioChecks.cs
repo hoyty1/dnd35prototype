@@ -54,6 +54,7 @@ namespace Tests.Scenarios
         // (pinned, pinner) pairs whose pin just ended; ResolveEndedPins sorts a release from a lapse or an escape.
         private readonly List<(CharacterController, CharacterController)> _pinsEnded = new List<(CharacterController, CharacterController)>();
         private bool _singleActionAtTurnStart;
+        private bool _moveOnlyAtTurnStart;
         private CharacterController _openTurn;
         private int _ownMoveSquares;
         private int _movesSinceAction;
@@ -185,9 +186,11 @@ namespace Tests.Scenarios
             _movesSinceAction = 0;
             _aooSinceTurn[a] = 0;
             _speedSquaresAtTurnStart[a] = a.Stats != null ? Math.Max(0, a.Stats.EffectiveSpeedFeet / 5) : 0;
-            // Disabled or staggered when the turn starts (BeginNPCTurnForAI may still set it; the flag is read again
-            // at turn end only if it was already set here, so a creature dropped to 0 HP mid-charge is not flagged).
+            // Disabled, staggered or slowed when the turn starts (CharacterController.RefreshActionLimits; the flag is
+            // read again at turn end only if it was already set here, so a creature dropped to 0 HP mid-charge is not
+            // flagged). Nauseated likewise for the move-only limit.
             _singleActionAtTurnStart = a.Actions != null && a.Actions.SingleActionOnly;
+            _moveOnlyAtTurnStart = a.Actions != null && a.Actions.MoveActionOnly;
 
             int round = _gm.CurrentRound;
             if (_lastTurnRound.TryGetValue(a, out int last) && last == round)
@@ -210,8 +213,11 @@ namespace Tests.Scenarios
             if (act != null)
             {
                 // A disabled or staggered creature may take only a move or a standard action (PHB p.145-146).
+                // A slowed creature likewise (PHB p.280); a nauseated one takes only a move action (PHB p.310).
                 if (_singleActionAtTurnStart && act.SingleActionOnly && act.FullRoundActionUsed)
                     Violation(Econ, _job.Trace.KeyOf(a) + " took a full-round action while limited to a single action", a);
+                if (_moveOnlyAtTurnStart && act.MoveActionOnly && (act.StandardActionUsed || act.FullRoundActionUsed))
+                    Violation(Econ, _job.Trace.KeyOf(a) + " took a standard or full-round action while limited to a move action", a);
                 if (act.HasMoved5Ft && _ownMoveSquares > 1)
                     Violation(Econ, _job.Trace.KeyOf(a) + " took a 5-ft step and moved " + _ownMoveSquares + " squares", a);
             }

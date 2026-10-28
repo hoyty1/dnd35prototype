@@ -6521,6 +6521,8 @@ public partial class GameManager
             FullRoundActionUsed = caster.Actions.FullRoundActionUsed,
             SwiftActionUsed = caster.Actions.SwiftActionUsed,
             StandardConvertedToMove = caster.Actions.StandardConvertedToMove,
+            StrenuousDamagePending = caster.StrenuousDamagePending,
+            NoFurtherActions = caster.Actions.NoFurtherActions,
             SlotUsedStates = null,
             QuickenedSpellUsed = false
         };
@@ -6638,6 +6640,8 @@ public partial class GameManager
         caster.Actions.FullRoundActionUsed = _pendingSpellcastSnapshot.FullRoundActionUsed;
         caster.Actions.SwiftActionUsed = _pendingSpellcastSnapshot.SwiftActionUsed;
         caster.Actions.StandardConvertedToMove = _pendingSpellcastSnapshot.StandardConvertedToMove;
+        caster.Actions.NoFurtherActions = _pendingSpellcastSnapshot.NoFurtherActions;
+        caster.RestoreStrenuousDamagePending(_pendingSpellcastSnapshot.StrenuousDamagePending);
 
         var spellComp = caster.Spellcasting;
         if (spellComp != null)

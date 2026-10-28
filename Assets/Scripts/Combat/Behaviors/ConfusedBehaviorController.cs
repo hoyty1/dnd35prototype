@@ -134,7 +134,7 @@ public sealed class ConfusedBehaviorController
                         {
                             yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approach.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
                             ConsumeMoveAction(actor);
-                            if (actor.Stats.CurrentHP <= 0)
+                            if (!actor.CanTakeTurnActions())
                                 yield break; // dropped by an AoO while moving (CMB-073)
                         }
                     }

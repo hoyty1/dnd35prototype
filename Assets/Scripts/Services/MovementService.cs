@@ -345,6 +345,13 @@ public class MovementService : MonoBehaviour
             return false;
         }
 
+        // A disabled creature whose strenuous act will leave it dying takes nothing further this turn (PHB p.145).
+        if (character.Actions != null && character.Actions.NoFurtherActions)
+        {
+            reason = "Acting while disabled has spent this turn";
+            return false;
+        }
+
         if (character.HasCondition(CombatConditionType.Prone))
         {
             reason = "Cannot 5-foot step while prone";
@@ -377,6 +384,10 @@ public class MovementService : MonoBehaviour
     public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
     {
         if (character == null || character.Stats == null)
+            return false;
+
+        // A disabled creature whose strenuous act will leave it dying takes nothing further this turn (PHB p.145).
+        if (character.Actions != null && character.Actions.NoFurtherActions)
             return false;
 
         return IsValidAdjacentStepDestination(character, destination, disallowDifficultTerrain: true);

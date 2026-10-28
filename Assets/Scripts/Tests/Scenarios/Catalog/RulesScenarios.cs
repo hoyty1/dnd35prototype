@@ -195,6 +195,11 @@ namespace Tests.Scenarios
             yield return S("freetrip-trigger-aoo", FreeTripTriggerAoO);
             yield return S("single-vs-full-attack", () => SingleVsFull(false));
             yield return S("single-vs-full-attack-ui", () => SingleVsFull(true));
+            yield return S("slowed-no-full-attack-ui", () => SlowedNoFullAttack(true));
+            yield return S("slowed-no-full-attack-ai", () => SlowedNoFullAttack(false));
+            yield return S("disabled-npc-acts", DisabledNpcActs);
+            yield return S("disabled-pc-acts-ui", () => DisabledPcActs(false));
+            yield return S("disabled-pc-wins-ui", () => DisabledPcActs(true));
             yield return S("pin-release-ends-grapple", PinRelease);
             yield return S("pin-release-5ft", PinReleaseFiveFootStep);
             yield return S("pin-release-ui-withdraw", () => PinReleaseLeave(true, "withdraw"));
@@ -2388,6 +2393,195 @@ namespace Tests.Scenarios
             b.Expect("Round 1, after a move: one attack at +10", Expect.ModSequence(key, 1, 10))
              .Expect("Round 2, full attack: +10 then +5", Expect.ModSequence(key, 2, 10, 5));
             return b.Build();
+        }
+
+        // ── Action limits: Slow and disabled (CMB-095, AI-053, batch 12 D5) ──
+
+        /// <summary>
+        /// A slowed fighter (BAB +6, two iteratives) next to a sturdy dummy takes one move or one standard action each
+        /// turn and no full-round action (PHB p.280): one attack per round, never a full attack, and no move after the
+        /// attack. The Ui hero's Full Attack button does nothing and its second Attack click is refused; the AI-run
+        /// fighter's attack sequence stops after one step. Slow is set by the tweak through
+        /// <see cref="CharacterController.ApplySlowEffect"/>, the spell's own apply site, which runs the one action-limit
+        /// formula (<see cref="CharacterController.RefreshActionLimits"/>).
+        /// </summary>
+        private static ScenarioDef SlowedNoFullAttack(bool ui)
+        {
+            string key = ui ? "hero" : "fighter";
+            ScenarioBuilder b = Rules(ui ? "rules/slowed-no-full-attack-ui" : "rules/slowed-no-full-attack-ai",
+                    "A slowed creature takes one move or one standard action and no full attack (PHB p.280; CMB-095)" + (ui ? ", through the PC buttons" : ", on the AI path"))
+                .Covers("CMB-095", "PHB p.280", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc(key, ActorSource.Stats(() => Fighter(ui ? "Hero" : "Fighter", 6)), 10, 10, ui ? Control.Ui : Control.Ai)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Idle)
+                .Tweak(key, c => { StripOffHand(c); c.ApplySlowEffect(10, null); })
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy");
+            if (ui)
+                b.Turn(key, 1,
+                        Step.Assert("the slowed hero starts limited to a single action, with no full-round action", ctx =>
+                            ctx.Get(key).Actions.SingleActionOnly && !ctx.Get(key).Actions.HasFullRoundAction),
+                        Step.FullAttack("dummy"),
+                        Step.Attack("dummy"),
+                        Step.Assert("after the attack the hero has no move action left", ctx => !ctx.Get(key).Actions.HasMoveAction))
+                 .Turn(key, 2, Step.Attack("dummy"), Step.AttackAgain("dummy"))
+                 .Expect("The hero's turns are Ui turns", Expect.Controller(key, "ui"))
+                 .Expect("The Full Attack button does nothing while slowed", Expect.StepStatus(key, 1, "FullAttack", 0, "refused"))
+                 .Expect("Round 1: the single attack is made", Expect.StepStatus(key, 1, "Attack", 0, "done"))
+                 .Expect("Round 2: a second attack (a full attack) is refused", Expect.StepStatus(key, 2, "AttackAgain", 0, "refused", "skipped"));
+            else
+                b.Expect("The fighter's turns are AI turns", Expect.Controller(key, "ai"));
+            // One standard action a round: an attack, or a maneuver in its place (the AI fighter often trips or grapples;
+            // a grapple lost to the dummy's AoO leaves no maneuver event, so a round may show none).
+            b.Expect("At most one attack or maneuver in each round, and at least one in all: a slowed creature never full-attacks (PHB p.280)", v =>
+                {
+                    var parts = new List<string>();
+                    bool ok = true;
+                    int total = 0;
+                    for (int round = 1; round <= 2; round++)
+                    {
+                        int attacks = v.Attacks(key, null, false, round).Count;
+                        int maneuvers = v.Of("maneuver").Count(e => e.Round == round && e.Str("by") == key && !e.Bool("counter"));
+                        parts.Add("round " + round + ": " + attacks + " attack(s), " + maneuvers + " maneuver(s)");
+                        ok &= attacks + maneuvers <= 1;
+                        if (ui) ok &= attacks + maneuvers == 1;
+                        total += attacks + maneuvers;
+                    }
+                    ok &= total >= 1;
+                    return ok ? ExpectResult.Pass(string.Join("; ", parts)) : ExpectResult.Fail(string.Join("; ", parts));
+                })
+             .Expect("Every turn ends under the single-action limit with its action spent (the AI does not skip a slowed turn)", v =>
+                {
+                    int turns = 0;
+                    foreach (TraceEvent te in v.Of("turn_end").Where(e => e.Str("actor") == key))
+                    {
+                        turns++;
+                        if (!(te.Get("econ") is JsonObj econ) || !(econ.Get("single") is bool single && single))
+                            return ExpectResult.Fail("turn #" + te.Seq + " ended without the single-action limit", te.Seq);
+                        if (!(econ.Get("std") is bool su && su) && !(econ.Get("move") is bool mu && mu) && !(econ.Get("full") is bool fu && fu))
+                            return ExpectResult.Fail("turn #" + te.Seq + " spent no action", te.Seq);
+                    }
+                    return turns > 0 ? ExpectResult.Pass(turns + " turn(s), each limited and spent") : ExpectResult.Fail("no turn of " + key);
+                })
+             .Expect("No round has both an attack or maneuver and a move (a 5-ft step aside): one action only (PHB p.280)", v =>
+                {
+                    for (int round = 1; round <= 2; round++)
+                    {
+                        int acts = v.Attacks(key, null, false, round).Count
+                            + v.Of("maneuver").Count(e => e.Round == round && e.Str("by") == key && !e.Bool("counter"));
+                        int moved = v.Moves(key, round).Where(e => e.Str("type") == "move" || e.Str("type") == "path-move").Sum(e => e.Int("sq"));
+                        if (acts > 0 && moved > 0)
+                            return ExpectResult.Fail("round " + round + ": " + acts + " attack(s) or maneuver(s) and a move of " + moved + " square(s)");
+                    }
+                    return ExpectResult.Pass("no round with both");
+                });
+            if (ui)
+                b.Expect("The checks pass", Expect.AssertsPass());
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A disabled AI orc (0 hp) next to an idle hero still takes its turn (PHB p.145; batch 12 D5, AI-053): one
+        /// standard action (an attack or a maneuver), which is strenuous, so after it the orc drops to -1 hp and is dying
+        /// (the damage comes once the act is complete, at the turn end, so the act itself is made while disabled). The
+        /// enemy side is then out and the game declares the victory (CORE-011). Before batch 12 the AI's HP gate ended a
+        /// disabled creature's turn.
+        /// </summary>
+        private static ScenarioDef DisabledNpcActs()
+        {
+            return Rules("rules/disabled-npc-acts", "A disabled AI creature takes one standard action and drops to -1 hp (PHB p.145; AI-053, batch 12 D5)")
+                .Covers("AI-053", "PHB p.145", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Ai)
+                .Hp("orc", 0)
+                .Tweak("hero", SturdyDummy)
+                .Initiative("orc", "hero")
+                .Expect("The orc's turn is an AI turn", Expect.Controller("orc", "ai"))
+                .Expect("The disabled orc takes one standard action: one attack or maneuver in round 1", v =>
+                {
+                    int attacks = v.Attacks("orc", null, false, 1).Count;
+                    int maneuvers = v.Of("maneuver").Count(e => e.Round == 1 && e.Str("by") == "orc");
+                    return attacks + maneuvers == 1
+                        ? ExpectResult.Pass(attacks + " attack(s), " + maneuvers + " maneuver(s)")
+                        : ExpectResult.Fail(attacks + " attack(s), " + maneuvers + " maneuver(s)");
+                })
+                .Expect("The strenuous action drops it to -1 hp once it is complete (PHB p.145)", v =>
+                    v.Log(@"takes 1 damage for acting while disabled \(0 → -1 HP\)").Count > 0
+                        ? ExpectResult.Pass("logged")
+                        : ExpectResult.Fail("no disabled standard-action log line"))
+                .Expect("The orc ends dying at -1 hp, out of the fight", v =>
+                {
+                    JsonObj o = v.Final("orc");
+                    int hp = o != null && o.Get("hp") is int h ? h : int.MinValue;
+                    return hp == -1 && ScenarioChecks.IsDownSnapshot(o) ? ExpectResult.Pass("hp -1, down") : ExpectResult.Fail("hp " + hp);
+                })
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Build();
+        }
+
+        /// <summary>
+        /// A disabled Ui hero (0 hp) attacks an orc (every d20 a 19; PHB p.145, batch 12 D5, the PC side of
+        /// <see cref="DisabledNpcActs"/>). The attack is strenuous: once it is complete the hero is at -1 hp and dying.
+        /// <paramref name="killsLastFoe"/> false: a sturdy orc survives, the hero's 5-ft step after the attack is refused
+        /// (nothing further after a strenuous act that leaves it dying), the 1 hp comes at the turn end and the party is
+        /// out, a defeat. True: the orc is at 1 hp and the attack drops it, so the act decides the fight and the combat-end
+        /// check deals the 1 hp first (GameManager.EvaluateCombatEnd): both sides are out, the hero rolls its
+        /// stabilization (a forced 5 on d%, stable) and the party wins (CORE-038).
+        /// </summary>
+        private static ScenarioDef DisabledPcActs(bool killsLastFoe)
+        {
+            ScenarioBuilder b = Rules(killsLastFoe ? "rules/disabled-pc-wins-ui" : "rules/disabled-pc-acts-ui",
+                    killsLastFoe
+                        ? "A disabled PC that drops the last foe takes its strenuous 1 hp before the fight is decided (PHB p.145; CORE-038)"
+                        : "A disabled PC takes one standard action, nothing further, and drops to -1 hp (PHB p.145; batch 12 D5)")
+                .Covers("AI-053", "PHB p.145", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Idle)
+                .Hp("hero", 0)
+                .Tweak("hero", StripOffHand)
+                .Force(20, 19, null, -1)
+                .Force(100, 5, CharacterController.StabilizationCheckContext, -1)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("the disabled hero starts limited to a single action", ctx =>
+                        ctx.Get("hero").Actions.SingleActionOnly && !ctx.Get("hero").Actions.HasFullRoundAction),
+                    Step.Attack("orc"),
+                    Step.FiveFootStep(9, 10))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The disabled hero makes one attack (a win ends the fight inside the step, so the attack event is counted)", v =>
+                    v.Attacks("hero", "orc", false, 1).Count == 1
+                        ? ExpectResult.Pass("1 attack")
+                        : ExpectResult.Fail(v.Attacks("hero", "orc", false, 1).Count + " attack(s)"))
+                .Expect("The strenuous attack drops it to -1 hp once it is complete (PHB p.145)", v =>
+                    v.Log(@"Hero takes 1 damage for acting while disabled \(0 → -1 HP\)").Count == 1
+                        ? ExpectResult.Pass("logged once")
+                        : ExpectResult.Fail(v.Log(@"Hero takes 1 damage for acting while disabled").Count + " log line(s)"));
+            if (killsLastFoe)
+                b.Hp("orc", 1)
+                 .Expect("The act decided the fight: both sides out, the hero rolls to stabilize first (CORE-038)", v =>
+                    v.Log("Both sides are down at once").Count > 0 ? ExpectResult.Pass("tie line") : ExpectResult.Fail("no tie line"))
+                 .Expect("The hero ends stable at -1 hp", v =>
+                    {
+                        JsonObj hero = v.Final("hero");
+                        bool ok = hero != null && hero.Get("hp") is int hp && hp == -1 && hero.Get("st") is HPState st && st == HPState.Stable;
+                        return ok ? ExpectResult.Pass("hero -1/Stable") : ExpectResult.Fail("hero " + hero?.Get("hp") + "/" + hero?.Get("st"));
+                    })
+                 .Expect("The party wins after the roll-out", Expect.Outcome(Outcome.Victory));
+            else
+                b.Tweak("orc", SturdyDummy)
+                 .Expect("No 5-ft step after the strenuous act (PHB p.145)", Expect.StepStatus("hero", 1, "FiveFootStep", 0, "refused", "skipped"))
+                 .Expect("The hero did not move", v =>
+                    v.Moves("hero").Count == 0 ? ExpectResult.Pass("no move") : ExpectResult.Fail(v.Moves("hero").Count + " move event(s)"))
+                 .Expect("The hero ends dying at -1 hp, and the party is out", v =>
+                    {
+                        JsonObj hero = v.Final("hero");
+                        int hp = hero != null && hero.Get("hp") is int h ? h : int.MinValue;
+                        return hp == -1 && ScenarioChecks.IsDownSnapshot(hero) ? ExpectResult.Pass("hp -1, down") : ExpectResult.Fail("hp " + hp);
+                    })
+                 .Expect("The game declares the defeat itself", Expect.Outcome(Outcome.Defeat));
+            return b.Expect("The checks pass", Expect.AssertsPass()).Build();
         }
 
         // ── Pin release (CMB-089, CMB-122) ──────────────────────────────

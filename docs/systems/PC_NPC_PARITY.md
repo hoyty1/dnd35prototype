@@ -36,7 +36,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 |---|---|---|
 | Attack roll and damage resolution | Shared | (CMB-043 done) |
 | Single attack orchestration | Mostly shared | CMB-017, CMB-019, CMB-090, CMB-093 |
-| Full attack / iteratives | Melee shared (one step resolver and attack sequence); ranged divergent | CMB-091, CMB-044, CMB-095 |
+| Full attack / iteratives | Melee shared (one step resolver and attack sequence); ranged divergent | CMB-091, CMB-044 |
 | Two-weapon, off-hand | PC only | AI-055 |
 | Flurry of blows | Shared since 2026-10-14 (CHR-003): one core, `CharacterController.TryBeginFlurryOfBlows`, called by the PC button and the AI; the steps run through the shared attack sequence (`ResolveAttackSequenceStep`), the PC's one step per target click as in its iterative sequence, and a maneuver may replace any flurry step on both sides (`TryCommitManeuverSubstituteStep`; the PC through the Special Attack menu) | - |
 | Smite (paladin Smite Evil, template smites) | Shared since 2026-10-14 (CHR-020, CMB-021, AI-056): one rule, `SmiteRules`; the PC Smite button and the AI (`TryNPCDeclareSmite`, before the NPC melee sequence or a charge's attack) declare it, and `PerformSingleAttackWithCritCore` applies and spends it on the next melee attack of either side; summons and other templated creatures alike | - |
@@ -50,7 +50,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Crawl, drop prone | PC only | CMB-074, AI-054 |
 | Turn start | Divergent | CMB-075, AI-053, CHR-069, CMB-094 |
 | Turn end, round ticks, initiative | Shared | - |
-| Action economy | Mostly shared | CMB-095, CMB-102 |
+| Action economy | Shared action limits since batch 12 step 3 (`CharacterController.RefreshActionLimits`: Slow, disabled, staggered, nauseated) | CMB-102 |
 | Single-target spellcasting | Shared: one staged cast core and one handler registry for both sides since batch 11 step 8 (2026-10-15); the NPC path's remaining differences are named `LegacyCastQuirk` bits (see section 5, step 9); the caster choices are the AI decider's own since batch 11 step 22 (2026-10-16), and the AI chooses metamagic since step 28 (AI-001 closed) | SPL-114, SPL-160, CORE-039 |
 | Area spells | Shared since batch 11 step 25 (2026-10-16): an NPC area cast is an area request (`SpellCastRequest.ForAIArea`, or `ForAIGrease` for Grease's 10-ft. square) run through the same stages, area handler registry and Grease resolve as the PC's (`GameManager.TryNPCPerformAreaSpellCast`, `RunCastSync`), aimed by the AI's search (`AreaAimSearch`) over the step 24 geometry and tests the PC cursor and the Legality stage use (origins at intersections, range and line of effect to the origin, `AoESystem.GetTargetsInArea` with `TeamUtility`); the AI casts as an area exactly the spells the PC's targeting routes to the area cast (`AoESystem.RoutesToArea`, Prayer's burst included since the step 25 review; its old single-target resolver is reached by no request), and a single-target request of any of them is refused for every caster ("area-needs-aim"); a Grease square's and a one-square effect's range is tested in the core (`CheckAreaOriginLegality`), not only by the PC highlight and the AI's search. The NPC area request keeps the NPC caster tests (`LegacyCastQuirkSets.AiAreaPath`, SPL-160). What the AI decider cannot fill (a wall's ends, Grease on an object, a swarm's square) is a decider capability (`ICastDecider.CanFill`), not a rule fork (AI-071) | SPL-160, AI-071 |
 | Summons | Shared since batch 11 step 27 (2026-10-16): an NPC summon is a summon request (`SpellCastRequest.ForAISummon`) run through the PC's Summon resolve, whose creature and square the AI decider picks; a summon follows its caster's control; a single-target request of a summon spell is refused for every caster; one square test for every caster at the cast core's Legality stage (range, room for the creature's space, line of effect; `CheckSummonPlacementLegality`), which the PC highlight and the AI's square search also filter through. The AI cannot place a Summon Swarm (a decider capability, AI-071) | AI-071 |
@@ -67,7 +67,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Conditions: compulsion behaviour | Divergent | CMB-100 |
 | Wards and barriers (Sanctuary, Resilient Sphere) | Divergent | CMB-093, CMB-092, AI-005 |
 | Perception of unseen creatures | NPC only | CMB-094 |
-| HP, dying, death | Mostly shared | CORE-015, AI-053 |
+| HP, dying, death | Mostly shared (a disabled NPC acts since batch 12 step 3) | CORE-015 |
 | Damage mitigation | Shared (2026-10-09, SPL-004) | CMB-013, CMB-011 |
 | Stat derivation | Divergent by origin (BAB and base saves shared since 2026-10-08, CRE-004; averaged hit dice and creature HP totals shared since 2026-10-14, CRE-041; elite and nonelite arrays for class levels on creatures, the elite DMG chapter 4 arrangement PCs' NPC counterparts use, since 2026-10-14, CRE-058) | CHR-070, CHR-067, CRE-058 |
 | Equipment-derived stats | Shared | - |
@@ -88,7 +88,6 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CMB-102 (new, mostly fixed) | Maneuver action cost | The attack sequence is per creature (standard then move for both sides); the NPC melee attack runs step by step and the AI may replace any step, weapon or natural, with trip, disarm, sunder or grapple at that step's bonus (2026-10-07; a natural attack at its own BAB, primary full, secondary -5 or -2 with Multiattack, for PCs and NPCs through one core, `TryCommitManeuverSubstituteStep`; natural-weapon rulings of 2026-10-08 on both sides: sunder with a slashing or bludgeoning natural attack through `CanSunderWithAttack`, a natural weapon disarms as a one-handed weapon of the creature's size, and a secondary penalty applies to the grapple touch attack only; an "Unarmed Strike" listed as a natural attack (no shipped entry since CRE-042, 2026-10-14) disarms and sunders like a PC monk's unarmed strike, as a light weapon, owner interpretation 2026-10-11, CMB-141). Bull rush is a standard action or charge end for both sides, with one legality check and one charge bull rush (2026-10-07). The AI re-evaluates every step, limited by a per-turn stopgap (owner decision 2026-10-07, AI-060: no maneuver after one succeeds, no retry of a failed type against the same target; an AI limit, not a rule). Open: no charge or AoO substitutes, NPCs never feint | PC/NPC | Med | AttackPool.cs (`ManeuverActionCost`); NPCTurns.cs (`PerformNPCMeleeAttackSequence`); AIService.cs (`PerformMeleeAttackActionWithManeuvers`) |
 | CMB-092 (new) | Resilient Sphere | Blocks only PC attacks; an enclosed NPC loses its whole turn while an enclosed PC can self-cast | NPC/PC | Med | CombatFlowService.cs:164-177; AIService.cs:196-202 |
 | CMB-094 (new) | Unseen creatures | Only AI-run creatures get Listen pinpointing; PCs auto-miss and cannot shoot into a square | NPC | Med | AIService.cs:887, 1524, 2978; CombatActions.cs:95 |
-| CMB-095 (new) | Slow | No-full-round check in the shared attack-sequence executor (PC iteratives, NPC melee), the NPC ranged full attack and the natural Full Attack button; PC dual wield unchecked (the flurry checks it since CHR-003); a slowed creature still gets move + standard | PC | Med | CharacterController.cs (`CanPayForNextAttack`); NPCTurns.cs:1175 |
 | CMB-096 (new) | Thrown mode | PC UI global; NPCs cannot throw melee weapons and NPC range math reads it | depends | Med | GameManager.cs:11564-11592; CombatFlowService.cs:228-254 |
 | GRID-018 (new) | Grease movement | Entry save and extra cost only on PC voluntary moves | NPC | Med | CombatActions.cs:1019, 1058 |
 | SPL-112 (fixed 2026-10-16) | Caster choices | Fixed by batch 11 step 22: the AI decider makes the caster's choices (`AiCastChoiceHeuristics`: the energy of the visible enemies' attacks, else the energy last taken, else fire; chill Fire Shield against fire, else warm; Disguise Self the caster's race); the rules read the request's choice for both sides (`rules/cast-pair-resist-energy` passes, `rules/npc-resist-energy-choice` and `-cold`) | none | n/a | AI/Spellcasting/AiCastDecider.cs, AiCastChoiceHeuristics.cs |
@@ -127,7 +126,6 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | ITM-070 (new) | Charmed potion | Separate potion resolution | NPC | Low | CharmedBehaviorController.cs:178-215 |
 | CHR-076 (new) | Commoner weapon | An NPC commoner is proficient with the first simple weapon it carries (DMG p.109); a PC who takes commoner levels never chooses one | NPC | Low | CreatureProficiency.cs (`FirstCarriedSimpleWeapon`); CharacterStats.cs (`IsProficientWithWeapon`) |
 | AI-057 (new) | Reload then fire | NPC stops after reload | PC | Low | NPCTurns.cs:1142-1150 |
-| AI-053 | Disabled at 0 HP | NPC loses the turn | PC | Low | AIService.cs:66 |
 | CMB-074 | Crawl, drop prone | PC only | PC | Low | GameManager.cs:7054-7388 |
 
 Dropped after spot-check:
@@ -145,9 +143,9 @@ Cheap first, all localized:
    - (done 2026-10-28, batch 12 step 2) fix the acid spray numbers (CRE-040, narrowed to its trigger);
    - (done 2026-10-28, batch 12 step 2) compute flanking in the PC charge (CMB-018, narrowed to the charge core).
    - Batch 12 implements this step (planned 2026-10-23, not built yet): `docs/designs/pc_npc_parity_batch12.md`.
-2. **More cheap fixes.** These close CMB-095, AI-053, SPL-119 and CHR-067 (partly):
-   - set `SingleActionOnly` while Slowed (CMB-095);
-   - delete the AI HP<=0 gates (AI-053);
+2. **More cheap fixes.** These close CMB-095, AI-053 (its HP part), SPL-119 and CHR-067 (partly):
+   - (done 2026-10-28, batch 12 step 3) one action-limit formula, `CharacterController.RefreshActionLimits`, for both sides: single action while disabled, staggered, slowed or `IsSingleActionsOnly`, move action only while nauseated (`ActionEconomy.MoveActionOnly`); the per-button Slow checks are gone (CMB-095 closed);
+   - (done 2026-10-28, batch 12 step 3) the AI HP<=0 gates read `CanTakeTurnActions`, `ThreatSystem.IsMoverIncapacitated` and `MoveAlongPath` stop only a dead, dying or unconscious mover, and the engulf, the standard-action ranged specials, the charmed item use and Manyshot pay through `CommitStandardAction`, so a disabled creature acts and takes its strenuous 1 hp once the act is done, at the turn end or by the combat-end check when the act puts a side out, Diehard below 0 included, a quickened spell too (decision D5; AI-053 narrowed to its non-HP items; CMB-072 closed; a mover disabled mid-path still finishes its path, CMB-176);
    - (done 2026-10-16, batch 11 step 23) `AoESystem.GetTargetsInArea` by `TeamUtility` (SPL-119);
    - untrained skill fallback to the ability modifier (CHR-067).
    - Batch 12 implements this step (planned 2026-10-23, not built yet): `docs/designs/pc_npc_parity_batch12.md`.

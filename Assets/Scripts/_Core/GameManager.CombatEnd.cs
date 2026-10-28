@@ -40,6 +40,11 @@ public partial class GameManager
             return true;
 
         CombatEndRules.SideCounts sides = GetCombatEndSides();
+        // The act that put a side out is complete, so a disabled creature's strenuous 1 hp for it is dealt before the
+        // fight is decided (PHB p.145): a disabled last PC that drops the last foe is then at -1 and dying, and both
+        // sides are out (CORE-038). Elsewhere the turn end deals it (NextInitiativeTurn).
+        if ((sides.PlayersOut || sides.EnemiesOut) && SettleAllStrenuousDamage())
+            sides = GetCombatEndSides();
         if (sides.PlayersOut && sides.EnemiesOut)
         {
             if (ResolvePartyDyingAfterBothSidesOut(sourceContext))
@@ -62,6 +67,34 @@ public partial class GameManager
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Deals the 1 hp a disabled creature owes for a strenuous act (PHB p.145; CharacterController.MarkStrenuousAction),
+    /// with the death cleanup when it dies of it. True when damage was dealt.
+    /// </summary>
+    private bool SettleStrenuousDamage(CharacterController c)
+    {
+        if (c == null || !c.ResolvePendingStrenuousDamage())
+            return false;
+
+        if (c.CurrentHPState == HPState.Dead)
+        {
+            _conditionService?.CleanupOnDeath(c);
+            HandleSummonDeathCleanup(c);
+        }
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    /// <summary>Settles every combatant's owed strenuous damage (<see cref="SettleStrenuousDamage"/>); true when any was dealt.</summary>
+    private bool SettleAllStrenuousDamage()
+    {
+        bool dealt = false;
+        foreach (CharacterController c in GetAllCharacters())
+            if (c != null && c.StrenuousDamagePending)
+                dealt |= SettleStrenuousDamage(c);
+        return dealt;
     }
 
     /// <summary>

@@ -16,6 +16,10 @@ internal sealed class CastResourceSnapshot
     public bool FullRoundActionUsed;
     public bool SwiftActionUsed;
     public bool StandardConvertedToMove;
+    // A disabled caster's owed strenuous damage and its no-further-actions limit (CharacterController.MarkStrenuousAction):
+    // a refunded cast never completed its act, so it owes nothing for it.
+    public bool StrenuousDamagePending;
+    public bool NoFurtherActions;
     public bool QuickenedSpellUsed;
     public List<bool> SlotUsedStates;
     // Spells-per-day counters spent before the AoO prompt (spontaneous casters,

@@ -19,8 +19,20 @@ public class ActionEconomy
     // Whether a 5-foot step has been taken this turn
     public bool HasMoved5Ft;
 
-    // D&D 3.5 disabled state support: one move OR one standard action each turn.
+    // One move OR one standard action each turn, and no full-round action: disabled (PHB p.145), staggered (PHB p.146,
+    // glossary p.313), slowed (PHB p.280), or a creature limited to single actions (zombies, MM p.266). Written by
+    // CharacterController.RefreshActionLimits; a plain field so tests can set it directly.
     public bool SingleActionOnly;
+
+    // Only a single move action each turn: nauseated (PHB p.310 glossary; DMG p.301). No standard or full-round
+    // action and no conversion of the standard action. Written by CharacterController.RefreshActionLimits.
+    public bool MoveActionOnly;
+
+    // A disabled creature finished a strenuous act this turn that will leave it dying once its 1 damage is dealt
+    // (PHB p.145: after the act it is "now" at -1 and dying), so it takes no further action, 5-ft step or swift or
+    // quickened casting this turn. Set by CharacterController.MarkStrenuousAction (not for Diehard or temporary hit
+    // points, which keep it disabled); cleared by Reset and by a refunded cast's snapshot.
+    public bool NoFurtherActions;
 
     // ========== AVAILABILITY CHECKS ==========
 
@@ -29,7 +41,7 @@ public class ActionEconomy
     {
         get
         {
-            if (FullRoundActionUsed || MoveActionUsed)
+            if (NoFurtherActions || FullRoundActionUsed || MoveActionUsed)
                 return false;
             if (SingleActionOnly && (StandardActionUsed || StandardConvertedToMove))
                 return false;
@@ -42,6 +54,8 @@ public class ActionEconomy
     {
         get
         {
+            if (MoveActionOnly || NoFurtherActions)
+                return false;
             if (FullRoundActionUsed || StandardActionUsed || StandardConvertedToMove)
                 return false;
             if (SingleActionOnly && MoveActionUsed)
@@ -51,20 +65,21 @@ public class ActionEconomy
     }
 
     /// <summary>Can the character take a Full-Round Action? (requires neither standard nor move used yet)</summary>
-    public bool HasFullRoundAction => !SingleActionOnly && !FullRoundActionUsed && !StandardActionUsed && !MoveActionUsed && !StandardConvertedToMove;
+    public bool HasFullRoundAction => !SingleActionOnly && !MoveActionOnly && !NoFurtherActions && !FullRoundActionUsed && !StandardActionUsed && !MoveActionUsed && !StandardConvertedToMove;
 
     /// <summary>Can the character convert their standard action into a second move?</summary>
-    public bool CanConvertStandardToMove => !SingleActionOnly && HasStandardAction && MoveActionUsed;
+    public bool CanConvertStandardToMove => !SingleActionOnly && !MoveActionOnly && HasStandardAction && MoveActionUsed;
 
     /// <summary>Can the character take a Swift Action?</summary>
-    public bool HasSwiftAction => !SwiftActionUsed;
+    public bool HasSwiftAction => !SwiftActionUsed && !NoFurtherActions;
 
     /// <summary>Are all meaningful actions (standard+move or full-round) spent?</summary>
     public bool AllMainActionsSpent
     {
         get
         {
-            if (FullRoundActionUsed) return true;
+            if (FullRoundActionUsed || NoFurtherActions) return true;
+            if (MoveActionOnly && MoveActionUsed) return true; // the one move action was the whole turn
             bool moveSpent = MoveActionUsed || StandardConvertedToMove;
             bool stdSpent = StandardActionUsed || StandardConvertedToMove;
             // If both are spent, or standard used and move used
@@ -96,7 +111,9 @@ public class ActionEconomy
             return false;
 
         MoveActionUsed = true;
-        if (SingleActionOnly)
+        // The one move action of a single-action or move-only turn is the whole turn: lifting the limit later in the
+        // turn gives no standard action back (CharacterController.RefreshActionLimits).
+        if (SingleActionOnly || MoveActionOnly)
             StandardConvertedToMove = true;
         return true;
     }
@@ -136,6 +153,8 @@ public class ActionEconomy
         SwiftActionUsed = false;
         StandardConvertedToMove = false;
         SingleActionOnly = false;
+        MoveActionOnly = false;
+        NoFurtherActions = false;
         HasMoved5Ft = false;
     }
 
@@ -145,7 +164,7 @@ public class ActionEconomy
     {
         if (FullRoundActionUsed) return "Full-Round Action used - Turn complete";
 
-        string status = SingleActionOnly ? "[Single action only] " : "";
+        string status = MoveActionOnly ? "[Move action only] " : SingleActionOnly ? "[Single action only] " : "";
         if (HasMoveAction) status += "[Move] ";
         else status += "[Move USED] ";
 

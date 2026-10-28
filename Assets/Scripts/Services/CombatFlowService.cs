@@ -1414,8 +1414,8 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        // Manyshot is a standard action
-        attacker.Actions.UseStandardAction();
+        // Manyshot is a standard action (PHB p.97); a disabled archer takes its strenuous 1 hp (PHB p.145)
+        attacker.CommitStandardAction();
         attacker.Stats.ManyshotActive = false; // consume the toggle
 
         int manyshotPenalty = FeatManager.GetManyshotAttackPenalty(); // -4

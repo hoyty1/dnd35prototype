@@ -547,7 +547,7 @@ public static class BardicMusicRules
             log.Append(End(bard, "starts another song", all)).Append(' ');
 
         d.SpendUse();
-        bard.CommitStandardAction(); // checked above; a disabled bard at 0 hp drops to -1 (PHB p.145)
+        bard.CommitStandardAction(); // checked above; a disabled bard takes 1 damage once the act is done (PHB p.145)
         string uses = $"({d.RemainingUses}/{d.MaxUsesPerDay} uses left)";
         if (DeafFailure(bard, log))
             return BardicMusicResult.Done($"{name} tries to begin {BardicAbilityInfo.GetDisplayName(ability)}.{log} {uses}");
@@ -639,7 +639,7 @@ public static class BardicMusicRules
         if (!CanConcentrate(bard, out string reason))
             return BardicMusicResult.Refused(reason);
         BardicMusicData d = Data(bard.Stats);
-        bard.CommitStandardAction(); // checked above; a disabled bard at 0 hp drops to -1 (PHB p.145)
+        bard.CommitStandardAction(); // checked above; a disabled bard takes 1 damage once the act is done (PHB p.145)
         d.ConcentratedThisTurn = true;
         return BardicMusicResult.Done($"{bard.Stats.CharacterName} keeps up {BardicAbilityInfo.GetDisplayName(d.ActiveAbility)} (concentration).");
     }
@@ -658,7 +658,7 @@ public static class BardicMusicRules
         BardicMusicData d = Data(bard.Stats);
         string name = bard.Stats.CharacterName;
         string tName = target.Stats.CharacterName;
-        bard.CommitStandardAction(); // checked above; a disabled bard at 0 hp drops to -1 (PHB p.145)
+        bard.CommitStandardAction(); // checked above; a disabled bard takes 1 damage once the act is done (PHB p.145)
         d.ConcentratedThisTurn = true;
 
         var log = new StringBuilder($"{name} makes a suggestion to {tName}: ");

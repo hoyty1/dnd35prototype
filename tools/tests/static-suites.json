@@ -546,6 +546,17 @@
       "notes": "Throws NullReferenceException in TestElementalForms (form is named \"Fire Elemental (Small)\", TST-008); later tests do not run."
     },
     {
+      "type": "Tests.Combat.ActionLimitRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 35,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-095, AI-053, batch 12 step 3 decision D5 (2026-10-28): the one action-limit formula (CharacterController.RefreshActionLimits) for Slow (single action, no full-round action; Haste ending Slow gives nothing back), Nauseated (move action only), disabled and staggered (single action), the disabled strenuous 1 hp after the act (ResolvePendingStrenuousDamage, Diehard included) and ThreatSystem.IsMoverIncapacitated (0 hp keeps moving). Play only: CharacterController.Init needs Awake (TST-009). 25/25 in a fresh Play session with the baseline seed and seeds 1-4."
+    },
+    {
       "type": "Tests.Combat.AnimateRopeRulesTests",
       "needs": "either",
       "skip": "",
@@ -884,7 +895,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 194,
+      "passed": 195,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1711,7 +1722,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 611,
+      "passed": 613,
       "failed": 6,
       "flakyFailures": 0,
       "knownFailures": [

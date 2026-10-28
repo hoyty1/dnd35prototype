@@ -564,8 +564,9 @@ namespace Tests.Scenarios
                         if (a.HasTakenFiveFootStep) { ok = false; note = "a 5-ft step was taken this turn"; break; }
                         if (!(act.HasMoveAction || act.CanConvertStandardToMove)) { ok = false; note = "no move action left"; break; }
                         yield return gm.MoveCharacterAlongComputedPathForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI());
-                        // AIService spends the move after the path, unless the mover was dropped (CMB-073).
-                        if (Fingerprint(job, a) != before && a.Stats != null && a.Stats.CurrentHP > 0)
+                        // AIService spends the move after the path, unless the mover was dropped (CMB-073; a disabled
+                        // mover is not dropped, PHB p.145, batch 12 D5).
+                        if (Fingerprint(job, a) != before && a.Stats != null && !ThreatSystem.IsMoverIncapacitated(a))
                         {
                             if (act.HasMoveAction) act.UseMoveAction();
                             else if (act.CanConvertStandardToMove) act.ConvertStandardToMove();

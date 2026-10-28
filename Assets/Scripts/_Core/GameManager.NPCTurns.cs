@@ -87,9 +87,9 @@ public partial class GameManager
             yield break;
 
         // ── Death/disable check at summon turn start ──
-        if (summon.Stats != null && summon.Stats.CurrentHP <= 0)
+        if (summon.Stats != null && !summon.CanTakeTurnActions())
         {
-            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} is dead/disabled (HP={summon.Stats.CurrentHP}) at summon turn start — turn ended");
+            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} cannot act (HP={summon.Stats.CurrentHP}) at summon turn start — turn ended");
             yield break;
         }
 
@@ -112,9 +112,9 @@ public partial class GameManager
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
 
                 // ── Death/disable check after retreat movement ──
-                if (summon.Stats.CurrentHP <= 0)
+                if (!summon.CanTakeTurnActions())
                 {
-                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} killed/disabled during retreat (HP={summon.Stats.CurrentHP}) — turn ended");
+                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} dropped during retreat (HP={summon.Stats.CurrentHP}) — turn ended");
                     yield break;
                 }
 
@@ -133,9 +133,9 @@ public partial class GameManager
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
 
                 // ── Death/disable check after advance movement ──
-                if (summon.Stats.CurrentHP <= 0)
+                if (!summon.CanTakeTurnActions())
                 {
-                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} killed/disabled during advance (HP={summon.Stats.CurrentHP}) — turn ended");
+                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} dropped during advance (HP={summon.Stats.CurrentHP}) — turn ended");
                     yield break;
                 }
 
@@ -146,9 +146,9 @@ public partial class GameManager
         }
 
         // ── Death/disable re-check before attack phase ──
-        if (summon.Stats.CurrentHP <= 0)
+        if (!summon.CanTakeTurnActions())
         {
-            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} dead/disabled before summon attack phase (HP={summon.Stats.CurrentHP}) — turn ended");
+            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} cannot act before summon attack phase (HP={summon.Stats.CurrentHP}) — turn ended");
             yield break;
         }
 
@@ -830,7 +830,7 @@ public partial class GameManager
         int iteration;
         for (iteration = 0; iteration < maxSequenceIterations; iteration++)
         {
-            if (npc.Stats == null || npc.Stats.IsDead || npc.Stats.CurrentHP <= 0 || CurrentPhase == TurnPhase.CombatOver)
+            if (npc.Stats == null || npc.Stats.IsDead || !npc.CanTakeTurnActions() || CurrentPhase == TurnPhase.CombatOver)
                 break;
 
             // Same predicate as the PC iterative flow (CharacterController.UsesInnateNaturalAttackSequence).
@@ -916,7 +916,7 @@ public partial class GameManager
                         break;
                     }
 
-                    if (npc.Stats.IsDead || npc.Stats.CurrentHP <= 0)
+                    if (npc.Stats.IsDead || !npc.CanTakeTurnActions())
                         break;
 
                     // A failed trip waits on a controllable defender's counter-trip choice (PHB p.158,
@@ -1573,8 +1573,7 @@ public partial class GameManager
 
         bool canUseFullAttack = npc.Actions != null
             && npc.Actions.HasFullRoundAction
-            && npc.IsTargetInCurrentWeaponRange(target)
-            && !npc.HasActiveSlowEffect; // Slow prevents full-round actions (PHB p.280)
+            && npc.IsTargetInCurrentWeaponRange(target); // no full-round action while slowed (PHB p.280, CMB-095)
 
         if (canUseFullAttack)
         {
@@ -1783,7 +1782,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
         yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep));
-        if (npc.Stats.CurrentHP <= 0)
+        if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO while moving (CMB-073)
 
         if (npc.Actions.HasMoveAction)

@@ -3844,6 +3844,10 @@ public partial class GameManager : MonoBehaviour
         CheckSpellConcentrationAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
+        // A disabled creature's strenuous act costs 1 hp once the act is complete (PHB p.145), after the dying check
+        // so a creature that drops to -1 here starts its dying rolls next turn; the combat-end check below sees it.
+        // An act that decided the fight was settled by EvaluateCombatEnd already.
+        SettleStrenuousDamage(endingCharacter);
 
         // Every turn boundary checks the combat end (CORE-011): whatever dropped a creature during this turn, on
         // any path, the combat ends here at the latest. Checked before TurnEndedEvent so its subscribers see the end.
@@ -4387,7 +4391,7 @@ public partial class GameManager : MonoBehaviour
         else if (actor.Actions.CanConvertStandardToMove)
             actor.Actions.ConvertStandardToMove();
         else if (actor.Actions.HasStandardAction)
-            actor.Actions.UseStandardAction();
+            actor.CommitStandardAction(); // every standard action pays here (PHB p.145; CMB-072)
     }
 
     private void ResolveConsumableUseProvocation(CharacterController actor, int inventoryIndex, ItemData item)
@@ -9087,15 +9091,8 @@ public partial class GameManager : MonoBehaviour
     public void OnFullAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
+        // Slow, disabled, staggered and nauseated creatures have no full-round action (ActionEconomy, CMB-095).
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
-
-        // Slow prevents full-round actions (PHB p.280)
-        if (pc.HasActiveSlowEffect)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is Slowed and cannot take full-round actions!"));
-            CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;

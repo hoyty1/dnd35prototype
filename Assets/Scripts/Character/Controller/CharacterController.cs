@@ -831,7 +831,7 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
-        if (Actions == null || !Actions.HasFullRoundAction || HasActiveSlowEffect)
+        if (Actions == null || !Actions.HasFullRoundAction)
         {
             reason = "a flurry of blows is a full attack and needs the full-round action (PHB p.40, p.143)";
             return false;
@@ -1010,8 +1010,7 @@ public class CharacterController : MonoBehaviour
 
         return Actions != null
             && Actions.HasMoveAction
-            && !Actions.SingleActionOnly
-            && !HasActiveSlowEffect;
+            && !Actions.SingleActionOnly;
     }
 
     /// <summary>Can the action for the next attack be paid (or is it already paid)?</summary>
@@ -1038,13 +1037,13 @@ public class CharacterController : MonoBehaviour
                 return false;
 
             case ProgressiveAttackMode.StandardAttackCommitted:
-                if (HasActiveSlowEffect)
+                if (Actions.SingleActionOnly)
                 {
-                    reason = "slowed creatures cannot take full-round actions, so a second attack is not allowed (PHB p.280)";
+                    reason = "limited to a single action this turn (disabled, staggered or slowed), so a second attack is not allowed (PHB p.145, p.280)";
                     return false;
                 }
 
-                if (!Actions.HasMoveAction || Actions.SingleActionOnly)
+                if (!Actions.HasMoveAction)
                 {
                     reason = "a second attack makes this a full attack and needs the unspent move action (PHB p.143)";
                     return false;
@@ -2218,6 +2217,7 @@ public class CharacterController : MonoBehaviour
             DurationRemainingRounds = rounds
         };
         ActiveSlowEffect.SetCaster(caster);
+        RefreshActionLimits(); // Slow: one move or standard action, no full-round action (PHB p.280, CMB-095)
     }
 
     public void UpdateSlowDuration(int durationRemainingRounds)
@@ -2225,11 +2225,13 @@ public class CharacterController : MonoBehaviour
         if (ActiveSlowEffect == null)
             return;
         ActiveSlowEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+        RefreshActionLimits();
     }
 
     public void ClearSlowEffect()
     {
         ActiveSlowEffect = null;
+        RefreshActionLimits(); // never gives back an action already spent
     }
 
     /// <summary>
@@ -4009,13 +4011,13 @@ public class CharacterController : MonoBehaviour
 
         for (int i = 0; i < path.Count; i++)
         {
-            // ── Death/disable check BEFORE each movement step ──
-            // If the creature was killed or disabled (HP <= 0) by damage taken during
-            // movement (e.g., Wall of Fire pass-through, AoO, etc.), stop immediately.
-            // D&D 3.5e: a dead/dying/disabled creature cannot continue moving.
-            if (Stats != null && Stats.CurrentHP <= 0)
+            // ── Incapacitation check BEFORE each movement step ──
+            // If damage taken during movement (Wall of Fire pass-through, an AoO) left the creature dead, dying or
+            // unconscious, stop immediately. A disabled creature (exactly 0 hp, or below 0 with Diehard) keeps
+            // moving: it may still take its move action (PHB p.145; batch 12 D5, AI-053).
+            if (Stats != null && ThreatSystem.IsMoverIncapacitated(this))
             {
-                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} is dead/disabled (HP={Stats.CurrentHP}) — movement interrupted at step {i}/{path.Count}");
+                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} cannot act (HP={Stats.CurrentHP}) — movement interrupted at step {i}/{path.Count}");
                 break;
             }
 
@@ -4068,9 +4070,9 @@ public class CharacterController : MonoBehaviour
             // Area effects (Wall of Fire, etc.) detect entry via UpdateCharacterTracking()
             // in their Update() method. The yield return null above gives Unity a frame to
             // process those Updates. Check again after the step completes.
-            if (Stats != null && Stats.CurrentHP <= 0)
+            if (Stats != null && ThreatSystem.IsMoverIncapacitated(this))
             {
-                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} killed/disabled after step {i + 1}/{path.Count} at ({GridPosition.x},{GridPosition.y}) (HP={Stats.CurrentHP}) — movement interrupted");
+                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} dropped after step {i + 1}/{path.Count} at ({GridPosition.x},{GridPosition.y}) (HP={Stats.CurrentHP}) — movement interrupted");
                 break;
             }
         }
@@ -4512,6 +4514,7 @@ public class CharacterController : MonoBehaviour
     public void ResetForNewCreature(string reason = "slot reused")
     {
         StopAllCoroutines();
+        StrenuousDamagePending = false;
         _currentScaleAnimation = null;
         _grappleAlternateVisibilityCoroutine = null;
 
@@ -5343,8 +5346,7 @@ public class CharacterController : MonoBehaviour
         UpdateConditionsForHPState(newState);
         EnsureStatusTagManager().UpdateHPStateTags(newState);
 
-        Actions.SingleActionOnly = (newState == HPState.Disabled || newState == HPState.Staggered)
-            || (Stats != null && Stats.IsSingleActionsOnly);
+        RefreshActionLimits();
 
         if (newState == HPState.Unconscious || newState == HPState.Dying || newState == HPState.Stable)
         {
@@ -5497,21 +5499,101 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// The one action-limit formula (PHB p.145 disabled, p.146 and glossary p.313 staggered, p.280 Slow, p.310
+    /// nauseated; MM p.266 single actions; CMB-095): one move or one standard action and no full-round action while
+    /// disabled, staggered, slowed or limited to single actions; a single move action while nauseated. It only sets the
+    /// flags, so it never gives back an action already spent (<see cref="ActionEconomy.UseStandardAction"/> and
+    /// <see cref="ActionEconomy.UseMoveAction"/> spend both halves while a limit is on). Called at turn start, on an HP
+    /// state change and wherever Slow or Nauseated is applied or removed.
+    /// </summary>
+    public void RefreshActionLimits()
+    {
+        if (Actions == null)
+            return;
+
+        Actions.SingleActionOnly = _currentHPState == HPState.Disabled
+            || _currentHPState == HPState.Staggered
+            || (Stats != null && Stats.IsSingleActionsOnly)
+            || HasActiveSlowEffect;
+        Actions.MoveActionOnly = Stats != null && HasConditionDirect(CombatConditionType.Nauseated);
+    }
+
+    /// <summary>
+    /// A disabled creature took a strenuous act this turn (a standard action, or a quickened spell) and owes the 1
+    /// damage for it (<see cref="ResolvePendingStrenuousDamage"/>). Cleared at turn start and by
+    /// <see cref="ResetForNewCreature"/>; a refunded cast puts back its value from before the cast.
+    /// </summary>
+    public bool StrenuousDamagePending { get; private set; }
+
+    /// <summary>
+    /// Spend the standard action. A disabled creature's standard action is strenuous (<see cref="MarkStrenuousAction"/>).
+    /// Every standard action of either side pays here.
+    /// </summary>
     public bool CommitStandardAction()
     {
         if (!Actions.HasStandardAction)
             return false;
 
         Actions.UseStandardAction();
+        MarkStrenuousAction();
+        return true;
+    }
 
-        if (_currentHPState == HPState.Disabled && Stats != null && Stats.CurrentHP == 0)
-        {
-            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{Stats.CharacterName} takes a standard action while disabled and drops to -1 HP!"));
+    /// <summary>
+    /// A strenuous act by a disabled creature: a standard action (<see cref="CommitStandardAction"/>) or another
+    /// strenuous action such as casting a quickened spell (PHB p.145; PHB p.93 Diehard; the cast core's free-action cost,
+    /// PCs and NPCs alike). It takes 1 damage after completing the act (at 0 hp it is then at -1 and dying; with
+    /// Diehard below 0 it loses 1 more and stays disabled). The damage is owed here and dealt by
+    /// <see cref="ResolvePendingStrenuousDamage"/> once the act is done: at the turn end (GameManager.NextInitiativeTurn)
+    /// or, when the act decides the fight, by the combat-end check (GameManager.EvaluateCombatEnd). A creature the
+    /// damage will leave dying takes nothing further this turn (<see cref="ActionEconomy.NoFurtherActions"/>: no 5-ft
+    /// step, swift action or quickened spell; delegated RAW reading 2026-10-28, RULES_COVERAGE 4.1). No-op for a
+    /// creature that is not disabled.
+    /// </summary>
+    public void MarkStrenuousAction()
+    {
+        if (_currentHPState != HPState.Disabled || Stats == null || Stats.CurrentHP > 0)
+            return;
 
-            Stats.CurrentHP = -1;
-        }
+        StrenuousDamagePending = true;
+        bool staysDisabled = Stats.TempHP > 0 || FeatManager.HasDiehard(Stats);
+        if (!staysDisabled && Actions != null)
+            Actions.NoFurtherActions = true;
+    }
 
+    /// <summary>
+    /// A cast refunded after its cost was paid (the AoO prompt cancelled, a failed spend) never completed its act, so it
+    /// owes nothing: put back the owed-damage flag captured before the cast (GameManager.RestoreSpellcastResourceSnapshot).
+    /// </summary>
+    public void RestoreStrenuousDamagePending(bool pending)
+    {
+        StrenuousDamagePending = pending;
+    }
+
+    /// <summary>
+    /// Deal the 1 damage a disabled creature owes for its strenuous act (PHB p.145, "after completing the act";
+    /// <see cref="MarkStrenuousAction"/>). Temporary hit points absorb it first (<see cref="CharacterStats.TakeDamage"/>).
+    /// The game calls it at every turn end, before the combat-end check (GameManager.NextInitiativeTurn), and in the
+    /// combat-end check once a side is out (GameManager.EvaluateCombatEnd), for PCs and NPCs alike. The damage is due
+    /// whatever happened since (healing included). True when damage was dealt.
+    /// </summary>
+    public bool ResolvePendingStrenuousDamage()
+    {
+        if (!StrenuousDamagePending)
+            return false;
+
+        StrenuousDamagePending = false;
+        if (Stats == null || IsDead || Stats.IsDead)
+            return false;
+
+        int before = Stats.CurrentHP;
+        Stats.TakeDamage(1);
+        int after = Stats.CurrentHP;
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", after < before
+                ? $"{Stats.CharacterName} takes 1 damage for acting while disabled ({before} → {after} HP)."
+                : $"{Stats.CharacterName} takes 1 damage for acting while disabled (absorbed by temporary hit points)."));
         return true;
     }
 
@@ -12688,8 +12770,8 @@ public class CharacterController : MonoBehaviour
         IsWithdrawing = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
-        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)
-            || (Stats != null && Stats.IsSingleActionsOnly);
+        RefreshActionLimits();
+        StrenuousDamagePending = false;
         ProgressiveAttackPool.Clear();
         // A rake needs the creature to begin its turn grappling (MM p.314, CMB-144).
         ProgressiveAttackPool.MarkTurnStartedGrappling(IsGrappling());

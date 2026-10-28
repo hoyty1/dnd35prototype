@@ -1650,16 +1650,21 @@ public static class GrappleDamageRulesTests
     {
         var attacker = CreateIterativeAttacker("SequenceSlowed");
         attacker.ApplySlowEffect(2, null);
+        // Slow sets the same single-action limit as a disabled creature (CharacterController.RefreshActionLimits,
+        // PHB p.280, CMB-095), the case TestAttackSequenceSingleActionOnlyAllowsOneStep sets by hand.
+        Assert(attacker.Actions.SingleActionOnly && !attacker.Actions.HasFullRoundAction,
+            "Slow limits the creature to a single action and no full-round action (PHB p.280)");
 
         int remainingBefore = attacker.GetRemainingMainHandAttackSteps();
         bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
         bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
 
         Assert(remainingBefore == 1, "A slowed creature shows one attack step remaining (PHB p.280)");
-        // Only the refused second attack is asserted. RAW a slowed creature takes a move or a standard
-        // action, not both (PHB p.280); its move action is still available here (CMB-095).
+        // RAW a slowed creature takes a move or a standard action, not both (PHB p.280): its move action is gone
+        // after the attack (ActionEconomy.SingleActionOnly, set by CharacterController.RefreshActionLimits).
         Assert(first && !second && !string.IsNullOrEmpty(reason),
             "A slowed creature cannot turn its attack into a full attack (PHB p.280: no full-round actions)");
+        Assert(!attacker.Actions.HasMoveAction, "A slowed creature has no move action after its attack (PHB p.280)");
 
         Cleanup(attacker);
     }

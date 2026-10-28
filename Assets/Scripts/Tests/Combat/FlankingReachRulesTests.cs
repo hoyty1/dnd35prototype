@@ -774,9 +774,16 @@ public class FlankingReachRulesTests : MonoBehaviour
             Assert(!ThreatSystem.ShouldStopMovementAfterAoO(mover, pronebefore, out _),
                 "Mover already prone before the AoO is not stopped by Prone", ref passed, ref failed);
 
+            // PHB p.145 (batch 12 D5): a disabled creature (0 hp) still acts, so an AoO that leaves it at 0 hp does not
+            // stop its move; one that drops it below 0 (dying) does.
             mover.Stats.CurrentHP = 0;
+            Assert(mover.CurrentHPState == HPState.Disabled && !ThreatSystem.IsMoverIncapacitated(mover)
+                    && !ThreatSystem.ShouldStopMovementAfterAoO(mover, pronebefore, out _),
+                $"Mover left at 0 HP (disabled) by an AoO keeps moving (state {mover.CurrentHPState})", ref passed, ref failed);
+
+            mover.Stats.CurrentHP = -1;
             Assert(ThreatSystem.IsMoverIncapacitated(mover) && ThreatSystem.ShouldStopMovementAfterAoO(mover, pronebefore, out _),
-                "Mover dropped to 0 HP by an AoO stops moving", ref passed, ref failed);
+                $"Mover dropped below 0 HP (dying) by an AoO stops moving (state {mover.CurrentHPState})", ref passed, ref failed);
         }
         finally
         {

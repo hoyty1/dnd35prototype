@@ -798,15 +798,17 @@ public static class ThreatSystem
     }
 
     /// <summary>
-    /// True when the mover is dead, unconscious or at 0 HP or less. Matches the check
-    /// <c>CharacterController.MoveAlongPath</c> and the AI routines make after moving.
+    /// True when the mover can take no turn actions: dead, dying, stable or unconscious
+    /// (<see cref="CharacterController.CanTakeTurnActions"/>, or the Unconscious condition). A disabled creature
+    /// (0 hp, or below 0 with Diehard) and a staggered one still act, so an AoO that leaves the mover at exactly 0 hp
+    /// does not end its move, and one that drops it below 0 does (PHB p.145; decision D5 of batch 12, AI-053).
     /// </summary>
     public static bool IsMoverIncapacitated(CharacterController mover)
     {
         if (mover == null || mover.Stats == null)
             return true;
 
-        return mover.IsDead || mover.IsUnconscious || mover.Stats.IsDead || mover.Stats.CurrentHP <= 0;
+        return mover.IsDead || mover.IsUnconscious || mover.Stats.IsDead || !mover.CanTakeTurnActions();
     }
 
     /// <summary>

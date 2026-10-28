@@ -1144,7 +1144,7 @@ public partial class GameManager
             // Blocked (MoveAlongPath refused the square): stop here rather than jump to the next square.
             if (pc.GridPosition != step)
             {
-                if (!interruptedByIncapacitation && pc.Stats != null && pc.Stats.CurrentHP <= 0)
+                if (!interruptedByIncapacitation && pc.Stats != null && ThreatSystem.IsMoverIncapacitated(pc))
                     interruptedByIncapacitation = true;
                 break;
             }
@@ -1156,9 +1156,10 @@ public partial class GameManager
             // their cells via UpdateCharacterTracking() in Unity's Update loop.
             // The MoveAlongPath coroutine already breaks on death, but we need to
             // set the interruptedByIncapacitation flag here for proper PC turn handling.
-            if (!interruptedByIncapacitation && pc.Stats != null && pc.Stats.CurrentHP <= 0)
+            // A disabled PC (0 hp) keeps moving (PHB p.145, batch 12 D5); dead, dying or unconscious stops.
+            if (!interruptedByIncapacitation && pc.Stats != null && ThreatSystem.IsMoverIncapacitated(pc))
             {
-                Debug.Log($"🔥 [PCMovement] {pc.Stats.CharacterName} killed/disabled by area damage during movement step {pathIndex + 1} (HP={pc.Stats.CurrentHP})");
+                Debug.Log($"🔥 [PCMovement] {pc.Stats.CharacterName} dropped by area damage during movement step {pathIndex + 1} (HP={pc.Stats.CurrentHP})");
                 interruptedByIncapacitation = true;
                 break;
             }

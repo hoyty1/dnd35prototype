@@ -40,7 +40,7 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
         BeginNPCTurnForAI: Melf's Acid Arrow damage, regeneration (ConditionService.OnTurnStart
                            already ran in GameManager.OnTurnStarted, CMB-006),
                            StartNewTurn, ProcessRoundStartPerception (Listen checks)
-        HP <= 0 -> stop
+        !CanTakeTurnActions() -> stop (a disabled NPC acts, PHB p.145)
         Confused / Charmed / Fascinated / Frightened controllers (may end the turn)
         Animate Rope escape attempt
         SelectBestTarget; none -> ExecuteSearchTurnWhenNoTargets (300), reselect, else stop
