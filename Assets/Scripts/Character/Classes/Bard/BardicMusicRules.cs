@@ -791,17 +791,34 @@ public static class BardicMusicRules
     /// </summary>
     public static int ApplyCountersong(CharacterController target, int saveTotal, SaveContext context)
     {
+        TryCountersong(target, saveTotal, context, null, out int total);
+        return total;
+    }
+
+    /// <summary>
+    /// <see cref="ApplyCountersong(CharacterController, int, SaveContext)"/> that says whether the countersong replaced
+    /// the save. <paramref name="automaticFailureDC"/> is the DC when the save rolled a natural 1 (an automatic failure,
+    /// PHB p.177): any Perform result that meets that DC is then higher than the save and is used, whatever the save's
+    /// total (SaveRollRules; delegated RAW reading 2026-10-28, RULES_COVERAGE 4.1). Null: the Perform result is used
+    /// when it is higher than <paramref name="saveTotal"/>.
+    /// </summary>
+    public static bool TryCountersong(CharacterController target, int saveTotal, SaveContext context, int? automaticFailureDC, out int total)
+    {
+        total = saveTotal;
         if (context == null || !context.IsSonicOrLanguageDependent || target == null)
-            return saveTotal;
+            return false;
         GameManager gm = GameManager.Instance;
         int? result = CountersongResultFor(target, gm != null ? gm.GetAllCharactersForAI() : null);
-        if (result.HasValue && result.Value > saveTotal)
-        {
-            Debug.Log($"[BardicMusic] {target.Stats.CharacterName} uses a countersong result {result.Value} in place of save {saveTotal} ({context.Label})");
-            gm?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("♪", $"{target.Stats.CharacterName} uses the countersong (Perform {result.Value}) in place of its save ({saveTotal}) against {context.Label ?? "the effect"}."));
-            return result.Value;
-        }
-        return saveTotal;
+        if (!result.HasValue)
+            return false;
+        bool use = automaticFailureDC.HasValue ? result.Value >= automaticFailureDC.Value : result.Value > saveTotal;
+        if (!use)
+            return false;
+        string saveNote = automaticFailureDC.HasValue ? $"{saveTotal}, natural 1" : saveTotal.ToString();
+        Debug.Log($"[BardicMusic] {target.Stats.CharacterName} uses a countersong result {result.Value} in place of save {saveNote} ({context.Label})");
+        gm?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("♪", $"{target.Stats.CharacterName} uses the countersong (Perform {result.Value}) in place of its save ({saveNote}) against {context.Label ?? "the effect"}."));
+        total = result.Value;
+        return true;
     }
 
     /// <summary>

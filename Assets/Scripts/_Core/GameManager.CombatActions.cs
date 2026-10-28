@@ -998,6 +998,9 @@ public partial class GameManager
     /// </summary>
     internal static Func<int> BullRushMisdirectionRollOverride;
 
+    /// <summary>The d100 context of the bull rush's 25% chance that an attack of opportunity strikes the other creature (DiceService; CORE-030).</summary>
+    public const string BullRushMisdirectionContext = "Bull rush misdirection d100";
+
     /// <summary>
     /// One AoO during a bull rush (PHB p.154): <paramref name="provoker"/> attacks
     /// <paramref name="intended"/>, but when the provoker is not <paramref name="other"/> (the other
@@ -1022,7 +1025,7 @@ public partial class GameManager
             && other.Stats != null && !other.IsDead && !other.Stats.IsDead;
         if (canStray)
         {
-            roll = BullRushMisdirectionRollOverride != null ? BullRushMisdirectionRollOverride() : Random.Range(1, 101);
+            roll = BullRushMisdirectionRollOverride != null ? BullRushMisdirectionRollOverride() : DiceService.Percentile(BullRushMisdirectionContext); // CORE-030
             if (roll <= 25)
                 victim = other;
         }

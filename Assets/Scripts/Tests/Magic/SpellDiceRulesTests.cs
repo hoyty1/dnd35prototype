@@ -15,7 +15,7 @@ namespace Tests.Magic
 /// MM p.307: constructs are immune to necromancy effects (inflict); a cure channels energy into a living creature
 /// (PHB p.215), so it does nothing to a construct.
 /// Builds CharacterStats only (no controllers), so it runs in edit or Play mode. Every die is forced to its maximum
-/// through ScenarioHooks.RollFilter (so a touch attack is a natural 20 and every save roll is 20); saves are decided
+/// through ScenarioHooks.RollFilter (a touch attack's d20 is a natural 20, every other d20 a 10); saves are decided
 /// with a +/-30 untyped save modifier in CharacterStats.Bonuses.
 /// </summary>
 public static class SpellDiceRulesTests
@@ -41,7 +41,7 @@ public static class SpellDiceRulesTests
         TestEnergyOutcomes();
 
         Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
-        ScenarioHooks.RollFilter = (sides, ctx, natural) => sides;
+        ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? TouchHitsOtherD20Ten(ctx) : sides;
         try
         {
             TestCasterLevel();
@@ -65,7 +65,7 @@ public static class SpellDiceRulesTests
         // Batch 11 step 19 (SPL-038, SPL-097): the metamagic dice rule, pure and through SpellCaster.Cast.
         TestMetamagicDiceRule();
         Func<int, string, int, int> before19 = ScenarioHooks.RollFilter;
-        ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+        ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? TouchHitsOtherD20Ten(ctx) : Math.Min(3, sides);
         try
         {
             TestCastMetamagicDice();
@@ -77,6 +77,13 @@ public static class SpellDiceRulesTests
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
     }
+
+    /// <summary>
+    /// The forced d20: 20 for a spell's touch attack (it hits), 10 for every other d20, so the +/-30 save modifiers decide
+    /// the saves: a forced 20 on a save would now be a natural 20 that always succeeds (PHB p.177; SaveRollRules, batch 12
+    /// step 10).
+    /// </summary>
+    private static int TouchHitsOtherD20Ten(string ctx) => ctx == SpellCaster.TouchAttackContext ? 20 : 10;
 
     private static void Assert(bool condition, string testName, string detail = "")
     {

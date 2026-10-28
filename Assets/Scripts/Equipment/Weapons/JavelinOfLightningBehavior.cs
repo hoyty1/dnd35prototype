@@ -48,18 +48,19 @@ public class JavelinOfLightningBehavior : SpecificItemBehavior
         if (target != null && target.Stats != null)
         {
             var save = SavingThrowResolver.ResolveReflexSave(target.Stats, BoltDC, "Javelin of Lightning",
-                SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.LIGHTNING_BOLT));
+                SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.LIGHTNING_BOLT, Wielder != null ? Wielder.Stats : null));
 
+            int rolled = damage;
             if (save.Succeeded)
-            {
-                int halfDamage = damage / 2;
-                logNotes.Add($"Javelin of Lightning: {BoltDice}d{BoltDieSides}={damage} electricity → {target.Stats.CharacterName} saves (Reflex DC {BoltDC}: {save.Total}), takes {halfDamage}");
-                damage = halfDamage;
-            }
+                damage /= 2;
+            // Evasion and Improved Evasion on the bolt's Reflex-half damage (PHB p.50, p.41-42; SPL-090).
+            damage = SpellSaveResolver.ApplyEvasion(damage, target.Stats, save.Succeeded, out string evasionNote);
+            string natural = save.Succeeded != (save.Total >= BoltDC) ? (save.NaturalTwenty ? ", natural 20" : ", natural 1") : string.Empty;
+            string evasion = evasionNote != null ? " (" + evasionNote + ")" : string.Empty;
+            if (save.Succeeded)
+                logNotes.Add($"Javelin of Lightning: {BoltDice}d{BoltDieSides}={rolled} electricity → {target.Stats.CharacterName} saves (Reflex DC {BoltDC}: {save.Total}{natural}), takes {damage}{evasion}");
             else
-            {
-                logNotes.Add($"Javelin of Lightning: {BoltDice}d{BoltDieSides}={damage} electricity → {target.Stats.CharacterName} fails save (Reflex DC {BoltDC}: {save.Total}), takes full {damage}");
-            }
+                logNotes.Add($"Javelin of Lightning: {BoltDice}d{BoltDieSides}={rolled} electricity → {target.Stats.CharacterName} fails save (Reflex DC {BoltDC}: {save.Total}{natural}), takes {(evasionNote != null ? damage.ToString() : "full " + damage)}{evasion}");
 
             // Apply electricity damage
             var packet = new DamagePacket
@@ -70,7 +71,8 @@ public class JavelinOfLightningBehavior : SpecificItemBehavior
                 Source = AttackSource.Other,
                 SourceName = "Javelin of Lightning"
             };
-            target.Stats.ApplyIncomingDamage(damage, packet);
+            if (damage > 0)
+                target.Stats.ApplyIncomingDamage(damage, packet);
 
             if (target.Stats.IsDead)
             {

@@ -506,12 +506,13 @@ public class ConditionService : MonoBehaviour
             if (!escapeData.CheckAtTurnStart)
                 continue;
 
-            int roll = DiceRoller.D20();
-            int saveMod = GetSaveModifierForType(actor.Stats, escapeData.SaveType, escapeData.SourceSpellId);
-            int total = roll + saveMod;
-            bool success = total >= escapeData.SaveDC;
+            // The one save roll (SaveRollRules, D13), against the condition's source spell and its caster (the
+            // protection ward against the original caster, SPL-018).
+            SaveRoll save = SaveRollRules.Roll(actor.Stats, EscapeSaveType(escapeData.SaveType), escapeData.SaveDC,
+                EscapeSaveContext(escapeData, condition), null);
+            bool success = save.Succeeded;
 
-            Debug.Log($"[ConditionService] {actor.Stats.CharacterName} {escapeData.SaveType} save to end {condition.Type}: d20({roll}) + {saveMod} = {total} vs DC {escapeData.SaveDC} => {(success ? "SUCCESS" : "FAIL")}");
+            Debug.Log($"[ConditionService] {actor.Stats.CharacterName} {escapeData.SaveType} save to end {condition.Type}: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {escapeData.SaveDC} => {SaveRollRules.Outcome(save)}");
 
             if (!success)
                 continue;
@@ -526,19 +527,21 @@ public class ConditionService : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// The shared save modifier (SaveRules, CHR-018) for an escape save; against the condition's source spell when it
-    /// has one. An unrecognized save name counts as Will, as before.
-    /// </summary>
-    private static int GetSaveModifierForType(CharacterStats stats, string saveType, string sourceSpellId)
-    {
-        if (stats == null)
-            return 0;
+    /// <summary>An escape save's type by name; an unrecognized name counts as Will, as before.</summary>
+    private static SavingThrowType EscapeSaveType(string saveType)
+        => SaveRules.TryParse(saveType, out SavingThrowType save) ? save : SavingThrowType.Will;
 
-        if (!SaveRules.TryParse(saveType, out SavingThrowType save))
-            save = SavingThrowType.Will;
-        SaveContext context = string.IsNullOrEmpty(sourceSpellId) ? SaveContext.None : SaveContext.ForSpellId(sourceSpellId);
-        return SaveRules.Modifier(stats, save, context);
+    /// <summary>
+    /// What an escape save is against (SaveRules, CHR-018): the condition's source spell, with the creature that imposed
+    /// the condition as its caster (the protection ward against that caster's alignment, PHB p.266; SPL-018), else a
+    /// labelled effect of that creature.
+    /// </summary>
+    private static SaveContext EscapeSaveContext(ConditionEscapeCheckData escapeData, ActiveCondition condition)
+    {
+        CharacterController source = condition != null ? condition.Source : null;
+        if (!string.IsNullOrEmpty(escapeData.SourceSpellId))
+            return SaveContext.ForSpellId(escapeData.SourceSpellId, source != null ? source.Stats : null);
+        return SaveContext.Effect(escapeData.SourceName ?? (condition != null ? condition.SourceName : null), source);
     }
 
     private static int FindBestMetadataMatchIndex(List<ActiveCondition> previousConditions, List<bool> consumed, StatusEffect effect)

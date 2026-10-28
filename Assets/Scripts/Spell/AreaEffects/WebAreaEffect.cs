@@ -57,12 +57,10 @@ public class WebAreaEffect : PersistentAreaEffect
         if (character.HasCondition(CombatConditionType.Entangled) && gameManager != null && gameManager.IsEntangledByWeb(character))
             return;
 
-        int roll = DiceRoller.D20();
-        int reflex = SpellSaveModifier(character, SavingThrowType.Reflex);
-        int total = roll + reflex;
-        bool success = total >= SaveDC;
+        SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
+        bool success = save.Succeeded;
 
-        LogEffect($"{character.Stats.CharacterName} Reflex d20({roll}) + {reflex} = {total} vs DC {SaveDC} {(success ? "SUCCESS" : "FAIL")}");
+        LogEffect($"{character.Stats.CharacterName} Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {SaveDC} {SaveRollRules.Outcome(save)}");
 
         if (success)
             return;

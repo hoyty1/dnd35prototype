@@ -4373,13 +4373,13 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = Mathf.Max(0, disease.FortitudeDC + dcModifier);
-        int roll = DiceService.D20("Disease exposure Fort save");
-        int total = roll + Stats.FortitudeSave;
+        // The one save roll (SaveRollRules, D13; SPL-018).
+        SaveRoll save = SaveRollRules.Roll(Stats, SavingThrowType.Fortitude, dc, SaveContext.Disease(disease.Name), "Disease exposure Fort save");
 
         LogAbilityScoreMessage($"🦠 {Stats.CharacterName} is exposed to {disease.Name} (Fort DC {dc}).");
-        LogAbilityScoreMessage($"   Fortitude: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+        LogAbilityScoreMessage($"   Fortitude: d20({save.Roll}) + {save.Modifier} = {save.Total} {SaveRollRules.Outcome(save)}");
 
-        if (total >= dc)
+        if (save.Succeeded)
             return;
 
         _activeDiseases.Add(new ActiveDisease(disease));
@@ -4862,19 +4862,18 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = Mathf.Max(0, poison.FortitudeDC + dcModifier);
-        int roll = DiceService.D20("Poison initial Fort save");
-        int fortMod = SaveRules.Modifier(Stats, SavingThrowType.Fortitude, SaveContext.Poison(poison.Id ?? poison.Name)); // CHR-018
-        int total = roll + fortMod;
+        // The one save roll (SaveRollRules, D13), with the poison context (CHR-018).
+        SaveRoll save = SaveRollRules.Roll(Stats, SavingThrowType.Fortitude, dc, SaveContext.Poison(poison.Id ?? poison.Name), "Poison initial Fort save");
 
         LogAbilityScoreMessage($"☠ {Stats.CharacterName} is exposed to {poison.Name} ({poison.Type}, Fort DC {dc}).");
-        LogAbilityScoreMessage($"   Initial save: d20({roll}) + {fortMod} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+        LogAbilityScoreMessage($"   Initial save: d20({save.Roll}) + {save.Modifier} = {save.Total} {SaveRollRules.Outcome(save)}");
 
         ActivePoison activePoison = new ActivePoison(poison)
         {
-            InitialSaveSucceeded = total >= dc
+            InitialSaveSucceeded = save.Succeeded
         };
 
-        if (total < dc)
+        if (!save.Succeeded)
         {
             ApplyAbilityEffectList(poison.InitialDamage, $"{poison.Name} (initial)");
             ApplySpecialEffectList(poison.InitialSpecialEffects, poison.Name, applyForInitial: true, applyForSecondary: false);
@@ -4899,14 +4898,14 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = poison.PoisonData.FortitudeDC;
-        int roll = DiceService.D20("Poison secondary Fort save");
-        int fortMod = SaveRules.Modifier(Stats, SavingThrowType.Fortitude, SaveContext.Poison(poison.PoisonData.Id ?? poison.PoisonData.Name)); // CHR-018
-        int total = roll + fortMod;
+        // The one save roll (SaveRollRules, D13), with the poison context (CHR-018).
+        SaveRoll save = SaveRollRules.Roll(Stats, SavingThrowType.Fortitude, dc,
+            SaveContext.Poison(poison.PoisonData.Id ?? poison.PoisonData.Name), "Poison secondary Fort save");
 
         LogAbilityScoreMessage($"☣ {Stats.CharacterName} makes secondary save vs {poison.PoisonData.Name} (DC {dc}).");
-        LogAbilityScoreMessage($"   Secondary save: d20({roll}) + {fortMod} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+        LogAbilityScoreMessage($"   Secondary save: d20({save.Roll}) + {save.Modifier} = {save.Total} {SaveRollRules.Outcome(save)}");
 
-        poison.SecondarySaveSucceeded = total >= dc;
+        poison.SecondarySaveSucceeded = save.Succeeded;
         if (!poison.SecondarySaveSucceeded)
         {
             ApplyAbilityEffectList(poison.PoisonData.SecondaryDamage, $"{poison.PoisonData.Name} (secondary)");
@@ -4951,11 +4950,11 @@ public class CharacterController : MonoBehaviour
             }
 
             int dc = active.DiseaseData.FortitudeDC;
-            int roll = DiceService.D20("Disease daily Fort save");
-            int total = roll + Stats.FortitudeSave;
-            bool success = total >= dc;
+            // The one save roll (SaveRollRules, D13; SPL-018).
+            SaveRoll save = SaveRollRules.Roll(Stats, SavingThrowType.Fortitude, dc, SaveContext.Disease(active.DiseaseData.Name), "Disease daily Fort save");
+            bool success = save.Succeeded;
 
-            LogAbilityScoreMessage($"🦠 Daily save vs {active.DiseaseData.Name}: d20({roll}) + {Stats.FortitudeSave} = {total} vs DC {dc} {(success ? "SUCCESS" : "FAIL")}");
+            LogAbilityScoreMessage($"🦠 Daily save vs {active.DiseaseData.Name}: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {dc} {SaveRollRules.Outcome(save)}");
 
             if (success)
             {
@@ -5701,17 +5700,18 @@ public class CharacterController : MonoBehaviour
         // --- Paralysis on hit (Gelatinous Cube tentacle, Ghoul, etc.) ---
         if (naturalAttack.ParalysisOnHitDC > 0 && target.Stats != null)
         {
-            int roll = DiceRoller.D20();
-            int total = roll + target.Stats.FortitudeSave;
-            if (total < naturalAttack.ParalysisOnHitDC)
+            // The one save roll (SaveRollRules, D13), against this creature's ability (SPL-018).
+            SaveRoll save = SaveRollRules.Roll(target.Stats, SavingThrowType.Fortitude, naturalAttack.ParalysisOnHitDC,
+                SaveContext.CreatureAbility("paralysis", this), null);
+            if (!save.Succeeded)
             {
                 int duration = Mathf.Max(1, naturalAttack.ParalysisOnHitDurationRounds);
                 target.Conditions.ApplyCondition(CombatConditionType.Paralyzed, duration, Stats?.CharacterName ?? "Paralysis");
-                Debug.Log($"[OnHit] {target.Stats.CharacterName} paralyzed for {duration} rounds (Fort d20({roll})+{target.Stats.FortitudeSave}={total} < DC {naturalAttack.ParalysisOnHitDC})");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} paralyzed for {duration} rounds (Fort d20({save.Roll})+{save.Modifier}={save.Total} vs DC {naturalAttack.ParalysisOnHitDC}: failed{save.NaturalSuffix})");
             }
             else
             {
-                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists paralysis (Fort d20({roll})+{target.Stats.FortitudeSave}={total} >= DC {naturalAttack.ParalysisOnHitDC})");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists paralysis (Fort d20({save.Roll})+{save.Modifier}={save.Total} vs DC {naturalAttack.ParalysisOnHitDC}{save.NaturalSuffix})");
             }
         }
 
@@ -5732,16 +5732,17 @@ public class CharacterController : MonoBehaviour
         // --- Petrification on hit (Cockatrice) ---
         if (naturalAttack.PetrificationOnHitDC > 0 && target.Stats != null)
         {
-            int roll = DiceRoller.D20();
-            int total = roll + target.Stats.FortitudeSave;
-            if (total < naturalAttack.PetrificationOnHitDC)
+            // The one save roll (SaveRollRules, D13), against this creature's ability (SPL-018).
+            SaveRoll save = SaveRollRules.Roll(target.Stats, SavingThrowType.Fortitude, naturalAttack.PetrificationOnHitDC,
+                SaveContext.CreatureAbility("petrification", this), null);
+            if (!save.Succeeded)
             {
                 target.Conditions.ApplyCondition(CombatConditionType.Petrified, 999, Stats?.CharacterName ?? "Petrification");
-                Debug.Log($"[OnHit] {target.Stats.CharacterName} PETRIFIED (Fort d20({roll})+{target.Stats.FortitudeSave}={total} < DC {naturalAttack.PetrificationOnHitDC})");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} PETRIFIED (Fort d20({save.Roll})+{save.Modifier}={save.Total} vs DC {naturalAttack.PetrificationOnHitDC}: failed{save.NaturalSuffix})");
             }
             else
             {
-                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists petrification (Fort d20({roll})+{target.Stats.FortitudeSave}={total} >= DC {naturalAttack.PetrificationOnHitDC})");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists petrification (Fort d20({save.Roll})+{save.Modifier}={save.Total} vs DC {naturalAttack.PetrificationOnHitDC}{save.NaturalSuffix})");
             }
         }
 
@@ -15079,15 +15080,22 @@ public class CharacterController : MonoBehaviour
 
         int fortRoll = 0;
         int fortTotal = 0;
+        int fortMod = 0;
+        string fortNatural = string.Empty;
         int saveDC = 10 + Mathf.Max(0, finalDamage);
         bool fortSucceeded = false;
         bool diedFromDamage = hpAfterDamage <= -10;
 
         if (!diedFromDamage)
         {
-            fortRoll = DiceService.D20("Coup de Grace Fort save");
-            fortTotal = fortRoll + target.Stats.FortitudeSave;
-            fortSucceeded = fortTotal >= saveDC;
+            // The one save roll (SaveRollRules, D13; SPL-018): a natural 20 survives, a natural 1 dies (PHB p.153, p.177).
+            SaveRoll fortSave = SaveRollRules.Roll(target.Stats, SavingThrowType.Fortitude, saveDC,
+                SaveContext.Effect("Coup de Grace", this), "Coup de Grace Fort save");
+            fortRoll = fortSave.Roll;
+            fortMod = fortSave.Modifier;
+            fortTotal = fortSave.Total;
+            fortSucceeded = fortSave.Succeeded;
+            fortNatural = fortSave.NaturalSuffix;
 
             if (!fortSucceeded)
             {
@@ -15114,7 +15122,7 @@ public class CharacterController : MonoBehaviour
 
         string saveLine = diedFromDamage
             ? $"{target.Stats.CharacterName} is slain by damage before the Fortitude save can matter."
-            : $"Fortitude save: d20({fortRoll}) + {target.Stats.FortitudeSave} = {fortTotal} vs DC {saveDC} {(fortSucceeded ? "SUCCESS" : "FAILURE")}.";
+            : $"Fortitude save: d20({fortRoll}) + {fortMod} = {fortTotal} vs DC {saveDC} {(fortSucceeded ? "SUCCESS" : "FAILURE")}{fortNatural}.";
 
         string deathLine = diedFromDamage
             ? $"{target.Stats.CharacterName} is dead."

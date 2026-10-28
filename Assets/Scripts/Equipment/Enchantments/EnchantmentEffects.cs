@@ -756,17 +756,20 @@ public static class AdvancedEnchantmentEffects
             if (stats == null || !stats.DisruptionEffect) continue;
 
             saveDC = stats.DisruptionSaveDC;
-            saveRoll = DiceService.D20("Disruption Fort save");
-            int totalSave = saveRoll + targetFortSaveBonus;
+            // The one save roll (SaveRollRules, D13) with the caller's modifier: natural 1 and 20 (PHB p.177).
+            SaveRoll save = SaveRollRules.RollWithModifier(null, null, targetFortSaveBonus, saveDC,
+                SaveContext.Effect("Disruption"), "Disruption Fort save");
+            saveRoll = save.Roll;
+            int totalSave = save.Total;
 
-            if (totalSave < saveDC)
+            if (!save.Succeeded)
             {
-                Debug.Log($"[Enchantment] Disruption: Undead fails Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} < DC {saveDC}) — DESTROYED!");
+                Debug.Log($"[Enchantment] Disruption: Undead fails Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} vs DC {saveDC}{save.NaturalSuffix}) — DESTROYED!");
                 return true;
             }
             else
             {
-                Debug.Log($"[Enchantment] Disruption: Undead passes Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} ≥ DC {saveDC}).");
+                Debug.Log($"[Enchantment] Disruption: Undead passes Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} vs DC {saveDC}{save.NaturalSuffix}).");
                 return false;
             }
         }

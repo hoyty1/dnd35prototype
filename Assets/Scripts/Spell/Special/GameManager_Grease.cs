@@ -537,14 +537,12 @@ public partial class GameManager
             }
 
             int saveDC = GetHighestGreaseSaveDCAtCell(currentCell, out CharacterController greaseCaster);
-            int roll = DiceRoller.D20();
-            // The save against the area's caster's spell (SaveRules with the caster: the protection ward, SPL-018).
-            int reflex = SaveRules.Modifier(mover.Stats, SavingThrowType.Reflex,
-                SaveContext.ForSpellId(SpellNames.GREASE, greaseCaster != null ? greaseCaster.Stats : null)); // CHR-018
-            int total = roll + reflex;
-            bool success = total >= saveDC;
+            // The one save roll (SaveRollRules, D13) against the area's caster's spell (the protection ward, SPL-018).
+            SaveRoll save = SaveRollRules.Roll(mover.Stats, SavingThrowType.Reflex, saveDC,
+                SaveContext.ForSpellId(SpellNames.GREASE, greaseCaster != null ? greaseCaster.Stats : null), null); // CHR-018
+            bool success = save.Succeeded;
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Grease check ({mover.Stats.CharacterName}): Reflex d20({roll}) + {reflex} = {total} vs DC {saveDC} {(success ? "SUCCESS" : "FAIL")}."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Grease check ({mover.Stats.CharacterName}): Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {saveDC} {SaveRollRules.Outcome(save)}."));
 
             if (!success)
             {
@@ -714,12 +712,11 @@ public partial class GameManager
 
             if (TryFindGreasedItemHolder(effect.Item, out CharacterController holder, out EquipSlot slot))
             {
-                int roll = DiceRoller.D20();
-                int reflex = SaveRules.Modifier(holder.Stats, SavingThrowType.Reflex,
-                    SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null)); // CHR-018, SPL-018
-                int total = roll + reflex;
-                bool saveSucceeded = total >= effect.SaveDC;
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Greased item check: {holder.Stats.CharacterName} d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}."));
+                // The one save roll (SaveRollRules, D13) against the caster's spell (CHR-018, SPL-018).
+                SaveRoll save = SaveRollRules.Roll(holder.Stats, SavingThrowType.Reflex, effect.SaveDC,
+                    SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null), null);
+                bool saveSucceeded = save.Succeeded;
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Greased item check: {holder.Stats.CharacterName} d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {effect.SaveDC} {SaveRollRules.Outcome(save)}."));
 
                 if (!saveSucceeded)
                 {
@@ -767,19 +764,18 @@ public partial class GameManager
         if (effect == null)
             return true;
 
-        int roll = DiceRoller.D20();
-        int reflex = SaveRules.Modifier(actor.Stats, SavingThrowType.Reflex,
-            SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null)); // CHR-018, SPL-018
-        int total = roll + reflex;
-        bool saveSucceeded = total >= effect.SaveDC;
+        // The one save roll (SaveRollRules, D13) against the caster's spell (CHR-018, SPL-018).
+        SaveRoll save = SaveRollRules.Roll(actor.Stats, SavingThrowType.Reflex, effect.SaveDC,
+            SaveContext.ForSpellId(SpellNames.GREASE, effect.Caster != null ? effect.Caster.Stats : null), null);
+        bool saveSucceeded = save.Succeeded;
 
         if (!saveSucceeded)
         {
-            failureReason = $"{actor.Stats.CharacterName} can't keep hold of {item.Name}: Reflex d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC}.";
+            failureReason = $"{actor.Stats.CharacterName} can't keep hold of {item.Name}: Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {effect.SaveDC}{save.NaturalSuffix}.";
             return false;
         }
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{actor.Stats.CharacterName} steadies {item.Name}: Reflex d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC}."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{actor.Stats.CharacterName} steadies {item.Name}: Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {effect.SaveDC}{save.NaturalSuffix}."));
         return true;
     }
 }

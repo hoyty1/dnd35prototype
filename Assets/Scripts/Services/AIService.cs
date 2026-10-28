@@ -1712,7 +1712,8 @@ public class AIService : MonoBehaviour
             if (traits.DistractionDC > 0)
             {
                 var saveResult = SavingThrowResolver.ResolveFortitudeSave(
-                    victim.Stats, traits.DistractionDC, $"{swarm.Stats.CharacterName} distraction");
+                    victim.Stats, traits.DistractionDC, $"{swarm.Stats.CharacterName} distraction",
+                    SaveContext.CreatureAbility($"{swarm.Stats.CharacterName} distraction", swarm));
 
                 if (saveResult.Succeeded)
                 {
@@ -4026,7 +4027,7 @@ public class AIService : MonoBehaviour
             // Check for on-hit effects (blinding on crit, etc.)
             if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
             {
-                ApplyStatusEffectFromSpecialAttack(target, attack);
+                ApplyStatusEffectFromSpecialAttack(target, attack, npc);
             }
         }
         else
@@ -4069,7 +4070,8 @@ public class AIService : MonoBehaviour
             CombatLogHelper.Info("", $"{npc.Stats.CharacterName} attempts to engulf {target.Stats.CharacterName}!"));
 
         // Target makes Reflex save to avoid
-        var saveResult = SavingThrowResolver.ResolveReflexSave(target.Stats, engulf.ReflexSaveDC, "Engulf");
+        var saveResult = SavingThrowResolver.ResolveReflexSave(target.Stats, engulf.ReflexSaveDC, "Engulf",
+            SaveContext.CreatureAbility("Engulf", npc));
         
         if (saveResult.Succeeded)
         {
@@ -4283,24 +4285,41 @@ public class AIService : MonoBehaviour
         };
     }
 
+    /// <summary>The d20 context of a monster's ranged special attack roll (the scenario harness forces it by this label).</summary>
+    public const string SpecialRangedTouchContext = "Special attack ranged touch";
+
     /// <summary>
-    /// Roll a ranged touch attack against a target.
-    /// Returns true if the attack hits.
+    /// A monster's ranged touch attack (spittle, MM p.126) with the terms of a spell's ranged touch attack (AI-006):
+    /// SpellCaster.SpellTouchAttack's bonus (BAB + Dex + size, the racial bonus against the target's kind, fighting
+    /// defensively, shooting into melee, PHB p.140), SpellCaster.TouchAttackAC (touch AC, fighting defensively, the
+    /// dwarf's and gnome's dodge bonus, a protection ward), a natural 20 always hits and a natural 1 always misses
+    /// (PHB p.134), then the target's concealment miss chance (PHB p.152). Returns true if the attack hits.
     /// </summary>
     private bool RollRangedTouchAttack(CharacterController attacker, CharacterController target)
     {
         if (attacker?.Stats == null || target?.Stats == null)
             return false;
 
-        int attackBonus = attacker.Stats.BaseAttackBonus + attacker.Stats.DEXMod;
-        int targetAC = CombatCalculationService.SimpleTouchAC(target.Stats);  // Ranged touch ignores armor/shield
+        SpellCaster.SpellTouchAttackTerms terms = SpellCaster.SpellTouchAttack(null, attacker, attacker.Stats, target, target.Stats,
+            isRanged: true, againstImage: false);
+        AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(target, attacker.Stats.CharacterAlignment);
+        int targetAC = SpellCaster.TouchAttackAC(target, target.Stats, attacker.Stats, protection, out _);
 
-        int roll = DiceService.D20("Special attack ranged touch"); // DiceService, so the scenario harness can force it
-        int total = roll + attackBonus;
+        int roll = DiceService.D20(SpecialRangedTouchContext); // DiceService, so the scenario harness can force it
+        int total = roll + terms.Total;
+        bool hit = CombatCalculationService.IsHit(roll, total, targetAC);
+        string natural = roll == 20 ? " (natural 20)" : roll == 1 ? " (natural 1)" : string.Empty;
 
-        Debug.Log($"[AI] Ranged touch attack: d20({roll}) + {attackBonus} = {total} vs AC {targetAC}");
+        Debug.Log($"[AI] Ranged touch attack: d20({roll}) + {terms.Total} = {total} vs touch AC {targetAC}{natural} → {(hit ? "hit" : "miss")}");
 
-        return total >= targetAC;
+        if (hit && SpellCaster.TouchAttackMissesByConcealment(attacker, target, true, out int missRoll, out int missChance))
+        {
+            Debug.Log($"[AI] Ranged touch attack misses due to concealment ({missRoll} ≤ {missChance}).");
+            _gameManager?.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🌫", $"{attacker.Stats.CharacterName}'s ranged touch attack misses {target.Stats.CharacterName} due to concealment ({missRoll} ≤ {missChance}%)."));
+            return false;
+        }
+
+        return hit;
     }
 
     /// <summary>
@@ -4320,7 +4339,8 @@ public class AIService : MonoBehaviour
     /// Uses Fortitude or Will save depending on attack definition.
     /// Supports random duration via OnHitDurationDice.
     /// </summary>
-    private void ApplyStatusEffectFromSpecialAttack(CharacterController target, RangedSpecialAttackDefinition attack)
+    private void ApplyStatusEffectFromSpecialAttack(CharacterController target, RangedSpecialAttackDefinition attack,
+        CharacterController source = null)
     {
         if (target == null || string.IsNullOrEmpty(attack.OnHitStatusEffectType))
             return;
@@ -4333,12 +4353,14 @@ public class AIService : MonoBehaviour
 
             if (attack.OnHitSaveIsFortitude)
             {
-                saveResult = SavingThrowResolver.ResolveFortitudeSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+                saveResult = SavingThrowResolver.ResolveFortitudeSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType,
+                    SaveContext.CreatureAbility(attack.OnHitStatusEffectType, source));
                 saveTypeName = "Fort";
             }
             else
             {
-                saveResult = SavingThrowResolver.ResolveWillSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+                saveResult = SavingThrowResolver.ResolveWillSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType,
+                    SaveContext.CreatureAbility(attack.OnHitStatusEffectType, source));
                 saveTypeName = "Will";
             }
 

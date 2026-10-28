@@ -72,7 +72,7 @@ public class NineLivesStealerBehavior : SpecificItemBehavior
         }
 
         // Fort save DC 20 or die
-        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, InstantDeathDC, DisplayName);
+        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, InstantDeathDC, DisplayName, SaveContext.Effect(DisplayName, Wielder));
 
         if (!save.Succeeded)
         {

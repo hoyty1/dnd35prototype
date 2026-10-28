@@ -47,8 +47,14 @@ public static class SavingThrowResolver
         public int Total;
         /// <summary>The DC the save was made against.</summary>
         public int DC;
-        /// <summary>Whether the save succeeded (Total >= DC).</summary>
+        /// <summary>Whether the save succeeded: a natural 20 always, a natural 1 never, else Total >= DC (PHB p.177).</summary>
         public bool Succeeded;
+        /// <summary>The d20 came up 1 (an automatic failure, PHB p.177).</summary>
+        public bool NaturalOne;
+        /// <summary>The d20 came up 20 (an automatic success, PHB p.177).</summary>
+        public bool NaturalTwenty;
+        /// <summary>" (natural 1)" or " (natural 20)" when that decided the save, else empty (SaveRoll.NaturalSuffix), for hand-built log lines.</summary>
+        public string NaturalSuffix;
         /// <summary>Name of the effect being saved against.</summary>
         public string EffectName;
         /// <summary>Formatted log message for CombatUI display.</summary>
@@ -93,8 +99,8 @@ public static class SavingThrowResolver
     // ========================================================================
 
     /// <summary>
-    /// Resolve a saving throw: roll d20, add modifier, compare to DC.
-    /// This is the primary method for all saving throw checks.
+    /// Resolve a saving throw through the one save roll, <see cref="SaveRollRules"/> (the Luck reroll, the countersong,
+    /// natural 1 and 20; D13), with this resolver's result type and log line.
     /// </summary>
     /// <param name="stats">Character's stats.</param>
     /// <param name="saveType">The type of saving throw.</param>
@@ -108,16 +114,12 @@ public static class SavingThrowResolver
         string saveTypeName = GetSaveTypeName(saveType);
         string diceContext = $"{characterName} {saveTypeName} save vs {effectName ?? "effect"}";
 
-        int roll = DiceService.D20(diceContext);
-        // Apply Luck domain reroll if armed
-        if (stats != null)
-        {
-            roll = stats.ApplyLuckReroll(roll, $"{saveTypeName} saving throw");
-            GameManager.Instance?.LogLuckRerollIfTriggered(stats);
-        }
-        int modifier = GetSaveModifier(stats, saveType, context);
-        int total = roll + modifier;
-        bool succeeded = total >= dc;
+        // The one save roll (SaveRollRules, D13): the d20, the Luck reroll, the modifier, the countersong, natural 1 and 20.
+        SaveRoll save = SaveRollRules.Roll(stats, saveType, dc, context, diceContext);
+        int roll = save.Roll;
+        int modifier = save.Modifier;
+        int total = save.Total;
+        bool succeeded = save.Succeeded;
 
         var result = new SaveResult
         {
@@ -127,9 +129,12 @@ public static class SavingThrowResolver
             Total = total,
             DC = dc,
             Succeeded = succeeded,
+            NaturalOne = save.NaturalOne,
+            NaturalTwenty = save.NaturalTwenty,
+            NaturalSuffix = save.NaturalSuffix,
             EffectName = effectName,
             LogMessage = CombatLogger.FormatSavingThrow(
-                characterName, saveTypeName, roll, modifier, total, dc, succeeded, effectName)
+                characterName, saveTypeName, roll, modifier, total, dc, succeeded, effectName) + save.NaturalSuffix
         };
 
         return result;
@@ -206,7 +211,7 @@ public static class SavingThrowResolver
         string effectLabel = isDaily
             ? $"{diseaseName} (daily)"
             : $"{diseaseName} (exposure)";
-        return ResolveFortitudeSave(stats, dc, effectLabel);
+        return ResolveFortitudeSave(stats, dc, effectLabel, SaveContext.Disease(diseaseName));
     }
 
     /// <summary>
@@ -219,7 +224,7 @@ public static class SavingThrowResolver
     public static SaveResult ResolveCoupDeGraceSave(CharacterStats stats, int damageDealt)
     {
         int dc = 10 + damageDealt;
-        return ResolveFortitudeSave(stats, dc, "Coup de Grace");
+        return ResolveFortitudeSave(stats, dc, "Coup de Grace", SaveContext.Effect("Coup de Grace"));
     }
 
     /// <summary>
@@ -248,9 +253,7 @@ public static class SavingThrowResolver
     /// <returns>True if the save succeeded.</returns>
     public static bool QuickSave(CharacterStats stats, SaveType saveType, int dc, SaveContext context = null)
     {
-        int roll = DiceService.D20();
-        int modifier = GetSaveModifier(stats, saveType, context);
-        return (roll + modifier) >= dc;
+        return SaveRollRules.Roll(stats, saveType, dc, context, null).Succeeded;
     }
 
     /// <summary>

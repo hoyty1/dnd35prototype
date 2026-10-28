@@ -508,10 +508,14 @@ public static class AreaOriginTests
                 "a one-square effect (Call Lightning's bolt) takes the square under the cursor, with no intersection origin");
 
             // 3b. The cast core's Legality stage refuses a burst whose recorded origin is out of range, for every caster.
+            //     The requests use a TestPanel source with no bypass: it skips only the caster tests (an action and a slot,
+            //     CheckCastCasterLegality), which the suite's slotless TestHelpers wizard would fail first since batch 12
+            //     step 9 (SPL-160); the range and line-of-effect tests still run as for any cast.
+            CastSource OriginTestSource() => new CastSource { Kind = CastSourceKind.TestPanel };
             int fireballRange = CasterLevelRules.RangeSquares(pc, fireball);
-            SpellCastRequest near = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, new CastSource()),
+            SpellCastRequest near = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, OriginTestSource()),
                 new List<CharacterController>(), burstCells, new GridIntersection(11, 25));
-            SpellCastRequest far = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, new CastSource()),
+            SpellCastRequest far = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, OriginTestSource()),
                 new List<CharacterController>(), burstCells, new GridIntersection(fireballRange + 2, 26));
             CastOutcome nearOutcome = gm.CheckLegality(near);
             CastOutcome farOutcome = gm.CheckLegality(far);
@@ -526,7 +530,7 @@ public static class AreaOriginTests
             SpellCastRequest GreaseAt(Vector2Int anchor)
             {
                 var cells = new HashSet<Vector2Int> { anchor, anchor + Vector2Int.right, anchor + Vector2Int.up, anchor + Vector2Int.one };
-                SpellCastRequest r = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, greaseRanged, null, new CastSource()), null,
+                SpellCastRequest r = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, greaseRanged, null, OriginTestSource()), null,
                     new List<CharacterController>(), cells, GridIntersection.NorthEastCornerOf(anchor));
                 r.Choices.GreaseMode = GreaseCastMode.Area;
                 return r;
@@ -537,9 +541,9 @@ public static class AreaOriginTests
                 "the cast core refuses a Grease square beyond Grease's range (PHB p.237: Close), for every caster",
                 $"near {greaseNear.Reason}, beyond {greaseBeyond.Reason}");
             int boltRange = callLightning.AoERangeSquares > 0 ? callLightning.AoERangeSquares : CasterLevelRules.RangeSquares(pc, callLightning);
-            SpellCastRequest boltNear = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, new CastSource()),
+            SpellCastRequest boltNear = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, OriginTestSource()),
                 new List<CharacterController>(), new HashSet<Vector2Int> { new Vector2Int(5, 25) }, null);
-            SpellCastRequest boltBeyond = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, new CastSource()),
+            SpellCastRequest boltBeyond = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, callLightning, null, OriginTestSource()),
                 new List<CharacterController>(), new HashSet<Vector2Int> { new Vector2Int(boltRange + 1, 25) }, null);
             CastOutcome boltNearOutcome = gm.CheckLegality(boltNear);
             CastOutcome boltBeyondOutcome = gm.CheckLegality(boltBeyond);
@@ -556,7 +560,7 @@ public static class AreaOriginTests
                 Assert(!gm.Harness_BuildUiAreaAim(pc, fireball, new Vector2(4.2f, 15.8f), out _, out _)
                        && gm.Harness_BuildUiAreaAim(pc, fireball, new Vector2(4.2f, 22.8f), out _, out _),
                     "the PC's Fireball cannot originate beyond a wall, only on the caster's side of it");
-                SpellCastRequest hidden = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, new CastSource()),
+                SpellCastRequest hidden = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(pc, fireball, null, OriginTestSource()),
                     new List<CharacterController>(), AoESystem.GetBurstCells(new GridIntersection(5, 16), 4, grid), new GridIntersection(5, 16));
                 CastOutcome hiddenOutcome = gm.CheckLegality(hidden);
                 Assert(hiddenOutcome.Kind == CastOutcomeKind.Refused && hiddenOutcome.Reason == "origin-no-line-of-effect",
@@ -565,7 +569,7 @@ public static class AreaOriginTests
                 SpellData grease = SpellDatabase.GetSpell(SpellNames.GREASE).Clone();
                 // Within Grease's range (7 squares at caster level 5) but beyond the wall, so line of effect is what refuses it.
                 var greaseCells = new HashSet<Vector2Int> { new Vector2Int(1, 18), new Vector2Int(2, 18), new Vector2Int(1, 19), new Vector2Int(2, 19) };
-                SpellCastRequest greaseFar = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, grease, null, new CastSource()), null,
+                SpellCastRequest greaseFar = SpellCastRequest.ForUiGrease(SpellCastRequest.ForUi(pc, grease, null, OriginTestSource()), null,
                     new List<CharacterController>(), greaseCells, GridIntersection.NorthEastCornerOf(new Vector2Int(1, 18)));
                 greaseFar.Choices.GreaseMode = GreaseCastMode.Area;
                 CastOutcome greaseOutcome = gm.CheckLegality(greaseFar);

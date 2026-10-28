@@ -53,7 +53,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Breath weapon | Partial | Dragon profile; recharges per its MM entry (batch 12 step 6) | n/a | AI-033, AI-040, AI-008 |
 | Gaze / aura | Used | `ProcessAuraAbility` | n/a | AI-013, CRE-012, CORE-002 |
 | Frightful presence | Auto | first attack or breath | n/a | AI-041 |
-| Engulf, spittle, bombardier spray | Used | 8.4 | n/a | AI-006, CMB-024 |
+| Engulf, spittle, bombardier spray | Used | 8.4 | n/a | CMB-024 |
 | Spell-like abilities | Never | no system | n/a | CRE-015, CRE-017 |
 | Turn undead | Never | PC menu flow; turned NPCs flee or cower since batch 12 step 7 | Yes (turn only; no rebuke, command or bolster; turning level by class level since CHR-020) | CMB-026, AI-054; 11.8.6, 11.8.7 |
 | Rage | Never | PC-only button; the rules core works for any actor | Yes | 11.8.7 |
@@ -91,4 +91,4 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 **PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; metamagic (area spells since batch 11 step 25, except the placements of AI-071; summons and held charges since batch 11 step 27, except Summon Swarm); controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
 
-**NPC-only advantages (all bugs or gaps):** the breath weapon costs no action (AI-040; the engulf and the standard-action ranged specials pay a standard action since batch 12 step 3); melee routines path to an invisible target's true square (AI-051); monster ranged-special touch rolls skip the attack calculator (AI-006; their damage is mitigated since SPL-004); a silenced NPC cannot cast a verbal spell since batch 11 step 13 (the shared Legality rule; the AI's spell choice skips it).
+**NPC-only advantages (all bugs or gaps):** the breath weapon costs no action (AI-040; the engulf and the standard-action ranged specials pay a standard action since batch 12 step 3); melee routines path to an invisible target's true square (AI-051); (monster ranged-special touch rolls use the spell ranged touch terms since batch 12 step 10, AI-006 fixed, and their damage is mitigated since SPL-004); a silenced NPC cannot cast a verbal spell since batch 11 step 13 (the shared Legality rule; the AI's spell choice skips it).

@@ -73,6 +73,13 @@ public sealed class SaveContext
     /// <summary>A fear effect that is not a spell (frightful presence, an aura of fear).</summary>
     public static readonly SaveContext Fear = new SaveContext(fear: true, label: "fear");
 
+    /// <summary>
+    /// A fear effect that is not a spell, made by <paramref name="source"/> (a dragon's frightful presence, MM p.309): the
+    /// fear bonuses plus those that depend on the creature that made it (an alignment ward, PHB p.266).
+    /// </summary>
+    public static SaveContext FearFrom(string label, CharacterController source)
+        => new SaveContext(fear: true, label: string.IsNullOrEmpty(label) ? "fear" : label, sourceCaster: source);
+
     /// <summary>A trap.</summary>
     public static readonly SaveContext Trap = new SaveContext(trap: true, label: "trap");
 
@@ -83,6 +90,19 @@ public sealed class SaveContext
     /// </summary>
     public static SaveContext CreatureAbility(string label, CharacterController source = null)
         => new SaveContext(label: label, sourceCaster: source);
+
+    /// <summary>
+    /// An effect that is neither a spell nor a poison, fear, charm or trap effect and has no context of its own (a coup
+    /// de grace, a magic item's own power such as a Sun Blade's radiance, Stunning Fist): the bonuses that apply to
+    /// every save, plus those that depend on the creature that made the effect (<paramref name="source"/>, e.g. an
+    /// alignment ward). <see cref="CreatureAbility"/> is the same for a creature's ability.
+    /// </summary>
+    public static SaveContext Effect(string label, CharacterController source = null)
+        => new SaveContext(label: label, sourceCaster: source);
+
+    /// <summary>A disease (DMG p.292). No PHB save bonus applies against disease alone, so it is a labelled effect.</summary>
+    public static SaveContext Disease(string diseaseName = null)
+        => new SaveContext(label: string.IsNullOrEmpty(diseaseName) ? "disease" : diseaseName);
 
     /// <summary>A poison, by its PoisonDatabase id or name; a spider's poison (an id or name containing "spider") is marked as such.</summary>
     public static SaveContext Poison(string poisonIdOrName = null)

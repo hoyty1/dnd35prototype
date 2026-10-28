@@ -2725,7 +2725,7 @@ public partial class GameManager
                     if (result.RequiredSave)
                     {
                         string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
-                        logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
+                        logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}{result.SaveNaturalSuffix}!");
                     }
                     if (!string.IsNullOrEmpty(result.EvasionNote))
                         logBuilder.AppendLine($"  {result.EvasionNote}");
@@ -2829,12 +2829,12 @@ public partial class GameManager
                 }
                 else if (SpellUtilities.IsEffectNegatedBySave(spell, result, !target.IsIntelligentUndead()))
                 {
-                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - SAVED (negates).");
+                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - SAVED (negates){result.SaveNaturalSuffix}.");
                 }
                 else
                 {
                     if (result.RequiredSave)
-                        sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - FAILED.");
+                        sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - FAILED{result.SaveNaturalSuffix}.");
                     ActiveSpellEffect applied = ApplySpellBuff(caster, target, spell, ctx.SpellComp, result);
                     if (ScenarioHooks.CastStage != null)
                         CastStageTrace.Mark(caster, spell, CastStageTrace.Buff, (applied != null ? "applied " : "no-effect ") + targetName);
@@ -3790,10 +3790,11 @@ public partial class GameManager
             // Fort save vs sickened
             // The stench is a poison effect of the spell (PHB p.235): spell and poison bonuses apply (SaveRules, CHR-018),
             // and those against its caster (the protection ward, SPL-018).
-            int fortSave = DiceService.D20("Ghoul Touch Fort save")
-                + SaveRules.Modifier(creature.Stats, SavingThrowType.Fortitude,
-                    new SaveContext(spell: true, poison: true, label: "Ghoul Touch stench", sourceCaster: caster));
-            bool saved = fortSave >= spellDC;
+            // The one save roll (SaveRollRules, D13).
+            SaveRoll stenchSave = SaveRollRules.Roll(creature.Stats, SavingThrowType.Fortitude, spellDC,
+                new SaveContext(spell: true, poison: true, label: "Ghoul Touch stench", sourceCaster: caster), "Ghoul Touch Fort save");
+            int fortSave = stenchSave.Total;
+            bool saved = stenchSave.Succeeded;
 
             if (saved)
             {

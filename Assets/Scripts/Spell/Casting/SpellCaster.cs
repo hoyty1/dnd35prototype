@@ -155,17 +155,9 @@ public static class SpellCaster
             bool preciseShotNegated = terms.PreciseShotNegated;
             int shootingIntoMeleePenalty = terms.ShootingIntoMeleePenalty;
 
-            int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
-                + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0)
-                + RacialTraitRules.KindDodgeACBonusAgainst(targetStats, casterStats); // dwarf and gnome vs giants (CHR-019)
-
-            // The ward's deflection does not stack with the target's own deflection: only the excess applies.
-            int protectionDeflection = AlignmentProtectionRules.DeflectionAcIncrease(protection, targetStats);
+            int touchAC = TouchAttackAC(targetController, targetStats, casterStats, protection, out int protectionDeflection);
             if (protectionDeflection > 0)
-            {
-                touchAC += protectionDeflection;
                 result.ProtectionAcBonus = protectionDeflection;
-            }
 
             int animateRopeRangePenalty = terms.RangeIncrementPenalty;
             int animateRopeIncrement = terms.RangeIncrement;
@@ -214,23 +206,13 @@ public static class SpellCaster
         }
 
         // ========== CONCEALMENT MISS CHANCE (applies after successful touch/ranged touch attack roll) ==========
-        if (result.AttackHit && result.RequiredAttackRoll && casterController != null && targetController != null)
+        if (result.AttackHit && result.RequiredAttackRoll
+            && TouchAttackMissesByConcealment(casterController, targetController, result.IsRangedTouch, out int concealmentRoll, out int missChance))
         {
-            int targetMissChance = targetController.GetMissChance(casterController, result.IsRangedTouch);
-            int blindedCasterMissChance = casterController.HasCondition(CombatConditionType.Blinded) ? CombatCalculationService.BlindedAttackerMissChance : 0;
-            int missChance = Mathf.Max(targetMissChance, blindedCasterMissChance);
-
-            if (missChance > 0)
-            {
-                int concealmentRoll = DiceRoller.D100();
-                if (CombatCalculationService.ConcealmentMiss(concealmentRoll, missChance))
-                {
-                    result.AttackHit = false;
-                    result.Success = false;
-                    result.NoEffectReason = $"Attack misses due to concealment ({concealmentRoll} ≤ {missChance}).";
-                    return result;
-                }
-            }
+            result.AttackHit = false;
+            result.Success = false;
+            result.NoEffectReason = $"Attack misses due to concealment ({concealmentRoll} ≤ {missChance}).";
+            return result;
         }
 
         // ========== GLOBE OF INVULNERABILITY (a melee touch on a creature inside it) ==========
@@ -437,7 +419,6 @@ public static class SpellCaster
             }
             else
             {
-                int saveRoll = DiceService.D20(SavingThrowContext);
                 SaveContext saveContext = SaveContext.ForSpell(spell, casterStats, casterController);
                 int saveMod = GetSaveModifier(
                     targetStats,
@@ -448,15 +429,19 @@ public static class SpellCaster
                     out int protectionSaveBonus,
                     out int situationalSaveBonus,
                     out string situationalSaveSource);
-                result.SaveRoll = saveRoll;
+                // The one save roll (SaveRollRules, D13): the d20, the Luck reroll (PHB p.187), the countersong's Perform
+                // result in place of the save against a sonic or language-dependent spell when higher (PHB p.29; CHR-026),
+                // and a natural 1 or 20 (PHB p.177).
+                SaveRoll save = SaveRollRules.RollWithModifier(targetStats, targetController, saveMod, result.SaveDC, saveContext,
+                    SavingThrowContext, saveType + " saving throw");
+                result.SaveRoll = save.Roll;
                 result.SaveMod = saveMod;
                 result.ProtectionSaveBonus = protectionSaveBonus;
                 result.SituationalSaveBonus = situationalSaveBonus;
                 result.SituationalSaveBonusSource = situationalSaveSource;
-                // A countersong's Perform result replaces the save against a sonic or language-dependent spell when higher
-                // (PHB p.29; CHR-026).
-                result.SaveTotal = BardicMusicRules.ApplyCountersong(targetController, saveRoll + saveMod, saveContext);
-                result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
+                result.SaveTotal = save.Total;
+                result.SaveSucceeded = save.Succeeded;
+                result.SaveNaturalSuffix = save.NaturalSuffix;
             }
         }
 
@@ -1057,6 +1042,47 @@ public static class SpellCaster
         }
 
         return terms;
+    }
+
+    /// <summary>
+    /// The touch AC a touch attack (a spell's touch or ray, a monster's ranged touch attack) is rolled against: the
+    /// target's touch AC (PHB p.136), +4 while it fights defensively (PHB p.140), the dwarf's and gnome's dodge bonus
+    /// against the attacker's kind (PHB p.15, p.17; CHR-019), and the excess of a protection ward's deflection over the
+    /// target's own against the attacker's alignment (PHB p.266; <paramref name="protectionDeflection"/>).
+    /// </summary>
+    public static int TouchAttackAC(CharacterController targetController, CharacterStats targetStats, CharacterStats attackerStats,
+        AlignmentProtectionBenefits protection, out int protectionDeflection)
+    {
+        int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
+            + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0)
+            + RacialTraitRules.KindDodgeACBonusAgainst(targetStats, attackerStats); // dwarf and gnome vs giants (CHR-019)
+
+        // The ward's deflection does not stack with the target's own deflection: only the excess applies.
+        protectionDeflection = AlignmentProtectionRules.DeflectionAcIncrease(protection, targetStats);
+        if (protectionDeflection > 0)
+            touchAC += protectionDeflection;
+        return touchAC;
+    }
+
+    /// <summary>
+    /// The miss chance of a touch attack that hit (PHB p.152): the target's concealment against the attacker, or 50% for a
+    /// blinded attacker, whichever is higher, rolled once on d100 (<paramref name="roll"/>; no roll and false when there
+    /// is no miss chance or either creature is unknown). True when the attack misses.
+    /// </summary>
+    public static bool TouchAttackMissesByConcealment(CharacterController attacker, CharacterController target, bool isRanged,
+        out int roll, out int missChance)
+    {
+        roll = 0;
+        missChance = 0;
+        if (attacker == null || target == null)
+            return false;
+        int targetMissChance = target.GetMissChance(attacker, isRanged);
+        int blindedAttackerMissChance = attacker.HasCondition(CombatConditionType.Blinded) ? CombatCalculationService.BlindedAttackerMissChance : 0;
+        missChance = Mathf.Max(targetMissChance, blindedAttackerMissChance);
+        if (missChance <= 0)
+            return false;
+        roll = DiceRoller.D100();
+        return CombatCalculationService.ConcealmentMiss(roll, missChance);
     }
 
     /// <summary>

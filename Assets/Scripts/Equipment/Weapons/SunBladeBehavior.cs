@@ -102,7 +102,7 @@ public class SunBladeBehavior : SpecificItemBehavior
         // Undead that are critically hit must make Will DC 14 or be blinded
         if (target.Stats.CreatureType == "Undead")
         {
-            var save = SavingThrowResolver.ResolveWillSave(target.Stats, 14, "Sun Blade radiance");
+            var save = SavingThrowResolver.ResolveWillSave(target.Stats, 14, "Sun Blade radiance", SaveContext.Effect("Sun Blade radiance", Wielder));
             if (!save.Succeeded)
             {
                 target.ApplyCondition(CombatConditionType.Blinded, 5, "Sun Blade radiance");

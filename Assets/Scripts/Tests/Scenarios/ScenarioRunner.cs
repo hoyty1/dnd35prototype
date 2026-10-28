@@ -318,6 +318,13 @@ namespace Tests.Scenarios
     {
         public enum RunState { Idle, Running, Done, Interrupted }
 
+        /// <summary>The bonus key of the scenarios' save tweaks (Bonuses.Set("scenario:save-tweak", AllSaves, ...)).</summary>
+        internal const string SaveTweakKey = "scenario:save-tweak";
+
+        /// <summary>True when <paramref name="c"/> carries a scenario save tweak of 20 or more either way (the save fallback).</summary>
+        private static bool HasDecidingSaveTweak(CharacterController c)
+            => c != null && c.Stats != null && Math.Abs(c.Stats.Bonuses.OwnerValue(SaveTweakKey, BonusTarget.AllSaves)) >= 20;
+
         internal static ScenarioRunner Instance;
         /// <summary>Jobs that started a fight in this domain (this Play session); the static-suite runner warns when it runs after them (docs/TESTING.md 2.6).</summary>
         internal static int JobsStartedThisDomain;
@@ -1206,9 +1213,16 @@ namespace Tests.Scenarios
             job.Trace.Install();
 
             bool record = def.RecordDice || job.Options.RecordDice;
-            if (def.DiceForces.Count > 0 || record)
+            // Save fallback: when an actor carries a scenario save tweak of 20 or more either way, every save d20 the
+            // scenario does not force itself is a 10, so the tweak decides the save; an unforced natural 1 or 20 would
+            // decide it instead (PHB p.177; SaveRollRules since batch 12 step 10). Appended last, so a scenario's own
+            // forces win.
+            bool saveFallback = def.Actors.Any(spec => HasDecidingSaveTweak(job.Ctx.Actors[spec.Key]));
+            if (def.DiceForces.Count > 0 || record || saveFallback)
             {
                 List<DiceForce> forces = def.DiceForces.Select(f => f.Clone()).ToList();
+                if (saveFallback)
+                    forces.Add(new DiceForce { Sides = 20, Value = 10, CtxContains = SaveRollRules.SaveDiceTag, Remaining = -1 });
                 ScenarioTrace trace = job.Trace;
                 ScenarioHooks.RollFilter = (sides, ctx, natural) =>
                 {

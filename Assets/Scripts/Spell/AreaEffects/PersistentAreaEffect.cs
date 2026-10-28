@@ -685,16 +685,17 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         Destroy(gameObject);
     }
 
+    /// <summary>The save context of this effect's spell and its caster (SaveContext.ForSpellId; the protection ward, SPL-018).</summary>
+    protected SaveContext SpellSaveContext()
+        => SaveContext.ForSpellId(SpellId, Caster != null ? Caster.Stats : null);
+
     /// <summary>
-    /// <paramref name="character"/>'s save modifier against this effect's spell (SaveRules, CHR-018): every bonus that
-    /// applies to all saves plus those against the spell (racial, Still Mind, morale against fear, ...).
+    /// <paramref name="character"/>'s <paramref name="save"/> against this effect's spell at <paramref name="dc"/>, through
+    /// the one save roll (SaveRollRules, D13: the Luck reroll, the countersong, natural 1 and 20; SPL-018), with the
+    /// shared modifier against the spell (SaveRules, CHR-018: racial, Still Mind, morale against fear, ...). The d20 has no dice context, as the d20 it replaced.
     /// </summary>
-    protected int SpellSaveModifier(CharacterController character, SavingThrowType save)
-    {
-        if (character == null || character.Stats == null)
-            return 0;
-        return SaveRules.Modifier(character.Stats, save, SaveContext.ForSpellId(SpellId, Caster != null ? Caster.Stats : null));
-    }
+    protected SaveRoll RollSpellSave(CharacterController character, SavingThrowType save, int dc)
+        => SaveRollRules.Roll(character != null ? character.Stats : null, save, dc, SpellSaveContext(), null);
 
     /// <summary>
     /// Deals this effect's spell damage of one type to <paramref name="character"/> through the shared path

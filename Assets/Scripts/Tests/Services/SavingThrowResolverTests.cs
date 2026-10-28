@@ -89,28 +89,28 @@ public static class SavingThrowResolverTests
 
     private static void TestResolveSaveSuccess()
     {
-        // DC 1 with any stats should almost always succeed
+        // DC 1 succeeds on every roll but a natural 1, which always fails (PHB p.177; SaveRollRules, D13)
         var stats = TestHelpers.CreateStats(name: "Save_Easy", con: 16);
-        int successes = 0;
+        int wrong = 0;
         for (int i = 0; i < 100; i++)
         {
             var result = SavingThrowResolver.ResolveSave(stats, SavingThrowResolver.SaveType.Fortitude, 1, "easy save");
-            if (result.Succeeded) successes++;
+            if (result.Succeeded != (result.Roll != 1)) wrong++;
         }
-        Assert(successes == 100, "DC 1 save always succeeds", $"successes={successes}/100");
+        Assert(wrong == 0, "DC 1 save succeeds on every roll but a natural 1", $"wrong={wrong}/100");
     }
 
     private static void TestResolveSaveFailure()
     {
-        // DC 100 should almost always fail
+        // DC 100 fails on every roll but a natural 20, which always succeeds (PHB p.177; SaveRollRules, D13)
         var stats = TestHelpers.CreateStats(name: "Save_Hard");
-        int failures = 0;
+        int wrong = 0;
         for (int i = 0; i < 100; i++)
         {
             var result = SavingThrowResolver.ResolveSave(stats, SavingThrowResolver.SaveType.Will, 100, "impossible save");
-            if (!result.Succeeded) failures++;
+            if (result.Succeeded != (result.Roll == 20)) wrong++;
         }
-        Assert(failures == 100, "DC 100 save always fails", $"failures={failures}/100");
+        Assert(wrong == 0, "DC 100 save fails on every roll but a natural 20", $"wrong={wrong}/100");
     }
 
     private static void TestResolveFortitudeSave()
@@ -122,7 +122,7 @@ public static class SavingThrowResolverTests
         Assert(result.DC == 15, "Fort save DC = 15", $"got {result.DC}");
         Assert(result.Roll >= 1 && result.Roll <= 20, "Fort save roll in range", $"got {result.Roll}");
         Assert(result.Total == result.Roll + result.Modifier, "Fort total = roll + mod", $"total={result.Total}, roll={result.Roll}, mod={result.Modifier}");
-        Assert(result.Succeeded == (result.Total >= result.DC), "Fort succeeded logic correct");
+        Assert(result.Succeeded == (result.Roll == 20 || (result.Roll != 1 && result.Total >= result.DC)), "Fort succeeded logic correct (natural 1 and 20, PHB p.177)");
         Assert(!string.IsNullOrEmpty(result.LogMessage), "Fort log message not empty");
     }
 
@@ -231,7 +231,7 @@ public static class SavingThrowResolverTests
         Assert(result.EffectName == "test effect", "Result.EffectName correct", $"got '{result.EffectName}'");
         Assert(result.Modifier == stats.WillSave, "Result.Modifier = WillSave", $"got {result.Modifier}, expected {stats.WillSave}");
         Assert(result.Total == result.Roll + result.Modifier, "Result.Total = Roll + Modifier");
-        Assert(result.Succeeded == (result.Total >= 15), "Result.Succeeded matches Total >= DC");
+        Assert(result.Succeeded == (result.Roll == 20 || (result.Roll != 1 && result.Total >= 15)), "Result.Succeeded matches Total >= DC, with natural 1 and 20 (PHB p.177)");
         Assert(!string.IsNullOrEmpty(result.LogMessage), "Result.LogMessage populated");
     }
 }

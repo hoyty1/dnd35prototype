@@ -554,22 +554,25 @@ public static class FeatManager
         attackerStats.StunningFistActive = false; // Reset toggle
 
         int dc = GetStunningFistDC(attackerStats);
-        int fortSave = DiceService.D20("Stunning Fist Fort save") + target.Stats.FortitudeSave;
+        // The one save roll (SaveRollRules, D13; SPL-018), against the attacker's Stunning Fist (PHB p.101).
+        SaveRoll save = SaveRollRules.Roll(target.Stats, SavingThrowType.Fortitude, dc,
+            SaveContext.Effect("Stunning Fist", attacker != null ? attacker : attackerStats.OwnerCharacter), "Stunning Fist Fort save");
+        int fortSave = save.Total;
 
         string attackerName = attackerStats.CharacterName ?? "Attacker";
         string targetName = target.Stats.CharacterName ?? "Target";
 
-        if (fortSave < dc)
+        if (!save.Succeeded)
         {
             // Target is stunned for 1 round
             using (TurnDurations.Anchor(attacker))
                 target.ApplyCondition(CombatConditionType.Stunned, 1, "Stunning Fist");
-            Debug.Log($"[Stunning Fist] {targetName} STUNNED by {attackerName}! (Fort {fortSave} < DC {dc}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
+            Debug.Log($"[Stunning Fist] {targetName} STUNNED by {attackerName}! (Fort {fortSave} vs DC {dc}{save.NaturalSuffix}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
             return true;
         }
         else
         {
-            Debug.Log($"[Stunning Fist] {targetName} resists {attackerName}'s Stunning Fist (Fort {fortSave} >= DC {dc}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
+            Debug.Log($"[Stunning Fist] {targetName} resists {attackerName}'s Stunning Fist (Fort {fortSave} vs DC {dc}{save.NaturalSuffix}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
             return false;
         }
     }

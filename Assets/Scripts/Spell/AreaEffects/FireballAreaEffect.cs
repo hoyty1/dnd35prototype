@@ -60,17 +60,16 @@ public class FireballAreaEffect : PersistentAreaEffect
         for (int i = 0; i < diceCount; i++)
             damage += DiceRoller.D6(); // 1d6
 
-        int roll = DiceRoller.D20();
-        int reflexSave = SpellSaveModifier(character, SavingThrowType.Reflex);
-        int total = roll + reflexSave;
+        SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
 
-        bool saveSucceeded = total >= SaveDC;
+        bool saveSucceeded = save.Succeeded;
         if (saveSucceeded)
             damage /= 2;
 
-        damage = Mathf.Max(0, damage);
+        // Evasion and Improved Evasion on Reflex-half damage (PHB p.50, p.41-42; SpellSaveResolver.ApplyEvasion).
+        damage = Mathf.Max(0, SpellSaveResolver.ApplyEvasion(damage, character.Stats, saveSucceeded, out string evasionNote));
         DamageResolutionResult dealt = DealSpellDamage(character, damage, DamageType.Fire, saveSucceeded);
 
-        LogEffect($"{character.Stats.CharacterName} Reflex: d20({roll}) + {reflexSave} = {total} vs DC {SaveDC} -> {(saveSucceeded ? "half" : "full")} {dealt.FinalDamage} fire damage{GameManager.DescribeMitigation(dealt)}.");
+        LogEffect($"{character.Stats.CharacterName} Reflex: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {SaveDC}{save.NaturalSuffix} -> {(saveSucceeded ? "half" : "full")} {dealt.FinalDamage} fire damage{GameManager.DescribeMitigation(dealt)}{(evasionNote != null ? " (" + evasionNote + ")" : string.Empty)}.");
     }
 }

@@ -12,6 +12,9 @@ public class GrappleSystem : BaseCombatManeuver
 
 public partial class GameManager
 {
+    /// <summary>The dice context of the free adjacent square picked for a creature that cannot choose one after a grapple (DiceService; CORE-030).</summary>
+    public const string GrappleEscapeSquareContext = "Grapple escape square";
+
     private bool _isGrappleMoveSelection;
     private CharacterController _grappleMoveActor;
     private int _grappleMoveMaxRangeSquares;
@@ -485,7 +488,10 @@ public partial class GameManager
 
         if (!actorCanSelectNow)
         {
-            Vector2Int selectedSquare = validSquares[UnityEngine.Random.Range(0, validSquares.Count)];
+            // One pick among the free squares through DiceService (the scenario RollFilter seam; CORE-030), clamped so a
+            // filter that returns a value for another die size cannot index past the list.
+            int pick = Mathf.Clamp(DiceService.Roll(1, validSquares.Count, GrappleEscapeSquareContext), 1, validSquares.Count) - 1;
+            Vector2Int selectedSquare = validSquares[pick];
             autoMove = ExecuteFreeAdjacentGrappleMovement(actor, selectedSquare, formerOpponent, showActionChoicesAfterMove: false);
             return false;
         }

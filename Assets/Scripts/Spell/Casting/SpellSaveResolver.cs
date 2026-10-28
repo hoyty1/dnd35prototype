@@ -56,8 +56,17 @@ public struct SaveResult
     /// <summary>The DC that needed to be met or exceeded.</summary>
     public int DC;
 
-    /// <summary>True if Total >= DC.</summary>
+    /// <summary>True if the save succeeded: a natural 20 always, a natural 1 never, else Total >= DC (PHB p.177; SaveRollRules).</summary>
     public bool Saved;
+
+    /// <summary>The d20 came up 1.</summary>
+    public bool NaturalOne;
+
+    /// <summary>The d20 came up 20.</summary>
+    public bool NaturalTwenty;
+
+    /// <summary>" (natural 1)" or " (natural 20)" when the natural roll decided the save (SaveRoll.NaturalSuffix), else empty or null.</summary>
+    public string NaturalSuffix;
 
     /// <summary>
     /// True when the target gave up its save (PHB p.177; SpellSaveRules.TargetForgoesSave): no die was rolled, and the
@@ -91,7 +100,7 @@ public struct SaveResult
             sb.AppendLine($"  {TypeName}: save forgone (willing) vs DC {DC} → {fail}");
             return;
         }
-        sb.AppendLine($"  {TypeName}: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? success : fail)}");
+        sb.AppendLine($"  {TypeName}: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? success : fail)}{NaturalSuffix}");
     }
 
     /// <summary>
@@ -106,7 +115,7 @@ public struct SaveResult
             sb.AppendLine($"  {TypeName} save: forgone (willing) vs DC {DC} → FAILED (full)");
             return;
         }
-        sb.AppendLine($"  {TypeName} save: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? "SAVED (half)" : "FAILED (full)")}");
+        sb.AppendLine($"  {TypeName} save: d20({Roll}) + {Modifier} = {Total} vs DC {DC} → {(Saved ? "SAVED (half)" : "FAILED (full)")}{NaturalSuffix}");
     }
 }
 
@@ -200,7 +209,8 @@ public static class SpellSaveResolver
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Roll a saving throw for a target against a spell DC, with the shared save modifier (SaveRules, CHR-018).
+    /// Roll a saving throw for a target against a spell DC, with the shared save modifier (SaveRules, CHR-018), through
+    /// the one save roll (SaveRollRules: the Luck reroll, the countersong, natural 1 and 20; D13).
     /// </summary>
     /// <param name="target">The character making the save.</param>
     /// <param name="type">Fort, Reflex, or Will.</param>
@@ -214,20 +224,11 @@ public static class SpellSaveResolver
     public static SaveResult RollSave(CharacterController target, SaveType type, int dc, SaveContext context = null,
         string diceContext = null, int extraModifier = 0)
     {
-        int roll = DiceService.D20(diceContext);
-        int modifier = SaveRules.Modifier(target != null ? target.Stats : null, type, context) + extraModifier;
-        // A countersong's Perform result replaces the save against a sonic or language-dependent attack when higher (PHB p.29).
-        int total = BardicMusicRules.ApplyCountersong(target, roll + modifier, context);
-
-        return new SaveResult
-        {
-            Type = type,
-            Roll = roll,
-            Modifier = modifier,
-            Total = total,
-            DC = dc,
-            Saved = total >= dc
-        };
+        CharacterStats stats = target != null ? target.Stats : null;
+        // The one save roll (SaveRollRules, D13): the Luck reroll, the countersong (PHB p.29), natural 1 and 20 (PHB p.177).
+        SaveRoll save = SaveRollRules.RollWithModifier(stats, target,
+            SaveRules.Modifier(stats, type, context) + extraModifier, dc, context, diceContext, LuckLabel(type));
+        return FromRoll(type, save);
     }
 
     /// <summary>
@@ -235,20 +236,28 @@ public static class SpellSaveResolver
     /// </summary>
     public static SaveResult RollSave(CharacterStats stats, SaveType type, int dc, SaveContext context = null)
     {
-        int roll = DiceService.D20();
-        int modifier = SaveRules.Modifier(stats, type, context);
-        int total = BardicMusicRules.ApplyCountersong(stats != null ? stats.OwnerCharacter : null, roll + modifier, context);
+        return FromRoll(type, SaveRollRules.Roll(stats, type, dc, context, null));
+    }
 
+    /// <summary>This resolver's result for one <see cref="SaveRollRules"/> roll.</summary>
+    public static SaveResult FromRoll(SaveType type, SaveRoll save)
+    {
         return new SaveResult
         {
             Type = type,
-            Roll = roll,
-            Modifier = modifier,
-            Total = total,
-            DC = dc,
-            Saved = total >= dc
+            Roll = save.Roll,
+            Modifier = save.Modifier,
+            Total = save.Total,
+            DC = save.DC,
+            Saved = save.Succeeded,
+            NaturalOne = save.NaturalOne,
+            NaturalTwenty = save.NaturalTwenty,
+            NaturalSuffix = save.NaturalSuffix
         };
     }
+
+    private static string LuckLabel(SaveType type)
+        => SaveRollRules.SaveName(SaveRules.ToSavingThrowType(type)) + " saving throw";
 
     // ════════════════════════════════════════════════════════════
     //  Spell Resistance Resolution

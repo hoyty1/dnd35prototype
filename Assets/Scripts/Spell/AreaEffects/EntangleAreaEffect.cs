@@ -37,13 +37,11 @@ public class EntangleAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
-        int roll = DiceRoller.D20();
-        int reflexMod = SpellSaveModifier(character, SavingThrowType.Reflex);
-        int total = roll + reflexMod;
-        bool saved = total >= SaveDC;
+        SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
+        bool saved = save.Succeeded;
 
         string timing = isInitial ? "is in" : "enters";
-        LogEffect($"{character.Stats.CharacterName} {timing} Entangle: Reflex d20({roll})+{reflexMod}={total} vs DC {SaveDC} → {(saved ? "SAVED (half speed)" : "ENTANGLED")}");
+        LogEffect($"{character.Stats.CharacterName} {timing} Entangle: Reflex d20({save.Roll})+{save.Modifier}={save.Total} vs DC {SaveDC} → {(saved ? "SAVED (half speed)" : "ENTANGLED")}{save.NaturalSuffix}");
 
         if (!saved)
         {
@@ -78,15 +76,12 @@ public class EntangleAreaEffect : PersistentAreaEffect
         else
         {
             // Re-check entanglement for creatures still in area but not entangled
-            int roll = DiceRoller.D20();
-            int reflexMod = SpellSaveModifier(character, SavingThrowType.Reflex);
-            int total = roll + reflexMod;
-            bool saved = total >= SaveDC;
+            SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
 
-            if (!saved)
+            if (!save.Succeeded)
             {
                 character.ApplyCondition(CombatConditionType.Entangled, 1, "Entangle");
-                LogEffect($"🌿 {character.Stats.CharacterName} becomes entangled again! Reflex {total} vs DC {SaveDC}");
+                LogEffect($"🌿 {character.Stats.CharacterName} becomes entangled again! Reflex {save.Total} vs DC {SaveDC}{save.NaturalSuffix}");
             }
         }
     }

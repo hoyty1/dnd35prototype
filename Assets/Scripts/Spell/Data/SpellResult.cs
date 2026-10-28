@@ -40,6 +40,8 @@ public class SpellResult
     public int SaveMod;                 // Target's save modifier
     public int SaveTotal;               // d20 + save modifier
     public bool SaveSucceeded;
+    /// <summary>" (natural 1)" or " (natural 20)" when the natural roll decided the save (SaveRoll.NaturalSuffix), else empty or null.</summary>
+    public string SaveNaturalSuffix;
     public int SituationalSaveBonus;
     public string SituationalSaveBonusSource;
 
@@ -260,7 +262,7 @@ public class SpellResult
 
             sb.AppendLine($"    Total: {CharacterStats.FormatMod(SaveMod)}");
             string saveResult = SaveSucceeded ? "SUCCESS" : "FAIL";
-            sb.AppendLine($"    Roll: {SaveRoll} + {SaveMod} = {SaveTotal} vs DC {SaveDC}: {saveResult}");
+            sb.AppendLine($"    Roll: {SaveRoll} + {SaveMod} = {SaveTotal} vs DC {SaveDC}: {saveResult}{SaveNaturalSuffix}");
 
             if (ProtectionSaveBonus > 0)
                 sb.AppendLine("    COMPARISON: A non-opposed caster using the same spell would not grant this +2 save bonus.");

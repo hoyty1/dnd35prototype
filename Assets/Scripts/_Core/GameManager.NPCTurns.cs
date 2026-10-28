@@ -1435,11 +1435,16 @@ public partial class GameManager
 
             int damageToApply = saveSuccess ? (spray.SaveNegates ? 0 : rawDamage / 2) : rawDamage;
 
+            // Evasion and Improved Evasion apply to every Reflex-half damage (PHB p.50, p.41-42; D13, SPL-090).
+            string evasionNote = string.Empty;
+            if (spray.SaveType == SavingThrowType.Reflex && !spray.SaveNegates)
+                damageToApply = SpellSaveResolver.ApplyEvasion(damageToApply, victim.Stats, saveSuccess, out evasionNote);
+
             // D&D 3.5e: Blinking creatures take half damage from area attacks
             if (damageToApply > 0 && victim.HasActiveBlinkEffect)
                 damageToApply = Mathf.Max(1, damageToApply / 2);
 
-            string saveText = $"{saveName} d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {spray.SaveDC} {(saveSuccess ? "SUCCESS" : "FAIL")}";
+            string saveText = $"{saveName} d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {spray.SaveDC} {(saveSuccess ? "SUCCESS" : "FAIL")}{save.NaturalSuffix}{(string.IsNullOrEmpty(evasionNote) ? "" : " " + evasionNote)}";
             if (damageToApply <= 0)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: {saveText} | no damage{(saveSuccess && spray.SaveNegates ? " (negated)" : "")}"));
@@ -1853,6 +1858,12 @@ public partial class GameManager
     //  Breath Weapon Execution (called from AIService for dragon-type AI)
     // ══════════════════════════════════════════════════════════════════
 
+    /// <summary>The dice context of each creature's save against a breath weapon (SaveRollRules; the scenario harness forces it by this label).</summary>
+    public const string BreathWeaponSaveContext = "Breath weapon save";
+
+    /// <summary>The dice context of each creature's Will save against a frightful presence (SaveRollRules; a test can force it by this label).</summary>
+    public const string FrightfulPresenceSaveContext = "Frightful presence save";
+
     /// <summary>
     /// Resolves a breath weapon attack aimed at <paramref name="aimTarget"/>.
     /// Computes the affected cells (cone or line), rolls damage, and applies
@@ -1929,16 +1940,27 @@ public partial class GameManager
             CharacterController target = targets[t];
             log.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-            // Roll saving throw (raw d20 + save: AI-040)
-            int saveBonus = bw.IsReflexSave ? target.Stats.ReflexSave : target.Stats.FortitudeSave;
-            int saveRoll = DiceRoller.D20();
-            int saveTotal = saveRoll + saveBonus;
-            bool saved = saveTotal >= bw.SaveDC;
+            // The one save roll (SaveRollRules, D13): the Luck reroll, natural 1 and 20 (PHB p.177), and the bonuses that
+            // depend on the breathing creature (SaveContext.CreatureAbility: an alignment ward; SPL-018).
+            SaveRoll breathSave = SaveRollRules.Roll(target.Stats,
+                bw.IsReflexSave ? SavingThrowType.Reflex : SavingThrowType.Fortitude, bw.SaveDC,
+                SaveContext.CreatureAbility(npc.Stats.CharacterName + "'s breath weapon", npc), BreathWeaponSaveContext);
+            int saveBonus = breathSave.Modifier;
+            int saveRoll = breathSave.Roll;
+            int saveTotal = breathSave.Total;
+            bool saved = breathSave.Succeeded;
 
             int damageRolled = saved ? (bw.SaveNegates ? 0 : totalDamage / 2) : totalDamage;
 
+            // Evasion and Improved Evasion on a Reflex-half breath (PHB p.50, p.41-42; SpellSaveResolver.ApplyEvasion, SPL-090).
+            string evasionNote = null;
+            if (bw.IsReflexSave && !bw.SaveNegates)
+                damageRolled = SpellSaveResolver.ApplyEvasion(damageRolled, target.Stats, saved, out evasionNote);
+
             string saveResult = saved ? "SAVED" : "FAILED";
-            log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}!");
+            log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}{breathSave.NaturalSuffix}!");
+            if (evasionNote != null)
+                log.AppendLine($"  {evasionNote}");
 
             // A breath weapon is a supernatural ability: immunity, Protection from Energy, resistance and Fire Shield
             // apply by its energy type, damage reduction does not (MM p.307); then the concentration and death checks
@@ -2024,14 +2046,19 @@ public partial class GameManager
             string targetName = target.Stats.CharacterName;
             int targetHD = target.Stats.GetHitDice();
 
-            // Will save against a fear effect (SaveRules: morale against fear, CHR-018)
-            int roll = DiceRoller.D20();
-            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.Fear);
-            int total = roll + willMod;
+            // Will save against a fear effect (SaveRules: morale against fear, CHR-018), through the one save roll
+            // (SaveRollRules, D13).
+            // The context names the dragon, so the bonuses that depend on the creature causing the fear apply (an
+            // alignment ward, PHB p.266).
+            SaveRoll fearSave = SaveRollRules.Roll(target.Stats, SavingThrowType.Will, fp.SaveDC,
+                SaveContext.FearFrom(dragonName + "'s frightful presence", dragon), FrightfulPresenceSaveContext);
+            int roll = fearSave.Roll;
+            int willMod = fearSave.Modifier;
+            int total = fearSave.Total;
 
-            if (total >= fp.SaveDC)
+            if (fearSave.Succeeded)
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}) — immune for remainder of combat"));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix}) — immune for remainder of combat"));
                 continue;
             }
 
@@ -2044,13 +2071,13 @@ public partial class GameManager
             {
                 // Panicked
                 target.ApplyCondition(CombatConditionType.Panicked, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}, {targetHD} HD ≤ {fp.HDThresholdForPanic})"));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix}, {targetHD} HD ≤ {fp.HDThresholdForPanic})"));
             }
             else
             {
                 // Shaken
                 target.ApplyCondition(CombatConditionType.Shaken, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC})"));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix})"));
             }
         }
 

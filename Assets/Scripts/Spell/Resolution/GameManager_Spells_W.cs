@@ -384,14 +384,14 @@ public partial class GameManager
     /// </summary>
     private bool RollWallOfIceReflexSave(CharacterController caster, CharacterController creature, int dc, out int roll, out int total)
     {
-        roll = DiceRoller.D20();
-        // The save against the caster's spell (SaveRules with the caster: the protection ward, SPL-018).
-        int reflexMod = SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex,
-            SaveContext.ForSpellId(SpellNames.WALL_OF_ICE, caster != null ? caster.Stats : null)); // CHR-018
-        total = roll + reflexMod;
-        bool success = total >= dc;
+        // The one save roll (SaveRollRules, D13) against the caster's spell (the protection ward, SPL-018).
+        SaveRoll save = SaveRollRules.Roll(creature.Stats, SavingThrowType.Reflex, dc,
+            SaveContext.ForSpellId(SpellNames.WALL_OF_ICE, caster != null ? caster.Stats : null), null); // CHR-018
+        roll = save.Roll;
+        total = save.Total;
+        bool success = save.Succeeded;
 
-        Debug.Log($"[WallOfIce] Reflex save: {creature.Stats.CharacterName} rolls d20({roll}) + {reflexMod} = {total} vs DC {dc} → {(success ? "SUCCESS" : "FAILURE")}");
+        Debug.Log($"[WallOfIce] Reflex save: {creature.Stats.CharacterName} rolls d20({roll}) + {save.Modifier} = {total} vs DC {dc} → {SaveRollRules.Outcome(save, "SUCCESS", "FAILURE")}");
         return success;
     }
 

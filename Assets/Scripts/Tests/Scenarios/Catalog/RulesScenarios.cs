@@ -294,6 +294,9 @@ namespace Tests.Scenarios
             yield return S("zero-level-spells-ai", ZeroLevelSpellsAi);
             yield return S("zero-level-spells-aoo-cancel", ZeroLevelSpellsAoOCancel);
             yield return S("save-bonuses", SaveBonuses);
+            yield return S("save-natural-one", () => SaveNatural(1));
+            yield return S("save-natural-twenty", () => SaveNatural(20));
+            yield return S("ai-ranged-touch-natural-one", AiRangedTouchNaturalOne);
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
             yield return S("spell-dice-undead", SpellDiceUndead);
@@ -7393,6 +7396,130 @@ namespace Tests.Scenarios
         private const string SaveBonusNotePrefix = "save-bonus expect ";
 
         /// <summary>
+        /// Batch 12 step 10 (D13, SPL-018; PHB p.177): a natural 1 on a saving throw always fails and a natural 20 always
+        /// succeeds, on every save path. <paramref name="natural"/> 1: every save d20 is forced to 1 and the two targets
+        /// get +30 on every save; 20: forced to 20 and -30. The Quick Start wizard (Ui, the PC cast path; Charm Person
+        /// prepared in place of Enlarge Person) charms the orc, the enchanter (Scripted, the NPC cast path,
+        /// evil_enchanter_test) charms the hero (PHB p.209: humanoid, Will negates), and before its cast the wizard's
+        /// Assert step poisons the hero (CharacterController.ApplyPoison, medium spider venom: the hand-rolled poison save
+        /// that now goes through SaveRollRules too). With a natural 1 both are charmed and the poison's initial save fails
+        /// at +30; with a natural 20 neither is charmed and the poison save succeeds at -30. Before the step every one of
+        /// these saves compared the total with the DC only.
+        /// </summary>
+        private static ScenarioDef SaveNatural(int natural)
+        {
+            bool one = natural == 1;
+            int tweak = one ? 30 : -30;
+            string id = one ? "rules/save-natural-one" : "rules/save-natural-twenty";
+            string title = one
+                ? "A natural 1 on a save always fails, even at +30: PC and NPC casts and a poison save (PHB p.177; D13, SPL-018)"
+                : "A natural 20 on a save always succeeds, even at -30: PC and NPC casts and a poison save (PHB p.177; D13, SPL-018)";
+            string note = one ? @"\(natural 1\)" : @"\(natural 20\)";
+            return Rules(id, title)
+                .Covers("SPL-018", "PHB p.177", "PHB p.209", "DMG p.296", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 6, 10, Control.Ui)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Sure Hero", 4)), 6, 12, Control.Idle)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Idle)
+                .Npc("enchanter", "evil_enchanter_test", 11, 12, Control.Scripted)
+                .Tweak("wizard", PrepareCharmPersonForEnlarge)
+                .Tweak("hero", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, tweak, "scenario save tweak"))
+                .Tweak("orc", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, tweak, "scenario save tweak"))
+                .Force(20, natural, SpellCaster.SavingThrowContext, -1)
+                .Force(20, natural, "Poison initial Fort save", 1)
+                .Initiative("wizard", "enchanter", "hero", "orc")
+                .Turn("wizard", 1,
+                    Step.Assert("The hero is exposed to medium spider venom (Fort DC 12, MM p.289; DMG p.296)", ctx =>
+                    {
+                        ctx.Get("hero").ApplyPoison("medium_spider_poison");
+                        return true;
+                    }),
+                    Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "orc"),
+                    Step.EndTurn())
+                .Turn("enchanter", 1, Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "hero"), Step.EndTurn())
+                .Expect("Both Charm Person casts ran", v =>
+                    v.Log("casts Charm Person").Count >= 2
+                        ? ExpectResult.Pass(v.Log("casts Charm Person").Count + " casts logged")
+                        : ExpectResult.Fail(v.Log("casts Charm Person").Count + " Charm Person casts logged"))
+                .Expect(one ? "The orc (Will +30, PC cast) is charmed by a natural 1 (PHB p.177)" : "The orc (Will -30, PC cast) resists with a natural 20 (PHB p.177)", v =>
+                {
+                    JsonObj orc = v.Final("orc");
+                    if (orc == null) return ExpectResult.Fail("no final snapshot");
+                    return HasCond(orc, "Charmed") == one
+                        ? ExpectResult.Pass("orc charmed " + one)
+                        : ExpectResult.Fail("orc conds " + string.Join(",", (orc.Get("conds") as List<string>) ?? new List<string>()));
+                })
+                .Expect(one ? "The hero (Will +30, NPC cast) is charmed by a natural 1 (PHB p.177; PC_NPC_PARITY)" : "The hero (Will -30, NPC cast) resists with a natural 20 (PHB p.177; PC_NPC_PARITY)", v =>
+                {
+                    JsonObj hero = v.Final("hero");
+                    if (hero == null) return ExpectResult.Fail("no final snapshot");
+                    return HasCond(hero, "Charmed") == one
+                        ? ExpectResult.Pass("hero charmed " + one)
+                        : ExpectResult.Fail("hero conds " + string.Join(",", (hero.Get("conds") as List<string>) ?? new List<string>()));
+                })
+                .Expect(one ? "The poison's initial save fails at +30 on a natural 1, and says so" : "The poison's initial save succeeds at -30 on a natural 20, and says so", v =>
+                {
+                    string want = @"Initial save: d20\(" + natural + @"\) \+ -?\d+ = -?\d+ " + (one ? "FAIL" : "SUCCESS") + " " + note;
+                    List<TraceEvent> lines = v.Log(want);
+                    return lines.Count == 1
+                        ? ExpectResult.Pass(lines[0].Str("text"), lines[0].Seq)
+                        : ExpectResult.Fail(lines.Count + " poison save lines match " + want);
+                })
+                .Expect("The spell saves' log lines name the natural roll that decided them", v =>
+                {
+                    List<TraceEvent> lines = v.Log(note);
+                    return lines.Count >= 3
+                        ? ExpectResult.Pass(lines.Count + " lines name it")
+                        : ExpectResult.Fail("only " + lines.Count + " log lines match " + note + " (the poison line and the two Charm Person saves expected)");
+                })
+                .Build();
+        }
+
+        /// <summary>The Quick Start wizard prepares Charm Person in its Enlarge Person slot (PHB p.209).</summary>
+        private static void PrepareCharmPersonForEnlarge(CharacterController c)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                return;
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null && slot.PreparedSpell != null && slot.PreparedSpell.SpellId == DND35e.Identifiers.SpellNames.ENLARGE_PERSON)
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.CHARM_PERSON).Clone();
+                    break;
+                }
+        }
+
+        /// <summary>
+        /// Batch 12 step 10 (AI-006; PHB p.134, MM p.126): a monster's ranged touch attack uses the spell ranged touch
+        /// attack's terms (SpellCaster.SpellTouchAttack and TouchAttackAC), so a natural 1 always misses. The gibbering
+        /// mouther (AI, its free-action spittle at the start of its turn, AIService.TryExecuteRangedSpecialAttack) has its
+        /// base attack bonus raised to +30, and its spittle's d20 is forced to 1: it misses the fighter 15 ft away, whose
+        /// touch AC a +30 bonus beats on any other roll. Before the step the roll was d20 + BAB + Dex against 10 + Dex +
+        /// size, with no natural 1 or 20, so it hit.
+        /// </summary>
+        private static ScenarioDef AiRangedTouchNaturalOne()
+        {
+            return Rules("rules/ai-ranged-touch-natural-one", "A monster's ranged touch attack misses on a natural 1, even at +30 (PHB p.134; MM p.126; AI-006)")
+                .Covers("AI-006", "PHB p.134", "PHB p.136", "MM p.126", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("mouther", "gibbering_mouther", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Spat At", 4)), 13, 10, Control.Idle)
+                .Tweak("mouther", c => c.Stats.BaseAttackBonusOverride = 30)
+                .Force(20, 1, AIService.SpecialRangedTouchContext, 1)
+                .Initiative("mouther", "hero")
+                .Expect("The mouther spat at the hero, and the natural 1 missed at +30", v =>
+                {
+                    List<TraceEvent> misses = v.Log("Spittle misses!");
+                    return misses.Count == 1
+                        ? ExpectResult.Pass(misses[0].Str("text"), misses[0].Seq)
+                        : ExpectResult.Fail(misses.Count + " spittle misses logged" + (v.Log("Spittle hits").Count > 0 ? " (it hit)" : ""));
+                })
+                .Expect("No spittle hit landed", v =>
+                    v.Log("Spittle hits").Count == 0 ? ExpectResult.Pass("no hit") : ExpectResult.Fail(v.Log("Spittle hits").Count + " spittle hits"))
+                .Build();
+        }
+
+        /// <summary>
         /// CHR-018: the one save modifier (CharacterStats.GetSaveTotal and SaveRules) applies every save bonus source on
         /// the real cast path. Four Stats party actors each make a Will save against Daze (Sor/Wiz/Brd 0, Enchantment
         /// (Compulsion), Will negates, PHB p.217) cast by its own neutral_mage_test (Wizard 3) through the NPC cast
@@ -7876,6 +8003,9 @@ namespace Tests.Scenarios
                 .Tweak("dRes", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
                 .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid", "dSwarm", "dSwarmDr", "dEmp", "dMax", "dBoth", "dRes")
                 .Force(10, 10, "Breath weapon damage", -1)
+                // The breath saves at 10, so the -30 tweaks fail them: an unforced natural 20 always saves (PHB p.177,
+                // SaveRollRules since batch 12 step 10).
+                .Force(20, 10, GameManager.BreathWeaponSaveContext, -1)
                 .Script("dragon", BreathAtHeroes)
                 .Turn("hero2", 1,
                     Step.Assert("The breath weapon's fire takes the fighter's fire resistance (MM p.314)", BreathMitigationCheck),
@@ -7890,6 +8020,14 @@ namespace Tests.Scenarios
                 .Expect("Every damage check holds", Expect.AssertsPass())
                 .Build();
         }
+
+        /// <summary>
+        /// A d20 for the damage checks' local roll filters: 20 for an attack roll (a spell's touch or ray attack, a
+        /// monster's ranged touch attack), so it hits, and 10 for every other d20 (the saves), so a -30 tweak fails it:
+        /// a forced 20 would be a natural 20, which always saves (PHB p.177; SaveRollRules, batch 12 step 10).
+        /// </summary>
+        private static int AttackHitsSaveFailsD20(string diceContext)
+            => diceContext == SpellCaster.TouchAttackContext || diceContext == AIService.SpecialRangedTouchContext ? 20 : 10;
 
         /// <summary>Dragon script: breathes once at the heroes (the AI's breath executor), recording their HP first.</summary>
         private static System.Collections.IEnumerator BreathAtHeroes(ScenarioContext ctx, CharacterController dragon)
@@ -7923,8 +8061,9 @@ namespace Tests.Scenarios
             GameManager gm = ctx.Gm;
             CharacterController mage = ctx.Get("mage");
             Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
-            // Every die at its maximum while the checks run; saves still fail through the -30 tweaks.
-            ScenarioHooks.RollFilter = (sides, c, natural) => sides;
+            // Every die at its maximum while the checks run, but the saves' d20s at 10: the -30 tweaks no longer fail a
+            // natural 20 (PHB p.177; SaveRollRules, batch 12 step 10), so only the attack rolls keep the 20.
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? AttackHitsSaveFailsD20(c) : sides;
             bool ok = true;
             try
             {
@@ -8033,7 +8172,7 @@ namespace Tests.Scenarios
         /// <summary>
         /// Batch 11 step 19 (SPL-038): the Maximize stamped on a cast's spell clone reaches each converted damage resolver,
         /// invoked by reflection on dRes (a 50 HP target dummy, true neutral, saves made to fail with -30, its HP restored
-        /// before each call) under a roll filter of every d20 at 20 and every other die at 3: Lightning Bolt
+        /// before each call) under a roll filter of every attack d20 at 20, every other d20 at 10 (AttackHitsSaveFailsD20) and every other die at 3: Lightning Bolt
         /// (TryResolveScaledAoEDamageSpell), Cone of Cold, Chain Lightning's primary bolt, Ice Storm, Shout, Sunburst (on a
         /// living creature), Vampiric Touch, Produce Flame and Holy Smite (TryResolveAlignmentBurstAoE, an area handler since
         /// batch 11 step 23, half on a neutral
@@ -8047,7 +8186,7 @@ namespace Tests.Scenarios
             CharacterController mage = ctx.Get("mage");
             CharacterController dummy = ctx.Get("dRes");
             Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
-            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? AttackHitsSaveFailsD20(c) : Math.Min(3, sides);
             bool ok = true;
             try
             {
@@ -8112,8 +8251,8 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// Batch 11 step 19 (SPL-038, SPL-097): the cast's metamagic, stamped on its spell clone
-        /// (SpellCaster.ApplyMetamagicToSpellData), reaches the custom handlers' dice (SpellDiceRules.Roll). Every d20 is 20
-        /// (the ray hits; the -30 tweaks still fail every save) and every other die 3. arcane_missile_adept (Wizard 5)
+        /// (SpellCaster.ApplyMetamagicToSpellData), reaches the custom handlers' dice (SpellDiceRules.Roll). Every attack d20
+        /// is 20 (the ray hits) and every other d20 10 (AttackHitsSaveFailsD20: a natural 20 would save) and every other die 3. arcane_missile_adept (Wizard 5)
         /// casts Fireball (TryResolveScaledAoEDamageSpell, 5d6 = 15 plain) Empowered on dEmp (15 + 7 = 22, PHB p.93),
         /// Maximized on dMax (30, PHB p.97) and both on dBoth (30 + half of the normal 15 = 37, PHB p.97-98), then Searing
         /// Light (TryResolveSearingLightSpellEffect, 2d8 = 6 halved for a living creature, SPL-177) Empowered on dEmp (9,
@@ -8124,7 +8263,7 @@ namespace Tests.Scenarios
             GameManager gm = ctx.Gm;
             CharacterController mage = ctx.Get("mage");
             Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
-            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? 20 : Math.Min(3, sides);
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides == 20 ? AttackHitsSaveFailsD20(c) : Math.Min(3, sides);
             bool ok = true;
             try
             {

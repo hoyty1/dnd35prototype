@@ -37,7 +37,7 @@ public class SlayingArrowBehavior : SpecificItemBehavior
             return;
         }
 
-        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, _saveDC, DisplayName);
+        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, _saveDC, DisplayName, SaveContext.Effect(DisplayName, Wielder));
 
         if (!save.Succeeded)
         {

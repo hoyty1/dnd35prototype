@@ -235,20 +235,20 @@ public class CreatureTrapSystem : MonoBehaviour
         }
 
         // ── Saving throw ──
-        // The shared save modifier (SaveRules, CHR-018). A trapping item's effect passes no context: no situational
-        // character bonus is applied to it (SPL-018 lists it). An unknown save name gives +0 as before.
-        int saveBonus = SaveRules.Modifier(target.Stats, saveType, SaveContext.None);
-
-        int saveRoll = DiceRoller.D20();
-        int saveTotal = saveRoll + saveBonus;
+        // The one save roll (SaveRollRules, D13: the Luck reroll, natural 1 and 20), with the shared modifier (SaveRules,
+        // CHR-018) against the item's own power, a labelled effect (SPL-018). An unknown save name gives +0 as before.
+        SaveRoll save = SaveRollRules.Roll(target.Stats, saveType, saveDC, SaveContext.Effect(trapItem.Name), null);
+        int saveBonus = save.Modifier;
+        int saveRoll = save.Roll;
+        int saveTotal = save.Total;
         result.SaveRoll = saveRoll;
         result.SaveTotal = saveTotal;
 
-        if (saveRoll != 1 && (saveRoll == 20 || saveTotal >= saveDC))
+        if (save.Succeeded)
         {
             result.Success = false;
             result.FailureReason = "Saving throw succeeded.";
-            result.LogMessage = $"{result.CreatureName} resists trapping! {saveType} save: d20({saveRoll}) + {saveBonus} = {saveTotal} vs DC {saveDC} — PASSED";
+            result.LogMessage = $"{result.CreatureName} resists trapping! {saveType} save: d20({saveRoll}) + {saveBonus} = {saveTotal} vs DC {saveDC} — PASSED{save.NaturalSuffix}";
             Debug.Log($"[CreatureTrap] {result.LogMessage}");
             return result;
         }
@@ -607,10 +607,11 @@ public class CreatureTrapSystem : MonoBehaviour
             if (distance > rangeCells) continue;
 
             // Will save
-            int saveRoll = DiceRoller.D20();
-            int saveTotal = saveRoll + SaveRules.Modifier(character.Stats, SavingThrowType.Will, SaveContext.None); // SaveRules, CHR-018
+            // The one save roll (SaveRollRules, D13; SaveRules, CHR-018).
+            SaveRoll save = SaveRollRules.Roll(character.Stats, SavingThrowType.Will, saveDC, SaveContext.Effect("control earth elementals"), null);
+            int saveTotal = save.Total;
 
-            if (saveRoll != 20 && (saveRoll == 1 || saveTotal < saveDC))
+            if (!save.Succeeded)
             {
                 controlled.Add(character.Stats.CharacterName);
                 Debug.Log($"[CreatureTrap] {character.Stats.CharacterName} is now under control! Will save: {saveTotal} vs DC {saveDC} — FAILED");

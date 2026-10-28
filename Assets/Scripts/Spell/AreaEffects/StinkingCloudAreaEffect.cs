@@ -184,17 +184,15 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
         if (creature == null || creature.Stats == null)
             return;
 
-        int roll = DiceRoller.D20();
-        int fortBonus = SpellSaveModifier(creature, SavingThrowType.Fortitude);
-        int total = roll + fortBonus;
+        SaveRoll save = RollSpellSave(creature, SavingThrowType.Fortitude, SaveDC); // SaveRollRules, D13
 
-        if (total >= SaveDC)
+        if (save.Succeeded)
         {
-            LogEffect($"  💨 {creature.Stats.CharacterName} Fort save: d20({roll}) + {fortBonus} = {total} vs DC {SaveDC} — SUCCESS (not nauseated this round).");
+            LogEffect($"  💨 {creature.Stats.CharacterName} Fort save: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {SaveDC} — SUCCESS{save.NaturalSuffix} (not nauseated this round).");
         }
         else
         {
-            LogEffect($"  💨 {creature.Stats.CharacterName} Fort save: d20({roll}) + {fortBonus} = {total} vs DC {SaveDC} — FAILED → NAUSEATED!");
+            LogEffect($"  💨 {creature.Stats.CharacterName} Fort save: d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {SaveDC} — FAILED{save.NaturalSuffix} → NAUSEATED!");
             ApplyNauseated(creature);
         }
     }

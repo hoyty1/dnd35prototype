@@ -157,8 +157,8 @@ public static class SpellSaveAndResistanceRulesTests
         Assert(forgone.Forgone && !forgone.Saved && labels.Count == 0,
             "A forgone save rolls no die and fails, even when the die would have been a 20", "dice " + labels.Count);
         SaveResult rolled = SpellSaveRules.RollSave(caster, ally, hands, SaveType.Reflex, 15, "test save");
-        Assert(!rolled.Forgone && rolled.Roll == 20 && rolled.Saved && labels.Count == 1 && labels[0] == "test save",
-            "An ally's save against a Damage spell is one d20 under the caller's label", rolled.Roll + " " + string.Join(",", labels));
+        Assert(!rolled.Forgone && rolled.Roll == 20 && rolled.Saved && labels.Count == 1 && labels[0] == SaveRollRules.SaveDiceContext("test save"),
+            "An ally's save against a Damage spell is one d20 under the caller's label (tagged [save], SaveRollRules)", rolled.Roll + " " + string.Join(",", labels));
         ScenarioHooks.RollFilter = null;
     }
 

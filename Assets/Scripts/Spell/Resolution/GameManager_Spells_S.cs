@@ -513,7 +513,7 @@ public partial class GameManager
                 }
 
                 if (result.RequiredSave)
-                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {(result.SaveSucceeded ? "SAVED" : "FAILED")}!");
+                    sb.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {(result.SaveSucceeded ? "SAVED" : "FAILED")}{result.SaveNaturalSuffix}!");
                 sb.AppendLine($"  Damage: {result.DamageDealt} sonic");
                 sb.AppendLine($"  {targetName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
                 if (result.DamageDealt > 0)

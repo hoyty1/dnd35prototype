@@ -3356,9 +3356,10 @@ public partial class GameManager : MonoBehaviour
             : data != null && !string.IsNullOrEmpty(data.SourceSpellId)
                 ? SaveContext.ForSpellId(data.SourceSpellId, source != null ? source.Stats : null)
                 : SaveContext.None;
-        int saveRoll = DiceService.D20("Disturbance Will save");
-        int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, fascinationContext);
-        bool saveSucceeded = saveTotal >= disturbanceDc;
+        // The one save roll (SaveRollRules, D13).
+        SaveRoll disturbanceSave = SaveRollRules.Roll(target.Stats, SavingThrowType.Will, disturbanceDc, fascinationContext, "Disturbance Will save");
+        int saveTotal = disturbanceSave.Total;
+        bool saveSucceeded = disturbanceSave.Succeeded;
 
         if (saveSucceeded)
         {
