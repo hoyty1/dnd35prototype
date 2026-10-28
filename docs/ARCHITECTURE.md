@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 62 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 63 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,11 +140,11 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 62 files (since batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 63 files (since batch 12 step 5 added `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
-| **_Core/** (12) | | |
+| **_Core/** (13) | | |
 | GameManager.cs | 11,467 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
 | GameManager.CombatEnd.cs | 363 | The shared combat-end check `EvaluateCombatEnd` (both sides, by team, through `CombatEndRules`; `GetCombatEndSides` remembers which sides had members this combat and counts a creature the opposing side controls as out of its own side, `IsOutOfHostileSideByPartyControl` and `IsOutOfPartySideByHostileControl`; a tie rolls the dying PCs' stabilization first, `ResolvePartyDyingAfterBothSidesOut`, CORE-038), `CheckCombatVictory`, XP registration of defeated enemies (active creatures only, so an unused pool slot's old creature gives none; at a victory also the foes the party controls), victory and defeat handling, the defeat screen and `StartNewPartyAfterDefeat` (CORE-011, CORE-037, CORE-034, CORE-001). |
@@ -156,6 +156,7 @@ There are 62 files (since batch 11 step 7 added `GameManager.CastCore.cs` and `G
 | GameManager.TestConfigs.cs | 1,875 | 22 `Configure*TestParty` methods, `RestoreStandardPartyLayout`. |
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
 | GameManager.ScenarioHarness.cs | 579 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat (the reset also releases grapple links, CMB-038), dump turn state and the open prompt, call the PC menu callbacks (open the Special Attack menu and click a maneuver button as a player would, pick a spell, cancel a selection) and answer the AoO prompt. No game code calls it. |
+| GameManager.TurnStart.cs | 109 | The turn-start routines (batch 12 step 5): `BeginCombatantTurn` (before the turn-skip gate: ongoing effects, the turn-start combat-end check, Aid Another expiry) and `BeginActingTurn` (after it: the rage tick, `StartNewTurn`, perception, the Turn Undead proximity check), each with one branch per turn path (`TurnStartPath`) until step 6 merges them (CMB-075). |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
 | **Spell/Resolution/** (28) | | |
 | GameManager.CastContext.cs | 274 | The per-cast context (batch 11 step 4): the cast stack (`BeginCast`, `EndCast`, `EndPendingCast`, `EndAllCasts`; a misuse raises `ScenarioHooks.CastStackViolation`) and the old `_pending*` names as read-only views of the current cast's `SpellCastRequest` (batch 11 step 29), plus `UiCastChoicesForAnswer`, through which the UI's choice dialogs answer ([Spells: per-cast context](architecture/spells.md)). |
@@ -250,7 +251,7 @@ There are 675 `.cs` files (about 305K lines, recounted 2026-10-07). The layout c
 
 ```
 Assets/Scripts/
-  _Core/ (18)            GameManager.cs + 11 GameManager.*.cs partials (ScenarioHarness is editor-only),
+  _Core/ (19)            GameManager.cs + 12 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
   AI/ (10)               AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,

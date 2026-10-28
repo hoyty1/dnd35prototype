@@ -3879,19 +3879,10 @@ public partial class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
-        // ConditionService.OnTurnStart already ran in OnTurnStarted (CMB-006).
-        HandleFlamingSphereTurnStart(pc);
-        ApplyMelfsAcidArrowTurnStartDamage(pc);
-        pc.TickBombardierAcidSprayCooldown();
-        pc.ApplyRegenerationAtTurnStart();
-        CloseInventoryIfOpen();
-
-        // Ongoing damage at the start of the turn can drop the last creature of a side.
-        if (EvaluateCombatEnd("StartPCTurn.TurnStartEffects"))
+        // ConditionService.OnTurnStart already ran in OnTurnStarted (CMB-006). The turn-start effects, the combat-end
+        // check and Aid Another expiry (GameManager.TurnStart.cs).
+        if (BeginCombatantTurn(pc, TurnStartPath.Pc))
             return;
-
-        // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
-        ExpireAidBonusesAtTurnStart(pc);
 
         // If this PC is unconscious/dead, skip their actions.
         if (ShouldSkipTurnDueToHPState(pc))
@@ -3938,29 +3929,15 @@ public partial class GameManager : MonoBehaviour
 
         if (pc.IsGrappling())
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", "You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions)."));
-        // Tick Barbarian Rage at start of turn
-        if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
-        {
-            pc.Stats.TickRage();
-            if (!pc.Stats.IsRaging)
-            {
-                CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"😫 {pc.Stats.CharacterName}'s rage has ended! Now fatigued."));
-                UpdateAllStatsUI();
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{pc.Stats.CharacterName}: Rage - {pc.Stats.RageRoundsRemaining} rounds remaining"));
-            }
-        }
 
-        // Bardic music rounds pass at the bard's initiative count for PCs and NPCs alike (OnInitiativeCountReached, CHR-069).
-
+        // UI flow reset. Until batch 12 step 5 it ran between the rage tick and StartNewTurn; neither reads its fields,
+        // and its combat-end safety check finds the same sides either way (ending a rage lowers max hp and clamps current hp
+        // to it, so the HP state only changes if max hp drops to 0 or below). Step 6 moves the rage tick out of BeginActingTurn.
         EndAttackSequence();
         EndThrownAttackSequence();
-        pc.StartNewTurn();
 
-        PruneTurnUndeadTrackers();
-        CheckTurnUndeadProximityBreakingForCleric(pc);
+        // The rage tick, the per-turn resets and the Turn Undead proximity check (GameManager.TurnStart.cs).
+        BeginActingTurn(pc, TurnStartPath.Pc);
 
         _loggedHeldChargeNoActionsReminder = false;
 
@@ -11031,21 +11008,6 @@ public partial class GameManager : MonoBehaviour
         return (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
             ? _npcAIBehaviors[npcIdx]
             : NPCAIBehavior.AggressiveMelee;
-    }
-
-    public void BeginNPCTurnForAI(CharacterController npc)
-    {
-        if (npc == null)
-            return;
-
-        // ConditionService.OnTurnStart already ran in OnTurnStarted, before the turn-skip check (CMB-006).
-        ApplyMelfsAcidArrowTurnStartDamage(npc);
-        npc.TickBombardierAcidSprayCooldown();
-        npc.ApplyRegenerationAtTurnStart();
-        npc.StartNewTurn();
-        ProcessNPCRoundStartPerception(npc);
-        PruneTurnUndeadTrackers();
-        CheckTurnUndeadProximityBreakingForMover(npc);
     }
 
     /// <summary>Delegates to AIService.ProcessRoundStartPerception for centralized perception logic.</summary>

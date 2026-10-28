@@ -129,7 +129,7 @@ public class AIService : MonoBehaviour
         if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
             yield break;
 
-        _gameManager.BeginNPCTurnForAI(npc);
+        _gameManager.BeginActingTurn(npc, GameManager.TurnStartPath.Npc);
 
         bool isSummon = _gameManager.IsSummonedCreature(npc);
         string turnColor = isSummon ? "#66E8FF" : "#FF6666";

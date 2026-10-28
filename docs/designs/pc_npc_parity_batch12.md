@@ -458,13 +458,18 @@ IDs: preparation for CMB-075, CHR-069, CMB-094. **Pure move:** every pre-existin
 
 Tests: none new. Every hash unchanged; diff with `ScenarioTraceDiff` if one moves.
 
+As built (2026-10-28):
+- Both routines take a second argument, `GameManager.TurnStartPath` (`Pc` or `Npc`), from their caller, so each branch runs on exactly the path that ran it before and no new `IsControllable` read is added.
+- `StartPCTurn` now runs `EndAttackSequence` and `EndThrownAttackSequence` just before `BeginActingTurn`, so before the rage tick instead of after it. Two constraints of this step force it: `BeginActingTurn` holds both the rage tick and `StartNewTurn`, and the UI resets stay in `StartPCTurn`. It is inert: neither routine reads what the other writes, and the combat-end safety check in `EndAttackSequence` sees the same sides, because ending a rage lowers max hp and clamps current hp to it, which changes the HP state only if max hp drops to 0 or below. No budget scenario has a raging PC barbarian (rage ticks only on the PC path), so this reorder is not verified in Play mode.
+- `ScenarioTrace.CallerFrames` skips the frame `BeginCombatantTurn` when it builds the hashed `by` field of a `phase` event, so the 21 budget jobs that end at the turn-start check (`combat-end-petrified-*`, `tie-*`, `domination-cleared-by-rest`) still report `StartPCTurn` or `SingleNPCTurnFromInitiative`. The skip matches the name as a string (TST-006).
+
 TEST BUDGET: `rules/condition-duration-turn-relative`, `rules/pin-*`, `rules/concentration-lapse-*`, `rules/combat-end-*`, `rules/bard-*` (seeds 1-3), TurnDurationRulesTests, FlatFootedRulesTests, MelfsAcidArrowRulesTests, CombatEndRulesTests; `smoke/*` seeds 1-3. All hashes must equal the previous run's.
 
 ### 6. Run every creature's turn-start effects before the skip gate (`b12-turn-start-raw`)
 
 IDs: CMB-075 (ordering), CHR-069, AI-032, CRE-073, SPL-200, CORE-003; D3, D14. Behaviour change; *broad*.
 
-1. **One call site.** `OnTurnStarted` (GameManager.cs ~:3601-3644) calls `BeginCombatantTurn(character)` once, after `TickDomainPowerDurations` and before the `IsPC` fork. Remove the branches. If it reports the combat ended, return before the fork. The order:
+1. **One call site.** `OnTurnStarted` (GameManager.cs ~:3601-3644) calls `BeginCombatantTurn(character)` once, after `TickDomainPowerDurations` and before the `IsPC` fork. Remove the branches. Step 5 added `GameManager.TurnStartPath` (`Pc`/`Npc`) as a temporary second parameter of both routines: delete the enum and its arguments in `StartPCTurn`, `SingleNPCTurnFromInitiative` and `AIService.ExecuteNPCTurnBody`. If it reports the combat ended, return before the fork. The order:
    1. Flaming Sphere tick.
    2. Melf's tick.
    3. Regeneration.
@@ -488,6 +493,7 @@ IDs: CMB-075 (ordering), CHR-069, AI-032, CRE-073, SPL-200, CORE-003; D3, D14. B
    - The AIService.cs :147 HP gate is deleted; the skip gate already covers it.
 6. **Logs.** NPC logs now show turn-start effects before "turn begins". Accept and explain the trace differences.
 7. **Tests.**
+   - Scenario trace: step 5 made `ScenarioTrace.CallerFrames` skip `BeginCombatantTurn` in the hashed `by` field. Once the call sits in `OnTurnStarted`, a combat that ends at the turn-start check reports `OnTurnStarted` (or its caller) instead of `StartPCTurn`/`SingleNPCTurnFromInitiative`. That frame-name move is expected: separate it from real changes in `ScenarioTraceDiff`, and decide whether to keep or drop the skip.
    - Delete the CORE-003 waiver in `KnownIssueWaivers.cs` (~:17) once `rules/turn-start-acid-arrow-last-enemy` passes, and update the ScenarioChecks.cs ~:190 comment that names `BeginNPCTurnForAI`.
    - Delete CMB-075's ordering half, CHR-069, AI-032, CRE-073, SPL-200 and CORE-003 (if the scenario proves the tick kill ends combat at once).
 

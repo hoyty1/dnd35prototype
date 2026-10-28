@@ -135,7 +135,7 @@ Status key: **Implemented** = has a runtime effect that matches the rule in outl
 - **Data present, never used:** five non-dragon breath weapons, metallic gas breaths (AI-008), stench (3 creatures) and `BloodDrainDefinition` (2) (CRE-031), `BonusElementalDamage*` (9), `HasTrample`.
 - **Partial, remaining work:**
   - Engulf: damage per round, paralysis, an escape check, a size check (Medium or smaller), removing Helpless when the target escapes or the engulfer dies, skipping already-engulfed targets, and falling through to melee (CMB-024).
-  - Breath weapons: tick the breath and ranged-special recharges in `GameManager.BeginNPCTurnForAI`, which today only resets the bombardier beetle's once-per-round spray flag; let non-dragon archetypes breathe.
+  - Breath weapons: tick the breath and ranged-special recharges at every creature's turn start (`GameManager.BeginCombatantTurn`, batch 12 step 6), where today only the PC path, and the NPC path of `BeginActingTurn`, reset the bombardier beetle's once-per-round spray flag; let non-dragon archetypes breathe.
   - Regeneration: express energy suppression and make damage nonlethal. Add a separate fast-healing field.
 - **Not in the database:** blink dog, roper, grell.
 - **Clone hazard:** `NPCDefinition.Clone` shares `RangedSpecialAttack`, `BloodDrain` and `TerrainManipulation`, and the undead and lycanthrope templates do not clear them, so a templated mouther would keep its spittle (CRE-023).
@@ -146,7 +146,7 @@ Status key: **Implemented** = has a runtime effect that matches the rule in outl
 - **Rule as captured in the code comments (MM, Gibbering Mouther).** At will, as a standard action, the adjacent squares become quicksand-like (stone takes longer). Any creature other than the mouther must spend a move action or become mired (treated as pinned). The "Reflex DC 13" in the creature data belongs to Engulf, not to this ability.
 - **What is not done.** No cells are marked and nothing is highlighted. `TickTerrainManipulationDuration` and `IsTerrainManipulationActive` have no callers. `EffectType`, `DamagePerRound`, `DamageType` and `SetupRounds` are never read.
 - **Trap: marking cells would barely matter.** Difficult terrain does not slow movement anywhere. `MovementService.GetMovementCost` has no callers, and neither movement range nor SquareGrid A* reads difficult terrain. A marked cell only blocks 5-ft steps, prone crawling and charges. Area slowdown that does work goes through `CharacterStats.EffectiveSpeedFeet` multipliers (`SolidFogAreaEffect.GetSpeedMultiplierFor`). `MovementService._difficultTerrainSquares` is a plain set with no per-source counting, so clearing one effect's cells erases overlapping Entangle, Grease or Web cells.
-- **Suggested shape.** Build it as a `PersistentAreaEffect` subclass, modelled on `SoftenEarthAreaEffect` (mud with a highlight) plus the caster-following update in `LesserGlobeOfInvulnerabilityAreaEffect`. Apply `CombatConditionType.Pinned` to creatures that did not spend a move action. Tick it from `BeginNPCTurnForAI`.
+- **Suggested shape.** Build it as a `PersistentAreaEffect` subclass, modelled on `SoftenEarthAreaEffect` (mud with a highlight) plus the caster-following update in `LesserGlobeOfInvulnerabilityAreaEffect`. Apply `CombatConditionType.Pinned` to creatures that did not spend a move action. Tick it from the turn start (`GameManager.BeginCombatantTurn`, `_Core/GameManager.TurnStart.cs`).
 
 ### Design questions still open
 

@@ -74,10 +74,11 @@ Contents:
  GameManager.OnTurnStarted --(IsControllable)--> StartPCTurn (player)
           | not controllable
  GameManager.SingleNPCTurnFromInitiative
+          |-- BeginCombatantTurn (NPC path: Aid expiry, Flaming Sphere, combat-end check)
           |-- ShouldSkipTurnDueToHPState? --> log, NextInitiativeTurn   (CMB-075)
           v
  AIService.ExecuteNPCTurn
-   BeginNPCTurnForAI (ticks, regen, perception)
+   GameManager.BeginActingTurn (NPC path: ticks, regen, perception)
    !CanTakeTurnActions()? -> end   (dead, dying, stable, unconscious; a disabled NPC acts)
    Confused / Charmed / Fascinated ----> BehaviorController (whole turn; charmed stands up first)
    Prone (not grappling) -> TryStandUpFromProneForAI (move action, AoOs)
@@ -173,14 +174,14 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3992):
 - **Fascinated**: the `ExecuteNPCTurn` Fascinated branch (99-114), including its "source dead, remove the condition" cleanup, is unreachable.
 - **Pinned** creatures lose their turn, so the pinned branch of `ChooseNPCGrappleAction` (the escape checks) never runs for a pinned NPC. PHB ch.8 (Grapple) lets a pinned creature try to escape.
 - **Nauseated** creatures (swarm distraction) lose the whole turn; DMG ch.8 allows a single move action.
-- A skipped NPC also skips `BeginNPCTurnForAI`: no regeneration, no Melf's Acid Arrow tick, no `StartNewTurn`, no perception. `StartPCTurn` applies regeneration and acid arrow *before* its skip check. A troll at negative HP therefore never regenerates (CMB-075); combat end counts it as out while it is dying or unconscious, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
+- A skipped NPC also skips the NPC path of `BeginActingTurn` (`_Core/GameManager.TurnStart.cs`): no regeneration, no Melf's Acid Arrow tick, no `StartNewTurn`, no perception. `StartPCTurn` applies regeneration and acid arrow *before* its skip check. A troll at negative HP therefore never regenerates (CMB-075); combat end counts it as out while it is dying or unconscious, regeneration or not (owner definition 2026-10-07, `CombatEndRules.IsOutOfFight`).
 
 ### 3.3 `ExecuteNPCTurn` gate order
 
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10935) | acid arrow damage, the bombardier once-per-round spray flag reset (`TickBombardierAcidSprayCooldown`), `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | 132 | `GameManager.BeginActingTurn(npc, TurnStartPath.Npc)` (`_Core/GameManager.TurnStart.cs`; `BeginNPCTurnForAI` until batch 12 step 5) | acid arrow damage, the bombardier once-per-round spray flag reset (`TickBombardierAcidSprayCooldown`), `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 147 | `!CanTakeTurnActions()` | end. Since batch 12 step 3 (2026-10-28) a disabled NPC (0 hp, or below 0 with Diehard) passes and takes its single action (PHB p.145, decision D5) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
@@ -625,7 +626,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 
 ### 8.5 Regeneration
 
-`ApplyRegenerationAtTurnStart` heals a fixed amount unless suppressed by the right damage tag or HP ≤ -10. It runs only at PC turn start and in `BeginNPCTurnForAI`, so an NPC at negative HP never regenerates (CMB-075). MM regeneration (damage becomes nonlethal) is not modelled; troll and others behave as fast healing (CRE-017). No profile reasons about regeneration (own or enemy).
+`ApplyRegenerationAtTurnStart` heals a fixed amount unless suppressed by the right damage tag or HP ≤ -10. It runs only at PC turn start (before the skip gate) and in the NPC path of `BeginActingTurn` (after it), so an NPC at negative HP never regenerates (CMB-075). MM regeneration (damage becomes nonlethal) is not modelled; troll and others behave as fast healing (CRE-017). No profile reasons about regeneration (own or enemy).
 
 ### 8.6 Grapple AI
 
@@ -751,7 +752,7 @@ AIService may use only public GameManager members (docs/ARCHITECTURE.md conventi
 2. **Action economy:** spend the action yourself (`CommitStandardAction`, `UseFullRoundAction`, `UseMoveAction`); the breath weapon still does not (AI-040).
 3. **Rules plumbing:** resolve AoOs where PHB ch.8 says the action provokes (movement: `ResolveMovementAoOsBeforeStep`; maneuvers: `ResolveManeuverInitiationAoOs`; casting: `ResolveNPCSpellcastProvocation`); route damage through `Stats.ApplyIncomingDamage` with a typed `DamagePacket` (do not copy AI-006 or the breath code); saves through `SavingThrowResolver`; end with `EvaluateCombatEnd` (both sides; CORE-011) when the action can drop a creature.
 4. **Call site:** free actions at the top of `ExecuteNPCTurn` (after the condition gates); standard actions before or after movement in the routines that should use it. Prefer a capability check usable by every routine over adding it to AggressiveMelee only.
-5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, a clear in `CharacterController.ResetForNewCreature` (CRE-046), and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown in `BeginNPCTurnForAI` (AI-032).
+5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, a clear in `CharacterController.ResetForNewCreature` (CRE-046), and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown at the turn start (`CharacterController.TickTurnCooldowns` from `BeginCombatantTurn` once batch 12 step 6 lands; today the NPC branch of `BeginActingTurn`, AI-032).
 6. **Feedback:** `CombatUI?.ShowCombatLog(CombatLogHelper...)`, a `[AI][Tag]` `Debug.Log`, and a `WaitForSeconds`.
 
 Maneuvers go through `ManeuverPreferences` → `GetPreferredManeuver` → `ShouldUseManeuver` → `TryNPCSpecialAttackByTypeForAI`; see DEVELOPMENT_RECIPES "Add a combat maneuver".

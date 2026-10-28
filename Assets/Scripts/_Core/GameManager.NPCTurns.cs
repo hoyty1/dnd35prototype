@@ -47,11 +47,8 @@ public partial class GameManager
         // Update initiative UI to highlight current NPC
         UpdateInitiativeUI();
 
-        ExpireAidBonusesAtTurnStart(npc);
-        HandleFlamingSphereTurnStart(npc);
-
-        // Ongoing damage at the start of the turn can drop the last creature of a side.
-        if (EvaluateCombatEnd("SingleNPCTurn.TurnStartEffects"))
+        // Aid Another expiry, Flaming Sphere and the combat-end check (GameManager.TurnStart.cs).
+        if (BeginCombatantTurn(npc, TurnStartPath.Npc))
             yield break;
 
         if (ShouldSkipTurnDueToHPState(npc))

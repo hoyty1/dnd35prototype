@@ -231,9 +231,10 @@ TurnService.OnNewRound -> GameManager.OnNewRound (_Core/GameManager.cs)
   TickSummonDurations
   TickEmanations -> EffectService.TickEmanations
   TickActiveGreaseEffects -> WindEffectManager, AreaEffectManager.OnCombatRoundStart, greased objects
-Turn start: StartPCTurn -> HandleFlamingSphereTurnStart, ApplyMelfsAcidArrowTurnStartDamage
-            SingleNPCTurnFromInitiative (NPCTurns.cs) -> HandleFlamingSphereTurnStart
-            BeginNPCTurnForAI -> ApplyMelfsAcidArrowTurnStartDamage
+Turn start: StartPCTurn -> BeginCombatantTurn (TurnStart.cs) -> HandleFlamingSphereTurnStart,
+                                                                 ApplyMelfsAcidArrowTurnStartDamage
+            SingleNPCTurnFromInitiative (NPCTurns.cs) -> BeginCombatantTurn -> HandleFlamingSphereTurnStart
+            AIService.ExecuteNPCTurnBody -> BeginActingTurn (NPC path) -> ApplyMelfsAcidArrowTurnStartDamage
             OnTurnStarted -> TickDomainPowerDurations
 ```
 
