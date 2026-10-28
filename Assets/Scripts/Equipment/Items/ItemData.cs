@@ -203,6 +203,12 @@ public class ItemData
     public int ReachSquares;          // Melee reach in squares (1 = 5 ft, 2 = 10 ft, 3 = 15 ft)
     public bool CanAttackAdjacent;    // Whether this melee weapon can attack adjacent (distance 1)
     public bool IsReachWeapon;        // True for reach weapons (typically ReachSquares > 1)
+    /// <summary>
+    /// A trip weapon: "you can use this weapon to make trip attacks" (PHB p.115-122: flails, guisarme, halberd, sickle,
+    /// spiked chain, whip and others), so its trip's melee touch attack reaches as far as the weapon (AttackLegality,
+    /// CMB-104). Set by ItemDatabase.Register for the PHB trip weapons; copied by CloneItem and CopyBaseProperties.
+    /// </summary>
+    public bool CanMakeTripAttacks;
     public bool DealsNonlethalDamage; // Whip and similar weapons can deal nonlethal damage
     public bool WhipLikeArmorRestriction; // Cannot harm targets with armor/natural armor bonus +1 or higher
 

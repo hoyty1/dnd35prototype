@@ -202,6 +202,11 @@ public class LastKnownPositionTracker : MonoBehaviour
             if (_owner.CanSee(target, incomingIsRangedAttack))
                 continue;
 
+            // Hide from Undead (PHB p.241): an undead that has not seen through the ward cannot hear or smell the warded
+            // creature either, and no sense locates it, so neither Listen nor Spot pinpoints it (WardSaveLedger, D6).
+            if (WardSaveLedger.IsHiddenFromUndead(_owner, target))
+                continue;
+
             bool ownerHasSeeInvisibility = _owner.CanSeeInvisible(target);
             bool targetIsInvisible = target.HasActiveInvisibilityEffect;
             if (ownerHasSeeInvisibility && targetIsInvisible)

@@ -368,6 +368,11 @@ public class StatusEffectManager : MonoBehaviour
             _stats.SanctuaryActive = false;
             _stats.SanctuaryDC = 0;
             _stats.SanctuaryCasterLevel = 0;
+            if (_stats.ActiveSanctuaryEffect == effect)
+                _stats.ActiveSanctuaryEffect = null;
+            // The attackers' saves against this casting end with it (D6; a flag-only fixture keys on the stats).
+            WardSaveLedger.ForgetWard(effect);
+            WardSaveLedger.ForgetWard(_stats);
         }
 
         // D&D 3.5e: Clear Hide from Undead flag when the spell effect expires or is removed.
@@ -376,6 +381,10 @@ public class StatusEffectManager : MonoBehaviour
             _stats.HideFromUndeadActive = false;
             _stats.HideFromUndeadDC = 0;
             _stats.HideFromUndeadCasterLevel = 0;
+            if (_stats.ActiveHideFromUndeadEffect == effect)
+                _stats.ActiveHideFromUndeadEffect = null;
+            WardSaveLedger.ForgetWard(effect);
+            WardSaveLedger.ForgetWard(_stats);
         }
 
         // D&D 3.5e: Clear Remove Fear morale bonus when the spell effect expires or is removed.

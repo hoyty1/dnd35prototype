@@ -257,8 +257,10 @@ public partial class GameManager
             if (!attacker.CanLocateForRangedAttack(candidate))
                 continue;
 
-            // The Improved Grab hold bar (MM p.310, CMB-163).
-            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            // The direct-attack gate, read only (AttackLegality): the Improved Grab hold bar (MM p.310, CMB-163), the
+            // Resilient Sphere (CMB-092) and a known failed Sanctuary or Hide from Undead save (D6). An unrolled ward stays
+            // a target: the click rolls the save.
+            if (!IsDirectlyAttackableNoReach(attacker, candidate))
                 continue;
 
             valid.Add(candidate);
@@ -282,12 +284,19 @@ public partial class GameManager
 
             // No visibility filter: a pinpointed creature is a target, and so (until the believed-square UI, CMB-094) is an
             // unseen one the PC has not pinpointed; the attack's last-known-square auto-miss and miss chance apply.
-            if (attacker.IsTargetInCurrentWeaponRange(candidate) && !attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            if (attacker.IsTargetInCurrentWeaponRange(candidate) && IsDirectlyAttackableNoReach(attacker, candidate))
                 valid.Add(candidate);
         }
 
         return valid;
     }
+
+    /// <summary>
+    /// The direct-attack gate without its reach test (the caller runs its own for the attack mode): the hold bar, the
+    /// Resilient Sphere and a known failed ward save (AttackLegality.Check; batch 12 step 12). Never rolls.
+    /// </summary>
+    private static bool IsDirectlyAttackableNoReach(CharacterController attacker, CharacterController target)
+        => AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok;
 
     private List<CharacterController> GetValidTargetsForCurrentWeapon(CharacterController attacker)
     {
@@ -1407,10 +1416,14 @@ public partial class GameManager
         if (_isAwaitingRangedRetargetSelection)
         {
             CharacterController retarget = GetAttackTargetInCell(pc, cell); // as highlighted (CMB-131)
-            if (retarget != null && pc.IsBarredFromOrdinaryAttackOn(retarget, out string retargetHoldReason))
+            Legality retargetLegality = retarget != null
+                ? AttackLegality.Check(pc, retarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
+                : Legality.Allowed();
+            if (!retargetLegality.Ok)
             {
-                // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", retargetHoldReason));
+                // The direct-attack gate: the Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163),
+                // the Resilient Sphere (CMB-092), a known failed ward save (D6).
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", retargetLegality.Reason));
                 return;
             }
 
@@ -1480,10 +1493,12 @@ public partial class GameManager
 
         if (clicked != null && clicked.Stats != null && !clicked.Stats.IsDead && _highlightedCells.Contains(cell))
         {
-            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149): the shared rule.
-            if (pc.IsBarredFromOrdinaryAttackOn(clicked, out string holdReason))
+            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149), nothing passes a
+            // Resilient Sphere (CMB-092), and a known failed ward save bars the target (D6): the shared gate.
+            Legality clickLegality = AttackLegality.Check(pc, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+            if (!clickLegality.Ok)
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", clickLegality.Reason));
                 return;
             }
 
@@ -1518,9 +1533,12 @@ public partial class GameManager
 
         // A creature holding with one body part attacks only other opponents, with its off hand too (MM p.310; delegated
         // RAW reading 2026-10-14, CMB-163); the selection stays open for another target.
-        if (attacker.IsBarredFromOrdinaryAttackOn(clicked, out string offHandHoldReason))
+        // The same gate also refuses a target across a Resilient Sphere (CMB-092) or behind a ward this attacker failed
+        // to overcome (D6), before any cost.
+        Legality offHandLegality = AttackLegality.Check(attacker, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+        if (!offHandLegality.Ok)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", offHandHoldReason));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", offHandLegality.Reason));
             return;
         }
 
@@ -1562,6 +1580,20 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
 
         CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attempt rolls the attacker's one save; a failure loses
+        // this off-hand attack (paid above).
+        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        {
+            attacker.RegisterAttackMade(AttackStepKind.OffHand);
+            _offHandAttackUsedThisTurn = true;
+            _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
+            _isSelectingOffHandTarget = false;
+            _isSelectingOffHandThrownTarget = false;
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+            return;
+        }
 
         Debug.Log("[OffHand] Calling ExecuteOffHandAttack...");
         CombatResult result = ExecuteOffHandAttack(attacker, target, _currentOffHandBAB, offHandWeapon, useThrownRange);
@@ -1695,7 +1727,15 @@ public partial class GameManager
                 ? distance <= 1
                 : type == SpecialAttackType.BullRushAttack
                     ? distance == 1
-                    : attacker.CanMeleeAttackDistance(distance);
+                    // Trip and grapple are unarmed melee touch attacks, so natural reach whatever the weapon (a longspear
+                    // trips an adjacent foe), and a trip weapon trips at its own reach (PHB p.115-122); disarm and sunder
+                    // the reach of the weapon in the hand chosen: the shared maneuver reach rule (AttackLegality, CMB-104).
+                    // Trip legality itself grays the target below.
+                    : type == SpecialAttackType.Trip
+                        ? AttackLegality.IsInTripReach(attacker, distance)
+                        : type == SpecialAttackType.Grapple
+                            ? distance <= AttackLegality.UnarmedReachSquares(attacker)
+                            : AttackLegality.IsInManeuverReach(attacker, occupant, type, PcManeuverIntent(attacker, type), out _);
 
             if (type == SpecialAttackType.Overrun)
             {
@@ -1718,6 +1758,13 @@ public partial class GameManager
                 hasHoldBarredTarget = true;
                 continue;
             }
+
+            // Nothing passes a Resilient Sphere (CMB-092), and a foe whose ward this attacker failed to overcome cannot be
+            // attacked (D6): not a target (read only; an unrolled ward stays a target and the click rolls its save).
+            if (IsDirectAttackManeuverForGate(type)
+                && !AttackLegality.Check(attacker, occupant, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(type),
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward).Ok)
+                continue;
 
             if (type == SpecialAttackType.Disarm)
             {
@@ -1886,6 +1933,26 @@ public partial class GameManager
             _isSelectingSpecialAttack = false;
             ShowActionChoices();
             return;
+        }
+
+        // The one direct-attack gate for maneuvers, shared with the NPC executor (AttackLegality, batch 12 step 12): the
+        // Resilient Sphere (CMB-092), the maneuver's reach (CMB-104: trip and grapple at natural reach, disarm and sunder
+        // at the weapon's) and a known failed ward save (D6), before any cost.
+        bool gatedManeuver = IsDirectAttackManeuverForGate(type);
+        if (gatedManeuver)
+        {
+            Legality maneuverLegality = AttackLegality.CanDirectlyAttack(attacker, target, DirectAttackKind.Maneuver, PcManeuverIntent(attacker, type));
+            if (!maneuverLegality.Ok)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type} on {target.Stats.CharacterName}: {maneuverLegality.Reason}."));
+                Grid.ClearAllHighlights();
+                _highlightedCells.Clear();
+                _isSelectingSpecialAttack = false;
+                if (type == SpecialAttackType.Sunder) { _pendingSunderUseOffHandSelection = false; ClearSunderSequenceState(); }
+                else if (type == SpecialAttackType.Disarm) { _pendingDisarmUseOffHandSelection = false; ClearDisarmSequenceState(); }
+                ShowActionChoices();
+                return;
+            }
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
@@ -2086,6 +2153,21 @@ public partial class GameManager
             actionLabel = "standard action";
         }
 
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the NPC executor: the attempt rolls the attacker's
+        // one save, after the cost and before the initiation AoOs; a failure loses the paid step or action and the maneuver
+        // is never made (so it provokes nothing).
+        if (gatedManeuver && AttackLegality.CommitWard(attacker, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(type)) == WardVerdict.Failed)
+        {
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            if (type == SpecialAttackType.Sunder) { _pendingSunderUseOffHandSelection = false; ClearSunderSequenceState(); }
+            else if (type == SpecialAttackType.Disarm) { _pendingDisarmUseOffHandSelection = false; ClearDisarmSequenceState(); }
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(attacker, 0.8f));
+            return;
+        }
+
         // Shared with the NPC executor (TryNPCSpecialAttackIfBeneficial, CMB-076).
         if (ResolveManeuverInitiationAoOs(attacker, target, type) != ManeuverAoOOutcome.Proceed)
         {
@@ -2239,6 +2321,31 @@ public partial class GameManager
 
         FinalizeSpecialAttackResolution(attacker, target);
     }
+
+    /// <summary>
+    /// The PC wrapper's maneuver intent for the shared gate (AttackLegality, CMB-104): a disarm or sunder names the hand
+    /// chosen from the menu (the off-hand weapon, or the main weapon; none for an unarmed attempt), as
+    /// TryConsumeDisarmAttackAction and TryConsumeSunderAttackAction then use it; any other maneuver names none.
+    /// </summary>
+    private AttackIntent PcManeuverIntent(CharacterController attacker, SpecialAttackType type)
+    {
+        if (attacker != null && (type == SpecialAttackType.Disarm || type == SpecialAttackType.Sunder))
+        {
+            bool offHand = type == SpecialAttackType.Disarm ? _pendingDisarmUseOffHandSelection : _pendingSunderUseOffHandSelection;
+            return AttackIntent.ForManeuverWith(type, offHand ? attacker.GetOffHandAttackWeapon() : attacker.GetEquippedMainWeapon());
+        }
+        return AttackIntent.ForManeuver(type);
+    }
+
+    /// <summary>
+    /// The special attacks the PC wrapper and the NPC executor put through the direct-attack gate (AttackLegality): those
+    /// made against an opponent in reach (trip, disarm, sunder, grapple, bull rush, coup de grace, feint). Aid another,
+    /// waking an ally, overrun (a move-through, OverrunSystem) and turning undead have their own tests.
+    /// </summary>
+    internal static bool IsDirectAttackManeuverForGate(SpecialAttackType type)
+        => type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm || type == SpecialAttackType.Sunder
+           || type == SpecialAttackType.Grapple || type == SpecialAttackType.BullRushAttack
+           || type == SpecialAttackType.CoupDeGrace || type == SpecialAttackType.Feint;
 
     private void FinalizeSpecialAttackResolution(CharacterController attacker, CharacterController target)
     {
@@ -2649,15 +2756,18 @@ public partial class GameManager
                 || currentTarget.Stats == null
                 || currentTarget.Stats.IsDead
                 || !IsTargetInCurrentWeaponRange(attacker, currentTarget)
-                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163).
-                || attacker.IsBarredFromOrdinaryAttackOn(currentTarget, out _);
+                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163); nothing passes a
+                // Resilient Sphere (CMB-092); a failed ward save bars the target (D6): the shared gate.
+                || !IsDirectlyAttackableNoReach(attacker, currentTarget);
 
             if (needsRetarget)
             {
                 if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", attacker.IsBarredFromOrdinaryAttackOn(currentTarget, out string sequenceHoldReason)
-                        ? sequenceHoldReason
+                    Legality sequenceLegality = AttackLegality.Check(attacker, currentTarget, DirectAttackKind.Weapon, null,
+                        AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", !sequenceLegality.Ok
+                        ? sequenceLegality.Reason
                         : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
                 }
 
@@ -2712,6 +2822,16 @@ public partial class GameManager
                 if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead
                     || currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
                     break;
+            }
+
+            // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): this step's attempt rolls the attacker's one save; a
+            // failure loses this attack, and the next one goes to another target (the warded one now fails the gate).
+            if (AttackLegality.CommitWard(attacker, currentTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
+            {
+                attacksMade++;
+                UpdateAllStatsUI();
+                yield return new WaitForSeconds(0.35f);
+                continue;
             }
 
             // Recompute flanking/range context each attack in case target/position changed.

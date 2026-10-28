@@ -207,6 +207,60 @@ public class DispelMagicService : MonoBehaviour
     }
 
     /// <summary>
+    /// A targeted Dispel Magic aimed at <paramref name="target"/>, a creature inside <paramref name="sphere"/>, by a caster
+    /// outside every sphere: the sphere is subject to a targeted dispel magic (PHB p.258) and nothing else passes its
+    /// boundary, so the one dispel check (1d20 + caster level, max +10, PHB p.223) is made against the sphere alone, DC 11
+    /// + its caster level; the sphere's own caster succeeds automatically. A success ends the sphere. Delegated RAW
+    /// reading 2026-10-28 (batch 12 step 12, as <see cref="PerformGlobeDispel"/>); PCs and NPCs alike, through the cast
+    /// core's single-target path.
+    /// </summary>
+    public void PerformSphereDispel(CharacterController caster, CharacterController target, ResilientSphereAreaEffect sphere, int casterLevel = 0)
+    {
+        if (caster == null || sphere == null)
+            return;
+
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "the target";
+        if (casterLevel <= 0)
+            casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int checkBonus = Mathf.Min(casterLevel, 10);
+        int sphereCasterLevel = Mathf.Max(1, sphere.CasterLevel);
+        int dc = GetDispelDC(sphereCasterLevel);
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮",
+            $"{casterName} casts Dispel Magic at {targetName}, inside a Resilient Sphere: the dispel can reach only the sphere (PHB p.258)."));
+
+        bool success;
+        string detail;
+        if (sphere.Caster == caster)
+        {
+            success = true;
+            detail = "(auto-success, own spell)";
+        }
+        else
+        {
+            int roll = DiceService.D20(DispelCheckContext);
+            int total = roll + checkBonus;
+            success = total >= dc;
+            detail = $"(1d20 {roll} + {checkBonus} = {total} vs DC {dc})";
+        }
+
+        if (success)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"Dispel Magic succeeds — the Resilient Sphere around {targetName} is dispelled {detail}"));
+            Debug.Log($"[DispelMagic] Dispelled Resilient Sphere (CL {sphereCasterLevel}) around {targetName} {detail}");
+            sphere.ExpireEffect();
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"Dispel Magic fails against the Resilient Sphere around {targetName} {detail}"));
+            Debug.Log($"[DispelMagic] Failed to dispel Resilient Sphere (CL {sphereCasterLevel}) {detail}");
+        }
+
+        _updateAllStatsUI?.Invoke();
+    }
+
+    /// <summary>
     /// A targeted Dispel Magic whose Mirror Image figure pick named one of <paramref name="target"/>'s images (PHB p.254;
     /// batch 11 step 26): the dispel was aimed at a figment, which is part of the Mirror Image spell's effect, and a
     /// targeted dispel may target a spell (PHB p.223), so its one dispel check is made against the Mirror Image on the

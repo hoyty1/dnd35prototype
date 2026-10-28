@@ -3857,6 +3857,8 @@ public class CharacterStats
     [NonSerialized] public int SanctuaryDC;
     /// <summary>Caster level of the Sanctuary effect (for dispel checks).</summary>
     [NonSerialized] public int SanctuaryCasterLevel;
+    /// <summary>The Sanctuary casting now on this character: the key of the attackers' one save against it (WardSaveLedger, D6).</summary>
+    [NonSerialized] public ActiveSpellEffect ActiveSanctuaryEffect;
 
     // ── Hide from Undead ──
     /// <summary>True if Hide from Undead is active on this character.</summary>
@@ -3865,6 +3867,8 @@ public class CharacterStats
     [NonSerialized] public int HideFromUndeadDC;
     /// <summary>Caster level of the Hide from Undead effect.</summary>
     [NonSerialized] public int HideFromUndeadCasterLevel;
+    /// <summary>The Hide from Undead casting now on this character: the key of the undead's one save against it (WardSaveLedger, D6).</summary>
+    [NonSerialized] public ActiveSpellEffect ActiveHideFromUndeadEffect;
 
     // ── Remove Fear ──
     /// <summary>Morale bonus to saves vs fear from Remove Fear spell.</summary>

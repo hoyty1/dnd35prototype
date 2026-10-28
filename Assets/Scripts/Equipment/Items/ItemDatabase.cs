@@ -1602,7 +1602,25 @@ public static class ItemDatabase
 
         ApplyWeaponSizeDefaults(item);
         ApplyReachDefaults(item);
+        ApplyTripWeaponDefaults(item);
         _items[item.Id] = item;
+    }
+
+    /// <summary>
+    /// The PHB trip weapons in the database: each description says "you can use this weapon to make trip attacks" (PHB
+    /// printed p.115-122: light and heavy flail, guisarme, halberd, sickle, spiked chain, whip; the dire flail, gnome hooked
+    /// hammer, kama, scythe and bolas are not in the database).
+    /// </summary>
+    private static readonly HashSet<string> TripWeaponIds = new HashSet<string>
+    {
+        ItemIDs.FLAIL_LIGHT, ItemIDs.FLAIL_HEAVY, ItemIDs.GUISARME, ItemIDs.HALBERD,
+        ItemIDs.SICKLE, ItemIDs.SPIKED_CHAIN, ItemIDs.WHIP
+    };
+
+    private static void ApplyTripWeaponDefaults(ItemData item)
+    {
+        if (item != null && item.Type == ItemType.Weapon && TripWeaponIds.Contains(item.Id))
+            item.CanMakeTripAttacks = true;
     }
 
     /// <summary>
@@ -1763,6 +1781,7 @@ public static class ItemDatabase
         clone.ReachSquares = src.ReachSquares;
         clone.CanAttackAdjacent = src.CanAttackAdjacent;
         clone.IsReachWeapon = src.IsReachWeapon;
+        clone.CanMakeTripAttacks = src.CanMakeTripAttacks;
         clone.DealsNonlethalDamage = src.DealsNonlethalDamage;
         clone.WhipLikeArmorRestriction = src.WhipLikeArmorRestriction;
         clone.DamageType = src.DamageType;

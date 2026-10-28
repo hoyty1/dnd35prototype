@@ -1088,6 +1088,9 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log($"[CombatReset] ENTER | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderCount} | currentCharacter={currentCharacterName} | activeNPCs={activeNpcs}");
 
+        // No ward save outlives its encounter (WardSaveLedger, D6).
+        WardSaveLedger.Clear();
+
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();
 

@@ -1134,6 +1134,19 @@ public partial class GameManager
             return false;
         }
 
+        // The direct-attack gate, read only (AttackLegality, batch 12 step 12), for the attack or the bull rush at the end of
+        // the charge: nothing passes a Resilient Sphere (PHB p.258, CMB-092), and a target whose ward the charger failed to
+        // overcome cannot be attacked (D6). The path test below keeps the charge's own reach. An unrolled ward is legal;
+        // the attack after the move rolls its save.
+        Legality chargeLegality = AttackLegality.Check(charger, target, DirectAttackKind.Charge,
+            forBullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null,
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+        if (!chargeLegality.Ok)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge {target.Stats.CharacterName}: {chargeLegality.Reason}."));
+            return false;
+        }
+
         if (charger.Stats.IsFatiguedOrExhausted)
         {
             if (logFailures)
@@ -1578,7 +1591,16 @@ public partial class GameManager
             ? chargeFlankPartner.Stats.CharacterName
             : null;
 
-        if (_pendingChargeBullRush)
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attack (or bull rush) after the move is the attempt,
+        // and rolls the charger's one save; a failure loses it (the charge's full-round action is spent).
+        bool chargeLostToWard = AttackLegality.CommitWard(charger, target, DirectAttackKind.Charge,
+            _pendingChargeBullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null) == WardVerdict.Failed;
+
+        if (chargeLostToWard)
+        {
+            // Logged by the commit.
+        }
+        else if (_pendingChargeBullRush)
         {
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
             yield return StartCoroutine(ResolveChargeBullRush(charger, target,
@@ -1991,12 +2013,21 @@ public partial class GameManager
             && npc.Stats.HasNaturalAttacks
             && npc.GetEquippedMainWeapon() == null;
 
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the PC charge: the attack (or bull rush) after the
+        // move rolls the charger's one save; a failure loses it.
+        bool npcChargeLostToWard = AttackLegality.CommitWard(npc, target, DirectAttackKind.Charge,
+            bullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null) == WardVerdict.Failed;
+
         // The AI may smite with the charge's attack (or a pounce's first attack), as a PC may declare its smite before
         // charging (SmiteRules, CHR-020). A bull rush on a charge makes no attack, so it declares nothing.
-        if (!bullRush)
+        if (!bullRush && !npcChargeLostToWard)
             TryNPCDeclareSmite(npc, target);
 
-        if (bullRush)
+        if (npcChargeLostToWard)
+        {
+            // Logged by the commit.
+        }
+        else if (bullRush)
         {
             // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).
             var chargeBullRushOutcome = new ChargeBullRushOutcome();

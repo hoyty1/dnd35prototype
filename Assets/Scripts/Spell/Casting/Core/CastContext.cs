@@ -58,6 +58,11 @@ public sealed class CastContext
 
     internal bool IsHeldChargeDelivery;
     /// <summary>
+    /// The warded target whose Sanctuary save the Ward stage just rolled and passed (batch 12 step 12, D6): a cancel at
+    /// the AoO prompt forgets that save (WardSaveLedger.ForgetSanctuarySave), since nothing was attempted. Null otherwise.
+    /// </summary>
+    internal CharacterController WardSaveRolledAgainst;
+    /// <summary>
     /// Set once the run has ended the caster's concentration for this casting (decision D1, batch 11 step 16): at the
     /// provocation, before its rolls, or at the ConcentrationOnCast stage, so the step runs once per run.
     /// </summary>
@@ -168,6 +173,7 @@ public sealed class CastContext
         Outcome = null;
         Done = null;
         IsHeldChargeDelivery = false;
+        WardSaveRolledAgainst = null;
         ConcentrationHandled = false;
         IsQuickened = false;
         CountsAsQuickenedSpell = false;

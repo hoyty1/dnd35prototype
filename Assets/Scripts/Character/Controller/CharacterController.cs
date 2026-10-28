@@ -4571,6 +4571,10 @@ public class CharacterController : MonoBehaviour
 
         // Links to other creatures (resolved while the old stats are still bound).
         ReleaseGrappleState(reason);
+        // The old creature's Sanctuary and Hide from Undead saves (batch 12 step 12, D6).
+        WardSaveLedger.ForgetAttacker(this);
+        if (Stats != null)
+            WardSaveLedger.ForgetWard(Stats);
         _isPinningOpponent = false;
         _pinnedOpponent = null;
         _pinnedBy = null;
@@ -10662,6 +10666,11 @@ public class CharacterController : MonoBehaviour
         if (Stats != null && Stats.DisplacementMissChance > 0)
             bestMissChance = Mathf.Max(bestMissChance, Stats.DisplacementMissChance);
 
+        // Hide from Undead (PHB p.241): an undead that has not seen through this creature's ward cannot see, hear or smell
+        // it, so it has total concealment from that undead (WardSaveLedger.IsHiddenFromUndead; D6).
+        if (attacker != null && WardSaveLedger.IsHiddenFromUndead(attacker, this))
+            bestMissChance = Mathf.Max(bestMissChance, 50);
+
         return bestMissChance;
     }
 
@@ -10715,6 +10724,9 @@ public class CharacterController : MonoBehaviour
         if (target == this)
             return true;
         if (HasCondition(CombatConditionType.Blinded))
+            return false;
+        // Hide from Undead (PHB p.241): no undead sense perceives the warded creature until it sees through the ward.
+        if (WardSaveLedger.IsHiddenFromUndead(this, target))
             return false;
 
         bool invisibilityPierced = CanSeeInvisible(target) || target.IsOutlinedByGlitterdust;
@@ -10853,6 +10865,9 @@ public class CharacterController : MonoBehaviour
             string tier = Stats.DisplacementMissChance >= 50 ? "Major" : "Minor";
             return $"Cloak of Displacement, {tier} ({Stats.DisplacementMissChance}% miss chance)";
         }
+
+        if (sourceEffect == null && missChance == 50 && WardSaveLedger.IsHiddenFromUndead(attacker, this))
+            return "Total concealment (50% miss chance) from Hide from Undead";
 
         string sourceName = sourceEffect != null && !string.IsNullOrWhiteSpace(sourceEffect.ConcealmentSource)
             ? sourceEffect.ConcealmentSource

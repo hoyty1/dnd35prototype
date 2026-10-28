@@ -915,6 +915,7 @@ public class ItemBuilder
         _item.ReachSquares = src.ReachSquares;
         _item.CanAttackAdjacent = src.CanAttackAdjacent;
         _item.IsReachWeapon = src.IsReachWeapon;
+        _item.CanMakeTripAttacks = src.CanMakeTripAttacks;
         _item.DamageType = src.DamageType;
         _item.DmgModType = src.DmgModType;
         _item.CritThreatMin = src.CritThreatMin;

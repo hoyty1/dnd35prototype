@@ -373,14 +373,17 @@ public static class ThreatSystem
     /// holds the target with one body part after Improved Grab, because a holder may not attack the creature it holds in
     /// any form, an attack of opportunity included (MM p.310 "against other opponents"; delegated RAW reading 2026-10-14,
     /// CMB-163; CharacterController.IsBarredFromOrdinaryAttackOn). The holder still threatens and takes AoOs against third
-    /// parties. The provoker lists and <see cref="ExecuteAoO"/> read it.
+    /// parties. Also false when the threatener already failed its save against the target's Sanctuary or Hide from Undead
+    /// casting (WardSaveLedger, read only; PHB p.274, p.241; batch 12 step 12, D6): it cannot attack that creature at all.
+    /// The provoker lists and <see cref="ExecuteAoO"/> read it.
     /// </summary>
     public static bool CanMakeAoOAgainst(CharacterController threatener, CharacterController target)
     {
         if (!CanMakeAoO(threatener))
             return false;
 
-        return target == null || !threatener.IsBarredFromOrdinaryAttackOn(target, out _);
+        return target == null
+            || (!threatener.IsBarredFromOrdinaryAttackOn(target, out _) && !WardSaveLedger.HasKnownFailure(threatener, target));
     }
 
     /// <summary>
@@ -687,6 +690,14 @@ public static class ThreatSystem
             return null;
         }
 
+        // A threatener that already failed its save against the target's Sanctuary or Hide from Undead cannot attack it
+        // (D6), so no AoO is spent.
+        if (WardSaveLedger.HasKnownFailure(threatener, target))
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes no AoO against {target.Stats.CharacterName}: it failed its save against that creature's ward (PHB p.274, D6).");
+            return null;
+        }
+
         if (target.HasTotalConcealment(threatener, incomingIsRangedAttack: false))
         {
             Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} cannot make AoO against {target.Stats.CharacterName}: target has total concealment.");
@@ -706,6 +717,14 @@ public static class ThreatSystem
             && target.Stats.SpringAttackTarget == threatener)
         {
             Debug.Log($"[ThreatSystem] Spring Attack/Shot on the Run: {threatener.Stats.CharacterName}'s AoO suppressed (was the attack target).");
+            return null;
+        }
+
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the AoO is a direct attack, so its attempt rolls the
+        // threatener's one save against the casting; a failure loses the AoO (spent above).
+        if (AttackLegality.CommitWard(threatener, target, DirectAttackKind.AoO) == WardVerdict.Failed)
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName}'s AoO against {target.Stats.CharacterName} is lost to its ward (D6).");
             return null;
         }
 
@@ -844,7 +863,8 @@ public static class ThreatSystem
     /// <summary>
     /// Table 8-2 and PHB p.154-158: Grapple, Sunder, Trip and Disarm provoke from the target
     /// unless the attacker has Improved Grapple, Improved Sunder, Improved Trip or Improved
-    /// Disarm (trip is always the unarmed version here: trip weapons are not modelled).
+    /// Disarm (trip is always the unarmed version here: a trip weapon's trip, which provokes nothing per PHB p.159, still
+    /// resolves as the unarmed one, CMB-188).
     /// Bull rush provokes from every enemy that threatens the attacker; Improved Bull Rush only
     /// removes the defender's AoO (see <see cref="GetManeuverAoOProvokers"/>). Coup de Grace
     /// provokes from every threatening enemy (PHB p.153).

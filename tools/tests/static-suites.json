@@ -590,6 +590,17 @@
       "notes": "CMB-095, AI-053, batch 12 step 3 decision D5 (2026-10-28): the one action-limit formula (CharacterController.RefreshActionLimits) for Slow (single action, no full-round action; Haste ending Slow gives nothing back), Nauseated (move action only), disabled and staggered (single action), the disabled strenuous 1 hp after the act (ResolvePendingStrenuousDamage, Diehard included) and ThreatSystem.IsMoverIncapacitated (0 hp keeps moving). Play only: CharacterController.Init needs Awake (TST-009). 25/25 in a fresh Play session with the baseline seed and seeds 1-4."
     },
     {
+      "type": "Tests.Combat.AttackLegalityTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 28,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-092, CMB-093, CMB-104, AI-005, batch 12 step 12 decision D6 (2026-10-28): AttackLegality.CanDirectlyAttack as a pure table (the Resilient Sphere both ways and inside one sphere, the Improved Grab hold bar not refusing a spell, maneuver reach: nothing at 10 ft without reach, a longspear trips and grapples adjacent and disarms only at 10 ft) and WardSaveLedger (Predict never rolls, Commit rolls one Sanctuary save per attacker and casting, a failure bars later attacks and AoOs, a new casting rolls again, an ally's spell meets no ward, a feint is no attack; Hide from Undead: mindless undead never see through it with no save, a living attacker is not bound, an intelligent undead's success keeps the spell). Dice forced through ScenarioHooks.RollFilter. Play only: CharacterController.Init needs Awake (TST-009). 28/28 in its first Play pass (20261028T191943Z-play)."
+    },
+    {
       "type": "Tests.Combat.AnimateRopeRulesTests",
       "needs": "either",
       "skip": "",

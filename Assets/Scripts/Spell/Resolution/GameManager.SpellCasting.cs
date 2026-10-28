@@ -5362,6 +5362,7 @@ public partial class GameManager
                 recipient.Stats.SanctuaryActive = true;
                 recipient.Stats.SanctuaryDC = saveDC;
                 recipient.Stats.SanctuaryCasterLevel = casterLevel;
+                recipient.Stats.ActiveSanctuaryEffect = effect; // a new casting: every attacker saves again (WardSaveLedger, D6)
 
                 SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
@@ -5395,6 +5396,7 @@ public partial class GameManager
                 target.Stats.HideFromUndeadActive = true;
                 target.Stats.HideFromUndeadDC = saveDC;
                 target.Stats.HideFromUndeadCasterLevel = casterLevel;
+                target.Stats.ActiveHideFromUndeadEffect = effect; // a new casting: every intelligent undead saves again (D6)
 
                 SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
@@ -5588,7 +5590,12 @@ public partial class GameManager
             // A creature inside a globe of invulnerability that excludes Dispel Magic: the targeted dispel can bring the
             // globe down (PHB p.236) but not reach the spells on the creature inside it, so it checks the globe alone
             // (delegated RAW reading 2026-10-14, SPL-141; the cast core's Globe stage lets it through).
-            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect dispelledGlobe))
+            // A creature inside a Resilient Sphere, from outside it: the sphere is subject to a targeted dispel (PHB p.258)
+            // but nothing else passes its boundary, so the dispel checks the sphere alone (delegated RAW reading
+            // 2026-10-28; CheckCastDirectAttackLegality lets it through).
+            if (IsTargetedDispelAtSphere(caster, target, spell))
+                PerformSphereDispel(caster, target, ResilientSphereAreaEffect.GetSphereContainingCharacter(target), SpellDurationRules.CasterLevelFor(caster, spell));
+            else if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect dispelledGlobe))
                 PerformGlobeDispel(caster, target, dispelledGlobe, SpellDurationRules.CasterLevelFor(caster, spell));
             else
                 PerformTargetedDispel(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));

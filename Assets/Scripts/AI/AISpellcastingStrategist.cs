@@ -437,10 +437,14 @@ public static class AISpellcastingStrategist
                 continue;
             if (IsWastedOnGlobe(spell, candidate))
                 continue;
+            // The cast core's legality, read only: it refuses a target behind a Resilient Sphere or one this caster
+            // already failed its Sanctuary or Hide from Undead save against (CheckCastDirectAttackLegality; CMB-092, AI-005).
             if (!IsLegalSpellTarget(gm, caster, spell, candidate, rangeSquares))
                 continue;
 
             float score = ScoreEnemyTarget(caster, candidate, spell, gm);
+            // A ward not yet saved against: the cast's commit may lose the casting action (D6), so score it lower.
+            score += AttackLegality.WardTargetScoreAdjustment(caster, candidate);
             if (score > bestScore)
             {
                 bestScore = score;

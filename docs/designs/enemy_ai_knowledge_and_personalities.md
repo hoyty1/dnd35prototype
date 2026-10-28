@@ -416,7 +416,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-004** | Brute (29 definitions) and Caster get a null Role. |
 | | **AI-017** | `OnEnable` overwrites tuning, and summon and spawn-override instances leak (a reused slot's old instance is destroyed since 2026-10-08, CRE-046). Apply params after `OnEnable`, and destroy the remaining instances. |
 | | **AI-018** | `CombatUI` null dereference at `AIService.cs:59-60`. The static-suite runner and its curated baseline exist since 2026-10-07 (TST-002 closed), but without the AI-018 fix the turn tests below cannot run headless. The Play-mode scenario harness (docs/TESTING.md 3.4, 2026-10-07) can run them in the real scene instead. |
-| | **AI-005** | `SelectBestTarget` re-rolls Sanctuary on every call, so cached decisions would still flip within a turn (the Listen re-roll, AI-007, was fixed in batch 12 step 8). |
+| | AI-005 (fixed 2026-10-28) | Target choice no longer rolls: the Sanctuary save is rolled once per attacker and casting at the attack's commit and only predicted at selection (`WardSaveLedger`, batch 12 step 12), so cached decisions no longer flip within a turn (the Listen re-roll, AI-007, was fixed in batch 12 step 8). |
 | | **AI-021** | Two position stores. The tag and store leak across encounters on reused slots was fixed on 2026-10-08 (CRE-046: `CharacterController.ResetForNewCreature`). |
 | Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |
 | | **AI-047** | The healer never moves to touch (the shaman example). |

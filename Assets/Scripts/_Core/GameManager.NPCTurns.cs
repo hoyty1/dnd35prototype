@@ -411,6 +411,21 @@ public partial class GameManager
             return false;
         }
 
+        // The one direct-attack gate the PC wrapper runs too (AttackLegality, batch 12 step 12), before any cost or AoO:
+        // the Resilient Sphere (CMB-092), the maneuver's own reach (CMB-104: trip and grapple at natural reach, disarm and
+        // sunder at the weapon's, bull rush adjacent, so a ranged kiter no longer trips from thrown range) and a known
+        // failed ward save (D6).
+        bool gatedManeuver = IsDirectAttackManeuverForGate(choice.Value);
+        if (gatedManeuver)
+        {
+            Legality maneuverLegality = AttackLegality.CanDirectlyAttack(npc, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(choice.Value));
+            if (!maneuverLegality.Ok)
+            {
+                Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} on {target?.Stats?.CharacterName ?? "<null>"}: {maneuverLegality.Reason}");
+                return false;
+            }
+        }
+
         // Same trip legality as the PC wrapper (size, swarm, incorporeal; PHB p.158, CMB-079), checked
         // before any cost or AoO.
         if (choice.Value == SpecialAttackType.Trip && !npc.CanTrip(target, out string tripReason))
@@ -463,6 +478,25 @@ public partial class GameManager
         else if (choice.Value != SpecialAttackType.CoupDeGrace && !npc.Actions.HasStandardAction)
         {
             return false;
+        }
+
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the PC wrapper: the attempt rolls the NPC's one save
+        // after the cost and before the initiation AoOs; a failure loses the step (a substitute paid it above) or the
+        // action, and the maneuver is never made.
+        if (gatedManeuver && AttackLegality.CommitWard(npc, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(choice.Value)) == WardVerdict.Failed)
+        {
+            if (!replacesAttack)
+            {
+                if (choice.Value == SpecialAttackType.CoupDeGrace)
+                    npc.Actions.UseFullRoundAction();
+                else
+                    npc.CommitStandardAction();
+            }
+
+            UpdateAllStatsUI();
+            attempted = choice.Value;
+            succeeded = false;
+            return true;
         }
 
         // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
@@ -848,17 +882,22 @@ public partial class GameManager
                 || currentTarget.Stats.IsDead
                 || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
                 || !npc.IsTargetInCurrentWeaponRange(currentTarget) // melee reach; never the PC thrown mode (CMB-096)
-                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149).
-                || npc.IsBarredFromOrdinaryAttackOn(currentTarget, out _);
+                // The direct-attack gate, read only (AttackLegality): a creature holding with one body part attacks only
+                // other opponents (MM p.310, CMB-149), nothing passes a Resilient Sphere (PHB p.258, CMB-092), and a failed
+                // Sanctuary or Hide from Undead save bars the target (D6).
+                || !AttackLegality.Check(npc, currentTarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok;
 
             if (needsNewTarget)
             {
                 // Without an adaptive profile the NPC attacks only its chosen target, as before.
                 if (!adaptive)
                 {
+                    Legality stopLegality = currentTarget != null && currentTarget.Stats != null
+                        ? AttackLegality.Check(npc, currentTarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
+                        : Legality.Allowed();
                     stopReason = currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead
                         ? "target is down"
-                        : (npc.IsBarredFromOrdinaryAttackOn(currentTarget, out _) ? "it holds the target with one body part" : "target is out of reach");
+                        : (!stopLegality.Ok ? stopLegality.Reason : "target is out of reach");
                     break;
                 }
 
@@ -941,6 +980,20 @@ public partial class GameManager
             {
                 stopReason = commitReason;
                 break;
+            }
+
+            // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): this step's attempt rolls the NPC's one save against the
+            // target's casting; a failure loses this step (paid above), and the next step looks for another target.
+            if (AttackLegality.CommitWard(npc, currentTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
+            {
+                UpdateAllStatsUI();
+                if (!adaptive)
+                {
+                    stopReason = "lost the attack to the target's ward";
+                    break;
+                }
+                currentTarget = null;
+                continue;
             }
 
             CharacterController flankPartner;
@@ -1510,6 +1563,17 @@ public partial class GameManager
             yield break;
         }
 
+        // Nothing passes a Resilient Sphere's boundary (PHB p.258, CMB-092), and a target whose ward this NPC failed to
+        // overcome cannot be attacked (D6): the shared gate, read only, before anything that assumes an attack happens.
+        Legality attackLegality = AttackLegality.Check(npc, target, DirectAttackKind.Weapon, null,
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+        if (!attackLegality.Ok)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", attackLegality.Reason));
+            yield return new WaitForSeconds(0.4f);
+            yield break;
+        }
+
         // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks
         CombatFlowService.BreakProtectiveWardsOnAttack(npc);
 
@@ -1567,13 +1631,24 @@ public partial class GameManager
         }
 
         // Ranged (and thrown) attacks are unchanged (CMB-091). The AI's maneuver is tried once
-        // first, as before; the ranged kiter's reach gate for it is CMB-104.
+        // first, as before; the maneuver executor's reach gate refuses one out of reach (CMB-104).
         if (tryStepManeuver != null && tryStepManeuver(npc, target))
         {
             // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
             while (IsAwaitingCounterTripChoice)
                 yield return null;
             yield return new WaitForSeconds(0.8f);
+            yield break;
+        }
+
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the ranged attack's attempt rolls the NPC's one save. This
+        // one-target ranged branch cannot retarget, so a failure loses its first attack step, the standard action (as a
+        // single attack would); the turn may go on with its move action.
+        if (AttackLegality.CommitWard(npc, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        {
+            npc.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+            UpdateAllStatsUI();
+            yield return new WaitForSeconds(0.6f);
             yield break;
         }
 

@@ -171,8 +171,8 @@ public enum LegacyCastQuirk : long
     // casting-while-concentrating step once, as every cast.
 
     // Bit 43 is unused. A hold needs no Resilient Sphere bit: holding a charge inside a sphere is legal (PHB p.258:
-    // nothing crosses the sphere until the charge is delivered; delegated RAW reading 2026-10-14), and the delivery's
-    // boundary test belongs to CMB-092.
+    // nothing crosses the sphere until the charge is delivered; delegated RAW reading 2026-10-14), and the delivery meets
+    // the boundary at the Legality stage's direct-attack gate (CheckCastDirectAttackLegality, batch 12 step 12).
 
     // Bit 44 is unused: HoldSkipsGrappleLegality (SPL-146) was removed by batch 11 step 15; holding a charge is casting
     // the spell (PHB p.141), so a grappled or pinned caster meets the grapple casting rule (PHB p.156) at the hold.

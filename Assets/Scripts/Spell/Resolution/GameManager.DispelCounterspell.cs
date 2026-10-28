@@ -54,6 +54,10 @@ public partial class GameManager
     public void PerformGlobeDispel(CharacterController caster, CharacterController target, LesserGlobeOfInvulnerabilityAreaEffect globe, int casterLevel = 0)
         => _dispelMagicService?.PerformGlobeDispel(caster, target, globe, casterLevel);
 
+    /// <summary>Delegates to <see cref="DispelMagicService.PerformSphereDispel"/>.</summary>
+    public void PerformSphereDispel(CharacterController caster, CharacterController target, ResilientSphereAreaEffect sphere, int casterLevel = 0)
+        => _dispelMagicService?.PerformSphereDispel(caster, target, sphere, casterLevel);
+
     /// <summary>Delegates to <see cref="DispelMagicService.PerformMirrorImageDispel"/>.</summary>
     public void PerformMirrorImageDispel(CharacterController caster, CharacterController target, int casterLevel = 0)
         => _dispelMagicService?.PerformMirrorImageDispel(caster, target, casterLevel);

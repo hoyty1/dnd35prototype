@@ -626,6 +626,11 @@ public partial class GameManager
         _lastHostileActionRound.Remove(npc);
         _lastWeaponAttackNoise.Remove(npc);
 
+        // The slot's old creature's ward saves, as attacker and as warded creature (WardSaveLedger, D6).
+        WardSaveLedger.ForgetAttacker(npc);
+        if (npc.Stats != null)
+            WardSaveLedger.ForgetWard(npc.Stats);
+
         var others = new List<CharacterController>();
         if (PCs != null) others.AddRange(PCs);
         if (NPCs != null) others.AddRange(NPCs);

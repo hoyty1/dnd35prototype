@@ -1849,14 +1849,18 @@ public class AIService : MonoBehaviour
             if (ShouldExcludeTargetBecauseOfFrightenedSource(npc, candidate))
                 continue;
 
-            // D&D 3.5e Sanctuary (PHB p.274): attacker must make Will save vs DC to target this creature.
-            // On failure, the attacker must choose a different target. Checked per-target in AI selection.
+            // Sanctuary (PHB p.274) and Hide from Undead (PHB p.241): a prediction, never a roll (AI-005, decision D6). A
+            // known failed Sanctuary save against the casting (or a mindless undead's Hide from Undead) excludes the
+            // target; an unrolled Sanctuary only scores it lower (GetPerceptionTargetingAdjustment), and the attack's
+            // commit rolls the save. Hide from Undead against an intelligent undead is concealment (CanSeeTarget below).
             if (ShouldExcludeTargetBecauseOfSanctuary(npc, candidate))
                 continue;
 
-            // D&D 3.5e Hide from Undead (PHB p.241): undead cannot perceive the hidden creature.
-            // Mindless undead are automatically hidden from; intelligent undead get a Will save.
             if (ShouldExcludeTargetBecauseOfHideFromUndead(npc, candidate))
+                continue;
+
+            // Otiluke's Resilient Sphere (PHB p.258; CMB-092): nothing passes its boundary.
+            if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(npc, candidate))
                 continue;
 
             if (CanSeeTarget(npc, candidate))
@@ -2023,87 +2027,29 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>
-    /// D&D 3.5e Sanctuary (PHB p.274): An attacker must succeed on a Will save (DC set
-    /// when the spell was cast) or be unable to attack/target the warded creature.
-    /// Each potential attacker rolls once per targeting attempt.
+    /// Sanctuary (PHB p.274), read only: true when this attacker already failed its one save against the warded
+    /// creature's casting (WardSaveLedger, decision D6; AI-005). Choosing a target is not an attempt, so nothing is rolled
+    /// or logged here; the save is rolled once, at the attack's commit (AttackLegality.CommitWard).
     /// </summary>
     private bool ShouldExcludeTargetBecauseOfSanctuary(CharacterController npc, CharacterController candidate)
     {
-        if (_gameManager == null || npc == null || candidate == null)
+        if (npc == null || candidate == null || candidate.Stats == null || !candidate.Stats.SanctuaryActive)
             return false;
-        if (candidate.Stats == null || !candidate.Stats.SanctuaryActive)
-            return false;
-
-        int dc = candidate.Stats.SanctuaryDC;
-        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Sanctuary",
-            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.SANCTUARY));
-        string npcName = npc.Stats != null ? npc.Stats.CharacterName : "NPC";
-        string candName = candidate.Stats.CharacterName;
-
-        if (saveResult.Succeeded)
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"️ {npcName} overcomes {candName}'s Sanctuary (Will {saveResult.Total} vs DC {dc})."));
-            Debug.Log($"[AI][Sanctuary] {npcName} passed Will save {saveResult.Total} vs DC {dc} — can target {candName}");
-            return false; // can target
-        }
-        else
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"️ {npcName} is unable to attack {candName} — Sanctuary! (Will {saveResult.Total} vs DC {dc})"));
-            Debug.Log($"[AI][Sanctuary] {npcName} failed Will save {saveResult.Total} vs DC {dc} — cannot target {candName}");
-            return true; // excluded
-        }
+        return WardSaveLedger.HasKnownFailure(npc, candidate);
     }
 
     /// <summary>
-    /// D&D 3.5e Hide from Undead (PHB p.241): Undead cannot perceive the warded creature.
-    /// Mindless undead are automatically affected (no save). Intelligent undead (INT ≥ 1)
-    /// get a Will save to see through the ward.
-    /// Non-undead NPCs are unaffected by this spell.
+    /// Hide from Undead (PHB p.241), read only: true for a mindless undead, which acts as though the warded creature is not
+    /// there (WardSaveLedger.Predict). An intelligent undead is not excluded: until it sees through the ward (its one save
+    /// per casting, rolled at its turn-start perception step) the creature is unseen by it, and the unseen-target rules
+    /// below apply (total concealment, last-known square; D6). A successful save does not end the spell (the old success
+    /// branch ended it for everyone, AI-005).
     /// </summary>
     private bool ShouldExcludeTargetBecauseOfHideFromUndead(CharacterController npc, CharacterController candidate)
     {
-        if (_gameManager == null || npc == null || candidate == null)
+        if (npc == null || candidate == null || candidate.Stats == null || !candidate.Stats.HideFromUndeadActive)
             return false;
-        if (candidate.Stats == null || !candidate.Stats.HideFromUndeadActive)
-            return false;
-
-        // Only affects undead attackers
-        if (!_gameManager.IsUndeadCharacterForAI(npc))
-            return false;
-
-        string npcName = npc.Stats != null ? npc.Stats.CharacterName : "NPC";
-        string candName = candidate.Stats.CharacterName;
-
-        // Mindless undead: automatically hidden from, no save
-        if (npc.Stats != null && npc.Stats.IsMindless)
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (mindless, no save)"));
-            Debug.Log($"[AI][HideFromUndead] Mindless undead {npcName} auto-excluded from targeting {candName}");
-            return true;
-        }
-
-        // Intelligent undead: Will save to see through
-        int dc = candidate.Stats.HideFromUndeadDC;
-        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Hide from Undead",
-            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.HIDE_FROM_UNDEAD));
-
-        if (saveResult.Succeeded)
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"👻 {npcName} sees through {candName}'s ward! (Will {saveResult.Total} vs DC {dc})"));
-            Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} passed Will {saveResult.Total} vs DC {dc}");
-            // Spell breaks for this target when the undead sees through
-            candidate.Stats.HideFromUndeadActive = false;
-            var statusMgr = candidate.StatusEffectManager;
-            statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"👻 Hide from Undead on {candName} is broken — {npcName} perceived them!"));
-            return false;
-        }
-        else
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (Will {saveResult.Total} vs DC {dc})"));
-            Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} failed Will {saveResult.Total} vs DC {dc}");
-            return true;
-        }
+        return WardSaveLedger.HasKnownFailure(npc, candidate);
     }
 
     private CharacterController SelectBestTargetFromProfile(CharacterController npc, List<CharacterController> allCombatants, AIProfile profile)
@@ -2275,7 +2221,9 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null || target.Stats == null)
             return 0f;
 
-        float adjustment = 0f;
+        // A ward this attacker has not saved against yet (Sanctuary, Hide from Undead): the commit may lose the attack, so
+        // the target ranks lower (AI-005, D6).
+        float adjustment = AttackLegality.WardTargetScoreAdjustment(npc, target);
 
         if (target.IsInvisibleCondition)
         {
@@ -3670,8 +3618,9 @@ public class AIService : MonoBehaviour
             if (!TeamUtility.IsEnemy(source, candidate))
                 continue;
             // A creature holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
-            // 2026-10-14, CMB-163), so a free Spittle goes to another foe in range.
-            if (source.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            // 2026-10-14, CMB-163), so a free Spittle goes to another foe in range; nor across a Resilient Sphere or at a
+            // foe whose ward it failed to overcome (AttackLegality, read only; CMB-092, D6).
+            if (!AttackLegality.Check(source, candidate, DirectAttackKind.Touch, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
                 continue;
 
             int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
@@ -3711,8 +3660,9 @@ public class AIService : MonoBehaviour
             if (!TeamUtility.IsEnemy(summon, candidate))
                 continue;
             // A summon holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
-            // 2026-10-14, CMB-163).
-            if (summon.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            // 2026-10-14, CMB-163); nor across a Resilient Sphere or at a foe whose ward it failed to overcome
+            // (AttackLegality, read only; CMB-092, D6).
+            if (!AttackLegality.Check(summon, candidate, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
                 continue;
             enemies.Add(candidate);
         }
@@ -3862,8 +3812,10 @@ public class AIService : MonoBehaviour
                 continue;
             if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
-            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149).
-            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149); the sphere and a
+            // known failed ward save (CMB-092, AI-005), read only.
+            if (!AttackLegality.Check(attacker, candidate, DirectAttackKind.Weapon, null,
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
                 continue;
 
             enemies.Add(candidate);
@@ -3993,6 +3945,25 @@ public class AIService : MonoBehaviour
         {
             Debug.Log($"[AI] {npc.Stats.CharacterName}'s target is too far ({distance} squares) for {attack.Name} (range {attack.RangeFeet} ft).");
             return false;
+        }
+
+        // Nothing passes a Resilient Sphere (CMB-092), and a known failed ward save bars the target (D6); read only.
+        Legality specialLegality = AttackLegality.Check(npc, target, DirectAttackKind.Touch, null,
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+        if (!specialLegality.Ok)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot use {attack.Name} on {target.Stats.CharacterName}: {specialLegality.Reason}");
+            return false;
+        }
+
+        // A ranged touch attack is a direct attack: its attempt rolls the attacker's one Sanctuary save (PHB p.274; D6); a
+        // failure loses the attack and its action but not the ability's use, which never happened, as a spell keeps its
+        // slot (delegated RAW reading 2026-10-28, D6).
+        if (AttackLegality.CommitWard(npc, target, DirectAttackKind.Touch) == WardVerdict.Failed)
+        {
+            if (!attack.IsFreeAction)
+                npc.CommitStandardAction();
+            return true;
         }
 
         // A ranged special that is not a free action is a standard action; it pays through CommitStandardAction, so a

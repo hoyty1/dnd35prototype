@@ -364,7 +364,7 @@ public partial class GameManager
         return true;
     }
 
-    private static bool IsUndeadCharacter(CharacterController character)
+    internal static bool IsUndeadCharacter(CharacterController character)
     {
         if (character == null || character.Stats == null)
             return false;

@@ -15,6 +15,8 @@ public enum CastStage
 {
     Legality,
     Cost,
+    /// <summary>The caster's one Will save against a warded target's Sanctuary or Hide from Undead (batch 12 step 12, D6).</summary>
+    Ward,
     Distraction,
     Failure,
     Spend,
@@ -95,7 +97,8 @@ public sealed class CastOutcome
 
     /// <summary>
     /// True when the cast counts as cast: it passed Legality and spent its slot, whatever came of the spell afterwards
-    /// (resolved, lost to a distraction or the attacks of opportunity, failed, countered). False for a refusal, a cancel
+    /// (resolved, lost to a distraction or the attacks of opportunity, failed, countered), or lost its casting action to a
+    /// failed ward save with the slot kept (the Ward stage, batch 12 step 12). False for a refusal, a cancel
     /// and a slot that could not be spent. TryNPCPerformSpellCast returns it, exactly as its old body returned true or false
     /// (GameManager.RunCastSync).
     /// </summary>
@@ -232,7 +235,7 @@ public partial class GameManager
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
         CastOutcome refusal = CheckCastCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req) ?? CheckDeciderCapability(req)
-                              ?? CheckCastTargetLegality(req) ?? CheckSummonPlacementLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
+                              ?? CheckCastTargetLegality(req) ?? CheckCastDirectAttackLegality(req) ?? CheckSummonPlacementLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
                               ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
         return refusal ?? new CastOutcome(CastOutcomeKind.Resolved, CastStage.Legality, "ok");
@@ -295,7 +298,8 @@ public partial class GameManager
     /// SpellData.CanHoldCharge). Holding the charge is casting the spell (PHB p.141), so a hold meets the grapple casting
     /// rule as every casting does (<see cref="CheckCastGrappleLegality"/>). Holding a charge inside a Resilient Sphere is
     /// legal: the cast and the held charge send nothing through the sphere (PHB p.258); only a delivery to a creature on
-    /// the other side crosses it, which is the delivery's test (CMB-092) (delegated RAW reading 2026-10-14). Null for any
+    /// the other side crosses it, which the delivery's direct-attack gate refuses (<see cref="CheckCastDirectAttackLegality"/>,
+    /// batch 12 step 12) (delegated RAW reading 2026-10-14). Null for any
     /// other request, or when the hold passes; a refusal carries its log line in <see cref="CastOutcome.Detail"/>, which
     /// the Legality stage shows, so the pre-check has no side effect.
     /// </summary>
@@ -601,6 +605,54 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The creature a single-target cast is aimed at when it is someone other than the caster, else null: the target of
+    /// the direct-attack gate and the ward commit (batch 12 step 12). An area, summon, Grease or hold has none.
+    /// </summary>
+    private static CharacterController DirectSpellTarget(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.ResolveKind != CastResolveKind.Single || req.Aim == null)
+            return null;
+        CharacterController target = req.Aim.Target;
+        return target != null && target != req.Caster ? target : null;
+    }
+
+    /// <summary>
+    /// <see cref="AttackLegality.CanDirectlyAttack"/> (kind Spell) for a single-target cast at another creature, for every
+    /// caster and source (a held charge's delivery included): the Resilient Sphere (CMB-092) and a known failed ward save
+    /// (D6). A targeted Dispel Magic from outside every sphere at a creature inside one passes the sphere test: the sphere
+    /// is subject to a targeted dispel (PHB p.258), and the dispel then reaches the sphere alone
+    /// (<see cref="IsTargetedDispelAtSphere"/>). Pure; the refusal's <see cref="CastOutcome.Detail"/> is the gate's reason.
+    /// Null when the cast may go on.
+    /// </summary>
+    private static CastOutcome CheckCastDirectAttackLegality(SpellCastRequest req)
+    {
+        CharacterController target = DirectSpellTarget(req);
+        if (target == null)
+            return null;
+        AttackLegalityChecks checks = IsTargetedDispelAtSphere(req.Caster, target, req.Spell)
+            ? AttackLegalityChecks.All & ~AttackLegalityChecks.Sphere
+            : AttackLegalityChecks.All;
+        Legality legal = AttackLegality.Check(req.Caster, target, DirectAttackKind.Spell, AttackIntent.ForSpell(req.Spell), checks);
+        if (legal.Ok)
+            return null;
+        string reason = (checks & AttackLegalityChecks.Sphere) != 0 && ResilientSphereAreaEffect.DoesSphereBlockInteraction(req.Caster, target)
+            ? "resilient-sphere" : "ward-save-failed";
+        return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, reason) { Detail = legal.Reason };
+    }
+
+    /// <summary>
+    /// True for a Dispel Magic aimed at <paramref name="target"/>, a creature inside a Resilient Sphere, by a caster inside
+    /// no sphere: PHB p.258 makes the sphere subject to a targeted dispel magic, while nothing else passes its boundary, so
+    /// the dispel reaches the sphere alone (GameManager.PerformSphereDispel), not the spells on the creature inside, as for
+    /// a globe of invulnerability (delegated RAW reading 2026-10-28, batch 12 step 12; PCs and NPCs alike).
+    /// </summary>
+    internal static bool IsTargetedDispelAtSphere(CharacterController caster, CharacterController target, SpellData spell)
+        => spell != null && string.Equals(spell.SpellId, SpellNames.DISPEL_MAGIC, StringComparison.Ordinal)
+           && caster != null && target != null && caster != target
+           && !ResilientSphereAreaEffect.IsCharacterInAnySphere(caster)
+           && ResilientSphereAreaEffect.IsCharacterInAnySphere(target);
+
+    /// <summary>
     /// The metamagic's rules (MetamagicSystem.ValidateMetamagicApplication, batch 11 step 21, SPL-055), the same for every
     /// caster and path: no Quicken Spell on a spontaneous cast (PHB p.98 Special), only a feat the caster has (a feat that
     /// does not change the spell is not refused), a Heighten that raises the level (PHB p.95), at most 9th level. An NPC's
@@ -731,6 +783,20 @@ public partial class GameManager
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason == "area-needs-aim" || refusal.Reason == "summon-needs-placement" ? refusal.Reason : "invalid-target");
             if (spell != null)
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
+            FinishCast(ctx, refusal);
+            return;
+        }
+
+        // The direct-attack gate for a spell aimed at a creature (AttackLegality, batch 12 step 12): nothing passes a
+        // Resilient Sphere's boundary (PHB p.258, CMB-092), and an opponent that failed its save against the target's
+        // Sanctuary or Hide from Undead casting cannot target it (PHB p.274, p.241; D6). Read only: the save itself is
+        // rolled after the Cost stage (CastStageWard).
+        refusal = CheckCastDirectAttackLegality(req);
+        if (refusal != null)
+        {
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);
+            if (!string.IsNullOrEmpty(refusal.Detail))
+                CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"{spell.Name}: {refusal.Detail}."));
             FinishCast(ctx, refusal);
             return;
         }
@@ -893,10 +959,8 @@ public partial class GameManager
             }
             CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "standard");
         }
-        // Test instrumentation (inert outside the scenario harness): a cast begins. Delivering a held charge is not a
-        // cast (the hold raised it when the spell was cast). A summon, Grease or hold has no target creature here.
-        if (!isDeliveringHeldCharge)
-            ScenarioHooks.SpellCast?.Invoke(caster, target, spell);
+        // The scenario harness's SpellCast hook fires once the Ward stage has passed (CastStageWard): a cast lost to a
+        // ward save was never cast.
 
         SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null)
@@ -946,6 +1010,47 @@ public partial class GameManager
             prefix += $"⟳ {caster.Stats.CharacterName} spontaneously casts {spell.Name}! ({sacrificeInfo})\n";
         }
         ctx.LogPrefix = prefix;
+
+        CastStageWard(ctx);
+    }
+
+    /// <summary>
+    /// Ward: a spell aimed at a warded opponent rolls the caster's one Will save against the target's Sanctuary or Hide
+    /// from Undead casting (WardSaveLedger.Commit, PHB p.274, p.241; batch 12 step 12, decision D6), after the action is
+    /// paid and before anything spends the slot. On a failure the casting action is lost but the slot (scroll, wand charge,
+    /// held charge) is kept, because the spell was never cast ("can't follow through"): the cast ends Failed at this
+    /// stage. A scroll or wand use pays its item's standard action here, as its spend would have. Then Distraction.
+    /// </summary>
+    private void CastStageWard(CastContext ctx)
+    {
+        SpellCastRequest req = ctx.Request;
+        CharacterController target = DirectSpellTarget(req);
+        ctx.WardSaveRolledAgainst = null;
+        if (target != null && AttackLegality.IsWardedAttempt(req.Caster, target, DirectAttackKind.Spell, AttackIntent.ForSpell(req.Spell))
+            && WardSaveLedger.Predict(req.Caster, target).Risk == LegalityRisk.WardSaveUnrolled)
+        {
+            EnterCastStage(ctx, CastStage.Ward);
+            WardVerdict verdict = AttackLegality.CommitWard(req.Caster, target, DirectAttackKind.Spell, AttackIntent.ForSpell(req.Spell));
+            if (verdict != WardVerdict.Failed)
+                ctx.WardSaveRolledAgainst = target; // a passed save just rolled: a cancel at the AoO prompt takes it back
+            if (verdict == WardVerdict.Failed)
+            {
+                CharacterController caster = req.Caster;
+                if (req.Source.Kind == CastSourceKind.Scroll || req.Source.Kind == CastSourceKind.Wand)
+                    caster.CommitStandardAction();
+                CastStageTrace.Mark(caster, req.Spell, CastStageTrace.Cost, "ward-save-failed");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{caster.Stats.CharacterName} keeps {req.Spell.Name}: the spell was never cast (PHB p.274)."));
+                ClearSpellcastResourceSnapshot();
+                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Failed, CastStage.Ward, "ward-save-failed"));
+                return;
+            }
+        }
+
+        // Test instrumentation (inert outside the scenario harness): a cast begins, now that no ward stopped it. Delivering
+        // a held charge is not a cast (the hold raised it when the spell was cast). A summon, Grease or hold has no target
+        // creature here.
+        if (!ctx.IsHeldChargeDelivery)
+            ScenarioHooks.SpellCast?.Invoke(req.Caster, req.Aim != null ? req.Aim.Target : null, req.Spell);
 
         CastStageDistraction(ctx);
     }
@@ -1212,8 +1317,11 @@ public partial class GameManager
         CharacterController caster = ctx.Request.Caster;
         if (answer == CastProvocationAnswer.Cancelled)
         {
-            // Backing out at the prompt gives back the action and the spell (the snapshot).
+            // Backing out at the prompt gives back the action and the spell (the snapshot), and the Sanctuary save the Ward
+            // stage rolled: nothing was attempted (SPL-152, D6).
             RestoreSpellcastResourceSnapshot(caster);
+            if (ctx.WardSaveRolledAgainst != null)
+                WardSaveLedger.ForgetSanctuarySave(caster, ctx.WardSaveRolledAgainst);
             _spellcastProvocationCancelled = false;
             if (caster != null && caster.Stats != null)
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{caster.Stats.CharacterName} cancels spell cast."));

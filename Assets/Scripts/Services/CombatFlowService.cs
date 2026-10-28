@@ -153,27 +153,18 @@ public class CombatFlowService : MonoBehaviour
         if (_gameManager == null || attacker == null || target == null)
             return;
 
-        // A creature holding the target with one body part after Improved Grab attacks only other opponents, in every
-        // attack mode (MM p.310; delegated RAW reading 2026-10-14, CMB-163). The target clicks check this first; this
-        // keeps every caller of the PC attack entry on the same rule.
-        if (attacker.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
+        // The one direct-attack gate (AttackLegality, batch 12 step 12), the same for PCs and NPCs: the Improved Grab hold bar
+        // in every attack mode (MM p.310; delegated RAW reading 2026-10-14, CMB-163), the Resilient Sphere in either
+        // direction (PHB p.258; creatures inside the same sphere attack each other normally, CMB-092) and a known failed
+        // Sanctuary or Hide from Undead save (PHB p.274, p.241; D6). The target clicks and highlights check it first (reach
+        // and range too); this keeps every caller of the PC attack entry on the same rule. Nothing is spent.
+        Legality legality = AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null,
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+        if (!legality.Ok)
         {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
-
-        // ── Resilient Sphere boundary block (PHB p.263) ──
-        // Nothing passes through the sphere boundary. Attacks between creatures
-        // separated by a sphere boundary are blocked. Creatures inside the SAME
-        // sphere can attack each other normally.
-        if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(attacker, target))
-        {
-            bool attackerInSphere = ResilientSphereAreaEffect.IsCharacterInAnySphere(attacker);
-            string msg = attackerInSphere
-                ? $"<color=#44CCFF>🔮 {attacker.Stats.CharacterName}'s attack cannot pass through the Resilient Sphere!</color>"
-                : $"<color=#44CCFF>🔮 Attack on {target.Stats.CharacterName} is blocked by Resilient Sphere! Nothing can pass through.</color>";
-            _gameManager.CombatUI?.ShowCombatLog(msg);
+            _gameManager.CombatUI?.ShowCombatLog(ResilientSphereAreaEffect.DoesSphereBlockInteraction(attacker, target)
+                ? CombatLogHelper.IceBlue("🔮", legality.Reason + ".")
+                : CombatLogHelper.Warning("⚠", legality.Reason));
             _gameManager.Combat_ShowActionChoices();
             return;
         }
@@ -361,8 +352,10 @@ public class CombatFlowService : MonoBehaviour
                 continue; // Skip allies
             if (!SquareGridUtils.IsAdjacent(attacker.GridPosition, candidate.GridPosition))
                 continue;
-            // The Improved Grab hold bar: no cleave into the creature this attacker holds (MM p.310, CMB-163).
-            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
+            // The Improved Grab hold bar: no cleave into the creature this attacker holds (MM p.310, CMB-163); nor across a
+            // Resilient Sphere or into a creature whose ward this attacker failed to overcome (AttackLegality, D6).
+            if (!AttackLegality.Check(attacker, candidate, DirectAttackKind.Weapon, null,
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
                 continue;
 
             return candidate;
@@ -518,6 +511,14 @@ public class CombatFlowService : MonoBehaviour
 
         if (sequenceEnteredFullAttack)
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+
+        // Sanctuary and Hide from Undead (D6): a failed save loses this step of the sequence; the next step may go to
+        // another target (the warded one is then refused by the legality gate).
+        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        {
+            LoseAttackStepToWard(attacker, endSequence: false);
+            return;
+        }
 
         ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
             ? (_gameManager.Combat_GetEquippedWeapon() ?? attacker.GetEquippedMainWeapon())
@@ -745,6 +746,52 @@ public class CombatFlowService : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// A PC attack step lost to a failed Sanctuary or Hide from Undead save (WardSaveLedger, D6; logged by the commit): the
+    /// step was paid, so it is recorded as made (a natural attack picked from its button is used up), the attack sequence
+    /// moves on to its next step or ends, and the turn returns to the action menu after the usual pause.
+    /// </summary>
+    private void LoseAttackStepToWard(CharacterController attacker, bool endSequence)
+    {
+        // The lost step is the one the normal path would have made, so the natural-attack bookkeeping matches it: a
+        // natural-button pick (or its Haste extra attack) is used up; the sequence's auto natural step uses the next
+        // unused natural attack, or Haste's extra one when all are used (as PerformIterativeSequenceAttack does).
+        bool naturalStep = _gameManager.Combat_HasPendingNaturalAttackSelection()
+            && attacker.GetEquippedMainWeapon() == null && attacker.Stats != null && attacker.Stats.HasNaturalAttacks;
+        if (naturalStep)
+        {
+            if (_gameManager.Combat_IsPendingNaturalAttackHasteExtra())
+                attacker.MarkHasteExtraNaturalAttackUsed();
+            else
+                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex()));
+            _gameManager.Combat_ClearPendingNaturalAttackSelection();
+        }
+        else if (!endSequence && _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+            && ShouldUseNaturalAttackStep(attacker, attacker.GetEquippedMainWeapon()))
+        {
+            naturalStep = true;
+            int naturalAttackIndex = _gameManager.Combat_ResolveNextUnusedNaturalAttackIndex(attacker, _gameManager.Combat_GetTotalAttacksUsed());
+            if (naturalAttackIndex >= 0)
+                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
+            else if (attacker.CanUseHasteExtraNaturalAttack())
+                attacker.MarkHasteExtraNaturalAttackUsed();
+        }
+
+        attacker.RegisterAttackMade(naturalStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
+
+        if (endSequence || !_gameManager.Combat_HasMoreAttacksAvailable())
+            _gameManager.Combat_EndAttackSequence();
+        else
+            _gameManager.Combat_SetCurrentAttackBAB(GetSequenceAttackBaseBonus(attacker, _gameManager.Combat_GetCurrentAttackType(), _gameManager.Combat_GetTotalAttacksUsed())
+                + (_gameManager.Combat_IsDualWielding()
+                   && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown)
+                    ? _gameManager.Combat_GetMainHandPenalty() : 0));
+
+        _gameManager.Combat_UpdateAllStatsUI();
+        _gameManager.Combat_ClearHighlights();
+        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.0f);
+    }
+
     public void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
@@ -789,6 +836,14 @@ public class CombatFlowService : MonoBehaviour
 
             if (enteredFullAttack)
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+        }
+
+        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attempt rolls the attacker's one save against the
+        // target's casting; a failure loses this attack step (paid above), as on the NPC side.
+        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        {
+            LoseAttackStepToWard(attacker, endSequence: true);
+            return;
         }
 
         ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
@@ -950,6 +1005,9 @@ public class CombatFlowService : MonoBehaviour
                     bool cleaveFlanking = CombatUtils.IsAttackerFlanking(attacker, cleaveTarget, _gameManager.Combat_GetAllCharacters(), out CharacterController cleavePartner);
                     int cleaveFlankBonus = cleaveFlanking ? CombatUtils.FlankingAttackBonus : 0;
                     string cleavePartnerName = cleavePartner != null && cleavePartner.Stats != null ? cleavePartner.Stats.CharacterName : null;
+                    // The cleave attack is a direct attack too: a failed ward save loses it (D6).
+                    if (AttackLegality.CommitWard(attacker, cleaveTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
+                        break;
                     CombatResult cleaveResult = attacker.Attack(cleaveTarget, cleaveFlanking, cleaveFlankBonus, cleavePartnerName, null, null, attackWeapon);
                     string cleaveLog = BuildAttackLog(attacker, cleaveFlanking, cleavePartnerName, cleaveResult);
                     _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
@@ -1082,6 +1140,16 @@ public class CombatFlowService : MonoBehaviour
             return;
 
         attacker.Actions.UseFullRoundAction();
+
+        // Sanctuary and Hide from Undead (D6). This legacy one-target two-weapon full attack cannot retarget, so a failed
+        // save loses the whole full-round action against the warded target (step 17's shared sequence makes it per step).
+        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            _gameManager.Combat_ClearHighlights();
+            _gameManager.Combat_StartAfterAttackDelay(attacker, 1.0f);
+            return;
+        }
 
         bool isMeleeFearBreak = _gameManager.Combat_IsMeleeFearBreakAttack(attacker, attacker.GetEquippedMainWeapon(), rangeInfo, false);
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
@@ -1309,7 +1377,10 @@ public class CombatFlowService : MonoBehaviour
         // Whirlwind Attack makes one attack against each opponent, never the one this attacker holds with one body part
         // (MM p.310; delegated RAW reading 2026-10-14, CMB-163). When the held creature is the only adjacent foe, the
         // action is refused before its cost.
-        int barredCount = adjacentEnemies.RemoveAll(enemy => enemy != null && attacker.IsBarredFromOrdinaryAttackOn(enemy, out _));
+        // The same gate also leaves out a foe across a Resilient Sphere and one whose ward this attacker failed to overcome
+        // (AttackLegality, batch 12 step 12).
+        int barredCount = adjacentEnemies.RemoveAll(enemy => enemy != null && !AttackLegality.Check(attacker, enemy, DirectAttackKind.Weapon, null,
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok);
         if (adjacentEnemies.Count == 0 && barredCount > 0)
         {
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use Whirlwind Attack: its only adjacent foe is the creature it holds (MM p.310)."));
@@ -1335,6 +1406,13 @@ public class CombatFlowService : MonoBehaviour
         foreach (var enemy in adjacentEnemies)
         {
             if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
+
+            // Each attack is a direct attack: a warded foe rolls the attacker's one save first (D6); a failure loses that one attack.
+            if (AttackLegality.CommitWard(attacker, enemy, DirectAttackKind.Weapon) == WardVerdict.Failed)
+            {
+                logLines.AppendLine($"  vs {enemy.Stats.CharacterName}: lost to its ward");
+                continue;
+            }
 
             // Single melee attack at full BAB against each target; each is a melee attack,
             // so flanking that target grants +2 (PHB p.153; no defender AC penalty, CMB-001).

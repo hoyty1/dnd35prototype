@@ -14,7 +14,8 @@ using System.Collections.Generic;
 /// Hide with See Invisibility) is <see cref="LastKnownPositionTracker.AttemptListenChecks"/>: a pinpoint records the
 /// square, becomes the last-known square and lapses when the creature leaves it (DMG p.295), and a deafened creature
 /// pinpoints nothing by hearing (PHB p.307). Gaps: the DC is a flat 20 (CMB-182), and only an unseen enemy the creature
-/// tracks (one it saw vanish) is checked, so one that was never seen cannot be pinpointed (CMB-183).
+/// tracks (one it saw vanish) is checked, so one that was never seen cannot be pinpointed (CMB-183). An intelligent undead
+/// rolls its Hide from Undead saves here first (WardSaveLedger.RollHideFromUndeadSaves, batch 12 step 12, D6).
 /// </summary>
 public static class PerceptionRules
 {
@@ -36,6 +37,10 @@ public static class PerceptionRules
         LastKnownPositionTracker tracker = LastKnownPositionTracker.Ensure(actor);
         if (tracker == null)
             return;
+
+        // Hide from Undead (PHB p.241): an intelligent undead makes its one Will save per casting the first time it would
+        // perceive a warded creature, here; a failure leaves that creature unseen by it (WardSaveLedger, D6).
+        WardSaveLedger.RollHideFromUndeadSaves(actor, all);
 
         var visibleEnemies = new List<CharacterController>();
         var concealedTrackedEnemies = new List<CharacterController>();
