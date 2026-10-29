@@ -40,6 +40,14 @@ public class SpikeStoneAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
+        // The spikes hurt only a creature "moving on foot" (PHB p.283): an incorporeal creature does not (it has no weight
+        // and does not trigger traps set off by weight, MM p.311; difficult terrain does not hamper it, PHB p.148).
+        // Delegated RAW reading 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1; MovementTerrain.IgnoresDifficultTerrain, the
+        // exemption the charge planner asks too (a fly mode joins there, GRID-027). Freedom of Movement lifts the half speed
+        // only (MovementTerrain.ZoneHindersMovement), not the damage: the spikes still pierce a creature that walks on them.
+        if (MovementTerrain.IgnoresDifficultTerrain(character))
+            return;
+
         // Deal damage on entry (1d8 for moving into a square)
         if (!isInitial) // Only on movement, not initial placement
         {

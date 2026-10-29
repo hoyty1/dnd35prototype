@@ -193,6 +193,12 @@ public class GreaseAreaEffect : PersistentAreaEffect
     /// <summary>The Reflex save or fall (SaveRollRules through RollSpellSave, D13).</summary>
     private void RollFallSave(CharacterController character, string timing)
     {
+        // A creature the grease does not hinder rolls nothing: an incorporeal creature does not stand on the surface and
+        // cannot fall (MM p.311), and Freedom of Movement moves normally despite it (PHB p.233; delegated RAW reading
+        // 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1; MovementTerrain.ZoneHindersMovement, the one exemption).
+        if (!MovementTerrain.ZoneHindersMovement(character, this))
+            return;
+
         SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC, ReflexDiceContext); // SaveRollRules, D13
         LogEffect($"{character.Stats.CharacterName} {timing} grease: Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {SaveDC} {SaveRollRules.Outcome(save)}");
 

@@ -954,7 +954,7 @@ public partial class GameManager
             return;
 
         var previewPath = GetChargePath(ActivePC, target, _pendingChargeBullRush);
-        int pathCost = SquareGridUtils.CalculatePathCost(ActivePC.GridPosition, previewPath);
+        int pathCost = SquareGridUtils.CalculatePathCost(ActivePC, ActivePC.GridPosition, previewPath);
         CombatUI.SetTurnIndicator($"CHARGE ready: {target.Stats.CharacterName} ({pathCost * 5} ft). Click target to preview and confirm.");
     }
 
@@ -1115,9 +1115,13 @@ public partial class GameManager
     ///    (<see cref="ChargePathFailureReason.TooFar"/>).
     /// 2. That space must be free and every line from the starting space to it clear (<see cref="FindChargeLineBlocker"/>):
     ///    no square that the two spaces' convex hull covers may block movement (a wall; a barrier on a step), slow it
-    ///    (difficult terrain) or hold a creature, an ally or the target too; a helpless or dead creature does not stop a
-    ///    charge (<see cref="ChargeRules.LetsChargePass"/>), and the charger's own starting space does not block it (owner
-    ///    interpretation 2026-10-11, CMB-153). Otherwise <see cref="ChargePathFailureReason.LineBlocked"/>, with
+    ///    (difficult terrain, solid fog, a sleet storm) or hold a creature, an ally or the target too. The square question
+    ///    is the charger's own (<see cref="MovementTerrain.Classify"/>): only a movement ability bypasses an obstacle (an
+    ///    incorporeal charger passes a Wall of Ice and ground zones, Freedom of Movement passes the zones of impeding magic;
+    ///    owner interpretation 2026-10-29). The starting space's terrain counts too: a charger standing in a square that
+    ///    slows it cannot charge out of it (delegated RAW reading 2026-10-29 under that ruling, PHB p.148, p.154). A helpless or dead creature does not stop a charge
+    ///    (<see cref="ChargeRules.LetsChargePass"/>), and a creature sharing the charger's starting space does not block it
+    ///    (owner interpretation 2026-10-11, CMB-153). Otherwise <see cref="ChargePathFailureReason.LineBlocked"/>, with
     ///    <paramref name="blockedReason"/> naming what is in the way.
     /// When several spaces tie as closest, any one that is free and clear will do, the one <see cref="IsBetterChargeEndpoint"/>
     /// prefers first (delegated RAW readings 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1). The path is the straight steps
@@ -1199,7 +1203,7 @@ public partial class GameManager
             Vector2Int endpoint = closest[i];
             List<Vector2Int> candidatePath = SquareGridUtils.GetStraightLinePath(start, endpoint);
             string blocker = DescribeChargeEndSpaceBlocker(charger, endpoint, moverSizeSquares);
-            if (blocker == null && SquareGridUtils.CalculatePathCost(start, candidatePath, ignoreDifficultTerrain: true) >= SquareGridUtils.BlockedPathCost)
+            if (blocker == null && SquareGridUtils.CalculatePathCost(charger, start, candidatePath, ignoreDifficultTerrain: true) >= SquareGridUtils.BlockedPathCost)
                 blocker = "a barrier blocks the way";
             if (blocker == null)
                 blocker = FindChargeLineBlocker(charger, target, start, endpoint, moverSizeSquares, startingSpace);
@@ -1235,17 +1239,20 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Why the closest space at <paramref name="endpoint"/> cannot be the charge's end (null: it can): a square of it is a
-    /// wall or holds a creature that is not dead (PHB p.154: if that space is occupied or otherwise blocked, you can't
-    /// charge). A helpless creature's square may be passed but not ended in.
+    /// Why the closest space at <paramref name="endpoint"/> cannot be the charge's end (null: it can): a square of it
+    /// blocks or slows this charger (<see cref="MovementTerrain.Classify"/>: a wall, a sphere, difficult terrain, solid fog,
+    /// with the charger's movement abilities; owner interpretation 2026-10-29) or holds a creature that is not dead (PHB
+    /// p.154: if that space is occupied or otherwise blocked, you can't charge; the end space is also on every charge line,
+    /// so a square that slows bars it too). A helpless creature's square may be passed but not ended in: a charge never
+    /// ends with two creatures' spaces overlapping (owner interpretation 2026-10-29).
     /// </summary>
     private string DescribeChargeEndSpaceBlocker(CharacterController charger, Vector2Int endpoint, int moverSizeSquares)
     {
         List<Vector2Int> footprint = charger.GetOccupiedSquaresAt(endpoint);
         for (int i = 0; i < footprint.Count; i++)
         {
-            if (SquareGridUtils.IsCellBlockedByWall(footprint[i]))
-                return "a wall blocks the closest space";
+            if (MovementTerrain.Classify(charger, footprint[i], out string hindrance) != SquareHindrance.None)
+                return $"{hindrance} is in the closest space";
         }
 
         if (Grid.CanTraversePathNode(endpoint, moverSizeSquares, charger, isDestinationNode: true, allowThroughAllies: true))
@@ -1272,10 +1279,14 @@ public partial class GameManager
     /// <summary>
     /// What stops a charge from <paramref name="start"/> to <paramref name="endpoint"/> (null: every line is clear, PHB p.154,
     /// CMB-132): a square that the convex hull of the starting and ending spaces covers
-    /// (<see cref="SquareGridUtils.GetSquaresCoveredBySweptSpace"/>: every line between the two spaces) and that is off the
-    /// grid, a wall square or difficult terrain, or that holds a creature the charge may not pass (anyone but a helpless or
-    /// dead creature, <see cref="ChargeRules.LetsChargePass"/>; the target always, whose space a charge never crosses). The
-    /// charger's starting space is left out (CMB-153).
+    /// (<see cref="SquareGridUtils.GetSquaresCoveredBySweptSpace"/>: every line between the two spaces, the starting space
+    /// included) and that blocks or slows this charger (<see cref="MovementTerrain.Classify"/>: off the grid, a wall, a
+    /// Resilient Sphere, difficult terrain, solid fog, a sleet storm; only a movement ability of the charger bypasses one,
+    /// owner interpretation 2026-10-29), or that holds a creature the charge may not pass (anyone but a helpless or dead creature,
+    /// <see cref="ChargeRules.LetsChargePass"/>; the target always, whose space a charge never crosses). A creature that
+    /// shares the charger's starting space does not block it (owner interpretation 2026-10-11, CMB-153); the terrain there
+    /// does (a charger standing in grease cannot charge out of it: delegated RAW reading 2026-10-29 under the owner
+    /// interpretation of that date, PHB p.148, p.154).
     /// </summary>
     private string FindChargeLineBlocker(CharacterController charger, CharacterController target, Vector2Int start, Vector2Int endpoint,
         int moverSizeSquares, HashSet<Vector2Int> startingSpace)
@@ -1295,17 +1306,19 @@ public partial class GameManager
     private string DescribeChargeSquareBlocker(CharacterController charger, CharacterController target, Vector2Int square,
         HashSet<Vector2Int> startingSpace)
     {
-        if (startingSpace.Contains(square))
+        // The square question for this charger first (owner interpretation 2026-10-29: only a movement ability bypasses an
+        // obstacle on the line), its own starting space included (delegated RAW reading 2026-10-29 under that ruling: PHB
+        // p.148 bars a charge across difficult terrain and p.154 starts every line in the starting space).
+        bool inStartingSpace = startingSpace.Contains(square);
+        if (MovementTerrain.Classify(charger, square, out string hindrance) != SquareHindrance.None)
+            return inStartingSpace ? $"the charger stands in {hindrance}" : $"{hindrance} is in the way";
+
+        // A creature sharing the starting space does not block the charge (owner interpretation 2026-10-11, CMB-153).
+        if (inStartingSpace)
             return null;
 
         SquareCell cell = Grid.GetCell(square);
-        if (cell == null)
-            return "the way leaves the battlefield";
-        if (SquareGridUtils.IsCellBlockedByWall(square))
-            return "a wall blocks the way";
-        if (IsDifficultTerrain(square))
-            return "difficult terrain is in the way";
-        if (!cell.IsOccupied)
+        if (cell == null || !cell.IsOccupied)
             return null;
 
         IReadOnlyList<CharacterController> occupants = cell.Occupants;

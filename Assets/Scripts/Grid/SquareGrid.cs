@@ -301,7 +301,7 @@ public class SquareGrid : MonoBehaviour
                 // Validate actual D&D 3.5e path cost (the path might cost more than
                 // straight-line distance if it detours around obstacles/threats).
                 // Trim the path to fit within maxRange.
-                int pathCost = SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain);
+                int pathCost = SquareGridUtils.CalculatePathCost(mover, start, path, ignoreDifficultTerrain);
                 if (pathCost > maxRange && path.Count > 0)
                 {
                     Debug.Log($"[SquareGrid] A* path cost {pathCost} exceeds maxRange {maxRange}, trimming...");
@@ -309,7 +309,7 @@ public class SquareGrid : MonoBehaviour
                     // A trimmed move must also end where the mover may stop (not an ally's square it only passes, PHB p.148).
                     while (path.Count > 0)
                     {
-                        pathCost = SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain);
+                        pathCost = SquareGridUtils.CalculatePathCost(mover, start, path, ignoreDifficultTerrain);
                         if (pathCost <= maxRange
                             && CanTraversePathNode(path[path.Count - 1], moverSizeSquares, mover, true, allowThroughAllies, allowThroughEnemies, allowDestinationEnemyOverlap))
                             break;
@@ -319,7 +319,7 @@ public class SquareGrid : MonoBehaviour
 
                 result.Path = path;
 
-                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps, cost {SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain)} from ({start.x},{start.y}) to ({destination.x},{destination.y})");
+                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps, cost {SquareGridUtils.CalculatePathCost(mover, start, path, ignoreDifficultTerrain)} from ({start.x},{start.y}) to ({destination.x},{destination.y})");
                 return result;
             }
 
@@ -343,7 +343,7 @@ public class SquareGrid : MonoBehaviour
 
                 // ── Barriers: a Resilient Sphere's boundary, an intact Wall of Ice or Wall of Force square, a diagonal past
                 // a wall's corner. The one step rule the path cost, the 5-foot step and the step executor share (GRID-013).
-                if (SquareGridUtils.IsStepBlockedByBarrier(current, neighbor))
+                if (SquareGridUtils.IsStepBlockedByBarrier(mover, current, neighbor))
                     continue;
 
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
@@ -351,7 +351,7 @@ public class SquareGrid : MonoBehaviour
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
 
                 // Difficult terrain costs double (PHB p.148; SquareGridUtils.StepCost), so the search prefers a way round.
-                if (!ignoreDifficultTerrain && SquareGridUtils.IsDifficultTerrainForMovement(neighbor))
+                if (!ignoreDifficultTerrain && SquareGridUtils.IsDifficultTerrainForMovement(mover, neighbor))
                     stepCost *= 2;
 
                 // Add threat penalty for moving into a threatened square
@@ -396,7 +396,7 @@ public class SquareGrid : MonoBehaviour
 
             // The one step barrier rule (sphere boundary, wall squares and corners; GRID-013).
             Vector2Int prev = (i == 0) ? start : result.Path[i - 1];
-            if (SquareGridUtils.IsStepBlockedByBarrier(prev, step))
+            if (SquareGridUtils.IsStepBlockedByBarrier(mover, prev, step))
             {
                 firstInvalidIndex = i;
                 break;
@@ -412,7 +412,7 @@ public class SquareGrid : MonoBehaviour
         }
 
         // ...and to the movement budget by the one path cost (diagonals, difficult terrain; GRID-013), as the A* path is.
-        while (result.Path.Count > 0 && SquareGridUtils.CalculatePathCost(start, result.Path, ignoreDifficultTerrain) > maxRange)
+        while (result.Path.Count > 0 && SquareGridUtils.CalculatePathCost(mover, start, result.Path, ignoreDifficultTerrain) > maxRange)
             result.Path.RemoveAt(result.Path.Count - 1);
 
         return result;

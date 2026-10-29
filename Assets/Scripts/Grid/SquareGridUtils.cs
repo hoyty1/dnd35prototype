@@ -193,35 +193,36 @@ public static class SquareGridUtils
     /// </summary>
     public const int BlockedPathCost = 100000;
 
-    /// <summary>An intact Wall of Ice or Wall of Force square: no creature moves into it (PHB p.298-299).</summary>
-    public static bool IsCellBlockedByWall(Vector2Int cell)
-        => WallOfIceAreaEffect.DoesCellBlockMovement(cell) || WallOfForceAreaEffect.DoesCellBlockMovement(cell);
+    /// <summary>
+    /// Whether <paramref name="mover"/> cannot enter <paramref name="cell"/> for a wall: an intact Wall of Force square, or
+    /// an intact Wall of Ice square for a mover that does not pass solid objects (PHB p.298-299; MM p.310-311). The per-mover
+    /// question is <see cref="MovementTerrain.IsCellBlockedByWall"/> (owner interpretation 2026-10-29); a null mover (an
+    /// object, a test) has no exemption.
+    /// </summary>
+    public static bool IsCellBlockedByWall(CharacterController mover, Vector2Int cell)
+        => MovementTerrain.IsCellBlockedByWall(mover, cell);
 
     /// <summary>
     /// The one barrier rule of a single step, shared by the A* (SquareGrid.FindPathAoOAware), the path cost
-    /// (<see cref="CalculatePathCost"/>), the move highlight and the 5-foot step (MovementService) and the step executor
-    /// (CharacterController.MoveAlongPath, CharacterController.FiveFootStep) (batch 12 step 23, GRID-013): a step may not
-    /// cross a Resilient Sphere's boundary (PHB p.258), enter an intact Wall of Ice or Wall of Force square, or cut a
-    /// diagonal past a wall square's corner (PHB p.147-148).
+    /// (<see cref="CalculatePathCost(CharacterController, Vector2Int, System.Collections.Generic.List{Vector2Int}, bool)"/>),
+    /// the move highlight and the 5-foot step (MovementService) and the step executor (CharacterController.MoveAlongPath,
+    /// CharacterController.FiveFootStep) (batch 12 step 23, GRID-013): a step may not cross a Resilient Sphere's boundary
+    /// (PHB p.258), enter an intact Wall of Ice or Wall of Force square, or cut a diagonal past a wall square's corner
+    /// (PHB p.147-148). An incorporeal mover passes the ice but not the force (MovementTerrain.IsStepBlockedByBarrier, owner
+    /// interpretation 2026-10-29).
     /// </summary>
-    public static bool IsStepBlockedByBarrier(Vector2Int from, Vector2Int to)
-    {
-        return ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(from, to)
-            || IsCellBlockedByWall(to)
-            || WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(from, to)
-            || WallOfForceAreaEffect.DoesDiagonalMoveCrossWall(from, to);
-    }
+    public static bool IsStepBlockedByBarrier(CharacterController mover, Vector2Int from, Vector2Int to)
+        => MovementTerrain.IsStepBlockedByBarrier(mover, from, to);
 
     /// <summary>
-    /// Whether <paramref name="cell"/> is difficult terrain for movement (the squares an area effect marks: Grease, Web,
-    /// Entangle, Spike Stones and the others; MovementService's set, read through the GameManager). False with no
-    /// GameManager (an edit-mode test).
+    /// Whether <paramref name="cell"/> is difficult terrain for <paramref name="mover"/> (the squares an area effect marks:
+    /// Grease, Web, Entangle, Spike Stones and the others; MovementService's set, read through the GameManager), with the
+    /// mover's exemptions (an incorporeal creature ignores it, Freedom of Movement ignores a Web's; PHB p.148, p.233;
+    /// <see cref="MovementTerrain.IsDifficultTerrain"/>, owner interpretation 2026-10-29). False with no GameManager (an
+    /// edit-mode test).
     /// </summary>
-    public static bool IsDifficultTerrainForMovement(Vector2Int cell)
-    {
-        GameManager gm = GameManager.Instance;
-        return gm != null && gm.IsDifficultTerrain(cell);
-    }
+    public static bool IsDifficultTerrainForMovement(CharacterController mover, Vector2Int cell)
+        => MovementTerrain.IsDifficultTerrain(mover, cell);
 
     /// <summary>
     /// The one step cost of movement (PHB p.147-148; batch 12 step 23, GRID-013): an orthogonal step costs 1 square, a
@@ -250,7 +251,8 @@ public static class SquareGridUtils
     /// steps (orthogonal 1, diagonal alternating 1/2, difficult terrain 2 or 3; the diagonal counter persists across the
     /// entire path), or <see cref="BlockedPathCost"/> when a step is blocked by a barrier
     /// (<see cref="IsStepBlockedByBarrier"/>). The one path cost of the A* trim, the movement cost, the PC move
-    /// executor, the charge and the overrun (batch 12 step 23, GRID-013).
+    /// executor, the charge and the overrun (batch 12 step 23, GRID-013). This form has no mover, so no movement ability
+    /// applies (an object, a test); a creature's move uses the form that takes it.
     ///
     /// This differs from GetDistance() which calculates the MINIMUM cost
     /// (straight-line). This method calculates the cost of the ACTUAL path taken.
@@ -259,14 +261,22 @@ public static class SquareGridUtils
     /// <param name="path">List of positions visited in order (each must be adjacent to previous)</param>
     /// <returns>Total movement cost in D&D 3.5e squares</returns>
     public static int CalculatePathCost(Vector2Int start, System.Collections.Generic.List<Vector2Int> path)
-        => CalculatePathCost(start, path, ignoreDifficultTerrain: false);
+        => CalculatePathCost(null, start, path, ignoreDifficultTerrain: false);
 
     /// <summary>
     /// <see cref="CalculatePathCost(Vector2Int, System.Collections.Generic.List{Vector2Int})"/>; with
     /// <paramref name="ignoreDifficultTerrain"/> the steps cost what they would on open ground (the Flaming Sphere's
-    /// roll, PHB p.232), and barriers still block.
+    /// roll, PHB p.232), and barriers still block. No mover.
     /// </summary>
     public static int CalculatePathCost(Vector2Int start, System.Collections.Generic.List<Vector2Int> path, bool ignoreDifficultTerrain)
+        => CalculatePathCost(null, start, path, ignoreDifficultTerrain);
+
+    /// <summary>
+    /// The path cost for <paramref name="mover"/>: barriers and difficult terrain as that mover meets them
+    /// (<see cref="IsStepBlockedByBarrier"/>, <see cref="IsDifficultTerrainForMovement"/>: an incorporeal creature passes a
+    /// Wall of Ice and pays no difficult-terrain cost; owner interpretation 2026-10-29). A null mover has no exemption.
+    /// </summary>
+    public static int CalculatePathCost(CharacterController mover, Vector2Int start, System.Collections.Generic.List<Vector2Int> path, bool ignoreDifficultTerrain = false)
     {
         if (path == null || path.Count == 0) return 0;
 
@@ -277,10 +287,10 @@ public static class SquareGridUtils
         for (int i = 0; i < path.Count; i++)
         {
             Vector2Int current = path[i];
-            if (IsStepBlockedByBarrier(prev, current))
+            if (IsStepBlockedByBarrier(mover, prev, current))
                 return BlockedPathCost;
 
-            cost += StepCost(prev, current, ref diagonalCount, !ignoreDifficultTerrain && IsDifficultTerrainForMovement(current));
+            cost += StepCost(prev, current, ref diagonalCount, !ignoreDifficultTerrain && IsDifficultTerrainForMovement(mover, current));
             prev = current;
         }
 

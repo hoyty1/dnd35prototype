@@ -321,7 +321,9 @@ public partial class GameManager
     /// (<see cref="CanCharge"/>), pays the charge's action (the full-round action, or the standard action of a partial
     /// charge, D2: CharacterController.CommitStandardAction, so a disabled charger's act is strenuous, PHB p.145), moves one
     /// square at a time with each provoked AoO resolved before its step (PHB p.137; ResolveMovementAoOsBeforeStep), passing
-    /// a helpless creature's square short of the end (PHB p.154; ChargeStepCanPass, CMB-199), then
+    /// a helpless creature's square short of the end (PHB p.154; ChargeStepCanPass, CMB-199) but never stopping in one (an
+    /// interrupted charge moves back to the last clear square it passed, <see cref="EndChargeInClearSpace"/>; owner
+    /// interpretation 2026-10-29), then
     /// resolves the end of the charge (<see cref="ResolveChargeEnd"/>), applies the charge's -2 AC until the charger's next
     /// turn and checks the end of combat. It does no UI continuation: the thin wrappers (the PC's ExecuteCharge and the
     /// NPC's NPCExecuteCharge) do.
@@ -377,6 +379,9 @@ public partial class GameManager
         var provokedAoOs = CheckForAoO(charger, path);
         bool interruptedByAoO = false;
         var aooOutcome = new MovementAoOStepOutcome();
+        // The squares the charge has passed whose space overlaps no other creature's, the start first: where an
+        // interrupted charge is moved back to (owner interpretation 2026-10-29; EndChargeInClearSpace).
+        var clearSquaresPassed = new List<Vector2Int> { chargeStart };
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
             // A step the charger cannot take (a barrier, a hold, Grease's failed Balance check) provokes nothing: it never
@@ -426,6 +431,19 @@ public partial class GameManager
                 aooOutcome.Reason = ThreatSystem.IsMoverIncapacitated(charger) ? "incapacitated" : "stopped on the way";
                 break;
             }
+
+            if (Grid == null || Grid.CanPlaceCreature(charger.GridPosition, charger.GetVisualSquaresOccupied(), charger))
+                clearSquaresPassed.Add(charger.GridPosition);
+        }
+
+        // No charge ends with the charger's space overlapping another creature's (owner interpretation 2026-10-29): a charge
+        // stopped in a helpless creature's square (a refused step, an AoO, a halt after it) moves back to the last square
+        // it passed whose space is clear.
+        if (EndChargeInClearSpace(charger, chargeStart, clearSquaresPassed) && !interruptedByAoO)
+        {
+            interruptedByAoO = true;
+            aooOutcome.StopMovement = true;
+            aooOutcome.Reason = "stopped on the way";
         }
 
         charger.HasMovedThisTurn = true;
@@ -470,6 +488,127 @@ public partial class GameManager
         // Victory or defeat for either side when the charge (or an AoO on the way) dropped the last creature of a side (CORE-011).
         CheckCombatVictory(req.CombatEndContext, target);
         o.CombatEnded = CurrentPhase == TurnPhase.CombatOver;
+    }
+
+    /// <summary>
+    /// The no-overlap rule of a charge, PC and NPC alike (owner interpretation 2026-10-29: "Charges need a clear path unless
+    /// they have some ability to bypass an object in their way, and they cannot end with two creatures spaces
+    /// overlapping"; docs/systems/RULES_COVERAGE.md 4.1). A charge may pass a helpless creature's square (PHB p.154), but
+    /// when it stops there (a refused step, an attack of opportunity, a halt) the charger moves back to the last square it
+    /// passed whose space overlaps no other creature's, as an overrun that fails moves 5 ft back the way it came (PHB
+    /// p.157), with no attack of opportunity and no further movement (delegated RAW reading 2026-10-29 under that ruling).
+    /// When no such square will take it now, the nearest free space that does not block it is used, searched ring by ring
+    /// until one is found, preferring open ground (<see cref="FallbackSpaceTier"/>). The charger's starting
+    /// space is left as it was: a creature sharing it is the CMB-153 case (owner interpretation 2026-10-11). True when the
+    /// charger was moved.
+    /// </summary>
+    private bool EndChargeInClearSpace(CharacterController charger, Vector2Int chargeStart, List<Vector2Int> clearSquaresPassed)
+    {
+        if (charger == null || Grid == null || charger.GridPosition == chargeStart)
+            return false;
+        int size = charger.GetVisualSquaresOccupied();
+        Vector2Int stoppedAt = charger.GridPosition;
+        if (Grid.CanPlaceCreature(stoppedAt, size, charger))
+            return false;
+
+        for (int i = clearSquaresPassed.Count - 1; i >= 0; i--)
+        {
+            Vector2Int square = clearSquaresPassed[i];
+            if (square == stoppedAt || !Grid.CanPlaceCreature(square, size, charger))
+                continue;
+            if (MoveChargerBack(charger, square))
+                return true;
+        }
+
+        // Nothing it passed will take it (the start is shared, CMB-153): the nearest free space, searched ring by ring out
+        // from where it stopped until one takes it, so no overlap remains. Within the nearest ring that has one, a space
+        // none of whose squares blocks or slows the charger (MovementTerrain.Classify) or lies in any zone comes first, then
+        // one in a zone that does not slow it, then one that slows it; a space with a square that blocks it never; ties go
+        // to the space nearest the last clear square the charge passed. The space may be one the charge did not pass
+        // (delegated RAW reading 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1).
+        Vector2Int lastClear = clearSquaresPassed.Count > 0 ? clearSquaresPassed[clearSquaresPassed.Count - 1] : chargeStart;
+        int maxRing = Mathf.Max(Grid.Width, Grid.Height);
+        var candidates = new List<(Vector2Int square, int tier, int distance)>();
+        for (int ring = 1; ring <= maxRing; ring++)
+        {
+            candidates.Clear();
+            for (int dx = -ring; dx <= ring; dx++)
+            {
+                for (int dy = -ring; dy <= ring; dy++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != ring)
+                        continue;
+                    Vector2Int square = new Vector2Int(stoppedAt.x + dx, stoppedAt.y + dy);
+                    if (!Grid.CanPlaceCreature(square, size, charger))
+                        continue;
+                    if (ring == 1 && MovementTerrain.IsStepBlockedByBarrier(charger, stoppedAt, square))
+                        continue;
+                    int tier = FallbackSpaceTier(charger, square);
+                    if (tier < 0)
+                        continue;
+                    candidates.Add((square, tier, SquareGridUtils.GetDistance(lastClear, square)));
+                }
+            }
+            if (candidates.Count == 0)
+                continue;
+            candidates.Sort((a, b) => a.tier != b.tier ? a.tier.CompareTo(b.tier) : a.distance.CompareTo(b.distance));
+            for (int i = 0; i < candidates.Count; i++)
+                if (MoveChargerBack(charger, candidates[i].square))
+                    return true;
+        }
+
+        Debug.LogWarning($"[Charge] {charger.Stats?.CharacterName} stopped in an occupied space at ({stoppedAt.x},{stoppedAt.y}) and no clear space on the battlefield will take it.");
+        return false;
+    }
+
+    /// <summary>
+    /// How suitable the space at <paramref name="anchor"/> is as the fallback end of an interrupted charge
+    /// (<see cref="EndChargeInClearSpace"/>): 0 when no square of the charger's space there blocks or slows it or lies in
+    /// any zone, 1 when one lies in a zone that does not slow it (a Wall of Fire, a Fog Cloud), 2 when one slows it, -1
+    /// when one blocks it (never used).
+    /// </summary>
+    private static int FallbackSpaceTier(CharacterController charger, Vector2Int anchor)
+    {
+        List<Vector2Int> footprint = charger.GetOccupiedSquaresAt(anchor);
+        List<PersistentAreaEffect> areas = AreaEffectManager.HasInstance ? AreaEffectManager.Instance.GetAllAreaEffects() : null;
+        int tier = 0;
+        for (int i = 0; i < footprint.Count; i++)
+        {
+            SquareHindrance hindrance = MovementTerrain.Classify(charger, footprint[i], out _);
+            if (hindrance == SquareHindrance.Blocks)
+                return -1;
+            if (hindrance == SquareHindrance.Slows)
+            {
+                tier = 2;
+                continue;
+            }
+            if (tier == 0 && areas != null)
+            {
+                for (int j = 0; j < areas.Count; j++)
+                {
+                    if (areas[j] != null && areas[j].IsCellInArea(footprint[i]))
+                    {
+                        tier = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        return tier;
+    }
+
+    private bool MoveChargerBack(CharacterController charger, Vector2Int square)
+    {
+        SquareCell cell = Grid.GetCell(square);
+        if (cell == null)
+            return false;
+        Vector2Int from = charger.GridPosition;
+        charger.MoveToCell(cell, markAsMoved: false);
+        if (charger.GridPosition != square)
+            return false;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{charger.Stats.CharacterName} cannot end the charge in another creature's space and moves back to ({square.x},{square.y})."));
+        Debug.Log($"[Charge] {charger.Stats.CharacterName} moved back from ({from.x},{from.y}) to ({square.x},{square.y}): no overlap at the end of a charge");
+        return true;
     }
 
     /// <summary>
@@ -529,7 +668,7 @@ public partial class GameManager
         {
             var bullRushOutcome = new ChargeBullRushOutcome();
             yield return StartCoroutine(ResolveChargeBullRush(charger, target,
-                SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), bullRushOutcome));
+                SquareGridUtils.CalculatePathCost(charger, chargeStart, path), CountDiagonalSteps(chargeStart, path), bullRushOutcome));
             o.ChargerDropped = bullRushOutcome.AttackerIncapacitated;
             yield break;
         }

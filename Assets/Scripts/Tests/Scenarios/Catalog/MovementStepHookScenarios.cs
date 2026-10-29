@@ -425,7 +425,7 @@ namespace Tests.Scenarios
                         Vector2Int prev = o.GridPosition;
                         foreach (Vector2Int step in r.Path)
                         {
-                            if (SquareGridUtils.IsStepBlockedByBarrier(prev, step))
+                            if (SquareGridUtils.IsStepBlockedByBarrier(o, prev, step))
                                 return false;
                             prev = step;
                         }

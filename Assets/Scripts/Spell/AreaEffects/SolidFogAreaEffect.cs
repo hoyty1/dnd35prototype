@@ -214,7 +214,29 @@ public class SolidFogAreaEffect : PersistentAreaEffect
     /// </summary>
     public static float GetSpeedMultiplierFor(CharacterController creature)
     {
+        // Freedom of Movement: the subject moves normally despite magic that impedes movement, Solid Fog named among it
+        // (PHB p.233; the one exemption, MovementTerrain.IgnoresMagicalImpediment, which the charge line reads too).
+        if (MovementTerrain.IgnoresMagicalImpediment(creature))
+            return 1.0f;
         return IsCreatureInAnySolidFog(creature) ? SpeedMultiplier : 1.0f;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="cell"/> lies in any active Solid Fog: a square that slows movement (PHB p.281), which bars a
+    /// charge line for a mover the fog hinders (PHB p.154; MovementTerrain.Classify, through MovementTerrain.ZoneHindersMovement).
+    /// </summary>
+    public static bool IsCellInAnySolidFog(Vector2Int cell)
+    {
+        if (!AreaEffectManager.HasInstance)
+            return false;
+
+        var fogs = AreaEffectManager.Instance.GetEffectsOfType<SolidFogAreaEffect>();
+        for (int i = 0; i < fogs.Count; i++)
+        {
+            if (fogs[i] != null && fogs[i].IsCellInArea(cell))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

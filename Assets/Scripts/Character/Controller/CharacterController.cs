@@ -16026,14 +16026,14 @@ public class CharacterController : MonoBehaviour
 
         // A wall square, a wall's corner or a sphere's boundary blocks a 5-foot step as it blocks any move (GRID-013).
         Vector2Int fromCell = GridPosition;
-        if (SquareGridUtils.IsStepBlockedByBarrier(fromCell, targetCell.Coords))
+        if (SquareGridUtils.IsStepBlockedByBarrier(this, fromCell, targetCell.Coords))
         {
             Debug.Log($"[5ftStep] {Stats.CharacterName}: a wall or barrier blocks the step to ({targetCell.Coords.x},{targetCell.Coords.y})");
             return false;
         }
 
         // No 5-foot step into or out of difficult terrain (grease, webs, undergrowth): PHB p.144, p.148.
-        if (SquareGridUtils.IsDifficultTerrainForMovement(targetCell.Coords) || MovementService.OccupiesDifficultTerrain(this))
+        if (SquareGridUtils.IsDifficultTerrainForMovement(this, targetCell.Coords) || MovementService.OccupiesDifficultTerrain(this))
         {
             Debug.Log($"[5ftStep] {Stats.CharacterName}: difficult terrain allows no 5-foot step to ({targetCell.Coords.x},{targetCell.Coords.y})");
             return false;

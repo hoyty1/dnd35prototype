@@ -37,6 +37,13 @@ public class EntangleAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
+        // The plants do not grasp a creature the zone does not hinder: an incorporeal creature (not subject to physical
+        // actions that move or manipulate it, MM p.311; difficult terrain does not hamper it, PHB p.148) or one under
+        // Freedom of Movement (PHB p.233). Delegated RAW reading 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1;
+        // MovementTerrain.ZoneHindersMovement, the exemption the charge planner asks too.
+        if (!MovementTerrain.ZoneHindersMovement(character, this))
+            return;
+
         SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
         bool saved = save.Succeeded;
 
@@ -73,9 +80,10 @@ public class EntangleAreaEffect : PersistentAreaEffect
                 LogEffect($"🌿 {character.Stats.CharacterName} breaks free from the entangle!");
             }
         }
-        else
+        else if (MovementTerrain.ZoneHindersMovement(character, this))
         {
-            // Re-check entanglement for creatures still in area but not entangled
+            // Re-check entanglement for creatures still in area but not entangled (none for a creature the zone does not
+            // hinder, as on entry)
             SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
 
             if (!save.Succeeded)

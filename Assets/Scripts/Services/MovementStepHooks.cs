@@ -65,6 +65,20 @@ public sealed class GreaseStepHook : IMovementStepHook
         if (greases.Count == 0)
             return;
 
+        // A mover the grease does not hinder makes no Balance check: an incorporeal creature (PHB p.148: difficult terrain
+        // does not hamper it; it does not walk on the greased surface) or one under Freedom of Movement (PHB p.233: it moves
+        // normally despite magic that impedes movement). Delegated RAW reading 2026-10-29 under the owner interpretation of
+        // that date, docs/systems/RULES_COVERAGE.md 4.1; MovementTerrain.ZoneHindersMovement, the one exemption, which the
+        // charge planner asks too. The answer depends only on the mover and the zone's kind.
+        for (int i = 0; i < greases.Count; i++)
+        {
+            if (greases[i] == null)
+                continue;
+            if (!MovementTerrain.ZoneHindersMovement(actor, greases[i]))
+                return;
+            break;
+        }
+
         int round = GameManager.Instance != null ? GameManager.Instance.CurrentRound : 0;
 
         // Failure "means it can't move that round" (PHB p.237): every later step this round is refused.

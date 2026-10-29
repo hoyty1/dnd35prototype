@@ -399,7 +399,7 @@ public partial class GameManager
             if (result == null || !PathEntersAnySquare(npc, result.Path, targetSquares))
                 continue;
             int count = result.Path.Count;
-            int cost = SquareGridUtils.CalculatePathCost(npc.GridPosition, result.Path);
+            int cost = SquareGridUtils.CalculatePathCost(npc, npc.GridPosition, result.Path);
             float straight = Vector2.Distance(FootprintCentre(cell.Coords, npcSquares), straightPast);
             bool better = count < bestCount
                 || (count == bestCount && cost < bestCost)

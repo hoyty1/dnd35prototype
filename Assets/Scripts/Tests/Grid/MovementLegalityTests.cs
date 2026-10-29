@@ -20,7 +20,9 @@ namespace Tests.Grid
 /// - CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule;
 /// - the charge's clear path (PHB p.154; CMB-132, CMB-199): the squares every line between the starting and ending spaces
 ///   passes through (their convex hull; an edge or corner touch is not a crossing), the straight steps inside it, and which
-///   creatures a charge may pass (helpless or dead ones only; ChargeRules.LetsChargePass).
+///   creatures a charge may pass (helpless or dead ones only; ChargeRules.LetsChargePass);
+/// - the per-mover square question (MovementTerrain; owner interpretation 2026-10-29): difficult terrain slows every mover
+///   but an incorporeal one, for a plain move's path cost as for a charge line; Freedom of Movement ignores only a Web's.
 /// Play mode only: CharacterController.Init needs Awake (TST-009).
 /// </summary>
 public static class MovementLegalityTests
@@ -58,6 +60,7 @@ public static class MovementLegalityTests
             TestWithdrawServiceAgrees();
             TestChargeLineGeometry();
             TestChargePassesOnlyHelplessCreatures();
+            TestMovementTerrainExemptions();
         }
         finally
         {
@@ -356,6 +359,68 @@ public static class MovementLegalityTests
         CharacterController prone = Create("ChargeProne");
         prone.ApplyCondition(CombatConditionType.Prone, 10, "test");
         Assert(!ChargeRules.LetsChargePass(prone), "A prone creature is not helpless and stops a charge");
+    }
+
+    /// <summary>
+    /// The per-mover square question (MovementTerrain; owner interpretation 2026-10-29; PHB p.148, p.233, MM p.310-311):
+    /// a difficult-terrain square slows a fighter and costs it 2 on a path, but not an incorporeal creature; Freedom of
+    /// Movement does not lift difficult terrain that is not a Web's; the exemption predicates read the movement abilities.
+    /// </summary>
+    private static void TestMovementTerrainExemptions()
+    {
+        CharacterController fighter = Create("MT_Fighter");
+        CharacterController ghost = Create("MT_Incorporeal");
+        ghost.ConfigureIncorporeal(true);
+        CharacterController free = Create("MT_Freedom");
+        free.Stats.FreedomOfMovementActive = true;
+        CharacterController traveler = Create("MT_Travel");
+        traveler.Stats.TravelDomainFreedomRounds = 3;
+
+        Assert(!MovementTerrain.IgnoresDifficultTerrain(fighter) && MovementTerrain.IgnoresDifficultTerrain(ghost)
+               && !MovementTerrain.IgnoresDifficultTerrain(null),
+            "Only the incorporeal creature ignores difficult terrain (PHB p.148; no fly mode, GRID-027)");
+        Assert(!MovementTerrain.PassesSolidObjects(fighter) && MovementTerrain.PassesSolidObjects(ghost),
+            "Only the incorporeal creature passes solid objects (MM p.310-311)");
+        Assert(!MovementTerrain.IgnoresMagicalImpediment(fighter) && MovementTerrain.IgnoresMagicalImpediment(free)
+               && MovementTerrain.IgnoresMagicalImpediment(traveler),
+            "Freedom of Movement (the spell or ring flag, or the Travel domain power) ignores magical impediments (PHB p.233)");
+
+        GameManager gm = GameManager.Instance;
+        if (gm == null || gm.Grid == null)
+        {
+            Assert(false, "MovementTerrain: no GameManager grid to test the difficult-terrain set on");
+            return;
+        }
+
+        var cell = new Vector2Int(1, 1);
+        bool wasDifficult = gm.IsDifficultTerrain(cell);
+        try
+        {
+            gm.SetAreaDifficultTerrain(new[] { cell }, true);
+            Assert(MovementTerrain.IsDifficultTerrain(fighter, cell)
+                   && MovementTerrain.Classify(fighter, cell, out string why) == SquareHindrance.Slows && why == "difficult terrain",
+                "A difficult-terrain square slows a fighter and bars its charge line (PHB p.148, p.154)");
+            Assert(!MovementTerrain.IsDifficultTerrain(ghost, cell) && MovementTerrain.Classify(ghost, cell, out _) == SquareHindrance.None,
+                "The same square does not hamper an incorporeal creature (PHB p.148)");
+            Assert(MovementTerrain.IsDifficultTerrain(free, cell),
+                "Freedom of Movement does not lift difficult terrain that no Web makes (PHB p.233 names magic, not terrain)");
+
+            var path = new List<Vector2Int> { new Vector2Int(1, 0), cell, new Vector2Int(1, 2) };
+            int fighterCost = SquareGridUtils.CalculatePathCost(fighter, new Vector2Int(1, -1), path);
+            int ghostCost = SquareGridUtils.CalculatePathCost(ghost, new Vector2Int(1, -1), path);
+            int noMoverCost = SquareGridUtils.CalculatePathCost(new Vector2Int(1, -1), path);
+            Assert(fighterCost == 4 && noMoverCost == 4 && ghostCost == 3,
+                $"A plain move's path cost reads the same question: 4 for the fighter and for no mover, 3 for the incorporeal one ({fighterCost}, {noMoverCost}, {ghostCost})");
+        }
+        finally
+        {
+            if (!wasDifficult)
+                gm.SetAreaDifficultTerrain(new[] { cell }, false);
+        }
+
+        Assert(MovementTerrain.Classify(fighter, new Vector2Int(-1, 5), out string edge) == SquareHindrance.Blocks
+               && edge == "the edge of the battlefield",
+            "A square off the grid blocks every mover");
     }
 
     private static void TestWithdrawServiceAgrees()

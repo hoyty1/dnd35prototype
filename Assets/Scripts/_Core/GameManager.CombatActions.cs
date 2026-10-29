@@ -1142,7 +1142,7 @@ public partial class GameManager
             // The one step cost (diagonals 1-2-1, difficult terrain such as Grease 2 or 3; SquareGridUtils.StepCost, GRID-013),
             // the cost the path search trimmed the path by. The diagonal count is committed only once the step is taken.
             int nextDiagonalCount = diagonalCount;
-            int stepCost = SquareGridUtils.StepCost(previousCell, step, ref nextDiagonalCount, SquareGridUtils.IsDifficultTerrainForMovement(step));
+            int stepCost = SquareGridUtils.StepCost(previousCell, step, ref nextDiagonalCount, SquareGridUtils.IsDifficultTerrainForMovement(pc, step));
             if (movementCostConsumed + stepCost > movementBudgetSquares)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName} cannot move farther this action (difficult terrain slows movement)."));

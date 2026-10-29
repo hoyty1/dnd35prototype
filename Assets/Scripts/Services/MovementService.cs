@@ -167,8 +167,9 @@ public class MovementService : MonoBehaviour
             if (!IsValidMoveDestination(mover, cell.Coords))
                 continue;
 
-            // An intact Wall of Ice or Wall of Force square blocks movement (breached ice allows passage; GRID-013).
-            if (SquareGridUtils.IsCellBlockedByWall(cell.Coords))
+            // An intact Wall of Ice or Wall of Force square blocks movement (breached ice allows passage; GRID-013); an
+            // incorporeal mover passes the ice (MovementTerrain, owner interpretation 2026-10-29).
+            if (SquareGridUtils.IsCellBlockedByWall(mover, cell.Coords))
                 continue;
 
             reachable.Add(cell);
@@ -396,7 +397,7 @@ public class MovementService : MonoBehaviour
     /// kept for the round, so the second ask rolls nothing).
     /// </summary>
     public static bool IsStepRefused(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind)
-        => SquareGridUtils.IsStepBlockedByBarrier(from, to) || RunBeforeStepHooks(actor, from, to, kind);
+        => SquareGridUtils.IsStepBlockedByBarrier(actor, from, to) || RunBeforeStepHooks(actor, from, to, kind);
 
     /// <summary>
     /// Why <paramref name="actor"/> may take no further step of this movement (null: it may): prone (except in a crawl,
@@ -660,16 +661,15 @@ public class MovementService : MonoBehaviour
         return Mathf.Max(0, actor.Stats.MoveRange);
     }
 
-    /// <summary>Whether any square <paramref name="character"/> occupies is difficult terrain (PHB p.148).</summary>
+    /// <summary>
+    /// Whether any square <paramref name="character"/> occupies is difficult terrain for it (PHB p.148; an incorporeal
+    /// creature ignores it, MovementTerrain.OccupiesDifficultTerrainAt, owner interpretation 2026-10-29).
+    /// </summary>
     public static bool OccupiesDifficultTerrain(CharacterController character)
     {
         if (character == null)
             return false;
-        List<Vector2Int> occupied = character.GetOccupiedSquaresAt(character.GridPosition);
-        for (int i = 0; i < occupied.Count; i++)
-            if (SquareGridUtils.IsDifficultTerrainForMovement(occupied[i]))
-                return true;
-        return false;
+        return MovementTerrain.OccupiesDifficultTerrainAt(character, character.GridPosition);
     }
 
     public bool IsValidAdjacentStepDestination(CharacterController character, Vector2Int destination, bool disallowDifficultTerrain = true)
@@ -689,7 +689,7 @@ public class MovementService : MonoBehaviour
         if (!_grid.CanPlaceCreature(destination, character.GetVisualSquaresOccupied(), character))
             return false;
 
-        if (disallowDifficultTerrain && IsDifficultTerrain(destination))
+        if (disallowDifficultTerrain && SquareGridUtils.IsDifficultTerrainForMovement(character, destination))
             return false;
 
         // No 5-foot step out of difficult terrain either: a creature moves only as fast as the most difficult terrain it
@@ -698,7 +698,7 @@ public class MovementService : MonoBehaviour
             return false;
 
         // A wall square, a wall's corner or a sphere's boundary blocks the step as it blocks any move (GRID-013).
-        if (SquareGridUtils.IsStepBlockedByBarrier(character.GridPosition, destination))
+        if (SquareGridUtils.IsStepBlockedByBarrier(character, character.GridPosition, destination))
             return false;
 
         return true;

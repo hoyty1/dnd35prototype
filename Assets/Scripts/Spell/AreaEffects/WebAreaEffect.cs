@@ -57,6 +57,12 @@ public class WebAreaEffect : PersistentAreaEffect
         if (character.HasCondition(CombatConditionType.Entangled) && gameManager != null && gameManager.IsEntangledByWeb(character))
             return;
 
+        // The strands do not hold a creature the web does not hinder: an incorporeal creature (it passes solid objects and is
+        // not subject to physical actions that move or manipulate it, MM p.311) or one under Freedom of Movement (PHB p.233,
+        // Web named). Delegated RAW reading 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1; MovementTerrain.ZoneHindersMovement.
+        if (!MovementTerrain.ZoneHindersMovement(character, this))
+            return;
+
         SaveRoll save = RollSpellSave(character, SavingThrowType.Reflex, SaveDC); // SaveRollRules, D13
         bool success = save.Succeeded;
 
