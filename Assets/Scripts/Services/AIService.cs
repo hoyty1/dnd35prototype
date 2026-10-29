@@ -568,15 +568,13 @@ public class AIService : MonoBehaviour
 
         var searchMove = new MoveAttempt();
         yield return _gameManager.StartCoroutine(
-            _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchDestination, _gameManager.GetPlayerMoveSecondsPerStepForAI(), searchMove));
+            _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, searchDestination, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, searchMove)));
         if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO or area damage while moving (CMB-073)
         if (searchMove.Refused)
             yield break; // refused by the shared movement legality (logged): nothing spent
-
-        if (npc.Actions.HasMoveAction)
-            npc.Actions.UseMoveAction();
+        // The move executor spent the move action after the walk (MoveSpend.MoveAction, AI-076's quirk until step 10).
 
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} moves to search for enemies."));
         yield return new WaitForSeconds(0.35f);
@@ -750,10 +748,9 @@ public class AIService : MonoBehaviour
 
         var advanceMove = new MoveAttempt();
         yield return _gameManager.StartCoroutine(
-            _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), advanceMove));
+            _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, advanceMove)));
         if (CombatEnded() || !npc.CanTakeTurnActions() || advanceMove.Refused)
-            yield break; // a refused move (logged) spends nothing
-        npc.Actions.UseMoveAction();
+            yield break; // a refused move (logged) spends nothing; the executor spent the move after the walk
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
         yield return new WaitForSeconds(0.5f);
     }
@@ -847,7 +844,7 @@ public class AIService : MonoBehaviour
             {
                 var advanceMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), advanceMove));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, advanceMove)));
 
                 // ── Death/disable check after movement ──
                 // Creature may have been killed by area damage (Wall of Fire, etc.) during movement.
@@ -858,10 +855,8 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on
+                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
                 {
-                    npc.Actions.UseMoveAction();
-
                     // Activate terrain manipulation after moving closer
                     if (npc.HasTerrainManipulation)
                         ActivateTerrainManipulation(npc);
@@ -1080,7 +1075,7 @@ public class AIService : MonoBehaviour
 
                     var breathMove = new MoveAttempt();
                     yield return _gameManager.StartCoroutine(
-                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, bp.Position, _gameManager.GetPlayerMoveSecondsPerStepForAI(), breathMove));
+                        _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bp.Position, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, breathMove)));
 
                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                     if (!npc.CanTakeTurnActions())
@@ -1090,8 +1085,7 @@ public class AIService : MonoBehaviour
                     }
                     if (breathMove.Refused)
                         yield break; // refused by the shared movement legality (logged): not in the breath position
-
-                    npc.Actions.UseMoveAction();
+                    // The executor spent the move action after the walk.
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                         $"{npc.Stats.CharacterName} maneuvers into optimal breath weapon position!"));
                     yield return new WaitForSeconds(0.4f);
@@ -1129,11 +1123,11 @@ public class AIService : MonoBehaviour
                                 {
                                     var repositionMove = new MoveAttempt();
                                     yield return _gameManager.StartCoroutine(
-                                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), repositionMove));
+                                        _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, repositionMove)));
                                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (!npc.CanTakeTurnActions() || repositionMove.Refused)
                                         yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                                    npc.Actions.UseMoveAction();
+                                    // The executor spent the move action after the walk.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
                                     yield return new WaitForSeconds(0.3f);
@@ -1176,11 +1170,11 @@ public class AIService : MonoBehaviour
                                 {
                                     var repositionMove = new MoveAttempt();
                                     yield return _gameManager.StartCoroutine(
-                                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), repositionMove));
+                                        _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, repositionMove)));
                                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (!npc.CanTakeTurnActions() || repositionMove.Refused)
                                         yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                                    npc.Actions.UseMoveAction();
+                                    // The executor spent the move action after the walk.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
                                     yield return new WaitForSeconds(0.3f);
@@ -1214,7 +1208,7 @@ public class AIService : MonoBehaviour
             {
                 var advanceMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), advanceMove));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, advanceMove)));
 
                 if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (!npc.CanTakeTurnActions())
@@ -1223,9 +1217,8 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on
+                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
                 {
-                    npc.Actions.UseMoveAction();
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                     yield return new WaitForSeconds(0.5f);
                 }
@@ -1307,11 +1300,11 @@ public class AIService : MonoBehaviour
                 {
                     var blindMove = new MoveAttempt();
                     yield return _gameManager.StartCoroutine(
-                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), blindMove));
+                        _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, blindMove)));
                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                     if (!npc.CanTakeTurnActions() || blindMove.Refused)
                         yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                    npc.Actions.UseMoveAction();
+                    // The executor spent the move action after the walk.
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment."));
                     yield return new WaitForSeconds(0.4f);
                 }
@@ -1377,7 +1370,7 @@ public class AIService : MonoBehaviour
             {
                 var retreatMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), retreatMove));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, retreatMove)));
 
                 // ── Death/disable check after retreat movement ──
                 if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
@@ -1387,10 +1380,8 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!retreatMove.Refused) // a refused move (logged) spends nothing; the routine goes on
+                if (!retreatMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
                 {
-                    npc.Actions.UseMoveAction();
-
                     if (shouldRetreatForRisk)
                         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity."));
                     else
@@ -1699,7 +1690,7 @@ public class AIService : MonoBehaviour
             {
                 var advanceMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), advanceMove));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, advanceMove)));
 
                 // ── Death/disable check after movement ──
                 if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
@@ -1709,9 +1700,8 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on
+                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
                 {
-                    npc.Actions.UseMoveAction();
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.5f);
                 }
@@ -1780,7 +1770,7 @@ public class AIService : MonoBehaviour
         {
             var swarmMove = new MoveAttempt();
             yield return _gameManager.StartCoroutine(
-                _gameManager.MoveCharacterAlongComputedPathForAI(swarm, target.GridPosition, _gameManager.GetPlayerMoveSecondsPerStepForAI(), swarmMove));
+                _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(swarm, target.GridPosition, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, swarmMove)));
 
             // ── Death/disable check after swarm movement ──
             if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
@@ -1790,11 +1780,8 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
-            if (!swarmMove.Refused) // a refused move (logged) spends nothing
-            {
-                swarm.Actions.UseMoveAction();
+            if (!swarmMove.Refused) // a refused move (logged) spends nothing (the executor spent it)
                 yield return new WaitForSeconds(0.35f);
-            }
         }
 
         // ── Death/disable re-check before swarm attack phase ──
@@ -3244,9 +3231,12 @@ public class AIService : MonoBehaviour
                     continue;
                 target = reachable[i];
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("✋", $"{npc.Stats.CharacterName} moves to touch {target.Stats.CharacterName} with the held {held.Name}."));
+                // MoveSpend.None (batch 13 step 9): this routine's after-walk test is the incapacitation test
+                // (ThreatSystem.IsMoverIncapacitated, which also counts the Unconscious condition), not the quirk bits' one,
+                // so it keeps its own spend until step 10 pays every move first.
                 var touchMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, approach.Value, _gameManager.GetPlayerMoveSecondsPerStepForAI(), touchMove));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, approach.Value, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.None, touchMove)));
                 if (CombatEnded() || ThreatSystem.IsMoverIncapacitated(npc))
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
                 if (touchMove.Refused)

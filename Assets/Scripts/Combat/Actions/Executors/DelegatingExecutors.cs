@@ -455,11 +455,14 @@ public sealed class OverrunActionExecutor : IActionExecutor
 }
 
 /// <summary>
-/// Move and withdraw: today's AI move executors (GameManager.MoveCharacterAlongComputedPath and
-/// MoveCharacterAlongComputedPathWithdraw, through ActionCore_Move and ActionCore_Withdraw) until batch 13 step 9 makes one
-/// move executor for both sides. A move pays its move action after the walk as the AI does today (AI-076; step 10 pays it
-/// first), unless the caller pays (AiMoveRequest.CallerPays: the AI wrappers, each site paying as before); a withdraw
-/// pays its own action.
+/// Move and withdraw (status Extracted, batch 13 step 9): the one move executor of both sides,
+/// GameManager.ExecuteMoveAction, run with the context's <see cref="MoveRequest"/> (<see cref="ActionContext.CoreRequest"/>:
+/// the PC's MoveRequest.ForUi, the AI wrappers' MoveRequest.ForAI and ForAIWithdraw). With no request it builds one for
+/// the context's side: for <see cref="ActorSource.Ui"/> (the harness's Ui Step.Action) the PC's own (<see cref="UiRequestFor"/>:
+/// the click path's search, MoveRequest.ForUi, paid before the walk, the standard action converted); for an AI pick through
+/// the catalog (AiOutOfReach) the AI's: a move paid after the walk once it started (AI-076; step 10 pays it first), a
+/// withdraw that pays its own action. <see cref="CanExecute"/> asks only for a destination: the movement legality is the
+/// executor's first step, which logs its refusal as the AI cores always did (CanStart asks it for the legal set).
 /// </summary>
 public sealed class MoveActionExecutor : IActionExecutor
 {
@@ -480,34 +483,74 @@ public sealed class MoveActionExecutor : IActionExecutor
     {
         if (ctx == null)
             return Legality.Refused(LegalityBar.Other, "no context");
-        Legality start = CanStart(ctx.Actor);
-        if (!start.Ok)
-            return start;
-        return ctx.Cell.HasValue ? Legality.Allowed() : Legality.Refused(LegalityBar.Terrain, "no destination");
+        if (ctx.Actor == null || ctx.Actor.Stats == null)
+            return Legality.Refused(LegalityBar.Target, "no actor");
+        var req = ctx.CoreRequest as MoveRequest;
+        bool hasWhere = ctx.Cell.HasValue || (req != null && (req.Destination.HasValue || (req.Path != null && req.Path.Count > 0)));
+        return hasWhere ? Legality.Allowed() : Legality.Refused(LegalityBar.Terrain, "no destination");
+    }
+
+    /// <summary>The request the catalog's own AI pick runs (no MoveRequest on the context): a move spent after the walk
+    /// once it started, whatever became of the mover, as this executor paid it before step 9; or the AI withdraw.</summary>
+    internal static MoveRequest DefaultAiRequest(bool withdraw, CharacterController mover, Vector2Int destination, float secondsPerStep)
+        => withdraw
+            ? MoveRequest.ForAIWithdraw(mover, destination, secondsPerStep)
+            : MoveRequest.ForAI(mover, destination, secondsPerStep, MoveSpend.MoveAction).SpendingEvenIfDropped().SpendingOnlyIfStarted();
+
+    /// <summary>
+    /// The request a PC's catalog move with no MoveRequest runs (a Ui context: the harness's Step.Action), the PC's own
+    /// rule as its click builds it (GameManager.HandleMovementClick): the path the click would find (the move or withdraw
+    /// budget, threats avoided, through allies, a withdraw's start square exempt, PHB p.143), MoveRequest.ForUi on it. No
+    /// path (none, or no budget): an empty path, so the executor's legality still logs its refusal and nothing is spent.
+    /// </summary>
+    internal static MoveRequest UiRequestFor(GameManager gm, bool withdraw, CharacterController actor, Vector2Int destination)
+    {
+        var path = new List<Vector2Int>();
+        List<AoOThreatInfo> provoked = null;
+        if (gm != null && actor != null && actor.Stats != null && destination != actor.GridPosition)
+        {
+            int budget = withdraw ? gm.GetWithdrawMoveRangeSquares(actor) : gm.GetCurrentMoveRangeSquares(actor);
+            if (budget > 0)
+            {
+                AoOPathResult found = gm.FindPath(actor, destination, avoidThreats: true, maxRangeOverride: budget,
+                    allowThroughAllies: true, allowThroughEnemies: false, suppressFirstSquareAoO: withdraw);
+                if (found != null && found.Path != null && found.Path.Count > 0)
+                {
+                    path = new List<Vector2Int>(found.Path);
+                    provoked = found.ProvokedAoOs;
+                }
+            }
+        }
+        return MoveRequest.ForUi(actor, path, provoked, withdraw, gm != null ? gm.GetPlayerMoveSecondsPerStepForAI() : 0.08f);
     }
 
     public IEnumerator Execute(ActionContext ctx, ActionOutcome o)
     {
         GameManager gm = ExecutorUtil.Gm;
-        if (gm == null || !ctx.Cell.HasValue)
+        var req = ctx.CoreRequest as MoveRequest;
+        if (gm == null || (req == null && !ctx.Cell.HasValue))
         {
             o.Refuse(Legality.Refused(LegalityBar.Terrain, "no destination"));
             yield break;
         }
 
-        CharacterController mover = ctx.Actor;
-        var aiMove = ctx.CoreRequest as AiMoveRequest;
-        MoveAttempt attempt = aiMove != null && aiMove.Attempt != null ? aiMove.Attempt : new MoveAttempt();
-        float seconds = aiMove != null ? aiMove.SecondsPerStep : gm.GetPlayerMoveSecondsPerStepForAI();
-        if (_withdraw)
-            yield return gm.ActionCore_Withdraw(mover, ctx.Cell.Value, seconds, attempt);
-        else
-            yield return gm.ActionCore_Move(mover, ctx.Cell.Value, seconds, attempt);
+        // The context's side picks only the rule's builder: a Ui context with no request gets the PC's own request (the
+        // PC/NPC parity rule; the harness's Ui Step.Action), never the AI's after-walk spend.
+        if (req == null)
+            req = ctx.Source == ActorSource.Ui
+                ? UiRequestFor(gm, _withdraw, ctx.Actor, ctx.Cell.Value)
+                : DefaultAiRequest(_withdraw, ctx.Actor, ctx.Cell.Value, gm.GetPlayerMoveSecondsPerStepForAI());
+        if (req.Mover == null)
+            req.Mover = ctx.Actor;
+        yield return gm.ExecuteMoveAction(req);
+        MoveAttempt attempt = req.Attempt;
 
         o.CoreOutcome = attempt;
+        if (attempt.Incapacitated)
+            o.ActorDown = true;
         if (attempt.Refused)
         {
-            // The move core logs its refusal.
+            // The executor logs its refusal.
             o.Refuse(Legality.Refused(LegalityBar.Other, attempt.Reason));
             o.RefusalLogged = true;
             yield break;
@@ -517,11 +560,7 @@ public sealed class MoveActionExecutor : IActionExecutor
             o.Refuse(Legality.Refused(LegalityBar.Terrain, _withdraw ? "the withdrawal did not start" : "the move did not start"));
             yield break;
         }
-        // The move action after the walk, as every AI move site pays it today (AI-076); a caller that pays itself (the AI
-        // wrappers' AiMoveRequest.CallerPays) pays as before.
-        if (!_withdraw && (aiMove == null || !aiMove.CallerPays) && mover.Actions.HasMoveAction)
-            mover.Actions.UseMoveAction();
-        o.Performed = attempt.Started;
+        o.Performed = true;
     }
 }
 

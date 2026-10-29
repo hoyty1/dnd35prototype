@@ -283,7 +283,7 @@ End Turn is refused while a flight option is legal. A PC with no flight option a
 - `LegalityRisk` is unchanged, and so is `ActorSource {Ui, AI}` (C7).
 - `AttackLegalityChecks.Charm = 16` joins `All` in step 20.
 
-**Moves.** `MoveRequest` (built by `ForUi` or `ForAI`) and `GameManager.ExecuteMoveAction(MoveRequest, MoveAttempt)` are one executor for both sides. Its AI quirk bits live only from step 9 to step 10.
+**Moves.** `MoveRequest` (built by `ForUi` or `ForAI`) and `GameManager.ExecuteMoveAction(MoveRequest)` (since step 9; the attempt is `MoveRequest.Attempt`) are one executor for both sides. Its AI quirk bits live only from step 9 to step 10.
 
 **Knowledge** (`Assets/Scripts/AI/Knowledge/`):
 - **`FactKey`:** Species, CreatureType, Subtype, Size, ArmorCategory, ShieldCarried, WieldsMelee, WieldsRanged, WieldsReach, WoundBand, HpState, Condition, Caster, Mindless.
@@ -666,7 +666,7 @@ First re-grep these signatures; since 3bbf47d they take the mover:
    - `MoveSpend {MoveAction, None, ExecutorOwned}`. `ExecutorOwned` is the withdraw's own spend; `None` is a caller that pays otherwise, such as the flee run or a forced move.
    - `[Flags] MoveQuirk {None, AiSpendsAfterWalk = 1, AiSpendsWithoutPath = 2, AiSegmentLoop = 4}`. `ForAI` sets all three; `ForUi` sets none.
    - `AllowConvertStandard` is set by `ForUi`, and by the compulsion controllers, which convert a standard action today.
-2. **`GameManager.ExecuteMoveAction(MoveRequest, MoveAttempt)`** (partial `GameManager.MoveAction.cs`) runs, in order:
+2. **`GameManager.ExecuteMoveAction(MoveRequest, MoveAttempt)`** (partial `GameManager.MoveAction.cs`; built as `ExecuteMoveAction(MoveRequest)`, the attempt on the request) runs, in order:
    1. `CanStartMovement`;
    2. the spend, before the walk unless `AiSpendsAfterWalk`;
    3. the walk: the PC per-step loop, or `ExecutePathWithMovementAoOs` under `AiSegmentLoop`;
@@ -695,11 +695,19 @@ Every hash unchanged.
 
 IDs: AI-076; D3. Behaviour change; *broad* (every AI move).
 
-1. **The flip.** Delete `AiSpendsAfterWalk` and `AiSpendsWithoutPath`. Both sides pay before the first step.
+**Step 9 result (2026-10-29; read it before the flip).** What step 9 built differs from its plan text:
+- `MoveQuirk` has five bits, not three: `AiSpendsAfterWalk`, `AiSpendsWithoutPath`, `AiSegmentLoop`, plus `AiNoSpendIfDropped` (no after-walk spend when `CanTakeTurnActions` is false) and `AiNoSpendIfCombatOver`; `AiDefault` is all five. `MoveRequest` has four modifiers: `ConvertingStandard()`, `SpendingEvenIfDropped()`, `SpendingAfterCombatEnd()` and `SpendingOnlyIfStarted()`. The flip deletes the four spend bits (`AiSpendsAfterWalk`, `AiSpendsWithoutPath`, `AiNoSpendIfDropped`, `AiNoSpendIfCombatOver`), `ShouldSpendAfterWalk` and the three spend modifiers; `ConvertingStandard()` stays (`AllowConvertStandard`).
+- `ExecuteMoveAction(MoveRequest)` takes the request only; its one attempt record is `MoveRequest.Attempt` (made when null). `MoveActionExecutor` builds the PC's request (`UiRequestFor`, `MoveRequest.ForUi`) for a Ui context with no request, and `DefaultAiRequest` for an AI one.
+- There are 24 move calls, not 20 spend sites: 11 in `AIService`, 3 in `GameManager.NPCTurns` (`SpendingAfterCombatEnd`), the charmed (3, `CharmedMove`) and confused (2, `ConfusedMove`) moves, the frightened flee (`ConvertingStandard`) and run, the suggested move (`ConvertingStandard().SpendingEvenIfDropped()`), and AiOutOfReach's catalog pick (`DefaultAiRequest`). `MovementLegalityTests.TestMoveSiteClassification` pins the classification.
+- Two sites pass `MoveSpend.None` and still pay after the walk themselves; both move to pay-first in the flip: the held charge's touch move (`AIService.TryDeliverHeldChargeTurn`, its own `UseMoveAction` after an `IsMoverIncapacitated` test) and the harness's typed Move step (`ScenarioSteps.cs`, `StepKind.Move` on the AI path: the caller-pays overload `MoveCharacterAlongComputedPathForAI(mover, destination, secondsPerStep, attempt)`, `MoveSpend.None`, then its own spend; the overload goes with it). The frightened run's `MoveSpend.None` stays: it pays its full-round action, not a move action.
+- The tests that pin the quirk bits, to rewrite in the flip: `ActionCatalogTests.TestMoveEntries` (`DefaultAiRequest`'s quirks are `AiSpendsAfterWalk | AiSegmentLoop`), `MovementLegalityTests.TestMoveRequestBuilders`, `TestAfterWalkSpendRule`, `TestExecuteMoveActionSpends` and `TestMoveSiteClassification`.
+- The walkers: step 9 found no rules difference between the per-step walk and `ExecutePathWithMovementAoOs`, only presentation that the hashes pin (trace types `path-reposition` and `path-move`, AoO waits of 1.0 s and 0.5 s, log-line order; `docs/architecture/combat-and-grid.md`, "The two walkers"). Folding them moves every AI movement hash, so this step keeps `AiSegmentLoop` (item 3), and the fold is a later named step.
+
+1. **The flip.** Delete the four spend bits (Step 9 result). Both sides pay before the first step.
    - No path, or a `CanStartMovement` refusal, sets `MoveAttempt.Refused` and spends nothing.
    - A walk stopped midway stays spent.
-2. **The callers.** Each of the 20 sites' `Refused` branch goes on to its next choice, with no "moves toward" log and no spend.
-3. **`AiSegmentLoop`** stays, unless step 9 found no rules difference; then delete it too and say so in the body.
+2. **The callers.** Each of the 24 move calls' `Refused` branch goes on to its next choice, with no "moves toward" log and no spend; the two self-paying `MoveSpend.None` sites (Step 9 result) pass `MoveSpend.MoveAction` and drop their own spend.
+3. **`AiSegmentLoop`** stays. Step 9 found no rules difference, only presentation that the hashes pin; folding the walkers would move every AI movement hash, which this step's budget does not cover, so it is left to a later named step (say so in the body).
 4. **Docs.** Record D3; delete AI-076.
 
 Tests:
@@ -708,7 +716,7 @@ Tests:
   - `rules/ai-move-spent-when-aoo-stops-it-ai`.
 - MovementLegalityTests: a pathless AI move spends nothing.
 
-TEST BUDGET: the new scenarios, MovementLegalityTests, `rules/movement-*`, `rules/ai-*`, `rules/restricted-withdraw-*`, `rules/frightened-*`, `rules/panicked-*`, `rules/charge-*`, `rules/nauseated-move-*` (seeds 1-3); `smoke/*` seeds 1-3.
+TEST BUDGET: the new scenarios, MovementLegalityTests, ActionCatalogTests, `rules/movement-*`, `rules/ai-*`, `rules/restricted-withdraw-*`, `rules/frightened-*`, `rules/panicked-*`, `rules/charge-*`, `rules/nauseated-move-*` (seeds 1-3); `smoke/*` seeds 1-3.
 
 ### 11. Midpoint full regression (`regression-midpoint`)
 

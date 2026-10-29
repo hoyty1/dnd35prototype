@@ -4,7 +4,8 @@ using UnityEngine;
 /// <summary>
 /// One request to take a catalog action (batch 13 step 3): who acts, whose choices these are, and what it is aimed at.
 /// <see cref="CoreRequest"/> carries the request of the core a Delegating executor wraps when the caller built it
-/// (AttackSequenceRequest, SpellCastRequest, ManeuverRequest, ChargeRequest, OverrunActionRequest); without one the
+/// (AttackSequenceRequest, SpellCastRequest, ManeuverRequest, ChargeRequest, OverrunActionRequest; an Extracted move or
+/// withdraw's MoveRequest); without one the
 /// executor builds the core's request from this context and <see cref="Source"/>.
 /// </summary>
 public sealed class ActionContext
@@ -102,18 +103,6 @@ public sealed class ActionOutcome
 
     public override string ToString()
         => Performed ? $"performed({Spent})" : (Cancelled ? "cancelled" : Refusal.ToString());
-}
-
-/// <summary>
-/// The AI move request of the move and withdraw entries (batch 13 step 6): the walk's pace, the core's MoveAttempt the
-/// caller reads, and whether the caller pays the move action itself (every AI move site pays after the walk as it does
-/// today, AI-076, so its routing through the catalog changes nothing; batch 13 steps 9-10 make one payment rule).
-/// </summary>
-public sealed class AiMoveRequest
-{
-    public float SecondsPerStep;
-    public MoveAttempt Attempt;
-    public bool CallerPays;
 }
 
 /// <summary>

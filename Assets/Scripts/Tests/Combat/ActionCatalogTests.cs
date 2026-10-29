@@ -17,6 +17,9 @@ namespace Tests.Combat
 /// - ActionCosts.From maps every CastActionCost; ActionCosts.CanAfford and SpentBetween on an action economy;
 /// - Legality's bar (Refused(string) is Other; no reason text changes) and the ActionLegality adapters;
 /// - ActionDeciders.For by source;
+/// - the move and withdraw entries (batch 13 step 9): Extracted over the one move executor (GameManager.ExecuteMoveAction,
+///   whose file the source scan covers), the PC's tail as their UiAfter (ShowChoices), a pre-check that asks only for a
+///   destination, and the AI request the executor builds when the caller gave none;
 /// - a source scan: the executor files (Combat/Actions/Executors) never continue the UI (ShowActionChoices,
 ///   AfterAttackDelay, EndActivePCTurn, DelayedEndActivePCTurn) nor read IsControllable, ActivePC or IsPlayerTurn, and
 ///   ActionDeciders.cs is the only catalog file that reads IsControllable (its assertion count grows with the files);
@@ -35,7 +38,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-6) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-9) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -50,6 +53,7 @@ public static class ActionCatalogTests
         Run(TestLookups);
         Run(TestExecutorSourceScan);
         Run(TestInlineAction);
+        Run(TestMoveEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -81,6 +85,46 @@ public static class ActionCatalogTests
             yielded.Count.ToString());
         Assert(string.Join(",", log) == "runner,executor,core,core-end,executor-end,runner-end",
             "InlineAction runs the runner, the executor and the core in order (the nested enumerator is the caller's)", string.Join(",", log));
+    }
+
+    /// <summary>
+    /// The move and withdraw entries (batch 13 step 9): both run the one move executor, status Extracted; their UiAfter is
+    /// the PC's tail (the action panel; the runner ends the turn of a PC dropped on the way); CanExecute asks only for a
+    /// destination (the movement legality is the executor's first step, which logs its refusal); CanStart asks the shared
+    /// movement legality for the legal set; a catalog AI pick with no MoveRequest (AiOutOfReach) gets the AI request that
+    /// pays the move after the walk once it started, whatever became of the mover, as the executor paid it before; and a
+    /// Ui context with no MoveRequest (the harness's Ui Step.Action) gets the PC's own (MoveRequest.ForUi, no quirk bit).
+    /// </summary>
+    private static void TestMoveEntries()
+    {
+        ActionDefinition move = ActionCatalog.Get(ActionIds.Move);
+        ActionDefinition withdraw = ActionCatalog.Get(ActionIds.Withdraw);
+        Assert(move != null && move.Status == ImplStatus.Extracted && move.Executor is MoveActionExecutor && move.UiAfter == ActionUiAfter.ShowChoices,
+            "The move entry is Extracted over MoveActionExecutor, with the PC's tail (ShowChoices)", move != null ? move.Status + "/" + move.UiAfter : "null");
+        Assert(withdraw != null && withdraw.Status == ImplStatus.Extracted && withdraw.Executor is MoveActionExecutor && withdraw.UiAfter == ActionUiAfter.ShowChoices,
+            "The withdraw entry is Extracted over MoveActionExecutor, with the PC's tail (ShowChoices)", withdraw != null ? withdraw.Status + "/" + withdraw.UiAfter : "null");
+
+        if (move != null && move.Executor != null)
+        {
+            var noWhere = new ActionContext { Definition = move };
+            Assert(!move.Executor.CanExecute(noWhere).Ok, "The move pre-check refuses a context with no actor and no destination");
+        }
+
+        MoveRequest ai = MoveActionExecutor.DefaultAiRequest(false, null, new Vector2Int(3, 4), 0.1f);
+        Assert(ai.Spend == MoveSpend.MoveAction && ai.Quirks == (MoveQuirk.AiSpendsAfterWalk | MoveQuirk.AiSegmentLoop) && !ai.AllowConvertStandard
+               && ai.Destination == new Vector2Int(3, 4) && ai.Path == null,
+            "A catalog AI move with no request pays its move after the walk once it started (AiSpendsAfterWalk, AiSegmentLoop)", ai.Quirks.ToString());
+        MoveRequest aiWithdraw = MoveActionExecutor.DefaultAiRequest(true, null, new Vector2Int(3, 4), 0.1f);
+        Assert(aiWithdraw.Spend == MoveSpend.ExecutorOwned && aiWithdraw.IsWithdraw && aiWithdraw.Label == "AoO (Withdraw)",
+            "A catalog AI withdraw pays its own action (ExecutorOwned)", aiWithdraw.Spend.ToString());
+
+        // A Ui context with no request (the harness's Ui Step.Action) gets the PC's own rule, never the AI's after-walk spend.
+        MoveRequest ui = MoveActionExecutor.UiRequestFor(null, false, null, new Vector2Int(3, 4));
+        Assert(ui.Quirks == MoveQuirk.None && ui.Spend == MoveSpend.MoveAction && ui.AllowConvertStandard && ui.PcRefusalText && ui.Path != null,
+            "A Ui catalog move with no request runs MoveRequest.ForUi: paid before the walk, the standard action converted, no quirk bit", ui.Quirks.ToString());
+        MoveRequest uiWithdraw = MoveActionExecutor.UiRequestFor(null, true, null, new Vector2Int(3, 4));
+        Assert(uiWithdraw.Quirks == MoveQuirk.None && uiWithdraw.Spend == MoveSpend.ExecutorOwned && uiWithdraw.IsWithdraw,
+            "A Ui catalog withdraw with no request runs MoveRequest.ForUi's withdraw (its own action, no quirk bit)", uiWithdraw.Quirks.ToString());
     }
 
     private static void Run(Action test)
@@ -194,8 +238,8 @@ public static class ActionCatalogTests
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Delegating, "AI-076" },
-        new object[] { ActionIds.Withdraw, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Delegating, "" },
+        new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Extracted, "AI-076" },
+        new object[] { ActionIds.Withdraw, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.FiveFootStep, ActionCostType.NotAnAction, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Run, ActionCostType.FullRound, ProvokeRule.Yes, ImplStatus.Missing, "CMB-202" },
         new object[] { ActionIds.Crawl, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.PcOnly, "AI-054" },

@@ -281,11 +281,11 @@ public static class ActionCatalog
 
         // ── Movement and posture ──
         l.Add(Def(ActionIds.Move, "Move", Mv, ActionCostType.Move, ProvokeRule.ByMovement, ActionTargetKind.Cell, ActionRoles.Approach | ActionRoles.Retreat,
-                "PHB p.143-144, p.137, Table 8-2 and note 1", ImplStatus.Delegating, "AI-076")
+                "PHB p.143-144, p.137, Table 8-2 and note 1", ImplStatus.Extracted, "AI-076")
             .Run(new MoveActionExecutor(false), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.Withdraw, "Withdraw", Mv, ActionCostType.FullRound, ProvokeRule.ByMovement, ActionTargetKind.Cell, ActionRoles.Retreat | ActionRoles.Escape,
-                "PHB p.143-144 (the first square provokes from no seen foe), Table 8-2 (No) and note 5", ImplStatus.Delegating)
-            .Run(new MoveActionExecutor(true), ActionUiAfter.AttackDelay, 0.6f)
+                "PHB p.143-144 (the first square provokes from no seen foe), Table 8-2 (No) and note 5", ImplStatus.Extracted)
+            .Run(new MoveActionExecutor(true), ActionUiAfter.ShowChoices)
             .Costs(SingleActionStandard));
         l.Add(Def(ActionIds.FiveFootStep, "5-Foot Step", Mv, ActionCostType.NotAnAction, ProvokeRule.No, ActionTargetKind.Cell, ActionRoles.Approach | ActionRoles.Retreat,
                 "PHB p.144, Table 8-2 (no action)", ImplStatus.Delegating)

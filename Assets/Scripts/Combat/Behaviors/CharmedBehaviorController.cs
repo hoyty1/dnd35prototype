@@ -85,8 +85,7 @@ public sealed class CharmedBehaviorController
                 {
                     // Wait for the move: it can provoke AoOs that drop the actor (CMB-073).
                     var healMove = new MoveAttempt();
-                    yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, adjacentCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), healMove));
-                    if (!healMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
+                    yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(CharmedMove(gameManager, actor, adjacentCell, healMove)));
                     if (!actor.CanTakeTurnActions())
                         yield break;
                     yield return new WaitForSeconds(0.35f);
@@ -110,8 +109,7 @@ public sealed class CharmedBehaviorController
                 && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int consumableCell))
             {
                 var consumableMove = new MoveAttempt();
-                yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, consumableCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), consumableMove));
-                if (!consumableMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
+                yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(CharmedMove(gameManager, actor, consumableCell, consumableMove)));
                 if (!actor.CanTakeTurnActions())
                     yield break;
             }
@@ -135,8 +133,7 @@ public sealed class CharmedBehaviorController
             && TryFindCellTowardTarget(gameManager, actor, hostileToCaster, out Vector2Int approachCell))
         {
             var approachMove = new MoveAttempt();
-            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approachCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), approachMove));
-            if (!approachMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
+            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(CharmedMove(gameManager, actor, approachCell, approachMove)));
             if (!actor.CanTakeTurnActions())
                 yield break;
             yield return new WaitForSeconds(0.35f);
@@ -448,14 +445,13 @@ public sealed class CharmedBehaviorController
         return actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove;
     }
 
-    private static void ConsumeMoveAction(CharacterController actor)
-    {
-        if (actor == null || actor.Actions == null)
-            return;
-
-        if (actor.Actions.HasMoveAction)
-            actor.Actions.UseMoveAction();
-        else if (actor.Actions.CanConvertStandardToMove)
-            actor.Actions.ConvertStandardToMove();
-    }
+    /// <summary>
+    /// A charmed creature's move (batch 13 step 9): the move executor spends the move action after the walk, or converts
+    /// the standard action, whenever the move was not refused, whatever became of the mover (as this controller paid it;
+    /// AI-076's quirk until step 10). A refused move (logged) spends nothing.
+    /// </summary>
+    private static MoveRequest CharmedMove(GameManager gameManager, CharacterController actor, Vector2Int destination, MoveAttempt attempt)
+        => MoveRequest.ForAI(actor, destination, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, attempt)
+            .ConvertingStandard()
+            .SpendingEvenIfDropped();
 }

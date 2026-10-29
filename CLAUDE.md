@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 70 files in 8 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 71 files in 8 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); area handlers sit in an area registry in the same file (`BuildAreaHandlers`, the generic loop as fallback); unclaimed single-target spells fall to `ApplySpellBuff`.

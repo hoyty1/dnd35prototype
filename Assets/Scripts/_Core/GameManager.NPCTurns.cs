@@ -111,7 +111,10 @@ public partial class GameManager
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 var retreatMove = new MoveAttempt();
-                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(summon, retreat.Coords, PlayerMoveSecondsPerStep, retreatMove));
+                // The executor spends the move after the walk unless the summon was dropped (the summon routine pays after a
+                // combat end too: SpendingAfterCombatEnd; AI-076's quirk until batch 13 step 10).
+                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
+                    MoveRequest.ForAI(summon, retreat.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, retreatMove).SpendingAfterCombatEnd()));
 
                 // ── Death/disable check after retreat movement ──
                 if (!summon.CanTakeTurnActions())
@@ -122,8 +125,6 @@ public partial class GameManager
 
                 if (!retreatMove.Refused) // a refused move (logged) spends nothing
                 {
-                    if (summon.Actions.HasMoveAction)
-                        summon.Actions.UseMoveAction();
                     CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
                     yield return new WaitForSeconds(0.45f);
                 }
@@ -136,7 +137,8 @@ public partial class GameManager
             if (bestCell != null)
             {
                 var advanceMove = new MoveAttempt();
-                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(summon, bestCell.Coords, PlayerMoveSecondsPerStep, advanceMove));
+                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
+                    MoveRequest.ForAI(summon, bestCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, advanceMove).SpendingAfterCombatEnd()));
 
                 // ── Death/disable check after advance movement ──
                 if (!summon.CanTakeTurnActions())
@@ -145,9 +147,8 @@ public partial class GameManager
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing
+                if (!advanceMove.Refused) // a refused move (logged) spends nothing (the executor spent it)
                 {
-                    summon.Actions.UseMoveAction();
                     CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.4f);
                 }
@@ -1260,14 +1261,12 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
         var searchMove = new MoveAttempt();
-        yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(npc, searchCell.Coords, PlayerMoveSecondsPerStep, searchMove));
+        yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
+            MoveRequest.ForAI(npc, searchCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, searchMove).SpendingAfterCombatEnd()));
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO while moving (CMB-073)
         if (searchMove.Refused)
-            yield break; // refused (logged): nothing spent
-
-        if (npc.Actions.HasMoveAction)
-            npc.Actions.UseMoveAction();
+            yield break; // refused (logged): nothing spent; the executor spent the move after the walk
 
         bool canSeeAfterMove = npc.CanSee(target, npc.IsEquippedWeaponRanged());
         CombatUI?.ShowCombatLog(canSeeAfterMove

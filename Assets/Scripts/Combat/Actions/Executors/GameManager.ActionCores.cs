@@ -73,14 +73,6 @@ public partial class GameManager
         Func<CharacterController, CharacterController, bool> tryStepManeuver, int maxSteps)
         => NPCPerformAttack(npc, target, tryStepManeuver, maxSteps);
 
-    /// <summary>One move action's walk (MoveCharacterAlongComputedPath: the shared movement legality, the AoOs); pays nothing.</summary>
-    internal IEnumerator ActionCore_Move(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
-        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep, attempt);
-
-    /// <summary>The withdraw (MoveCharacterAlongComputedPathWithdraw), which pays its own action.</summary>
-    internal IEnumerator ActionCore_Withdraw(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
-        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep, attempt);
-
     /// <summary>The shared 5-foot step (ExecuteFiveFootStep, no UI follow-up). False when the square is off the grid or the step failed (logged).</summary>
     internal bool ActionCore_FiveFootStep(CharacterController actor, Vector2Int destination)
     {

@@ -48,6 +48,15 @@ public partial class GameManager
             yield break;
         }
 
+        // A move or withdraw walks over many frames: the PC is busy until the entry's tail returns the action panel, as
+        // the click path's ExecuteMovement marks it (batch 13 step 9 review; the harness's Ui Step.Action move waits on it).
+        if (ctx.Definition.Executor is MoveActionExecutor)
+        {
+            CurrentSubPhase = PlayerSubPhase.Animating;
+            if (_pathPreview != null) _pathPreview.HidePath();
+            if (_hoverMarker != null) _hoverMarker.Hide();
+        }
+
         ctx.Decider = ActionDeciders.For(actor, ActorSource.Ui);
         ActionCosts.Snapshot before = ActionCosts.Take(actor);
         yield return ctx.Definition.Executor.Execute(ctx, o);
@@ -301,6 +310,18 @@ public partial class GameManager
     /// </summary>
     internal IEnumerator RunAIActionInline(ActionContext ctx, ActionOutcome o)
         => InlineAction(RunAIAction(ctx, o ?? new ActionOutcome()), 2);
+
+    /// <summary>
+    /// <see cref="RunPlayerAction"/> for a PC coroutine that yields it in place of the core it used to run (batch 13 step 9,
+    /// the PC's move and withdraw, a pure move): the runner's and the executor's enumerators are inlined as in
+    /// <see cref="RunAIActionInline"/>, so the core's own yields are the caller's and no frame is added.
+    /// </summary>
+    internal IEnumerator RunPlayerActionInline(ActionContext ctx, ActionOutcome o)
+    {
+        if (ctx != null)
+            ctx.Source = ActorSource.Ui;
+        return InlineAction(RunPlayerActionRoutine(ctx, o ?? new ActionOutcome()), 2);
+    }
 
     /// <summary>
     /// Runs <see cref="RunAIAction"/> to its end at once, for a synchronous AI call site (a cast through RunCastSync, a

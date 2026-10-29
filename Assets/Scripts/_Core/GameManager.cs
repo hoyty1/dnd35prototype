@@ -11215,31 +11215,46 @@ public partial class GameManager : MonoBehaviour
         => NPCExecuteCharge(npc, target, bullRush);
 
     /// <summary>
-    /// An NPC, summon or compulsion move (one move action's budget). Refused by the shared movement legality
-    /// (MovementService.CanStartMovement: prone, grappling, a 5-foot step taken, no move action) with a log;
-    /// <paramref name="attempt"/>, when given, says whether it started and why not.
+    /// An NPC, summon or compulsion move (one move action's budget) that the caller pays for itself
+    /// (<see cref="MoveSpend.None"/>: the frightened run, the held charge's touch move, the harness's typed move). Refused by
+    /// the shared movement legality (MovementService.CanStartMovement: prone, grappling, a 5-foot step taken, no move
+    /// action) with a log; <paramref name="attempt"/>, when given, says whether it started and why not.
     /// </summary>
     public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-        => RunAIActionInline(AiMoveContext(ActionIds.Move, mover, destination, secondsPerStep, attempt), new ActionOutcome());
+        => MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(mover, destination, secondsPerStep, MoveSpend.None, attempt));
 
     /// <summary>
-    /// The catalog context of an AI move or withdraw (batch 13 step 6): the caller's pace and MoveAttempt, and the caller
-    /// pays a move as every AI move site does today (AI-076), so the routing changes nothing.
+    /// An NPC, summon or compulsion move through the one move executor (ExecuteMoveAction, batch 13 step 9) with the
+    /// caller's <see cref="MoveRequest"/> (MoveRequest.ForAI: who pays, and the AI quirk bits); its Attempt says whether it
+    /// started and why not.
     /// </summary>
-    private static ActionContext AiMoveContext(string id, CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
+    public IEnumerator MoveCharacterAlongComputedPathForAI(MoveRequest request)
+        => RunAIActionInline(AiMoveContext(ActionIds.Move, request), new ActionOutcome());
+
+    /// <summary>
+    /// The catalog context of an AI move or withdraw (batch 13 steps 6 and 9): the move entry with the caller's request,
+    /// whose attempt the caller reads.
+    /// </summary>
+    private static ActionContext AiMoveContext(string id, MoveRequest request)
     {
-        ActionContext ctx = ActionContext.For(id, mover, ActorSource.AI);
-        ctx.Cell = destination;
-        ctx.CoreRequest = new AiMoveRequest { SecondsPerStep = secondsPerStep, Attempt = attempt ?? new MoveAttempt(), CallerPays = true };
+        ActionContext ctx = ActionContext.For(id, request != null ? request.Mover : null, ActorSource.AI);
+        if (request != null)
+        {
+            if (request.Attempt == null)
+                request.Attempt = new MoveAttempt();
+            ctx.Cell = request.Destination;
+        }
+        ctx.CoreRequest = request;
         return ctx;
     }
 
     /// <summary>
     /// An NPC or compulsion withdraw: the full-round withdraw, or a Restricted Withdraw (a standard action at speed) for a
-    /// creature limited to a single action (PHB p.143-144). Refused by the shared movement legality with a log.
+    /// creature limited to a single action (PHB p.143-144), paid by the executor. Refused by the shared movement legality
+    /// with a log.
     /// </summary>
     public IEnumerator ExecuteWithdrawMovementForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-        => RunAIActionInline(AiMoveContext(ActionIds.Withdraw, mover, destination, secondsPerStep, attempt), new ActionOutcome());
+        => RunAIActionInline(AiMoveContext(ActionIds.Withdraw, MoveRequest.ForAIWithdraw(mover, destination, secondsPerStep, attempt)), new ActionOutcome());
 
     public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
         => TryNPCSpecialAttackIfBeneficial(npc, target);

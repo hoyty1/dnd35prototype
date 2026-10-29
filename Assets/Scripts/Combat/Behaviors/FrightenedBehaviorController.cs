@@ -210,7 +210,8 @@ public sealed class FrightenedBehaviorController
                 result.Outcome = FlightOutcome.Fled;
                 var runAttempt = new MoveAttempt();
                 yield return gameManager.StartCoroutine(
-                    gameManager.MoveCharacterAlongComputedPathForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), runAttempt));
+                    gameManager.MoveCharacterAlongComputedPathForAI(
+                        MoveRequest.ForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.None, runAttempt)));
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
 
@@ -233,7 +234,9 @@ public sealed class FrightenedBehaviorController
                 result.Outcome = FlightOutcome.Fled;
                 var fleeAttempt = new MoveAttempt();
                 yield return gameManager.StartCoroutine(
-                    gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), fleeAttempt));
+                    gameManager.MoveCharacterAlongComputedPathForAI(
+                        MoveRequest.ForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, fleeAttempt)
+                            .ConvertingStandard()));
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
 
@@ -243,7 +246,8 @@ public sealed class FrightenedBehaviorController
                     yield break;
                 }
 
-                ConsumeMoveAction(actor);
+                // The executor spent the move action (or converted the standard action) after the walk, unless the mover
+                // was dropped or the combat ended (AI-076's quirk until batch 13 step 10).
                 gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{actorName} runs from {sourceName} in terror!{logSuffix}"));
                 yield return new WaitForSeconds(0.35f);
                 yield break;
@@ -336,14 +340,4 @@ public sealed class FrightenedBehaviorController
         return actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove;
     }
 
-    private static void ConsumeMoveAction(CharacterController actor)
-    {
-        if (actor == null || actor.Actions == null)
-            return;
-
-        if (actor.Actions.HasMoveAction)
-            actor.Actions.UseMoveAction();
-        else if (actor.Actions.CanConvertStandardToMove)
-            actor.Actions.ConvertStandardToMove();
-    }
 }

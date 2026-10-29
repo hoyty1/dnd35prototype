@@ -28,14 +28,17 @@ public enum MoveKind
 }
 
 /// <summary>
-/// What a movement executor did with a movement request (GameManager.MoveCharacterAlongComputedPath[Withdraw]): refused
-/// by <see cref="MovementService.CanStartMovement"/>, with its reason, or started. An AI routine reads it and goes on.
+/// What the move executor did with a movement request (GameManager.ExecuteMoveAction, batch 13 step 9): refused by
+/// <see cref="MovementService.CanStartMovement"/> or its action spend, with its reason, or started; and whether the mover
+/// was dropped on the way. An AI routine reads it and goes on.
 /// </summary>
 public sealed class MoveAttempt
 {
     public bool Started;
     public bool Refused;
     public string Reason = string.Empty;
+    /// <summary>The mover was dropped (dead, dying or unconscious) on the way (ThreatSystem.IsMoverIncapacitated).</summary>
+    public bool Incapacitated;
 }
 
 /// <summary>
@@ -468,8 +471,8 @@ public class MovementService : MonoBehaviour
     /// <summary>
     /// The one movement legality check for every mover, PC or NPC (PHB p.143-144): may <paramref name="actor"/> start a
     /// movement of this <paramref name="kind"/> covering <paramref name="squares"/> squares (0 or less: any distance within
-    /// the kind's budget)? Pure: no dice, no log, no action spent. The PC buttons (Move, Withdraw, 5-Foot Step), the NPC
-    /// movement executors (GameManager.MoveCharacterAlongComputedPath[Withdraw]), the AI's 5-foot steps and withdraws and
+    /// the kind's budget)? Pure: no dice, no log, no action spent. The PC buttons (Move, Withdraw, 5-Foot Step), the
+    /// move executor of both sides (GameManager.ExecuteMoveAction), the AI's 5-foot steps and withdraws and
     /// the compulsion controllers all ask it.
     /// <list type="bullet">
     /// <item>No movement while prone (stand up or crawl first, PHB p.142-143), grappling or pinned (only the grapple's own

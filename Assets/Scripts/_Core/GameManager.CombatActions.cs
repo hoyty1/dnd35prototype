@@ -672,7 +672,7 @@ public partial class GameManager
         if (!_highlightedCells.Contains(cell) || _movementService == null || !_movementService.IsValidMoveDestination(pc, cell.Coords))
             return;
 
-        // The same path rules as the AI's moves (MoveCharacterAlongComputedPath[Withdraw]): the move or
+        // The same path rules as the AI's moves (ExecuteMoveAction's path search): the move or
         // withdraw budget the highlight and hover preview use, the swarm pass-through flags, and for a
         // withdraw the start-square exemption (PHB p.143). Only the route preference (avoidThreats) is the
         // PC UI's own (GRID-001).
@@ -1077,6 +1077,13 @@ public partial class GameManager
         yield return StartCoroutine(ExecuteMovement(pc, path, isWithdraw, provokedAoOs));
     }
 
+    /// <summary>
+    /// The PC's move or withdraw along the clicked <paramref name="path"/> (batch 13 step 9): the one move executor
+    /// (ExecuteMoveAction) with <see cref="MoveRequest.ForUi"/>, through the catalog's move or withdraw entry, whose UiAfter
+    /// (ShowChoices) and runner continue the turn: the action panel after the move or a refusal, the turn's end when the
+    /// PC was dropped on the way (after the combat-end check). The runner, the executor and the walk are inlined, so the
+    /// walk's yields are this coroutine's own.
+    /// </summary>
     private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path, bool isWithdraw = false, List<AoOThreatInfo> provokedAoOs = null)
     {
         if (pc == null || pc.Stats == null || path == null || path.Count == 0)
@@ -1088,285 +1095,12 @@ public partial class GameManager
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
 
-        bool consumedAction = false;
-        // The budget is read before the action is spent: a Restricted Withdraw spends the single action (PHB p.144).
-        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
-        if (isWithdraw)
-        {
-            // The full-round action, or a Restricted Withdraw's standard action (the shared legality, GRID-022).
-            if (TrySpendWithdrawAction(pc, out string withdrawRefusal))
-            {
-                consumedAction = true;
-            }
-            else
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot complete Withdraw: {withdrawRefusal}."));
-                ShowActionChoices();
-                yield break;
-            }
-
-            pc.IsWithdrawing = true;
-        }
-        else
-        {
-            if (pc.Actions.HasMoveAction)
-            {
-                pc.Actions.UseMoveAction();
-                consumedAction = true;
-            }
-            else if (pc.Actions.CanConvertStandardToMove)
-            {
-                pc.Actions.ConvertStandardToMove();
-                consumedAction = true;
-            }
-        }
-
-        if (!consumedAction)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no action available for movement."));
-            ShowActionChoices();
-            yield break;
-        }
-
-        bool interruptedByIncapacitation = false;
-        bool stoppedOnTheWay = false;
-        string stoppedByAoOReason = null;
-        int movementCostConsumed = 0;
-        int diagonalCount = 0;
-        Vector2Int previousCell = pc.GridPosition;
-        var aooOutcome = new MovementAoOStepOutcome();
-
-        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
-        {
-            Vector2Int step = path[pathIndex];
-            // The one step cost (diagonals 1-2-1, difficult terrain such as Grease 2 or 3; SquareGridUtils.StepCost, GRID-013),
-            // the cost the path search trimmed the path by. The diagonal count is committed only once the step is taken.
-            int nextDiagonalCount = diagonalCount;
-            int stepCost = SquareGridUtils.StepCost(previousCell, step, ref nextDiagonalCount, SquareGridUtils.IsDifficultTerrainForMovement(pc, step));
-            if (movementCostConsumed + stepCost > movementBudgetSquares)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName} cannot move farther this action (difficult terrain slows movement)."));
-                break;
-            }
-
-            // A step the mover cannot take (a barrier, a hold, Grease's failed Balance check, PHB p.237) provokes nothing:
-            // it never leaves its square (PHB p.137).
-            MoveKind stepKind = isWithdraw ? MovementService.WithdrawKindFor(pc) : MoveKind.Move;
-            if (MovementService.IsStepRefused(pc, pc.GridPosition, step, stepKind))
-            {
-                stoppedOnTheWay = true;
-                break;
-            }
-
-            // AoOs for leaving the current square resolve before the step (PHB p.137, CMB-005).
-            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, pathIndex, "AoO", 1.0f, aooOutcome));
-            if (aooOutcome.StopMovement)
-            {
-                if (aooOutcome.Incapacitated)
-                    interruptedByIncapacitation = true;
-                else
-                    stoppedByAoOReason = aooOutcome.Reason;
-                break;
-            }
-
-            var stepPath = new List<Vector2Int> { step };
-
-            // Only the path's last square is the destination: an ally's square the path passes through is
-            // a legal intermediate step (PHB p.148), as in ExecutePathWithMovementAoOs for the AI movers.
-            bool stepIsDestination = pathIndex == path.Count - 1;
-            if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination, kind: stepKind));
-            else
-                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination, kind: stepKind));
-
-            // Blocked (MoveAlongPath refused the square: a barrier, an occupant, a movement step rule such as Grease's
-            // Balance check, PHB p.237, D12): stop here rather than jump to the next square.
-            if (pc.GridPosition != step)
-            {
-                if (!interruptedByIncapacitation && pc.Stats != null && ThreatSystem.IsMoverIncapacitated(pc))
-                    interruptedByIncapacitation = true;
-                else
-                    stoppedOnTheWay = true;
-                break;
-            }
-
-            movementCostConsumed += stepCost;
-            diagonalCount = nextDiagonalCount;
-
-            // ── Death/disable check after area effect damage during movement step ──
-            // Area effects (Wall of Fire, etc.) may deal damage when a creature enters
-            // their cells via UpdateCharacterTracking() in Unity's Update loop.
-            // The MoveAlongPath coroutine already breaks on death, but we need to
-            // set the interruptedByIncapacitation flag here for proper PC turn handling.
-            // A disabled PC (0 hp) keeps moving (PHB p.145, batch 12 D5); dead, dying or unconscious stops.
-            if (!interruptedByIncapacitation && pc.Stats != null && ThreatSystem.IsMoverIncapacitated(pc))
-            {
-                Debug.Log($"🔥 [PCMovement] {pc.Stats.CharacterName} dropped by area damage during movement step {pathIndex + 1} (HP={pc.Stats.CurrentHP})");
-                interruptedByIncapacitation = true;
-                break;
-            }
-
-            previousCell = step;
-        }
-
-        if (movementCostConsumed > 0)
-            pc.HasMovedThisTurn = true;
-
-        CheckTurnUndeadProximityBreakingForMover(pc);
-        PruneTurnUndeadTrackers();
-        UpdateAllStatsUI();
-
-        if (isWithdraw && !interruptedByIncapacitation)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} completes Withdraw."));
-
-        InvalidatePreviewThreats();
-
-        if (interruptedByIncapacitation)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s movement stops immediately due to incapacitation."));
-
-            if (EvaluateCombatEnd("PCMovement.Incapacitated"))
-                yield break;
-
-            EndActivePCTurn();
-            yield break;
-        }
-
-        if (stoppedOnTheWay)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s movement stops short of the destination."));
-
-        if (!string.IsNullOrEmpty(stoppedByAoOReason))
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s movement stops ({stoppedByAoOReason}) after an attack of opportunity."));
-
-        ShowActionChoices();
-    }
-
-    /// <summary>
-    /// True, with a log, when the shared movement legality (MovementService.CanStartMovement) refuses this NPC, summon or
-    /// compulsion movement; the executor then moves nothing and spends nothing, and the AI routine goes on.
-    /// </summary>
-    private bool RefuseAiMovement(CharacterController mover, MoveKind kind, string what, MoveAttempt attempt)
-    {
-        Legality legal = MovementService.CanStartMovement(mover, kind);
-        if (legal.Ok)
-            return false;
-
-        RecordRefusedAiMovement(mover, what, legal.Reason, attempt);
-        return true;
-    }
-
-    private void RecordRefusedAiMovement(CharacterController mover, string what, string reason, MoveAttempt attempt)
-    {
-        if (attempt != null)
-        {
-            attempt.Refused = true;
-            attempt.Reason = reason ?? string.Empty;
-        }
-
-        string name = mover != null && mover.Stats != null ? mover.Stats.CharacterName : "?";
-        Debug.Log($"[Movement] {name} cannot {what}: {reason}");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{name} cannot {what}: {reason}."));
-    }
-
-    private IEnumerator MoveCharacterAlongComputedPathWithdraw(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-    {
-        if (mover == null || mover.Stats == null || Grid == null)
-            yield break;
-
-        if (destination == mover.GridPosition)
-            yield break;
-
-        // The shared movement legality (batch 12 step 22, GRID-019, GRID-022): a full-round withdraw or a Restricted
-        // Withdraw, not after a 5-foot step, not blinded, not prone or grappling.
-        if (RefuseAiMovement(mover, MovementService.WithdrawKindFor(mover), "withdraw", attempt))
-            yield break;
-
-        int maxRange = GetWithdrawMoveRangeSquares(mover);
-        if (maxRange <= 0)
-            yield break; // prone, entangled in a web or otherwise unable to move (CMB-074)
-
-        AoOPathResult pathResult = _movementService != null
-            ? _movementService.FindPath(
-                mover,
-                destination,
-                avoidThreats: false,
-                maxRangeOverride: maxRange,
-                allowThroughAllies: true,
-                allowThroughEnemies: false,
-                suppressFirstSquareAoO: true)
-            : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
-
-        List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
-            ? pathResult.Path
-            : null;
-
-        if (path == null || path.Count == 0)
-            yield break;
-
-        if (!TrySpendWithdrawAction(mover, out string withdrawRefusal))
-        {
-            RecordRefusedAiMovement(mover, "withdraw", withdrawRefusal, attempt);
-            yield break;
-        }
-        if (attempt != null)
-            attempt.Started = true;
-        mover.IsWithdrawing = true;
-
-        // Leaving the starting space (every square the mover starts in, for the whole withdraw) is already exempt in
-        // ProvokedAoOs from the enemies the mover can see (the startSpace rule in ThreatSystem.AnalyzePathForAoOs,
-        // suppressFirstSquareAoO, CharacterController.CanVisuallyPerceive, PHB p.143, DMG p.29, GRID-021); the rest resolve
-        // before the step that provokes them, like any other movement.
-        List<AoOThreatInfo> provokedAoOs = pathResult != null ? pathResult.ProvokedAoOs : null;
-        var moveOutcome = new MovementAoOStepOutcome();
-        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, secondsPerStep, "AoO (Withdraw)", moveOutcome,
-            MovementService.WithdrawKindFor(mover)));
-
-        CheckTurnUndeadProximityBreakingForMover(mover);
-        PruneTurnUndeadTrackers();
-    }
-
-    private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-    {
-        if (mover == null || mover.Stats == null || Grid == null)
-            yield break;
-
-        if (destination == mover.GridPosition)
-            yield break;
-
-        // The shared movement legality (batch 12 step 22, GRID-019): no ordinary movement after a 5-foot step (PHB p.144),
-        // while prone or grappling, or with no move action left. The caller spends the move action after the path.
-        if (RefuseAiMovement(mover, MoveKind.Move, "move", attempt))
-            yield break;
-
-        int maxRange = GetCurrentMoveRangeSquares(mover);
-        if (maxRange <= 0)
-            yield break;
-
-        AoOPathResult pathResult = _movementService != null
-            ? _movementService.FindPath(mover, destination, avoidThreats: false, maxRangeOverride: maxRange)
-            : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
-
-        List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
-            ? pathResult.Path
-            : null;
-
-        // If no valid path found (e.g. blocked by Wall of Ice or other obstacle), abort movement.
-        if (path == null || path.Count == 0)
-        {
-            Debug.Log($"[CombatActions] MoveCharacterAlongComputedPath: No valid path to {destination} for {mover?.Stats?.CharacterName}. Movement blocked.");
-            yield break;
-        }
-
-        if (attempt != null)
-            attempt.Started = true;
-
-        // Ordinary movement provokes for every mover (PHB p.137, CMB-073). Callers re-check
-        // the mover's HP after this coroutine, because an AoO can drop it mid-path.
-        var moveOutcome = new MovementAoOStepOutcome();
-        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, pathResult != null ? pathResult.ProvokedAoOs : null, secondsPerStep, "AoO", moveOutcome));
-
-        CheckTurnUndeadProximityBreakingForMover(mover);
-        PruneTurnUndeadTrackers();
+        ActionContext ctx = ActionContext.For(isWithdraw ? ActionIds.Withdraw : ActionIds.Move, pc, ActorSource.Ui);
+        ctx.Cell = path[path.Count - 1];
+        ctx.CoreRequest = MoveRequest.ForUi(pc, path, provokedAoOs, isWithdraw, PlayerMoveSecondsPerStep);
+        IEnumerator run = RunPlayerActionInline(ctx, new ActionOutcome());
+        while (run.MoveNext())
+            yield return run.Current;
     }
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)

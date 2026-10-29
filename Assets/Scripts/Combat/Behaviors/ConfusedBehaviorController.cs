@@ -118,12 +118,9 @@ public sealed class ConfusedBehaviorController
                         {
                             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} panics and flees from {casterName}!"));
                             var fleeMove = new MoveAttempt();
-                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), fleeMove));
-                            if (!fleeMove.Refused) // a refused move (logged) spends nothing
-                            {
-                                ConsumeMoveAction(actor);
+                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(ConfusedMove(gameManager, actor, fleeCell.Coords, fleeMove)));
+                            if (!fleeMove.Refused) // a refused move (logged) spends nothing; the executor spent this one
                                 moved = true;
-                            }
                         }
                     }
 
@@ -149,8 +146,7 @@ public sealed class ConfusedBehaviorController
                         if (approach != null && approach.Coords != actor.GridPosition)
                         {
                             var approachMove = new MoveAttempt();
-                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approach.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), approachMove));
-                            if (!approachMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
+                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(ConfusedMove(gameManager, actor, approach.Coords, approachMove)));
                             if (!actor.CanTakeTurnActions())
                                 yield break; // dropped by an AoO while moving (CMB-073)
                         }
@@ -304,16 +300,15 @@ public sealed class ConfusedBehaviorController
         return actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove;
     }
 
-    private static void ConsumeMoveAction(CharacterController actor)
-    {
-        if (actor == null || actor.Actions == null)
-            return;
-
-        if (actor.Actions.HasMoveAction)
-            actor.Actions.UseMoveAction();
-        else if (actor.Actions.CanConvertStandardToMove)
-            actor.Actions.ConvertStandardToMove();
-    }
+    /// <summary>
+    /// A confused creature's move (batch 13 step 9): the move executor spends the move action after the walk, or converts
+    /// the standard action, whenever the move was not refused, whatever became of the mover (as this controller paid it;
+    /// AI-076's quirk until step 10). A refused move (logged) spends nothing.
+    /// </summary>
+    private static MoveRequest ConfusedMove(GameManager gameManager, CharacterController actor, Vector2Int destination, MoveAttempt attempt)
+        => MoveRequest.ForAI(actor, destination, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, attempt)
+            .ConvertingStandard()
+            .SpendingEvenIfDropped();
 
     private static IEnumerator ResolveSelfAttack(CharacterController actor, GameManager gameManager, string log)
     {

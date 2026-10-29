@@ -22,6 +22,7 @@ namespace Tests.Scenarios
             yield return S("restricted-withdraw-disabled-ui", RestrictedWithdrawDisabledUi);
             yield return S("restricted-withdraw-disabled-ai", RestrictedWithdrawDisabledAi);
             yield return S("blinded-no-withdraw-ai", BlindedNoWithdrawAi);
+            yield return S("movement-step-action-converts-standard-ui", StepActionMoveConvertsStandardUi);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("MovementLegalityScenarios rules/" + name, build);
@@ -65,7 +66,7 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// GRID-019 (PHB p.144): a Scripted orc (the NPC turn path and its movement executors) takes a 5-foot step and then
-        /// tries to move: the move executor (GameManager.MoveCharacterAlongComputedPath) refuses it, so the orc stays in
+        /// tries to move: the move executor (GameManager.ExecuteMoveAction) refuses it, so the orc stays in
         /// the square it stepped to. In round 2 it moves first and then tries a 5-foot step, which is refused. Before the
         /// fix the executor read only the move range, so an AI ranged kiter could step and then walk. A far-off idle hero
         /// keeps the fight going.
@@ -217,6 +218,58 @@ namespace Tests.Scenarios
                     v.Log(@"Hobgoblin Sergeant takes 1 damage for acting while disabled").Count == 1
                         ? ExpectResult.Pass("logged once")
                         : ExpectResult.Fail(v.Log(@"Hobgoblin Sergeant takes 1 damage for acting while disabled").Count + " log line(s)"))
+                .Build();
+        }
+
+        // ── Batch 13 step 9: a Ui catalog move runs the PC's rule ──────
+
+        /// <summary>
+        /// Batch 13 step 9 (PC/NPC parity; PHB p.141: a standard action may be taken as a move action): a Ui fighter moves
+        /// with the Move button (its move action), then runs the catalog's move entry itself (the harness's Ui Step.Action,
+        /// with no MoveRequest on the context). The executor builds the PC's request (MoveActionExecutor.UiRequestFor,
+        /// MoveRequest.ForUi): the standard action is converted to a second move before the walk. Before the fix a Ui
+        /// context with no request ran the AI's request, which pays after the walk with no conversion, so the second move
+        /// was free. A far-off idle orc keeps the fight going.
+        /// </summary>
+        private static ScenarioDef StepActionMoveConvertsStandardUi()
+        {
+            return Rules("rules/movement-step-action-converts-standard-ui", "A Ui catalog move with no request converts the standard action as the PC's move does (PHB p.141; batch 13 step 9)")
+                .Covers("batch 13 step 9", "PHB p.141")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 2)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 2, 18, Control.Idle)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Move(13, 10),
+                    Step.Assert("after the Move button the move action is spent and the standard action is unused", ctx =>
+                    {
+                        CharacterController h = ctx.Get("hero");
+                        return h.Actions.MoveActionUsed && !h.Actions.StandardConvertedToMove && !h.Actions.StandardActionUsed;
+                    }),
+                    Step.ActionAt(ActionIds.Move, 16, 10))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The catalog move step is done", Expect.StepStatus("hero", 1, "Action(move", 0, "done"))
+                .Expect("The hero's turn ends at (16,10), after both moves (the step waits for the walk)", v =>
+                {
+                    TraceEvent te = v.Of("turn_end").FirstOrDefault(e => e.Str("actor") == "hero" && e.Round == 1);
+                    JsonObj hero = te != null && te.Get("diff") is List<JsonObj> diff ? diff.FirstOrDefault(d => d.Get("k") as string == "hero") : null;
+                    Vector2Int? p = Pos(hero);
+                    return p == new Vector2Int(16, 10) ? ExpectResult.Pass("at (16,10)") : ExpectResult.Fail("at " + p + " at the turn end");
+                })
+                .Expect("The hero moves 6 squares in its own turn", v =>
+                {
+                    int moved = v.Of("move").Where(e => e.Str("actor") == "hero" && e.Round == 1 && e.Turn == 1).Sum(e => e.Int("sq"));
+                    return moved == 6 ? ExpectResult.Pass("6 squares") : ExpectResult.Fail(moved + " squares");
+                })
+                .Expect("The catalog move converted the standard action (PHB p.141)", v =>
+                {
+                    JsonObj econ = Econ(v, "hero", 1);
+                    if (econ == null) return ExpectResult.Fail("no turn end");
+                    return Flag(econ, "move") && Flag(econ, "conv")
+                        ? ExpectResult.Pass("move spent, standard converted")
+                        : ExpectResult.Fail("move " + Flag(econ, "move") + ", conv " + Flag(econ, "conv"));
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
                 .Build();
         }
 

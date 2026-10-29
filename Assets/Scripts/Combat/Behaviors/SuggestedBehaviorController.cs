@@ -100,11 +100,14 @@ public sealed class SuggestedBehaviorController
                 {
                     var moveAttempt = new MoveAttempt();
                     yield return gameManager.StartCoroutine(
-                        gameManager.MoveCharacterAlongComputedPathForAI(actor, moveCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), moveAttempt));
+                        gameManager.MoveCharacterAlongComputedPathForAI(
+                            MoveRequest.ForAI(actor, moveCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, moveAttempt)
+                                .ConvertingStandard()
+                                .SpendingEvenIfDropped()));
+                    // The executor spent the move action (or converted the standard action) after the walk whenever the move
+                    // was not refused (AI-076's quirk until batch 13 step 10).
                     if (!moveAttempt.Refused) // a refused move (logged) spends nothing and falls through
                     {
-                        if (actor.Actions.HasMoveAction) actor.Actions.UseMoveAction();
-                        else if (actor.Actions.CanConvertStandardToMove) actor.Actions.ConvertStandardToMove();
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and moves away from the fight."));
                         yield return new WaitForSeconds(0.3f);
                         yield break;
