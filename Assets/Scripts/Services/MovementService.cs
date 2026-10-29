@@ -21,7 +21,10 @@ public enum MoveKind
     /// <summary>A 5-foot step (PHB p.144).</summary>
     FiveFootStep,
     /// <summary>A charge's movement (PHB p.154; the charge core's own rules decide its lane and target).</summary>
-    Charge
+    Charge,
+    /// <summary>A prone creature's crawl, 5 ft as a move action (PHB p.142-143; GameManager.ExecuteCrawl). The step hooks
+    /// read it; the crawl has its own legality (GameManager.IsValidCrawlDestination), not <see cref="MovementService.CanStartMovement"/>.</summary>
+    Crawl
 }
 
 /// <summary>
@@ -164,8 +167,8 @@ public class MovementService : MonoBehaviour
             if (!IsValidMoveDestination(mover, cell.Coords))
                 continue;
 
-            // Intact Wall of Ice cells block movement — only breached cells allow passage.
-            if (WallOfIceAreaEffect.DoesCellBlockMovement(cell.Coords))
+            // An intact Wall of Ice or Wall of Force square blocks movement (breached ice allows passage; GRID-013).
+            if (SquareGridUtils.IsCellBlockedByWall(cell.Coords))
                 continue;
 
             reachable.Add(cell);
@@ -179,17 +182,8 @@ public class MovementService : MonoBehaviour
         if (path == null || path.Count == 0)
             return 0;
 
-        int cost = SquareGridUtils.CalculatePathCost(start, path);
-
-        // Difficult terrain doubles movement cost for each square entered.
-        // Base path cost already includes the first cost per square.
-        for (int i = 0; i < path.Count; i++)
-        {
-            if (IsDifficultTerrain(path[i]))
-                cost += 1;
-        }
-
-        return cost;
+        // The one path cost (diagonals, difficult terrain, barriers; SquareGridUtils.StepCost, GRID-013).
+        return SquareGridUtils.CalculatePathCost(start, path);
     }
 
     /// <summary>
@@ -347,12 +341,90 @@ public class MovementService : MonoBehaviour
 
     // ========== MOVEMENT EXECUTION ==========
 
-    public IEnumerator ExecuteMovement(CharacterController mover, List<Vector2Int> path, float secondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true)
+    public IEnumerator ExecuteMovement(CharacterController mover, List<Vector2Int> path, float secondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true,
+        MoveKind kind = MoveKind.Move)
     {
         if (mover == null || path == null || path.Count == 0)
             yield break;
 
-        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved, lastStepIsDestination);
+        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved, lastStepIsDestination, kind: kind);
+    }
+
+    // ========== MOVEMENT STEP HOOKS (batch 12 step 23; GRID-018) ==========
+
+    /// <summary>
+    /// The rules that run on every square of a creature's own movement (<see cref="IMovementStepHook"/>), in order:
+    /// the halt of a mover held in place or down (before and after the step), Grease's Balance check (before the step),
+    /// the Wall of Ice breach and zone entry (after it). Static, so a mover with
+    /// no GameManager or MovementService runs the same list.
+    /// </summary>
+    private static readonly List<IMovementStepHook> StepHooks = new List<IMovementStepHook>
+    {
+        new MovementHaltStepHook(),
+        new GreaseStepHook(),
+        new WallOfIceBreachStepHook(),
+        new AreaZoneEntryStepHook()
+    };
+
+    /// <summary>Adds a per-step movement rule (run after the built-in ones). Registering the same instance twice is ignored.</summary>
+    public static void RegisterStepHook(IMovementStepHook hook)
+    {
+        if (hook != null && !StepHooks.Contains(hook))
+            StepHooks.Add(hook);
+    }
+
+    /// <summary>Runs every hook's <see cref="IMovementStepHook.BeforeStep"/>; true when one refuses the step.</summary>
+    public static bool RunBeforeStepHooks(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind)
+    {
+        bool stop = false;
+        for (int i = 0; i < StepHooks.Count && !stop; i++)
+            StepHooks[i].BeforeStep(actor, from, to, kind, ref stop);
+        return stop;
+    }
+
+    /// <summary>
+    /// Whether the step from <paramref name="from"/> into <paramref name="to"/> is refused before it is taken: a barrier
+    /// blocks it (<see cref="SquareGridUtils.IsStepBlockedByBarrier"/>) or a step hook refuses it
+    /// (<see cref="RunBeforeStepHooks"/>: the mover is held or down, Grease's Balance check failed). Every mover asks it
+    /// before the step's attacks of opportunity resolve, so a creature that cannot leave its square provokes none
+    /// (PHB p.137: moving out of a threatened square provokes), and the step executor asks it again (the Balance check is
+    /// kept for the round, so the second ask rolls nothing).
+    /// </summary>
+    public static bool IsStepRefused(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind)
+        => SquareGridUtils.IsStepBlockedByBarrier(from, to) || RunBeforeStepHooks(actor, from, to, kind);
+
+    /// <summary>
+    /// Why <paramref name="actor"/> may take no further step of this movement (null: it may): prone (except in a crawl,
+    /// PHB p.142-143), pinned (PHB p.156), held by a condition that prevents movement, held in a web (PHB p.301) or
+    /// grappled by Black Tentacles (PHB p.228). The mid-move form of <see cref="CanStartMovement"/>'s state rules, read
+    /// by <see cref="MovementHaltStepHook"/>. A grappler's own move of the grapple is not refused here (PHB p.157).
+    /// </summary>
+    public static string StepHaltReason(CharacterController actor, MoveKind kind)
+    {
+        if (actor == null || actor.Stats == null)
+            return null;
+        if (kind != MoveKind.Crawl && actor.HasCondition(CombatConditionType.Prone))
+            return "prone";
+        if (actor.HasCondition(CombatConditionType.Pinned))
+            return "pinned";
+        if (actor.Stats.MovementBlockedByCondition)
+            return "held by a condition";
+        GameManager gm = GameManager.Instance;
+        if (gm != null && gm.IsEntangledByWeb(actor))
+            return "held in a web";
+        if (BlackTentaclesAreaEffect.IsCharacterGrappledByAnyTentacles(actor))
+            return "grappled by the tentacles";
+        return null;
+    }
+
+    /// <summary>Runs every hook's <see cref="IMovementStepHook.OnStep"/>; true when one ends the movement here.</summary>
+    public static bool RunAfterStepHooks(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind)
+    {
+        bool stop = false;
+        // Every hook runs (the zone entry after a breach's damage), whatever an earlier one decided.
+        for (int i = 0; i < StepHooks.Count; i++)
+            StepHooks[i].OnStep(actor, from, to, kind, ref stop);
+        return stop;
     }
 
     public bool CanTake5FootStep(CharacterController character, out string reason)
@@ -434,6 +506,10 @@ public class MovementService : MonoBehaviour
 
         if (actor.Stats.MovementBlockedByCondition)
             return Legality.Refused("Movement blocked by condition");
+
+        // A failed Balance check in grease: the creature cannot move that round (PHB p.237, D12), so no action is spent.
+        if (GreaseAreaEffect.FailedBalanceInAnyGreaseThisRound(actor))
+            return Legality.Refused("Failed a Balance check in grease: cannot move this round");
 
         int speed = SingleMoveBudgetSquares(actor);
         if (speed <= 0)
@@ -579,6 +655,18 @@ public class MovementService : MonoBehaviour
         return Mathf.Max(0, actor.Stats.MoveRange);
     }
 
+    /// <summary>Whether any square <paramref name="character"/> occupies is difficult terrain (PHB p.148).</summary>
+    public static bool OccupiesDifficultTerrain(CharacterController character)
+    {
+        if (character == null)
+            return false;
+        List<Vector2Int> occupied = character.GetOccupiedSquaresAt(character.GridPosition);
+        for (int i = 0; i < occupied.Count; i++)
+            if (SquareGridUtils.IsDifficultTerrainForMovement(occupied[i]))
+                return true;
+        return false;
+    }
+
     public bool IsValidAdjacentStepDestination(CharacterController character, Vector2Int destination, bool disallowDifficultTerrain = true)
     {
         if (character == null)
@@ -599,8 +687,13 @@ public class MovementService : MonoBehaviour
         if (disallowDifficultTerrain && IsDifficultTerrain(destination))
             return false;
 
-        // Intact Wall of Ice cells block movement (including 5-foot steps).
-        if (WallOfIceAreaEffect.DoesCellBlockMovement(destination))
+        // No 5-foot step out of difficult terrain either: a creature moves only as fast as the most difficult terrain it
+        // occupies (PHB p.148), and the step needs movement unhampered by difficult terrain (PHB p.144).
+        if (disallowDifficultTerrain && OccupiesDifficultTerrain(character))
+            return false;
+
+        // A wall square, a wall's corner or a sphere's boundary blocks the step as it blocks any move (GRID-013).
+        if (SquareGridUtils.IsStepBlockedByBarrier(character.GridPosition, destination))
             return false;
 
         return true;

@@ -862,7 +862,8 @@ public partial class GameManager
         List<AoOThreatInfo> provokedAoOs,
         float secondsPerStep,
         string aooLogLabel,
-        MovementAoOStepOutcome outcome)
+        MovementAoOStepOutcome outcome,
+        MoveKind kind = MoveKind.Move)
     {
         outcome.Reset();
         if (mover == null || mover.Stats == null || path == null || path.Count == 0)
@@ -883,9 +884,9 @@ public partial class GameManager
             {
                 List<Vector2Int> segment = path.GetRange(segmentStart, pathIndex - segmentStart);
                 if (_movementService != null)
-                    yield return StartCoroutine(_movementService.ExecuteMovement(mover, segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd));
+                    yield return StartCoroutine(_movementService.ExecuteMovement(mover, segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd, kind: kind));
                 else
-                    yield return StartCoroutine(mover.MoveAlongPath(segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd));
+                    yield return StartCoroutine(mover.MoveAlongPath(segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd, kind: kind));
 
                 if (ThreatSystem.IsMoverIncapacitated(mover))
                 {
@@ -909,6 +910,16 @@ public partial class GameManager
                 yield break;
 
             segmentStart = pathIndex;
+
+            // A step the mover cannot take (a barrier, a hold, Grease's failed Balance check) provokes nothing: it never
+            // leaves its square (PHB p.137, p.237).
+            if (MovementService.IsStepRefused(mover, mover.GridPosition, path[pathIndex], kind))
+            {
+                outcome.StopMovement = true;
+                outcome.Reason = "blocked";
+                yield break;
+            }
+
             yield return StartCoroutine(ResolveMovementAoOsBeforeStep(mover, provokedAoOs, pathIndex, aooLogLabel, 0.5f, stepOutcome));
             if (stepOutcome.StopMovement)
             {
@@ -1118,19 +1129,32 @@ public partial class GameManager
         }
 
         bool interruptedByIncapacitation = false;
-        bool interruptedByGreaseSlip = false;
+        bool stoppedOnTheWay = false;
         string stoppedByAoOReason = null;
         int movementCostConsumed = 0;
+        int diagonalCount = 0;
         Vector2Int previousCell = pc.GridPosition;
         var aooOutcome = new MovementAoOStepOutcome();
 
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
             Vector2Int step = path[pathIndex];
-            int stepCost = 1 + GetGreaseAreaExtraMovementCost(pc, step);
+            // The one step cost (diagonals 1-2-1, difficult terrain such as Grease 2 or 3; SquareGridUtils.StepCost, GRID-013),
+            // the cost the path search trimmed the path by. The diagonal count is committed only once the step is taken.
+            int nextDiagonalCount = diagonalCount;
+            int stepCost = SquareGridUtils.StepCost(previousCell, step, ref nextDiagonalCount, SquareGridUtils.IsDifficultTerrainForMovement(step));
             if (movementCostConsumed + stepCost > movementBudgetSquares)
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName} cannot move farther this action (grease slows movement)."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName} cannot move farther this action (difficult terrain slows movement)."));
+                break;
+            }
+
+            // A step the mover cannot take (a barrier, a hold, Grease's failed Balance check, PHB p.237) provokes nothing:
+            // it never leaves its square (PHB p.137).
+            MoveKind stepKind = isWithdraw ? MovementService.WithdrawKindFor(pc) : MoveKind.Move;
+            if (MovementService.IsStepRefused(pc, pc.GridPosition, step, stepKind))
+            {
+                stoppedOnTheWay = true;
                 break;
             }
 
@@ -1151,19 +1175,23 @@ public partial class GameManager
             // a legal intermediate step (PHB p.148), as in ExecutePathWithMovementAoOs for the AI movers.
             bool stepIsDestination = pathIndex == path.Count - 1;
             if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination));
+                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination, kind: stepKind));
             else
-                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination));
+                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false, lastStepIsDestination: stepIsDestination, kind: stepKind));
 
-            // Blocked (MoveAlongPath refused the square): stop here rather than jump to the next square.
+            // Blocked (MoveAlongPath refused the square: a barrier, an occupant, a movement step rule such as Grease's
+            // Balance check, PHB p.237, D12): stop here rather than jump to the next square.
             if (pc.GridPosition != step)
             {
                 if (!interruptedByIncapacitation && pc.Stats != null && ThreatSystem.IsMoverIncapacitated(pc))
                     interruptedByIncapacitation = true;
+                else
+                    stoppedOnTheWay = true;
                 break;
             }
 
             movementCostConsumed += stepCost;
+            diagonalCount = nextDiagonalCount;
 
             // ── Death/disable check after area effect damage during movement step ──
             // Area effects (Wall of Fire, etc.) may deal damage when a creature enters
@@ -1175,12 +1203,6 @@ public partial class GameManager
             {
                 Debug.Log($"🔥 [PCMovement] {pc.Stats.CharacterName} dropped by area damage during movement step {pathIndex + 1} (HP={pc.Stats.CurrentHP})");
                 interruptedByIncapacitation = true;
-                break;
-            }
-
-            if (!HandleGreaseStepAfterMovement(pc, previousCell, step))
-            {
-                interruptedByGreaseSlip = true;
                 break;
             }
 
@@ -1210,8 +1232,8 @@ public partial class GameManager
             yield break;
         }
 
-        if (interruptedByGreaseSlip)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName}'s movement ends after slipping in grease."));
+        if (stoppedOnTheWay)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s movement stops short of the destination."));
 
         if (!string.IsNullOrEmpty(stoppedByAoOReason))
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s movement stops ({stoppedByAoOReason}) after an attack of opportunity."));
@@ -1296,7 +1318,8 @@ public partial class GameManager
         // before the step that provokes them, like any other movement.
         List<AoOThreatInfo> provokedAoOs = pathResult != null ? pathResult.ProvokedAoOs : null;
         var moveOutcome = new MovementAoOStepOutcome();
-        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, secondsPerStep, "AoO (Withdraw)", moveOutcome));
+        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, secondsPerStep, "AoO (Withdraw)", moveOutcome,
+            MovementService.WithdrawKindFor(mover)));
 
         CheckTurnUndeadProximityBreakingForMover(mover);
         PruneTurnUndeadTrackers();

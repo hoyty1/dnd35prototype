@@ -7526,15 +7526,18 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Crawling provokes attacks of opportunity!"));
 
         var aooOutcome = new MovementAoOStepOutcome();
-        yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, 0, "AoO (crawling)", 0.8f, aooOutcome));
+        // A crawl the step rules refuse (a barrier, a hold, Grease's failed Balance check) provokes nothing (PHB p.137).
+        bool crawlRefused = MovementService.IsStepRefused(pc, pc.GridPosition, destination.Coords, MoveKind.Crawl);
+        if (!crawlRefused)
+            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, 0, "AoO (crawling)", 0.8f, aooOutcome));
         bool interruptedByIncapacitation = aooOutcome.Incapacitated;
 
-        if (!aooOutcome.StopMovement)
+        if (!aooOutcome.StopMovement && !crawlRefused)
         {
             if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+                yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true, kind: MoveKind.Crawl));
             else
-                yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+                yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true, kind: MoveKind.Crawl));
         }
 
         RefreshFlankedConditions();

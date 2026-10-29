@@ -1269,7 +1269,8 @@ public partial class GameManager
         return false;
     }
 
-    private bool IsDifficultTerrain(Vector2Int pos)
+    /// <summary>Whether <paramref name="pos"/> is difficult terrain (MovementService's set; SquareGridUtils.StepCost reads it too).</summary>
+    public bool IsDifficultTerrain(Vector2Int pos)
     {
         if (_movementService != null)
             return _movementService.IsDifficultTerrain(pos);

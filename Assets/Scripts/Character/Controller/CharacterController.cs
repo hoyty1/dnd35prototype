@@ -4333,10 +4333,13 @@ public class CharacterController : MonoBehaviour
     /// longer move (the movement AoO helper pauses mid-path), so the segment may end in an
     /// ally's square that the full move only passes through. <paramref name="allowThroughEnemies"/> lets the mover pass an
     /// opponent's space short of the destination: only the overrun sets it, for a defender that let it by or was knocked
-    /// prone (GameManager.RunOverrunMove, PHB p.157).
+    /// prone (GameManager.RunOverrunMove, PHB p.157). Each step passes the one barrier rule
+    /// (SquareGridUtils.IsStepBlockedByBarrier: sphere boundaries, wall squares and corners; GRID-013) and runs the
+    /// movement step hooks (MovementService.RunBeforeStepHooks before it, RunAfterStepHooks after it: Grease, the Wall of
+    /// Ice breach, zone entry; batch 12 step 23, GRID-018) with <paramref name="kind"/>.
     /// </summary>
     public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true,
-        bool allowThroughEnemies = false)
+        bool allowThroughEnemies = false, MoveKind kind = MoveKind.Move)
     {
         if (path == null || path.Count == 0)
             yield break;
@@ -4382,6 +4385,12 @@ public class CharacterController : MonoBehaviour
                     allowDestinationEnemyOverlap: allowEnemyOverlap))
                 break;
 
+            // A barrier, or a step hook that refuses the step (the mover is held or down, Grease's Balance check, PHB
+            // p.237, D12): MovementService.IsStepRefused, the check every mover also makes before the step's AoOs.
+            Vector2Int fromCell = GridPosition;
+            if (MovementService.IsStepRefused(this, fromCell, nextCell.Coords, kind))
+                break;
+
             Vector3 startPos = transform.position;
             Vector3 endPos = grid != null
                 ? grid.GetCenteredWorldPosition(nextCell.Coords, GetVisualSquaresOccupied())
@@ -4403,13 +4412,8 @@ public class CharacterController : MonoBehaviour
 
             transform.position = endPos;
 
-            // ── Wall of Ice breach pass-through damage ──
-            // Moving through a breached Wall of Ice cell (Line mode only) deals 1d6+CL cold damage.
-            // D&D 3.5e: creatures passing through a breached section take cold damage.
-            if (WallOfIceAreaEffect.IsCellBreachedWallOfIce(nextCell.Coords))
-            {
-                WallOfIceAreaEffect.ApplyBreachDamageAtCell(this, nextCell.Coords);
-            }
+            // ── The step hooks after the step: the Wall of Ice breach's cold damage, zone entry (Spike Stones, Entangle...) ──
+            bool stopHere = MovementService.RunAfterStepHooks(this, fromCell, nextCell.Coords, kind);
 
             // ── Death/disable check AFTER each movement step ──
             // Area effects (Wall of Fire, etc.) detect entry via UpdateCharacterTracking()
@@ -4420,12 +4424,17 @@ public class CharacterController : MonoBehaviour
                 Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} dropped after step {i + 1}/{path.Count} at ({GridPosition.x},{GridPosition.y}) (HP={Stats.CurrentHP}) — movement interrupted");
                 break;
             }
+
+            if (stopHere)
+                break;
         }
 
         RefreshGridOccupancy();
         UpdatePositionForSize();
         UpdateInvisibilityMovementState(true);
-        if (markAsMoved)
+        // Only a movement that covered ground counts as having moved (a refused first step leaves the 5-foot step
+        // open, as the PC move executor already did; batch 12 step 23).
+        if (markAsMoved && oldPosition != GridPosition)
             HasMovedThisTurn = true;
 
         if (oldPosition != GridPosition)
@@ -16014,11 +16023,37 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
+        // A wall square, a wall's corner or a sphere's boundary blocks a 5-foot step as it blocks any move (GRID-013).
+        Vector2Int fromCell = GridPosition;
+        if (SquareGridUtils.IsStepBlockedByBarrier(fromCell, targetCell.Coords))
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: a wall or barrier blocks the step to ({targetCell.Coords.x},{targetCell.Coords.y})");
+            return false;
+        }
+
+        // No 5-foot step into or out of difficult terrain (grease, webs, undergrowth): PHB p.144, p.148.
+        if (SquareGridUtils.IsDifficultTerrainForMovement(targetCell.Coords) || MovementService.OccupiesDifficultTerrain(this))
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: difficult terrain allows no 5-foot step to ({targetCell.Coords.x},{targetCell.Coords.y})");
+            return false;
+        }
+
+        // The movement step hooks, as on every step of a move (batch 12 step 23, GRID-018): the halt of a mover held in
+        // place, and the rest of the list.
+        if (MovementService.RunBeforeStepHooks(this, fromCell, targetCell.Coords, MoveKind.FiveFootStep))
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: the step is refused (a movement step rule)");
+            return false;
+        }
+
         Debug.Log($"[5ftStep] {Stats.CharacterName} takes a 5-foot step to ({targetCell.Coords.x},{targetCell.Coords.y}) - NO AoO provoked");
 
         // Move without consuming normal movement/action economy.
         MoveToCell(targetCell, markAsMoved: false);
+        if (GridPosition != targetCell.Coords)
+            return false;
         HasTakenFiveFootStep = true;
+        MovementService.RunAfterStepHooks(this, fromCell, targetCell.Coords, MoveKind.FiveFootStep);
         return true;
     }
 

@@ -233,8 +233,11 @@ public class SquareGrid : MonoBehaviour
     /// <returns>AoOPathResult with the computed path and provoked AoOs.</returns>
     public AoOPathResult FindPathAoOAware(Vector2Int start, Vector2Int destination,
         HashSet<Vector2Int> threatenedSquares, int maxRange, int moverSizeSquares = 1, CharacterController mover = null,
-        bool allowThroughAllies = true, bool allowThroughEnemies = false, bool allowDestinationEnemyOverlap = false)
+        bool allowThroughAllies = true, bool allowThroughEnemies = false, bool allowDestinationEnemyOverlap = false,
+        bool ignoreDifficultTerrain = false)
     {
+        // ignoreDifficultTerrain: a mover that is not a creature walking the ground (the Flaming Sphere, which rolls 30 ft a
+        // round whatever the footing, PHB p.232) keeps the barrier rule but pays no difficult-terrain cost.
         var result = new AoOPathResult();
         if (start == destination) return result;
 
@@ -298,22 +301,25 @@ public class SquareGrid : MonoBehaviour
                 // Validate actual D&D 3.5e path cost (the path might cost more than
                 // straight-line distance if it detours around obstacles/threats).
                 // Trim the path to fit within maxRange.
-                int pathCost = SquareGridUtils.CalculatePathCost(start, path);
+                int pathCost = SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain);
                 if (pathCost > maxRange && path.Count > 0)
                 {
                     Debug.Log($"[SquareGrid] A* path cost {pathCost} exceeds maxRange {maxRange}, trimming...");
                     // Trim from the end until path fits within movement budget
+                    // A trimmed move must also end where the mover may stop (not an ally's square it only passes, PHB p.148).
                     while (path.Count > 0)
                     {
-                        pathCost = SquareGridUtils.CalculatePathCost(start, path);
-                        if (pathCost <= maxRange) break;
+                        pathCost = SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain);
+                        if (pathCost <= maxRange
+                            && CanTraversePathNode(path[path.Count - 1], moverSizeSquares, mover, true, allowThroughAllies, allowThroughEnemies, allowDestinationEnemyOverlap))
+                            break;
                         path.RemoveAt(path.Count - 1);
                     }
                 }
 
                 result.Path = path;
 
-                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps, cost {SquareGridUtils.CalculatePathCost(start, path)} from ({start.x},{start.y}) to ({destination.x},{destination.y})");
+                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps, cost {SquareGridUtils.CalculatePathCost(start, path, ignoreDifficultTerrain)} from ({start.x},{start.y}) to ({destination.x},{destination.y})");
                 return result;
             }
 
@@ -335,33 +341,18 @@ public class SquareGrid : MonoBehaviour
 
                 if (!canTraverseHere) continue;
 
-                // ── Resilient Sphere boundary block ──
-                // Characters cannot cross sphere boundaries (in→out, out→in, or between spheres).
-                if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(current, neighbor))
-                    continue;
-
-                // ── Wall of Ice movement block ──
-                // Intact wall cells block movement; breached cells allow passage (with damage).
-                if (WallOfIceAreaEffect.DoesCellBlockMovement(neighbor))
-                    continue;
-
-                // ── Wall of Ice diagonal corner block ──
-                // D&D 3.5e: Can't move diagonally past a wall corner.
-                if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(current, neighbor))
-                    continue;
-
-                // ── Wall of Force movement block ──
-                // Wall of Force is immune to damage — all cells permanently block.
-                if (WallOfForceAreaEffect.DoesCellBlockMovement(neighbor))
-                    continue;
-
-                // ── Wall of Force diagonal corner block ──
-                if (WallOfForceAreaEffect.DoesDiagonalMoveCrossWall(current, neighbor))
+                // ── Barriers: a Resilient Sphere's boundary, an intact Wall of Ice or Wall of Force square, a diagonal past
+                // a wall's corner. The one step rule the path cost, the 5-foot step and the step executor share (GRID-013).
+                if (SquareGridUtils.IsStepBlockedByBarrier(current, neighbor))
                     continue;
 
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
+
+                // Difficult terrain costs double (PHB p.148; SquareGridUtils.StepCost), so the search prefers a way round.
+                if (!ignoreDifficultTerrain && SquareGridUtils.IsDifficultTerrainForMovement(neighbor))
+                    stepCost *= 2;
 
                 // Add threat penalty for moving into a threatened square
                 if (threatenedSquares != null && threatenedSquares.Contains(current))
@@ -403,37 +394,9 @@ public class SquareGrid : MonoBehaviour
                 break;
             }
 
-            // Check sphere boundary crossing for fallback path
+            // The one step barrier rule (sphere boundary, wall squares and corners; GRID-013).
             Vector2Int prev = (i == 0) ? start : result.Path[i - 1];
-            if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(prev, step))
-            {
-                firstInvalidIndex = i;
-                break;
-            }
-
-            // Check Wall of Ice blocking for fallback path
-            if (WallOfIceAreaEffect.DoesCellBlockMovement(step))
-            {
-                firstInvalidIndex = i;
-                break;
-            }
-
-            // Check Wall of Ice diagonal corner blocking for fallback path
-            if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(prev, step))
-            {
-                firstInvalidIndex = i;
-                break;
-            }
-
-            // Check Wall of Force blocking for fallback path
-            if (WallOfForceAreaEffect.DoesCellBlockMovement(step))
-            {
-                firstInvalidIndex = i;
-                break;
-            }
-
-            // Check Wall of Force diagonal corner blocking for fallback path
-            if (WallOfForceAreaEffect.DoesDiagonalMoveCrossWall(prev, step))
+            if (SquareGridUtils.IsStepBlockedByBarrier(prev, step))
             {
                 firstInvalidIndex = i;
                 break;
@@ -447,6 +410,10 @@ public class SquareGrid : MonoBehaviour
         {
             result.Path.RemoveAt(result.Path.Count - 1);
         }
+
+        // ...and to the movement budget by the one path cost (diagonals, difficult terrain; GRID-013), as the A* path is.
+        while (result.Path.Count > 0 && SquareGridUtils.CalculatePathCost(start, result.Path, ignoreDifficultTerrain) > maxRange)
+            result.Path.RemoveAt(result.Path.Count - 1);
 
         return result;
     }

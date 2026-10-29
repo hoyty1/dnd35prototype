@@ -651,6 +651,14 @@ public partial class GameManager
                 defender = opponents[0];
             }
 
+            // A step the mover cannot take (a barrier, a hold, Grease's failed Balance check) provokes nothing: it never
+            // leaves its square (PHB p.137, p.237).
+            if (MovementService.IsStepRefused(attacker, attacker.GridPosition, step, MoveKind.Move))
+            {
+                outcome.StopReason = "blocked";
+                break;
+            }
+
             // AoOs for leaving the current square resolve before the step (PHB p.137).
             yield return StartCoroutine(ResolveMovementAoOsBeforeStep(attacker, aoos, pathIndex, "AoO", OverrunSecondsAfterAoO, stepOutcome));
             if (stepOutcome.StopMovement)

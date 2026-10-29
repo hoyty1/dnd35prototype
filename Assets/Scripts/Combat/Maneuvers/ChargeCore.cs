@@ -349,6 +349,16 @@ public partial class GameManager
         var aooOutcome = new MovementAoOStepOutcome();
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
+            // A step the charger cannot take (a barrier, a hold, Grease's failed Balance check) provokes nothing: it never
+            // leaves its square (PHB p.137, p.237). The charge stops there.
+            if (MovementService.IsStepRefused(charger, charger.GridPosition, path[pathIndex], MoveKind.Charge))
+            {
+                interruptedByAoO = true;
+                aooOutcome.StopMovement = true;
+                aooOutcome.Reason = "stopped on the way";
+                break;
+            }
+
             yield return StartCoroutine(ResolveMovementAoOsBeforeStep(charger, provokedAoOs, pathIndex, req.AoOLabel, req.AoODelay, aooOutcome));
             if (aooOutcome.StopMovement)
             {
@@ -358,9 +368,19 @@ public partial class GameManager
 
             var stepPath = new List<Vector2Int> { path[pathIndex] };
             if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, req.SecondsPerStep, markAsMoved: false));
+                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, req.SecondsPerStep, markAsMoved: false, kind: MoveKind.Charge));
             else
-                yield return StartCoroutine(charger.MoveAlongPath(stepPath, req.SecondsPerStep, markAsMoved: false));
+                yield return StartCoroutine(charger.MoveAlongPath(stepPath, req.SecondsPerStep, markAsMoved: false, kind: MoveKind.Charge));
+
+            // Refused or ended on the way (a barrier, a movement step rule such as Grease's Balance check, an area's damage):
+            // the charge stops there rather than jump to the next square (batch 12 step 23).
+            if (charger.GridPosition != path[pathIndex])
+            {
+                interruptedByAoO = true;
+                aooOutcome.StopMovement = true;
+                aooOutcome.Reason = ThreatSystem.IsMoverIncapacitated(charger) ? "incapacitated" : "stopped on the way";
+                break;
+            }
         }
 
         charger.HasMovedThisTurn = true;

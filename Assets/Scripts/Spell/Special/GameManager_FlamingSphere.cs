@@ -468,7 +468,8 @@ public partial class GameManager
             moverSizeSquares: 1,
             mover: null,
             allowThroughAllies: false,
-            allowThroughEnemies: false);
+            allowThroughEnemies: false,
+            ignoreDifficultTerrain: true); // the sphere rolls its 30 ft whatever the footing (PHB p.232)
 
         if (!IsPathResultReachDestination(pathResult, destination))
             return false;
@@ -496,7 +497,7 @@ public partial class GameManager
             if (!TryGetBestFlamingSpherePath(start, neighbor, maxRange, out List<Vector2Int> candidatePath))
                 continue;
 
-            int cost = SquareGridUtils.CalculatePathCost(start, candidatePath);
+            int cost = SquareGridUtils.CalculatePathCost(start, candidatePath, ignoreDifficultTerrain: true);
             int steps = candidatePath != null ? candidatePath.Count : int.MaxValue;
             if (cost < bestCost || (cost == bestCost && steps < bestSteps))
             {

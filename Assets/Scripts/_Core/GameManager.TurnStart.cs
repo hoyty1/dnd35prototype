@@ -42,6 +42,8 @@ public partial class GameManager
         {
             HandleFlamingSphereTurnStart(actor);
             ApplyMelfsAcidArrowTurnStartDamage(actor);
+            // Grease's repeated Reflex save for the creatures in the caster's areas, on the caster's turn (PHB p.237, D12).
+            ApplyGreaseCasterTurnSaves(actor);
             actor.ApplyRegenerationAtTurnStart();
 
             // Breath weapon, ranged special and terrain manipulation cooldowns (AI-032), and the once-per-round flags

@@ -30,6 +30,12 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
     /// <summary>Damage bonus (Str mod of 19 = +4).</summary>
     private const int DamageBonus = 4;
 
+    /// <summary>The d20 context of the tentacles' grapple check to seize a creature (DiceService; a scenario can force it).</summary>
+    public const string TentacleGrappleDiceContext = "Black Tentacles grapple (tentacles)";
+
+    /// <summary>The d20 context of the creature's opposed grapple check against the seizing tentacles.</summary>
+    public const string CreatureGrappleDiceContext = "Black Tentacles grapple (creature)";
+
     /// <summary>Tracks creatures currently grappled by tentacles.</summary>
     private readonly HashSet<CharacterController> _grappledCreatures = new HashSet<CharacterController>();
 
@@ -161,13 +167,13 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
         if (creature == null || creature.Stats == null || creature.Stats.IsDead)
             return;
 
-        // Tentacle grapple roll
-        int tentacleRoll = DiceRoller.D20();
+        // Tentacle grapple roll (the dice contexts are behaviour-neutral: a scenario can force them)
+        int tentacleRoll = DiceService.D20(TentacleGrappleDiceContext);
         int tentacleTotal = tentacleRoll + TentacleGrappleModifier;
 
         // Creature's opposed grapple check
         int creatureGrappleMod = creature.GetGrappleModifier();
-        int creatureRoll = DiceRoller.D20();
+        int creatureRoll = DiceService.D20(CreatureGrappleDiceContext);
         int creatureTotal = creatureRoll + creatureGrappleMod;
 
         if (tentacleTotal >= creatureTotal)

@@ -474,85 +474,24 @@ public partial class GameManager
         return log.ToString();
     }
 
-    private bool IsCellInActiveGreaseArea(Vector2Int pos)
+    /// <summary>
+    /// The Reflex save Grease repeats "on your turn each round" for every creature still in its area (PHB p.237), read as
+    /// the caster's turn (decision D12 of docs/designs/pc_npc_parity_batch12.md, delegated RAW reading 2026-10-23): at the
+    /// start of each turn of <paramref name="actor"/> after the cast, each of its grease areas rolls the save for the
+    /// creatures inside (GreaseAreaEffect.OnCasterTurnStart). Run by BeginCombatantTurn, PC or NPC caster alike.
+    /// </summary>
+    private void ApplyGreaseCasterTurnSaves(CharacterController actor)
     {
+        if (actor == null || !AreaEffectManager.HasInstance)
+            return;
+
         List<GreaseAreaEffect> greaseEffects = AreaEffectManager.Instance.GetEffectsOfType<GreaseAreaEffect>();
         for (int i = 0; i < greaseEffects.Count; i++)
         {
             GreaseAreaEffect effect = greaseEffects[i];
-            if (effect != null && effect.IsCellInArea(pos))
-                return true;
+            if (effect != null && effect.Caster == actor)
+                effect.OnCasterTurnStart();
         }
-
-        return false;
-    }
-
-    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos) => GetHighestGreaseSaveDCAtCell(pos, out _);
-
-    /// <summary>The highest save DC of the Grease areas on <paramref name="pos"/>, and the caster of that area.</summary>
-    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos, out CharacterController greaseCaster)
-    {
-        greaseCaster = null;
-        int highestDC = 10;
-        List<GreaseAreaEffect> greaseEffects = AreaEffectManager.Instance.GetEffectsOfType<GreaseAreaEffect>();
-        for (int i = 0; i < greaseEffects.Count; i++)
-        {
-            GreaseAreaEffect effect = greaseEffects[i];
-            if (effect == null || !effect.IsCellInArea(pos))
-                continue;
-
-            if (greaseCaster == null || effect.SaveDC > highestDC)
-                greaseCaster = effect.Caster;
-            highestDC = Mathf.Max(highestDC, effect.SaveDC);
-        }
-
-        return highestDC;
-    }
-
-    private int GetGreaseAreaExtraMovementCost(CharacterController mover, Vector2Int destination)
-    {
-        if (mover == null || mover.Stats == null || mover.Stats.IsDead)
-            return 0;
-
-        return IsCellInActiveGreaseArea(destination) ? 1 : 0;
-    }
-
-    public bool HandleGreaseStepAfterMovement(CharacterController mover, Vector2Int previousCell, Vector2Int currentCell)
-    {
-        if (mover == null || mover.Stats == null || mover.Stats.IsDead)
-            return true;
-
-        bool wasInGrease = IsCellInActiveGreaseArea(previousCell);
-        bool nowInGrease = IsCellInActiveGreaseArea(currentCell);
-        if (!nowInGrease)
-            return true;
-
-        if (!wasInGrease)
-        {
-            // If an area hook has already applied prone on entry, stop movement immediately.
-            if (mover.HasCondition(CombatConditionType.Prone))
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{mover.Stats.CharacterName} enters grease, falls prone, and stops moving."));
-                return false;
-            }
-
-            int saveDC = GetHighestGreaseSaveDCAtCell(currentCell, out CharacterController greaseCaster);
-            // The one save roll (SaveRollRules, D13) against the area's caster's spell (the protection ward, SPL-018).
-            SaveRoll save = SaveRollRules.Roll(mover.Stats, SavingThrowType.Reflex, saveDC,
-                SaveContext.ForSpellId(SpellNames.GREASE, greaseCaster != null ? greaseCaster.Stats : null), null); // CHR-018
-            bool success = save.Succeeded;
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Grease check ({mover.Stats.CharacterName}): Reflex d20({save.Roll}) + {save.Modifier} = {save.Total} vs DC {saveDC} {SaveRollRules.Outcome(save)}."));
-
-            if (!success)
-            {
-                mover.ApplyCondition(CombatConditionType.Prone, -1, "Grease");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{mover.Stats.CharacterName} slips in grease, falls prone, and movement ends immediately."));
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private void TickActiveGreaseEffects()

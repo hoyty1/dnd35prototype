@@ -7189,9 +7189,10 @@ public class CharacterStats
     /// Roll a skill check for a specific skill, for any creature (a skill without an entry is used untrained, CHR-067):
     /// d20 + <see cref="SkillCheckModifier"/>. -1 (the check cannot be made) for a name that is no skill, a skill a
     /// mindless creature cannot use, Listen while deafened, and a trained-only skill with 0 ranks (PHB p.63-64).
-    /// Logs the full breakdown to the console.
+    /// Logs the full breakdown to the console. <paramref name="diceContext"/>, when given, is the d20's DiceService context
+    /// (a scenario can force it); otherwise the d20 is drawn as before (DiceRoller.D20).
     /// </summary>
-    public int RollSkillCheck(string skillName)
+    public int RollSkillCheck(string skillName, string diceContext = null)
     {
         if (!TryGetSkillOrUntrained(skillName, out Skill skill))
         {
@@ -7219,7 +7220,7 @@ public class CharacterStats
             return -1;
         }
 
-        int d20 = DiceRoller.D20();
+        int d20 = string.IsNullOrEmpty(diceContext) ? DiceRoller.D20() : DiceService.D20(diceContext);
         d20 = ApplyLuckReroll(d20, $"{name} skill check");
         GameManager.Instance?.LogLuckRerollIfTriggered(this);
         int modifier = SkillCheckModifier(skill, true, out string breakdown);

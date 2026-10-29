@@ -588,11 +588,15 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
         UpdateCharacterTracking();
 
+        // A creature this tracking pass has just met as a new entrant (one placed in the area without a step of its own:
+        // a push, a drag, a teleport) has had its entry reaction now; the round-start reaction is not a second one in the
+        // same pass (GRID-018: the double save).
         foreach (CharacterController character in CharactersInArea)
         {
-            if (character != null && character.Stats != null && !character.Stats.IsDead)
+            if (character != null && character.Stats != null && !character.Stats.IsDead && !_enteredInLastTracking.Contains(character))
                 OnCreatureInAreaAtRoundStart(character);
         }
+        _enteredInLastTracking.Clear();
 
         RoundsRemaining--;
 
@@ -628,10 +632,14 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
     }
 
+    /// <summary>The creatures the last <see cref="UpdateCharacterTracking"/> pass met as new entrants.</summary>
+    private readonly HashSet<CharacterController> _enteredInLastTracking = new HashSet<CharacterController>();
+
     private void UpdateCharacterTrackingCore()
     {
         CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
         var currentlyInArea = new HashSet<CharacterController>();
+        _enteredInLastTracking.Clear();
 
         for (int i = 0; i < allCharacters.Length; i++)
         {
@@ -644,7 +652,10 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
             currentlyInArea.Add(character);
             if (!CharactersInArea.Contains(character))
+            {
+                _enteredInLastTracking.Add(character);
                 OnCreatureEntersArea(character, isInitial: false);
+            }
         }
 
         foreach (CharacterController previous in CharactersInArea)
@@ -654,6 +665,46 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
 
         CharactersInArea = currentlyInArea;
+    }
+
+    /// <summary>
+    /// Zone tracking for one creature after a step of its own movement (the zone-entry movement step hook,
+    /// AreaZoneEntryStepHook; batch 12 step 23, GRID-018): a creature that stepped into the area is registered and its
+    /// entry reaction runs now (OnCreatureEntersArea, not initial), so one that only crosses the area is caught; one that
+    /// stepped out is unregistered (OnCreatureExitsArea). The registry is the one <see cref="UpdateCharacterTracking"/>
+    /// keeps, so an entrant is not met again as new at the next round start (the double entry save of GRID-018), and an
+    /// area that also tracks every frame fires each entry once.
+    /// </summary>
+    public void NotifyCreatureStep(CharacterController character)
+    {
+        if (hasExpired || character == null || character.Stats == null || character.Stats.IsDead || AffectedCells == null)
+            return;
+
+        bool inside = IsCharacterInArea(character);
+        bool tracked = CharactersInArea.Contains(character);
+        if (inside == tracked)
+            return;
+
+        // The entry resolves as one effect: a reaction to its damage (the acid spray, D1) comes after it.
+        GameManager gm = gameManager != null ? gameManager : GameManager.Instance;
+        gm?.DeferAttackedReactions();
+        try
+        {
+            if (inside)
+            {
+                CharactersInArea.Add(character);
+                OnCreatureEntersArea(character, isInitial: false);
+            }
+            else
+            {
+                CharactersInArea.Remove(character);
+                OnCreatureExitsArea(character);
+            }
+        }
+        finally
+        {
+            gm?.ResumeAttackedReactions();
+        }
     }
 
     protected void ApplyInitialEffect()
@@ -726,6 +777,10 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     /// </summary>
     protected SaveRoll RollSpellSave(CharacterController character, SavingThrowType save, int dc)
         => SaveRollRules.Roll(character != null ? character.Stats : null, save, dc, SpellSaveContext(), null);
+
+    /// <summary><see cref="RollSpellSave(CharacterController, SavingThrowType, int)"/> with a dice context (a scenario can force the d20).</summary>
+    protected SaveRoll RollSpellSave(CharacterController character, SavingThrowType save, int dc, string diceContext)
+        => SaveRollRules.Roll(character != null ? character.Stats : null, save, dc, SpellSaveContext(), diceContext);
 
     /// <summary>
     /// Deals this effect's spell damage of one type to <paramref name="character"/> through the shared path
