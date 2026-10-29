@@ -13,13 +13,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Undead Mindless AI", menuName = "DND35/AI/Profiles/Undead Mindless")]
     public class UndeadMindlessAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Undead Mindless";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Mindless undead that shamble toward the nearest living target and attack without tactics.";
+            ProfileName = "Undead Mindless";
+            Description = "Mindless undead that shamble toward the nearest living target and attack without tactics.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 1f;

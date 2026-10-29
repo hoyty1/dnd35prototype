@@ -130,7 +130,7 @@ namespace Tests.Scenarios
         public Control Control = Control.Ai;
         /// <summary>
         /// Optional AI profile override for an AI-run PC-slot actor (default: AiProfileForClass). Return a fresh
-        /// ScriptableObject.CreateInstance: the harness destroys it after the job. An asset, or an instance another
+        /// AIProfile.CreateRuntime (the type's tuning defaults, AI-017): the harness destroys it after the job. An asset, or an instance another
         /// controller already uses, is assigned but never destroyed.
         /// </summary>
         public Func<DND35.AI.AIProfile> Profile;

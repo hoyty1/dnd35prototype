@@ -39,10 +39,10 @@ public partial class GameManager
             yield break;
 
         CurrentPhase = TurnPhase.NPCTurn;
-        CombatUI.SetActivePC(0); // No PC active
-        CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
-        CombatUI.SetActionButtonsVisible(false);
-        CombatUI.HideSummonContextMenu();
+        CombatUI?.SetActivePC(0); // No PC active
+        CombatUI?.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
+        CombatUI?.SetActionButtonsVisible(false);
+        CombatUI?.HideSummonContextMenu();
 
         // Update initiative UI to highlight current NPC
         UpdateInitiativeUI();
@@ -52,7 +52,7 @@ public partial class GameManager
 
         if (ShouldSkipTurnDueToHPState(npc))
         {
-            CombatUI.SetActiveNPC(-1); // Clear NPC highlight
+            CombatUI?.SetActiveNPC(-1); // Clear NPC highlight
             if (npc != null && npc.Stats != null)
             {
                 string reason = GetUnableToActReason(npc);
@@ -96,7 +96,7 @@ public partial class GameManager
 
         if (data.CurrentCommand != null && data.CurrentCommand.Type == SummonCommandType.ProtectCaster && data.Caster != null && data.Caster.Stats != null)
         {
-            CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}."));
         }
 
         CharacterController target = SelectSummonTargetByCommand(summon, data);
@@ -124,7 +124,7 @@ public partial class GameManager
                 {
                     if (summon.Actions.HasMoveAction)
                         summon.Actions.UseMoveAction();
-                    CombatUI.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
                     yield return new WaitForSeconds(0.45f);
                 }
             }
@@ -148,7 +148,7 @@ public partial class GameManager
                 if (!advanceMove.Refused) // a refused move (logged) spends nothing
                 {
                     summon.Actions.UseMoveAction();
-                    CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
+                    CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.4f);
                 }
             }
@@ -1050,13 +1050,13 @@ public partial class GameManager
         {
             if (ExecuteReload(npc, out string reloadLog))
             {
-                CombatUI.ShowCombatLog(reloadLog);
+                CombatUI?.ShowCombatLog(reloadLog);
                 UpdateAllStatsUI();
                 yield return new WaitForSeconds(0.8f);
                 yield break;
             }
 
-            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
             yield return new WaitForSeconds(0.6f);
             yield break;
         }

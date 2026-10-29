@@ -103,6 +103,7 @@ public partial class GameManager
         _activeSummons.RemoveAll(s => s != null && s.Controller == npc);
         _summonedAllies.Remove(npc);
         _summonedEnemies.Remove(npc);
+        DestroyRuntimeAIProfileIfUnused(npc.aiProfile, npc); // its runtime profile goes with it (AI-017)
         if (npc.gameObject != null)
             Destroy(npc.gameObject);
     }
@@ -310,7 +311,7 @@ public partial class GameManager
 
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
-                npc.aiProfile = TrackRuntimeAIProfile(ScriptableObject.CreateInstance<RangedAIProfile>());
+                ReplaceRuntimeAIProfile(npc, CreateRuntimeAIProfile<RangedAIProfile>());
                 npc.Tags.AddTag("Uses Armor-Based Targeting");
                 Debug.Log($"[ArmorTargetingTest] Overriding {npc.Stats.CharacterName} to Ranged profile for armor-priority targeting validation.");
             }
@@ -318,7 +319,7 @@ public partial class GameManager
             if (_isShieldBashTestEncounter)
             {
                 // Keep shield bash validation deterministic: basic melee pressure only, no trip/disarm/grapple maneuver selection.
-                npc.aiProfile = TrackRuntimeAIProfile(ScriptableObject.CreateInstance<UndeadMindlessAIProfile>());
+                ReplaceRuntimeAIProfile(npc, CreateRuntimeAIProfile<UndeadMindlessAIProfile>());
                 npc.Tags.AddTag("ShieldBashTestSimpleMeleeAI");
                 Debug.Log($"[ShieldBashTest] Overriding {npc.Stats.CharacterName} to simple melee-only AI profile.");
             }
@@ -591,12 +592,30 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Runtime AI profile instances this GameManager created for spawned creatures (BuildRuntimeAIProfile and the
-    /// preset spawn overrides). <see cref="ResetCharacterSlotForSpawn"/> destroys a slot's old profile only when it is
-    /// in this set, so a profile someone else owns (a persistent asset, or one the scenario harness assigned and
-    /// tracks) is never destroyed here.
+    /// Runtime AI profile instances this GameManager created for spawned creatures (<see cref="CreateRuntimeAIProfile{T}"/>:
+    /// BuildRuntimeAIProfile, the preset spawn overrides and the swarm summons). It destroys a profile only when it is in
+    /// this set, so a profile someone else owns (a persistent asset, or one the scenario harness assigned and tracks) is
+    /// never destroyed here (AI-017).
     /// </summary>
     private readonly HashSet<DND35.AI.AIProfile> _runtimeCreatedAIProfiles = new HashSet<DND35.AI.AIProfile>();
+
+    /// <summary>
+    /// The tracked profiles of summoned creatures. A summon is its own GameObject, destroyed when it leaves, not a pool
+    /// slot that a later spawn resets, so <see cref="DestroyUnusedSummonAIProfiles"/> destroys these profiles once the
+    /// summons are despawned and no live creature uses them (AI-017).
+    /// </summary>
+    private readonly HashSet<DND35.AI.AIProfile> _runtimeSummonAIProfiles = new HashSet<DND35.AI.AIProfile>();
+
+    /// <summary>
+    /// The one way the game creates an AI profile at runtime: <see cref="DND35.AI.AIProfile.CreateRuntime{T}"/> (the
+    /// instance with its type's tuning defaults) recorded as an instance this GameManager owns (AI-017).
+    /// </summary>
+    internal T CreateRuntimeAIProfile<T>() where T : DND35.AI.AIProfile
+    {
+        T profile = DND35.AI.AIProfile.CreateRuntime<T>();
+        TrackRuntimeAIProfile(profile);
+        return profile;
+    }
 
     /// <summary>Records <paramref name="profile"/> as a runtime instance this GameManager owns, and returns it.</summary>
     private DND35.AI.AIProfile TrackRuntimeAIProfile(DND35.AI.AIProfile profile)
@@ -604,6 +623,76 @@ public partial class GameManager
         if (profile != null)
             _runtimeCreatedAIProfiles.Add(profile);
         return profile;
+    }
+
+    /// <summary>
+    /// Gives <paramref name="character"/> <paramref name="profile"/> and destroys the profile it replaces when this
+    /// GameManager created that one and no other character uses it (AI-017). A summon's replacement stays marked as a
+    /// summon profile.
+    /// </summary>
+    private void ReplaceRuntimeAIProfile(CharacterController character, DND35.AI.AIProfile profile)
+    {
+        if (character == null)
+            return;
+        DND35.AI.AIProfile old = character.aiProfile;
+        character.aiProfile = profile;
+        if (old == null || old == profile)
+            return;
+        if (_runtimeSummonAIProfiles.Contains(old) && profile != null && _runtimeCreatedAIProfiles.Contains(profile))
+            _runtimeSummonAIProfiles.Add(profile);
+        DestroyRuntimeAIProfileIfUnused(old, character);
+    }
+
+    /// <summary>Marks a new summon's tracked profile for <see cref="DestroyUnusedSummonAIProfiles"/>.</summary>
+    private void MarkSummonAIProfile(CharacterController summon)
+    {
+        DND35.AI.AIProfile profile = summon != null ? summon.aiProfile : null;
+        if (profile != null && _runtimeCreatedAIProfiles.Contains(profile))
+            _runtimeSummonAIProfiles.Add(profile);
+    }
+
+    /// <summary>
+    /// Destroys <paramref name="profile"/> when this GameManager created it and no character but
+    /// <paramref name="exclude"/> uses it (party, enemy slots, summons).
+    /// </summary>
+    private void DestroyRuntimeAIProfileIfUnused(DND35.AI.AIProfile profile, CharacterController exclude)
+    {
+        if (profile == null || !_runtimeCreatedAIProfiles.Contains(profile) || IsAIProfileUsedByOther(profile, exclude))
+            return;
+        _runtimeCreatedAIProfiles.Remove(profile);
+        _runtimeSummonAIProfiles.Remove(profile);
+        Destroy(profile);
+    }
+
+    private bool IsAIProfileUsedByOther(DND35.AI.AIProfile profile, CharacterController exclude)
+    {
+        bool Uses(CharacterController c) => c != null && c != exclude && c.aiProfile == profile;
+        if (PCs != null)
+            foreach (CharacterController c in PCs)
+                if (Uses(c)) return true;
+        if (NPCs != null)
+            foreach (CharacterController c in NPCs)
+                if (Uses(c)) return true;
+        foreach (ActiveSummonInstance s in _activeSummons)
+            if (s != null && Uses(s.Controller)) return true;
+        foreach (CharacterController c in _summonedAllies)
+            if (Uses(c)) return true;
+        foreach (CharacterController c in _summonedEnemies)
+            if (Uses(c)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Destroys the tracked summon profiles that no live creature uses any more (the summon left or was despawned).
+    /// Called by <see cref="ResetCombatStateForNextEncounter"/> and again right after each despawn loop that clears the
+    /// summon lists (the post-combat rest, the defeat screen's new party, the scenario harness reset); it is idempotent
+    /// (AI-017).
+    /// </summary>
+    private void DestroyUnusedSummonAIProfiles()
+    {
+        _runtimeSummonAIProfiles.RemoveWhere(p => p == null);
+        foreach (DND35.AI.AIProfile profile in new List<DND35.AI.AIProfile>(_runtimeSummonAIProfiles))
+            DestroyRuntimeAIProfileIfUnused(profile, null);
     }
 
     /// <summary>
@@ -686,12 +775,7 @@ public partial class GameManager
         npc.ResetForNewCreature("slot reused");
 
         _runtimeCreatedAIProfiles.RemoveWhere(p => p == null);
-        if (oldProfile != null && _runtimeCreatedAIProfiles.Contains(oldProfile)
-            && !others.Exists(o => o != null && o != npc && o.aiProfile == oldProfile))
-        {
-            _runtimeCreatedAIProfiles.Remove(oldProfile);
-            Destroy(oldProfile);
-        }
+        DestroyRuntimeAIProfileIfUnused(oldProfile, npc);
     }
 
     /// <summary>
@@ -1047,7 +1131,7 @@ public partial class GameManager
             concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
         concMgr.Init(stats, npc);
 
-        npc.aiProfile = TrackRuntimeAIProfile(runtimeProfile);
+        npc.aiProfile = runtimeProfile; // tracked by CreateRuntimeAIProfile (AI-017)
         npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
         npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
 
@@ -1110,44 +1194,44 @@ public partial class GameManager
         switch (archetype)
         {
             case NPCAIProfileArchetype.Animal:
-                return ScriptableObject.CreateInstance<AnimalAIProfile>();
+                return CreateRuntimeAIProfile<AnimalAIProfile>();
             case NPCAIProfileArchetype.Humanoid:
-                return ScriptableObject.CreateInstance<HumanoidAIProfile>();
+                return CreateRuntimeAIProfile<HumanoidAIProfile>();
             case NPCAIProfileArchetype.Berserk:
-                return ScriptableObject.CreateInstance<BerserkAIProfile>();
+                return CreateRuntimeAIProfile<BerserkAIProfile>();
             case NPCAIProfileArchetype.Grappler:
-                return ScriptableObject.CreateInstance<GrapplerAIProfile>();
+                return CreateRuntimeAIProfile<GrapplerAIProfile>();
             case NPCAIProfileArchetype.Ranged:
-                return ScriptableObject.CreateInstance<RangedAIProfile>();
+                return CreateRuntimeAIProfile<RangedAIProfile>();
             case NPCAIProfileArchetype.Healer:
-                return ScriptableObject.CreateInstance<HealerAIProfile>();
+                return CreateRuntimeAIProfile<HealerAIProfile>();
             case NPCAIProfileArchetype.Spellcaster:
-                return ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+                return CreateRuntimeAIProfile<SpellcasterAIProfile>();
             case NPCAIProfileArchetype.Evoker:
-                return ScriptableObject.CreateInstance<EvokerAIProfile>();
+                return CreateRuntimeAIProfile<EvokerAIProfile>();
             case NPCAIProfileArchetype.Abjurer:
-                return ScriptableObject.CreateInstance<AbjurerAIProfile>();
+                return CreateRuntimeAIProfile<AbjurerAIProfile>();
             case NPCAIProfileArchetype.Necromancer:
-                return ScriptableObject.CreateInstance<NecromancerAIProfile>();
+                return CreateRuntimeAIProfile<NecromancerAIProfile>();
             case NPCAIProfileArchetype.UndeadMindless:
-                return ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
+                return CreateRuntimeAIProfile<UndeadMindlessAIProfile>();
             case NPCAIProfileArchetype.Swarm:
-                return ScriptableObject.CreateInstance<SwarmAI>();
+                return CreateRuntimeAIProfile<SwarmAI>();
             case NPCAIProfileArchetype.IndiscriminateSwarm:
-                return ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+                return CreateRuntimeAIProfile<IndiscriminateSwarmAI>();
             case NPCAIProfileArchetype.Dragon:
-                return ScriptableObject.CreateInstance<DragonAIProfile>();
+                return CreateRuntimeAIProfile<DragonAIProfile>();
             case NPCAIProfileArchetype.Undead:
             case NPCAIProfileArchetype.UndeadTactical:
-                return ScriptableObject.CreateInstance<UndeadTacticalAIProfile>();
+                return CreateRuntimeAIProfile<UndeadTacticalAIProfile>();
             case NPCAIProfileArchetype.UndeadBrute:
-                return ScriptableObject.CreateInstance<UndeadBruteAIProfile>();
+                return CreateRuntimeAIProfile<UndeadBruteAIProfile>();
             case NPCAIProfileArchetype.UndeadIncorporeal:
-                return ScriptableObject.CreateInstance<UndeadIncorporealAIProfile>();
+                return CreateRuntimeAIProfile<UndeadIncorporealAIProfile>();
             case NPCAIProfileArchetype.Vampire:
-                return ScriptableObject.CreateInstance<VampireAIProfile>();
+                return CreateRuntimeAIProfile<VampireAIProfile>();
             case NPCAIProfileArchetype.Lich:
-                return ScriptableObject.CreateInstance<LichAIProfile>();
+                return CreateRuntimeAIProfile<LichAIProfile>();
             default:
                 return null;
         }

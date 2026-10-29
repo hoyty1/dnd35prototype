@@ -14,13 +14,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Undead Brute AI", menuName = "DND35/AI/Profiles/Undead Brute")]
     public class UndeadBruteAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Undead Brute";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Fearsome undead brute that advances relentlessly, using auras to debilitate and melee to destroy.";
+            ProfileName = "Undead Brute";
+            Description = "Fearsome undead brute that advances relentlessly, using auras to debilitate and melee to destroy.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 1f;             // maximum aggression — never retreats

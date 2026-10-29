@@ -7,7 +7,7 @@ namespace Tests.Scenarios
 {
     /// <summary>
     /// Picks an AI profile for a PC-slot actor the harness runs through the AI (the party has no profiles).
-    /// Instances are created like GameManager.BuildRuntimeAIProfile does (ScriptableObject.CreateInstance);
+    /// Instances are created like GameManager.BuildRuntimeAIProfile does (AIProfile.CreateRuntime, AI-017);
     /// the runner destroys them when the job ends.
     /// Cleric and Druid: Healer. Wizard and Sorcerer: Evoker with a damage spell prepared or known, else Spellcaster.
     /// Ranger with a ranged weapon in hand: Ranged. Anything else: Humanoid.
@@ -21,19 +21,19 @@ namespace Tests.Scenarios
             {
                 case "Cleric":
                 case "Druid":
-                    return ScriptableObject.CreateInstance<HealerAIProfile>();
+                    return DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
                 case "Wizard":
                 case "Sorcerer":
                     return HasDamageSpell(pc)
-                        ? ScriptableObject.CreateInstance<EvokerAIProfile>()
-                        : (AIProfile)ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+                        ? DND35.AI.AIProfile.CreateRuntime<EvokerAIProfile>()
+                        : (AIProfile)DND35.AI.AIProfile.CreateRuntime<SpellcasterAIProfile>();
                 case "Ranger":
                     ItemData weapon = pc.GetEquippedMainWeapon();
                     if (weapon != null && weapon.IsRangedWeapon)
-                        return ScriptableObject.CreateInstance<RangedAIProfile>();
-                    return ScriptableObject.CreateInstance<HumanoidAIProfile>();
+                        return DND35.AI.AIProfile.CreateRuntime<RangedAIProfile>();
+                    return DND35.AI.AIProfile.CreateRuntime<HumanoidAIProfile>();
                 default:
-                    return ScriptableObject.CreateInstance<HumanoidAIProfile>();
+                    return DND35.AI.AIProfile.CreateRuntime<HumanoidAIProfile>();
             }
         }
 

@@ -868,6 +868,7 @@ public partial class GameManager : MonoBehaviour
         _activeSummons.Clear();
         _summonedAllies.Clear();
         _summonedEnemies.Clear();
+        DestroyUnusedSummonAIProfiles(); // the despawned summons' AI profiles (AI-017)
         ClearAllMirrorImageEffects("combat reset");
         MeleeReactionService.ClearAll();
         CurseTracker.ClearAll();
@@ -1149,6 +1150,7 @@ public partial class GameManager : MonoBehaviour
         ClearGrappleMoveSelectionState();
 
         ClearBattlefieldForEncounterLoopReset(safeContext);
+        DestroyUnusedSummonAIProfiles(); // the last fight's summons' AI profiles (AI-017)
 
         // The energy damage a continuing party member took belongs to the last fight (the AI's energy choice reads it,
         // CharacterStats.LastEnergyDamageTaken; batch 11 step 22).
@@ -11302,9 +11304,6 @@ public partial class GameManager : MonoBehaviour
     public bool IsEnemyTeamForAI(CharacterController source, CharacterController target)
         => TeamUtility.IsEnemy(source, target);
 
-    public bool IsUndeadCharacterForAI(CharacterController character)
-        => IsUndeadCharacter(character);
-
     public CharacterController GetTurnUndeadTurnerForAI(CharacterController undead)
         => GetTurnUndeadTurner(undead);
 
@@ -11313,12 +11312,6 @@ public partial class GameManager : MonoBehaviour
 
     public CharacterController GetClosestAliveEnemyToForAI(CharacterController source)
         => GetClosestAliveEnemyTo(source);
-
-    public void PruneTurnUndeadTrackersForAI()
-        => PruneTurnUndeadTrackers();
-
-    public void CheckTurnUndeadProximityBreakingForMoverForAI(CharacterController mover)
-        => CheckTurnUndeadProximityBreakingForMover(mover);
 
     public float GetPlayerMoveSecondsPerStepForAI()
         => PlayerMoveSecondsPerStep;

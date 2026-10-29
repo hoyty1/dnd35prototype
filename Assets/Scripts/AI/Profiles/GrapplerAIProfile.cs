@@ -8,13 +8,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Grappler AI", menuName = "DND35/AI/Profiles/Grappler")]
     public class GrapplerAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Grappler";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Control-focused melee profile that seeks grapples on isolated/vulnerable targets.";
+            ProfileName = "Grappler";
+            Description = "Control-focused melee profile that seeks grapples on isolated/vulnerable targets.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 0.7f;

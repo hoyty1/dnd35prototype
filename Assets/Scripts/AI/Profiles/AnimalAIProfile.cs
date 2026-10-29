@@ -34,13 +34,12 @@ namespace DND35.AI.Profiles
 
         private readonly HashSet<int> _specialtyLoggedActors = new HashSet<int>();
 
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Animal";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Specialty-driven animal profile that adapts between grappler, tripper, and pack-hunter tactics.";
+            ProfileName = "Animal";
+            Description = "Specialty-driven animal profile that adapts between grappler, tripper, and pack-hunter tactics.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 0.75f;
@@ -69,7 +68,11 @@ namespace DND35.AI.Profiles
             Maneuvers.AttemptBullRush = false;
             Maneuvers.AttemptOverrun = false;
             Maneuvers.UsePowerAttack = false;
+        }
 
+        /// <summary>Runtime state only; the tuning is <see cref="ApplyRuntimeDefaults"/> (AI-017).</summary>
+        private void OnEnable()
+        {
             _specialtyLoggedActors.Clear();
         }
 

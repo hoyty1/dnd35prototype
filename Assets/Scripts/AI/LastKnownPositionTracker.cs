@@ -94,14 +94,6 @@ public class LastKnownPositionTracker : MonoBehaviour
         return null;
     }
 
-    public bool IsAtLastKnownPosition(CharacterController character, Vector2Int lastKnownPos)
-    {
-        if (character == null)
-            return false;
-
-        return character.GridPosition == lastKnownPos;
-    }
-
     /// <summary>
     /// True while <paramref name="character"/> stands in the square this creature's last check pinpointed it in. A pinpoint
     /// lapses once the creature moves out of that square (DMG p.295), even before the observer's next check.

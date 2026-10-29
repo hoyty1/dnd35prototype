@@ -5,14 +5,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Abjurer AI", menuName = "DND35/AI/Profiles/Spellcasters/Abjurer")]
     public class AbjurerAIProfile : SpellcasterAIProfile
     {
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Abjurer";
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Defensive spellcaster prioritizing protection, control, and ally safety.";
+            ProfileName = "Abjurer";
+            Description = "Defensive spellcaster prioritizing protection, control, and ally safety.";
 
             CombatStyle = CombatStyle.Mixed;
             Aggression = 0.3f;

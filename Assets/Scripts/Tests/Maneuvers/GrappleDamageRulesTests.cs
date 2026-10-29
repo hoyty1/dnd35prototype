@@ -817,7 +817,7 @@ public static class GrappleDamageRulesTests
         npc.Stats.HasPounce = true;
         npc.Stats.HasImprovedGrab = true;
         npc.Stats.HasRake = true;
-        AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+        AnimalAIProfile profile = DND35.AI.AIProfile.CreateRuntime<AnimalAIProfile>();
         npc.aiProfile = profile;
 
         try
@@ -3277,7 +3277,7 @@ public static class GrappleDamageRulesTests
             npc.Stats.BaseAttackBonusOverride = 4;
             npc.Stats.Feats.Add("Improved Trip"); // no AoO from the target (PHB p.96)
             npc.IsControllable = false;
-            profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.GrapplerAIProfile>();
+            profile = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.GrapplerAIProfile>();
             npc.aiProfile = profile;
             target = CreateWeakDefender("NpcNaturalGrapplerTarget");
             target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
@@ -3377,7 +3377,7 @@ public static class GrappleDamageRulesTests
                 try
                 {
                     if (withProfile)
-                        profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>();
+                        profile = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
                     npc = CreateAiTripper(withProfile ? "StopgapTripHumanoid" : "StopgapTripLegacy", profile, 24, 4 + row);
                     target = CreateArmedStopgapTarget(withProfile ? "StopgapTripHumanoidTarget" : "StopgapTripLegacyTarget", 25, 4 + row);
                     row += 3;
@@ -3453,7 +3453,7 @@ public static class GrappleDamageRulesTests
                 try
                 {
                     if (withProfile)
-                        profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>();
+                        profile = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
                     npc = CreateAiTripper(withProfile ? "StopgapFailHumanoid" : "StopgapFailLegacy", profile, 28, 4 + row);
                     target = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidTarget" : "StopgapFailLegacyTarget", 29, 4 + row);
                     other = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidOther" : "StopgapFailLegacyOther", 29, 5 + row);

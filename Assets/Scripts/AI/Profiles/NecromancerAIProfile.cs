@@ -5,14 +5,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Necromancer AI", menuName = "DND35/AI/Profiles/Spellcasters/Necromancer")]
     public class NecromancerAIProfile : SpellcasterAIProfile
     {
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Necromancer";
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Debuff and attrition specialist emphasizing necromancy and tactical pressure.";
+            ProfileName = "Necromancer";
+            Description = "Debuff and attrition specialist emphasizing necromancy and tactical pressure.";
 
             CombatStyle = CombatStyle.Ranged;
             Aggression = 0.6f;

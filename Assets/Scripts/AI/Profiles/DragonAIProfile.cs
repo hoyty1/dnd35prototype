@@ -57,13 +57,12 @@ namespace DND35.AI.Profiles
         [System.NonSerialized] public int BreathWeaponExpectedHits;
         [System.NonSerialized] public bool WantsToUseSecondaryBreath;
 
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Dragon";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Tactical dragon AI: breath weapon optimization, spell priority, caster targeting.";
+            ProfileName = "Dragon";
+            Description = "Tactical dragon AI: breath weapon optimization, spell priority, caster targeting.";
 
             CombatStyle = CombatStyle.Mixed;
             Aggression = 0.8f;

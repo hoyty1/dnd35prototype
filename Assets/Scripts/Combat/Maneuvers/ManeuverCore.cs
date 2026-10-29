@@ -317,8 +317,8 @@ public static class ManeuverDeciders
 {
     /// <summary>
     /// The UI decider for a controllable creature, else the AI's. <paramref name="overrideSource"/> fixes the source: the NPC
-    /// executor passes <see cref="ActorSource.AI"/> (the NPC turn path is AI-run for every creature on it), and batch 13
-    /// passes a forced source.
+    /// executor passes <see cref="ActorSource.AI"/> (the NPC turn path is AI-run for every creature on it), and so does a
+    /// forced PC turn (batch 13 design choice C7).
     /// </summary>
     public static IManeuverDecider For(CharacterController actor, ActorSource? overrideSource = null)
     {

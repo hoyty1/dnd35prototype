@@ -42,14 +42,12 @@ namespace DND35.AI.Profiles
 
         public bool StayNearWoundedAllies = true;
 
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Healer";
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Support spellcaster focused on healing, buffing, and safe combat decisions.";
+            ProfileName = "Healer";
+            Description = "Support spellcaster focused on healing, buffing, and safe combat decisions.";
 
             CombatStyle = CombatStyle.Ranged;
             Aggression = 0.2f;

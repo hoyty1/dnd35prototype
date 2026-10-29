@@ -5,14 +5,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Evoker AI", menuName = "DND35/AI/Profiles/Spellcasters/Evoker")]
     public class EvokerAIProfile : SpellcasterAIProfile
     {
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Evoker";
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Offensive spellcaster focused on evocation and aggressive AoE use.";
+            ProfileName = "Evoker";
+            Description = "Offensive spellcaster focused on evocation and aggressive AoE use.";
 
             CombatStyle = CombatStyle.Ranged;
             Aggression = 0.8f;

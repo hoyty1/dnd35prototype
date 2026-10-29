@@ -64,7 +64,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 102,
+      "passed": 111,
       "failed": 3,
       "flakyFailures": 0,
       "knownFailures": [
@@ -81,7 +81,7 @@
           "issue": "TST-025"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 18 review (2026-10-28, AI-055 closed): seven checks of the AI attack-mode stopgaps (DefaultShouldUseTwoWeaponFighting: a TWF + ITWF fighter with a light off-hand weapon fights with two, a no-feat one with a one-handed off-hand weapon does not, none once the turn cannot become a full attack; DefaultShouldUseRapidShot: a Rapid Shot archer declares it, no feat no Rapid Shot, one dagger to throw no, a second dagger carried yes); 93 passed (20261029T032102Z-play). Batch 12 step 19 review (2026-10-29): +9, the maneuver stopgaps (DefaultShouldFeint: feints, not a mindless target, not without the move action; DefaultShouldSkipImprovedGrab at and one below the tie; DefaultChooseManeuverItem: the weapon over the shield, the better of two held weapons; DefaultChooseGrappleMoveDestination stays beside its ally and moves toward a farther one); 102 passed."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 18 review (2026-10-28, AI-055 closed): seven checks of the AI attack-mode stopgaps (DefaultShouldUseTwoWeaponFighting: a TWF + ITWF fighter with a light off-hand weapon fights with two, a no-feat one with a one-handed off-hand weapon does not, none once the turn cannot become a full attack; DefaultShouldUseRapidShot: a Rapid Shot archer declares it, no feat no Rapid Shot, one dagger to throw no, a second dagger carried yes); 93 passed (20261029T032102Z-play). Batch 12 step 19 review (2026-10-29): +9, the maneuver stopgaps (DefaultShouldFeint: feints, not a mindless target, not without the move action; DefaultShouldSkipImprovedGrab at and one below the tie; DefaultChooseManeuverItem: the weapon over the shield, the better of two held weapons; DefaultChooseGrappleMoveDestination stays beside its ally and moves toward a farther one); 102 passed. Batch 13 step 2 (2026-10-29, AI-017, AI-053): nine checks of AIProfile.CreateRuntime: every profile type gets its own ProfileName and its old OnEnable tuning, and values loaded into a bare CreateInstance survive OnEnable."
     },
     {
       "type": "Tests.AI.AiMetamagicPlannerTests",
@@ -253,11 +253,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 49,
+      "passed": 54,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager"
+      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one."
     },
     {
       "type": "Tests.Character.NpcProficiencyTests",

@@ -200,6 +200,7 @@ public partial class GameManager
         Sprite dead = LoadSprite("Sprites/npc_enemy_dead");
 
         InitializeNPCFromDefinition(summon, summonDef, cell, alive, dead);
+        MarkSummonAIProfile(summon); // destroyed at the next combat reset once the summon is gone (AI-017)
 
         // The summoned creature fights for its caster's side and follows its caster's control (batch 11 step 27): the
         // player commands a player-controlled caster's creature, the AI runs an AI-run caster's (an enemy's, or an AI-run
@@ -630,7 +631,7 @@ public partial class GameManager
             return;
         }
 
-        summonCC.aiProfile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+        ReplaceRuntimeAIProfile(summonCC, CreateRuntimeAIProfile<IndiscriminateSwarmAI>());
         summonCC.EnemyUseCoupDeGraceOverride = false;
 
         // Swarm is completely uncontrollable - it attacks nearest creature regardless of team
@@ -770,7 +771,7 @@ public partial class GameManager
                 summonCC.SetControllable(false);
 
                 if (!(summonCC.aiProfile is SwarmAI) && !(summonCC.aiProfile is IndiscriminateSwarmAI))
-                    summonCC.aiProfile = ScriptableObject.CreateInstance<SwarmAI>();
+                    ReplaceRuntimeAIProfile(summonCC, CreateRuntimeAIProfile<SwarmAI>());
             }
 
             if (stackedDueToNoSpace)

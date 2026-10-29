@@ -15,13 +15,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Undead Incorporeal AI", menuName = "DND35/AI/Profiles/Undead Incorporeal")]
     public class UndeadIncorporealAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Undead Incorporeal";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Incorporeal undead that phases through defences, draining ability scores with touch attacks.";
+            ProfileName = "Undead Incorporeal";
+            Description = "Incorporeal undead that phases through defences, draining ability scores with touch attacks.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 0.9f;           // very aggressive — incorporeality protects them

@@ -77,6 +77,8 @@ namespace Tests.AI
             TestAiImprovedGrabSkipStopgap();
             TestAiManeuverItemStopgap();
             TestAiGrappleMoveStaysWhenSafest();
+            TestRuntimeProfilesGetNameAndDefaults();
+            TestSavedProfileValuesSurviveLoad();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -92,6 +94,144 @@ namespace Tests.AI
             {
                 _failed++;
                 Debug.LogError($"  FAIL: {testName} {detail}");
+            }
+        }
+
+        // ---- Batch 13 step 2 (AI-017, AI-053): runtime profile defaults and saved values ----
+
+        private static void Destroy(UnityEngine.Object o)
+        {
+            if (o != null)
+                UnityEngine.Object.DestroyImmediate(o);
+        }
+
+        /// <summary>
+        /// AIProfile.CreateRuntime gives every profile type its own ProfileName (AI-053: the "Default AI" initializer no
+        /// longer survives) and its tuning, with the values the old OnEnable wrote (AI-017).
+        /// </summary>
+        private static void TestRuntimeProfilesGetNameAndDefaults()
+        {
+            var names = new List<KeyValuePair<AIProfile, string>>
+            {
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<AnimalAIProfile>(), "Animal"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<HumanoidAIProfile>(), "Humanoid"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<BerserkAIProfile>(), "Berserk"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<GrapplerAIProfile>(), "Grappler"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<RangedAIProfile>(), "Ranged"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<SpellcasterAIProfile>(), "Spellcaster"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<HealerAIProfile>(), "Healer"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<EvokerAIProfile>(), "Evoker"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<AbjurerAIProfile>(), "Abjurer"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<NecromancerAIProfile>(), "Necromancer"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<DragonAIProfile>(), "Dragon"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<SwarmAI>(), "Swarm"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<IndiscriminateSwarmAI>(), "Indiscriminate Swarm"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<UndeadMindlessAIProfile>(), "Undead Mindless"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<UndeadTacticalAIProfile>(), "Undead Tactical"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<UndeadBruteAIProfile>(), "Undead Brute"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<UndeadIncorporealAIProfile>(), "Undead Incorporeal"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<VampireAIProfile>(), "Vampire"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<LichAIProfile>(), "Lich"),
+            };
+            try
+            {
+                var wrong = new List<string>();
+                foreach (KeyValuePair<AIProfile, string> kv in names)
+                    if (kv.Key == null || kv.Key.ProfileName != kv.Value)
+                        wrong.Add(kv.Value + "=" + (kv.Key != null ? kv.Key.ProfileName : "null"));
+                Assert(wrong.Count == 0, "AI-053: every runtime profile type carries its own ProfileName", string.Join(", ", wrong));
+
+                var berserk = (BerserkAIProfile)names[2].Key;
+                Assert(berserk.CombatStyle == CombatStyle.Melee && Mathf.Approximately(berserk.Aggression, 1f)
+                        && !berserk.Movement.AvoidAoOs && berserk.GrappleBehavior == GrappleBehavior.Aggressive
+                        && berserk.Maneuvers.AttemptTrip && berserk.TagPriorities.Count == 3,
+                    "AI-017: a runtime Berserk profile has its melee tuning and default tag priorities");
+                var ranged = (RangedAIProfile)names[4].Key;
+                Assert(ranged.CombatStyle == CombatStyle.Ranged && ranged.Movement.PreferredRangeSquares == 6
+                        && ranged.Movement.MaintainDistance && ranged.GrappleBehavior == GrappleBehavior.EscapeOnly,
+                    "AI-017: a runtime Ranged profile keeps 6 squares away");
+                var evoker = (EvokerAIProfile)names[7].Key;
+                Assert(evoker.CombatStyle == CombatStyle.Ranged && evoker.PreferredCastingDistanceSquares == 6
+                        && evoker.Movement.PreferredRangeSquares == 6 && evoker.Movement.AvoidAoOs
+                        && evoker.SchoolPriorities.Count == 3 && evoker.AOECasting.MinimumEnemiesInAOE == 2,
+                    "AI-017: a runtime Evoker profile has the spellcaster base defaults, then its own");
+                var vampire = (VampireAIProfile)names[17].Key;
+                Assert(vampire.Movement.PreferredRangeSquares == 2 && vampire.PreferredCastingDistanceSquares == 4
+                        && Mathf.Approximately(vampire.FleeHealthThreshold, vampire.GaseousFormFleeThreshold),
+                    "AI-017: a runtime Vampire profile overrides the spellcaster base range in the old order");
+            }
+            finally
+            {
+                foreach (KeyValuePair<AIProfile, string> kv in names)
+                    Destroy(kv.Key);
+            }
+        }
+
+        /// <summary>
+        /// AI-017: OnEnable no longer writes tuning, so values a saved .asset carries survive a load. Unity loads an
+        /// asset by creating the instance, deserialising its fields and then calling OnEnable; the test does the same
+        /// with JsonUtility and calls OnEnable by reflection where a profile still has one (Animal and Swarm keep only
+        /// runtime-state resets there).
+        /// </summary>
+        private static void TestSavedProfileValuesSurviveLoad()
+        {
+            BerserkAIProfile saved = AIProfile.CreateRuntime<BerserkAIProfile>();
+            AnimalAIProfile savedAnimal = AIProfile.CreateRuntime<AnimalAIProfile>();
+            SwarmAI savedSwarm = AIProfile.CreateRuntime<SwarmAI>();
+            BerserkAIProfile loaded = ScriptableObject.CreateInstance<BerserkAIProfile>();
+            AnimalAIProfile loadedAnimal = ScriptableObject.CreateInstance<AnimalAIProfile>();
+            SwarmAI loadedSwarm = ScriptableObject.CreateInstance<SwarmAI>();
+            try
+            {
+                Assert(loaded.ProfileName == "Default AI" && Mathf.Approximately(loaded.Aggression, 0.5f),
+                    "AI-017: CreateInstance alone (an asset before its fields load) writes no tuning");
+
+                saved.ProfileName = "Tuned Berserk";
+                saved.Aggression = 0.42f;
+                saved.Movement.AvoidAoOs = true;
+                savedAnimal.ProfileName = "Tuned Animal";
+                savedAnimal.Aggression = 0.33f;
+                savedAnimal.Movement.SeekFlanking = false;
+                savedSwarm.Aggression = 0.25f;
+
+                JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(saved), loaded);
+                JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(savedAnimal), loadedAnimal);
+                JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(savedSwarm), loadedSwarm);
+                InvokeOnEnable(loaded);
+                InvokeOnEnable(loadedAnimal);
+                InvokeOnEnable(loadedSwarm);
+
+                Assert(loaded.ProfileName == "Tuned Berserk" && Mathf.Approximately(loaded.Aggression, 0.42f) && loaded.Movement.AvoidAoOs,
+                    "AI-017: a saved Berserk profile keeps its name, aggression and movement after a load");
+                Assert(loadedAnimal.ProfileName == "Tuned Animal" && Mathf.Approximately(loadedAnimal.Aggression, 0.33f)
+                        && !loadedAnimal.Movement.SeekFlanking,
+                    "AI-017: a saved Animal profile keeps its values through its OnEnable");
+                Assert(Mathf.Approximately(loadedSwarm.Aggression, 0.25f),
+                    "AI-017: a saved Swarm profile keeps its aggression through its OnEnable");
+            }
+            finally
+            {
+                Destroy(saved);
+                Destroy(savedAnimal);
+                Destroy(savedSwarm);
+                Destroy(loaded);
+                Destroy(loadedAnimal);
+                Destroy(loadedSwarm);
+            }
+        }
+
+        private static void InvokeOnEnable(ScriptableObject profile)
+        {
+            for (Type t = profile.GetType(); t != null && t != typeof(ScriptableObject); t = t.BaseType)
+            {
+                System.Reflection.MethodInfo m = t.GetMethod("OnEnable",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly);
+                if (m != null)
+                {
+                    m.Invoke(profile, null);
+                    return;
+                }
             }
         }
 
@@ -319,7 +459,7 @@ namespace Tests.AI
             CharacterController ai = TestHelpers.CreateWarrior("AI_Berserk", level: 5);
             CharacterController healthy = TestHelpers.CreateWarrior("Target_Healthy", level: 5);
             CharacterController wounded = TestHelpers.CreateWarrior("Target_Wounded", level: 5);
-            BerserkAIProfile profile = ScriptableObject.CreateInstance<BerserkAIProfile>();
+            BerserkAIProfile profile = DND35.AI.AIProfile.CreateRuntime<BerserkAIProfile>();
 
             try
             {
@@ -346,7 +486,7 @@ namespace Tests.AI
             CharacterController ai = TestHelpers.CreateRogue("AI_Ranged", level: 5);
             CharacterController lightArmor = TestHelpers.CreateWarrior("Target_Light", level: 5);
             CharacterController heavyArmor = TestHelpers.CreateWarrior("Target_Heavy", level: 5);
-            RangedAIProfile profile = ScriptableObject.CreateInstance<RangedAIProfile>();
+            RangedAIProfile profile = DND35.AI.AIProfile.CreateRuntime<RangedAIProfile>();
 
             try
             {
@@ -375,7 +515,7 @@ namespace Tests.AI
             AIService aiService = aiServiceGo.AddComponent<AIService>();
             CharacterController attacker = TestHelpers.CreateWarrior("AI_Grappler", level: 6);
             CharacterController defender = TestHelpers.CreateWarrior("Target_Armed", level: 6);
-            GrapplerAIProfile profile = ScriptableObject.CreateInstance<GrapplerAIProfile>();
+            GrapplerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<GrapplerAIProfile>();
 
             try
             {
@@ -526,7 +666,7 @@ namespace Tests.AI
             CharacterController wolf = TestHelpers.CreateWarrior("AI_Wolf", level: 2);
             CharacterController nearTarget = TestHelpers.CreateWarrior("Near_Target", level: 3);
             CharacterController farTarget = TestHelpers.CreateWarrior("Far_Target", level: 3);
-            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+            AnimalAIProfile profile = DND35.AI.AIProfile.CreateRuntime<AnimalAIProfile>();
 
             try
             {
@@ -554,7 +694,7 @@ namespace Tests.AI
         {
             CharacterController wolf = TestHelpers.CreateWarrior("AI_Wolf_Trip", level: 2);
             CharacterController target = TestHelpers.CreateWarrior("Trip_Target", level: 3);
-            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+            AnimalAIProfile profile = DND35.AI.AIProfile.CreateRuntime<AnimalAIProfile>();
 
             try
             {
@@ -576,7 +716,7 @@ namespace Tests.AI
         private static void TestAnimalProfileEnablesAdaptiveFullAttackRetargeting()
         {
             CharacterController tiger = TestHelpers.CreateWarrior("AI_Tiger_Profile", level: 8);
-            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+            AnimalAIProfile profile = DND35.AI.AIProfile.CreateRuntime<AnimalAIProfile>();
 
             try
             {
@@ -618,9 +758,9 @@ namespace Tests.AI
         private static void TestProfileCoupDeGraceDefaults()
         {
             CharacterController attacker = TestHelpers.CreateWarrior("AI_Coup_Defaults", level: 5);
-            AnimalAIProfile animalProfile = ScriptableObject.CreateInstance<AnimalAIProfile>();
-            BerserkAIProfile berserkProfile = ScriptableObject.CreateInstance<BerserkAIProfile>();
-            SpellcasterAIProfile spellcasterProfile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            AnimalAIProfile animalProfile = DND35.AI.AIProfile.CreateRuntime<AnimalAIProfile>();
+            BerserkAIProfile berserkProfile = DND35.AI.AIProfile.CreateRuntime<BerserkAIProfile>();
+            SpellcasterAIProfile spellcasterProfile = DND35.AI.AIProfile.CreateRuntime<SpellcasterAIProfile>();
             AIProfile baseProfile = ScriptableObject.CreateInstance<AIProfile>();
 
             try
@@ -812,7 +952,7 @@ namespace Tests.AI
 
         private static void TestEvokerSchoolPriority()
         {
-            EvokerAIProfile profile = ScriptableObject.CreateInstance<EvokerAIProfile>();
+            EvokerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<EvokerAIProfile>();
             try
             {
                 float evocation = profile.GetSchoolPriority(SpellSchool.Evocation);
@@ -829,7 +969,7 @@ namespace Tests.AI
 
         private static void TestAbjurerPrefersSingleTarget()
         {
-            AbjurerAIProfile profile = ScriptableObject.CreateInstance<AbjurerAIProfile>();
+            AbjurerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<AbjurerAIProfile>();
             try
             {
                 Assert(profile.AOECasting.PreferSingleTarget,
@@ -843,7 +983,7 @@ namespace Tests.AI
 
         private static void TestSpellcasterAOEAvoidsUnsafeFriendlyFire()
         {
-            SpellcasterAIProfile profile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            SpellcasterAIProfile profile = DND35.AI.AIProfile.CreateRuntime<SpellcasterAIProfile>();
             var gridGo = new GameObject("Grid_Test");
             var gmGo = new GameObject("GM_Test");
             SquareGrid grid = gridGo.AddComponent<SquareGrid>();
@@ -914,7 +1054,7 @@ namespace Tests.AI
 
         private static void TestHealerPrioritizesHealing()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_Cleric", level: 5);
             CharacterController woundedAlly = TestHelpers.CreateWarrior("Ally_Wounded", level: 5);
 
@@ -941,7 +1081,7 @@ namespace Tests.AI
 
         private static void TestHealerUsesBuffingWhenAlliesHealthy()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_Buffer", level: 5);
             CharacterController healthyAlly = TestHelpers.CreateWarrior("Ally_Healthy", level: 5);
 
@@ -967,7 +1107,7 @@ namespace Tests.AI
 
         private static void TestHealerChoosesCriticalHealing()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_Critical", level: 5);
             CharacterController criticalAlly = TestHelpers.CreateWarrior("Ally_Critical", level: 5);
 
@@ -994,7 +1134,7 @@ namespace Tests.AI
 
         private static void TestHealerChoosesMeleeWithHighACAndMeleeAB()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_MeleeMode", level: 6);
 
             try
@@ -1017,7 +1157,7 @@ namespace Tests.AI
 
         private static void TestHealerChoosesRangedWithLowAC()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_RangedMode", level: 6);
 
             try
@@ -1381,7 +1521,7 @@ namespace Tests.AI
         /// </summary>
         private static void TestHealerIgnoresWoundedUndeadAlly()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_UndeadEscort", level: 5);
             CharacterController undeadAlly = TestHelpers.CreateWarrior("Ally_Zombie", level: 5);
 
@@ -1422,7 +1562,7 @@ namespace Tests.AI
 
         private static void TestHealerPrioritizesMostWoundedAlly()
         {
-            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
             CharacterController healer = TestHelpers.CreateCleric("Healer_Targeting", level: 5);
             CharacterController allyA = TestHelpers.CreateWarrior("Ally_A", level: 5);
             CharacterController allyB = TestHelpers.CreateWarrior("Ally_B", level: 5);
@@ -1458,8 +1598,8 @@ namespace Tests.AI
 
         private static void TestRangedRiskMultiplierDefaults()
         {
-            RangedAIProfile rangedProfile = ScriptableObject.CreateInstance<RangedAIProfile>();
-            SpellcasterAIProfile spellcasterProfile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            RangedAIProfile rangedProfile = DND35.AI.AIProfile.CreateRuntime<RangedAIProfile>();
+            SpellcasterAIProfile spellcasterProfile = DND35.AI.AIProfile.CreateRuntime<SpellcasterAIProfile>();
 
             try
             {
@@ -1575,7 +1715,7 @@ namespace Tests.AI
             CharacterController swarm = TestHelpers.CreateWarrior("Swarm_AI", level: 3);
             CharacterController nearEnemy = TestHelpers.CreateWarrior("Enemy_Near", level: 3);
             CharacterController fartherEnemy = TestHelpers.CreateWarrior("Enemy_Far", level: 3);
-            SwarmAI profile = ScriptableObject.CreateInstance<SwarmAI>();
+            SwarmAI profile = DND35.AI.AIProfile.CreateRuntime<SwarmAI>();
 
             try
             {
@@ -1615,7 +1755,7 @@ namespace Tests.AI
             CharacterController swarm = TestHelpers.CreateWarrior("Summoned_Swarm", level: 3);
             CharacterController ally = TestHelpers.CreateWarrior("Ally_Close", level: 3);
             CharacterController enemy = TestHelpers.CreateWarrior("Enemy_Far", level: 3);
-            IndiscriminateSwarmAI profile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+            IndiscriminateSwarmAI profile = DND35.AI.AIProfile.CreateRuntime<IndiscriminateSwarmAI>();
 
             try
             {

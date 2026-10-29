@@ -1,6 +1,6 @@
 # Batch 13: AI groundwork and the action catalog
 
-> Status (2026-10-29): unbuilt; design for building, not started. Produced by a read-only design pass: three code mappers on master e48deb5, two independent designs, and one judge who checked the key claims against the code at 3bbf47d (the charge-terrain commit that followed) and against the books. Nothing here was compiled, run or verified in Play mode. Line numbers are anchors from 2026-10-29: they drift, so anchor on the member names.
+> Status (2026-10-29): building. Step 1 (docs) is committed (20f0161); step 2 (AI groundwork, a pure move) is built, with every pre-existing scenario hash equal to the launch baseline (rules/* run 20261029-131339, smoke/* run 20261029-131636, seeds 1-3, at 20f0161); steps 3-21 are not started. Produced by a read-only design pass: three code mappers on master e48deb5, two independent designs, and one judge who checked the key claims against the code at 3bbf47d (the charge-terrain commit that followed) and against the books. Nothing here was compiled, run or verified in Play mode. Line numbers are anchors from 2026-10-29: they drift, so anchor on the member names.
 
 ## Summary
 

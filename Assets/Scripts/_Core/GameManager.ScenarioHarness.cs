@@ -297,6 +297,7 @@ public partial class GameManager
         });
         foreach (CharacterController summon in summons)
             Step("RemoveSummon", () => Harness_RemoveSpawnedController(summon));
+        Step("DestroySummonProfiles", DestroyUnusedSummonAIProfiles); // the removed summons' AI profiles (AI-017)
 
         Step("ClearDefeatedEnemies", () => _defeatedEnemiesThisCombat.Clear());
 

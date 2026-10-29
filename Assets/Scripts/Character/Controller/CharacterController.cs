@@ -11043,14 +11043,6 @@ public class CharacterController : MonoBehaviour
         return null;
     }
 
-    public void ClearLastKnownPosition(CharacterController target)
-    {
-        if (target == null)
-            return;
-
-        _lastKnownTargetPositions.Remove(target);
-    }
-
     /// <summary>
     /// Human-readable concealment summary for combat log output.
     /// </summary>

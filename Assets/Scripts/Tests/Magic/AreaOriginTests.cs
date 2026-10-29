@@ -454,7 +454,7 @@ public static class AreaOriginTests
             }
 
             // 1. The AI's Fireball evaluation picks the corner of the target's square that spares an ally 4 squares west.
-            profile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            profile = DND35.AI.AIProfile.CreateRuntime<SpellcasterAIProfile>();
             profile.AOECasting.AvoidHittingAllies = true;
             profile.AOECasting.MaxAcceptableAllyCasualties = 0f;
             profile.AOECasting.AcceptableAllyDamagePercent = 0.05f;

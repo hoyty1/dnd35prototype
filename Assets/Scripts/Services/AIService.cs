@@ -128,8 +128,8 @@ public class AIService : MonoBehaviour
         string turnColor = isSummon ? "#66E8FF" : "#FF6666";
         string turnIcon = isSummon ? "✶" : "💀";
 
-        _gameManager.CombatUI.SetTurnIndicator($"{_gameManager.GetSummonDisplayName(npc)}'s turn...");
-        _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Summon("", $"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>"));
+        _gameManager.CombatUI?.SetTurnIndicator($"{_gameManager.GetSummonDisplayName(npc)}'s turn...");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Summon("", $"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>"));
         yield return new WaitForSeconds(0.6f);
         if (CombatEnded())
             yield break;
@@ -822,7 +822,7 @@ public class AIService : MonoBehaviour
                     if (npc.HasTerrainManipulation)
                         ActivateTerrainManipulation(npc);
 
-                    _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                     yield return new WaitForSeconds(0.5f);
                 }
             }
@@ -1322,9 +1322,9 @@ public class AIService : MonoBehaviour
                     npc.Actions.UseMoveAction();
 
                     if (shouldRetreatForRisk)
-                        _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity."));
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity."));
                     else
-                        _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} retreats to maintain distance!"));
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} retreats to maintain distance!"));
 
                     yield return new WaitForSeconds(0.5f);
                 }
@@ -1382,7 +1382,7 @@ public class AIService : MonoBehaviour
                 if (!npc.CanTakeTurnActions() || approachMove.Refused)
                     yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} moves to get a better shot."));
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} moves to get a better shot."));
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -1604,7 +1604,7 @@ public class AIService : MonoBehaviour
                 if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on
                 {
                     npc.Actions.UseMoveAction();
-                    _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.5f);
                 }
             }
@@ -2556,27 +2556,6 @@ public class AIService : MonoBehaviour
         }
 
         return bestCell;
-    }
-
-    public float EvaluateAttackOptions(CharacterController npc, CharacterController target)
-    {
-        if (npc == null || target == null || target.Stats == null)
-            return float.MinValue;
-
-        bool inRange = npc.IsTargetInCurrentWeaponRange(target);
-        float score = inRange ? 8f : 2f;
-
-        score += ShouldUseManeuver(npc, target) ? 2.5f : 0.75f;
-
-        SpellData spell = SelectSpell(npc, target);
-        if (spell != null)
-            score += 1.5f;
-
-        float hpPercent = npc.Stats.TotalMaxHP > 0 ? (float)npc.Stats.CurrentHP / npc.Stats.TotalMaxHP : 1f;
-        if (hpPercent < 0.35f)
-            score -= 2f;
-
-        return score;
     }
 
     /// <summary>
@@ -3951,38 +3930,6 @@ public class AIService : MonoBehaviour
         }
 
         return best;
-    }
-
-    /// <summary>
-    /// Evaluates which special maneuver an NPC should use against a target.
-    /// D&D 3.5e: Evaluates coup de grace, trip, disarm, grapple, and sunder in priority order
-    /// based on profile preferences, target state, and ability scores.
-    /// </summary>
-    /// <param name="npc">The NPC selecting a maneuver.</param>
-    /// <param name="target">The intended target.</param>
-    /// <param name="profile">The NPC's AI profile (optional).</param>
-    /// <returns>The recommended maneuver type, or null if no maneuver is beneficial.</returns>
-    public static SpecialAttackType? EvaluateBestManeuver(CharacterController npc, CharacterController target, AIProfile profile = null)
-    {
-        if (npc == null || target == null || npc.Stats == null || target.Stats == null)
-            return null;
-
-        bool hasImprovedGrab = npc.Stats.HasImprovedGrab;
-
-        // Trip: target must be standing and trippable (size, swarm, incorporeal; PHB p.158), NPC must have melee weapon
-        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped() && npc.CanPerformSpecialAttack(SpecialAttackType.Trip)
-            && npc.CanTrip(target, out _))
-            return SpecialAttackType.Trip;
-
-        // Disarm: target has weapon, NPC has high STR
-        if (target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3 && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
-            return SpecialAttackType.Disarm;
-
-        // Grapple: NPC has high STR and no Improved Grab (which handles grapple differently)
-        if (npc.Stats.STRMod >= 4 && !hasImprovedGrab && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple))
-            return SpecialAttackType.Grapple;
-
-        return null;
     }
 
     /// <summary>

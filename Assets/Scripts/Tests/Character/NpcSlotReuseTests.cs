@@ -49,6 +49,7 @@ public static class NpcSlotReuseTests
             TestRespawnClearsOthersMemoryOfSlot();
             TestPartySlotGetsNewCharacter();
             TestAuraSaveImmunityForgottenWithSource();
+            TestReusedSlotDestroysOldProfile();
         }
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -68,6 +69,43 @@ public static class NpcSlotReuseTests
         }
     }
 
+    /// <summary>
+    /// AI-017: a spawn creates the creature's profile through GameManager.CreateRuntimeAIProfile, so it is tracked and
+    /// has its type's defaults and name (AI-053); respawning the slot gives it a new profile and destroys the old one
+    /// (no longer tracked). Object.Destroy runs at the end of the frame, so the test reads the tracking set.
+    /// </summary>
+    private static void TestReusedSlotDestroysOldProfile()
+    {
+        CharacterController slot = NewController("AI017_ProfileSlot");
+        try
+        {
+            FieldInfo trackedField = typeof(GameManager).GetField("_runtimeCreatedAIProfiles", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(trackedField != null, "AI-017: GameManager._runtimeCreatedAIProfiles exists");
+            if (trackedField == null)
+                return;
+            var tracked = (HashSet<DND35.AI.AIProfile>)trackedField.GetValue(GameManager.Instance);
+
+            Spawn(slot, Def("wolf_pack_hunter"), SlotPos);
+            DND35.AI.AIProfile first = slot.aiProfile;
+            Assert(first is DND35.AI.Profiles.AnimalAIProfile && tracked.Contains(first),
+                "AI-017: a spawned wolf gets a tracked runtime Animal profile");
+            Assert(first != null && first.ProfileName == "Animal" && first.CombatStyle == DND35.AI.CombatStyle.Melee
+                    && Mathf.Approximately(first.Aggression, 0.75f),
+                "AI-017, AI-053: the runtime profile carries the Animal defaults and name (" + (first != null ? first.ProfileName : "null") + ")");
+
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            DND35.AI.AIProfile second = slot.aiProfile;
+            Assert(second != null && second != first && tracked.Contains(second),
+                "AI-017: the respawned slot gets a new tracked profile");
+            Assert(first != null && !tracked.Contains(first),
+                "AI-017: the reused slot's old profile is destroyed (no longer tracked)");
+        }
+        finally
+        {
+            Cleanup(slot);
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static CharacterController NewController(string name)
@@ -79,6 +117,23 @@ public static class NpcSlotReuseTests
     private static void Spawn(CharacterController cc, NPCDefinition def, Vector2Int pos)
     {
         GameManager.Instance.InitializeNPCFromDefinition(cc, def, pos, null, null);
+    }
+
+    /// <summary>
+    /// Drops the test controller's runtime profile from the GameManager's tracking set and destroys it, so a test's spawn
+    /// leaves no stale tracked profile for later checks in the same Play session (AI-017).
+    /// </summary>
+    private static void DestroyTrackedProfile(GameManager gm, CharacterController cc)
+    {
+        DND35.AI.AIProfile profile = cc.aiProfile;
+        if (gm == null || profile == null)
+            return;
+        FieldInfo trackedField = typeof(GameManager).GetField("_runtimeCreatedAIProfiles", BindingFlags.Instance | BindingFlags.NonPublic);
+        var tracked = trackedField != null ? trackedField.GetValue(gm) as HashSet<DND35.AI.AIProfile> : null;
+        if (tracked == null || !tracked.Remove(profile))
+            return;
+        cc.aiProfile = null;
+        Object.DestroyImmediate(profile);
     }
 
     private static NPCDefinition Def(string id)
@@ -98,6 +153,7 @@ public static class NpcSlotReuseTests
             if (gm != null && gm.Grid != null)
                 gm.Grid.ClearCreatureOccupancy(cc);
             AIService.ForgetAuraSaveImmunities(cc);
+            DestroyTrackedProfile(gm, cc);
             Object.DestroyImmediate(cc.gameObject);
         }
     }

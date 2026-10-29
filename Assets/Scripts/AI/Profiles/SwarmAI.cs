@@ -11,8 +11,10 @@ namespace DND35.AI.Profiles
     {
         protected CharacterController CurrentTarget;
 
-        protected virtual void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
+            base.ApplyRuntimeDefaults();
+
             ProfileName = "Swarm";
             Description = "Occupies the nearest enemy's space and stays on that target until it dies.";
             CombatStyle = CombatStyle.Melee;
@@ -29,7 +31,11 @@ namespace DND35.AI.Profiles
             Movement.SeekFlanking = false;
             Movement.MaintainDistance = false;
             Movement.UseCover = false;
+        }
 
+        /// <summary>Runtime state only; the tuning is <see cref="ApplyRuntimeDefaults"/> (AI-017).</summary>
+        protected virtual void OnEnable()
+        {
             CurrentTarget = null;
         }
 
@@ -45,12 +51,6 @@ namespace DND35.AI.Profiles
                 CurrentTarget = FindNearestTarget(swarm, candidateTargets);
 
             return CurrentTarget;
-        }
-
-        public virtual void ForceClearTarget(CharacterController deadTarget = null)
-        {
-            if (deadTarget == null || CurrentTarget == deadTarget)
-                CurrentTarget = null;
         }
 
         public bool IsOccupyingTargetSpace(CharacterController swarm, CharacterController target)

@@ -88,7 +88,7 @@ namespace Tests.Scenarios
         /// An adaptive AI profile (AIProfile.ShouldSwitchTargetsMidFullAttack: the animal profile's), so the Scripted hero's
         /// NPC-path full attack goes on against another goblin after a kill instead of stopping (an AI choice, not a rule).
         /// </summary>
-        private static DND35.AI.AIProfile Adaptive() => ScriptableObject.CreateInstance<DND35.AI.Profiles.AnimalAIProfile>();
+        private static DND35.AI.AIProfile Adaptive() => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.AnimalAIProfile>();
 
         private static ScenarioBuilder ForceHits(ScenarioBuilder b) => b.RecordDice().Force(20, 15, null, -1);
 

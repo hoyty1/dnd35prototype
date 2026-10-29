@@ -8,13 +8,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Ranged AI", menuName = "DND35/AI/Profiles/Ranged")]
     public class RangedAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Ranged";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Ranged specialist that keeps distance and prefers vulnerable/unarmored targets.";
+            ProfileName = "Ranged";
+            Description = "Ranged specialist that keeps distance and prefers vulnerable/unarmored targets.";
 
             CombatStyle = CombatStyle.Ranged;
             Aggression = 0.35f;

@@ -365,6 +365,7 @@ public partial class GameManager
         _activeSummons.Clear();
         _summonedAllies.Clear();
         _summonedEnemies.Clear();
+        DestroyUnusedSummonAIProfiles(); // the despawned summons' AI profiles (AI-017)
 
         // A new party starts with the starting gold, the default stash and empty loop statistics.
         _economyService?.ResetForNewParty(partyGold);

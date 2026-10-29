@@ -17,15 +17,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Lich AI", menuName = "DND35/AI/Profiles/Lich")]
     public class LichAIProfile : SpellcasterAIProfile
     {
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Lich";
-
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Undead archmage: buffs first, controls the battlefield with AoE, and reserves power for threats.";
+            ProfileName = "Lich";
+            Description = "Undead archmage: buffs first, controls the battlefield with AoE, and reserves power for threats.";
 
             CombatStyle = CombatStyle.Ranged; // spell-focused, maintain distance
             Aggression = 0.5f;                // calculated, not reckless

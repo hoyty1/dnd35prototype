@@ -14,13 +14,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Undead Tactical AI", menuName = "DND35/AI/Profiles/Undead Tactical")]
     public class UndeadTacticalAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Undead Tactical";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Intelligent undead that paralyse targets, coup de grâce the helpless, and drain life energy.";
+            ProfileName = "Undead Tactical";
+            Description = "Intelligent undead that paralyse targets, coup de grâce the helpless, and drain life energy.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 0.8f;

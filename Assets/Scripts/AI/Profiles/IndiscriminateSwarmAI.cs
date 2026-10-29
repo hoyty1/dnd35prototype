@@ -8,9 +8,9 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Indiscriminate Swarm AI", menuName = "DND35/AI/Profiles/Indiscriminate Swarm")]
     public class IndiscriminateSwarmAI : SwarmAI
     {
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
             ProfileName = "Indiscriminate Swarm";
             Description = "Targets the nearest living creature regardless of alignment or team.";
         }

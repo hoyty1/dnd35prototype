@@ -9,13 +9,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Humanoid AI", menuName = "DND35/AI/Profiles/Humanoid")]
     public class HumanoidAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Humanoid";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Tactical humanoid combatant that favors positioning, flanking, and measured pressure.";
+            ProfileName = "Humanoid";
+            Description = "Tactical humanoid combatant that favors positioning, flanking, and measured pressure.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 0.7f;

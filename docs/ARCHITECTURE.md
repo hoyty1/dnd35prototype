@@ -371,7 +371,7 @@ The two `Roll` methods mean different things. `DiceRoller.Roll(2, 6)` is 2d6, wh
 **Accessor wrapper families.** Services reach private GameManager state through public wrappers instead of direct field access:
 
 - `Combat_*` (59 members in `_Core/GameManager.CombatFlowAccessors.cs`), used by `CombatFlowService`, `ActionButtonPanel`, `CharmedBehaviorController` and `FireShieldReactionEffect`.
-- 40 public `*ForAI` methods, used mainly by `AIService`, also by the `AIProfile` subclasses and the Confused/Charmed/Fascinated/Frightened behavior controllers. 34 are in `GameManager.cs` (33 at :10882-11029, plus `GetSummonCasterForAI` at :10317); the others are in CombatActions (3), NPCTurns, FlamingSphere and MirrorImage (1 each).
+- Public `*ForAI` methods, used mainly by `AIService`, also by the `AIProfile` subclasses and the Confused/Charmed/Fascinated/Frightened behavior controllers. 44 are in `GameManager.cs` (re-counted 2026-10-29, after batch 13 step 2 deleted three uncalled ones, AI-053), most in one block near the end of the file; the others are in the partials (CombatActions, NPCTurns, FlamingSphere, MirrorImage and more).
 - One-line delegates kept for backward compatibility, e.g. `GameManager.DispelCounterspell.cs` and `IsEnemyTeam`/`IsAllyTeam` (`GameManager.cs:677-682`).
 
 A new AI need normally means adding a new `*ForAI` wrapper.

@@ -21,15 +21,12 @@ namespace DND35.AI.Profiles
         [Range(0f, 0.5f)]
         public float GaseousFormFleeThreshold = 0.25f;
 
-        protected override void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            base.OnEnable();
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Vampire";
-
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Cunning vampire that buffs, dominates, drains, and escapes when threatened.";
+            ProfileName = "Vampire";
+            Description = "Cunning vampire that buffs, dominates, drains, and escapes when threatened.";
 
             // Vampires fight in melee but open with spells
             CombatStyle = CombatStyle.Melee;

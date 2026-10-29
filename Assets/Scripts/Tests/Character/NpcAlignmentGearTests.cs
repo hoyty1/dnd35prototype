@@ -239,8 +239,8 @@ public static class NpcAlignmentGearTests
         Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.AggressiveMelee, null), "no profile: AggressiveMelee does not");
         Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.Ranged, null), "no profile: the unrouted Ranged behaviour does not (AI-003)");
 
-        var ranged = ScriptableObject.CreateInstance<DND35.AI.Profiles.RangedAIProfile>();
-        var humanoid = ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>();
+        var ranged = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.RangedAIProfile>();
+        var humanoid = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
         try
         {
             Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.AggressiveMelee, ranged), "a Ranged profile runs the ranged routine with a melee behaviour");

@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>Who makes a creature's choices: the player through the UI, or the AI (batch 13 adds a forced source).</summary>
+/// <summary>Who makes a creature's choices: the player through the UI, or the AI. A forced PC turn (a compulsion) passes AI;
+/// the enum stays two-valued (batch 13 design choice C7).</summary>
 public enum ActorSource
 {
     Ui,
@@ -178,8 +179,8 @@ public static class AttackDeciders
 {
     /// <summary>
     /// The UI decider for a controllable creature, else the AI's. <paramref name="overrideSource"/> fixes the source: an
-    /// NPC turn path passes <see cref="ActorSource.AI"/> (it is AI-run for every creature on it), and batch 13 passes a
-    /// forced source.
+    /// NPC turn path passes <see cref="ActorSource.AI"/> (it is AI-run for every creature on it), and so does a forced
+    /// PC turn (batch 13 design choice C7).
     /// </summary>
     public static IAttackDecider For(CharacterController actor, ActorSource? overrideSource = null)
     {

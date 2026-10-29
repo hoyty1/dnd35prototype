@@ -140,7 +140,7 @@ Per-NPC AI state lives in three places:
 
 - `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:981), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
 - `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015, CRE-006).
-- One `AIProfile` instance per NPC from `ScriptableObject.CreateInstance`, with all tuning hard-set in `OnEnable`. There are no profile `.asset` files (AI-017).
+- One `AIProfile` instance per creature from `GameManager.CreateRuntimeAIProfile<T>()` (`AIProfile.CreateRuntime<T>()`: `CreateInstance`, then the virtual `ApplyRuntimeDefaults`, which writes the type's tuning and its `ProfileName`), tracked so that the GameManager destroys it: a replaced profile at once, a reused slot's old one at the respawn, a summon's once it is despawned (the despawn loops and the combat reset; batch 13 step 2, AI-017). `OnEnable` writes no tuning, so a profile `.asset` would keep its Inspector values; there are no profile `.asset` files. A profile may hold per-turn state (the dragon's breath plan) because no two creatures share an instance; the scenario harness and the static suites call `AIProfile.CreateRuntime` directly.
 
 Writers of the AI fields besides the database files:
 
@@ -188,7 +188,7 @@ The compulsion pass (`GameManager.TryRunCompulsionTurn`, called by `BeginActingT
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
 | 1 | | (before `ExecuteNPCTurn`, since batch 12 step 6) | the turn-start effects and resets ran in `GameManager.OnTurnStarted` (`BeginCombatantTurn`); `SingleNPCTurnFromInitiative` ran the skip gate and `BeginActingTurn` (the shared turn-start perception `PerceptionRules.ProcessTurnStart`: tracker update plus a Listen check, run for PCs too since batch 12 step 8; turn-undead tracker pruning and proximity; and the compulsion pass, batch 12 step 7) |
-| 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
+| 2 | 55-61 | Turn banner (`CombatUI?.`, null-safe since batch 13 step 2), wait 0.6 s |
 | 3 | | (no HP gate since batch 12 step 6) | the skip gate already ended the turn of a creature that cannot act; a disabled NPC (0 hp, or below 0 with Diehard) takes its single action (PHB p.145, decision D5, batch 12 step 3) |
 | 4 | 73 | Confused | the stored d% roll (`CurrentTurnStart.Compulsion.Confused`); any result except ActNormally runs the controller and ends the turn |
 | 5 | 84 | Charmed, unless a stored suggestion, fear or turning takes the turn (one precedence with the PC side, batch 12 step 7) | stands up first when prone, not grappling and not fascinated (same call as 6a; ends the turn if an AoO drops it), then controller, end |
@@ -328,7 +328,7 @@ Never casts (AI-002), never runs or double-moves, never uses Total Defense, Powe
 
 ### 5.2 `ExecuteDragonTurn` (655)
 
-1. Resets per-turn breath state on the profile instance (AI-017).
+1. Resets per-turn breath state on the profile instance (one instance per creature, 2.4).
 2. If at most 2 enemies are adjacent (`IsTooCloseForCasting`) and `IsSpellcaster`: `TryExecuteSpellcastAction` with the dragon filter `IsDragonCastFirstCandidate` and a score floor of 0 (2026-10-14, AI-037 partial): never a 0-level spell; while the breath is ready or an enemy is adjacent, only a self or ally buff not yet active. Success ends the turn. No expected-value comparison with the breath or a full attack (AI-037).
 3. Breath ready: `DragonAIProfile.FindBestBreathPosition` tries the current square plus every reachable placeable cell (A* per cell), and every enemy as the aim point; picks most enemy hits, then fewest ally hits (0 allowed, `MaxAcceptableAllyHits`), then not moving; needs at least 1 enemy (`MinEnemiesForBreath`). Since batch 11 step 24 (2026-10-16) each simulated breath is the best cone or line that starts at an intersection on the edge of the dragon's space and covers the aim target (`AoESystem.BestDirectedAimAt`: most enemies less allies; MM p.69, PHB p.175), the aim `NPCExecuteBreathWeaponForAI` then fires, and the bombardier beetle's spray picks its 10-ft. cone the same way (`rules/area-origin-breath-ai`). Moves if needed, re-evaluates from the actual square, breathes, then retreats one move if an enemy is adjacent (block duplicated, AI-020). Positioning ignores AoOs and multi-square footprints.
 4. If breath is not viable, falls through to melee with the move possibly already spent. Then charge (needs a full-round action), approach only if `HasMoveAction`, re-target, maneuver or attack.
@@ -425,7 +425,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 | Brute | null (AI-004) | — | 29 | ogre, giants, hydras, minotaur, purple_worm, umber_hulk, ankheg, chimera, gorgon, treant, wyvern | legacy chooser |
 | Caster | null (AI-004) | — | 2 | couatl, spirit_naga | legacy chooser |
 
-35 effective definitions have a null profile. Every profile except the swarms logs as `[AI][Profile:Default AI]`, because subclasses set `ProfileName` only when empty and the base initialiser already set it (AI-053).
+35 effective definitions have a null profile. Every profile logs under its own name (`[AI][Profile:Berserk]` and so on): `ApplyRuntimeDefaults` sets `ProfileName` unconditionally since batch 13 step 2 (AI-053).
 
 ### 6.3 Profile members and hooks
 
@@ -674,11 +674,11 @@ The full matrix (every 3.5e combat option: AI status, where, PC availability, is
 From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were filed from this doc and are listed in 10.2):
 
 - **Casting:** AI-001 (fixed 2026-10-16: area spells in batch 11 step 25, the metamagic choice in step 28), AI-071 (walls, Grease on an object, swarm placement, Imbue with Spell Ability, areas with no judged value), AI-002 (melee routines never cast), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
-- **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-017 (profile leak, `OnEnable` overwrites, dragon per-turn state), AI-031 (enum docs lie).
+- **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-031 (enum docs lie).
 - **Targeting and perception:** AI-021 (two last-known stores), CMB-183 (never-seen unseen enemies get no Listen check).
 - **Monster abilities:** AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (bull rush and overrun never chosen by a shipped profile).
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
-- **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
+- **Structure and performance:** AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 
 From other files: CMB-022 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-027, SPL-041, SPL-047, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
 
@@ -716,7 +716,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-050 | Summon, swarm, charmed and confused targeting ignore wards and visibility |
 | AI-051 | Melee routines path to the true square of unseen targets |
 | AI-052 | `EvaluateMovementOptions` accepts A*'s partial fallback path, so unreachable cells can win |
-| AI-053 | Assorted small defects and uncalled members (auras skipped on controlled turns, `ProfileName` always "Default AI", and others; the HP gates were fixed in batch 12 step 3) |
+| AI-053 | Assorted small defects (auras skipped on controlled turns, armor-priority targeting unreachable, the flanking term; the HP gates were fixed in batch 12 step 3, the profile names and uncalled members in batch 13 step 2) |
 | TST-025 | Stale `AIProfileFrameworkTests` expectations; the AoE safety test can pass vacuously |
 | SPL-094 | Sanctuary and Hide from Undead are broken only by `NPCPerformAttack` and the PC attack path, not by charges, maneuvers or spells |
 | AI-054 | PC action executors (Aid Another, item use, Turn Undead, crawl, pick up, rage) are bound to the PC turn flow, so the AI cannot reuse them (area casts left it in batch 11; the NPC wall attacks moved to CORE-040 on 2026-10-29) |
@@ -745,16 +745,16 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 ### 11.2 Add a profile
 
 1. `AI/Profiles/<Name>AIProfile.cs`, `namespace DND35.AI.Profiles`, `: AIProfile` or `: SpellcasterAIProfile`.
-2. Set tuning in `OnEnable` (`private` in `AIProfile` subclasses; `protected virtual` in `SpellcasterAIProfile` and `SwarmAI`, so call `base.OnEnable()`). Set `CombatStyle` explicitly; `SpellcasterAIProfile` leaves it Melee, which means no casting (AI-002). Set `ProfileName` unconditionally if you want readable logs.
+2. Set tuning in `public override void ApplyRuntimeDefaults()`: call `base.ApplyRuntimeDefaults()` first, then set `ProfileName` (unconditionally, for readable logs) and the rest. Never write tuning in `OnEnable`, which keeps only runtime-state resets, so saved `.asset` values survive (AI-017). Set `CombatStyle` explicitly; `SpellcasterAIProfile` leaves it Melee, which means no casting (AI-002). Create instances with `GameManager.CreateRuntimeAIProfile<T>()` (tracked and destroyed by the GameManager) or, outside the spawn path, `AIProfile.CreateRuntime<T>()`; a bare `ScriptableObject.CreateInstance` gives the base defaults.
 3. Override hooks from 6.3. Keep score magnitudes in mind: visibility terms are ±50-120.
-4. Add an `NPCAIProfileArchetype` value and a `case` in `BuildRuntimeAIProfile`; set the archetype on definitions.
+4. Add an `NPCAIProfileArchetype` value and a `case` in `BuildRuntimeAIProfile` (`return CreateRuntimeAIProfile<T>();`); set the archetype on definitions.
 5. Needs its own routine (like Healer or Dragon)? Add an `is` branch in `ExecuteNPCTurn` before line 266.
-6. Keep per-turn state off the instance or accept one instance per NPC (AI-017).
-7. Unit-test it in `AIProfileFrameworkTests` (`ScriptableObject.CreateInstance<T>()`, then `TestHelpers.Cleanup`).
+6. Per-turn state on the instance is safe only because every creature gets its own instance; never share one.
+7. Unit-test it in `AIProfileFrameworkTests` (`AIProfile.CreateRuntime<T>()`, never a bare `ScriptableObject.CreateInstance<T>()`, which has no tuning; then `TestHelpers.Cleanup` or `DestroyImmediate`).
 
 ### 11.3 Add a `*ForAI` wrapper
 
-AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10884-11041, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 40 (34 in GameManager.cs); 4 have no callers (AI-053).
+AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10884-11041, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 44 in GameManager.cs (re-counted 2026-10-29); the uncalled turn-undead and undead-test wrappers were deleted in batch 13 step 2 (AI-053), and `HasActiveShieldSpellForAI` stays for its scenario caller.
 
 ### 11.4 Add an NPC action (attack form, monster ability, special action)
 
@@ -780,7 +780,6 @@ Add a static `Get<X>Score` to `AISpellcastingStrategist` and sum it in `ScoreSpe
 - `_npcAIBehaviors` is index-parallel to `NPCs`; summons append and remove (AI-015, CRE-006).
 - Every movement yield can kill the mover; re-check HP.
 - `StopAllCoroutines` on encounter reset kills AI mid-turn (CORE-013); turn advancement is re-entrant (CORE-012).
-- `CombatUI.` without `?.` throws in headless tests (AI-018).
 - `SelectBestTarget` has side effects (ward saves, Listen, tracker writes); do not call it speculatively in a loop without accepting them.
 - Spawn-time `aiProfile` assignments are overwritten by `BuildRuntimeAIProfile`; change the archetype instead.
 - Duplicate creature IDs: the later registration wins (CRE-022).
@@ -844,7 +843,8 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 ### 13.1 Structural constraints
 
-- **Decisions are encoded as control flow.** The routine order (cast, then breath, then move, then attack) *is* the decision. Adding an option means adding a branch to each routine that should consider it, which is why engulf, specials and breath each live in one routine only. `SelectBestAction`/`EvaluateAttackOptions` and `EvaluateBestManeuver` are vestiges of a scoring layer that was never finished (AI-025, AI-027); `SelectBestAction`'s `Retreat` result is worth keeping for morale (13.3).
+- **Decisions are encoded as control flow.** The routine order (cast, then breath, then move, then attack) *is* the decision. Adding an option means adding a branch to each routine that should consider it, which is why engulf, specials and breath each live in one routine only. `SelectBestAction` is the last vestige of a scoring layer that was never finished (AI-027; the uncalled `EvaluateAttackOptions` and `EvaluateBestManeuver` were deleted in batch 13 step 2); its `Retreat` result is worth keeping for morale (13.3).
+- **A bare `ScriptableObject.CreateInstance` of a profile subclass has no tuning** since batch 13 step 2 (AI-017): it carries the base `AIProfile` defaults (`ProfileName` "Default AI", Melee). Create profiles with `GameManager.CreateRuntimeAIProfile<T>()` on the spawn path, else `AIProfile.CreateRuntime<T>()`. A profile `.asset` made from the Create menu also starts from the base defaults (there are none today).
 - **Scores are not comparable.** Target scores, movement scores, spell scores and maneuver preferences use unrelated scales (and visibility swamps targeting). There is no common unit such as expected damage, expected HP removed, or expected conditions imposed, so "spell versus full attack versus breath" cannot be compared.
 - **The rules engine is asymmetric** (full audit and unification plan: [PC_NPC_PARITY.md](PC_NPC_PARITY.md)). NPC paths let the breath weapon spend no action (AI-040; saves and damage are shared since batch 12 step 10 and SPL-004); AoOs on movement, maneuvers and casting, and casting Concentration, now follow the PC rules. Any smarter AI built on top would optimise against rules the player does not share. These asymmetries are also the main source of "the AI feels wrong" reports that are not AI bugs.
 - **Capabilities are data the AI cannot see.** Spell-like abilities, stench, constrict, secondary breath and many MM specials exist only as text or unread fields; most monsters that should cast cannot. A deeper chooser has little to choose from until the capability data is executable.

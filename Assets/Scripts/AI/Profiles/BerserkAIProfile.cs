@@ -8,13 +8,12 @@ namespace DND35.AI.Profiles
     [CreateAssetMenu(fileName = "Berserk AI", menuName = "DND35/AI/Profiles/Berserk")]
     public class BerserkAIProfile : AIProfile
     {
-        private void OnEnable()
+        public override void ApplyRuntimeDefaults()
         {
-            if (string.IsNullOrWhiteSpace(ProfileName))
-                ProfileName = "Berserk";
+            base.ApplyRuntimeDefaults();
 
-            if (string.IsNullOrWhiteSpace(Description))
-                Description = "Aggressive melee combatant that pushes into danger and focuses wounded targets.";
+            ProfileName = "Berserk";
+            Description = "Aggressive melee combatant that pushes into danger and focuses wounded targets.";
 
             CombatStyle = CombatStyle.Melee;
             Aggression = 1f;

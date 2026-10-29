@@ -61,6 +61,28 @@ namespace DND35.AI
         public MonoScript CustomAIScript;
 #endif
 
+        /// <summary>
+        /// Writes this profile type's tuning (name, description, style, aggression, movement, maneuver, spell and tag
+        /// defaults) onto a runtime instance. Called only by <see cref="CreateRuntime{T}"/>, never from OnEnable, so a
+        /// profile saved as an .asset keeps its Inspector values when Unity loads it (AI-017). An override calls the
+        /// base first, then writes its own values; it sets <see cref="ProfileName"/> unconditionally (AI-053).
+        /// </summary>
+        public virtual void ApplyRuntimeDefaults()
+        {
+        }
+
+        /// <summary>
+        /// A new runtime instance of <typeparamref name="T"/> with its <see cref="ApplyRuntimeDefaults"/> applied: the
+        /// one way code creates a profile (the spawn path through GameManager.CreateRuntimeAIProfile, which also tracks
+        /// it for destruction; the scenario harness and the static suites directly). The caller owns the instance.
+        /// </summary>
+        public static T CreateRuntime<T>() where T : AIProfile
+        {
+            T profile = CreateInstance<T>();
+            profile.ApplyRuntimeDefaults();
+            return profile;
+        }
+
         public virtual float ScoreTarget(CharacterController target, CharacterController self)
         {
             if (target == null || target.Stats == null || target.Stats.IsDead || self == null)
