@@ -616,11 +616,22 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 87,
+      "passed": 149,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "batch 13 step 3 (b13-catalog-skeleton, 2026-10-29): the action catalog as data (one entry per ActionIds constant; cost, provocation, RulesRef, status and issues; the golden PHB p.141 Table 8-2 manifest realigned; every SpecialAttackType agrees with ManeuverActionCost.For; ActionCosts.From maps every CastActionCost; ActionCosts on an action economy; Legality's bar and the ActionLegality adapters; ActionDeciders.For) and the executor source scan (no UI continuation, no IsControllable, ActivePC or IsPlayerTurn under Combat/Actions/Executors). In Play mode only (a scene GameManager), also the runner's refusal paths (RunAIAction on a Missing entry, with no actor, a stand-up for a creature that is not prone) and ResolveActionProvocation's early exit. The source-scan assertions scale with the number of files under Combat/Actions. 79/79 in Play, 75/75 in the edit pass (all=true) after the review fixes (2026-10-29). Batch 13 step 4 (CMB-179, 2026-10-29): total defense is New with its executor (DefenseExecutors.cs joins the scan) and the Missing-entry refusal uses Run (CMB-202); 87/87 in Play (20261029T190209Z-play), 83/83 in the edit pass (all=true)."
+      "notes": "batch 13 step 3 (b13-catalog-skeleton, 2026-10-29): the action catalog as data (one entry per ActionIds constant; cost, provocation, RulesRef, status and issues; the golden PHB p.141 Table 8-2 manifest realigned; every SpecialAttackType agrees with ManeuverActionCost.For; ActionCosts.From maps every CastActionCost; ActionCosts on an action economy; Legality's bar and the ActionLegality adapters; ActionDeciders.For) and the executor source scan (no UI continuation, no IsControllable, ActivePC or IsPlayerTurn under Combat/Actions/Executors). In Play mode only (a scene GameManager), also the runner's refusal paths (RunAIAction on a Missing entry, with no actor, a stand-up for a creature that is not prone) and ResolveActionProvocation's early exit. The source-scan assertions scale with the number of files under Combat/Actions. 79/79 in Play, 75/75 in the edit pass (all=true) after the review fixes (2026-10-29). Batch 13 step 4 (CMB-179, 2026-10-29): total defense is New with its executor (DefenseExecutors.cs joins the scan) and the Missing-entry refusal uses Run (CMB-202); 87/87 in Play (20261029T190209Z-play), 83/83 in the edit pass (all=true). Batch 13 step 6 (b13-ai-runs-catalog, 2026-10-29): an AiOnly entry may carry an executor over the AI's core (breath, spittle, ranged special, engulf); the attack and full attack entries share one AiModeValuation (C2: AIProfile.DefaultShouldUseRapidShot and DefaultShouldUseTwoWeaponFighting, labelled the interim rule) and no other entry has one; InlineAction keeps the inner enumerators' yields; 143/143 in the edit pass (all=true), 147/147 in the Play pass 20261029T205643Z-play. After the step 6 review: RunAIAction's shadow check records a pick outside the legal set in ActionSetShadow (a stand-up while not prone, Condition) and a turned creature's attack as one Compulsion entry; 149/149 in the Play pass 20261029T211828Z-play."
+    },
+    {
+      "type": "Tests.Combat.ActionPanelParityTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 55,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "batch 13 step 6 (b13-ai-runs-catalog, 2026-10-29, design choice C8): the PC action panel (ActionButtonPanel.ComputeActionButtonStates through ComputeButtonStatesForParity) against the legal set (ActorActionSet.Allows) for ten fixtures (fighter, wizard, prone, grappled, pinned, nauseated, disabled, wild-shaped druid, frightened, charmed), plus the compulsion filter and the charm bar; each known disagreement is a KnownMismatches row tagged with the batch 13 step or issue that resolves it, and a row that no longer occurs fails the suite. Play only: CharacterController.Init needs Awake (TST-009). 55/55 in its first clean Play pass (20261029T205643Z-play) with 15 known mismatches (6 charge-without-a-foe rows, 6 coarser start gates and the grappled attack label: UI-055; use-item: step 14; the frightened PC's attack and drop prone: step 20)."
     },
     {
       "type": "Tests.Combat.TotalDefenseRulesTests",

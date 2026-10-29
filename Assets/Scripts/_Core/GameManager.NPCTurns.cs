@@ -111,7 +111,7 @@ public partial class GameManager
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 var retreatMove = new MoveAttempt();
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep, retreatMove));
+                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(summon, retreat.Coords, PlayerMoveSecondsPerStep, retreatMove));
 
                 // ── Death/disable check after retreat movement ──
                 if (!summon.CanTakeTurnActions())
@@ -136,7 +136,7 @@ public partial class GameManager
             if (bestCell != null)
             {
                 var advanceMove = new MoveAttempt();
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep, advanceMove));
+                yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(summon, bestCell.Coords, PlayerMoveSecondsPerStep, advanceMove));
 
                 // ── Death/disable check after advance movement ──
                 if (!summon.CanTakeTurnActions())
@@ -182,7 +182,7 @@ public partial class GameManager
                 && stepTarget != null && stepTarget.Stats != null && !stepTarget.Stats.IsProne
                 && TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip);
 
-        yield return StartCoroutine(NPCPerformAttack(summon, target, summonTripStep));
+        yield return StartCoroutine(NPCPerformAttackForAI(summon, target, summonTripStep));
     }
 
     /// <summary>Delegates to AIService.SelectSummonTarget for centralized summon targeting.</summary>
@@ -402,7 +402,21 @@ public partial class GameManager
         }
 
         ManeuverRequest req = ManeuverRequest.ForAI(this, npc, target, choice.Value, _maneuverStepIntent);
-        ManeuverOutcome outcome = ExecuteManeuver(req, null);
+        // Through the catalog's maneuver entry (batch 13 step 6): its executor runs ExecuteManeuver and, with NoWait, returns
+        // at once as before (a controllable defender's prompt settles later; the callers wait on it themselves).
+        ActionDefinition entry = ActionCatalog.ForManeuver(choice.Value);
+        ManeuverOutcome outcome;
+        if (entry != null && entry.Executor is ManeuverActionExecutor)
+        {
+            ActionContext ctx = ActionContext.For(entry.Id, npc, ActorSource.AI, target);
+            ctx.CoreRequest = req;
+            ctx.NoWait = true;
+            ActionOutcome ran = RunAIActionNow(ctx);
+            outcome = ran.CoreOutcome as ManeuverOutcome
+                ?? new ManeuverOutcome { Request = req, Kind = ManeuverOutcomeKind.Refused, Reason = ran.Refusal.Reason };
+        }
+        else
+            outcome = ExecuteManeuver(req, null);
         if (outcome.Kind == ManeuverOutcomeKind.Refused)
         {
             Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} on {target?.Stats?.CharacterName ?? "<null>"}: {outcome.Reason}");
@@ -850,7 +864,7 @@ public partial class GameManager
         if (destination == null)
             return false;
 
-        if (!ExecuteFiveFootStep(attacker, destination, returnToActionChoices: false))
+        if (!TryTakeFiveFootStepForAI(attacker, destination.Coords))
             return false;
 
         nextTarget = bestTarget;
@@ -871,7 +885,7 @@ public partial class GameManager
 
         SpellCastRequest request = SpellCastRequest.ForAI(npc, target, spell, metamagic);
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSpellCast));
-        return RunCastSync(request, out _);
+        return RunAICastAction(npc, request, target);
     }
 
     /// <summary>
@@ -889,7 +903,7 @@ public partial class GameManager
 
         SpellCastRequest request = BuildAiAreaRequest(npc, spell, placement, metamagic);
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformAreaSpellCast));
-        return RunCastSync(request, out _);
+        return RunAICastAction(npc, request);
     }
 
     /// <summary>
@@ -907,7 +921,7 @@ public partial class GameManager
 
         SpellCastRequest request = SpellCastRequest.ForAISummon(npc, spell, destination, metamagic);
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCPerformSummonSpellCast));
-        return RunCastSync(request, out _);
+        return RunAICastAction(npc, request);
     }
 
     /// <summary>
@@ -923,7 +937,7 @@ public partial class GameManager
 
         SpellCastRequest request = SpellCastRequest.ForAIHoldCharge(npc, spell, metamagic);
         CastStageTrace.Mark(npc, spell, CastStageTrace.Begin, nameof(TryNPCHoldTouchCharge));
-        return RunCastSync(request, out _);
+        return RunAICastAction(npc, request);
     }
 
     /// <summary>
@@ -1246,7 +1260,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
         var searchMove = new MoveAttempt();
-        yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep, searchMove));
+        yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(npc, searchCell.Coords, PlayerMoveSecondsPerStep, searchMove));
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO while moving (CMB-073)
         if (searchMove.Refused)
@@ -1332,6 +1346,18 @@ public partial class GameManager
     /// weapon was successfully used.
     /// </summary>
     public IEnumerator NPCExecuteBreathWeaponForAI(CharacterController npc, CharacterController aimTarget)
+    {
+        // Through the catalog's breath entry (batch 13 step 6), which runs the core overload below.
+        ActionContext ctx = ActionContext.For(ActionIds.BreathWeapon, npc, ActorSource.AI, aimTarget);
+        return RunAIActionInline(ctx, new ActionOutcome());
+    }
+
+    /// <summary>
+    /// The breath weapon core (the catalog's breath executor, ActionCore_BreathWeapon). It keeps the wrapper's name as an
+    /// overload on purpose: the scenario trace records the GameManager methods that end a combat by name
+    /// (ScenarioTrace.CallerFrames), so a renamed core would move every trace where a breath ends the fight.
+    /// </summary>
+    private IEnumerator NPCExecuteBreathWeaponForAI(CharacterController npc, CharacterController aimTarget, bool catalogCore)
     {
         if (npc == null || aimTarget == null || !npc.HasBreathWeapon || !npc.IsBreathWeaponReady)
             yield break;
@@ -1557,5 +1583,18 @@ public partial class GameManager
         }
 
         yield return new WaitForSeconds(0.5f);
+    }
+
+    /// <summary>
+    /// An NPC cast through the catalog's cast entry (batch 13 step 6, a pure move): the request built by the caller as
+    /// before, run by the cast executor through the cast core at once (RunCastSync). Returns whether it counts as cast.
+    /// </summary>
+    private bool RunAICastAction(CharacterController npc, SpellCastRequest request, CharacterController target = null)
+    {
+        ActionContext ctx = ActionContext.For(ActionIds.CastSpell, npc, ActorSource.AI, target);
+        ctx.CoreRequest = request;
+        ctx.Spell = request != null ? request.Spell : null;
+        ActionOutcome o = RunAIActionNow(ctx);
+        return o.Performed;
     }
 }

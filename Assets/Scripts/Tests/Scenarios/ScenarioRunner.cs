@@ -111,6 +111,13 @@ namespace Tests.Scenarios
         public JsonObj Soak;
         /// <summary>What GenerateActors produced for this job, or null.</summary>
         public JsonObj Generated;
+        /// <summary>
+        /// The legal set's shadow record (batch 13 step 6, C8; global::ActionSetShadow): AI picks run outside the actor's
+        /// legal set during this job. Outside the trace hash; 0 when there were none.
+        /// </summary>
+        public int ActionSetTotal;
+        public Dictionary<string, int> ActionSetCounts;
+        public List<string> ActionSetLines;
 
         public JsonObj ToJson()
         {
@@ -128,6 +135,14 @@ namespace Tests.Scenarios
                 o.Set("generated", Generated);
             if (Soak != null)
                 o.Set("soak", Soak.Set("wallSec", WallSec));
+            if (ActionSetTotal > 0)
+            {
+                var counts = new JsonObj();
+                foreach (KeyValuePair<string, int> kv in ActionSetCounts)
+                    counts.Set(kv.Key, kv.Value);
+                o.Set("actionSet", new JsonObj().Set("total", ActionSetTotal).Set("distinct", ActionSetCounts.Count)
+                    .Set("counts", counts).Set("lines", ActionSetLines));
+            }
             return o;
         }
     }
@@ -750,7 +765,8 @@ namespace Tests.Scenarios
                 }
             }
 
-            // d-g. Seed, spawn, control, hooks
+            // d-g. Seed, spawn, control, hooks (the legal set's shadow record starts empty for each job)
+            global::ActionSetShadow.Clear();
             if (!job.Decided)
                 TryRun(job, "setup", () => Setup(job, gm));
 
@@ -1416,6 +1432,11 @@ namespace Tests.Scenarios
                 result.Soak = SoakStats.ForJob(trace.Events, job.Outcome, result.Rounds);
             List<string> lines = trace.HashLines();
             result.Hash = ScenarioTrace.Hash(lines);
+            result.ActionSetTotal = global::ActionSetShadow.Total;
+            result.ActionSetCounts = new Dictionary<string, int>(global::ActionSetShadow.Counts.Count, StringComparer.Ordinal);
+            foreach (KeyValuePair<string, int> kv in global::ActionSetShadow.Counts)
+                result.ActionSetCounts[kv.Key] = kv.Value;
+            result.ActionSetLines = new List<string>(global::ActionSetShadow.Lines);
 
             string slug = Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "");
             string path = Path.Combine(RunDir, slug + ".jsonl");
@@ -1624,6 +1645,36 @@ namespace Tests.Scenarios
             return t;
         }
 
+        /// <summary>
+        /// The run's legal-set shadow record (batch 13 step 6, C8): the picks outside the legal set summed over the jobs,
+        /// with each distinct "actionId: bar: reason" and the jobs it came up in. The regressions read this count (fast
+        /// mode drops the "[ActionSet]" Debug.Log lines). Outside every trace hash.
+        /// </summary>
+        private JsonObj ActionSetSummary()
+        {
+            var distinct = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var jobsOf = new Dictionary<string, int>(StringComparer.Ordinal);
+            int total = 0, jobs = 0;
+            foreach (JobResult r in Results)
+            {
+                if (r.ActionSetTotal <= 0 || r.ActionSetCounts == null)
+                    continue;
+                total += r.ActionSetTotal;
+                jobs++;
+                foreach (KeyValuePair<string, int> kv in r.ActionSetCounts)
+                {
+                    distinct.TryGetValue(kv.Key, out int n);
+                    distinct[kv.Key] = n + kv.Value;
+                    jobsOf.TryGetValue(kv.Key, out int j);
+                    jobsOf[kv.Key] = j + 1;
+                }
+            }
+            var counts = new JsonObj();
+            foreach (KeyValuePair<string, int> kv in distinct)
+                counts.Set(kv.Key, new JsonObj().Set("picks", kv.Value).Set("jobs", jobsOf[kv.Key]));
+            return new JsonObj().Set("total", total).Set("distinct", distinct.Count).Set("jobs", jobs).Set("counts", counts);
+        }
+
         internal void WriteStatus(bool force)
         {
             if (RunDir == null)
@@ -1717,6 +1768,7 @@ namespace Tests.Scenarios
                 try { SoakStats.WriteRows(RunDir, Results); }
                 catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] soak rows: " + ex.Message); }
             }
+            s.Set("actionSet", ActionSetSummary());
             s.Set("results", Results.Select(r => r.ToJson()).ToList());
             SummaryJson = Json.Serialize(s);
             try

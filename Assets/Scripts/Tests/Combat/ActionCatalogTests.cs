@@ -35,7 +35,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 step 3) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-6) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -49,12 +49,38 @@ public static class ActionCatalogTests
         Run(TestDeciders);
         Run(TestLookups);
         Run(TestExecutorSourceScan);
+        Run(TestInlineAction);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
             Debug.Log("  [SKIP] TestRunnerRefusalsInPlay (needs Play mode and a scene GameManager)");
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
+    }
+
+    /// <summary>
+    /// GameManager.InlineAction (batch 13 step 6, the pure-move form of RunAIAction for the AI wrappers): the runner's and
+    /// the executor's enumerators are inlined, so the core's own yields (a wait, a nested coroutine) reach the caller as
+    /// the core yields them, in order, and no extra frame is added.
+    /// </summary>
+    private static void TestInlineAction()
+    {
+        var log = new List<string>();
+        var wait = new WaitForSeconds(0.5f);
+        System.Collections.IEnumerator Deep() { log.Add("deep"); yield return null; }
+        System.Collections.IEnumerator Core() { log.Add("core"); yield return wait; yield return Deep(); log.Add("core-end"); }
+        System.Collections.IEnumerator Executor() { log.Add("executor"); yield return Core(); log.Add("executor-end"); }
+        System.Collections.IEnumerator Runner() { log.Add("runner"); yield return Executor(); log.Add("runner-end"); }
+
+        var yielded = new List<object>();
+        System.Collections.IEnumerator inline = GameManager.InlineAction(Runner(), 2);
+        while (inline.MoveNext())
+            yielded.Add(inline.Current);
+        Assert(yielded.Count == 2 && ReferenceEquals(yielded[0], wait) && yielded[1] is System.Collections.IEnumerator,
+            "InlineAction passes the core's wait and its nested enumerator through unchanged (two levels inlined)",
+            yielded.Count.ToString());
+        Assert(string.Join(",", log) == "runner,executor,core,core-end,executor-end,runner-end",
+            "InlineAction runs the runner, the executor and the core in order (the nested enumerator is the caller's)", string.Join(",", log));
     }
 
     private static void Run(Action test)
@@ -132,7 +158,8 @@ public static class ActionCatalogTests
         {
             bool built = d.Status == ImplStatus.Delegating || d.Status == ImplStatus.Extracted || d.Status == ImplStatus.New;
             if (built && d.Executor == null) bad.Add(d.Id + ": " + d.Status + " without an executor");
-            if (!built && d.Executor != null) bad.Add(d.Id + ": " + d.Status + " with an executor");
+            // An AiOnly entry may wrap the AI's own core (breath, spittle, engulf, ranged special; batch 13 step 6).
+            if (!built && d.Executor != null && d.Status != ImplStatus.AiOnly) bad.Add(d.Id + ": " + d.Status + " with an executor");
             if (!built && (d.IssueIds == null || d.IssueIds.Length == 0)) bad.Add(d.Id + ": " + d.Status + " with no issue");
             if (d.IssueIds != null)
                 foreach (string issue in d.IssueIds)
@@ -366,7 +393,19 @@ public static class ActionCatalogTests
         Assert(ActionCatalog.Get(ActionIds.CastSpell).CostFor(null, null) == ActionCostType.Standard, "A cast with no spell given costs its default, a standard action");
         Assert(ActionCatalog.Get(ActionIds.BardicMusic).CostFor(null, new ActionContext { Variant = BardicMusicActionExecutor.StopVariant }) == ActionCostType.Free,
             "Stopping bardic music is a free action");
-        Assert(ActionCatalog.Get(ActionIds.Attack).AiModeValuation == null, "The attack entries' AiModeValuation slot is empty until step 6");
+        // C2 (batch 13 step 6): the attack entries carry the stopgap formula unchanged, labelled as the interim rule.
+        AiModeValuation attackValuation = ActionCatalog.Get(ActionIds.Attack).AiModeValuation;
+        AiModeValuation fullValuation = ActionCatalog.Get(ActionIds.FullAttack).AiModeValuation;
+        Assert(attackValuation != null && attackValuation == fullValuation && AiModeValuation.ForAttack == attackValuation,
+            "C2: the attack and full attack entries share one AiModeValuation, the one AttackIntent.ForAI reads");
+        Assert(attackValuation != null && attackValuation.Label == "interim rule, replaced by batch 22's evaluator",
+            "C2: the valuation is labelled the interim rule, replaced by batch 22's evaluator");
+        Assert(attackValuation != null && attackValuation.RapidShot != null && attackValuation.RapidShot.Method.Name == "DefaultShouldUseRapidShot"
+               && attackValuation.TwoWeapon != null && attackValuation.TwoWeapon.Method.Name == "DefaultShouldUseTwoWeaponFighting",
+            "C2: its formula is the stopgap's, unchanged (AIProfile.DefaultShouldUseRapidShot, DefaultShouldUseTwoWeaponFighting)");
+        foreach (ActionDefinition d in ActionCatalog.All)
+            if (d.Id != ActionIds.Attack && d.Id != ActionIds.FullAttack)
+                Assert(d.AiModeValuation == null, d.Id + " has no AiModeValuation (the attack entries only)");
         foreach (ActionDefinition d in ActionCatalog.All)
             if (d.Status == ImplStatus.OutOfScope)
                 Assert(d.Availability == null, d.Id + " (out of scope) has no availability rule");
@@ -464,12 +503,28 @@ public static class ActionCatalogTests
             Drain(gm.RunAIAction(ActionContext.For(ActionIds.Attack, null, ActorSource.AI), noActor));
             Assert(!noActor.Performed && noActor.Refusal.Bar == LegalityBar.Target, "RunAIAction refuses a run with no actor", noActor.ToString());
 
+            ActionSetShadow.Clear();
             var standUp = new ActionOutcome();
             drained = Drain(gm.RunAIAction(ActionContext.For(ActionIds.StandUp, actor, ActorSource.AI), standUp));
             Assert(drained && !standUp.Performed && standUp.Refusal.Bar == LegalityBar.Condition && !standUp.RefusalLogged
                    && !actor.Actions.MoveActionUsed && standUp.Spent == ActionCostType.Free,
                 "A stand-up for a creature that is not prone is refused unlogged and spends nothing (TryStandUpFromProneForAI's gate)",
                 standUp.ToString());
+            // C8: RunAIAction's shadow check records the pick outside the legal set in the sink the harness reads (fast mode
+            // drops the "[ActionSet]" Debug.Log line), and the pick still ran (the refusal above is the core's own).
+            Assert(ActionSetShadow.Total == 1 && ActionSetShadow.Counts.Count == 1
+                   && ActionSetShadow.Lines.Count == 1 && ActionSetShadow.Lines[0].Contains(ActionIds.StandUp + ": Condition"),
+                "RunAIAction records a pick outside the legal set in ActionSetShadow (stand-up while not prone: Condition bar)",
+                string.Join(" | ", ActionSetShadow.Lines));
+
+            ActionSetShadow.Clear();
+            actor.CurrentTurnStart.Compulsion = new TurnCompulsion { Turned = true };
+            gm.ActionSetShadowCheck(ActionContext.For(ActionIds.Attack, actor, ActorSource.AI));
+            actor.CurrentTurnStart.Clear();
+            Assert(ActionSetShadow.Total == 1 && ActionSetShadow.Lines.Count == 1 && ActionSetShadow.Lines[0].Contains(ActionIds.Attack + ": Compulsion"),
+                "The shadow check records a turned creature's attack as one Compulsion entry (PHB p.159, D15)",
+                string.Join(" | ", ActionSetShadow.Lines));
+            ActionSetShadow.Clear();
 
             var provoke = new ActionOutcome();
             drained = Drain(gm.ResolveActionProvocation(actor, AoOProvokingAction.DrinkPotion, ActionDeciders.For(actor, ActorSource.Ui), provoke));

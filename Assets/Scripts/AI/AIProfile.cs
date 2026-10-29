@@ -601,16 +601,10 @@ namespace DND35.AI
         }
 
         /// <summary>
-        /// AI stopgap (batch 13 catalog), AI-055 (owner decision Q2, 2026-10-23): whether the creature declares Rapid Shot
-        /// for its ranged attack on <paramref name="target"/> with <paramref name="weapon"/>. The rules (CharacterController
-        /// .CanDeclareRapidShot, the declaration before the first attack, D9) are the PC toggle's.
-        /// <see cref="DefaultShouldUseRapidShot"/>.
-        /// </summary>
-        public virtual bool ShouldUseRapidShot(CharacterController self, CharacterController target, ItemData weapon)
-            => DefaultShouldUseRapidShot(self, target, weapon);
-
-        /// <summary>
-        /// The default Rapid Shot choice, also used for creatures without a profile (AI stopgap, batch 13 catalog): declare it
+        /// The Rapid Shot choice of the attack entries' AiModeValuation (AI-055, owner decision Q2, 2026-10-23; batch 13
+        /// step 6, design choice C2): an interim rule, replaced by batch 22's evaluator. Every creature uses it through the
+        /// catalog (AttackIntent.ForAI); the profile hook it had is gone (no profile overrode it). The rules
+        /// (CharacterController.CanDeclareRapidShot, the declaration before the first attack, D9) are the PC toggle's. Declare it
         /// when it may be declared now (the feat, no attack made yet, the full-round action free) and the expected hits of the
         /// turn's shots with it (one extra shot at the highest bonus, -2 on every shot, PHB p.99) beat those without it.
         /// Damage per hit is taken as equal; Haste's extra shot is in both. A thrown weapon (a javelin, or a dagger the NPC
@@ -659,16 +653,10 @@ namespace DND35.AI
         private const int RapidShotPenalty = -2; // PHB p.99
 
         /// <summary>
-        /// AI stopgap (batch 13 catalog), AI-055 (owner decision Q2, 2026-10-23): whether the creature fights with two weapons
-        /// in its melee attack on <paramref name="target"/>. The rules (the off-hand steps of GameManager.RunAttackSequence,
-        /// CharacterController.GetDualWieldPenalties, GetOffHandAttackCount) are the PC Off-Hand button's.
-        /// <see cref="DefaultShouldUseTwoWeaponFighting"/>.
-        /// </summary>
-        public virtual bool ShouldUseTwoWeaponFighting(CharacterController self, CharacterController target)
-            => DefaultShouldUseTwoWeaponFighting(self, target);
-
-        /// <summary>
-        /// The default two-weapon choice, also used for creatures without a profile (AI stopgap, batch 13 catalog): fight with
+        /// The two-weapon choice of the attack entries' AiModeValuation (AI-055, owner decision Q2, 2026-10-23; batch 13 step
+        /// 6, design choice C2): an interim rule, replaced by batch 22's evaluator, read through the catalog by
+        /// AttackIntent.ForAI for every creature. The rules (the off-hand steps of GameManager.RunAttackSequence,
+        /// CharacterController.GetDualWieldPenalties, GetOffHandAttackCount) are the PC Off-Hand button's. Fight with
         /// two weapons when it holds one in each hand (CanDualWield; a shield bash only with Improved Shield Bash, since the
         /// lost shield AC is a cost it cannot weigh), the turn can still become a full attack (PHB p.143:
         /// the off-hand attack needs the full attack action), no flurry is declared, and the expected damage of the turn's

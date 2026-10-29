@@ -15,7 +15,7 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -63,6 +63,10 @@ namespace Tests.Scenarios
         public string[] Choices { get; private set; }
         /// <summary>The level of the prepared spell a <see cref="Convert"/> step gives up (the Convert button's row).</summary>
         public int ConvertLevel { get; private set; }
+        /// <summary>The catalog entry an <see cref="Action"/> step takes (an ActionIds constant).</summary>
+        public string ActionId { get; private set; }
+        /// <summary>An <see cref="Action"/> step's sub-choice (ActionContext.Variant: a wild shape form, a bardic music variant).</summary>
+        public string Variant { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move", "EscapeArtist" };
@@ -164,6 +168,25 @@ namespace Tests.Scenarios
         /// action through GameManager.RunAIAction, as the cornered panicked creature does.
         /// </summary>
         public static Step TotalDefense() => new Step(StepKind.TotalDefense);
+
+        /// <summary>
+        /// Takes the catalog entry <paramref name="actionId"/> (an ActionIds constant; batch 13 step 6) through the one
+        /// executor both sides share: a Scripted or AI-run actor through GameManager.RunAIAction, a Ui actor through
+        /// RunPlayerAction (the runner's UI follow-up included). The actor and round are the turn's
+        /// (<c>.Turn(actor, round, Step.Action(...))</c>, or <c>ScenarioBuilder.Action(actor, round, actionId, ...)</c>).
+        /// A Delegating entry builds its core's request from the context by the side's own rules; an entry whose executor
+        /// needs a caller's request (a cast, an overrun path) is refused by it, with the reason as the step's note.
+        /// </summary>
+        public static Step Action(string actionId, string target = null, string variant = null)
+            => new Step(StepKind.Action) { ActionId = actionId, Target = target, Variant = variant };
+
+        /// <summary><see cref="Action(string, string, string)"/> aimed at a square (move, withdraw, 5-foot step).</summary>
+        public static Step ActionAt(string actionId, int x, int y, string variant = null)
+            => new Step(StepKind.Action) { ActionId = actionId, Cell = new Vector2Int(x, y), HasCell = true, Variant = variant };
+
+        /// <summary><see cref="Action(string, string, string)"/> with an item of the actor's (its ItemDatabase id) and an optional target.</summary>
+        public static Step ActionItem(string actionId, string itemId, string target = null)
+            => new Step(StepKind.Action) { ActionId = actionId, ItemId = itemId, Target = target };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -367,6 +390,9 @@ namespace Tests.Scenarios
                     return "BardicSuggestion(" + Target + ")";
                 case StepKind.Wait:
                     return "Wait(" + Frames + ")";
+                case StepKind.Action:
+                    return "Action(" + ActionId + (Target != null ? "," + Target : "") + (HasCell ? "," + Cell.x + "," + Cell.y : "")
+                        + (ItemId != null ? ",item=" + ItemId : "") + (Variant != null ? ",variant=" + Variant : "") + ")";
                 default:
                     return Kind.ToString();
             }
@@ -393,6 +419,15 @@ namespace Tests.Scenarios
                 return Kind + " without a spell id";
             if (Kind == StepKind.UseItem && string.IsNullOrEmpty(ItemId))
                 return "UseItem without an item id";
+            if (Kind == StepKind.Action)
+            {
+                if (ActionCatalog.Get(ActionId) == null)
+                    return Describe() + ": no catalog action '" + ActionId + "'";
+                if (Target != null && def.Find(Target) == null)
+                    return Describe() + ": target '" + Target + "' is not an actor";
+                if (ItemId != null && !ItemDatabase.HasItem(ItemId))
+                    return Describe() + ": no item '" + ItemId + "' in ItemDatabase";
+            }
             if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
                 return Describe() + ": no bestiary entry '" + FormId + "'";
             if (Kind == StepKind.AnswerCleave && Target != null && def.Find(Target) == null)
@@ -417,8 +452,10 @@ namespace Tests.Scenarios
             {
                 // A grapple escape or move has the AI-path executor (GameManager.RunGrappleActionForAI, batch 12 step 19).
                 bool aiGrapple = Kind == StepKind.GrappleAction && (GrappleKind == "Escape" || GrappleKind == "Move" || GrappleKind == "EscapeArtist") && !HasCell;
+                // Holding a touch charge and delivering it have shared executors since batch 13 step 6 (the cast entry with
+                // the AI hold request, TryNPCHoldTouchChargeForAI; the deliver-held-charge entry), so they run on both paths.
                 if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || (Kind == StepKind.GrappleAction && !aiGrapple) || Kind == StepKind.NaturalAttack
-                    || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert
+                    || Kind == StepKind.UseItem || Kind == StepKind.Convert
                     || Kind == StepKind.DualWield)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 // A summon aimed at a square is the one square cast the NPC path has (batch 11 step 27, SPL-091).
@@ -591,7 +628,8 @@ namespace Tests.Scenarios
                 // AI executors below bypass: refuse movement and ordinary attacks instead of breaking those rules.
                 if (a.IsGrappling() && (s.Kind == StepKind.Move || s.Kind == StepKind.Withdraw || s.Kind == StepKind.FiveFootStep
                     || s.Kind == StepKind.Attack || s.Kind == StepKind.AttackAgain || s.Kind == StepKind.FullAttack || s.Kind == StepKind.Flurry
-                    || s.Kind == StepKind.Smite || s.Kind == StepKind.Charge || s.Kind == StepKind.Overrun))
+                    || s.Kind == StepKind.Smite || s.Kind == StepKind.Charge || s.Kind == StepKind.Overrun
+                    || (s.Kind == StepKind.Action && BypassesGrappleRules(s.ActionId))))
                 {
                     EmitStep(job, a, path, i, s, "refused", "grappling (no AI-path grapple executor; let the AI run this turn)");
                     continue;
@@ -725,6 +763,39 @@ namespace Tests.Scenarios
                         yield return null;
                         break;
 
+                    case StepKind.Action:
+                    {
+                        var actionOutcome = new ActionOutcome();
+                        ActionContext actionCtx = BuildActionContext(a, s, target, global::ActorSource.AI, out string itemNote);
+                        yield return gm.RunAIAction(actionCtx, actionOutcome);
+                        ok = actionOutcome.Performed;
+                        if (!actionOutcome.Performed) note = actionOutcome.Refusal.Reason;
+                        if (itemNote != null) note = note == null ? itemNote : itemNote + "; " + note;
+                        break;
+                    }
+
+                    case StepKind.CastHeld:
+                    {
+                        // The AI's hold of a touch charge (the cast entry with SpellCastRequest.ForAIHoldCharge, PHB p.141).
+                        SpellData heldTemplate = SpellDatabase.GetSpell(s.SpellId);
+                        if (heldTemplate == null) { ok = false; note = "unknown spell"; break; }
+                        string preH = Preconditions(a, null);
+                        ok = gm.TryNPCHoldTouchChargeForAI(a, heldTemplate.Clone(), s.Metamagic);
+                        if (ok == false) note = "hold executor returned false (" + preH + ")";
+                        yield return null;
+                        break;
+                    }
+
+                    case StepKind.DeliverHeld:
+                    {
+                        if (target == null || target.Stats == null || target.Stats.IsDead) { ok = false; note = "no live target"; break; }
+                        var delivery = new ActionOutcome();
+                        yield return gm.RunAIAction(ActionContext.For(ActionIds.DeliverHeldCharge, a, global::ActorSource.AI, target), delivery);
+                        ok = delivery.Performed;
+                        if (!delivery.Performed) note = delivery.Refusal.Reason;
+                        break;
+                    }
+
                     case StepKind.TotalDefense:
                     {
                         var totalDefense = new ActionOutcome();
@@ -834,6 +905,55 @@ namespace Tests.Scenarios
             }
         }
 
+        /// <summary>
+        /// The catalog entries whose AI executors bypass the grapple rules (AIService.RunGrappleTurnForAI owns a grappling
+        /// creature's movement and attacks): an <see cref="Step.Action"/> step with one of them is refused for a grappler,
+        /// as the matching typed steps are.
+        /// </summary>
+        private static bool BypassesGrappleRules(string actionId)
+            => actionId == ActionIds.Move || actionId == ActionIds.Withdraw || actionId == ActionIds.FiveFootStep
+               || actionId == ActionIds.Attack || actionId == ActionIds.FullAttack || actionId == ActionIds.FlurryOfBlows
+               || actionId == ActionIds.Smite || actionId == ActionIds.Charge || actionId == ActionIds.BullRushCharge
+               || actionId == ActionIds.Overrun;
+
+        /// <summary>
+        /// The catalog context of an <see cref="Step.Action"/> step (batch 13 step 6): the entry, the actor, the side whose
+        /// choices these are (<paramref name="source"/>), the target, the square, the item (the first of the actor's wielded
+        /// items, main hand then off hand, or carried items with the step's ItemDatabase id) and the variant.
+        /// <paramref name="itemNote"/> says "item ID not carried" when the step names an item the actor does not have.
+        /// </summary>
+        internal static ActionContext BuildActionContext(CharacterController a, Step s, CharacterController target, global::ActorSource source,
+            out string itemNote)
+        {
+            itemNote = null;
+            ActionContext ctx = ActionContext.For(s.ActionId, a, source, target);
+            if (s.HasCell)
+                ctx.Cell = s.Cell;
+            ctx.Variant = s.Variant;
+            if (!string.IsNullOrEmpty(s.ItemId) && a != null)
+            {
+                global::Inventory inv = a.InventoryComp != null ? a.InventoryComp.CharacterInventory : null;
+                ItemData main = a.GetEquippedMainWeapon();
+                if (main != null && main.Id == s.ItemId)
+                    ctx.Item = main;
+                else if (inv != null && inv.RightHandSlot != null && inv.RightHandSlot.Id == s.ItemId)
+                    ctx.Item = inv.RightHandSlot;
+                else if (inv != null && inv.LeftHandSlot != null && inv.LeftHandSlot.Id == s.ItemId)
+                    ctx.Item = inv.LeftHandSlot;
+                else if (inv != null && inv.GeneralSlots != null)
+                    for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                        if (inv.GeneralSlots[i] != null && inv.GeneralSlots[i].Id == s.ItemId)
+                        {
+                            ctx.Item = inv.GeneralSlots[i];
+                            ctx.InventoryIndex = i;
+                            break;
+                        }
+                if (ctx.Item == null)
+                    itemNote = "item " + s.ItemId + " not carried";
+            }
+            return ctx;
+        }
+
         /// <summary>The action-economy facts an AI-path maneuver or cast depends on, for a refused step's note.</summary>
         private static string Preconditions(CharacterController a, SpecialAttackType? maneuver)
         {
@@ -890,6 +1010,8 @@ namespace Tests.Scenarios
         private int _currentIndex;
         private string _before;
         private string _awaitNote;
+        /// <summary>The outcome of the running <see cref="Step.Action"/> step (Ui path), folded into its note when it ends.</summary>
+        private ActionOutcome _actionOutcome;
         private int _actionFrame;
         private float _actionTime;
         private int _readySince;
@@ -1093,6 +1215,16 @@ namespace Tests.Scenarios
                 _awaitNote = (_awaitNote == null ? "" : _awaitNote + "; ") + "the target selection never opened";
                 _pendingClick = null;
             }
+            if (_actionOutcome != null)
+            {
+                if (!_actionOutcome.Performed)
+                {
+                    string refused = _actionOutcome.Cancelled ? "cancelled" : _actionOutcome.Refusal.Reason;
+                    if (!string.IsNullOrEmpty(refused))
+                        _awaitNote = (_awaitNote == null ? "" : _awaitNote + "; ") + refused;
+                }
+                _actionOutcome = null;
+            }
             string note = _awaitNote;
             if (why != null)
                 note = note == null ? why : note + "; " + why;
@@ -1264,6 +1396,17 @@ namespace Tests.Scenarios
                 case StepKind.TotalDefense:
                     gm.OnTotalDefenseButtonPressed();
                     break;
+                case StepKind.Action:
+                {
+                    // The PC runner: the executor, then the entry's UI follow-up (batch 13 step 6). Its outcome is read
+                    // when the step's wait ends (FinishCurrent), so a refused or cancelled step says why.
+                    ActionContext uiCtx = ScriptedSteps.BuildActionContext(_actor, s, target, global::ActorSource.Ui, out string uiItemNote);
+                    if (uiItemNote != null)
+                        _awaitNote = uiItemNote;
+                    _actionOutcome = new ActionOutcome();
+                    gm.RunPlayerAction(uiCtx, _actionOutcome);
+                    break;
+                }
                 case StepKind.BardicStop:
                     gm.OnBardicMusicButtonPressed();
                     if (!gm.Harness_ChooseSelectionOption("Stop ")) { _awaitNote = "no Stop option"; gm.CombatUI?.HidePickUpItemSelection(); }

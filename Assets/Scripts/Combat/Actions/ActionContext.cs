@@ -36,6 +36,13 @@ public sealed class ActionContext
     /// <summary>The AI's maneuver hook on an attack entry: it may replace a melee attack step with a maneuver (CMB-102).</summary>
     public Func<CharacterController, CharacterController, bool> TryStepManeuver;
 
+    /// <summary>
+    /// The caller reads the outcome at once and does not wait for a defender's prompt to settle (the NPC maneuver path,
+    /// GameManager.TryNPCSpecialAttackIfBeneficial, which a scripted step or the AI coroutine waits on itself): the
+    /// maneuver executor returns as soon as the core returns. Used by GameManager.RunAIActionNow callers (batch 13 step 6).
+    /// </summary>
+    public bool NoWait;
+
     public static ActionContext For(string id, CharacterController actor, ActorSource source, CharacterController target = null)
     {
         return new ActionContext
@@ -95,4 +102,26 @@ public sealed class ActionOutcome
 
     public override string ToString()
         => Performed ? $"performed({Spent})" : (Cancelled ? "cancelled" : Refusal.ToString());
+}
+
+/// <summary>
+/// The AI move request of the move and withdraw entries (batch 13 step 6): the walk's pace, the core's MoveAttempt the
+/// caller reads, and whether the caller pays the move action itself (every AI move site pays after the walk as it does
+/// today, AI-076, so its routing through the catalog changes nothing; batch 13 steps 9-10 make one payment rule).
+/// </summary>
+public sealed class AiMoveRequest
+{
+    public float SecondsPerStep;
+    public MoveAttempt Attempt;
+    public bool CallerPays;
+}
+
+/// <summary>
+/// The AI attack request of the attack and full attack entries (batch 13 step 6): the cap on the sequence's steps of
+/// GameManager.NPCPerformAttack (1: the attack action alone; int.MaxValue: every step the action economy allows), as the
+/// caller asked it through GameManager.NPCPerformAttackForAI.
+/// </summary>
+public sealed class NpcAttackRequest
+{
+    public int MaxSteps = int.MaxValue;
 }

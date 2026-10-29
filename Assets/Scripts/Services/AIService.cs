@@ -960,7 +960,8 @@ public class AIService : MonoBehaviour
             ? profile.ShouldMaintainConcentration(npc, all, otherSpellLevel, canAttackNow, holdsSummon)
             : AIProfile.DefaultShouldMaintainConcentration(npc, all, otherSpellLevel, canAttackNow, holdsSummon);
         Debug.Log($"[AI][Concentration] {npc.Stats.CharacterName} on {npc.Concentration.ConcentrationSpellName}: otherSpellLevel={otherSpellLevel} attackNow={canAttackNow} summon={holdsSummon} grappling={grappling} -> {(maintain ? "maintain" : "let it lapse")}");
-        return maintain && _gameManager.TryMaintainConcentrationForAI(npc);
+        // Through the catalog's maintain-concentration entry (batch 13 step 6).
+        return maintain && _gameManager.RunAIActionNow(ActionContext.For(ActionIds.MaintainConcentration, npc, ActorSource.AI)).Performed;
     }
 
     private bool HasAdjacentEnemy(CharacterController npc, List<CharacterController> allCombatants)
@@ -2106,6 +2107,10 @@ public class AIService : MonoBehaviour
         return npc.CanSee(target, incomingIsRangedAttack);
     }
 
+    /// <summary>The charm link the legal set reads (ActorActionSet's charm filter, batch 13 step 6): <see cref="ShouldExcludeTargetBecauseOfCharm"/>.</summary>
+    internal bool IsCharmedByForActions(CharacterController npc, CharacterController candidate)
+        => ShouldExcludeTargetBecauseOfCharm(npc, candidate);
+
     private bool ShouldExcludeTargetBecauseOfCharm(CharacterController npc, CharacterController candidate)
     {
         if (_gameManager == null || npc == null || candidate == null)
@@ -3183,7 +3188,8 @@ public class AIService : MonoBehaviour
             yield break;
 
         Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} delivers the held {held.Name} to {target.Stats.CharacterName}");
-        _gameManager.TryNPCDeliverHeldChargeForAI(npc, target);
+        // Through the catalog's deliver-held-charge entry (batch 13 step 6), whose executor runs TryNPCDeliverHeldChargeForAI.
+        _gameManager.RunAIActionNow(ActionContext.For(ActionIds.DeliverHeldCharge, npc, ActorSource.AI, target));
         yield return new WaitForSeconds(0.5f);
     }
 
@@ -4045,6 +4051,17 @@ public class AIService : MonoBehaviour
     {
         if (_gameManager == null || npc == null || target == null || npc.Stats == null)
             return false;
+        // Through the catalog's ranged special or spittle entry (batch 13 step 6), whose executor runs the core below.
+        RangedSpecialAttackDefinition definition = npc.GetRangedSpecialAttackDefinition();
+        string id = definition != null && definition.IsFreeAction ? ActionIds.Spittle : ActionIds.RangedSpecial;
+        return _gameManager.RunAIActionNow(ActionContext.For(id, npc, ActorSource.AI, target)).Performed;
+    }
+
+    /// <summary>The ranged special attack core (the catalog's executor, GameManager.ActionCore_RangedSpecial).</summary>
+    internal bool ExecuteRangedSpecialAttackCore(CharacterController npc, CharacterController target)
+    {
+        if (_gameManager == null || npc == null || target == null || npc.Stats == null)
+            return false;
 
         if (!npc.IsRangedSpecialAttackReady)
         {
@@ -4149,6 +4166,15 @@ public class AIService : MonoBehaviour
     /// Attempt to execute an Engulf attack. Returns true if engulf was attempted.
     /// </summary>
     public bool TryExecuteEngulf(CharacterController npc, CharacterController target)
+    {
+        if (_gameManager == null || npc == null || target == null || npc.Stats == null)
+            return false;
+        // Through the catalog's engulf entry (batch 13 step 6), whose executor runs the core below.
+        return _gameManager.RunAIActionNow(ActionContext.For(ActionIds.Engulf, npc, ActorSource.AI, target)).Performed;
+    }
+
+    /// <summary>The engulf core (the catalog's executor, GameManager.ActionCore_Engulf).</summary>
+    internal bool ExecuteEngulfCore(CharacterController npc, CharacterController target)
     {
         if (_gameManager == null || npc == null || target == null || npc.Stats == null)
             return false;

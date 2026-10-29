@@ -157,9 +157,9 @@ public sealed class AttackIntent
     /// An NPC's intent for an attack on <paramref name="target"/> with its main weapon (batch 12 step 17, CMB-096): the mode
     /// is the NPC's own (<see cref="ChooseAiMode"/>), never the PC UI's selection; <paramref name="gm"/> is not read (kept
     /// for the builders' common shape). Its attack modes (batch 12 step 18, AI-055; owner decision Q2, 2026-10-23) are the
-    /// AI's choice by its profile's expected-damage rule, an AI stopgap (batch 13 catalog): Rapid Shot for a ranged attack
-    /// (AIProfile.ShouldUseRapidShot, or the creature's standing toggle), two-weapon fighting for a melee one
-    /// (AIProfile.ShouldUseTwoWeaponFighting). The rules of both are the PC's (the executor declares Rapid Shot before the
+    /// AI's choice by the attack entries' AiModeValuation (batch 13 step 6, C2: the stopgap's expected-hits and
+    /// expected-damage formula, unchanged; an interim rule, replaced by batch 22's evaluator): Rapid Shot for a ranged
+    /// attack (or the creature's standing toggle), two-weapon fighting for a melee one. The rules of both are the PC's (the executor declares Rapid Shot before the
     /// first shot, D9; the off-hand steps and penalties, PHB p.160).
     /// </summary>
     public static AttackIntent ForAI(GameManager gm, CharacterController actor, CharacterController target)
@@ -171,18 +171,16 @@ public sealed class AttackIntent
             Weapon = weapon,
         };
         CopyDeclarations(intent, actor);
-        if (actor != null && actor.Stats != null && target != null)
+        // The mode chooser is the attack entries' AiModeValuation (batch 13 step 6, design choice C2): the stopgap formula,
+        // unchanged, an interim rule replaced by batch 22's evaluator.
+        AiModeValuation valuation = actor != null && actor.Stats != null && target != null ? AiModeValuation.ForAttack : null;
+        if (valuation != null)
         {
-            DND35.AI.AIProfile profile = actor.aiProfile;
             // Rapid Shot works with any ranged attack, a thrown weapon's too (PHB p.99, p.113).
             if ((intent.Mode == AttackMode.Ranged || intent.Mode == AttackMode.Thrown) && !intent.RapidShot)
-                intent.RapidShot = profile != null
-                    ? profile.ShouldUseRapidShot(actor, target, weapon)
-                    : DND35.AI.AIProfile.DefaultShouldUseRapidShot(actor, target, weapon);
+                intent.RapidShot = valuation.RapidShot != null && valuation.RapidShot(actor, target, weapon);
             if (intent.Mode == AttackMode.Melee)
-                intent.TwoWeapon = profile != null
-                    ? profile.ShouldUseTwoWeaponFighting(actor, target)
-                    : DND35.AI.AIProfile.DefaultShouldUseTwoWeaponFighting(actor, target);
+                intent.TwoWeapon = valuation.TwoWeapon != null && valuation.TwoWeapon(actor, target);
         }
         return intent;
     }

@@ -313,18 +313,29 @@ public partial class GameManager
             : AIProfile.DefaultBardicMusicChoice(npc, all);
         if (choice == null)
             return false;
+        // Through the catalog's bardic music entry (batch 13 step 6): the choice is its variant, the executor runs the same
+        // Execute* rule as before.
         switch (choice.Kind)
         {
             case BardicMusicChoice.ChoiceKind.Stop:
-                ExecuteBardicStop(npc);
+                RunBardicAction(npc, BardicMusicActionExecutor.StopVariant, null, null);
                 return false;
             case BardicMusicChoice.ChoiceKind.Concentrate:
-                return ExecuteBardicConcentrate(npc);
+                return RunBardicAction(npc, BardicMusicActionExecutor.ConcentrateVariant, null, null);
             case BardicMusicChoice.ChoiceKind.Suggest:
-                return choice.Targets.Count > 0 && ExecuteBardicSuggestion(npc, choice.Targets[0]);
+                return choice.Targets.Count > 0 && RunBardicAction(npc, BardicMusicActionExecutor.SuggestionVariant, choice.Targets[0], null);
             default:
-                return ExecuteBardicStart(npc, choice.Ability, choice.Targets, choice.Skill);
+                string variant = choice.Ability.ToString() + (string.IsNullOrEmpty(choice.Skill) ? string.Empty : ":" + choice.Skill);
+                return RunBardicAction(npc, variant, null, choice.Targets);
         }
+    }
+
+    private bool RunBardicAction(CharacterController npc, string variant, CharacterController target, IList<CharacterController> targets)
+    {
+        ActionContext ctx = ActionContext.For(ActionIds.BardicMusic, npc, ActorSource.AI, target);
+        ctx.Variant = variant;
+        ctx.CoreRequest = targets;
+        return RunAIActionNow(ctx).Performed;
     }
 
     // ── Turn hooks ─────────────────────────────────────────────────

@@ -198,6 +198,9 @@ public partial class GameManager
             : DND35.AI.AIProfile.DefaultWildShapeForm(npc, all);
         if (form == null)
             return false;
-        return ExecuteWildShape(npc, form.Id);
+        // Through the catalog's wild shape entry (batch 13 step 6), whose executor runs ExecuteWildShape.
+        ActionContext ctx = ActionContext.For(ActionIds.WildShape, npc, ActorSource.AI);
+        ctx.Variant = form.Id;
+        return RunAIActionNow(ctx).Performed;
     }
 }

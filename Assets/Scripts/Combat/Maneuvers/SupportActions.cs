@@ -1765,10 +1765,15 @@ public partial class GameManager
     /// </summary>
     private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target, bool bullRush = false)
     {
-        var outcome = new ChargeOutcome();
-        IEnumerator run = ExecuteCharge(ChargeRequestForAI(npc, target, bullRush), outcome);
+        // Through the catalog's charge entry (batch 13 step 6): its executor runs ExecuteCharge with this request, inlined
+        // so the core's yields reach this coroutine as before.
+        ActionContext ctx = ActionContext.For(bullRush ? ActionIds.BullRushCharge : ActionIds.Charge, npc, ActorSource.AI, target);
+        ctx.CoreRequest = ChargeRequestForAI(npc, target, bullRush);
+        var ran = new ActionOutcome();
+        IEnumerator run = RunAIActionInline(ctx, ran);
         while (run.MoveNext())
             yield return run.Current;
+        ChargeOutcome outcome = ran.CoreOutcome as ChargeOutcome ?? new ChargeOutcome();
 
         if (!outcome.Started || outcome.InterruptedByAoO || outcome.ChargerDropped || outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
             yield break;

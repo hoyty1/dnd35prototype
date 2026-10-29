@@ -78,7 +78,8 @@ public sealed class AttackSequenceActionExecutor : IActionExecutor
     /// Three ways in, each the rules of a live caller:
     /// - a caller's own AttackSequenceRequest (ctx.CoreRequest): the caller already ran the attack prelude, so only the
     ///   sequence runs (RunAttackSequence), after the flurry declaration;
-    /// - the AI without one: GameManager.NPCPerformAttackForAI, the AI's attack with its whole prelude (the grapple gate,
+    /// - the AI without one (or with an NpcAttackRequest, the AI wrappers' step cap): GameManager.NPCPerformAttack
+    ///   (ActionCore_NpcAttack), the AI's attack with its whole prelude (the grapple gate,
     ///   PHB p.156; the hold bar, MM p.310; the Sphere and ward gate; the ward break, PHB p.274, p.241; frightful presence;
     ///   the weapon fallback and reload; the profile's smite and flurry declarations) and its post-sequence steps, with the
     ///   context's maneuver hook (CMB-102). The attack entry caps it at one step; the full attack takes every step the
@@ -121,7 +122,8 @@ public sealed class AttackSequenceActionExecutor : IActionExecutor
         if (callerRequest == null && ctx.Source == ActorSource.AI)
         {
             ActionCosts.Snapshot before = ActionCosts.Take(actor);
-            yield return gm.NPCPerformAttackForAI(actor, ctx.Target, ctx.TryStepManeuver, _kind == Kind.Attack ? 1 : int.MaxValue);
+            int maxSteps = ctx.CoreRequest is NpcAttackRequest npcRequest ? npcRequest.MaxSteps : (_kind == Kind.Attack ? 1 : int.MaxValue);
+            yield return gm.ActionCore_NpcAttack(actor, ctx.Target, ctx.TryStepManeuver, maxSteps);
             o.Performed = ActionCosts.SpentSince(before, actor) != ActionCostType.Free || _kind == Kind.Flurry;
             if (!o.Performed)
             {
@@ -310,9 +312,11 @@ public sealed class ManeuverActionExecutor : IActionExecutor
             yield break;
         }
 
+        // NoWait (the NPC maneuver path): the outcome is read at once, as GameManager.TryNPCSpecialAttackIfBeneficial
+        // always did; a controllable defender's prompt settles later and the caller waits on it itself.
         bool settled = false;
-        ManeuverOutcome mo = gm.ExecuteManeuver(req, _ => settled = true);
-        while (!settled && !ExecutorUtil.CombatOver(gm))
+        ManeuverOutcome mo = ctx.NoWait ? gm.ExecuteManeuver(req, null) : gm.ExecuteManeuver(req, _ => settled = true);
+        while (!ctx.NoWait && !settled && !ExecutorUtil.CombatOver(gm))
             yield return null;
 
         o.CoreOutcome = mo;
@@ -390,6 +394,12 @@ public sealed class OverrunActionRequest
     /// <summary>The AoOs the path provokes; null: GameManager.CheckForAoO on the path, as the live callers compute it.</summary>
     public List<AoOThreatInfo> ProvokedAoOs;
     public float SecondsPerStep = 0.08f;
+
+    /// <summary>The caller's own outcome to fill (the NPC path's, GameManager.NPCExecuteOverrunForAI); null: a new one.</summary>
+    public OverrunMoveOutcome Outcome;
+
+    /// <summary>The combat-end check after a started overrun; null: the caller checks (the NPC path checks always, "Overrun.NPC").</summary>
+    public string CombatEndContext = "ActionCatalog.Overrun";
 }
 
 /// <summary>Overrun: the one overrun move, GameManager.RunOverrunMove (PHB p.157-158; CMB-015, CMB-086).</summary>
@@ -431,7 +441,7 @@ public sealed class OverrunActionExecutor : IActionExecutor
 
         // Leaving threatened squares on the way provokes (PHB p.137), as both live callers pass it.
         List<AoOThreatInfo> provoked = req.ProvokedAoOs ?? gm.CheckForAoO(ctx.Actor, req.Path);
-        var oo = new OverrunMoveOutcome();
+        OverrunMoveOutcome oo = req.Outcome ?? new OverrunMoveOutcome();
         yield return gm.RunOverrunMove(ctx.Actor, req.Path, provoked, req.SecondsPerStep, oo);
         o.CoreOutcome = oo;
         o.Performed = oo.Started;
@@ -439,15 +449,17 @@ public sealed class OverrunActionExecutor : IActionExecutor
         if (!oo.Started)
             o.Refuse(Legality.Refused(LegalityBar.Other, string.IsNullOrEmpty(oo.StopReason) ? "the overrun did not start" : oo.StopReason));
         // RunOverrunMove leaves the combat-end check to its caller.
-        if (oo.Started)
-            gm.EvaluateCombatEnd("ActionCatalog.Overrun");
+        if (oo.Started && req.CombatEndContext != null)
+            gm.EvaluateCombatEnd(req.CombatEndContext);
     }
 }
 
 /// <summary>
-/// Move and withdraw: today's AI move executors (GameManager.MoveCharacterAlongComputedPathForAI and
-/// ExecuteWithdrawMovementForAI) until batch 13 step 9 makes one move executor for both sides. A move pays its move
-/// action after the walk as the AI does today (AI-076; step 10 pays it first); a withdraw pays its own action.
+/// Move and withdraw: today's AI move executors (GameManager.MoveCharacterAlongComputedPath and
+/// MoveCharacterAlongComputedPathWithdraw, through ActionCore_Move and ActionCore_Withdraw) until batch 13 step 9 makes one
+/// move executor for both sides. A move pays its move action after the walk as the AI does today (AI-076; step 10 pays it
+/// first), unless the caller pays (AiMoveRequest.CallerPays: the AI wrappers, each site paying as before); a withdraw
+/// pays its own action.
 /// </summary>
 public sealed class MoveActionExecutor : IActionExecutor
 {
@@ -484,12 +496,13 @@ public sealed class MoveActionExecutor : IActionExecutor
         }
 
         CharacterController mover = ctx.Actor;
-        var attempt = new MoveAttempt();
-        float seconds = gm.GetPlayerMoveSecondsPerStepForAI();
+        var aiMove = ctx.CoreRequest as AiMoveRequest;
+        MoveAttempt attempt = aiMove != null && aiMove.Attempt != null ? aiMove.Attempt : new MoveAttempt();
+        float seconds = aiMove != null ? aiMove.SecondsPerStep : gm.GetPlayerMoveSecondsPerStepForAI();
         if (_withdraw)
-            yield return gm.ExecuteWithdrawMovementForAI(mover, ctx.Cell.Value, seconds, attempt);
+            yield return gm.ActionCore_Withdraw(mover, ctx.Cell.Value, seconds, attempt);
         else
-            yield return gm.MoveCharacterAlongComputedPathForAI(mover, ctx.Cell.Value, seconds, attempt);
+            yield return gm.ActionCore_Move(mover, ctx.Cell.Value, seconds, attempt);
 
         o.CoreOutcome = attempt;
         if (attempt.Refused)
@@ -504,14 +517,15 @@ public sealed class MoveActionExecutor : IActionExecutor
             o.Refuse(Legality.Refused(LegalityBar.Terrain, _withdraw ? "the withdrawal did not start" : "the move did not start"));
             yield break;
         }
-        // The move action after the walk, as every AI move site pays it today (AI-076).
-        if (!_withdraw && mover.Actions.HasMoveAction)
+        // The move action after the walk, as every AI move site pays it today (AI-076); a caller that pays itself (the AI
+        // wrappers' AiMoveRequest.CallerPays) pays as before.
+        if (!_withdraw && (aiMove == null || !aiMove.CallerPays) && mover.Actions.HasMoveAction)
             mover.Actions.UseMoveAction();
         o.Performed = attempt.Started;
     }
 }
 
-/// <summary>The 5-foot step: GameManager.TryTakeFiveFootStepForAI (the shared ExecuteFiveFootStep, no UI follow-up).</summary>
+/// <summary>The 5-foot step: the shared ExecuteFiveFootStep with no UI follow-up (GameManager.ActionCore_FiveFootStep; TryTakeFiveFootStepForAI routes here).</summary>
 public sealed class FiveFootStepActionExecutor : IActionExecutor
 {
     public Legality CanStart(CharacterController actor)
@@ -547,7 +561,7 @@ public sealed class FiveFootStepActionExecutor : IActionExecutor
             o.Refuse(Legality.Refused(LegalityBar.Terrain, "no destination"));
             yield break;
         }
-        o.Performed = gm.TryTakeFiveFootStepForAI(ctx.Actor, ctx.Cell.Value);
+        o.Performed = gm.ActionCore_FiveFootStep(ctx.Actor, ctx.Cell.Value);
         if (!o.Performed)
         {
             // ExecuteFiveFootStep logs why the step failed.
@@ -775,7 +789,9 @@ public sealed class BardicMusicActionExecutor : IActionExecutor
             default:
                 if (TryParseStart(ctx.Variant, out BardicAbility ability, out string skill))
                 {
-                    List<CharacterController> targets = ctx.Target != null ? new List<CharacterController> { ctx.Target } : null;
+                    // A caller's own list (the AI's targets, AIProfile.ChooseBardicMusic) or the one target.
+                    IList<CharacterController> targets = ctx.CoreRequest as IList<CharacterController>
+                        ?? (ctx.Target != null ? new List<CharacterController> { ctx.Target } : null);
                     o.Performed = gm.TryBardicMusicForAI(ctx.Actor, ability, targets, skill);
                 }
                 break;

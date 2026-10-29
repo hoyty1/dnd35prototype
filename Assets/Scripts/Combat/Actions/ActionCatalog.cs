@@ -166,6 +166,23 @@ public static class ActionCatalog
         }
     }
 
+    /// <summary>
+    /// The attack entries' AI mode chooser (design choice C2, inherited Q2): the AI stopgap's expected-hits Rapid Shot rule
+    /// and expected-damage two-weapon rule, formula unchanged (AIProfile.DefaultShouldUseRapidShot and
+    /// DefaultShouldUseTwoWeaponFighting); an interim rule, replaced by batch 22's evaluator. AttackIntent.ForAI reads it.
+    /// </summary>
+    private static readonly AiModeValuation AttackModeValuation = new AiModeValuation
+    {
+        RapidShot = DND35.AI.AIProfile.DefaultShouldUseRapidShot,
+        TwoWeapon = DND35.AI.AIProfile.DefaultShouldUseTwoWeaponFighting,
+    };
+
+    private static ActionDefinition WithModeValuation(this ActionDefinition d)
+    {
+        d.AiModeValuation = AttackModeValuation;
+        return d;
+    }
+
     private static ActionCostType BardicCostFor(CharacterController actor, ActionContext ctx)
         => ctx != null && ctx.Variant == BardicMusicActionExecutor.StopVariant ? ActionCostType.Free : ActionCostType.Standard;
 
@@ -178,10 +195,12 @@ public static class ActionCatalog
         // ── Attacks ──
         l.Add(Def(ActionIds.Attack, "Attack", A, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
                 "PHB p.139-141, Table 8-2 (melee No, ranged Yes, unarmed Yes)", ImplStatus.Delegating)
-            .Run(new AttackSequenceActionExecutor(AttackSequenceActionExecutor.Kind.Attack), ActionUiAfter.AttackDelay, 1.0f));
+            .Run(new AttackSequenceActionExecutor(AttackSequenceActionExecutor.Kind.Attack), ActionUiAfter.AttackDelay, 1.0f)
+            .WithModeValuation());
         l.Add(Def(ActionIds.FullAttack, "Full Attack", A, ActionCostType.FullRound, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
                 "PHB p.143, Table 8-2", ImplStatus.Delegating)
-            .Run(new AttackSequenceActionExecutor(AttackSequenceActionExecutor.Kind.FullAttack), ActionUiAfter.AttackDelay, 1.0f));
+            .Run(new AttackSequenceActionExecutor(AttackSequenceActionExecutor.Kind.FullAttack), ActionUiAfter.AttackDelay, 1.0f)
+            .WithModeValuation());
         l.Add(Def(ActionIds.FlurryOfBlows, "Flurry of Blows", A, ActionCostType.FullRound, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
                 "PHB p.40-41, p.143", ImplStatus.Delegating)
             .Run(new AttackSequenceActionExecutor(AttackSequenceActionExecutor.Kind.Flurry), ActionUiAfter.AttackDelay, 1.0f)
@@ -327,15 +346,19 @@ public static class ActionCatalog
         // ── Monster abilities (per creature) ──
         l.Add(Def(ActionIds.BreathWeapon, "Breath Weapon", Mo, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Cell, ActionRoles.Attack,
                 "MM p.69 (a dragon's breath is a standard action), p.306, p.315 (Su: standard action, no AoO)", ImplStatus.AiOnly, "CRE-039", "AI-040")
+            .Run(new BreathWeaponActionExecutor())
             .For(c => c.HasBreathWeapon || c.HasSecondaryBreathWeapon));
         l.Add(Def(ActionIds.Spittle, "Spittle", Mo, ActionCostType.Free, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
                 "MM p.315 (special attacks; the creature's entry gives a free action)", ImplStatus.AiOnly, "CRE-039")
+            .Run(new RangedSpecialActionExecutor(true))
             .For(c => c.HasRangedSpecialAttack && c.GetRangedSpecialAttackDefinition() != null && c.GetRangedSpecialAttackDefinition().IsFreeAction));
         l.Add(Def(ActionIds.Engulf, "Engulf", Mo, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Cell, ActionRoles.Attack,
                 "MM p.201 (gelatinous cube: AoO or a Reflex save), p.315", ImplStatus.AiOnly, "CRE-039")
+            .Run(new EngulfActionExecutor())
             .For(c => c.HasEngulf));
         l.Add(Def(ActionIds.RangedSpecial, "Ranged Special Attack", Mo, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
                 "MM p.315 (special attacks: a standard action unless noted)", ImplStatus.AiOnly, "CRE-039")
+            .Run(new RangedSpecialActionExecutor(false))
             .For(c => c.HasRangedSpecialAttack && c.GetRangedSpecialAttackDefinition() != null && !c.GetRangedSpecialAttackDefinition().IsFreeAction));
         l.Add(Def(ActionIds.Gaze, "Gaze", Mo, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Attack,
                 "MM p.309 (Gaze: automatic each turn; an active gaze is a standard action)", ImplStatus.OutOfScope, "CRE-076"));

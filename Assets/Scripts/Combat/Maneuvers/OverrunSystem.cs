@@ -444,7 +444,20 @@ public partial class GameManager
     public IEnumerator NPCExecuteOverrunForAI(CharacterController npc, List<Vector2Int> path, OverrunMoveOutcome outcome)
     {
         outcome = outcome ?? new OverrunMoveOutcome();
-        yield return StartCoroutine(RunOverrunMove(npc, path, CheckForAoO(npc, path), GetPlayerMoveSecondsPerStepForAI(), outcome));
+        // Through the catalog's overrun entry (batch 13 step 6): its executor runs RunOverrunMove on this path at the AI's
+        // pace and fills the caller's outcome; the combat-end check stays here, as before.
+        ActionContext ctx = ActionContext.For(ActionIds.Overrun, npc, ActorSource.AI);
+        ctx.CoreRequest = new OverrunActionRequest
+        {
+            Path = path,
+            ProvokedAoOs = CheckForAoO(npc, path),
+            SecondsPerStep = GetPlayerMoveSecondsPerStepForAI(),
+            Outcome = outcome,
+            CombatEndContext = null,
+        };
+        if (path != null && path.Count > 0)
+            ctx.Cell = path[path.Count - 1];
+        yield return StartCoroutine(RunAIActionInline(ctx, new ActionOutcome()));
         // Victory or defeat when an AoO or the overrun dropped the last creature of a side (CORE-011).
         EvaluateCombatEnd("Overrun.NPC");
     }

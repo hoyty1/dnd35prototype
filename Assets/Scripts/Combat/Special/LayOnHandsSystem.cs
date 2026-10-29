@@ -184,6 +184,7 @@ public partial class GameManager
             : DND35.AI.AIProfile.DefaultLayOnHandsTarget(npc, all);
         if (target == null)
             return false;
-        return ExecuteLayOnHands(npc, target);
+        // Through the catalog's lay-on-hands entry (batch 13 step 6), whose executor runs ExecuteLayOnHands.
+        return RunAIActionNow(ActionContext.For(ActionIds.LayOnHands, npc, ActorSource.AI, target)).Performed;
     }
 }

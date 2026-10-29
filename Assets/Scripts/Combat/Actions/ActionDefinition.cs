@@ -75,7 +75,10 @@ public enum ImplStatus
     New,
     /// <summary>Only the PC UI can take the action; no shared executor yet.</summary>
     PcOnly,
-    /// <summary>Only the AI takes the action; no shared executor yet.</summary>
+    /// <summary>
+    /// Only the AI takes the action. Its executor (from batch 13 step 6) wraps the AI's own core, so the AI's calls run
+    /// through the catalog; no PC path reaches it until it becomes shared (breath, spittle, engulf: step 18).
+    /// </summary>
     AiOnly,
     /// <summary>No one can take the action yet.</summary>
     Missing,
@@ -97,9 +100,10 @@ public enum ActionUiAfter
 }
 
 /// <summary>
-/// The AI's choice of mode for an attack entry (Rapid Shot, two-weapon fighting): the interim rule, replaced by batch 22's
-/// evaluator (batch 13 design choice C2, inherited Q2). Empty in step 3; step 6 puts AIProfile.DefaultShouldUseRapidShot
-/// and DefaultShouldUseTwoWeaponFighting here unchanged.
+/// The AI's choice of mode for an attack entry (Rapid Shot, two-weapon fighting): an interim rule, replaced by batch 22's
+/// evaluator (batch 13 design choice C2, inherited Q2). Since step 6 the attack and full attack entries carry the AI
+/// stopgap's formula unchanged (AIProfile.DefaultShouldUseRapidShot and DefaultShouldUseTwoWeaponFighting), and
+/// AttackIntent.ForAI reads it here (AiModeValuation.ForAttack).
 /// </summary>
 public sealed class AiModeValuation
 {
@@ -111,6 +115,9 @@ public sealed class AiModeValuation
 
     /// <summary>Whether to fight with two weapons against the target (null: never).</summary>
     public Func<CharacterController, CharacterController, bool> TwoWeapon;
+
+    /// <summary>The attack entry's valuation (ActionCatalog), the one AttackIntent.ForAI reads.</summary>
+    public static AiModeValuation ForAttack => ActionCatalog.Get(ActionIds.Attack)?.AiModeValuation;
 }
 
 /// <summary>
@@ -146,7 +153,7 @@ public sealed class ActionDefinition
     /// <summary>The issues that track the entry's gap or its next step (empty for a finished entry).</summary>
     public string[] IssueIds = Array.Empty<string>();
 
-    /// <summary>The shared executor (null while the entry is PcOnly, AiOnly, Missing or OutOfScope).</summary>
+    /// <summary>The shared executor (null while the entry is PcOnly, Missing or OutOfScope; an AiOnly entry's executor serves the AI only, and RunPlayerAction refuses it).</summary>
     public IActionExecutor Executor;
 
     /// <summary>What GameManager.RunPlayerAction does after the executor.</summary>
@@ -164,7 +171,7 @@ public sealed class ActionDefinition
     /// <summary>The creatures that have the action at all (null: every creature); a per-creature ability (breath, spittle, engulf) tests its data.</summary>
     public Func<CharacterController, bool> Availability;
 
-    /// <summary>The AI's interim mode chooser, on the attack entries only (C2); null until step 6.</summary>
+    /// <summary>The AI's interim mode chooser, on the attack and full attack entries only (C2, batch 13 step 6).</summary>
     public AiModeValuation AiModeValuation;
 
     /// <summary>The cost for <paramref name="actor"/> in <paramref name="ctx"/> (<see cref="CostRule"/>, else <see cref="Cost"/>).</summary>

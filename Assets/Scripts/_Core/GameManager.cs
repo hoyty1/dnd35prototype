@@ -7445,15 +7445,9 @@ public partial class GameManager : MonoBehaviour
         if (npc == null || npc.Stats == null || !npc.HasCondition(CombatConditionType.Prone))
             yield break;
 
-        string reason = GetStandUpDisabledReason(npc);
-        if (!string.IsNullOrEmpty(reason))
-        {
-            LogStaysProne(npc, reason);
-            yield break;
-        }
-
-        var outcome = new StandUpOutcome();
-        yield return StartCoroutine(ResolveStandUpFromProne(npc, null, 0.5f, outcome));
+        // Through the catalog's stand-up entry (batch 13 step 6): ActionCore_StandUp applies the same gate (the AI's
+        // "stays prone" line, nothing spent) and runs ResolveStandUpFromProne with the AI's 0.5 s AoO wait.
+        yield return StartCoroutine(RunAIActionInline(ActionContext.For(ActionIds.StandUp, npc, ActorSource.AI), new ActionOutcome()));
     }
 
     /// <summary>The AI's line when it may not stand up (TryStandUpFromProneForAI and the catalog's stand-up entry).</summary>
@@ -11215,7 +11209,7 @@ public partial class GameManager : MonoBehaviour
     public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target)
         => NPCExecuteCharge(npc, target);
 
-    /// <summary>NPC charge; bullRush ends it with the shared charge bull rush (ResolveChargeBullRush).</summary>
+    /// <summary>NPC charge; bullRush ends it with the shared charge bull rush (ResolveChargeBullRush). Through the catalog's charge entry (batch 13 step 6).</summary>
     public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target, bool bullRush)
         => NPCExecuteCharge(npc, target, bullRush);
 
@@ -11225,14 +11219,26 @@ public partial class GameManager : MonoBehaviour
     /// <paramref name="attempt"/>, when given, says whether it started and why not.
     /// </summary>
     public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep, attempt);
+        => RunAIActionInline(AiMoveContext(ActionIds.Move, mover, destination, secondsPerStep, attempt), new ActionOutcome());
+
+    /// <summary>
+    /// The catalog context of an AI move or withdraw (batch 13 step 6): the caller's pace and MoveAttempt, and the caller
+    /// pays a move as every AI move site does today (AI-076), so the routing changes nothing.
+    /// </summary>
+    private static ActionContext AiMoveContext(string id, CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
+    {
+        ActionContext ctx = ActionContext.For(id, mover, ActorSource.AI);
+        ctx.Cell = destination;
+        ctx.CoreRequest = new AiMoveRequest { SecondsPerStep = secondsPerStep, Attempt = attempt ?? new MoveAttempt(), CallerPays = true };
+        return ctx;
+    }
 
     /// <summary>
     /// An NPC or compulsion withdraw: the full-round withdraw, or a Restricted Withdraw (a standard action at speed) for a
     /// creature limited to a single action (PHB p.143-144). Refused by the shared movement legality with a log.
     /// </summary>
     public IEnumerator ExecuteWithdrawMovementForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep, attempt);
+        => RunAIActionInline(AiMoveContext(ActionIds.Withdraw, mover, destination, secondsPerStep, attempt), new ActionOutcome());
 
     public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
         => TryNPCSpecialAttackIfBeneficial(npc, target);
@@ -11269,7 +11275,16 @@ public partial class GameManager : MonoBehaviour
         CharacterController target,
         Func<CharacterController, CharacterController, bool> tryStepManeuver = null,
         int maxSteps = int.MaxValue)
-        => NPCPerformAttack(npc, target, tryStepManeuver, maxSteps);
+    {
+        // Through the catalog's attack entries (batch 13 step 6): the full attack entry when the sequence may take more
+        // than one step and the full-round action is free, else the attack entry; the executor runs NPCPerformAttack with
+        // these very arguments (ActionCore_NpcAttack).
+        bool full = maxSteps > 1 && npc != null && npc.Actions != null && npc.Actions.HasFullRoundAction;
+        ActionContext ctx = ActionContext.For(full ? ActionIds.FullAttack : ActionIds.Attack, npc, ActorSource.AI, target);
+        ctx.CoreRequest = new NpcAttackRequest { MaxSteps = maxSteps };
+        ctx.TryStepManeuver = tryStepManeuver;
+        return RunAIActionInline(ctx, new ActionOutcome());
+    }
 
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
         => TryNPCPerformSpellCastForAI(npc, target, spell, null);
@@ -11388,7 +11403,10 @@ public partial class GameManager : MonoBehaviour
         if (destinationCell == null)
             return false;
 
-        return ExecuteFiveFootStep(npc, destinationCell, returnToActionChoices: false);
+        // Through the catalog's 5-foot step entry (batch 13 step 6), whose executor runs ExecuteFiveFootStep.
+        ActionContext ctx = ActionContext.For(ActionIds.FiveFootStep, npc, ActorSource.AI);
+        ctx.Cell = destination;
+        return RunAIActionNow(ctx).Performed;
     }
 
     private void CancelMovementSelection()

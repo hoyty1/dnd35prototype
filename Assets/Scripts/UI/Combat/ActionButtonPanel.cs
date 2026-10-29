@@ -481,6 +481,31 @@ public class ActionButtonPanel : MonoBehaviour
         }
     }
 
+    /// <summary>One button's computed state, for ActionPanelParityTests (batch 13 step 6).</summary>
+    internal struct ButtonStateView
+    {
+        public Button Button;
+        public bool Visible;
+        public bool Enabled;
+        public string Label;
+    }
+
+    /// <summary>
+    /// The states <see cref="ComputeActionButtonStates"/> gives <paramref name="pc"/>'s buttons, without applying them
+    /// (ActionPanelParityTests compares them with the legal set, ActorActionSet; batch 13 step 6, C8). A button the panel
+    /// does not set is absent.
+    /// </summary>
+    internal List<ButtonStateView> ComputeButtonStatesForParity(CharacterController pc)
+    {
+        var result = new List<ButtonStateView>();
+        if (_combatUI == null || pc == null || pc.Stats == null)
+            return result;
+        ActionButtonStates states = ComputeActionButtonStates(pc, BuildActionButtonContext(pc));
+        foreach (KeyValuePair<Button, ActionButtonState> kv in states.Enumerate())
+            result.Add(new ButtonStateView { Button = kv.Key, Visible = kv.Value.Visible, Enabled = kv.Value.Enabled, Label = kv.Value.Label });
+        return result;
+    }
+
     private ActionButtonStates ComputeActionButtonStates(CharacterController pc, ActionButtonContext context)
     {
         ActionButtonStates states = new ActionButtonStates();

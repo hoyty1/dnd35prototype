@@ -541,6 +541,20 @@ namespace Tests.Scenarios
             return this;
         }
 
+        /// <summary>
+        /// One catalog action as <paramref name="actor"/>'s turn in <paramref name="round"/> (batch 13 step 6):
+        /// <c>Turn(actor, round, Step.Action(actionId, target, variant))</c>, or with a square (<paramref name="cell"/>)
+        /// <c>Step.ActionAt</c>, or with an item (<paramref name="itemId"/>) <c>Step.ActionItem</c>.
+        /// </summary>
+        public ScenarioBuilder Action(string actor, int round, string actionId, string target = null, Vector2Int? cell = null,
+            string itemId = null, string variant = null)
+        {
+            Step step = cell.HasValue ? Step.ActionAt(actionId, cell.Value.x, cell.Value.y, variant)
+                : itemId != null ? Step.ActionItem(actionId, itemId, target)
+                : Step.Action(actionId, target, variant);
+            return Turn(actor, round, step);
+        }
+
         /// <summary>Makes these actors Idle (the AI turn path with an empty turn).</summary>
         public ScenarioBuilder Idle(params string[] keys)
         {

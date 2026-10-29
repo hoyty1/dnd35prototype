@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 /// <summary>
 /// GameManager partial class: thin forwarders from the catalog's Delegating executors to the private cores they wrap
@@ -62,4 +64,45 @@ public partial class GameManager
         o.ActorDown = standUp.Incapacitated;
         o.CoreOutcome = standUp.StoodUp;
     }
+
+    // ── The AI cores the Delegating executors wrap (batch 13 step 6). The public *ForAI wrappers route through
+    // RunAIAction, so the executors reach the cores through these forwarders, never through the wrappers. ──
+
+    /// <summary>The NPC attack with its whole prelude and post-sequence steps (NPCPerformAttack; the attack entries' AI path).</summary>
+    internal IEnumerator ActionCore_NpcAttack(CharacterController npc, CharacterController target,
+        Func<CharacterController, CharacterController, bool> tryStepManeuver, int maxSteps)
+        => NPCPerformAttack(npc, target, tryStepManeuver, maxSteps);
+
+    /// <summary>One move action's walk (MoveCharacterAlongComputedPath: the shared movement legality, the AoOs); pays nothing.</summary>
+    internal IEnumerator ActionCore_Move(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
+        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep, attempt);
+
+    /// <summary>The withdraw (MoveCharacterAlongComputedPathWithdraw), which pays its own action.</summary>
+    internal IEnumerator ActionCore_Withdraw(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt)
+        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep, attempt);
+
+    /// <summary>The shared 5-foot step (ExecuteFiveFootStep, no UI follow-up). False when the square is off the grid or the step failed (logged).</summary>
+    internal bool ActionCore_FiveFootStep(CharacterController actor, Vector2Int destination)
+    {
+        if (actor == null || Grid == null)
+            return false;
+        SquareCell cell = Grid.GetCell(destination);
+        return cell != null && ExecuteFiveFootStep(actor, cell, returnToActionChoices: false);
+    }
+
+    /// <summary>The breath weapon aimed at <paramref name="aimTarget"/> (the core overload of NPCExecuteBreathWeaponForAI; MM p.69, p.306).</summary>
+    internal IEnumerator ActionCore_BreathWeapon(CharacterController actor, CharacterController aimTarget)
+        => NPCExecuteBreathWeaponForAI(actor, aimTarget, catalogCore: true);
+
+    /// <summary>A ranged special attack or spittle (AIService.ExecuteRangedSpecialAttackCore; MM p.315).</summary>
+    internal bool ActionCore_RangedSpecial(CharacterController actor, CharacterController target)
+        => _aiService != null && _aiService.ExecuteRangedSpecialAttackCore(actor, target);
+
+    /// <summary>An engulf (AIService.ExecuteEngulfCore; MM p.201).</summary>
+    internal bool ActionCore_Engulf(CharacterController actor, CharacterController target)
+        => _aiService != null && _aiService.ExecuteEngulfCore(actor, target);
+
+    /// <summary>Whether <paramref name="actor"/> is charmed by <paramref name="candidate"/> (the AI's charm link, PHB p.209; the legal set's charm filter).</summary>
+    internal bool ActionCore_IsCharmedBy(CharacterController actor, CharacterController candidate)
+        => _aiService != null && _aiService.IsCharmedByForActions(actor, candidate);
 }

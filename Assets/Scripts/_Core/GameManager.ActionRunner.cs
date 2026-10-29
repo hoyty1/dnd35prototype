@@ -14,7 +14,9 @@ using UnityEngine;
 ///   turn. <see cref="ConfirmActionProvocation"/> is its prompt alone, for a core that takes its own AoOs (stand up).
 /// They are internal (Assembly-CSharp: the tests, the harness, the AI). Total defense (batch 13 step 4) is their first
 /// live caller: the PC's Total Defense button through RunPlayerAction, the cornered panicked creature
-/// (FrightenedBehaviorController.ExecuteDecision) through RunAIAction; step 6 routes the rest of the AI through RunAIAction.
+/// (FrightenedBehaviorController.ExecuteDecision) through RunAIAction. Since step 6 every AI action call runs through
+/// RunAIAction: the GameManager *ForAI wrappers (attack, charge, move, withdraw, 5-foot step, stand up, overrun, breath),
+/// the NPC cast and maneuver cores, AIService's ranged specials and engulf, lay on hands and bardic music.
 /// </summary>
 public partial class GameManager
 {
@@ -32,6 +34,10 @@ public partial class GameManager
     {
         CharacterController actor = ctx != null ? ctx.Actor : null;
         Legality refusal = CheckRunnable(ctx);
+        // An AiOnly entry (the monster specials) has an executor for the AI's routing only; no PC path reaches it until it
+        // becomes shared (ImplStatus.AiOnly; batch 13 step 18).
+        if (refusal.Ok && ctx.Definition.Status == ImplStatus.AiOnly)
+            refusal = Legality.Refused(LegalityBar.Other, ctx.Definition.Name + " is AI-only until batch 13 step 18");
         if (refusal.Ok && IsPreChecked(ctx.Definition))
             refusal = ctx.Definition.Executor.CanExecute(ctx);
         if (!refusal.Ok)
@@ -105,7 +111,7 @@ public partial class GameManager
             yield break;
         }
 
-        ActionShadowCheck(ctx);
+        ActionSetShadowCheck(ctx);
 
         if (IsPreChecked(ctx.Definition))
         {
@@ -257,12 +263,110 @@ public partial class GameManager
             o.CombatEnded = true;
     }
 
-    /// <summary>The shadow hook (step 6 compares the pick with the legal set): a Debug.Log line when the actor cannot start the pick.</summary>
-    private static void ActionShadowCheck(ActionContext ctx)
+    /// <summary>
+    /// The legal set in shadow mode (batch 13 step 6, design choice C8): the pick is compared with the actor's
+    /// <see cref="ActorActionSet"/> (today's legality through the ActionLegality adapters, the compulsion filter and the
+    /// charm links), and a disagreement is a Debug.Log line only, never a combat-log line (combat-log lines are hashed).
+    /// Nothing reads the set's answer yet: the pick runs either way. The set is pure (no dice, no log, no state change); a
+    /// throw while building it is recorded and ignored, so the shadow can never change a turn. Each disagreement also goes
+    /// to <see cref="ActionSetShadow"/>, which the scenario harness writes into its results (fast mode drops Log-level
+    /// lines). Skipped where <see cref="ActionSetShadow.Enabled"/> is false (a release player build).
+    /// </summary>
+    internal void ActionSetShadowCheck(ActionContext ctx)
     {
-        Legality start = ctx.Definition.Executor.CanStart(ctx.Actor);
-        if (!start.Ok)
-            Debug.Log($"[ActionSet] shadow: {DescribeAction(ctx)} is outside what its actor can start now: {start.Reason} ({start.Bar})");
+        if (!ActionSetShadow.Enabled)
+            return;
+        try
+        {
+            ActorActionSet set = ActorActionSet.Build(this, ctx.Actor, ActorSource.AI);
+            Legality legal = set.Check(ctx.Definition.Id, ctx);
+            if (!legal.Ok)
+            {
+                ActionSetShadow.Record(ctx.Actor.Stats.CharacterName, ctx.Definition.Id, legal.Bar.ToString(), legal.Reason);
+                Debug.Log($"[ActionSet] {ctx.Actor.Stats.CharacterName} picked {ctx.Definition.Id} outside the legal set: {legal.Reason} ({legal.Bar})");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            ActionSetShadow.Record(ctx.Actor != null && ctx.Actor.Stats != null ? ctx.Actor.Stats.CharacterName : "?",
+                ctx.Definition != null ? ctx.Definition.Id : "?", "Error", ex.GetType().Name + ": " + ex.Message);
+            Debug.Log($"[ActionSet] the legal set of {DescribeAction(ctx)} could not be built: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="RunAIAction"/> for a caller that yields it in place of the core it used to yield (batch 13 step 6, a pure
+    /// move): the runner's and the executor's enumerators are inlined (<see cref="InlineAction"/>, two levels), so the
+    /// core's own yields reach the caller's coroutine exactly as before and no frame is added.
+    /// </summary>
+    internal IEnumerator RunAIActionInline(ActionContext ctx, ActionOutcome o)
+        => InlineAction(RunAIAction(ctx, o ?? new ActionOutcome()), 2);
+
+    /// <summary>
+    /// Runs <see cref="RunAIAction"/> to its end at once, for a synchronous AI call site (a cast through RunCastSync, a
+    /// maneuver with <see cref="ActionContext.NoWait"/>, a 5-foot step, lay on hands, bardic music, the monster specials):
+    /// every nested enumerator is drained in place. An executor that waits (a non-enumerator yield) is a caller's bug: it is
+    /// logged and its waits are skipped, with a step cap so a wait loop cannot hang the turn. Returns the outcome.
+    /// </summary>
+    internal ActionOutcome RunAIActionNow(ActionContext ctx, ActionOutcome o = null)
+    {
+        if (o == null)
+            o = new ActionOutcome();
+        var stack = new Stack<IEnumerator>();
+        stack.Push(RunAIAction(ctx, o));
+        int steps = 0;
+        bool warned = false;
+        while (stack.Count > 0)
+        {
+            IEnumerator top = stack.Peek();
+            if (!top.MoveNext())
+            {
+                stack.Pop();
+                continue;
+            }
+            if (top.Current is IEnumerator nested)
+            {
+                stack.Push(nested);
+                continue;
+            }
+            if (!warned)
+            {
+                warned = true;
+                Debug.LogWarning($"[ActionRunner] {DescribeAction(ctx)} waited inside a synchronous run ({top.Current}); its waits are skipped");
+            }
+            if (++steps > 10000)
+            {
+                Debug.LogWarning($"[ActionRunner] {DescribeAction(ctx)} did not finish in a synchronous run; stopped");
+                break;
+            }
+        }
+        return o;
+    }
+
+    /// <summary>
+    /// Inlines <paramref name="root"/> and the enumerators it yields down to <paramref name="levels"/> levels below it: their
+    /// leaf yields (null, WaitForSeconds, a Coroutine) and the enumerators deeper than that pass to the caller unchanged.
+    /// </summary>
+    internal static IEnumerator InlineAction(IEnumerator root, int levels)
+    {
+        var stack = new Stack<IEnumerator>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            IEnumerator top = stack.Peek();
+            if (!top.MoveNext())
+            {
+                stack.Pop();
+                continue;
+            }
+            object current = top.Current;
+            if (current is IEnumerator nested && stack.Count <= levels)
+            {
+                stack.Push(nested);
+                continue;
+            }
+            yield return current;
+        }
     }
 
     private void ShowActionRefusal(CharacterController actor, ActionContext ctx, Legality refusal)
