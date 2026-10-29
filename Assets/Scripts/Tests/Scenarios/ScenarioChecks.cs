@@ -220,7 +220,12 @@ namespace Tests.Scenarios
                     Violation(Econ, _job.Trace.KeyOf(a) + " took a full-round action while limited to a single action", a);
                 if (_moveOnlyAtTurnStart && act.MoveActionOnly && (act.StandardActionUsed || act.FullRoundActionUsed))
                     Violation(Econ, _job.Trace.KeyOf(a) + " took a standard or full-round action while limited to a move action", a);
-                if (act.HasMoved5Ft && _ownMoveSquares > 1)
+                // No 5-ft step in a round with other movement, either way round (PHB p.144). The step itself is a
+                // "reposition" event, not own movement; CharacterController.HasTakenFiveFootStep records it (ActionEconomy's
+                // HasMoved5Ft is never set). Batch 12 step 22, GRID-019.
+                // _ownMoveSquares counts only move and path-move events: the NPC executors. A Ui actor's own moves
+                // (GameManager.ExecuteMovement) trace as path-reposition, so this and the speed check below miss them.
+                if ((act.HasMoved5Ft || a.HasTakenFiveFootStep) && _ownMoveSquares > 0)
                     Violation(Econ, _job.Trace.KeyOf(a) + " took a 5-ft step and moved " + _ownMoveSquares + " squares", a);
             }
             _speedSquaresAtTurnStart.TryGetValue(a, out int speed);

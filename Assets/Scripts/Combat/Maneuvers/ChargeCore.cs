@@ -247,6 +247,13 @@ public partial class GameManager
         if (charger.HasCondition(CombatConditionType.Entangled))
             return Legality.Refused("Entangled creatures cannot charge.");
 
+        // The charge's movement through the shared movement legality (MovementService.CanStartMovement, batch 12 step 22):
+        // the checks above keep their own wording; this one adds what only it decides (a condition that prevents movement,
+        // no speed this turn, a disabled creature's spent turn) so the charge and every other movement read one rule.
+        Legality chargeMovement = MovementService.CanStartMovement(charger, MoveKind.Charge);
+        if (!chargeMovement.Ok)
+            return Legality.Refused($"Cannot charge: {chargeMovement.Reason}.");
+
         // A charge moves at least 10 ft and at most its budget (PHB p.154): a charger whose budget is shorter (a slowed
         // 15-ft creature's partial charge of 5 ft) cannot charge at all.
         int chargeBudget = GetChargeMaxDistanceSquares(charger);

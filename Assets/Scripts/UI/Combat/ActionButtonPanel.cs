@@ -502,13 +502,17 @@ public class ActionButtonPanel : MonoBehaviour
         bool canMoveByActions = context.Actions.HasMoveAction || context.Actions.CanConvertStandardToMove;
         bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
         bool blockedByIterativeAttackSequence = context.IterativeWeaponFullRoundStage || (context.Gm != null && context.Gm.IsIterativeThrownAttackInFullRoundStage(pc));
-        bool canMove = canMoveByActions && !blockedByFiveFootStep && !blockedByIterativeAttackSequence && !context.IsProne && !context.IsPinned;
+        // The shared movement legality (MovementService.CanStartMovement, batch 12 step 22), as the AI's moves ask it.
+        Legality moveLegality = MovementService.CanStartMovement(pc, MoveKind.Move);
+        bool canMove = moveLegality.Ok && !blockedByIterativeAttackSequence;
 
         string moveLabel = "Move (Used)";
         if (context.IsPinned) moveLabel = "Move (Pinned: grapple escape only)";
         else if (context.IsProne) moveLabel = "Move (Stand up first)";
         else if (blockedByFiveFootStep) moveLabel = "Move (After 5-ft step: no)";
         else if (blockedByIterativeAttackSequence) moveLabel = "Move (Consumed by Full Round Attack)";
+        else if (!canMoveByActions) moveLabel = "Move (Used)";
+        else if (!moveLegality.Ok) moveLabel = $"Move ({moveLegality.Reason})";
         else if (context.Actions.HasMoveAction) moveLabel = "Move (Move Action)";
         else if (context.Actions.CanConvertStandardToMove) moveLabel = "Move (Std→Move)";
 
@@ -516,7 +520,10 @@ public class ActionButtonPanel : MonoBehaviour
 
         string withdrawDisabledReason = context.Gm != null ? context.Gm.GetWithdrawDisabledReason(pc) : "Unavailable";
         bool canWithdraw = string.IsNullOrEmpty(withdrawDisabledReason);
-        string withdrawLabel = canWithdraw ? "Withdraw (Full-Round, 2x move)" : $"Withdraw ({withdrawDisabledReason})";
+        bool restrictedWithdraw = MovementService.WithdrawKindFor(pc) == MoveKind.RestrictedWithdraw;
+        string withdrawLabel = canWithdraw
+            ? (restrictedWithdraw ? "Withdraw (Standard, 1x move: restricted)" : "Withdraw (Full-Round, 2x move)")
+            : $"Withdraw ({withdrawDisabledReason})";
         states.Set(WithdrawButton, new ActionButtonState(true, canWithdraw, withdrawLabel));
 
         string fiveFootDisabledReason = context.Gm != null ? context.Gm.GetFiveFootStepDisabledReason(pc) : "Unavailable";

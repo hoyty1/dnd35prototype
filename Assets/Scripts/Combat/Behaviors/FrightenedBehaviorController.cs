@@ -166,33 +166,51 @@ public sealed class FrightenedBehaviorController
 
         int currentDistance = SquareGridUtils.GetDistance(actor.GridPosition, source.GridPosition);
 
-        if (actor.Actions != null && actor.Actions.HasFullRoundAction && !actor.Stats.MovementBlockedByCondition)
+        // The withdraw it may take (a full-round withdraw, or a Restricted Withdraw at speed when it is limited to a single
+        // action; never blinded or after a 5-foot step): the shared movement legality (PHB p.143-144, GRID-019, GRID-022).
+        if (actor.Actions != null && MovementService.CanStartMovement(actor, MovementService.WithdrawKindFor(actor)).Ok)
         {
             SquareCell withdrawCell = FindBestFleeCell(gameManager, actor, source.GridPosition, withdraw: true, running: false, currentDistance);
             if (withdrawCell != null && withdrawCell.Coords != actor.GridPosition)
             {
-                result.Outcome = FlightOutcome.Fled;
+                var withdrawAttempt = new MoveAttempt();
                 yield return gameManager.StartCoroutine(
-                    gameManager.ExecuteWithdrawMovementForAI(actor, withdrawCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    gameManager.ExecuteWithdrawMovementForAI(actor, withdrawCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), withdrawAttempt));
 
-                gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("", $"😱 {actorName} flees in terror from {sourceName}.{logSuffix}"));
-                yield return new WaitForSeconds(0.35f);
-                yield break;
+                if (withdrawAttempt.Started)
+                {
+                    result.Outcome = FlightOutcome.Fled;
+                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("", $"😱 {actorName} flees in terror from {sourceName}.{logSuffix}"));
+                    yield return new WaitForSeconds(0.35f);
+                    yield break;
+                }
+                if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
+                    yield break;
             }
+        }
 
+        // The run (a full-round action; never entangled, fatigued or exhausted, limited to one action, or after a 5-foot
+        // step): the shared movement legality (PHB p.144, p.308-309; batch 12 step 22). Otherwise it flees with a move.
+        if (actor.Actions != null && MovementService.CanStartMovement(actor, MoveKind.Run).Ok)
+        {
             SquareCell runCell = FindBestFleeCell(gameManager, actor, source.GridPosition, withdraw: false, running: true, currentDistance);
             if (runCell != null && runCell.Coords != actor.GridPosition)
             {
                 result.Outcome = FlightOutcome.Fled;
+                var runAttempt = new MoveAttempt();
                 yield return gameManager.StartCoroutine(
-                    gameManager.MoveCharacterAlongComputedPathForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    gameManager.MoveCharacterAlongComputedPathForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), runAttempt));
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
 
-                actor.Actions.UseFullRoundAction();
-                gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🏃", $"{actorName} runs from {sourceName}, provoking attacks of opportunity!{logSuffix}"));
-                yield return new WaitForSeconds(0.35f);
-                yield break;
+                if (!runAttempt.Refused)
+                {
+                    actor.Actions.UseFullRoundAction();
+                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🏃", $"{actorName} runs from {sourceName}, provoking attacks of opportunity!{logSuffix}"));
+                    yield return new WaitForSeconds(0.35f);
+                    yield break;
+                }
+                result.Outcome = FlightOutcome.Cornered; // refused before moving (logged): nothing spent, try the move below
             }
         }
 
@@ -202,10 +220,17 @@ public sealed class FrightenedBehaviorController
             if (fleeCell != null && fleeCell.Coords != actor.GridPosition)
             {
                 result.Outcome = FlightOutcome.Fled;
+                var fleeAttempt = new MoveAttempt();
                 yield return gameManager.StartCoroutine(
-                    gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), fleeAttempt));
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
+
+                if (fleeAttempt.Refused)
+                {
+                    result.Outcome = FlightOutcome.Cornered; // the shared legality refused it (logged): nothing spent
+                    yield break;
+                }
 
                 ConsumeMoveAction(actor);
                 gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{actorName} runs from {sourceName} in terror!{logSuffix}"));
@@ -228,7 +253,7 @@ public sealed class FrightenedBehaviorController
 
         int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
         int maxRange = withdraw
-            ? Mathf.Max(0, moveRange * 2)
+            ? Mathf.Max(0, gameManager.GetWithdrawMoveRangeSquares(actor)) // speed for a Restricted Withdraw (PHB p.144)
             : Mathf.Max(0, moveRange);
 
         List<SquareCell> candidates = gameManager.Grid.GetCellsInRange(actor.GridPosition, maxRange);

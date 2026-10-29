@@ -13,7 +13,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Double move | Never | AggressiveMelee wastes the standard action when still out of reach | Yes | gap |
 | Run (×4) | Never | Frightened "run" is 1× (it provokes like any move) | No | game-wide gap (PHB ch.8) |
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |
-| Withdraw | Partial | DefensiveMelee <30% HP; Frightened | Yes | AI-010 |
+| Withdraw | Partial | DefensiveMelee <30% HP; Frightened; Suggested; a Restricted Withdraw (standard action, speed) for a creature limited to one action, never blinded (batch 12 step 22, the shared `MovementService.CanStartMovement`) | Yes | AI-010 |
 | Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Untyped +2 (CMB-003); one charge core for both sides since batch 12 step 21 (flanking, Spirited Charge, the partial charge of a single-action creature, D2) |
 | Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
 | Cover, terrain, hazards | Never | `UseCover` unread; no cover system | No | paths through walls of fire, clouds, webs (inferred) |

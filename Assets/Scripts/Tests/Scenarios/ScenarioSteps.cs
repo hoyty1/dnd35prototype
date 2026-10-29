@@ -601,9 +601,13 @@ namespace Tests.Scenarios
                 switch (s.Kind)
                 {
                     case StepKind.Move:
-                        if (a.HasTakenFiveFootStep) { ok = false; note = "a 5-ft step was taken this turn"; break; }
-                        if (!(act.HasMoveAction || act.CanConvertStandardToMove)) { ok = false; note = "no move action left"; break; }
-                        yield return gm.MoveCharacterAlongComputedPathForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI());
+                    {
+                        // The executor asks the shared movement legality (MovementService.CanStartMovement, batch 12 step 22):
+                        // a 5-ft step taken, no move action, prone or grappling refuse the move there, as for the AI.
+                        var moveAttempt = new MoveAttempt();
+                        yield return gm.MoveCharacterAlongComputedPathForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI(), moveAttempt);
+                        if (moveAttempt.Refused) { ok = false; note = moveAttempt.Reason; break; }
+                        if (!moveAttempt.Started) { ok = false; note = "no path"; break; }
                         // AIService spends the move after the path, unless the mover was dropped (CMB-073; a disabled
                         // mover is not dropped, PHB p.145, batch 12 D5).
                         if (Fingerprint(job, a) != before && a.Stats != null && !ThreatSystem.IsMoverIncapacitated(a))
@@ -612,11 +616,18 @@ namespace Tests.Scenarios
                             else if (act.CanConvertStandardToMove) act.ConvertStandardToMove();
                         }
                         break;
+                    }
 
                     case StepKind.Withdraw:
-                        if (!act.HasFullRoundAction) { ok = false; note = "no full-round action"; break; }
-                        yield return gm.ExecuteWithdrawMovementForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI());
+                    {
+                        // The executor spends the full-round action, or a Restricted Withdraw's standard action, after the
+                        // shared legality (PHB p.143-144; GRID-022).
+                        var withdrawAttempt = new MoveAttempt();
+                        yield return gm.ExecuteWithdrawMovementForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI(), withdrawAttempt);
+                        if (withdrawAttempt.Refused) { ok = false; note = withdrawAttempt.Reason; }
+                        else if (!withdrawAttempt.Started) { ok = false; note = "no path"; }
                         break;
+                    }
 
                     case StepKind.FiveFootStep:
                         ok = gm.TryTakeFiveFootStepForAI(a, s.Cell);

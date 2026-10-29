@@ -732,7 +732,7 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator(_isGrappleMoveSelection
                     ? $"{pc.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)"
                     : (_isSelectingWithdraw
-                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving your starting space provokes no AoO from enemies you can see)"
+                        ? $"{pc.Stats.CharacterName} - {WithdrawIndicator(pc)}"
                         : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)"));
             }
         });
@@ -1078,16 +1078,18 @@ public partial class GameManager
         if (_hoverMarker != null) _hoverMarker.Hide();
 
         bool consumedAction = false;
+        // The budget is read before the action is spent: a Restricted Withdraw spends the single action (PHB p.144).
+        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
         if (isWithdraw)
         {
-            if (pc.Actions.HasFullRoundAction)
+            // The full-round action, or a Restricted Withdraw's standard action (the shared legality, GRID-022).
+            if (TrySpendWithdrawAction(pc, out string withdrawRefusal))
             {
-                pc.Actions.UseFullRoundAction();
                 consumedAction = true;
             }
             else
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot complete Withdraw without a full-round action."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot complete Withdraw: {withdrawRefusal}."));
                 ShowActionChoices();
                 yield break;
             }
@@ -1118,7 +1120,6 @@ public partial class GameManager
         bool interruptedByIncapacitation = false;
         bool interruptedByGreaseSlip = false;
         string stoppedByAoOReason = null;
-        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
         int movementCostConsumed = 0;
         Vector2Int previousCell = pc.GridPosition;
         var aooOutcome = new MovementAoOStepOutcome();
@@ -1218,15 +1219,44 @@ public partial class GameManager
         ShowActionChoices();
     }
 
-    private IEnumerator MoveCharacterAlongComputedPathWithdraw(CharacterController mover, Vector2Int destination, float secondsPerStep)
+    /// <summary>
+    /// True, with a log, when the shared movement legality (MovementService.CanStartMovement) refuses this NPC, summon or
+    /// compulsion movement; the executor then moves nothing and spends nothing, and the AI routine goes on.
+    /// </summary>
+    private bool RefuseAiMovement(CharacterController mover, MoveKind kind, string what, MoveAttempt attempt)
+    {
+        Legality legal = MovementService.CanStartMovement(mover, kind);
+        if (legal.Ok)
+            return false;
+
+        RecordRefusedAiMovement(mover, what, legal.Reason, attempt);
+        return true;
+    }
+
+    private void RecordRefusedAiMovement(CharacterController mover, string what, string reason, MoveAttempt attempt)
+    {
+        if (attempt != null)
+        {
+            attempt.Refused = true;
+            attempt.Reason = reason ?? string.Empty;
+        }
+
+        string name = mover != null && mover.Stats != null ? mover.Stats.CharacterName : "?";
+        Debug.Log($"[Movement] {name} cannot {what}: {reason}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{name} cannot {what}: {reason}."));
+    }
+
+    private IEnumerator MoveCharacterAlongComputedPathWithdraw(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
     {
         if (mover == null || mover.Stats == null || Grid == null)
             yield break;
 
-        if (!mover.Actions.HasFullRoundAction)
+        if (destination == mover.GridPosition)
             yield break;
 
-        if (destination == mover.GridPosition)
+        // The shared movement legality (batch 12 step 22, GRID-019, GRID-022): a full-round withdraw or a Restricted
+        // Withdraw, not after a 5-foot step, not blinded, not prone or grappling.
+        if (RefuseAiMovement(mover, MovementService.WithdrawKindFor(mover), "withdraw", attempt))
             yield break;
 
         int maxRange = GetWithdrawMoveRangeSquares(mover);
@@ -1251,7 +1281,13 @@ public partial class GameManager
         if (path == null || path.Count == 0)
             yield break;
 
-        mover.Actions.UseFullRoundAction();
+        if (!TrySpendWithdrawAction(mover, out string withdrawRefusal))
+        {
+            RecordRefusedAiMovement(mover, "withdraw", withdrawRefusal, attempt);
+            yield break;
+        }
+        if (attempt != null)
+            attempt.Started = true;
         mover.IsWithdrawing = true;
 
         // Leaving the starting space (every square the mover starts in, for the whole withdraw) is already exempt in
@@ -1266,12 +1302,17 @@ public partial class GameManager
         PruneTurnUndeadTrackers();
     }
 
-    private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep)
+    private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
     {
         if (mover == null || mover.Stats == null || Grid == null)
             yield break;
 
         if (destination == mover.GridPosition)
+            yield break;
+
+        // The shared movement legality (batch 12 step 22, GRID-019): no ordinary movement after a 5-foot step (PHB p.144),
+        // while prone or grappling, or with no move action left. The caller spends the move action after the path.
+        if (RefuseAiMovement(mover, MoveKind.Move, "move", attempt))
             yield break;
 
         int maxRange = GetCurrentMoveRangeSquares(mover);
@@ -1292,6 +1333,9 @@ public partial class GameManager
             Debug.Log($"[CombatActions] MoveCharacterAlongComputedPath: No valid path to {destination} for {mover?.Stats?.CharacterName}. Movement blocked.");
             yield break;
         }
+
+        if (attempt != null)
+            attempt.Started = true;
 
         // Ordinary movement provokes for every mover (PHB p.137, CMB-073). Callers re-check
         // the mover's HP after this coroutine, because an AoO can drop it mid-path.

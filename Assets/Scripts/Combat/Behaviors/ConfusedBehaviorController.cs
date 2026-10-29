@@ -105,9 +105,13 @@ public sealed class ConfusedBehaviorController
                         if (fleeCell != null && fleeCell.Coords != actor.GridPosition)
                         {
                             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} panics and flees from {casterName}!"));
-                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                            ConsumeMoveAction(actor);
-                            moved = true;
+                            var fleeMove = new MoveAttempt();
+                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), fleeMove));
+                            if (!fleeMove.Refused) // a refused move (logged) spends nothing
+                            {
+                                ConsumeMoveAction(actor);
+                                moved = true;
+                            }
                         }
                     }
 
@@ -132,8 +136,9 @@ public sealed class ConfusedBehaviorController
                         SquareCell approach = FindBestMovementCell(gameManager, actor, target.GridPosition, maximizeDistance: false);
                         if (approach != null && approach.Coords != actor.GridPosition)
                         {
-                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approach.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                            ConsumeMoveAction(actor);
+                            var approachMove = new MoveAttempt();
+                            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approach.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), approachMove));
+                            if (!approachMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
                             if (!actor.CanTakeTurnActions())
                                 yield break; // dropped by an AoO while moving (CMB-073)
                         }

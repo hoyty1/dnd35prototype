@@ -110,7 +110,8 @@ public partial class GameManager
             SquareCell retreat = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: true);
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
+                var retreatMove = new MoveAttempt();
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep, retreatMove));
 
                 // ── Death/disable check after retreat movement ──
                 if (!summon.CanTakeTurnActions())
@@ -119,10 +120,13 @@ public partial class GameManager
                     yield break;
                 }
 
-                if (summon.Actions.HasMoveAction)
-                    summon.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
-                yield return new WaitForSeconds(0.45f);
+                if (!retreatMove.Refused) // a refused move (logged) spends nothing
+                {
+                    if (summon.Actions.HasMoveAction)
+                        summon.Actions.UseMoveAction();
+                    CombatUI.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
+                    yield return new WaitForSeconds(0.45f);
+                }
             }
         }
 
@@ -131,7 +135,8 @@ public partial class GameManager
             SquareCell bestCell = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: false, target);
             if (bestCell != null)
             {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
+                var advanceMove = new MoveAttempt();
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep, advanceMove));
 
                 // ── Death/disable check after advance movement ──
                 if (!summon.CanTakeTurnActions())
@@ -140,9 +145,12 @@ public partial class GameManager
                     yield break;
                 }
 
-                summon.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
-                yield return new WaitForSeconds(0.4f);
+                if (!advanceMove.Refused) // a refused move (logged) spends nothing
+                {
+                    summon.Actions.UseMoveAction();
+                    CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
+                    yield return new WaitForSeconds(0.4f);
+                }
             }
         }
 
@@ -1164,14 +1172,22 @@ public partial class GameManager
         if (searchCell == null || searchCell.Coords == npc.GridPosition)
             yield break;
 
+        // No search move it may not make (after a 5-foot step, prone, grappling: the shared movement legality, PHB p.144,
+        // batch 12 step 22); its move action stays for another kind of move action.
+        if (!MovementService.CanStartMovement(npc, MoveKind.Move).Ok)
+            yield break;
+
         string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
-        yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep));
+        var searchMove = new MoveAttempt();
+        yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep, searchMove));
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO while moving (CMB-073)
+        if (searchMove.Refused)
+            yield break; // refused (logged): nothing spent
 
         if (npc.Actions.HasMoveAction)
             npc.Actions.UseMoveAction();

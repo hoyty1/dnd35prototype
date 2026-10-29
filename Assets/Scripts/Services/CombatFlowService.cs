@@ -24,53 +24,16 @@ public class CombatFlowService : MonoBehaviour
         _gameManager = null;
     }
 
+    /// <summary>
+    /// May <paramref name="actor"/> withdraw now: the shared movement legality (MovementService.CanStartMovement) for
+    /// the withdraw it may take (a full-round withdraw, or a Restricted Withdraw when limited to a single action;
+    /// PHB p.143-144; batch 12 step 22). The PC button, the AI and the compulsion controllers ask the same check.
+    /// </summary>
     public bool CanPerformWithdraw(CharacterController actor, out string reason)
     {
-        reason = string.Empty;
-
-        if (actor == null || actor.Stats == null)
-        {
-            reason = "No active character";
-            return false;
-        }
-
-        if (!actor.Actions.HasFullRoundAction)
-        {
-            reason = "Requires a full-round action";
-            return false;
-        }
-
-        if (actor.HasTakenFiveFootStep)
-        {
-            reason = "Cannot withdraw after a 5-foot step";
-            return false;
-        }
-
-        if (actor.HasCondition(CombatConditionType.Prone))
-        {
-            reason = "Stand up first";
-            return false;
-        }
-
-        if (actor.HasCondition(CombatConditionType.Pinned))
-        {
-            reason = "Pinned creatures cannot withdraw";
-            return false;
-        }
-
-        if (actor.IsGrappling())
-        {
-            reason = "Cannot withdraw while grappled";
-            return false;
-        }
-
-        if (actor.Stats.MovementBlockedByCondition)
-        {
-            reason = "Movement blocked by condition";
-            return false;
-        }
-
-        return true;
+        Legality legal = MovementService.CanStartMovement(actor, MovementService.WithdrawKindFor(actor));
+        reason = legal.Ok ? string.Empty : legal.Reason;
+        return legal.Ok;
     }
 
     // ===== Required extraction API (phase 2.1.6 contract) =====

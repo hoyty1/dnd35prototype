@@ -6899,27 +6899,13 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (pc.Stats.MovementBlockedByCondition || GetCurrentMoveRangeSquares(pc) <= 0)
+        // The shared movement legality (batch 12 step 22): prone, a 5-foot step taken, no speed or no move action.
+        Legality legal = MovementService.CanStartMovement(pc, MoveKind.Move);
+        if (!legal.Ok)
         {
-            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot move due to an active condition."));
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot move: {legal.Reason}."));
             return;
         }
-
-        if (pc.HasTakenFiveFootStep)
-        {
-            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} already used a 5-foot step this turn and cannot take normal movement."));
-            return;
-        }
-
-        if (pc.HasCondition(CombatConditionType.Prone))
-        {
-            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is prone and must stand up or crawl."));
-            return;
-        }
-
-        if (pc.Actions.HasMoveAction) { /* Normal move */ }
-        else if (pc.Actions.CanConvertStandardToMove) { /* Will convert */ }
-        else return;
 
         EndAttackSequence();
         _isSelectingWithdraw = false;
@@ -6929,13 +6915,31 @@ public partial class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
     }
 
-    private int GetWithdrawMoveRangeSquares(CharacterController character)
-    {
-        int baseRange = GetCurrentMoveRangeSquares(character);
-        if (baseRange <= 0)
-            return 0;
+    /// <summary>
+    /// The withdraw's movement budget: double speed, or speed for a Restricted Withdraw by a creature limited to a single
+    /// action (PHB p.143-144; MovementService.WithdrawBudgetSquares, GRID-022). PCs, the AI and the compulsion controllers.
+    /// </summary>
+    public int GetWithdrawMoveRangeSquares(CharacterController character)
+        => MovementService.WithdrawBudgetSquares(character);
 
-        return baseRange * 2;
+    /// <summary>
+    /// Spend the action a withdraw takes: the full-round action, or for a Restricted Withdraw the creature's single
+    /// standard action (PHB p.144), which is strenuous for a disabled creature (PHB p.145, CommitStandardAction).
+    /// False, and nothing spent, when the shared legality refuses it.
+    /// </summary>
+    private bool TrySpendWithdrawAction(CharacterController mover, out string reason)
+    {
+        MoveKind kind = MovementService.WithdrawKindFor(mover);
+        Legality legal = MovementService.CanStartMovement(mover, kind);
+        reason = legal.Reason;
+        if (!legal.Ok)
+            return false;
+
+        if (kind == MoveKind.RestrictedWithdraw)
+            return mover.CommitStandardAction();
+
+        mover.Actions.UseFullRoundAction();
+        return true;
     }
 
     public string GetWithdrawDisabledReason(CharacterController character)
@@ -6972,8 +6976,17 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc, maxRangeOverride: GetWithdrawMoveRangeSquares(pc));
         CombatUI.SetActionButtonsVisible(false);
-        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, leaving your starting space provokes no AoO from enemies you can see)");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). Leaving your starting space (every square you start in) provokes no attack of opportunity from enemies you can see (PHB p.143, DMG p.29)."));
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - {WithdrawIndicator(pc)}");
+        bool restricted = MovementService.WithdrawKindFor(pc) == MoveKind.RestrictedWithdraw;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins {(restricted ? "a Restricted Withdraw (standard action" : "Withdraw (full-round")}, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). Leaving your starting space (every square you start in) provokes no attack of opportunity from enemies you can see (PHB p.143-144, DMG p.29)."));
+    }
+
+    /// <summary>The withdraw's turn-indicator text: double move, or speed for a Restricted Withdraw (PHB p.144).</summary>
+    private static string WithdrawIndicator(CharacterController pc)
+    {
+        bool restricted = MovementService.WithdrawKindFor(pc) == MoveKind.RestrictedWithdraw;
+        return "Withdraw: select destination (" + (restricted ? "Restricted Withdraw, up to your speed" : "double move")
+            + ", leaving your starting space provokes no AoO from enemies you can see)";
     }
 
     public bool CanTakeFiveFootStep(CharacterController character)
@@ -11152,11 +11165,20 @@ public partial class GameManager : MonoBehaviour
     public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target, bool bullRush)
         => NPCExecuteCharge(npc, target, bullRush);
 
-    public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
-        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep);
+    /// <summary>
+    /// An NPC, summon or compulsion move (one move action's budget). Refused by the shared movement legality
+    /// (MovementService.CanStartMovement: prone, grappling, a 5-foot step taken, no move action) with a log;
+    /// <paramref name="attempt"/>, when given, says whether it started and why not.
+    /// </summary>
+    public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
+        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep, attempt);
 
-    public IEnumerator ExecuteWithdrawMovementForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
-        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep);
+    /// <summary>
+    /// An NPC or compulsion withdraw: the full-round withdraw, or a Restricted Withdraw (a standard action at speed) for a
+    /// creature limited to a single action (PHB p.143-144). Refused by the shared movement legality with a log.
+    /// </summary>
+    public IEnumerator ExecuteWithdrawMovementForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
+        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep, attempt);
 
     public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
         => TryNPCSpecialAttackIfBeneficial(npc, target);

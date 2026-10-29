@@ -212,7 +212,7 @@ All MonoBehaviour services live on the GameManager GameObject and are created in
 |---|---|---|---|---|
 | TurnService | Services/TurnService.cs | MonoBehaviour | Initiative order, round counter, turn events. | live |
 | InputService | Services/InputService.cs | MonoBehaviour | Per-frame mouse and key input, mode-keyed click handlers. | live (events `OnWorldClicked` and others have no subscribers) |
-| MovementService | Services/MovementService.cs | MonoBehaviour | Movement range, pathfinding wrappers, AoO and 5-ft step rules. | live |
+| MovementService | Services/MovementService.cs | MonoBehaviour | Movement range, pathfinding wrappers, AoO and 5-ft step rules; the one movement legality `CanStartMovement` (static, with `MoveKind`; batch 12 step 22). | live |
 | ConditionService | Services/ConditionService.cs | MonoBehaviour | Mirrors CharacterController conditions; turn and round expiry; escape saves. | live |
 | AIService | Services/AIService.cs | MonoBehaviour | NPC turn coroutine (`ExecuteNPCTurn`), targeting, tactical routines. | live |
 | CombatFlowService | Services/CombatFlowService.cs | MonoBehaviour | Attack pipelines (single, full, off-hand), range info, attack log. | partial (the `ExecuteAttack`/`RollAttack` "contract" methods, Whirlwind and Manyshot have no callers) |

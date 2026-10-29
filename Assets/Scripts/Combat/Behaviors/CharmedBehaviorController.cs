@@ -84,8 +84,9 @@ public sealed class CharmedBehaviorController
                     && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int adjacentCell))
                 {
                     // Wait for the move: it can provoke AoOs that drop the actor (CMB-073).
-                    yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, adjacentCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                    ConsumeMoveAction(actor);
+                    var healMove = new MoveAttempt();
+                    yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, adjacentCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), healMove));
+                    if (!healMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
                     if (!actor.CanTakeTurnActions())
                         yield break;
                     yield return new WaitForSeconds(0.35f);
@@ -108,8 +109,9 @@ public sealed class CharmedBehaviorController
                 && HasHealingConsumable(actor)
                 && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int consumableCell))
             {
-                yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, consumableCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                ConsumeMoveAction(actor);
+                var consumableMove = new MoveAttempt();
+                yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, consumableCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), consumableMove));
+                if (!consumableMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
                 if (!actor.CanTakeTurnActions())
                     yield break;
             }
@@ -132,8 +134,9 @@ public sealed class CharmedBehaviorController
         if (!actor.IsTargetInCurrentWeaponRange(hostileToCaster) && HasAnyMoveAction(actor)
             && TryFindCellTowardTarget(gameManager, actor, hostileToCaster, out Vector2Int approachCell))
         {
-            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approachCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-            ConsumeMoveAction(actor);
+            var approachMove = new MoveAttempt();
+            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approachCell, gameManager.GetPlayerMoveSecondsPerStepForAI(), approachMove));
+            if (!approachMove.Refused) ConsumeMoveAction(actor); // a refused move (logged) spends nothing
             if (!actor.CanTakeTurnActions())
                 yield break;
             yield return new WaitForSeconds(0.35f);

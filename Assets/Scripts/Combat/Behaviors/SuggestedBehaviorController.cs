@@ -73,16 +73,23 @@ public sealed class SuggestedBehaviorController
         int currentDistance = SquareGridUtils.GetDistance(actor.GridPosition, from);
         if (actor.Actions != null && !actor.Stats.MovementBlockedByCondition && !actor.IsGrappling())
         {
-            if (actor.Actions.HasFullRoundAction)
+            // The withdraw it may take, full-round or restricted (the shared movement legality, PHB p.143-144, GRID-022).
+            if (MovementService.CanStartMovement(actor, MovementService.WithdrawKindFor(actor)).Ok)
             {
                 SquareCell withdrawCell = FindFartherCell(gameManager, actor, from, withdraw: true, currentDistance);
                 if (withdrawCell != null)
                 {
+                    var withdrawAttempt = new MoveAttempt();
                     yield return gameManager.StartCoroutine(
-                        gameManager.ExecuteWithdrawMovementForAI(actor, withdrawCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and withdraws from the fight."));
-                    yield return new WaitForSeconds(0.3f);
-                    yield break;
+                        gameManager.ExecuteWithdrawMovementForAI(actor, withdrawCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), withdrawAttempt));
+                    if (withdrawAttempt.Started)
+                    {
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and withdraws from the fight."));
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                    if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
+                        yield break;
                 }
             }
 
@@ -91,13 +98,17 @@ public sealed class SuggestedBehaviorController
                 SquareCell moveCell = FindFartherCell(gameManager, actor, from, withdraw: false, currentDistance);
                 if (moveCell != null)
                 {
+                    var moveAttempt = new MoveAttempt();
                     yield return gameManager.StartCoroutine(
-                        gameManager.MoveCharacterAlongComputedPathForAI(actor, moveCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                    if (actor.Actions.HasMoveAction) actor.Actions.UseMoveAction();
-                    else if (actor.Actions.CanConvertStandardToMove) actor.Actions.ConvertStandardToMove();
-                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and moves away from the fight."));
-                    yield return new WaitForSeconds(0.3f);
-                    yield break;
+                        gameManager.MoveCharacterAlongComputedPathForAI(actor, moveCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), moveAttempt));
+                    if (!moveAttempt.Refused) // a refused move (logged) spends nothing and falls through
+                    {
+                        if (actor.Actions.HasMoveAction) actor.Actions.UseMoveAction();
+                        else if (actor.Actions.CanConvertStandardToMove) actor.Actions.ConvertStandardToMove();
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and moves away from the fight."));
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
                 }
             }
         }
@@ -113,7 +124,7 @@ public sealed class SuggestedBehaviorController
             return null;
 
         int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
-        int maxRange = withdraw ? Mathf.Max(0, moveRange * 2) : Mathf.Max(0, moveRange);
+        int maxRange = withdraw ? Mathf.Max(0, gameManager.GetWithdrawMoveRangeSquares(actor)) : Mathf.Max(0, moveRange); // speed for a Restricted Withdraw (PHB p.144)
         if (maxRange <= 0)
             return null;
 
