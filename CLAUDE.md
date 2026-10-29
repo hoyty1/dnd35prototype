@@ -41,8 +41,8 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 
 | Folder | Contents |
 |---|---|
-| `_Core/` | `GameManager.cs` (about 11.5K lines) + 15 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
-| `Combat/` | `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
+| `_Core/` | `GameManager.cs` (about 11.5K lines) + 16 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
+| `Combat/` | `Actions/` (the action catalog, batch 13: `ActionCatalog`, `ActionIds`, executors; runners in `_Core/GameManager.ActionRunner.cs`), `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
 | `Spell/` | `Data/`, `Database/`, `Casting/` (SpellCaster), `Components/` (StatusEffectManager, MetamagicData); GameManager partials in `Resolution/`, `Special/`, `Domain/` |
 | `Character/` | `Controller/CharacterController.cs` (about 12K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
 | `Equipment/` | `Items/` (ItemData, ItemDatabase, ItemIDs, ScrollData, WandData), `Inventory/`, `Store/`, enchantments, rings, rods, staves, wondrous |
@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 67 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 70 files in 8 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); area handlers sit in an area registry in the same file (`BuildAreaHandlers`, the generic loop as fallback); unclaimed single-target spells fall to `ApplySpellBuff`.

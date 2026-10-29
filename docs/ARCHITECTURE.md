@@ -11,6 +11,7 @@ This file covers the runtime loop, composition, services and cross-cutting conve
 | Part | Covers |
 |---|---|
 | [Combat & grid](architecture/combat-and-grid.md) | Grid, movement, turns, attack resolution, damage, AoO, conditions, maneuvers, reactions, combat log |
+| [Combat actions](architecture/combat-actions.md) | The action catalog (batch 13): one entry per combat action with its Table 8-2 cost and provocation, its status and its shared executor; the PC and AI runners |
 | [Spells](architecture/spells.md) | Spell data and IDs, casting resources, the cast pipelines, handlers, saves/DC/CL, durations, areas, metamagic, domains, summoning |
 | [Characters & creatures](architecture/characters-and-creatures.md) | CharacterController vs CharacterStats, derived stats, feats, skills, classes, XP, NPC database, templates, dragons |
 | [Items & economy](architecture/items-and-economy.md) | ItemData/ItemDatabase, inventory, consumables, enchantments, rings/rods/wondrous/staves, store, crafting, treasure |
@@ -93,7 +94,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 67 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 70 files (about 53,300 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,11 +141,11 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 68 files (since batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 70 files (since batch 13 step 3 added `_Core/GameManager.ActionRunner.cs` and `Combat/Actions/Executors/GameManager.ActionCores.cs`; batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
-| **_Core/** (16) | | |
+| **_Core/** (17) | | |
 | GameManager.cs | 11,467 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
 | GameManager.AttackCore.cs | 545 | The one attack-sequence executor (batch 12 step 17; CMB-091, CMB-045, CMB-096, CMB-173, D9): `RunAttackSequence` runs an `AttackSequenceRequest` (`Combat/Core/AttackSequence.cs`: the PC Attack button's click, the Full Attack button, an NPC attack, an AoO) step by step through the same stages for PCs and NPCs (`AttackSequenceStage`), `RunAttackSequenceSync` for synchronous callers, the natural-attack pick, `IsTargetInStepRange` and the Rapid Shot declaration `TryDeclareRapidShotForAttack`. |
@@ -161,6 +162,7 @@ There are 68 files (since batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs
 | GameManager.ScenarioHarness.cs | 579 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat (the reset also releases grapple links, CMB-038), dump turn state and the open prompt, call the PC menu callbacks (open the Special Attack menu and click a maneuver button as a player would, pick a spell, cancel a selection) and answer the AoO prompt. No game code calls it. |
 | GameManager.TurnStart.cs | 89 | The turn-start routines (batch 12 steps 5-6): `BeginCombatantTurn` (every creature, from `OnTurnStarted`, before the turn-skip gate: ongoing effects, regeneration, cooldowns, once-per-round flags, Aid Another expiry, `StartNewTurn`, the turn-start combat-end check; decision D3), `BeginActingTurn` (after the gate: the Turn Undead proximity check) and `TickRageAtCount` (rage at the barbarian's initiative count). |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
+| GameManager.ActionRunner.cs | 283 | The action catalog's runners (batch 13 step 3): `RunPlayerAction` (the executor, then the entry's `UiAfter`; nothing after an entry or core that owns its UI), `RunAIAction` (a nested enumerator; pre-checks Extracted and New entries; the `[ActionSet]` shadow hook), `ResolveActionProvocation` (the one non-movement AoO loop, never ends a turn), `ConfirmActionProvocation` (its prompt alone) and `TryShowActionAoOConfirmation` ([Combat actions](architecture/combat-actions.md)). No live flow calls them yet; `ActionCatalogTests`' Play pass runs their refusal paths. |
 | **Spell/Resolution/** (28) | | |
 | GameManager.CastContext.cs | 274 | The per-cast context (batch 11 step 4): the cast stack (`BeginCast`, `EndCast`, `EndPendingCast`, `EndAllCasts`; a misuse raises `ScenarioHooks.CastStackViolation`) and the old `_pending*` names as read-only views of the current cast's `SpellCastRequest` (batch 11 step 29), plus `UiCastChoicesForAnswer`, through which the UI's choice dialogs answer ([Spells: per-cast context](architecture/spells.md)). |
 | GameManager.SpellHandlerRegistry.cs | 234 | The single-target spell handler registry (batch 11 step 5): one `SpellHandlerEntry` per `TryResolve*SpellEffect` handler (spell ids, gate, ContinueToBuff), `RunSingleTargetHandlers`, the handler step of both `PerformSpellCast` and `TryNPCPerformSpellCast` (step 6; the cast core's Handlers stage since steps 7 and 8) ([Spells: handler chains](architecture/spells.md)). |
@@ -201,6 +203,8 @@ There are 68 files (since batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs
 | LayOnHandsSystem.cs | 182 | The PC Lay on Hands button and the AI wrapper over `LayOnHandsRules` (CHR-020). |
 | WildShapeSystem.cs | 186 | The PC Wild Shape button (form list or change back) and the AI wrappers over `WildShapeRules` (CHR-020). |
 | BardicMusicSystem.cs | 404 | The PC Bardic Music button and its lists, the shared executors and AI wrappers over `BardicMusicRules`, the per-count and end-of-turn hooks of a performance, the record of hostile actions (fascinate's nearby combat), and the suggested creature's turn (CHR-026). |
+| **Combat/Actions/Executors/** (1) | | |
+| GameManager.ActionCores.cs | 65 | The forwarder from the catalog's stand-up executor to its private core: `ActionCore_StandUp` (the callers' gate, the player's StandFromProne prompt, then `ResolveStandUpFromProne`) (batch 13 step 3). |
 | **Encounters/** (1) | | |
 | GameManager.DungeonEncounters.cs | 237 | Bridge from DMG dungeon tables to combat. No external callers: `EncounterSelectionUI.OnDMGTablesPressed` uses its own path. |
 

@@ -7444,13 +7444,17 @@ public partial class GameManager : MonoBehaviour
         string reason = GetStandUpDisabledReason(npc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} stays prone ({reason})."));
+            LogStaysProne(npc, reason);
             yield break;
         }
 
         var outcome = new StandUpOutcome();
         yield return StartCoroutine(ResolveStandUpFromProne(npc, null, 0.5f, outcome));
     }
+
+    /// <summary>The AI's line when it may not stand up (TryStandUpFromProneForAI and the catalog's stand-up entry).</summary>
+    private void LogStaysProne(CharacterController npc, string reason)
+        => CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} stays prone ({reason})."));
 
     private void ShowCrawlOptions(CharacterController pc)
     {
@@ -11211,13 +11215,16 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// NPC attack action for AI routines. <paramref name="tryStepManeuver"/>, when given, may replace
-    /// any melee attack step with a maneuver (CMB-102); it returns true when it acted.
+    /// any melee attack step with a maneuver (CMB-102); it returns true when it acted. <paramref name="maxSteps"/> caps
+    /// the sequence's steps (1: the attack action alone, the catalog's attack entry); by default the sequence takes every
+    /// step the action economy allows.
     /// </summary>
     public IEnumerator NPCPerformAttackForAI(
         CharacterController npc,
         CharacterController target,
-        Func<CharacterController, CharacterController, bool> tryStepManeuver = null)
-        => NPCPerformAttack(npc, target, tryStepManeuver);
+        Func<CharacterController, CharacterController, bool> tryStepManeuver = null,
+        int maxSteps = int.MaxValue)
+        => NPCPerformAttack(npc, target, tryStepManeuver, maxSteps);
 
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
         => TryNPCPerformSpellCastForAI(npc, target, spell, null);

@@ -77,11 +77,8 @@ public partial class GameManager
             return;
         }
 
-        string line = SmiteRules.TryDeclare(pc, out reason);
-        if (line == null)
+        if (!DeclareSmite(pc, out reason))
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot smite: {reason}."));
-        else
-            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {line}", "FFD280"));
         CombatUI?.UpdateActionButtons(pc);
     }
 
@@ -106,7 +103,17 @@ public partial class GameManager
         if (!choose)
             return false;
 
-        string line = SmiteRules.TryDeclare(npc, out _);
+        return DeclareSmite(npc, out _);
+    }
+
+    /// <summary>
+    /// Declares <paramref name="actor"/>'s smite (SmiteRules.TryDeclare) and logs it: the one declaration of the PC Smite
+    /// button, the AI's and the catalog's smite entry. False, with <paramref name="reason"/> and nothing logged, when the
+    /// rules refuse it; each caller logs that refusal its own way.
+    /// </summary>
+    internal bool DeclareSmite(CharacterController actor, out string reason)
+    {
+        string line = SmiteRules.TryDeclare(actor, out reason);
         if (line == null)
             return false;
         CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {line}", "FFD280"));

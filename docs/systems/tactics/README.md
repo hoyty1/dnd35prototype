@@ -79,7 +79,7 @@ Every entry also has a free-text `valueModel` (expected damage, control value, r
 
 #### 1.2 Types (C# 9; plain classes and enums, no `record` or `init` so no IsExternalInit polyfill is needed)
 
-The catalog reuses enums that already exist instead of adding parallel ones: `ActionCostType` (`_Core/Commands/IGameCommand.cs:46`, dormant today), `AoEShape` and `AoETargetFilter` (`Spell/AreaEffects/AoESystem.cs:12`), `SpellRangeCategory`, `SpellDescriptor`, `BonusType`, `DurationType`, `DamageType`, `CombatConditionType` and `SpecialAttackType`/`GrappleActionType` (`CharacterController.cs:12`).
+The catalog reuses enums that already exist instead of adding parallel ones: `ActionCostType` (`_Core/Commands/IGameCommand.cs:46`, the catalog entries' cost since batch 13 step 3), `AoEShape` and `AoETargetFilter` (`Spell/AreaEffects/AoESystem.cs:12`), `SpellRangeCategory`, `SpellDescriptor`, `BonusType`, `DurationType`, `DamageType`, `CombatConditionType` and `SpecialAttackType`/`GrappleActionType` (`CharacterController.cs:12`).
 
 ```csharp
 // AI/Catalog/ActionDefinition.cs
@@ -196,6 +196,8 @@ public interface IActionExecutor {
   IEnumerator Execute(ActionContext ctx, ActionOutcome outcome);
 }
 ```
+
+**Built (batch 13 step 3, 2026-10-29):** the catalog skeleton is `Assets/Scripts/Combat/Actions/` (`ActionDefinition`, `ActionCatalog`, `IActionExecutor`; `docs/architecture/combat-actions.md`), not the `ActionRegistry` sketched here; the sketch's AI metadata fields are not on the entries yet (batch 14 scores them).
 
 **Superseded in two places by the batch 13 design (2026-10-29, `docs/designs/action_catalog_batch13.md`):** (1) `ActorSource` stays the live two-value enum `{Ui, AI}` (`Combat/Core/IAttackDecider.cs`, design choice C7): a summon passes `Ui` or `AI` according to who controls it (a PC-cast summon is controllable, CRE-039), and a reaction (an AoO, `Combat/Core/AttackSequence.cs` ~:392) and a forced (confused, charmed, fleeing) turn pass `AI`, and the five-value enum sketched above would collide with the live one (and, in the scenario harness, with the class `Tests.Scenarios.ActorSource`, so harness code writes `global::ActorSource`). (2) The maneuver core already exists (batch 12 step 19): every maneuver a PC or an NPC starts against an opponent runs `GameManager.ExecuteManeuver` (`Combat/Maneuvers/GameManager.ManeuverCore.cs` ~:261) on a `ManeuverRequest`, so the catalog's maneuver entries wrap it rather than the `ExecuteSpecialAttack` pair named in 1.3.
 

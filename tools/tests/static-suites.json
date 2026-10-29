@@ -612,6 +612,17 @@
       "notes": "GRID-019, GRID-022, batch 12 step 22 (2026-10-29): the one movement legality MovementService.CanStartMovement for every mover (PHB p.143-144): no 5-foot step in a round with other movement either way round, one only, none at speed 5 ft; no movement while prone, pinned or paralyzed; no withdraw while blinded; Restricted Withdraw (a standard action at speed) for slowed and disabled creatures and no full-round withdraw for them; a nauseated creature moves but never double moves, runs, withdraws or charges; the move, double move, withdraw, run and charge budgets; no run or charge while entangled, fatigued or exhausted, and a run at three times the speed in heavy armor or with a heavy load (step 22 review); CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule. Play only: CharacterController.Init needs Awake (TST-009). 44/44 in its first Play pass, 54/54 after the review (20261029T065935Z-play). CMB-132, CMB-199 (2026-10-29): the charge line geometry (SquareGridUtils.GetSquaresCoveredBySweptSpace: every line between the starting and ending spaces, their convex hull, so a diagonal charge covers the squares orthogonally beside the diagonal while an edge or corner touch is not a crossing, for 1x1 and 2x2 chargers; GetStraightLinePath stays in that space and costs the open-ground distance) and which creatures a charge passes (ChargeRules.LetsChargePass: paralyzed, asleep and dying yes, awake and prone no; PHB p.154); 66/66 after the review (20261029T102008Z-play). Owner interpretation 2026-10-29 (the charge line per-mover hindrance): the per-mover square question MovementTerrain (difficult terrain slows a fighter and costs it 2 on a plain path, not an incorporeal creature; Freedom of Movement, the flag or the Travel domain power, lifts only a Web's difficult terrain; off the grid blocks; PHB p.148, p.233, MM p.310-311); 74/74 (20261029T123428Z-play)."
     },
     {
+      "type": "Tests.Combat.ActionCatalogTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 79,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "batch 13 step 3 (b13-catalog-skeleton, 2026-10-29): the action catalog as data (one entry per ActionIds constant; cost, provocation, RulesRef, status and issues; the golden PHB p.141 Table 8-2 manifest realigned; every SpecialAttackType agrees with ManeuverActionCost.For; ActionCosts.From maps every CastActionCost; ActionCosts on an action economy; Legality's bar and the ActionLegality adapters; ActionDeciders.For) and the executor source scan (no UI continuation, no IsControllable, ActivePC or IsPlayerTurn under Combat/Actions/Executors). In Play mode only (a scene GameManager), also the runner's refusal paths (RunAIAction on a Missing entry, with no actor, a stand-up for a creature that is not prone) and ResolveActionProvocation's early exit. The source-scan assertions scale with the number of files under Combat/Actions. 79/79 in Play, 75/75 in the edit pass (all=true) after the review fixes (2026-10-29)."
+    },
+    {
       "type": "Tests.Combat.AttackLegalityTests",
       "needs": "play",
       "skip": "",

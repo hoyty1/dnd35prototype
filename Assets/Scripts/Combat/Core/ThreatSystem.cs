@@ -950,9 +950,19 @@ public static class ThreatSystem
     /// <summary>
     /// The enemies that get an AoO when <paramref name="actor"/> stands up from prone (PHB p.143,
     /// Table 8-2): every living enemy that threatens any square of its footprint and can still
-    /// make an AoO. Shared by the PC Stand Up button and the AI stand-up step (CMB-074).
+    /// make an AoO. Shared by the PC Stand Up button and the AI stand-up step (CMB-074); the rule of every action that
+    /// provokes in place (<see cref="GetActionAoOProvokers"/>).
     /// </summary>
     public static List<CharacterController> GetStandUpAoOProvokers(CharacterController actor, List<CharacterController> allCharacters)
+        => GetActionAoOProvokers(actor, allCharacters);
+
+    /// <summary>
+    /// The enemies that get an AoO when <paramref name="actor"/> takes an action that provokes in place (PHB p.137,
+    /// Table 8-2: drinking a potion, reading a scroll, loading a crossbow): every living enemy that threatens any square
+    /// of its footprint and can still make an AoO. The action catalog's one non-movement AoO loop reads it
+    /// (GameManager.ResolveActionProvocation, batch 13 step 3).
+    /// </summary>
+    public static List<CharacterController> GetActionAoOProvokers(CharacterController actor, List<CharacterController> allCharacters)
     {
         var provokers = GetEnemiesThreateningFootprint(actor, allCharacters);
         provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoOAgainst(enemy, actor));

@@ -25,7 +25,7 @@ Step-by-step procedures for the common changes in this project: which files to t
 ## Contents
 
 - Magic: [Add a spell (data)](#add-a-spell-data) · [Implement a single-target, touch or self spell effect](#implement-a-single-target-touch-or-self-spell-effect) · [Implement an area spell](#implement-an-area-spell) · [Make NPCs cast a spell, and test a spell](#make-npcs-cast-a-spell-and-test-a-spell) · [Add a metamagic feat](#add-a-metamagic-feat)
-- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add a combat-log message](#add-a-combat-log-message)
+- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a combat-log message](#add-a-combat-log-message)
 - Items and economy: [Add a mundane weapon, armor or shield](#add-a-mundane-weapon-armor-or-shield) · [Add a weapon or armor special ability](#add-a-weapon-or-armor-special-ability) · [Add a wondrous item](#add-a-wondrous-item) · [Add a ring](#add-a-ring) · [Add a rod](#add-a-rod) · [Add a staff](#add-a-staff) · [Add a scroll, potion or wand](#add-a-scroll-potion-or-wand) · [Add an item to the store](#add-an-item-to-the-store) · [Make an item craftable](#make-an-item-craftable)
 - Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Add a combat scenario](#add-a-combat-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
 - UI: [Add a combat action button](#add-a-combat-action-button) · [Add a UI panel](#add-a-ui-panel)
@@ -268,6 +268,33 @@ Pitfalls:
 - Availability: the menu (`IsSpecialAttackButtonEnabled`, `OnSpecialAttackSelected`) reads `CanAffordManeuverForUi` (the cost table), and both wrappers run `CanStartManeuver`; `CanPerformSpecialAttack` (the weapon mode) is the NPC executor's extra test. Target legality belongs in one `Can<X>(target, out reason)` on `CharacterController` read by the PC wrapper (before any cost), its target highlighting, the NPC executor, the AI and the resolver itself (patterns `CanBullRush`, `CanTrip`).
 - A choice the rules leave to a creature (the item, the bull rush push, the counter-trip, the grapple move, the escape square, opposing an escape) is an `IManeuverDecider` method, offered after the resolver returns, never inside it: the UI decider prompts a controllable creature and the AI decider answers from its `AIProfile` (pattern `GameManager.HandleTripAftermath`, `ResolveGrappleEscapeThroughOpposition`). The prompt can open during an NPC turn, so NPC coroutines must wait while it is open (`IsAwaitingCounterTripChoice`; the attack-sequence executor `RunAttackSequence` waits on it with `WaitWhile` after a substitute trip, and its synchronous driver `RunAttackSequenceSync` finishes as a coroutine), the scenario runner must answer it (`ScenarioDef.CounterTripAnswers`, `EscapeOppositionAnswers`), and a combat reset must clear it.
 - Menu wiring keys on `btn.name`; a typo gives a dead button. A missing switch case in `CharacterController.ExecuteSpecialAttack` returns "tries an unknown maneuver" with `Success = false`.
+
+## Add an action
+
+Use for a combat action both sides take: a PHB Table 8-2 row or a creature ability. The catalog is `Combat/Actions/` ([Combat actions](architecture/combat-actions.md)); the plan is `docs/designs/action_catalog_batch13.md`.
+
+1. **Id.** Add a constant to `ActionIds` (`Combat/Actions/ActionIds.cs`).
+2. **Entry.** Add one `Def(...)` line to `ActionCatalog.Build` (`Combat/Actions/ActionCatalog.cs`):
+   - the Table 8-2 cost (`ActionCostType`) and provocation (`ProvokeRule`), read from PHB p.141 with the extract's offset columns realigned (the class summary lists the realigned rows); `ByMovement` when only the movement provokes;
+   - the target kind, the roles, a `RulesRef` that names the book and page, the status and its issue IDs;
+   - `.Costs(rule)` for a per-actor cost (a feat, a casting time, a single-action turn), `.For(predicate)` for an action only some creatures have, `.AsManeuver(type)` for a `SpecialAttackType` (its cost must agree with `ManeuverActionCost.For`);
+   - `.Run(executor, UiAfter, seconds)` once an executor exists.
+3. **Executor.** Implement `IActionExecutor` in `Combat/Actions/Executors/`:
+   - `CanStart(actor)` and `CanExecute(ctx)` are pure and return `Legality` with its `LegalityBar` (wrap an old check with `ActionLegality.FromDisabledReason`, `FromCheck` or `FromCast`);
+   - `Execute(ctx, outcome)` is a coroutine: pay through `ActionCosts.TryPay` or the core you wrap, resolve provocation through `GameManager.ResolveActionProvocation` (the decider confirms; it never ends the turn), set `Performed`, `Refusal`, `ActorDown`, `CoreOutcome`;
+   - read whose choices they are from `ctx.Source` and ask `ctx.Decider`; never call `ShowActionChoices`, `AfterAttackDelay`, `EndActivePCTurn` or `DelayedEndActivePCTurn`, and never read `IsControllable`, `ActivePC` or `IsPlayerTurn` (ActionCatalogTests scans the folder);
+   - delegate to a live caller's entry point with its whole prelude (its gates, ward breaks, declarations), not to the raw core it wraps, and set `RefusalLogged` when that core logs its refusal;
+   - a private GameManager member is reached through a public `*ForAI` wrapper when one exists (grep first), else through a thin forwarder in `Combat/Actions/Executors/GameManager.ActionCores.cs`;
+   - an executor over a core that continues the PC UI itself sets `CoreOwnsUi` (as the cast executor does with the UI decider), or the entry's `UiAfter` is `None`; the PC runner then adds no follow-up.
+   Status: `Delegating` over a finished core (the runner trusts its refusals), `Extracted` or `New` otherwise (the AI runner pre-checks `CanExecute` and a refusal spends nothing).
+4. **Callers.** The PC panel calls `GameManager.RunPlayerAction(ctx)` (it applies `UiAfter`); the AI, the harness and a forced PC turn yield `RunAIAction(ctx, outcome)`. Build the context with `ActionContext.For(id, actor, source, target)` and put a prebuilt core request in `CoreRequest`.
+5. **Tests.** Add the row to `ActionCatalogTests.Golden`; add scenario twins (`-ui`, `-ai`) when both sides can act, in `Tests/Scenarios/Catalog/ActionCatalogScenarios.cs` (create it on first use as a static class with a `[ScenarioSource]` method, like the other files in `Tests/Scenarios/Catalog/`) unless a subsystem file such as `ChargeCoreScenarios.cs` fits better ([Add a combat scenario](#add-a-combat-scenario)).
+6. **Docs.** The entry's row in `docs/architecture/combat-actions.md`, and the status in `docs/systems/AI_ACTION_COVERAGE.md`.
+
+Pitfalls:
+- Per-creature state the executor keeps on `CharacterController` must be cleared on slot reuse (CRE-046).
+- A coroutine that waits on a callback core re-checks `CurrentPhase == CombatOver` in its loop.
+- `ActorSource` stays `{Ui, AI}` (C7); in harness code write `global::ActorSource`, because `Tests.Scenarios.ActorSource` hides it.
 
 ## Add a combat-log message
 
@@ -616,6 +643,8 @@ All UI is built in code; there are no prefabs and no scene edits are needed. `Sc
 ## Add a combat action button
 
 Use for a top-level button in the combat action grid (not the Special Attack menu).
+
+An action both sides can take also gets a catalog entry and a shared executor, which the button reaches through `GameManager.RunPlayerAction` ([Add an action](#add-an-action)).
 
 1. Field: `public Button MyButton;` on `CombatUI` (`UI/Combat/CombatUI.cs`, `[Header]` groups around `:80-170`).
 2. Create it in `SceneBootstrap.CreateActionButtonsSection` (`_Core/SceneBootstrap.cs:661`, grid `:746-844`): `combatUI.MyButton = CreateGridButton(btnGrid.transform, "MyBtn", "Label", color);` (grid order = creation order). Wire it in the coroutine `SceneBootstrap.WireButtons` (`:1101`): `if (ui.MyButton != null) ui.MyButton.onClick.AddListener(() => GameManager.Instance.OnMyButtonPressed());`.

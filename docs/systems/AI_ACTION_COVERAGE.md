@@ -4,6 +4,8 @@
 
 Part of [AI.md](AI.md) (section 9). It lists which 3.5e combat options the enemy AI uses today compared with what player characters can do. Statuses were established by reading code, not in Play mode. Issue IDs link to `docs/issues/`.
 
+**Source of the status (since batch 13 step 3, 2026-10-29).** The action catalog's status column (`ActionDefinition.Status` in `Assets/Scripts/Combat/Actions/ActionCatalog.cs`: Delegating, Extracted, New, PcOnly, AiOnly, Missing, OutOfScope, with each entry's issue IDs; table in [combat-actions.md](../architecture/combat-actions.md)) is the source for which actions have a shared executor. Where this matrix and the catalog disagree, the catalog wins and this matrix is stale. This matrix adds what the catalog does not record: whether and when the AI chooses an action. Step 3 only added the catalog; no AI routine calls it yet (step 6 routes the AI through `GameManager.RunAIAction`).
+
 
 Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, or degraded; **Auto** = happens in shared resolution with no AI choice; **Never**. "PC" = available to player characters. The rows cover every PC combat control wired in the UI (the `GameManager.On*ButtonPressed` handlers, the Power Attack slider, the Rapid Shot and damage-mode toggles, the special-attack menu and the grapple menu) and the PHB ch.8 actions that no one can take yet. When a PC control is added, add its row here.
 
@@ -32,7 +34,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Power Attack, Rapid Shot | Power Attack never; Rapid Shot used since batch 12 step 18 (2026-10-28) | `UsePowerAttack` unread; Rapid Shot is `AttackIntent.ForAI`'s choice by `AIProfile.ShouldUseRapidShot` (expected hits, "AI stopgap (batch 13 catalog)"), declared before the first shot or throw by the shared rule (D9) | Yes | AI-026 (Power Attack); AI-055 closed 2026-10-28 |
 | Combat Expertise | Never | never written | No | CHR-021, AI-031 |
 | Fight defensively | Partial | cornered Frightened only | Yes | UI-007 |
-| Total defense | Never | no code | No | gap |
+| Total defense | Never | no code | No | gap (CMB-179; the catalog entry `total-defense` is Missing until batch 13 step 4) |
 | Cleave | Auto | after every melee step that drops a foe, every origin (the post-attack hook, batch 12 step 15, D7); the AI picks the target by its profile's `ScoreTarget` (`ChooseCleaveTargetForAI`), foes still in the fight first | Yes | |
 | Sneak attack | Auto | damage path (flanking, or a target denied Dex, flat-footed before its first turn included since 2026-10-14); AI seeks flanks, not flat-footed or sneak-attackable targets | Auto | CMB-167 |
 | Nonlethal | Never | | Yes | |

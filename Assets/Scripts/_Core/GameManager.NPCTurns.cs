@@ -680,12 +680,24 @@ public partial class GameManager
         bool choose = npc.aiProfile != null
             ? npc.aiProfile.ShouldUseFlurryOfBlows(npc, target)
             : DND35.AI.AIProfile.DefaultShouldUseFlurryOfBlows(npc, target);
-        if (!choose || !npc.TryBeginFlurryOfBlows(out _))
+        if (!choose)
+            return false;
+        return DeclareFlurryOfBlows(npc, target, out _);
+    }
+
+    /// <summary>
+    /// Declares <paramref name="actor"/>'s flurry of blows (CharacterController.TryBeginFlurryOfBlows: the full-round
+    /// action, PHB p.40) and logs its attack bonuses against <paramref name="target"/>: the AI's declaration and the
+    /// catalog's flurry entry. False, with <paramref name="reason"/> and nothing logged, when the rules refuse it.
+    /// </summary>
+    internal bool DeclareFlurryOfBlows(CharacterController actor, CharacterController target, out string reason)
+    {
+        if (!actor.TryBeginFlurryOfBlows(out reason))
             return false;
 
-        int[] bonuses = npc.GetFlurryOfBlowsAttackBonusPreview(target);
+        int[] bonuses = actor.GetFlurryOfBlowsAttackBonusPreview(target);
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("🥋",
-            $"{npc.Stats.CharacterName} strikes with a flurry of blows ({string.Join("/", System.Array.ConvertAll(bonuses, CharacterStats.FormatMod))}; {CharacterStats.FormatMod(npc.Stats.FlurryOfBlowsAttackPenalty)} on every attack until its next turn)."));
+            $"{actor.Stats.CharacterName} strikes with a flurry of blows ({string.Join("/", System.Array.ConvertAll(bonuses, CharacterStats.FormatMod))}; {CharacterStats.FormatMod(actor.Stats.FlurryOfBlowsAttackPenalty)} on every attack until its next turn)."));
         return true;
     }
 
@@ -989,7 +1001,8 @@ public partial class GameManager
     private IEnumerator NPCPerformAttack(
         CharacterController npc,
         CharacterController target,
-        Func<CharacterController, CharacterController, bool> tryStepManeuver = null)
+        Func<CharacterController, CharacterController, bool> tryStepManeuver = null,
+        int maxSteps = int.MaxValue)
     {
         if (npc == null || npc.Stats == null)
             yield break;
@@ -1064,6 +1077,8 @@ public partial class GameManager
         // The NPC's own intent (AttackIntent.ForAI; CMB-096): melee, ranged, or a throw of a melee throwable at a target beyond
         // its reach; never the PC UI's selection.
         AttackSequenceRequest request = AttackSequenceRequest.ForAI(this, npc, target, tryStepManeuver, npc.aiProfile);
+        if (maxSteps != int.MaxValue)
+            request.MaxSteps = maxSteps;
         bool melee = request.Intent.Mode == AttackMode.Melee;
 
         // The bombardier beetle's acid spray is a reaction to being attacked or disturbed, not part of its own attack
@@ -1078,7 +1093,11 @@ public partial class GameManager
             // A flurry has no off-hand attacks (PHB p.40; CanCommitAttack): a two-weapon intent chosen before the flurry was
             // declared is rebuilt, so no flurry attack takes the two-weapon main-hand penalty.
             if (npc.IsUsingFlurryOfBlows && request.InterleaveOffHand)
+            {
                 request = AttackSequenceRequest.ForAI(this, npc, target, tryStepManeuver, npc.aiProfile);
+                if (maxSteps != int.MaxValue)
+                    request.MaxSteps = maxSteps;
+            }
         }
         else if (tryStepManeuver != null && tryStepManeuver(npc, target))
         {
