@@ -1604,9 +1604,14 @@ namespace Tests.Scenarios
         /// opportunity the cast provokes (PHB p.140): the Ui wizard 1, the only hero, at 1 hp, casts Magic Missile at the
         /// adjacent goblin without casting defensively. The goblin (acting first, so not flat-footed, PHB p.137; +30 to hit,
         /// every d6 a 6, so its morningstar deals 6) hits and drops the wizard to -5, dying (PHB p.145), so the spell is lost
-        /// and the party is out. The
-        /// cast core's exit runs the combat-end check for the lost cast (FinishCast, RunCastCombatEndCheck) and declares the
-        /// defeat inside the cast, not at the action menu after the pause (ShowActionChoices) as before.
+        /// and the party is out. The defeat is declared inside the cast, not at the action menu after the pause
+        /// (ShowActionChoices) as before: since batch 12 step 14 (D15) by the AoO's post-attack hook
+        /// (ThreatSystem.ExecuteAoO, OnAttackResolved < EvaluateCombatEnd), else by the cast core's exit (FinishCast,
+        /// RunCastCombatEndCheck; TST-046). The trace closes at that decision, so a watcher (<see cref="AfterCombatEndWatch"/>)
+        /// records what the game still does after it: the lost cast may wind down (its provocation outcome, the lost
+        /// cast's concentration step) and must reach its exit's combat-end mark before the harness halt, but no later cast
+        /// stage, spell effect, 'cast' event or action-menu flow may follow (CMB-192's cast path); the watch's log lines
+        /// hold exactly one 'struck down while casting' line.
         /// </summary>
         private static ScenarioDef CastCombatEndRetaliationUi()
         {
@@ -1620,26 +1625,186 @@ namespace Tests.Scenarios
                 .Hp("wizard", 1)
                 .Initiative("gob", "wizard")
                 .Force(6, 6, null, -1)
+                .OnSetup(ctx => AfterCombatEndWatch.Stop())
                 .Turn("wizard", 1,
+                    Step.Assert("watch what follows the combat end", ctx => { AfterCombatEndWatch.Start(); return true; }),
                     Step.Cast(SpellNames.MAGIC_MISSILE, "gob"),
                     Step.AnswerAoO(AoOAnswer.Proceed))
                 .Expect("The goblin's attack of opportunity against the casting wizard hits (PHB p.140)",
                     Expect.Count("aoo", e => e.Str("by") == "gob" && e.Str("target") == "wizard" && e.Bool("hit"), 1, 1))
-                .Expect("The wizard is struck down and the spell is lost", Expect.Count("log", e => (e.Str("text") ?? "").Contains("is struck down while casting Magic Missile"), 1, 1))
+                .Expect("The spell is lost: the goblin keeps every hit point", v =>
+                {
+                    TraceEvent actor = v.Of("actor").FirstOrDefault(e => e.Str("key") == "gob");
+                    if (actor == null) return ExpectResult.Fail("no actor event for gob");
+                    int start = actor.Int("hp"), end = FinalHp(v, "gob");
+                    return end == start ? ExpectResult.Pass("gob hp " + start + " -> " + end) : ExpectResult.Fail("gob hp " + start + " -> " + end);
+                })
                 .Expect("The game declares the defeat itself", Expect.Outcome(Outcome.Defeat))
-                .Expect("The defeat is declared by the cast's own combat-end check, not at the action menu or a turn boundary (CORE-039)", v =>
+                .Expect("The defeat is declared inside the cast (the AoO's post-attack hook or the cast's own combat-end check), not at the action menu or a turn boundary (CORE-039, D15)", v =>
                 {
                     TraceEvent over = v.Of("phase").FirstOrDefault(e => e.Get("to") is GameManager.TurnPhase t && t == GameManager.TurnPhase.CombatOver);
                     if (over == null) return ExpectResult.Fail("no CombatOver");
                     var by = over.Get("by") as List<string>;
                     string text = by != null ? string.Join(" < ", by) : "";
-                    return text.IndexOf("RunCastCombatEndCheck", StringComparison.Ordinal) >= 0
-                           && text.IndexOf("ShowActionChoices", StringComparison.Ordinal) < 0
-                           && text.IndexOf("NextInitiativeTurn", StringComparison.Ordinal) < 0
-                        ? ExpectResult.Pass(text, over.Seq)
-                        : ExpectResult.Fail("by " + text, over.Seq);
+                    TraceEvent cast = v.Of("cast").FirstOrDefault(e => e.Str("by") == "wizard");
+                    TraceEvent aoo = v.AoOs("gob", "wizard").FirstOrDefault();
+                    bool inCast = text.IndexOf("RunCastCombatEndCheck", StringComparison.Ordinal) >= 0
+                                  || text.IndexOf("OnAttackResolved", StringComparison.Ordinal) >= 0;
+                    bool notMenuOrTurn = text.IndexOf("ShowActionChoices", StringComparison.Ordinal) < 0
+                                         && text.IndexOf("NextInitiativeTurn", StringComparison.Ordinal) < 0;
+                    bool ordered = cast != null && aoo != null && cast.Seq < over.Seq && aoo.Seq < over.Seq;
+                    return inCast && notMenuOrTurn && ordered
+                        ? ExpectResult.Pass(text + " (cast #" + cast.Seq + ", AoO #" + aoo.Seq + ")", over.Seq)
+                        : ExpectResult.Fail("by " + text + ", cast " + (cast != null ? "#" + cast.Seq : "none") + ", AoO " + (aoo != null ? "#" + aoo.Seq : "none"), over.Seq);
+                })
+                .Expect("The wizard is struck down once, the cast reaches its own exit, and after the combat end nothing of it goes on: no later cast stage, spell effect, 'cast' event or action menu (CMB-192's cast path)", v =>
+                {
+                    AfterCombatEndWatch w = AfterCombatEndWatch.Stop();
+                    if (w == null) return ExpectResult.Inconclusive("no watcher (the wizard's first step did not run)");
+                    if (!w.ProbeSeen) return ExpectResult.Inconclusive("the watcher's console listener never saw its probe line, so it cannot see the action-menu flow");
+                    if (!w.SawCombatOver) return ExpectResult.Fail("the watcher saw no CombatOver phase");
+                    List<string> late = w.Stages.Where(s => !AfterCombatEndWatch.IsWindDown(s)).ToList();
+                    int struck = w.AllLogs.Count(l => l != null && l.Contains("is struck down while casting Magic Missile"));
+                    string seen = "after the end: stages [" + string.Join(", ", w.Stages) + "], " + w.Logs.Count + " log lines, " + struck + " struck-down line(s)";
+                    if (late.Count > 0) return ExpectResult.Fail("cast stages after the combat end: " + string.Join(", ", late) + "; " + seen);
+                    if (w.Casts.Count > 0) return ExpectResult.Fail("'cast' events after the combat end: " + string.Join(", ", w.Casts));
+                    if (w.MenuFlow.Count > 0) return ExpectResult.Fail("action-menu flow after the combat end: " + string.Join(" | ", w.MenuFlow));
+                    // The cast must reach its own exit (FinishCast's combat-end mark) before the harness halt, which stops
+                    // every GameManager coroutine; a cast cut off by the halt would otherwise pass by default.
+                    if (!w.Stages.Any(s => s.StartsWith(CastStageTrace.CombatEnd + ":", StringComparison.Ordinal)))
+                        return ExpectResult.Fail("the cast never reached its exit before the harness halt; " + seen);
+                    if (struck != 1) return ExpectResult.Fail("expected one 'struck down while casting Magic Missile' line; " + seen);
+                    return ExpectResult.Pass(seen);
                 })
                 .Build();
+        }
+
+        /// <summary>
+        /// What the game still does after the CombatOver phase change of rules/cast-combat-end-retaliation-ui (TST-046). The
+        /// trace closes at the harness decision, so this watcher, started by the wizard's first step, chains the trace's
+        /// PhaseChanged, CastStage and SpellCast hooks and the CombatLog hook and listens to the console for the action-menu
+        /// flow markers (GameManager.LogMenuFlow: "[GameManager][MenuFlow] ...", Debug.Log lines the harness's fast mode
+        /// filters out, so the watch lowers the console filter to Log and proves it with a probe line; no probe makes the
+        /// expectation Inconclusive), recording everything that follows the CombatOver change. The scenario's last
+        /// expectation stops it (Finalize, before the job's cleanup) and puts the previous hooks and the filter back; the
+        /// scenario's OnSetup and a new start stop a watcher an aborted job left behind, and its console listener drops
+        /// itself once another trace owns the hooks.
+        /// </summary>
+        private sealed class AfterCombatEndWatch
+        {
+            private const string MenuFlowTag = "[GameManager][MenuFlow]";
+            private const string ProbeTag = "[Scenario][AfterCombatEndWatch] console probe";
+            private static AfterCombatEndWatch _current;
+
+            public readonly List<string> Stages = new List<string>();
+            public readonly List<string> Casts = new List<string>();
+            public readonly List<string> Logs = new List<string>();
+            /// <summary>Every combat log line from the start of the watch, before and after the combat end.</summary>
+            public readonly List<string> AllLogs = new List<string>();
+            public readonly List<string> MenuFlow = new List<string>();
+            public bool SawCombatOver;
+            /// <summary>The console listener received the probe line Start logs, so Debug.Log lines reach it.</summary>
+            public bool ProbeSeen;
+
+            private Action<GameManager.TurnPhase, GameManager.TurnPhase> _prevPhase, _phase;
+            private Action<CharacterController, SpellData, string, string> _prevStage, _stage;
+            private Action<CharacterController, CharacterController, SpellData> _prevCast, _cast;
+            private Action<string> _prevLog, _log;
+            private UnityEngine.Application.LogCallback _console;
+            private UnityEngine.LogType _prevFilter;
+
+            /// <summary>
+            /// The lost cast winding down after the AoO dropped its caster: the provocation's outcome (aoo-lost), the lost
+            /// cast's concentration step and the exit's combat-end mark. Any other stage means the cast went on.
+            /// </summary>
+            public static bool IsWindDown(string stage)
+                => stage == CastStageTrace.Provocation + ":aoo-lost"
+                   || stage.StartsWith(CastStageTrace.ConcentrationOnCast + ":", StringComparison.Ordinal)
+                   || stage.StartsWith(CastStageTrace.CombatEnd + ":", StringComparison.Ordinal);
+
+            public static void Start()
+            {
+                Stop();
+                var w = new AfterCombatEndWatch();
+                w._prevPhase = ScenarioHooks.PhaseChanged;
+                w._prevStage = ScenarioHooks.CastStage;
+                w._prevCast = ScenarioHooks.SpellCast;
+                w._prevLog = ScenarioHooks.CombatLog;
+                w._phase = ScenarioHooks.Safe<GameManager.TurnPhase, GameManager.TurnPhase>("after-combat-end-watch.phase", (from, to) =>
+                {
+                    w._prevPhase?.Invoke(from, to);
+                    if (to == GameManager.TurnPhase.CombatOver)
+                        w.SawCombatOver = true;
+                });
+                w._stage = ScenarioHooks.Safe<CharacterController, SpellData, string, string>("after-combat-end-watch.stage", (c, s, stage, detail) =>
+                {
+                    w._prevStage?.Invoke(c, s, stage, detail);
+                    if (w.SawCombatOver)
+                        w.Stages.Add(stage + ":" + detail);
+                });
+                w._cast = ScenarioHooks.Safe<CharacterController, CharacterController, SpellData>("after-combat-end-watch.cast", (c, t, s) =>
+                {
+                    w._prevCast?.Invoke(c, t, s);
+                    if (w.SawCombatOver)
+                        w.Casts.Add(s != null ? s.SpellId : "?");
+                });
+                w._log = ScenarioHooks.Safe<string>("after-combat-end-watch.log", text =>
+                {
+                    w._prevLog?.Invoke(text);
+                    w.AllLogs.Add(text);
+                    if (w.SawCombatOver)
+                        w.Logs.Add(text);
+                });
+                w._console = (condition, stackTrace, type) =>
+                {
+                    // A watcher a failed Finalize left behind: the next job's trace replaced the hooks, so drop the listener.
+                    if (ScenarioHooks.PhaseChanged != w._phase)
+                    {
+                        UnityEngine.Application.logMessageReceived -= w._console;
+                        return;
+                    }
+                    if (condition == null)
+                        return;
+                    if (condition.StartsWith(ProbeTag, StringComparison.Ordinal))
+                        w.ProbeSeen = true;
+                    else if (w.SawCombatOver && condition.StartsWith(MenuFlowTag, StringComparison.Ordinal))
+                    {
+                        int nl = condition.IndexOf('\n');
+                        w.MenuFlow.Add(nl > 0 ? condition.Substring(0, nl) : condition);
+                    }
+                };
+                ScenarioHooks.PhaseChanged = w._phase;
+                ScenarioHooks.CastStage = w._stage;
+                ScenarioHooks.SpellCast = w._cast;
+                ScenarioHooks.CombatLog = w._log;
+                // GameManager.LogMenuFlow writes with Debug.Log, which the harness's fast mode filters out
+                // (filterLogType = Warning) before any listener sees it: let Log lines through while watching, and prove it.
+                w._prevFilter = UnityEngine.Debug.unityLogger.filterLogType;
+                UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Log;
+                UnityEngine.Application.logMessageReceived += w._console;
+                _current = w;
+                UnityEngine.Debug.Log(ProbeTag);
+            }
+
+            /// <summary>
+            /// Stops the running watcher, puts back each hook it still holds and the console filter it set, and returns it
+            /// (null when none ran). The scenario's OnSetup calls it too, before the job's fast mode is applied, so a watcher
+            /// a failed Finalize left behind never runs into the next seed.
+            /// </summary>
+            public static AfterCombatEndWatch Stop()
+            {
+                AfterCombatEndWatch w = _current;
+                _current = null;
+                if (w == null)
+                    return null;
+                UnityEngine.Application.logMessageReceived -= w._console;
+                UnityEngine.Debug.unityLogger.filterLogType = w._prevFilter;
+                if (ScenarioHooks.PhaseChanged == w._phase) ScenarioHooks.PhaseChanged = w._prevPhase;
+                if (ScenarioHooks.CastStage == w._stage) ScenarioHooks.CastStage = w._prevStage;
+                if (ScenarioHooks.SpellCast == w._cast) ScenarioHooks.SpellCast = w._prevCast;
+                if (ScenarioHooks.CombatLog == w._log) ScenarioHooks.CombatLog = w._prevLog;
+                return w;
+            }
         }
 
         /// <summary>
@@ -3533,11 +3698,14 @@ namespace Tests.Scenarios
             var quicken = new MetamagicData();
             quicken.Toggle(MetamagicFeatId.QuickenSpell);
             const string refusedLog = "already cast a quickened spell this round";
+            const string uiName = "Quicken Ui Wizard", scriptedName = "Quicken Scripted Wizard";
+            // The refusal line names its caster: "<name> has already cast a quickened spell this round ...".
+            bool RefusalOf(TraceEvent e, string casterName) => (e.Str("text") ?? "").Contains(casterName + " has " + refusedLog);
             return Rules("rules/quicken-once-per-round", "One quickened spell per round, Feather Fall included, for a Ui and a Scripted caster (PHB p.98, p.229)")
                 .Covers("PHB p.98", "PHB p.229", "SPL-143", "batch 11 step 12")
                 .MaxRounds(2)
-                .Pc("ui", ActorSource.Stats(() => Wizard("Quicken Ui Wizard", 9, "Quicken Spell")), 3, 10, Control.Ui)
-                .Pc("scripted", ActorSource.Stats(() => Wizard("Quicken Scripted Wizard", 3)), 5, 10, Control.Scripted)
+                .Pc("ui", ActorSource.Stats(() => Wizard(uiName, 9, "Quicken Spell")), 3, 10, Control.Ui)
+                .Pc("scripted", ActorSource.Stats(() => Wizard(scriptedName, 3)), 5, 10, Control.Scripted)
                 .Npc("gob", "goblin", 14, 10, Control.Idle)
                 .Tweak("ui", c => { AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE, quicken); AddWizardSlot(c, 5, SpellNames.MAGIC_MISSILE, quicken); Prepare(c, 1, SpellNames.FEATHER_FALL); })
                 .Tweak("scripted", c => Prepare(c, 1, SpellNames.FEATHER_FALL, 2))
@@ -3575,7 +3743,11 @@ namespace Tests.Scenarios
                     Step.Assert("after", ctx => { FactSlotsSpent(ctx, "sc2.spent", "scripted"); return true; }))
                 .Expect("Round 1, Ui: one quickened Magic Missile spends one 5th-level slot and no action; the second quickened spell and Feather Fall spend nothing (PHB p.98, p.229)",
                     FactsAre(("ui1.spent", "L5+1"), ("ui1.actions", "smf")))
-                .Expect("Round 1, Ui: the second quickened spell and the Feather Fall are refused with a log line", Expect.Count("log", e => (e.Str("text") ?? "").Contains(refusedLog), 2, 2))
+                .Expect("Round 1, Ui: the second quickened spell and the Feather Fall are refused with a log line",
+                    Expect.Count("log", e => RefusalOf(e, uiName), 2, 2))
+                // Since batch 12 step 9 (CMB-101) an NPC caster's refusal is logged too (TST-044).
+                .Expect("Round 1, Scripted: the second Feather Fall's refusal is logged once",
+                    Expect.Count("log", e => RefusalOf(e, scriptedName), 1, 1))
                 .Expect("Round 1, Scripted: the first Feather Fall is cast as a free action, the second is refused (PHB p.229)", Expect.All(
                     Expect.StepStatus("scripted", 1, "Cast", 0, "done"),
                     Expect.StepStatus("scripted", 1, "Cast", 1, "refused"),

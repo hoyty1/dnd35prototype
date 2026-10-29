@@ -1681,6 +1681,10 @@ namespace Tests.Scenarios
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .Npc("goblin", "goblin", 10, 9, Control.Scripted)
                 .Tweak("orc", SturdyDummyWithoutAoO)
+                // Unarmored for the charge: its 6-square run and the follow of at least 3 squares fit the 12-square charge of
+                // a 30-ft speed; the kit's scale mail makes it 20 ft (PHB p.123; ITM-010), and a bull rush follow may not
+                // exceed the movement limit (PHB p.154), so the orc would stop 2 squares on (TST-045).
+                .Tweak("fighter", c => { if (charge) StripArmor(c); })
                 .Tweak("goblin", c =>
                 {
                     c.Stats.DEX = 16;

@@ -302,13 +302,19 @@ namespace Tests.Scenarios
                 .Turn("cleric", 2, Step.Pass())
                 .Expect("No turned skeleton's turn is skipped, in either round", v =>
                     v.Log("cannot act this turn").Any(e => e.Round == 1 || e.Round == 2) ? ExpectResult.Fail("a turn was skipped") : ExpectResult.Pass("no skip"))
-                .Expect("The free skeleton flees farther than one move action (speed 30 ft, 6 squares) takes it", v =>
+                .Expect("The free skeleton flees farther than one move action (its speed) takes it", v =>
                 {
+                    // The skeleton's speed as the trace recorded its actor (CharacterStats.EffectiveSpeedFeet): its banded
+                    // mail makes it 20 ft, 4 squares (PHB p.123; ITM-010, TST-045).
+                    TraceEvent actor = v.Of("actor").FirstOrDefault(e => e.Str("key") == "skel");
+                    int moveSquares = actor != null ? actor.Int("speed") / 5 : 0;
+                    if (moveSquares <= 0) return ExpectResult.Inconclusive("no speed for skel");
                     Vector2Int? c = Pos(v.Snapshot("cleric", 1, "skel")), s0 = Pos(v.Snapshot("skel", 1, "skel")), s1 = Pos(v.Snapshot("skel", 1, "stuck"));
                     if (c == null || s0 == null || s1 == null) return ExpectResult.Inconclusive("no positions");
                     int before = Dist(s0.Value, c.Value), after = Dist(s1.Value, c.Value);
                     bool logged = v.Log("flees in terror from Cleric|runs from Cleric").Any(e => e.Round == 1);
-                    return after > before + 6 && logged ? ExpectResult.Pass("distance " + before + " -> " + after) : ExpectResult.Fail("distance " + before + " -> " + after + ", flee log " + logged);
+                    string detail = "distance " + before + " -> " + after + " (one move action " + moveSquares + " squares)";
+                    return after > before + moveSquares && logged ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail + ", flee log " + logged);
                 })
                 .Expect("The skeleton that cannot move cowers in round 1 and acts again (cowers again) in round 2", v =>
                 {

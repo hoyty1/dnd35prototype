@@ -11,7 +11,9 @@ namespace Tests.Scenarios
     /// (AIProfile.DefaultBardicMusicChoice). The bards are Human bards built from stats (CHA 18, Perform at the class-skill
     /// maximum, level + 3); the foes are target dummies (bestiary entry target_dummy, "Arcane Target Dummy", 50 base HP, AC 6, Int 1;
     /// checked 2026-10-15). Fascinate's Will DC is the bard's Perform check, so the fascinate scenarios give the bard a +20
-    /// bonus on Perform checks (a test fixture, Tweak) to make the dummies' saves fail whatever the seed.
+    /// bonus on Perform checks (a test fixture, Tweak) to make the dummies' saves fail. A natural 20 still saves (PHB
+    /// p.177; batch 12 step 10, D13), so rules/bard-fascinate-scripted and rules/bard-fascinate-ai also force every save
+    /// d20 to 2 by its dice context (SaveRollRules.SaveDiceTag; TST-043).
     /// </summary>
     public static class BardScenarios
     {
@@ -142,6 +144,8 @@ namespace Tests.Scenarios
                 .Tweak("bard", LoudBard)
                 .Tweak("dummyA", Sturdy)
                 .Tweak("dummyB", Sturdy)
+                // A natural 20 always saves (PHB p.177), so no Perform bonus fails every seed's save: force the save d20s (TST-043).
+                .Force(20, 2, SaveRollRules.SaveDiceTag, -1)
                 // Unarmored, so its two 30-ft moves reach dummyA (the kit's scale mail would make them 20 ft, PHB p.123; ITM-010).
                 .Tweak("fighter", RulesScenarios.StripArmor)
                 .Initiative("bard", "fighter", "dummyA", "dummyB")
@@ -181,6 +185,8 @@ namespace Tests.Scenarios
                 .Tweak("bard", LoudBard)
                 .Tweak("dummyA", Sturdy)
                 .Tweak("dummyB", Sturdy)
+                // A natural 20 always saves (PHB p.177), so no Perform bonus fails every seed's save: force the save d20s (TST-043).
+                .Force(20, 2, SaveRollRules.SaveDiceTag, -1)
                 .Initiative("bard", "fighter", "dummyA", "dummyB")
                 .Turn("fighter", 1, Step.Assert("the AI bard fascinated both dummies", ctx =>
                     ctx.Get("dummyA").HasCondition(CombatConditionType.Fascinated) && ctx.Get("dummyB").HasCondition(CombatConditionType.Fascinated)
