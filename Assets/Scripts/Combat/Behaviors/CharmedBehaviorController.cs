@@ -142,7 +142,9 @@ public sealed class CharmedBehaviorController
             yield return new WaitForSeconds(0.35f);
         }
 
-        if (actor.IsTargetInCurrentWeaponRange(hostileToCaster) && actor.Actions.HasStandardAction)
+        // Only an attack the AI attack guard allows (batch 13 step 5, D1: reach, range, ammunition; C1: melee reach for a
+        // throwable weapon, as before step 5).
+        if (actor.Actions.HasStandardAction && AiAttackGuard.Passes(actor, hostileToCaster, allowThrow: false))
             yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, hostileToCaster));
     }
 

@@ -17,6 +17,9 @@ namespace Tests.Combat
 ///   ward only when it is hostile, whatever the teams; Hide from Undead binds undead only, a mindless undead never sees
 ///   through it, an intelligent undead's one save is rolled at its perception step or first attack, a failure leaves the
 ///   creature unseen (total concealment) without losing an attack, and a success does not end the spell (PHB p.274, p.241).
+/// - the AI attack guard, AiAttackGuard (batch 13 step 5, decision D1): reach and a reach weapon's dead zone (PHB p.112,
+///   p.137), five increments thrown (PHB p.134), ammunition (PHB p.113), a loaded or reloadable crossbow (PHB p.114), a
+///   ward save still to roll allowed with its risk, the sphere refused with the Ward bar.
 /// Dice are forced through ScenarioHooks.RollFilter. Play mode only: CharacterController.Init needs Awake (TST-009).
 /// </summary>
 public static class AttackLegalityTests
@@ -50,6 +53,11 @@ public static class AttackLegalityTests
             Run(TestSanctuaryPredictAndCommit);
             Run(TestSanctuarySpellOnlyAgainstOpponents);
             Run(TestHideFromUndead);
+            Run(TestAiGuardReachAndDeadZone);
+            Run(TestAiGuardRangeIncrements);
+            Run(TestAiGuardAmmunition);
+            Run(TestAiGuardCrossbowLoad);
+            Run(TestAiGuardWardAndSphere);
         }
         finally
         {
@@ -156,6 +164,146 @@ public static class AttackLegalityTests
             target.Stats.ActiveHideFromUndeadEffect = effect;
         }
         return effect;
+    }
+
+    // ── The AI attack guard (batch 13 step 5, D1) ───────────────────────
+
+    private static void TestAiGuardReachAndDeadZone()
+    {
+        var a = Create("AL_GuardA", new Vector2Int(5, 5), CharacterTeam.Player);
+        var near = Create("AL_GuardNear", new Vector2Int(6, 5), CharacterTeam.Enemy);
+        var far = Create("AL_GuardFar", new Vector2Int(7, 5), CharacterTeam.Enemy);
+        var farther = Create("AL_GuardFarther", new Vector2Int(9, 5), CharacterTeam.Enemy);
+#pragma warning disable CS0618 // the longsword's and longspear's string ids
+        Equip(a, ItemDatabase.CloneItem(ItemIDs.LONGSWORD));
+        Legality sword = AiAttackGuard.Check(a, far);
+        Assert(AiAttackGuard.Check(a, near).Ok && !sword.Ok && sword.Bar == LegalityBar.Reach,
+            "Guard: a longsword hits an adjacent foe, not one 10 ft away (Bar Reach; PHB p.137)");
+        Equip(a, ItemDatabase.CloneItem(ItemIDs.LONGSPEAR));
+#pragma warning restore CS0618
+        Legality deadZone = AiAttackGuard.Check(a, near);
+        Assert(!deadZone.Ok && deadZone.Bar == LegalityBar.Reach && AiAttackGuard.Check(a, far).Ok && !AiAttackGuard.Check(a, farther).Ok,
+            "Guard: a longspear hits at 10 ft only, not an adjacent foe (its dead zone) nor one 20 ft away (PHB p.112, p.137)");
+        Assert(AiOutOfReach.ApproachRangeSquares(a) == 2, "Out-of-reach approach: a longspear wielder closes to its reach of 10 ft, outside its dead zone");
+    }
+
+    private static void TestAiGuardRangeIncrements()
+    {
+        var a = Create("AL_RangeA", new Vector2Int(0, 5), CharacterTeam.Player);
+        var at10 = Create("AL_Range10", new Vector2Int(10, 5), CharacterTeam.Enemy);
+        var at11 = Create("AL_Range11", new Vector2Int(11, 5), CharacterTeam.Enemy);
+        Equip(a, ItemDatabase.CloneItem(ItemID.WeaponDagger));
+        // A thrown dagger: range increment 10 ft, five increments (PHB p.134): 50 ft, 10 squares.
+        Assert(AiAttackGuard.Check(a, at10).Ok && AttackIntent.ForAI(null, a, at10).Mode == AttackMode.Thrown,
+            "Guard: the AI throws a dagger at 50 ft, its fifth increment (PHB p.134; AttackIntent.ChooseAiMode)");
+        Legality beyond = AiAttackGuard.Check(a, at11);
+        Assert(!beyond.Ok && beyond.Bar == LegalityBar.Reach,
+            "Guard: a target 55 ft away is beyond five increments and out of the dagger's reach");
+        Legality meleeOnly = AiAttackGuard.Check(a, at10, allowThrow: false);
+        Assert(!meleeOnly.Ok && meleeOnly.Bar == LegalityBar.Reach,
+            "Guard without throws (the melee routines, C1): the dagger reaches only adjacent foes, so no far target is picked to throw at");
+
+        // A swarm attacks only creatures in its own squares (MM p.316): the guard's melee probe and the attack sequence's
+        // stage-3 reach test (GameManager.IsTargetInStepRange) agree on an adjacent foe.
+        var swarm = Create("AL_Swarm", new Vector2Int(0, 8), CharacterTeam.Player);
+        var swarmFoe = Create("AL_SwarmFoe", new Vector2Int(1, 8), CharacterTeam.Enemy);
+        swarm.Stats.IsSwarm = true;
+        AttackIntent swarmProbe = AttackIntent.ForMode(AttackMode.Melee, swarm.GetEquippedMainWeapon());
+        Assert(!AiAttackGuard.CheckTarget(swarm, swarmFoe, swarmProbe).Ok && !GameManager.IsTargetInStepRange(swarm, swarmFoe, swarmProbe),
+            "Guard: a swarm does not attack an adjacent foe outside its squares, the same answer as the sequence's reach test (MM p.316)");
+    }
+
+    private static void TestAiGuardAmmunition()
+    {
+        var archer = Create("AL_AmmoArcher", new Vector2Int(5, 5), CharacterTeam.Player);
+        var foe = Create("AL_AmmoFoe", new Vector2Int(10, 5), CharacterTeam.Enemy);
+        Equip(archer, ItemDatabase.CloneItem(ItemID.WeaponLongbow));
+        global::Inventory inv = archer.GetComponent<InventoryComponent>().CharacterInventory;
+        RemoveAmmo(inv, AmmunitionType.Arrow);
+        Legality empty = AiAttackGuard.Check(archer, foe);
+        Assert(!empty.Ok && empty.Bar == LegalityBar.Ammunition,
+            "Guard: a longbow with no arrows declares no shot (Bar Ammunition; PHB p.113, AI-073)");
+        Assert(!DND35.AI.AIProfile.HasUsableRangedWeapon(archer), "AIProfile.HasUsableRangedWeapon: a longbow without arrows is no usable ranged weapon (C1)");
+        ItemData arrows = ItemDatabase.CloneItem(ItemID.AmmoArrow);
+        arrows.Quantity = 5;
+        inv.AddItem(arrows);
+        inv.RecalculateStats();
+        Assert(AiAttackGuard.Check(archer, foe).Ok && DND35.AI.AIProfile.HasUsableRangedWeapon(archer),
+            "Guard: with arrows the same shot is allowed, and the longbow is a usable ranged weapon");
+    }
+
+    private static void TestAiGuardCrossbowLoad()
+    {
+        var xbow = Create("AL_Xbow", new Vector2Int(5, 5), CharacterTeam.Player);
+        var foe = Create("AL_XbowFoe", new Vector2Int(10, 5), CharacterTeam.Enemy);
+        Equip(xbow, ItemDatabase.CloneItem(ItemID.WeaponCrossbowLight));
+        global::Inventory inv = xbow.GetComponent<InventoryComponent>().CharacterInventory;
+#pragma warning disable CS0618 // the bolts' string id
+        ItemData bolts = ItemDatabase.CloneItem(ItemIDs.AMMO_BOLT);
+#pragma warning restore CS0618
+        if (bolts != null)
+        {
+            bolts.Quantity = 5;
+            inv.AddItem(bolts);
+            inv.RecalculateStats();
+        }
+        ItemData held = xbow.GetEquippedMainWeapon();
+        Assert(held != null && held.RequiresReload && AiAttackGuard.Check(xbow, foe).Ok, "Guard: a loaded light crossbow with bolts may shoot (fixture check)");
+        if (held == null)
+            return;
+        held.IsLoaded = false;
+        Assert(AiAttackGuard.Check(xbow, foe).Ok, "Guard: unloaded, with the move action left to reload it, the shot can still follow (PHB p.114)");
+        xbow.Actions.UseMoveAction();
+        Legality late = AiAttackGuard.Check(xbow, foe);
+        Assert(!late.Ok && late.Bar == LegalityBar.Ammunition, "Guard: unloaded with no move action left, no shot this turn (Bar Ammunition)");
+        Assert(AiAttackGuard.CheckWeapon(xbow, null, anyReload: true).Ok,
+            "Guard with anyReload (the NPC attack prelude): the standard action converted to a move still reloads, so the prelude reloads");
+
+        // No bolt, no reload (PHB p.113-114): the shared reload rule the PC's Reload button and the AI's reload call.
+        RemoveAmmo(inv, AmmunitionType.Bolt);
+        xbow.StartNewTurn();
+        Legality noBolts = AiAttackGuard.Check(xbow, foe);
+        Assert(!noBolts.Ok && noBolts.Bar == LegalityBar.Ammunition, "Guard: an unloaded crossbow without bolts declares no shot (Bar Ammunition)");
+        if (GameManager.Instance != null)
+            Assert(!GameManager.Instance.CanReloadEquippedWeapon(xbow, out _, out _),
+                "Reload: an unloaded crossbow cannot be reloaded without a bolt (GameManager.CanReloadEquippedWeapon; PHB p.113-114)");
+        held.IsLoaded = true;
+    }
+
+    private static void TestAiGuardWardAndSphere()
+    {
+        var a = Create("AL_GWardA", new Vector2Int(5, 5), CharacterTeam.Player);
+        var warded = Create("AL_GWarded", new Vector2Int(6, 5), CharacterTeam.Enemy);
+#pragma warning disable CS0618 // the longsword's string id
+        Equip(a, ItemDatabase.CloneItem(ItemIDs.LONGSWORD));
+#pragma warning restore CS0618
+        Ward(warded, SpellNames.SANCTUARY, 30);
+        Legality unrolled = AiAttackGuard.Check(a, warded);
+        Assert(unrolled.Ok && unrolled.Risk == LegalityRisk.WardSaveUnrolled,
+            "Guard: a Sanctuary save still to roll is allowed, with its risk (D1: the save may succeed)");
+        warded.Stats.SanctuaryActive = false;
+        warded.Stats.ActiveSanctuaryEffect = null;
+
+        ResilientSphereAreaEffect sphere = Sphere(warded.GridPosition);
+        try
+        {
+            Legality blocked = AiAttackGuard.Check(a, warded);
+            Assert(!blocked.Ok && blocked.Bar == LegalityBar.Ward, "Guard: a Resilient Sphere refuses the attack with the Ward bar (PHB p.258)");
+        }
+        finally
+        {
+            RemoveSphere(sphere);
+        }
+    }
+
+    private static void RemoveAmmo(global::Inventory inv, AmmunitionType type)
+    {
+        if (inv == null || inv.GeneralSlots == null)
+            return;
+        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+            if (inv.GeneralSlots[i] != null && inv.GeneralSlots[i].IsAmmunition && inv.GeneralSlots[i].AmmoType == type)
+                inv.GeneralSlots[i] = null;
+        inv.RecalculateStats();
     }
 
     // ── The sphere ─────────────────────────────────────────────────────

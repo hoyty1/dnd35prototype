@@ -214,7 +214,11 @@ public static class AttackLegality
                 if (mode == AttackMode.Thrown)
                     ok = attacker.IsTargetInThrownWeaponRange(target, intent.Weapon);
                 else if (mode == AttackMode.Melee)
-                    ok = attacker.CanMeleeAttackDistance(distance, intent.Weapon);
+                    // A swarm attacks only creatures in its own squares (MM p.316): the weapon-range rule the sequence's
+                    // stage 3 applies (IsTargetInCurrentWeaponRange), so the AI guard and the executor agree.
+                    ok = attacker.Stats.IsSwarm
+                        ? attacker.IsTargetInCurrentWeaponRange(target)
+                        : attacker.CanMeleeAttackDistance(distance, intent.Weapon);
                 else
                     ok = attacker.IsTargetInCurrentWeaponRange(target);
                 break;

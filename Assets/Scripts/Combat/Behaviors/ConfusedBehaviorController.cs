@@ -82,18 +82,30 @@ public sealed class ConfusedBehaviorController
                 yield break;
 
             case ConfusedTurnMode.AttackCasterOrSelf:
-                if (decision.PreferredTarget != null
+            {
+                bool casterThere = decision.PreferredTarget != null
                     && decision.PreferredTarget.Stats != null
-                    && !decision.PreferredTarget.Stats.IsDead
-                    && actor.IsTargetInCurrentWeaponRange(decision.PreferredTarget))
+                    && !decision.PreferredTarget.Stats.IsDead;
+                // The AI attack guard (batch 13 step 5, D1), melee reach for a throwable weapon (C1).
+                Legality onCaster = casterThere
+                    ? AiAttackGuard.Check(actor, decision.PreferredTarget, allowThrow: false)
+                    : Legality.Refused(LegalityBar.Reach, "no confusion source");
+                if (onCaster.Ok)
                 {
                     gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} lashes out at the confusion source ({casterName})!"));
                     yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, decision.PreferredTarget));
                     yield break;
                 }
 
-                yield return ResolveSelfAttack(actor, gameManager, $"🌀 {actorName} cannot reach {casterName} and attacks itself in confusion!");
+                // The self-attack (AI-043, not RAW: PHB p.212 has the creature close with the caster) keeps its old trigger,
+                // the caster out of reach or range; another refusal (a Resilient Sphere, a known failed ward save, no
+                // ammunition) is no attack at all.
+                if (onCaster.Bar == LegalityBar.Reach || onCaster.Bar == LegalityBar.Range)
+                    yield return ResolveSelfAttack(actor, gameManager, $"🌀 {actorName} cannot reach {casterName} and attacks itself in confusion!");
+                else
+                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} lashes out at {casterName} but cannot attack: {onCaster.Reason}."));
                 yield break;
+            }
 
             case ConfusedTurnMode.FleeFromCaster:
                 {
@@ -144,7 +156,7 @@ public sealed class ConfusedBehaviorController
                         }
                     }
 
-                    if (actor.IsTargetInCurrentWeaponRange(target))
+                    if (AiAttackGuard.Passes(actor, target, allowThrow: false)) // the AI attack guard (batch 13 step 5, D1; C1: melee reach)
                     {
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} attacks the nearest creature ({target.Stats.CharacterName})!"));
                         yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, target));

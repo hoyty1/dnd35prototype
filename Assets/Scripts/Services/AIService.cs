@@ -796,8 +796,10 @@ public class AIService : MonoBehaviour
         }
 
         // Moving needs the move action (AI-034): after a search move the NPC does not move again.
+        bool triedApproach = false;
         if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
         {
+            triedApproach = true;
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)
             {
@@ -836,11 +838,15 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        target = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+        // The attack target is chosen among the targets the attack guard allows (batch 13 step 5, D1): another foe in reach
+        // when the one it closed on is out of reach; without one, the routine's other options, then the profile's (C1).
+        List<CharacterController> attackPool = _gameManager.GetAllCharactersForAI();
+        CharacterController attackTarget = SelectGuardPassingTarget(npc, attackPool, allowThrow: false);
+        target = attackTarget ?? SelectBestTarget(npc, attackPool);
         if (target == null)
             yield break;
 
-        if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
+        if (attackTarget != null && !target.Stats.IsDead)
         {
             // ── Try Engulf attack if adjacent and available ──
             if (npc.HasEngulf && SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition) == 1)
@@ -886,6 +892,11 @@ public class AIService : MonoBehaviour
             // If the NPC cannot reach the target but is adjacent to a Wall of Ice,
             // try to attack or break through the wall to clear the path.
             yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
+
+            // A routine that did not try to close in (it thought the target in reach, or had no move): the profile's
+            // alternatives (C1).
+            if (!triedApproach && !CombatEnded() && npc.CanTakeTurnActions())
+                yield return _gameManager.StartCoroutine(RunOutOfReachAlternatives(npc, target, CombatStyle.Melee, allowThrow: false));
         }
     }
 
@@ -940,7 +951,7 @@ public class AIService : MonoBehaviour
             {
                 CharacterController foe = all[i];
                 canAttackNow = foe != null && foe != npc && foe.Stats != null && !foe.IsDead && _gameManager.IsEnemyTeamForAI(npc, foe)
-                    && npc.IsTargetInCurrentWeaponRange(foe); // reach, footprint and range, as the attack branches test
+                    && AiAttackGuard.Passes(npc, foe, allowThrow: false); // the attack guard the attack branches ask (D1): reach, range, ammunition
             }
         }
         bool holdsSummon = _gameManager.HasConcentrationSummonForAI(npc);
@@ -1182,13 +1193,15 @@ public class AIService : MonoBehaviour
         if (!npc.CanTakeTurnActions())
             yield break;
 
-        // Re-evaluate target after movement (priority 4: profile ScoreTarget already weights healers/mages)
-        target = SelectBestTarget(npc, allCombatants);
+        // Re-evaluate target after movement (priority 4: profile ScoreTarget already weights healers/mages), among the
+        // targets the attack guard allows (batch 13 step 5, D1).
+        CharacterController attackTarget = SelectGuardPassingTarget(npc, allCombatants, allowThrow: false);
+        target = attackTarget ?? SelectBestTarget(npc, allCombatants);
         if (target == null)
             yield break;
 
         // ── Priority 6: Full melee attack ──
-        if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
+        if (attackTarget != null && !target.Stats.IsDead)
         {
             // Each melee attack step may be replaced by a maneuver (CMB-102).
             yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, dragonProfile));
@@ -1228,13 +1241,16 @@ public class AIService : MonoBehaviour
         {
             // The turn-start check (PerceptionRules.ProcessTurnStart) made this turn's one Listen check; read its result
             // (DMG p.295: one check per round; AI-007).
+            // The blind attack is declared only when the attack guard allows it (D1: reach, range, ammunition); otherwise the
+            // routine searches by moving, below.
             Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
-            if (tracker.IsPinpointedThisRound(closestPC))
+            bool blindAttackAllowed = AiAttackGuard.Passes(npc, closestPC);
+            if (blindAttackAllowed && tracker.IsPinpointedThisRound(closestPC))
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position."));
-            else if (lastKnown.HasValue)
+            else if (blindAttackAllowed && lastKnown.HasValue)
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position."));
 
-            if (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue)
+            if (blindAttackAllowed && (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue))
             {
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
                 yield return new WaitForSeconds(0.45f);
@@ -1267,7 +1283,9 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        bool avoidAoORisk = npc.IsEquippedWeaponRanged();
+        // A ranged weapon that cannot shoot (no ammunition, a crossbow it cannot reload in time; the attack guard, D1) fires
+        // nothing that could provoke, so no tactical step for it (AI-039, AI-073).
+        bool avoidAoORisk = npc.IsEquippedWeaponRanged() && AiAttackGuard.CheckWeapon(npc, null).Ok;
         bool riskIsTooHigh = false;
         bool tookTacticalStep = false;
 
@@ -1299,6 +1317,15 @@ public class AIService : MonoBehaviour
         bool canMoveNow = npc.Actions.HasMoveAction && MovementService.CanStartMovement(npc, MoveKind.Move).Ok;
         bool shouldRetreatForDistance = distToClosestPC <= 2 && canMoveNow && !tookTacticalStep;
         bool shouldRetreatForRisk = avoidAoORisk && riskIsTooHigh && canMoveNow && !tookTacticalStep;
+        // AI-039 (batch 13 step 5): a kiter backs off only when it can still fight from range: a ranged attack the guard
+        // allows on some enemy (a bow with arrows, a thrown weapon), or a castable spell with range beyond touch. Without
+        // either it stays and fights with what it has (the attack phase below, or its profile's alternatives).
+        if ((shouldRetreatForDistance || shouldRetreatForRisk) && !CanFightFromRange(npc, closestPC, allCombatants))
+        {
+            Debug.Log($"[AI][Kiter] {npc.Stats.CharacterName} does not retreat: no ranged attack or ranged spell it can use (AI-039)");
+            shouldRetreatForDistance = false;
+            shouldRetreatForRisk = false;
+        }
 
         if (shouldRetreatForDistance || shouldRetreatForRisk)
         {
@@ -1339,7 +1366,8 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        CharacterController rangedTarget = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+        List<CharacterController> attackPool = _gameManager.GetAllCharactersForAI();
+        CharacterController rangedTarget = SelectBestTarget(npc, attackPool);
         if (rangedTarget == null)
             yield break;
 
@@ -1349,18 +1377,16 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        int maxRange = GetMaximumAttackRangeInSquares(npc);
-        int preferredSpellRange = GetBestAvailableSpellRangeInSquares(npc, rangedTarget);
-        if (preferredSpellRange > maxRange)
-            maxRange = preferredSpellRange;
-
-        int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
-
-        if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
+        // The weapon attack goes only to a target the attack guard allows (batch 13 step 5, D1; AI-075): the reach or range
+        // of the weapon in hand, its ammunition and load. A spell's range no longer widens the weapon's (the AI-075 cause:
+        // GetBestAvailableSpellRangeInSquares let a staff "reach" the spell's range, and the attack then stopped with
+        // "target is out of reach" while a foe stood next to the caster).
+        CharacterController attackTarget = SelectGuardPassingTarget(npc, attackPool);
+        if (attackTarget != null)
         {
-            bool usedSpecial = ShouldUseManeuver(npc, rangedTarget) && TryExecutePreferredManeuver(npc, rangedTarget, profile);
+            bool usedSpecial = ShouldUseManeuver(npc, attackTarget) && TryExecutePreferredManeuver(npc, attackTarget, profile);
             if (!usedSpecial)
-                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, rangedTarget));
+                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, attackTarget));
             else
             {
                 // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
@@ -1368,29 +1394,44 @@ public class AIService : MonoBehaviour
                     yield return null;
                 yield return new WaitForSeconds(0.8f);
             }
+            yield break;
         }
-        else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction && MovementService.CanStartMovement(npc, MoveKind.Move).Ok)
-        {
-            // Not after its tactical 5-foot step (PHB p.144; GRID-019): the shared legality above.
-            SquareCell approachCell = EvaluateMovementOptions(npc, rangedTarget.GridPosition, retreat: false, profile: profile);
-            if (approachCell != null)
-            {
-                var approachMove = new MoveAttempt();
-                yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, approachCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), approachMove));
-                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
-                if (!npc.CanTakeTurnActions() || approachMove.Refused)
-                    yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                npc.Actions.UseMoveAction();
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} moves to get a better shot."));
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
+
+        // No target in reach or range: the profile's alternatives (C1) through the catalog: another target, the preferred
+        // range or an approach (then the attack with the standard action left, AI-045), or total defense.
+        yield return _gameManager.StartCoroutine(RunOutOfReachAlternatives(npc, rangedTarget, CombatStyle.Ranged, allowThrow: true));
+        yield return new WaitForSeconds(0.3f);
     }
+
+    /// <summary>
+    /// AI-039: whether a kiter can still fight from range after backing off: a ranged attack the attack guard allows on
+    /// some enemy (AiAttackGuard.HasRangedAttackOnAnyEnemy: a bow with arrows, a loaded or reloadable crossbow, a thrown
+    /// weapon), or a castable spell whose range is beyond touch (the AI's spell pick for <paramref name="target"/>).
+    /// </summary>
+    internal bool CanFightFromRange(CharacterController npc, CharacterController target, List<CharacterController> allCombatants)
+    {
+        if (AiAttackGuard.HasRangedAttackOnAnyEnemy(npc, allCombatants))
+            return true;
+        return HasCastableRangedSpell(npc, target);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="npc"/> has any ranged means at all, wherever its foes stand: a ranged weapon in hand that can
+    /// shoot (ammunition, a loaded or reloadable crossbow: AiAttackGuard.CheckWeapon), a throwable melee weapon (PHB
+    /// p.113), or a castable spell with range beyond touch. AiOutOfReach asks it before a move to the preferred range: a
+    /// creature with no ranged means does not back off or walk to a range it cannot use (AI-039, AI-073).
+    /// </summary>
+    internal bool HasRangedMeans(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || npc.Stats == null)
+            return false;
+        if (AIProfile.HasUsableRangedWeapon(npc))
+            return true;
+        return HasCastableRangedSpell(npc, target);
+    }
+
+    private bool HasCastableRangedSpell(CharacterController npc, CharacterController target)
+        => npc.Stats != null && npc.Stats.IsSpellcaster && GetBestAvailableSpellRangeInSquares(npc, target) > 1;
 
     private struct RangedAoORiskAssessment
     {
@@ -1584,8 +1625,10 @@ public class AIService : MonoBehaviour
         }
 
         // Moving needs the move action (AI-034).
+        bool triedApproach = false;
         if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
         {
+            triedApproach = true;
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)
             {
@@ -1618,11 +1661,14 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        target = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+        // The attack target among the targets the attack guard allows (batch 13 step 5, D1).
+        List<CharacterController> attackPool = _gameManager.GetAllCharactersForAI();
+        CharacterController attackTarget = SelectGuardPassingTarget(npc, attackPool, allowThrow: false);
+        target = attackTarget ?? SelectBestTarget(npc, attackPool);
         if (target == null)
             yield break;
 
-        if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
+        if (attackTarget != null && !target.Stats.IsDead)
         {
             // Each melee attack step may be replaced by a maneuver (CMB-102).
             yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, profile));
@@ -1631,6 +1677,10 @@ public class AIService : MonoBehaviour
         {
             // ── AI: Wall of Ice interaction (defensive variant) ──
             yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
+
+            // A routine that did not try to close in: the profile's alternatives (C1).
+            if (!triedApproach && !CombatEnded() && npc.CanTakeTurnActions())
+                yield return _gameManager.StartCoroutine(RunOutOfReachAlternatives(npc, target, CombatStyle.Melee, allowThrow: false));
         }
     }
 
@@ -1898,7 +1948,14 @@ public class AIService : MonoBehaviour
         return npc != null ? npc.aiProfile : null;
     }
 
-    public CharacterController SelectBestTarget(CharacterController npc, List<CharacterController> allCombatants)
+    /// <summary>
+    /// The AI's target among the living enemies of <paramref name="npc"/> in <paramref name="allCombatants"/> (visible
+    /// ones first, then pinpointed and tracked ones), scored by its profile. <paramref name="filter"/>, when given, keeps
+    /// only the candidates it accepts (batch 13 step 5, D1: <see cref="SelectGuardPassingTarget"/> passes the attack guard,
+    /// so an attack target is chosen among the targets the creature can reach or hit); it is applied after the
+    /// last-known-position updates, so a filtered call tracks the same targets as an unfiltered one.
+    /// </summary>
+    public CharacterController SelectBestTarget(CharacterController npc, List<CharacterController> allCombatants, Func<CharacterController, bool> filter = null)
     {
         if (npc == null || allCombatants == null)
             return null;
@@ -1938,10 +1995,11 @@ public class AIService : MonoBehaviour
 
             if (CanSeeTarget(npc, candidate))
             {
-                visibleTargets.Add(candidate);
                 tracker.UpdateLastKnownPosition(candidate);
+                if (filter == null || filter(candidate))
+                    visibleTargets.Add(candidate);
             }
-            else if (tracker.HasLastKnownPosition(candidate))
+            else if (tracker.HasLastKnownPosition(candidate) && (filter == null || filter(candidate)))
             {
                 concealedTrackedTargets.Add(candidate);
             }
@@ -1977,6 +2035,29 @@ public class AIService : MonoBehaviour
 
         return null;
     }
+
+    /// <summary>
+    /// The best target <paramref name="npc"/> may declare a weapon attack on now (batch 13 step 5; D1, AI-075): the
+    /// profile's choice (<see cref="SelectBestTarget"/>) among the enemies that pass the attack guard (AiAttackGuard: the
+    /// direct-attack legality with reach and range, ammunition, a loaded or reloadable crossbow), or null when none does.
+    /// With <paramref name="allowThrow"/> false (the melee routines, C1) a throwable melee weapon counts its melee reach
+    /// only (AiAttackGuard.IntentFor), so a melee creature never picks a far foe to throw its weapon at.
+    /// </summary>
+    public CharacterController SelectGuardPassingTarget(CharacterController npc, List<CharacterController> allCombatants = null, bool allowThrow = true)
+    {
+        if (npc == null || _gameManager == null)
+            return null;
+        return SelectBestTarget(npc, allCombatants ?? _gameManager.GetAllCharactersForAI(), c => AiAttackGuard.Passes(npc, c, allowThrow));
+    }
+
+    /// <summary>
+    /// The out-of-reach alternatives of <paramref name="npc"/>'s profile (AIProfile.GetOutOfReachAlternatives, C1) through
+    /// the action catalog (<see cref="AiOutOfReach.Run"/>), when no target passes its attack guard; <paramref name="focus"/>
+    /// is the target the routine chose for its moves; <paramref name="styleWithoutProfile"/> picks the default list for a
+    /// creature without a profile; <paramref name="allowThrow"/> is the routine's guard (false for the melee routines).
+    /// </summary>
+    internal IEnumerator RunOutOfReachAlternatives(CharacterController npc, CharacterController focus, CombatStyle styleWithoutProfile, bool allowThrow, AiOutOfReachOutcome outcome = null)
+        => AiOutOfReach.Run(_gameManager, this, npc, focus, styleWithoutProfile, allowThrow, outcome);
 
     private CharacterController SelectBestTargetFromCandidates(CharacterController npc, List<CharacterController> candidateTargets)
     {
@@ -2425,7 +2506,13 @@ public class AIService : MonoBehaviour
         return score;
     }
 
-    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null)
+    /// <summary>
+    /// The best square within one move of <paramref name="mover"/>: farthest from <paramref name="targetPos"/> on a
+    /// retreat, else closest to the preferred range (the profile's Movement.PreferredRangeSquares, or
+    /// <paramref name="preferredRangeOverride"/>: the approach to the weapon's reach or range, AiOutOfReach), with a bonus
+    /// for threatening and flanking <paramref name="targetCharacter"/> and a penalty for paths that provoke.
+    /// </summary>
+    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null)
     {
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
             return null;
@@ -2440,9 +2527,11 @@ public class AIService : MonoBehaviour
         SquareCell bestCell = null;
         float bestScore = float.NegativeInfinity;
 
-        int preferredRange = profile != null && profile.Movement != null
-            ? Mathf.Max(0, profile.Movement.PreferredRangeSquares)
-            : 1;
+        int preferredRange = preferredRangeOverride.HasValue
+            ? Mathf.Max(0, preferredRangeOverride.Value)
+            : profile != null && profile.Movement != null
+                ? Mathf.Max(0, profile.Movement.PreferredRangeSquares)
+                : 1;
 
         bool avoidAoOs = profile != null
             && profile.Movement != null
@@ -2509,7 +2598,7 @@ public class AIService : MonoBehaviour
         return bestCell;
     }
 
-    private SquareCell EvaluateWithdrawRetreatDestination(CharacterController mover, Vector2Int dangerSource)
+    internal SquareCell EvaluateWithdrawRetreatDestination(CharacterController mover, Vector2Int dangerSource)
     {
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
             return null;
@@ -3901,7 +3990,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             // In reach or range for the step's mode (a throw's thrown range; batch 12 step 17), else the weapon's reach or range.
-            if (requireInRange && !(inRange != null ? inRange(candidate) : attacker.IsTargetInCurrentWeaponRange(candidate)))
+            if (requireInRange && !(inRange != null ? inRange(candidate) : AiAttackGuard.CheckTarget(attacker, candidate, null).Ok))
                 continue;
 
             candidates.Add(candidate);

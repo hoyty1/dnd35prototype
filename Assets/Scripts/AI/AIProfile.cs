@@ -204,6 +204,53 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// True for the casting profiles (SpellcasterAIProfile and its subclasses: Evoker, Abjurer, Healer, Necromancer,
+        /// Lich, Vampire), whose out-of-reach fallback without a usable ranged weapon is total defense (C1).
+        /// </summary>
+        public virtual bool IsCastingProfile => false;
+
+        private static readonly OutOfReachAlternative[] MeleeAlternatives =
+            { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Approach };
+        private static readonly OutOfReachAlternative[] RangedAlternatives =
+            { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.PreferredRange, OutOfReachAlternative.Approach };
+        private static readonly OutOfReachAlternative[] CasterAlternatives =
+            { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.PreferredRange, OutOfReachAlternative.TotalDefense };
+
+        /// <summary>
+        /// AI choice, not a rule (design choice C1, 2026-10-29; game direction the owner may overrule): what
+        /// <paramref name="self"/> does, in order, when no target passes its attack guard (AiAttackGuard, decision D1),
+        /// tried by AiOutOfReach.Run through the action catalog until one is performed. <see cref="DefaultOutOfReachAlternatives"/>.
+        /// </summary>
+        public virtual IReadOnlyList<OutOfReachAlternative> GetOutOfReachAlternatives(CharacterController self)
+            => DefaultOutOfReachAlternatives(self, CombatStyle, IsCastingProfile);
+
+        /// <summary>
+        /// The C1 defaults, also used for creatures without a profile:
+        /// - a casting profile that does not fight in melee and holds no ranged attack it can use (no ranged or throwable
+        ///   weapon, or a projectile weapon without ammunition): attack another target in reach, then the preferred range,
+        ///   then total defense (it does not walk into melee with its staff);
+        /// - Ranged: another target in range, then the preferred range, then approach;
+        /// - Melee and Mixed: another target the guard allows, then approach.
+        /// </summary>
+        public static IReadOnlyList<OutOfReachAlternative> DefaultOutOfReachAlternatives(CharacterController self, CombatStyle style, bool castingProfile)
+        {
+            if (castingProfile && style != CombatStyle.Melee && !HasUsableRangedWeapon(self))
+                return CasterAlternatives;
+            return style == CombatStyle.Ranged ? RangedAlternatives : MeleeAlternatives;
+        }
+
+        /// <summary>A ranged weapon in hand that can shoot now (AiAttackGuard.CheckWeapon), or a throwable melee weapon (PHB p.113).</summary>
+        public static bool HasUsableRangedWeapon(CharacterController self)
+        {
+            if (self == null || self.Stats == null)
+                return false;
+            ItemData weapon = self.GetEquippedMainWeapon();
+            if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
+                return AiAttackGuard.CheckWeapon(self, AttackIntent.ForMode(AttackMode.Ranged, weapon)).Ok;
+            return GameManager.IsThrowableWeapon(weapon, meleeOnly: true);
+        }
+
+        /// <summary>
         /// Optional per-profile weapon fallback hook used at attack time.
         /// Return true if this profile changed weapon state this turn.
         /// </summary>

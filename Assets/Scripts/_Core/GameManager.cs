@@ -7628,6 +7628,16 @@ public partial class GameManager : MonoBehaviour
         }
 
         reloadAction = character.GetEffectiveReloadAction(weapon);
+
+        // Loading a crossbow places a bolt in it (PHB p.113-114): no bolt, no reload. One rule for the PC's Reload button,
+        // the AI's reload and the NPC attack prelude (batch 13 step 5).
+        global::Inventory ammoInventory = character.InventoryComp != null ? character.InventoryComp.CharacterInventory : null;
+        if (weapon.RequiresAmmoType != AmmunitionType.None && ammoInventory != null && !ammoInventory.HasAmmo(weapon.RequiresAmmoType))
+        {
+            reason = $"No {weapon.RequiresAmmoType} ammunition to load";
+            return false;
+        }
+
         switch (reloadAction)
         {
             case ReloadActionType.FreeAction:
@@ -7687,6 +7697,25 @@ public partial class GameManager : MonoBehaviour
 
         string actionLabel = CharacterController.GetReloadActionLabel(reloadAction);
         reloadLog = $"🔄 {character.Stats.CharacterName} reloads {weapon.Name} ({actionLabel} action).";
+        return true;
+    }
+
+    /// <summary>
+    /// The AI's reload of an unloaded crossbow (batch 13 step 5, AiOutOfReach: an unloaded crossbow the attack guard
+    /// refuses, a heavy one whose full-round reload leaves no shot this turn included, is reloaded, as NPCPerformAttack's
+    /// prelude does): the rule of the PC's Reload button (CanReloadEquippedWeapon, ExecuteReload; PHB p.113-114: it needs a
+    /// bolt to load), logged. False when the main weapon needs no reload or cannot be reloaded now, without a bolt
+    /// included (nothing spent). Batch 13 step 12 makes reloading a shared executor (D4).
+    /// </summary>
+    internal bool TryReloadEquippedWeaponForAI(CharacterController npc)
+    {
+        ItemData weapon = npc != null ? npc.GetEquippedMainWeapon() : null;
+        if (weapon == null || !weapon.RequiresReload || weapon.IsLoaded)
+            return false;
+        if (!ExecuteReload(npc, out string reloadLog))
+            return false;
+        CombatUI?.ShowCombatLog(reloadLog);
+        UpdateAllStatsUI();
         return true;
     }
 

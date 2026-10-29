@@ -165,7 +165,9 @@ public partial class GameManager
         if (target == null)
             yield break;
 
-        if (!summon.IsTargetInCurrentWeaponRange(target) || target.Stats.IsDead)
+        // Only a target the attack guard allows (batch 13 step 5, D1: reach, range, ammunition; C1: melee reach for a
+        // throwable weapon, as before step 5).
+        if (target.Stats.IsDead || !AiAttackGuard.Passes(summon, target, allowThrow: false))
             yield break;
 
         // A templated summon's smite is declared by the shared NPC attack sequence below (NPCPerformAttack ->
@@ -569,6 +571,18 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The AI step chooser's target test (batch 13 step 5, D1): the attack guard's (AiAttackGuard.CheckTarget) and the
+    /// attack sequence's stage-3 reach test (IsTargetInStepRange), one predicate with the executor.
+    /// </summary>
+    private static Legality StepTargetLegality(CharacterController npc, CharacterController target, AttackIntent probe)
+    {
+        Legality legality = AiAttackGuard.CheckTarget(npc, target, probe);
+        if (legality.Ok && !IsTargetInStepRange(npc, target, probe))
+            return Legality.Refused(LegalityBar.Reach, "target is out of reach");
+        return legality;
+    }
+
+    /// <summary>
     /// The AI's answer to IAttackDecider.ChooseNextStep (batch 12 step 17; CMB-102): the NPC keeps its target while it is a
     /// valid one (alive, not an unconscious one its profile ignores, in reach or range for the step's mode, attackable:
     /// AttackLegality's sphere, hold bar and known ward failure). Otherwise, with a profile that switches targets mid full
@@ -620,14 +634,17 @@ public partial class GameManager
         AttackIntent probe = intent != null ? intent.CloneForStep() : null;
         if (probe != null)
             probe.Weapon = weapon;
+        // The attack guard's target test (batch 13 step 5, D1; AiAttackGuard.CheckTarget): the shared direct-attack legality
+        // (sphere, hold bar, a known failed ward) with the reach or range of this step's mode, and the executor's own stage-3
+        // reach test (IsTargetInStepRange), so the chooser never keeps or picks a target the sequence then refuses. The
+        // step's ammunition and load are stage 4's (CanShootWithWeapon), which refuses before any cost.
         Legality legality = current != null && current.Stats != null
-            ? AttackLegality.Check(npc, current, DirectAttackKind.Weapon, probe, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
+            ? StepTargetLegality(npc, current, probe)
             : Legality.Refused("target is down");
         bool needsNewTarget = current == null
             || current.Stats == null
             || current.Stats.IsDead
             || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
-            || !IsTargetInStepRange(npc, current, probe)
             || !legality.Ok;
         if (!needsNewTarget)
             return AttackStepChoice.At(current);
@@ -637,13 +654,13 @@ public partial class GameManager
         {
             string why = current == null || current.Stats == null || current.Stats.IsDead
                 ? "target is down"
-                : (!legality.Ok ? legality.Reason : "target is out of reach");
+                : (legality.Bar == LegalityBar.Reach || legality.Bar == LegalityBar.Range ? "target is out of reach" : legality.Reason);
             return AttackStepChoice.StopWith(why);
         }
 
         // A new target in reach or range for this step's mode: a throw looks within thrown range, never only adjacent foes.
         CharacterController inReachTarget = SelectBestAdaptiveFullAttackTarget(npc, profile, requireInRange: true,
-            inRange: candidate => IsTargetInStepRange(npc, candidate, probe));
+            inRange: candidate => StepTargetLegality(npc, candidate, probe).Ok);
         if (inReachTarget != null && inReachTarget != current)
         {
             state.Outcome.TargetSwitches++;
@@ -1046,6 +1063,36 @@ public partial class GameManager
             yield break;
         }
 
+        // The AI attack guard (batch 13 step 5, D1; owner ruling 2026-10-29): no attack is declared on a target out of the
+        // reach or range of the weapon in hand, or with a projectile weapon that has no ammunition (PHB p.112-113, p.134,
+        // p.137). The AI routines choose their targets among those the guard allows (AIService.SelectGuardPassingTarget);
+        // this backstop covers every other caller (the compulsion controllers, the catalog's attack entry, a scripted
+        // step) before anything is spent: no ward break, no frightful presence. A melee attack on a creature it holds with
+        // one body part is left to the sequence, which retargets (MM p.310). An unloaded crossbow that can be reloaded
+        // passes to the reload below. The profile's weapon fallback (a re-equip after a disarm, UndeadMindlessAIProfile) runs
+        // first, so the guard judges the weapon the attack would use.
+        if (npc.aiProfile != null)
+            npc.aiProfile.TryEnsureWeaponFallback(npc);
+        AttackIntent guardIntent = AttackIntent.ForAI(this, npc, target);
+        Legality inReach = AttackLegality.IsInReachOrRange(npc, target, DirectAttackKind.Weapon, guardIntent, out _)
+            ? AiAttackGuard.CheckWeapon(npc, guardIntent, anyReload: true)
+            : Legality.Refused(LegalityBar.Reach, "target is out of reach");
+        if (!inReach.Ok)
+        {
+            ItemData guardWeapon = guardIntent.Weapon;
+            if (inReach.Bar == LegalityBar.Ammunition && guardWeapon != null && _combatFlowService != null
+                && !_combatFlowService.CheckAmmoAvailable(npc, guardWeapon))
+            {
+                // CheckAmmoAvailable logged the shot refused for want of ammunition (PHB p.113).
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} makes no attack: {inReach.Reason}."));
+            }
+            yield return new WaitForSeconds(0.4f);
+            yield break;
+        }
+
         // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks
         CombatFlowService.BreakProtectiveWardsOnAttack(npc);
 
@@ -1055,9 +1102,6 @@ public partial class GameManager
         {
             yield return StartCoroutine(ResolveFrightfulPresence(npc));
         }
-
-        if (npc.aiProfile != null)
-            npc.aiProfile.TryEnsureWeaponFallback(npc);
 
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {

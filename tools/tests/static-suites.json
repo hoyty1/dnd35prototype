@@ -64,7 +64,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 111,
+      "passed": 119,
       "failed": 3,
       "flakyFailures": 0,
       "knownFailures": [
@@ -81,7 +81,7 @@
           "issue": "TST-025"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 18 review (2026-10-28, AI-055 closed): seven checks of the AI attack-mode stopgaps (DefaultShouldUseTwoWeaponFighting: a TWF + ITWF fighter with a light off-hand weapon fights with two, a no-feat one with a one-handed off-hand weapon does not, none once the turn cannot become a full attack; DefaultShouldUseRapidShot: a Rapid Shot archer declares it, no feat no Rapid Shot, one dagger to throw no, a second dagger carried yes); 93 passed (20261029T032102Z-play). Batch 12 step 19 review (2026-10-29): +9, the maneuver stopgaps (DefaultShouldFeint: feints, not a mindless target, not without the move action; DefaultShouldSkipImprovedGrab at and one below the tie; DefaultChooseManeuverItem: the weapon over the shield, the better of two held weapons; DefaultChooseGrappleMoveDestination stays beside its ally and moves toward a farther one); 102 passed. Batch 13 step 2 (2026-10-29, AI-017, AI-053): nine checks of AIProfile.CreateRuntime: every profile type gets its own ProfileName and its old OnEnable tuning, and values loaded into a bare CreateInstance survive OnEnable."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 18 review (2026-10-28, AI-055 closed): seven checks of the AI attack-mode stopgaps (DefaultShouldUseTwoWeaponFighting: a TWF + ITWF fighter with a light off-hand weapon fights with two, a no-feat one with a one-handed off-hand weapon does not, none once the turn cannot become a full attack; DefaultShouldUseRapidShot: a Rapid Shot archer declares it, no feat no Rapid Shot, one dagger to throw no, a second dagger carried yes); 93 passed (20261029T032102Z-play). Batch 12 step 19 review (2026-10-29): +9, the maneuver stopgaps (DefaultShouldFeint: feints, not a mindless target, not without the move action; DefaultShouldSkipImprovedGrab at and one below the tie; DefaultChooseManeuverItem: the weapon over the shield, the better of two held weapons; DefaultChooseGrappleMoveDestination stays beside its ally and moves toward a farther one); 102 passed. Batch 13 step 2 (2026-10-29, AI-017, AI-053): nine checks of AIProfile.CreateRuntime: every profile type gets its own ProfileName and its old OnEnable tuning, and values loaded into a bare CreateInstance survive OnEnable. Batch 13 step 5 (2026-10-29, C1): TestOutOfReachAlternativeDefaults, 8 assertions (the review added the dagger caster: the ranged list and an approach to throwing range); 119/122 with the same 3 known failures in the Play pass 2026-10-29."
     },
     {
       "type": "Tests.AI.AiMetamagicPlannerTests",
@@ -638,11 +638,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 28,
+      "passed": 60,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CMB-092, CMB-093, CMB-104, AI-005, batch 12 step 12 decision D6 (2026-10-28): AttackLegality.CanDirectlyAttack as a pure table (the Resilient Sphere both ways and inside one sphere, the Improved Grab hold bar not refusing a spell, maneuver reach: nothing at 10 ft without reach, a longspear trips and grapples adjacent and disarms only at 10 ft) and WardSaveLedger (Predict never rolls, Commit rolls one Sanctuary save per attacker and casting, a failure bars later attacks and AoOs, a new casting rolls again, an ally's spell meets no ward, a feint is no attack; Hide from Undead: mindless undead never see through it with no save, a living attacker is not bound, an intelligent undead's success keeps the spell). Dice forced through ScenarioHooks.RollFilter. Play only: CharacterController.Init needs Awake (TST-009). 28/28 in its first Play pass (20261028T191943Z-play)."
+      "notes": "CMB-092, CMB-093, CMB-104, AI-005, batch 12 step 12 decision D6 (2026-10-28): AttackLegality.CanDirectlyAttack as a pure table (the Resilient Sphere both ways and inside one sphere, the Improved Grab hold bar not refusing a spell, maneuver reach: nothing at 10 ft without reach, a longspear trips and grapples adjacent and disarms only at 10 ft) and WardSaveLedger (Predict never rolls, Commit rolls one Sanctuary save per attacker and casting, a failure bars later attacks and AoOs, a new casting rolls again, an ally's spell meets no ward, a feint is no attack; Hide from Undead: mindless undead never see through it with no save, a living attacker is not bound, an intelligent undead's success keeps the spell). Dice forced through ScenarioHooks.RollFilter. Play only: CharacterController.Init needs Awake (TST-009). 28/28 in its first Play pass (20261028T191943Z-play). Batch 13 step 5 (2026-10-29, D1): the AI attack guard AiAttackGuard (reach and a longspear's dead zone, five dagger increments thrown, a longbow without and with arrows, a light crossbow loaded, unloaded with and without the move action, an unrolled Sanctuary allowed with its risk, the sphere with the Ward bar); 56/56 in the Play pass 2026-10-29 (filter=AttackLegalityTests,AIProfileFrameworkTests). After the step 5 review: the melee-only guard (no throw), a swarm's guard agreeing with the sequence's reach test, an unloaded crossbow without bolts refused by the guard and by CanReloadEquippedWeapon; 60/60."
     },
     {
       "type": "Tests.Combat.PostAttackQuirkSetsTests",

@@ -22,6 +22,9 @@ namespace DND35.AI.Profiles
         [Range(0f, 1f)]
         public float FleeHealthThreshold = 0.25f;
 
+        /// <summary>A casting profile: without a usable ranged weapon its out-of-reach fallback is total defense (C1).</summary>
+        public override bool IsCastingProfile => true;
+
         public override void ApplyRuntimeDefaults()
         {
             base.ApplyRuntimeDefaults();

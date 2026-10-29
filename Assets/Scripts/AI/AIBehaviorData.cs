@@ -15,6 +15,26 @@ namespace DND35.AI
     }
 
     /// <summary>
+    /// What an AI-run creature does when no target passes its attack guard (AiAttackGuard; batch 13 step 5, design
+    /// choice C1, docs/systems/RULES_COVERAGE.md 4.1): the ordered list of AIProfile.GetOutOfReachAlternatives, tried by
+    /// AiOutOfReach.Run through the action catalog until one is performed. Batch 14 re-weights the list; batch 22
+    /// replaces it with the evaluator.
+    /// </summary>
+    public enum OutOfReachAlternative
+    {
+        /// <summary>Attack another target the guard allows (the catalog's attack or full attack entry).</summary>
+        AttackOtherTarget,
+        /// <summary>Move to the profile's preferred range of the focus target (Movement.PreferredRangeSquares; the move entry), then attack if a target is now allowed (AI-045).</summary>
+        PreferredRange,
+        /// <summary>Move to the reach or range of the weapon in hand from the focus target (the move entry), then attack if a target is now allowed (AI-045).</summary>
+        Approach,
+        /// <summary>Withdraw from the focus target (the withdraw entry; PHB p.143). In no default list.</summary>
+        Withdraw,
+        /// <summary>Total defense (the total_defense entry; PHB p.142, D2).</summary>
+        TotalDefense
+    }
+
+    /// <summary>
     /// Grapple posture for the AI profile.
     /// </summary>
     public enum GrappleBehavior

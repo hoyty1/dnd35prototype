@@ -79,6 +79,7 @@ namespace Tests.AI
             TestAiGrappleMoveStaysWhenSafest();
             TestRuntimeProfilesGetNameAndDefaults();
             TestSavedProfileValuesSurviveLoad();
+            TestOutOfReachAlternativeDefaults();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -232,6 +233,88 @@ namespace Tests.AI
                     m.Invoke(profile, null);
                     return;
                 }
+            }
+        }
+
+        // ---- Batch 13 step 5 (AI-075, design choice C1): the out-of-reach alternatives ----
+
+        /// <summary>
+        /// AIProfile.GetOutOfReachAlternatives (C1, an AI choice): a melee profile tries another target, then approaches; a
+        /// ranged one another target, the preferred range, then an approach; a casting profile that does not fight in melee
+        /// and holds no usable ranged weapon another target, the preferred range, then total defense (it does not walk its
+        /// staff into melee); with a bow and arrows that caster falls back to the ranged list; a casting profile of Melee
+        /// style keeps the melee list.
+        /// </summary>
+        private static void TestOutOfReachAlternativeDefaults()
+        {
+            CharacterController staff = null, bow = null, dagger = null;
+            var profiles = new List<UnityEngine.Object>();
+            try
+            {
+                staff = CreateArmedFighter("OorStaff", 1, Vector2Int.zero, ItemID.WeaponQuarterstaff, null);
+                bow = CreateArmedFighter("OorBow", 1, new Vector2Int(0, 2), ItemID.WeaponLongbow, null);
+                dagger = CreateArmedFighter("OorDagger", 1, new Vector2Int(0, 4), ItemID.WeaponDagger, null);
+
+                HumanoidAIProfile humanoid = AIProfile.CreateRuntime<HumanoidAIProfile>();
+                RangedAIProfile ranged = AIProfile.CreateRuntime<RangedAIProfile>();
+                EvokerAIProfile evoker = AIProfile.CreateRuntime<EvokerAIProfile>();
+                SpellcasterAIProfile meleeCaster = AIProfile.CreateRuntime<SpellcasterAIProfile>();
+                meleeCaster.CombatStyle = CombatStyle.Melee;
+                profiles.Add(humanoid);
+                profiles.Add(ranged);
+                profiles.Add(evoker);
+                profiles.Add(meleeCaster);
+
+                string melee = OutOfReachAlternative.AttackOtherTarget + "," + OutOfReachAlternative.Approach;
+                string rangedList = OutOfReachAlternative.AttackOtherTarget + "," + OutOfReachAlternative.PreferredRange + "," + OutOfReachAlternative.Approach;
+                string casterList = OutOfReachAlternative.AttackOtherTarget + "," + OutOfReachAlternative.PreferredRange + "," + OutOfReachAlternative.TotalDefense;
+
+                string h = string.Join(",", humanoid.GetOutOfReachAlternatives(staff));
+                Assert(h == melee, "C1: a melee profile tries another target in reach, then approaches", h);
+                string r = string.Join(",", ranged.GetOutOfReachAlternatives(staff));
+                Assert(r == rangedList, "C1: a ranged profile tries another target in range, the preferred range, then an approach", r);
+                string e = string.Join(",", evoker.GetOutOfReachAlternatives(staff));
+                Assert(evoker.IsCastingProfile && e == casterList,
+                    "C1: an evoker with only a quarterstaff tries another target in reach, the preferred range, then total defense", e);
+
+                // The longbow fixture carries no arrows: no usable ranged weapon (PHB p.113), still the caster list.
+                string noArrows = string.Join(",", evoker.GetOutOfReachAlternatives(bow));
+                Assert(!AIProfile.HasUsableRangedWeapon(bow) && noArrows == casterList,
+                    "C1: an evoker with a longbow but no arrows keeps the caster list", noArrows);
+                ItemData arrows = ItemDatabase.CloneItem(ItemID.AmmoArrow);
+                arrows.Quantity = 10;
+                global::Inventory inv = bow.GetComponent<InventoryComponent>().CharacterInventory;
+                inv.AddItem(arrows);
+                inv.RecalculateStats();
+                string withArrows = string.Join(",", evoker.GetOutOfReachAlternatives(bow));
+                Assert(AIProfile.HasUsableRangedWeapon(bow) && withArrows == rangedList,
+                    "C1: an evoker with a longbow and arrows uses the ranged list", withArrows);
+
+                string mc = string.Join(",", meleeCaster.GetOutOfReachAlternatives(staff));
+                Assert(mc == melee, "C1: a casting profile of Melee style keeps the melee list", mc);
+
+                string none = string.Join(",", AIProfile.DefaultOutOfReachAlternatives(staff, CombatStyle.Melee, castingProfile: false));
+                Assert(none == melee, "C1: a creature without a profile, melee style, gets the melee list", none);
+
+                // A caster with a dagger: the ranged list (a throwable weapon is a usable ranged weapon, PHB p.113), so its
+                // approach stops at throwing range (five 10-ft. increments, PHB p.134, capped by the preferred range) when
+                // the routine allows throws, not in melee; a melee routine's approach goes to melee reach.
+                dagger.aiProfile = evoker;
+                string daggerList = string.Join(",", evoker.GetOutOfReachAlternatives(dagger));
+                int preferred = evoker.Movement != null ? evoker.Movement.PreferredRangeSquares : 0;
+                int expectedThrow = preferred > 0 ? Mathf.Min(preferred, 10) : 10;
+                int throwApproach = AiOutOfReach.ApproachRangeSquares(dagger, allowThrow: true);
+                int meleeApproach = AiOutOfReach.ApproachRangeSquares(dagger, allowThrow: false);
+                Assert(daggerList == rangedList && throwApproach == expectedThrow && meleeApproach == 1,
+                    "C1: an evoker with a dagger uses the ranged list and approaches to throwing range, not into melee",
+                    daggerList + " throw=" + throwApproach + " (expected " + expectedThrow + ") melee=" + meleeApproach);
+            }
+            finally
+            {
+                foreach (UnityEngine.Object o in profiles)
+                    Destroy(o);
+                TestHelpers.Cleanup(staff != null ? staff.gameObject : null, bow != null ? bow.gameObject : null,
+                    dagger != null ? dagger.gameObject : null);
             }
         }
 

@@ -292,6 +292,7 @@ Use for a combat action both sides take: a PHB Table 8-2 row or a creature abili
 6. **Docs.** The entry's row in `docs/architecture/combat-actions.md`, and the status in `docs/systems/AI_ACTION_COVERAGE.md`.
 
 Pitfalls:
+- An AI weapon attack is declared only on a target the attack guard allows (`AI/AiAttackGuard.cs`, decision D1; batch 13 step 5): a new AI routine or behaviour picks its attack target with `AIService.SelectGuardPassingTarget` (or asks `AiAttackGuard.Passes`), and when nothing passes it runs the profile's alternatives (`AIService.RunOutOfReachAlternatives`, `AIProfile.GetOutOfReachAlternatives`); never widen a weapon's reach or range with a spell's.
 - Per-creature state the executor keeps on `CharacterController` must be cleared on slot reuse (CRE-046).
 - A coroutine that waits on a callback core re-checks `CurrentPhase == CombatOver` in its loop.
 - `ActorSource` stays `{Ui, AI}` (C7); in harness code write `global::ActorSource`, because `Tests.Scenarios.ActorSource` hides it.
