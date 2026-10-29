@@ -312,7 +312,7 @@ public partial class GameManager
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
                 ReplaceRuntimeAIProfile(npc, CreateRuntimeAIProfile<RangedAIProfile>());
-                npc.Tags.AddTag("Uses Armor-Based Targeting");
+                AddAIControlTag(npc, DND35.AI.Knowledge.AIControlFlagRules.ArmorPriorityTargetingTag);
                 Debug.Log($"[ArmorTargetingTest] Overriding {npc.Stats.CharacterName} to Ranged profile for armor-priority targeting validation.");
             }
 
@@ -320,7 +320,7 @@ public partial class GameManager
             {
                 // Keep shield bash validation deterministic: basic melee pressure only, no trip/disarm/grapple maneuver selection.
                 ReplaceRuntimeAIProfile(npc, CreateRuntimeAIProfile<UndeadMindlessAIProfile>());
-                npc.Tags.AddTag("ShieldBashTestSimpleMeleeAI");
+                AddAIControlTag(npc, DND35.AI.Knowledge.AIControlFlagRules.ShieldBashTestTag);
                 Debug.Log($"[ShieldBashTest] Overriding {npc.Stats.CharacterName} to simple melee-only AI profile.");
             }
 
@@ -458,7 +458,7 @@ public partial class GameManager
             // Ogre Battle needs an allied/controllable tiger, so we override allegiance/control at spawn time
             // instead of baking scenario flags (IsAlly/IsControllable) into the shared NPC record.
             npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
-            npc.Tags.AddTag("ScenarioOverride:OgreBattleAlly");
+            AddAIControlTag(npc, "ScenarioOverride:OgreBattleAlly");
             Debug.Log("[OgreBattleTest] Applied spawn-time override for dire_tiger: Team=Player, IsControllable=true.");
         }
 
@@ -468,14 +468,14 @@ public partial class GameManager
             {
                 npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
                 npc.Stats.CharacterAlignment = Alignment.NeutralGood;
-                npc.Tags.AddTag("ScenarioOverride:CelestialTemplateAlly");
+                AddAIControlTag(npc, "ScenarioOverride:CelestialTemplateAlly");
                 Debug.Log($"[CelestialTemplateTest] Ally override applied to {enemyId}: Team=Player, IsControllable=true, Alignment=NeutralGood.");
             }
             else
             {
                 npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:CelestialTemplateUndeadEnemy");
+                AddAIControlTag(npc, "ScenarioOverride:CelestialTemplateUndeadEnemy");
                 Debug.Log($"[CelestialTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment=NeutralEvil.");
             }
         }
@@ -486,14 +486,14 @@ public partial class GameManager
             {
                 npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:FiendishTemplateAlly");
+                AddAIControlTag(npc, "ScenarioOverride:FiendishTemplateAlly");
                 Debug.Log($"[FiendishTemplateTest] Ally override applied to {enemyId}: Team=Player, IsControllable=true, Alignment=NeutralEvil.");
             }
             else
             {
                 npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
                 npc.Stats.CharacterAlignment = spawnIndex == 2 ? Alignment.LawfulGood : Alignment.NeutralGood;
-                npc.Tags.AddTag("ScenarioOverride:FiendishTemplateGoodEnemy");
+                AddAIControlTag(npc, "ScenarioOverride:FiendishTemplateGoodEnemy");
                 Debug.Log($"[FiendishTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment={npc.Stats.CharacterAlignment}.");
             }
         }
@@ -511,7 +511,7 @@ public partial class GameManager
                 summonTestAlignment = Alignment.NeutralEvil;
 
             npc.Stats.CharacterAlignment = summonTestAlignment;
-            npc.Tags.AddTag("ScenarioOverride:SummonMonsterTestEvilEnemy");
+            AddAIControlTag(npc, "ScenarioOverride:SummonMonsterTestEvilEnemy");
             Debug.Log($"[SummonMonsterTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment={npc.Stats.CharacterAlignment}.");
         }
 
@@ -522,13 +522,13 @@ public partial class GameManager
             if (string.Equals(enemyId, "evil_enchanter_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilEnchanter");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilEnchanter");
                 Debug.Log("[ProtectionFromEvilTest] Enchanter override applied: Team=Enemy, Alignment=NeutralEvil, Charm Person loadout active.");
             }
             else if (string.Equals(enemyId, "fiendish_wolf", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilSummonedFiend");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilSummonedFiend");
 
                 CharacterController summonCaster = null;
                 if (NPCs != null && NPCs.Count > 0)
@@ -542,30 +542,30 @@ public partial class GameManager
             else if (string.Equals(enemyId, "evil_goblin_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilMeleeEnemy");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilMeleeEnemy");
             }
             else if (string.Equals(enemyId, "neutral_bandit_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.TrueNeutral;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilNeutralMeleeControl");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilNeutralMeleeControl");
                 Debug.Log("[ProtectionFromEvilTest] Neutral bandit control applied: no deflection bonus should trigger.");
             }
             else if (string.Equals(enemyId, "neutral_mage_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.TrueNeutral;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilNeutralCasterControl");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilNeutralCasterControl");
                 Debug.Log("[ProtectionFromEvilTest] Neutral mage control applied: Daze should not grant +2 protection save bonus.");
             }
             else if (string.Equals(enemyId, "evil_acolyte_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilEvilCasterControl");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilEvilCasterControl");
                 Debug.Log("[ProtectionFromEvilTest] Evil acolyte control applied: Daze should grant +2 protection save bonus.");
             }
             else
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
-                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilFallbackEnemy");
+                AddAIControlTag(npc, "ScenarioOverride:ProtectionFromEvilFallbackEnemy");
             }
         }
 
@@ -693,6 +693,18 @@ public partial class GameManager
         _runtimeSummonAIProfiles.RemoveWhere(p => p == null);
         foreach (DND35.AI.AIProfile profile in new List<DND35.AI.AIProfile>(_runtimeSummonAIProfiles))
             DestroyRuntimeAIProfileIfUnused(profile, null);
+    }
+
+    /// <summary>
+    /// Adds control tag <paramref name="tag"/> to <paramref name="npc"/> (kept for the tooltip and the tag tests) and sets
+    /// the AI switch it stands for (DND35.AI.Knowledge.AIControlFlagRules; batch 13 step 7): the AI reads the switch.
+    /// </summary>
+    internal static void AddAIControlTag(CharacterController npc, string tag)
+    {
+        if (npc == null || string.IsNullOrWhiteSpace(tag))
+            return;
+        npc.Tags.AddTag(tag);
+        npc.AIControl |= DND35.AI.Knowledge.AIControlFlagRules.FromTag(tag);
     }
 
     /// <summary>
@@ -1134,6 +1146,8 @@ public partial class GameManager
         npc.aiProfile = runtimeProfile; // tracked by CreateRuntimeAIProfile (AI-017)
         npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
         npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
+        // The definition's control tags ("AI:MagicMissileOnly", ...) become the creature's AI switches (batch 13 step 7).
+        npc.AIControl = DND35.AI.Knowledge.AIControlFlagRules.FromTags(stats.CreatureTags);
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +

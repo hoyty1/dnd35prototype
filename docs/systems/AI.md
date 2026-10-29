@@ -241,7 +241,7 @@ The routine returns; unused actions are discarded (no Delay or Ready; Total Defe
 3. Partitions into **visible** (`npc.CanSee(target, ranged)`, which only means "miss chance below 50%"; no line of sight, GRID-009) and **concealed but tracked** (has a last-known square).
 4. Returns the best visible target. If none, returns the best concealed target the turn-start check pinpointed (`IsPinpointedThisRound`; the AI rolls no Listen check of its own since batch 12 step 8), else the best tracked. Unseen enemies with no last-known square do not exist for the AI (CMB-183).
 
-`SelectBestTargetFromCandidates` (1586) tries, in order: `PriorityTargetName` exact name match (from `AITargetPriority`; 4 definitions, `grease_test_grappler1`-`4`, all naming "Slippery Sam"), then the profile scorer, then armor-priority targeting (unreachable in practice: its only writer also assigns a profile, AI-053), then the default heuristic. With a profile, the profile scorer always returns a target.
+`SelectBestTargetFromCandidates` (1586) tries, in order: `PriorityTargetName` exact name match (from `AITargetPriority`; 4 definitions, `grease_test_grappler1`-`4`, all naming "Slippery Sam"), then armor-priority targeting (the `AIControlFlags.ArmorPriorityTargeting` switch on `CharacterController.AIControl`, set from its control tag at spawn; before the profile since batch 13 step 7, because its only users, the `armor_targeting_test` skeleton archers, also have a profile; it reads the target's ArmorCategory fact), then the profile scorer, then the default heuristic. With a profile, the profile scorer always returns a target.
 
 A typical melee turn calls `SelectBestTarget` twice, a kiter three times; each call re-rolls ward saves and may roll Listen.
 
@@ -255,10 +255,10 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; each c
 | Threat | `CalculateThreat * 2`: +3 Cleric or Wizard, +2 Rogue, `clamp(Level*0.35, 0, 4)`, `clamp(STRMod+DEXMod, -2, 6)*0.35`, -0.75 if prone |
 | Wounded | `(1 - hp%) * 8` |
 | Armor | `clamp(26 - AC, -6, 8) * 0.7` |
-| "Flanking" | +2.5 if the NPC can already threaten the target from its square (misnamed; not a flank test) |
-| Creature type | +1.5 if undead or outsider |
+| Flanking | +2.5 if the NPC flanks the target from its square (`CombatUtils.IsAttackerFlanking`, PHB p.153; until batch 13 step 7 the term only tested threat, AI-053) |
+| Creature type | +1.5 if the target's CreatureType fact is Undead or Outsider |
 
-**Base `AIProfile.ScoreTarget` (AI/AIProfile.cs:64):** 10; each `TagPriorities` match ±priority (case-insensitive bidirectional substring match on StatusTagManager tags such as "Armor: Heavy", "HP State: Disabled"); `PrioritizeWounded` +(1-hp%)×8; `PrioritizeIsolated` +4 alone or -1.25 per adjacent ally; Ranged style `-|dist - PreferredRange| * 0.9` and -5 adjacent; Melee style `max(0, 6 - dist) * 0.7`; Mixed no distance term. "HP State: Staggered" tags rarely fire because `HPState.Staggered` means nonlethal damage equals current HP.
+**Base `AIProfile.ScoreTarget` (AI/AIProfile.cs:64):** 10; each `TagPriorities` row whose fact query matches ±priority (`AIProfile.AddFactPriorities`: `FactQuery.Parse` turns the string into a typed query on one `FactKey`, matched whole against the observer's view of the target, 6.6; so "Elf" no longer matches "Half-Elf", AI-078, fixed in batch 13 step 7); `PrioritizeWounded` +(1-hp%)×8; `PrioritizeIsolated` +4 alone or -1.25 per adjacent ally; Ranged style `-|dist - PreferredRange| * 0.9` and -5 adjacent; Melee style `max(0, 6 - dist) * 0.7`; Mixed no distance term. The seven profiles' "HP State: Staggered" rows read the BadlyHurt wound band (below half hit points and above 0) since batch 13 step 7, because they mean a badly wounded target and `HPState.Staggered` means nonlethal damage equal to current hit points (PHB p.313); "HP State: Disabled" and "HP State: Dying" stay hit point states.
 
 **Overrides:**
 
@@ -277,7 +277,7 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; each c
 
 Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUnconsciousTargets` (only Animal) and a conscious one exists. Everyone else keeps hitting dying PCs, and the maneuver chooser trips, disarms and grapples helpless targets (AI-058).
 
-**Perception adjustment (`GetPerceptionTargetingAdjustment`, 1925),** added in all scorers. Side effect: writes the second last-known store (AI-021). Invisible: -18, or with Scent +4 within 6 squares / -6 beyond. Unseen: -12, +4 back if tracked. Then `GetConcealmentTargetingAdjustment` (2001): miss chance 0% +50, below 50% -30, else -80 (-40 more if unseen, +20 if tracked), times `ConcealmentPenaltyMultiplier` (always 1). These ±50-120 terms dwarf every profile term (about 10-60), so the concealment tier decides the target almost always; within a tier, distance and threat decide.
+**Perception adjustment (`GetPerceptionTargetingAdjustment`, 1925),** added in all scorers. Side effect: a target the NPC sees now is recorded in its `LastKnownPositionTracker` (`RecordSighting`), the one position store since batch 13 step 7 (AI-021). Invisible: -18, or with Scent +4 within 6 squares / -6 beyond. Unseen: -12, +4 back if tracked. Then `GetConcealmentTargetingAdjustment` (2001): miss chance 0% +50, below 50% -30, else -80 (-40 more if unseen, +20 if tracked), times `ConcealmentPenaltyMultiplier` (always 1). These ±50-120 terms dwarf every profile term (about 10-60), so the concealment tier decides the target almost always; within a tier, distance and threat decide.
 
 ### 4.3 Other target selectors
 
@@ -441,7 +441,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 | Member | Read by | Status |
 |---|---|---|
 | `CombatStyle` | routing (AIService.cs:293), base `ScoreTarget` | Mixed is never special-cased |
-| `TagPriorities`, `PrioritizeWounded`, `PrioritizeIsolated` | base `ScoreTarget` (and copies in the undead profiles) | live |
+| `TagPriorities`, `PrioritizeWounded`, `PrioritizeIsolated` | base `ScoreTarget`; the undead profiles call the same `AddFactPriorities` for their rows | live; each row is a typed fact query (6.6) |
 | `Movement.PreferredRangeSquares`, `AvoidAoOs`, `SeekFlanking` | `EvaluateMovementOptions`, `TryTakeTacticalFiveFootStep` | live |
 | `GrappleBehavior` | `ShouldInitiateGrapple`, `GetPreferredManeuver` | `Maintain` unreachable (no maneuvers while grappling) |
 | `Maneuvers.AttemptTrip/Disarm/Sunder/BullRush/Overrun` | base `GetPreferredManeuver`, fixed order; Overrun by `ShouldOverrun` (the planned move through the defender's space, `ExecuteAggressiveMeleeTurn`) | Sunder, BullRush, Overrun never set (AI-014) |
@@ -487,6 +487,16 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 - **Breath only through the Dragon profile.** ankheg, behir, chimera, digester and gorgon never breathe (AI-033).
 - **Mephits** use Animal (PackHunter) tactics; their breath and SLAs are text (CRE-017).
 - **Class maps disagree.** `DungeonEncounterSpawner.UpdateAIForClass` vs the test-only `NPCTemplateAIConfigurator`: Sorcerer Evoker vs Spellcaster, Adept Spellcaster vs Healer, Paladin Humanoid vs Ranged, Barbarian Berserk vs Humanoid. The spawner only overrides the archetype for Fighter/Paladin/Monk/Warrior/Rogue if it was None or Animal.
+
+### 6.6 Target facts and the knowledge provider (batch 13 step 7)
+
+Target scoring reads typed facts about a target, never display tags (`Assets/Scripts/AI/Knowledge/`, namespace `DND35.AI.Knowledge`):
+
+- **Facts.** `FactKey`: Species, CreatureType, Subtype, Size, ArmorCategory, ShieldCarried, WieldsMelee, WieldsRanged, WieldsReach, WoundBand, HpState, Condition, Caster, Mindless. Each `FactValue` carries a `KnowledgeLevel` (Unknown, Apparent, Inferred, Recalled, Confirmed). `WoundBand` (`KnowledgeFacts.WoundBandOf`): Unhurt at full hit points, Hurt at half or more, BadlyHurt below half and above 0, Down at 0 or less.
+- **Views.** `KnowledgeService.ViewOf(observer, subject)` asks `KnowledgeService.Provider` (an `IKnowledgeProvider`) for an `ITargetView`. Until batch 17 the provider is `OmniscientKnowledgeProvider`: every fact is the true value at Confirmed, read live (species is the shown race, `DisplayedRace`; creature-type spellings are normalized at read time through `CreatureTypeProgressionDatabase.TryParseCreatureType`, so "MagicalBeast" equals "Magical Beast" and a wild-shaped creature's current type is read; armor from the worn armor's category; hands from the held items). **Batch 17 swaps the provider** for one that knows only what the observer has perceived, identified or recalled (`docs/designs/enemy_ai_knowledge_and_personalities.md`); **batch 14 scores the facts** in weighted personalities. Nothing outside the provider reads the truth for target scoring; one exception in spell scoring: `AISpellcastingStrategist.GetEnemyTypeScore` penalizes a mind-affecting spell through the shared immunity rule (`SpellUtilities.IsImmuneToMindAffecting`, the one the resolver applies, plants included per MM p.313) rather than a fact, until batch 17 exposes the immunity as one.
+- **Queries.** `FactQuery.Parse` turns each `TagPriority` string into a typed query on one fact (cached); every shipped string converts ("Race: X", "Armor: ... Armor", "Unarmored", "Wielding: Unarmed", "HP State: X"); the parser also takes "Type:", "Subtype:", "Size:", "Wound:" and "Condition:"; an unknown prefix parses to nothing and scores nothing. A bare word that names no fact parses as a species (`FactQuery.IsSpeciesFallback`); no shipped string uses that fallback and every shipped species names a `RaceDatabase` race (`KnowledgeFactsTests`), so a misspelled weight fails the suite. "Wielding: Unarmed" (and bare "Unarmed") is `QueryKind.NoManufacturedWeapon`: no manufactured weapon in either hand, the old display tag's meaning, not unarmed in the PHB p.139 sense (a monk, a creature with Improved Unarmed Strike or natural weapons, and a caster holding a touch charge are armed yet match it); batch 14 must not read it as RAW armed or unarmed. The armor fact reads the armor's typed category (`ItemData.ArmorCat`; base category, so mithral looks like its base armor), not display tags. A query matches whole: "Elf" is not "Half-Elf" (AI-078). "HP State: Staggered" reads the BadlyHurt band (PHB p.313: staggered is nonlethal damage equal to current hit points); Disabled and Dying stay hit point states.
+- **Readers.** `AIProfile.AddFactPriorities` (base `ScoreTarget` and the three undead profiles), `AIService.GetTargetPriority`'s creature-type term, `AIService.GetArmorPriorityScore`, and `AISpellcastingStrategist.IsCreatureType`/`IsMindless`. The strategist's undead, construct and ooze checks read the CreatureType fact only; a mindless creature of another type no longer counts as undead, and a mind-affecting spell against it gets its own -50 (MM p.313, mindless creatures are immune to mind-affecting effects).
+- **Control flags.** `AIControlFlags` (MagicMissileOnly, ArmorPriorityTargeting, ScenarioOverride) on `CharacterController.AIControl` are set from the control tags at spawn (`AIControlFlagRules.FromTags`; the scenario overrides through `GameManager.AddAIControlTag`) and cleared on slot reuse; `AIService.IsMagicMissileOnlyCaster` and `UsesArmorPriorityTargeting` read them, not the tags. The unread `Class:` display tag was dropped.
 
 ## 7. Spellcasting AI
 
@@ -664,7 +674,7 @@ NPCs summon since batch 11 step 27 (7.9); their creatures join the initiative af
 ### 8.8 Perception and wards
 
 - `CanSee` = miss chance below 50% (`GetMissChance`: invisibility unless See Invisibility or Glitterdust, Darkness, Wall of Fire, Entropic Shield, incorporeal, Displacement). No line of sight (GRID-009); no blindsight, tremorsense or blindsense.
-- Two last-known stores: `LastKnownPositionTracker` and `CharacterController._lastKnownTargetPositions`; cleared only when a controller is reused for a new creature (CRE-046 fix, AI-021). Going invisible writes both for all enemies (every enemy has a tracker since batch 12 step 8, so a creature that has not acted yet records the square too).
+- One last-known store since batch 13 step 7 (AI-021): the `LastKnownPositionTracker` every combatant has from `Init` (`CharacterController._lastKnownTargetPositions` was removed). Its writers record only real observations: a sighting (`RecordSighting`, only when the owner can see the creature: target scoring and an attack at a seen target), a Listen pinpoint, and the square a creature vanished from, for the enemies that saw it go invisible. It is cleared when a controller is reused for a new creature (CRE-046) and, for continuing party members, in `ResetCombatStateForNextEncounter`.
 - `AttemptListenChecks`: See Invisibility users roll opposed Spot vs Hide; everyone else rolls one Listen vs a flat DC 20 that pinpoints all concealed targets (one check per turn, at turn start). A pinpoint records the square and lapses when the creature leaves it; a deafened creature fails automatically (PHB p.307). DMG p.295 (Invisibility) opposes the Listen check with Move Silently (DC 0 in combat), adds distance and obstacles, and pinpoints only when the check beats the DC by 20 (CMB-182). The turn-start call is shared with PCs (`PerceptionRules.ProcessTurnStart`, CMB-094).
 - Sanctuary and Hide from Undead: see 4.1. The attacker's Sanctuary save is rolled once per (attacker, casting) when the attack is attempted, for PCs and NPCs alike, and a failure loses that attack (`WardSaveLedger`, batch 12 step 12, D6). An intelligent undead's Hide from Undead save is rolled at its turn-start perception step; a failure leaves the warded creature unseen by it (total concealment) and loses no attack, and a success no longer ends the spell; a mindless undead never perceives the creature. `BreakProtectiveWardsOnAttack` runs on the PC attack path and `NPCPerformAttack` only, not on charges, maneuvers, grapples or spells (SPL-094, partly unverified).
 
@@ -684,7 +694,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 
 - **Casting:** AI-001 (fixed 2026-10-16: area spells in batch 11 step 25, the metamagic choice in step 28), AI-071 (walls, Grease on an object, swarm placement, Imbue with Spell Ability, areas with no judged value), AI-002 (melee routines never cast), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
 - **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-031 (enum docs lie).
-- **Targeting and perception:** AI-021 (two last-known stores), CMB-183 (never-seen unseen enemies get no Listen check).
+- **Targeting and perception:** CMB-183 (never-seen unseen enemies get no Listen check).
 - **Monster abilities:** AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (bull rush and overrun never chosen by a shipped profile).
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
@@ -725,7 +735,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-050 | Summon, swarm, charmed and confused targeting ignore wards and visibility |
 | AI-051 | Melee routines path to the true square of unseen targets |
 | AI-052 | `EvaluateMovementOptions` accepts A*'s partial fallback path, so unreachable cells can win |
-| AI-053 | Assorted small defects (auras skipped on controlled turns, armor-priority targeting unreachable, the flanking term; the HP gates were fixed in batch 12 step 3, the profile names and uncalled members in batch 13 step 2) |
+| AI-053 | Auras and free Spittle skipped on condition-controlled turns (batch 13 step 19; the HP gates were fixed in batch 12 step 3, the profile names and uncalled members in batch 13 step 2, armor-priority targeting and the flanking term in step 7) |
 | TST-025 | Stale `AIProfileFrameworkTests` expectations; the AoE safety test can pass vacuously |
 | SPL-094 | Sanctuary and Hide from Undead are broken only by `NPCPerformAttack` and the PC attack path, not by charges, maneuvers or spells |
 | AI-054 | PC action executors (Aid Another, item use, Turn Undead, crawl, pick up, rage) are bound to the PC turn flow, so the AI cannot reuse them (area casts left it in batch 11; the NPC wall attacks moved to CORE-040 on 2026-10-29) |
@@ -738,7 +748,6 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-070 | The AI wizard casts Reduce Person on an ally it has just enlarged (Reduce Person is scored as an ally buff; 13 seeds of the step 22 soak) |
 | AI-076 | AI move actions are paid after the walk at 20 sites, and a pathless move still pays (filed mapping batch 13, 2026-10-29; fix batch 13 steps 9-10) |
 | AI-077 | Every AI routine ends its turn after a cast, song, maintained spell, Lay on Hands or breath, wasting the move (and a Quickened cast's standard action); batch 14 |
-| AI-078 | Loose fact matching: two-way substring tags, "HP State: Staggered" weighted as wounded, `IndexOf` creature types (batch 13 step 7) |
 | AI-079 | No AI-run creature rages (batch 13 step 16) |
 | CORE-040 | The NPC Wall of Ice attack and break wrappers end in `AfterAttackDelay`, which can end or redraw the turn inside the NPC coroutine (batch 13 step 13) |
 
@@ -807,10 +816,11 @@ Worked playbooks for likely requests (flanking and Aid Another, area spells and 
 | `Tests.AI.AIProfileFrameworkTests.RunAll` (38 test methods, no callers) | profile scoring (Berserk, Ranged, Animal), maneuver preferences, coup de grace defaults, NPC data archetypes, Evoker/Abjurer/Spellcaster AoE settings, Healer priorities, concealment tiers, ThreatSystem estimates, swarm targeting, `ActionEconomy.UseMoveAction` failure and the one-move gate. 2-3 tests are stale (TST-025) |
 | `Tests.AI.AiMetamagicPlannerTests` | the metamagic planner (7.10: a sorcerer's candidates, Empowered Fireball outranking the plain one against three foes and not one, the finishing blow, Extend, Heighten, a prepared Quickened slot, the candidate cap's order, an Enlarged range, a bard's refused Silent Spell) and the SR chance (AI-046); `Tests.AI.AreaAimSearchTests`: the area aim (7.8) |
 | `Tests.AI.LastKnownPositionTrackerTests` | the perception tracker every combatant has (batch 12 step 8, CMB-094): a Listen pinpoint records the square, becomes the last-known square and lapses when the creature moves (DMG p.295); a deafened creature pinpoints nothing (PHB p.307); a PC-side turn-start check (`PerceptionRules.ProcessTurnStart`) pinpoints a tracked invisible enemy; Play mode |
+| `Tests.AI.KnowledgeFactsTests` | the typed target facts (batch 13 step 7, AI-078): every shipped `TagPriority` string parses into a `FactQuery` without the bare-word species fallback (and names a `RaceDatabase` race), matching is whole ("Elf" is not "Half-Elf"), "HP State: Staggered" reads the BadlyHurt band, the wound bands, the omniscient view of a live creature (creature type spellings normalized, a mindless creature not undead), the armor fact read from `ItemData.ArmorCat`, a swappable `KnowledgeService.Provider`, the control tags' `AIControlFlags`, and the spell scoring's mind-affecting penalty against an intelligent plant (MM p.313); Play mode |
 | `Tests.Classes.NPCTemplateSystemTests` | configurator class maps and `AIConsumableManager` (test-only paths; TST-003, TST-008) |
 | `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image by RAW (the figure pick, its distribution, image AC and destruction, PC and NPC attackers and spells; batch 11 step 26), Frightened decision, confusion d% distribution |
 
-Untested: `ExecuteNPCTurn` and every routine, `SelectBestTarget`, `EvaluateMovementOptions`, `SelectSpell` (the scenarios cover it), the strategist (beyond its SR chance, `AiMetamagicPlannerTests`), the classifier, `LastKnownPositionTracker`, `BuildRuntimeAIProfile`, `TryNPCPerformSpellCast`, summon and grapple AI, Dragon/Lich/Vampire/Undead/Humanoid/Necromancer profiles.
+Untested: `ExecuteNPCTurn` and every routine, `SelectBestTarget`, `EvaluateMovementOptions`, `SelectSpell` (the scenarios cover it), the strategist (beyond its SR chance, `AiMetamagicPlannerTests`), the classifier, `BuildRuntimeAIProfile`, `TryNPCPerformSpellCast`, summon and grapple AI, Dragon/Lich/Vampire/Undead/Humanoid/Necromancer profiles.
 
 Run them with the committed runner in [TESTING.md section 3](../TESTING.md#3-running-suites), for example `Tests.Runner.StaticSuiteRunner.RunFromCommand("filter=AIProfileFrameworkTests,MirrorImageRulesTests")` in Play mode (CauseFear runs in the edit pass). Pitfalls: some tests `AddComponent<GameManager>()`, which `Awake` destroys in MainScene; one adds a `SquareGrid` that replaces `SquareGrid.Instance` (GRID-010), so restart Play mode afterwards. Pure functions you can test without a GameManager: `GetConcealmentTargetingAdjustment`, `FindClosestAliveEnemy`, `SelectSummonTarget`, `FindNearestEnemy`, and all profile hooks. In Play mode the live service is `GameManager.Instance.GetComponent<AIService>()`. Call `AISpellcastingStrategist.ResetCombatState()` between strategist tests.
 
@@ -821,7 +831,7 @@ Run them with the committed runner in [TESTING.md section 3](../TESTING.md#3-run
 | `goblin_raiders` | Humanoid, DefensiveMelee and the `Ranged` skeleton archer in one fight |
 | `grapple_test`, `tiger_hunt_test` | Grappler choices; pounce, Improved Grab, rake, emergency escape, scent vs an invisible PC |
 | `grease_test` | `AITargetPriority` |
-| `armor_targeting_test` | `RangedAIProfile` tag targeting and the kiter (not the armor-priority scorer, AI-053) |
+| `armor_targeting_test` | the armor-priority scorer (before the profile since batch 13 step 7) and the `RangedAIProfile` kiter |
 | `obscuring_mist_ranged_only`, `wind_dispersion_test` | concealment tiers, last-known attacks, Listen, ranged AoO risk |
 | `disrupt_undead_test`, `charm_person_test` | DefensiveMelee; charmed NPC healing its charmer |
 | `mirror_image_test` | Mirror Image figure pick against goblin archers |

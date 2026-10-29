@@ -1489,10 +1489,16 @@ public static class AISpellcastingStrategist
 
         float score = 0f;
 
-        // Undead: immune to mind-affecting
-        if (IsCreatureType(enemy, "Undead"))
+        // Immune to mind-affecting effects: the one shared rule the spell resolver applies (CharacterStats.IsImmuneToMindAffecting:
+        // undead, constructs, oozes, plants and vermin by type, any mindless creature, an explicit immunity; MM p.313, which
+        // gives plants the immunity whatever their Intelligence). Until batch 13 step 7 the AI kept its own per-type list,
+        // which missed plants and counted a mindless creature as undead. It reads the truth, as the omniscient provider does;
+        // batch 17 can expose it as a knowledge fact.
+        if (spell.IsMindAffecting && SpellUtilities.IsImmuneToMindAffecting(enemy))
+            score -= 50f;
+
+        if (IsCreatureType(caster, enemy, "Undead"))
         {
-            if (spell.IsMindAffecting) score -= 50f;
             // An inflict spell cures an undead (PHB p.244; SPL-005)
             if (SpellDiceRules.OutcomeFor(spell, enemy.Stats) == SpellEnergyOutcome.HealsUndead) score -= 100f;
             // Positive energy heals are damage to undead — bonus
@@ -1502,17 +1508,10 @@ public static class AISpellcastingStrategist
                 score += 10f;
         }
 
-        // Construct: immune to mind-affecting, many spell effects
-        if (IsCreatureType(enemy, "Construct"))
+        // Construct: immune to many spell effects
+        if (IsCreatureType(caster, enemy, "Construct"))
         {
-            if (spell.IsMindAffecting) score -= 50f;
             if (spell.EffectType == SpellEffectType.Control) score -= 20f;
-        }
-
-        // Ooze: immune to mind-affecting
-        if (IsCreatureType(enemy, "Ooze"))
-        {
-            if (spell.IsMindAffecting) score -= 50f;
         }
 
         return score;
@@ -1717,29 +1716,15 @@ public static class AISpellcastingStrategist
         return count;
     }
 
-    private static bool IsCreatureType(CharacterController character, string type)
+    /// <summary>
+    /// True when <paramref name="caster"/> knows <paramref name="character"/> to be of creature type <paramref name="type"/>:
+    /// the typed CreatureType fact through the knowledge provider, its spelling normalized by the one creature-type parser
+    /// (batch 13 step 7, AI-078). Before, any creature tag containing the type's name counted, and a mindless creature
+    /// counted as undead.
+    /// </summary>
+    private static bool IsCreatureType(CharacterController caster, CharacterController character, string type)
     {
         if (character == null || character.Stats == null) return false;
-
-        // Check creature tags
-        if (character.Tags != null && character.Tags.HasTag($"Type:{type}"))
-            return true;
-
-        // Check creature type string
-        if (character.Stats.CreatureTags != null)
-        {
-            for (int i = 0; i < character.Stats.CreatureTags.Count; i++)
-            {
-                if (character.Stats.CreatureTags[i] != null &&
-                    character.Stats.CreatureTags[i].IndexOf(type, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
-            }
-        }
-
-        // Check IsMindless for undead/construct heuristic
-        if (type == "Undead" && character.Stats.IsMindless)
-            return true;
-
-        return false;
+        return DND35.AI.Knowledge.KnowledgeService.ViewOf(caster, character).Has(DND35.AI.Knowledge.FactKey.CreatureType, type);
     }
 }

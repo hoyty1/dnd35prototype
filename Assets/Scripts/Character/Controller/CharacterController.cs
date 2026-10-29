@@ -331,6 +331,13 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string PriorityTargetName { get; set; }
 
+    /// <summary>
+    /// Switches on this creature's own AI, translated from its control tags at spawn (DND35.AI.Knowledge.AIControlFlagRules;
+    /// GameManager.InitializeNPCFromDefinition and the preset overrides through GameManager.AddAIControlTag; batch 13
+    /// step 7). The AI reads these, never the tag strings. Cleared by <see cref="ResetForNewCreature"/>.
+    /// </summary>
+    public DND35.AI.Knowledge.AIControlFlags AIControl { get; set; }
+
     [Header("Sprites")]
     public Sprite AliveSprite;
     public Sprite DeadSprite;
@@ -617,10 +624,6 @@ public class CharacterController : MonoBehaviour
     // Tracks attackers that currently have an active feint window against this defender.
     // Used only for visual/status indication on the defender token.
     private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
-
-    // Tracks each enemy's last known grid square when this character had line of sight.
-    // Used for total-concealment targeting behavior.
-    private readonly Dictionary<CharacterController, Vector2Int> _lastKnownTargetPositions = new Dictionary<CharacterController, Vector2Int>();
 
     // Pin state tracking (D&D 3.5e):
     // - A character can be pinning one opponent.
@@ -4928,7 +4931,7 @@ public class CharacterController : MonoBehaviour
     /// maneuver memory, feat toggles, the attack damage mode, ability-zero bookkeeping, diseases and poisons, every
     /// innate monster ability (regeneration, incorporeal, breath weapons, frightful presence, engulf, stench, aura,
     /// ranged special attack, blood drain, terrain manipulation, acid spray cooldown), last-known
-    /// positions, the summoned flag, HP state, AI profile and target priority, displayed race, tags, shield-bash AC suppression, sprite
+    /// positions (the LastKnownPositionTracker's, AI-021), the summoned flag, HP state, AI profile, AI control flags and target priority, displayed race, tags, shield-bash AC suppression, sprite
     /// tint and visibility, running coroutines, and every component outside <see cref="SlotReuseKeptComponentTypes"/>
     /// (concentration is ended first, so an effect it holds on another creature ends). Stats stay until the spawn's
     /// Init replaces them; links other characters and services keep to this controller are cleared by the GameManager
@@ -4973,7 +4976,6 @@ public class CharacterController : MonoBehaviour
         _incomingFeintSources.Clear();
         _turnsStartedCount = 0;
         CurrentTurnStart.Clear();
-        _lastKnownTargetPositions.Clear();
         WasSummoned = false;
 
         // Spell-effect records kept on the controller (their stat changes went to the old stats).
@@ -5046,6 +5048,7 @@ public class CharacterController : MonoBehaviour
         aiProfile = null;
         EnemyUseCoupDeGraceOverride = null;
         PriorityTargetName = null;
+        AIControl = DND35.AI.Knowledge.AIControlFlags.None;
         _displayedRace = null;
         _wasBlurVisualActive = false;
 
@@ -5088,8 +5091,8 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Drops what this character remembers about <paramref name="other"/>: its feint window against it, the feint
-    /// marker it set here, a counterspell readied against it, and its last-known square (also in its
-    /// LastKnownPositionTracker). Used when
+    /// marker it set here, a counterspell readied against it, and its last-known square (dropped from its
+    /// LastKnownPositionTracker, the one position store, AI-021). Used when
     /// <paramref name="other"/>'s controller is about to hold a different creature (CRE-046).
     /// </summary>
     public void ForgetCreature(CharacterController other)
@@ -5106,8 +5109,6 @@ public class CharacterController : MonoBehaviour
 
         if (_incomingFeintSources.Remove(other) && _incomingFeintSources.Count == 0 && Stats != null)
             RemoveCondition(CombatConditionType.Feinted);
-
-        _lastKnownTargetPositions.Remove(other);
 
         // The old creature's knowledge of which of this creature's Mirror Image figures is real (PHB p.254).
         MirrorImageRules.Forget(this, other);
@@ -7773,19 +7774,18 @@ public class CharacterController : MonoBehaviour
         if (target == null || target.Stats == null || target.Stats.IsDead)
             return false;
 
-        // Maintain attacker-side memory whenever the target is currently visible.
-        UpdateLastKnownPosition(target, incomingIsRangedAttack: isRangedAttack);
+        // A target seen now updates the attacker's one position store (AI-021).
+        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+        if (tracker != null)
+            tracker.RecordSighting(target, isRangedAttack);
 
         if (!target.HasTotalConcealment(this, incomingIsRangedAttack: isRangedAttack))
             return false;
 
-        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
         if (tracker != null && tracker.IsPinpointedThisRound(target))
             return false;
 
-        Vector2Int? trackerLastKnown = tracker != null ? tracker.GetLastKnownPosition(target) : null;
-        Vector2Int? fallbackLastKnown = GetLastKnownPosition(target);
-        Vector2Int? resolvedLastKnown = trackerLastKnown ?? fallbackLastKnown;
+        Vector2Int? resolvedLastKnown = tracker != null ? tracker.GetLastKnownPosition(target) : null;
 
         if (!resolvedLastKnown.HasValue || target.GridPosition == resolvedLastKnown.Value)
             return false;
@@ -11068,26 +11068,6 @@ public class CharacterController : MonoBehaviour
         }
 
         return true;
-    }
-
-    public void UpdateLastKnownPosition(CharacterController target, bool incomingIsRangedAttack = false)
-    {
-        if (target == null || target.Stats == null || target.Stats.IsDead)
-            return;
-
-        if (CanSee(target, incomingIsRangedAttack))
-            _lastKnownTargetPositions[target] = target.GridPosition;
-    }
-
-    public Vector2Int? GetLastKnownPosition(CharacterController target)
-    {
-        if (target == null)
-            return null;
-
-        if (_lastKnownTargetPositions.TryGetValue(target, out Vector2Int pos))
-            return pos;
-
-        return null;
     }
 
     /// <summary>

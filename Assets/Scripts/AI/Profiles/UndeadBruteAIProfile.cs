@@ -97,16 +97,7 @@ namespace DND35.AI.Profiles
             score += nearbyEnemies * 2f;
 
             // ── Tag priorities ──
-            if (target.Tags != null && TagPriorities != null)
-            {
-                foreach (TagPriority priority in TagPriorities)
-                {
-                    if (priority == null || string.IsNullOrWhiteSpace(priority.TagName))
-                        continue;
-                    if (TargetHasMatchingTag(target.Tags, priority.TagName))
-                        score += priority.IsPenalty ? -priority.Priority : priority.Priority;
-                }
-            }
+            score = AddFactPriorities(score, target, self); // through the knowledge provider (batch 13 step 7)
 
             return score;
         }

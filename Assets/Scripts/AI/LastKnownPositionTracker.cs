@@ -5,7 +5,10 @@ using UnityEngine;
 /// Tracks one combatant's last-known enemy positions and Listen-based pinpointing for concealed targets, PC or NPC.
 /// Every combatant gets one when its slot is initialised (<see cref="CharacterController.Init"/>, batch 12 step 8,
 /// CMB-094); a reused slot keeps the component and clears it (<see cref="CharacterController.ResetForNewCreature"/>).
-/// The turn-start check is <see cref="PerceptionRules.ProcessTurnStart"/>.
+/// The turn-start check is <see cref="PerceptionRules.ProcessTurnStart"/>. It is the only last-known-position store (batch
+/// 13 step 7, AI-021): it records a creature's square only when it is seen (<see cref="UpdateVisibleCharacters"/>,
+/// <see cref="RecordSighting"/>) or pinpointed (<see cref="Pinpoint"/>); a continuing party member's tracker is cleared
+/// between encounters (GameManager.ResetCombatStateForNextEncounter).
 /// D&D 3.5e behavior:
 /// - If target has total concealment, attack last known square.
 /// - If target moved from that square, attack misses automatically.
@@ -61,6 +64,20 @@ public class LastKnownPositionTracker : MonoBehaviour
 
         _lastKnownGridPositions[character] = character.GridPosition;
         _consecutiveLastKnownAutoMisses[character] = 0;
+    }
+
+    /// <summary>
+    /// Records <paramref name="character"/>'s square when this creature sees it now (CharacterController.CanSee with the
+    /// given attack kind): the one way a sighting reaches the store outside the turn-start check (an attack's
+    /// last-known-square test, target scoring, an invisibility cast). A pinpoint goes through <see cref="Pinpoint"/>.
+    /// Since batch 13 step 7 (AI-021) this tracker is the only last-known-position store.
+    /// </summary>
+    public void RecordSighting(CharacterController character, bool incomingIsRangedAttack)
+    {
+        if (_owner == null || character == null || character == _owner)
+            return;
+        if (_owner.CanSee(character, incomingIsRangedAttack))
+            UpdateLastKnownPosition(character);
     }
 
     public void UpdateVisibleCharacters(List<CharacterController> visibleCharacters)

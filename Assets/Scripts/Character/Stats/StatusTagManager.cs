@@ -8,7 +8,6 @@ using System.Collections.Generic;
 public class StatusTagManager
 {
     private const string RacePrefix = "Race: ";
-    private const string ClassPrefix = "Class: ";
     private const string HpStatePrefix = "HP State: ";
     private const string StatusPrefix = "Status: ";
     private const string WieldingPrefix = "Wielding: ";
@@ -143,17 +142,13 @@ public class StatusTagManager
     private void UpdateIdentityTags(CharacterTags tags)
     {
         tags.RemoveTagsByPrefix(RacePrefix);
-        tags.RemoveTagsByPrefix(ClassPrefix);
 
-        CharacterStats stats = _character != null ? _character.Stats : null;
         string race = _character != null ? _character.DisplayedRace : "Unknown";
         if (string.IsNullOrWhiteSpace(race))
             race = "Unknown";
 
-        string characterClass = (stats != null && !string.IsNullOrWhiteSpace(stats.CharacterClass)) ? stats.CharacterClass : "Unknown";
-
         tags.AddTag($"{RacePrefix}{race}");
-        tags.AddTag($"{ClassPrefix}{characterClass}");
+        // No "Class:" tag since batch 13 step 7: nothing read it (the AI reads classes from CharacterStats).
     }
 
     private void UpdateArmorTags(CharacterTags tags, ItemData armor)

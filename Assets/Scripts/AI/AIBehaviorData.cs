@@ -52,7 +52,7 @@ namespace DND35.AI
     [Serializable]
     public class TagPriority
     {
-        [Tooltip("Tag to evaluate (e.g. 'Race: Elf', 'Armor: Light Armor', 'Unarmored')")]
+        [Tooltip("Target fact to test, parsed by DND35.AI.Knowledge.FactQuery and matched whole (e.g. 'Race: Elf', 'Armor: Light Armor', 'HP State: Dying', 'Unarmored')")]
         public string TagName;
 
         [Tooltip("Weight for this tag. Higher value = stronger impact.")]

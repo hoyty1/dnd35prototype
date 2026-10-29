@@ -1942,8 +1942,6 @@ public class AIService : MonoBehaviour
         return candidates;
     }
 
-    private const string ArmorPriorityBehaviorTag = "Uses Armor-Based Targeting";
-
     private static AIProfile GetProfile(CharacterController npc)
     {
         return npc != null ? npc.aiProfile : null;
@@ -2080,19 +2078,21 @@ public class AIService : MonoBehaviour
             }
         }
 
+        // The armor-priority switch comes before the profile (AI-053, batch 13 step 7): the only creatures that have it
+        // (the armor-targeting test preset's skeleton archers) also have a profile, which made it unreachable.
+        if (UsesArmorPriorityTargeting(npc))
+        {
+            CharacterController prioritized = SelectBestArmorPriorityTarget(npc, candidateTargets);
+            if (prioritized != null)
+                return prioritized;
+        }
+
         AIProfile profile = GetProfile(npc);
         if (profile != null)
         {
             CharacterController profiled = SelectBestTargetFromProfile(npc, candidateTargets, profile);
             if (profiled != null)
                 return profiled;
-        }
-
-        if (UsesArmorPriorityTargeting(npc))
-        {
-            CharacterController prioritized = SelectBestArmorPriorityTarget(npc, candidateTargets);
-            if (prioritized != null)
-                return prioritized;
         }
 
         return SelectBestTargetDefault(npc, candidateTargets);
@@ -2308,11 +2308,14 @@ public class AIService : MonoBehaviour
             if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
-            int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
-            if (distance > maxRange)
+            // In reach or range: the attack guard (D1; reach, footprint, range, ammunition), not an anchor-to-anchor distance
+            // against 1 square for every melee weapon, which dropped a Large target's adjacent footprint and a reach
+            // weapon's 10-ft targets. The distance bonus measures footprint to footprint.
+            if (!AiAttackGuard.Passes(npc, candidate))
                 continue;
+            int distance = npc.GetMinimumDistanceToTarget(candidate, chebyshev: false);
 
-            float armorScore = GetArmorPriorityScore(candidate);
+            float armorScore = GetArmorPriorityScore(npc, candidate);
             float distanceBonus = Mathf.Max(0f, maxRange - distance) * 2f;
             float woundedBonus = Mathf.Clamp01(1f - ((float)candidate.Stats.CurrentHP / Mathf.Max(1f, candidate.Stats.TotalMaxHP))) * 1.5f;
             float totalScore = armorScore + distanceBonus + woundedBonus;
@@ -2333,46 +2336,30 @@ public class AIService : MonoBehaviour
         return best;
     }
 
-    private bool UsesArmorPriorityTargeting(CharacterController npc)
-    {
-        if (npc == null)
-            return false;
+    /// <summary>The "Uses Armor-Based Targeting" switch, translated from the control tag at spawn (CharacterController.AIControl; batch 13 step 7).</summary>
+    private static bool UsesArmorPriorityTargeting(CharacterController npc)
+        => npc != null && (npc.AIControl & DND35.AI.Knowledge.AIControlFlags.ArmorPriorityTargeting) != 0;
 
-        if (npc.Tags != null && npc.Tags.HasTag(ArmorPriorityBehaviorTag))
-            return true;
-
-        if (npc.Stats != null && npc.Stats.CreatureTags != null)
-        {
-            for (int i = 0; i < npc.Stats.CreatureTags.Count; i++)
-            {
-                if (string.Equals(npc.Stats.CreatureTags[i], ArmorPriorityBehaviorTag, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private float GetArmorPriorityScore(CharacterController target)
+    /// <summary>
+    /// The armor-priority score of <paramref name="target"/> as <paramref name="npc"/> knows it (the ArmorCategory fact
+    /// through the knowledge provider; batch 13 step 7): unarmored 100, light 75, medium 50, heavy 25, anything else 10.
+    /// </summary>
+    private static float GetArmorPriorityScore(CharacterController npc, CharacterController target)
     {
         if (target == null)
             return 0f;
 
-        if (target.Tags != null)
+        DND35.AI.Knowledge.FactValue armor = DND35.AI.Knowledge.KnowledgeService.ViewOf(npc, target).Get(DND35.AI.Knowledge.FactKey.ArmorCategory);
+        if (!armor.IsKnown)
+            return 10f;
+        switch ((DND35.AI.Knowledge.WornArmor)armor.Number)
         {
-            if (target.Tags.HasTag("Unarmored")) return 100f;
-            if (target.Tags.HasTag("Light Armor")) return 75f;
-            if (target.Tags.HasTag("Medium Armor")) return 50f;
-            if (target.Tags.HasTag("Heavy Armor")) return 25f;
+            case DND35.AI.Knowledge.WornArmor.Unarmored: return 100f;
+            case DND35.AI.Knowledge.WornArmor.Light: return 75f;
+            case DND35.AI.Knowledge.WornArmor.Medium: return 50f;
+            case DND35.AI.Knowledge.WornArmor.Heavy: return 25f;
+            default: return 10f;
         }
-
-        string armorTag = target.GetArmorTag();
-        if (string.Equals(armorTag, "Unarmored", StringComparison.OrdinalIgnoreCase)) return 100f;
-        if (string.Equals(armorTag, "Light Armor", StringComparison.OrdinalIgnoreCase)) return 75f;
-        if (string.Equals(armorTag, "Medium Armor", StringComparison.OrdinalIgnoreCase)) return 50f;
-        if (string.Equals(armorTag, "Heavy Armor", StringComparison.OrdinalIgnoreCase)) return 25f;
-
-        return 10f;
     }
 
     private float GetPerceptionTargetingAdjustment(CharacterController npc, CharacterController target, AIProfile profile = null)
@@ -2402,11 +2389,14 @@ public class AIService : MonoBehaviour
         }
 
         bool incomingIsRanged = npc.IsEquippedWeaponRanged();
-        npc.UpdateLastKnownPosition(target, incomingIsRanged);
+        // The one position store (AI-021): a target seen now is recorded; one seen or pinpointed before is tracked.
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker != null)
+            tracker.RecordSighting(target, incomingIsRanged);
 
         int missChance = target.GetMissChance(npc, incomingIsRanged);
         bool canSeeTarget = npc.CanSee(target, incomingIsRanged);
-        bool hasLastKnownPosition = npc.GetLastKnownPosition(target).HasValue;
+        bool hasLastKnownPosition = tracker != null && tracker.HasLastKnownPosition(target);
 
         if (!canSeeTarget)
         {
@@ -2479,12 +2469,15 @@ public class AIService : MonoBehaviour
 
         float armorEase = Mathf.Clamp(26f - target.Stats.ArmorClass, -6f, 8f) * 0.7f; // easier AC is better
 
-        bool flankingOpportunity = CombatUtils.CanThreatenTargetFromPosition(npc, npc.GridPosition, target);
-        float flankingBonus = flankingOpportunity ? 2.5f : 0f;
+        // Flanking (PHB p.153): the creature and an ally threaten the target from opposite sides, where it stands now
+        // (CombatUtils.IsAttackerFlanking, the attack's own test). Until batch 13 step 7 this term only tested threat (AI-053).
+        bool flanking = CombatUtils.IsAttackerFlanking(npc, target, _gameManager != null ? _gameManager.GetAllCharactersForAI() : null, out _);
+        float flankingBonus = flanking ? 2.5f : 0f;
 
-        string creatureType = target.Stats.CreatureType ?? string.Empty;
-        bool vulnerableType = creatureType.IndexOf("undead", StringComparison.OrdinalIgnoreCase) >= 0
-            || creatureType.IndexOf("outsider", StringComparison.OrdinalIgnoreCase) >= 0;
+        // The CreatureType fact through the knowledge provider (batch 13 step 7).
+        DND35.AI.Knowledge.ITargetView view = DND35.AI.Knowledge.KnowledgeService.ViewOf(npc, target);
+        bool vulnerableType = view.Has(DND35.AI.Knowledge.FactKey.CreatureType, "Undead")
+            || view.Has(DND35.AI.Knowledge.FactKey.CreatureType, "Outsider");
         float vulnerabilityBonus = vulnerableType ? 1.5f : 0f;
 
         return distanceScore + threatScore + woundedBonus + armorEase + flankingBonus + vulnerabilityBonus;
@@ -3207,30 +3200,9 @@ public class AIService : MonoBehaviour
             caster, spell, fallbackTarget, allCombatants, _gameManager);
     }
 
-    private static bool HasCreatureTag(CharacterController character, string tag)
-    {
-        if (character?.Stats?.CreatureTags == null || string.IsNullOrWhiteSpace(tag))
-            return false;
-
-        for (int i = 0; i < character.Stats.CreatureTags.Count; i++)
-        {
-            if (string.Equals(character.Stats.CreatureTags[i], tag, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
-
+    /// <summary>The "AI:MagicMissileOnly" switch, translated from the creature's control tag at spawn (CharacterController.AIControl; batch 13 step 7).</summary>
     private static bool IsMagicMissileOnlyCaster(CharacterController caster)
-    {
-        if (caster == null)
-            return false;
-
-        if (caster.Tags != null && caster.Tags.HasTag("AI:MagicMissileOnly"))
-            return true;
-
-        return HasCreatureTag(caster, "AI:MagicMissileOnly");
-    }
+        => caster != null && (caster.AIControl & DND35.AI.Knowledge.AIControlFlags.MagicMissileOnly) != 0;
 
     /// <summary>
     /// A castable spell and its score (<see cref="ScoreCastableSpells"/>), with the aim of an area spell (batch 11 step 25).

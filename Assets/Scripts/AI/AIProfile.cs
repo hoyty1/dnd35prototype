@@ -90,18 +90,8 @@ namespace DND35.AI
 
             float score = 10f;
 
-            // Tag priorities
-            if (target.Tags != null && TagPriorities != null)
-            {
-                foreach (TagPriority priority in TagPriorities)
-                {
-                    if (priority == null || string.IsNullOrWhiteSpace(priority.TagName))
-                        continue;
-
-                    if (TargetHasMatchingTag(target.Tags, priority.TagName))
-                        score += priority.IsPenalty ? -priority.Priority : priority.Priority;
-                }
-            }
+            // Fact priorities, read through the knowledge provider (batch 13 step 7, tags v2).
+            score = AddFactPriorities(score, target, self);
 
             // Wounded bonus
             if (PrioritizeWounded && target.Stats.TotalMaxHP > 0)
@@ -1236,37 +1226,36 @@ namespace DND35.AI
             return null;
         }
 
-        protected static bool TargetHasMatchingTag(CharacterTags tags, string requested)
+        /// <summary>
+        /// <paramref name="score"/> plus (or, for a penalty, minus) the weight of every <see cref="TagPriorities"/> entry
+        /// whose fact <paramref name="self"/> knows <paramref name="target"/> to have (batch 13 step 7, tags v2): each
+        /// string is parsed once into a typed query (Knowledge.FactQuery.Parse) and matched against the knowledge
+        /// provider's view (Knowledge.KnowledgeService.Provider.GetView), never against the display tags. A string that
+        /// names no fact never matches. The weights are added in list order.
+        /// </summary>
+        protected float AddFactPriorities(float score, CharacterController target, CharacterController self)
         {
-            if (tags == null || string.IsNullOrWhiteSpace(requested))
-                return false;
+            if (target == null || TagPriorities == null || TagPriorities.Count == 0)
+                return score;
 
-            string normalizedRequested = NormalizeTag(requested);
-
-            foreach (string existing in tags.GetAllTags())
+            Knowledge.ITargetView view = null;
+            for (int i = 0; i < TagPriorities.Count; i++)
             {
-                if (string.IsNullOrWhiteSpace(existing))
+                TagPriority priority = TagPriorities[i];
+                if (priority == null || string.IsNullOrWhiteSpace(priority.TagName))
                     continue;
 
-                string normalizedExisting = NormalizeTag(existing);
-                if (normalizedExisting.Equals(normalizedRequested, StringComparison.OrdinalIgnoreCase))
-                    return true;
+                Knowledge.FactQuery query = Knowledge.FactQuery.Parse(priority.TagName);
+                if (query == null)
+                    continue;
 
-                // Friendly partial matching supports both "Armor: Light Armor" and "Light Armor" etc.
-                if (normalizedExisting.IndexOf(normalizedRequested, StringComparison.OrdinalIgnoreCase) >= 0
-                    || normalizedRequested.IndexOf(normalizedExisting, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
+                if (view == null)
+                    view = Knowledge.KnowledgeService.ViewOf(self, target);
+                if (query.Matches(view))
+                    score += priority.IsPenalty ? -priority.Priority : priority.Priority;
             }
 
-            return false;
-        }
-
-        private static string NormalizeTag(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-                return string.Empty;
-
-            return raw.Trim().Replace(":", ": ").Replace("  ", " ");
+            return score;
         }
 
         private static int CountAdjacentAllies(CharacterController target)

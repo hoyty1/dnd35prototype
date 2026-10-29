@@ -18,6 +18,10 @@ namespace Tests.Scenarios
     /// (AiAttackGuard): an AI-run creature, NPC or party member, declares a weapon attack only on a target in the reach or
     /// range of the weapon in hand, with ammunition (PHB p.112-113, p.134, p.137); with none, its profile's out-of-reach
     /// alternatives (AiOutOfReach), the attack after an approach move included.
+    ///
+    /// Step 7 (AI-078, AI-053, AI-021; tags v2): AI target scoring reads typed facts through the knowledge provider
+    /// (DND35.AI.Knowledge): exact matching, the "HP State: Staggered" rows as the BadlyHurt wound band, the armor-priority
+    /// switch ahead of the profile, and a flanking term that tests a flank.
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -41,6 +45,10 @@ namespace Tests.Scenarios
             yield return S("ai-reach-weapon-dead-zone", AiReachWeaponDeadZone);
             yield return S("ai-archer-no-ammo-no-shot", AiArcherNoAmmoNoShot);
             yield return S("ai-melee-thrower-no-throw", AiMeleeThrowerNoThrow);
+            yield return S("ai-wound-band-priority", AiWoundBandPriority);
+            yield return S("ai-exact-race-match", AiExactRaceMatch);
+            yield return S("ai-armor-priority-reachable", AiArmorPriorityReachable);
+            yield return S("ai-flanking-priority", AiFlankingPriority);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -662,6 +670,152 @@ namespace Tests.Scenarios
                 })
                 .Expect("No refused shot for want of arrows", NoLog("has no Arrow ammunition", "no-ammunition"))
                 .Expect("No move to a better shot", NoLog("moves to get a better shot", "preferred-range move"))
+                .Build();
+        }
+
+        // ── batch 13 step 7: typed facts in AI target scoring ──────────
+
+        /// <summary>A plain melee profile that scores only the given fact priorities (no wounded or isolation terms).</summary>
+        private static Func<DND35.AI.AIProfile> FactProfile(params DND35.AI.TagPriority[] priorities)
+            => () =>
+            {
+                DND35.AI.AIProfile p = DND35.AI.AIProfile.CreateRuntime<DND35.AI.AIProfile>();
+                p.CombatStyle = DND35.AI.CombatStyle.Melee;
+                p.PrioritizeWounded = false;
+                p.PrioritizeIsolated = false;
+                p.TagPriorities = new List<DND35.AI.TagPriority>(priorities);
+                return p;
+            };
+
+        /// <summary>The attacker's first round-1 attack that is not an attack of opportunity is on <paramref name="want"/>.</summary>
+        private static Func<TraceView, ExpectResult> FirstAttackOn(string by, string want)
+            => v =>
+            {
+                TraceEvent first = v.Attacks(by, null, aoo: false, round: 1).FirstOrDefault();
+                if (first == null)
+                    return ExpectResult.Inconclusive("no round-1 attack");
+                return first.Str("target") == want
+                    ? ExpectResult.Pass("first attack on " + want, first.Seq)
+                    : ExpectResult.Fail("first attack on " + first.Str("target") + ", expected " + want, first.Seq);
+            };
+
+        /// <summary>
+        /// AI-078 (wound bands): an AI-run orc whose profile weights "HP State: Staggered" (+10), as seven shipped profiles
+        /// do to finish off a wounded foe, and "Armor: Unarmored" (+3), has two adjacent foes: an armored fighter at 6 hit
+        /// points (below half: BadlyHurt) and an unarmored one at full hit points. Staggered is nonlethal damage equal to
+        /// current hit points (PHB p.313), which neither has, so before batch 13 step 7 the row never fired and the orc took
+        /// the unarmored foe; the row now reads the BadlyHurt wound band, and the orc attacks the wounded fighter.
+        /// </summary>
+        private static ScenarioDef AiWoundBandPriority()
+        {
+            return Rules("rules/ai-wound-band-priority", "An AI profile's 'HP State: Staggered' weight picks the badly hurt foe (AI-078; PHB p.313)")
+                .Covers("AI-078", "PHB p.313", "batch 13 step 7")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Profile("orc", FactProfile(new DND35.AI.TagPriority("HP State: Staggered", 10f), new DND35.AI.TagPriority("Armor: Unarmored", 3f)))
+                .Pc("hurt", ActorSource.Stats(() => RulesScenarios.Fighter("Hurt Hero", 3)), 11, 10, Control.Idle)
+                .Pc("fresh", ActorSource.Stats(() => RulesScenarios.Fighter("Fresh Hero", 3)), 10, 11, Control.Idle)
+                .Hp("hurt", 6)
+                .Tweak("orc", Sturdy)
+                .Tweak("fresh", c => { RulesScenarios.StripArmor(c); Sturdy(c); })
+                .Initiative("orc", "hurt", "fresh")
+                .Expect("The hurt fighter starts badly hurt (below half its hit points), not staggered", v =>
+                {
+                    TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == "hurt");
+                    if (a == null)
+                        return ExpectResult.Inconclusive("no actor event");
+                    int hp = a.Int("hp"), max = a.Int("maxHp");
+                    DND35.AI.Knowledge.WoundBand band = DND35.AI.Knowledge.KnowledgeFacts.WoundBandOf(hp, max);
+                    return band == DND35.AI.Knowledge.WoundBand.BadlyHurt
+                        ? ExpectResult.Pass(hp + "/" + max + " " + band, a.Seq)
+                        : ExpectResult.Fail(hp + "/" + max + " " + band, a.Seq);
+                })
+                .Expect("Round 1: the orc attacks the badly hurt fighter", FirstAttackOn("orc", "hurt"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-078 (exact matching): an AI-run orc whose profile weights "Elf" (+10, a bare species) and "Armor: Unarmored"
+        /// (+3) has two adjacent foes: an armored elf and an unarmored half-elf. The old two-way substring match counted
+        /// "Elf" in "Race: Half-Elf", so both got the +10 and the orc took the unarmored half-elf; the species fact is now
+        /// matched whole, and the orc attacks the elf.
+        /// </summary>
+        private static ScenarioDef AiExactRaceMatch()
+        {
+            return Rules("rules/ai-exact-race-match", "An AI profile's 'Elf' weight matches an elf, not a half-elf (AI-078)")
+                .Covers("AI-078", "batch 13 step 7")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Profile("orc", FactProfile(new DND35.AI.TagPriority("Elf", 10f), new DND35.AI.TagPriority("Armor: Unarmored", 3f)))
+                .Pc("elf", ActorSource.Stats(() => RulesScenarios.Fighter("Elf Hero", 3)), 11, 10, Control.Idle)
+                .Pc("halfelf", ActorSource.Stats(() => RulesScenarios.Fighter("Half-Elf Hero", 3)), 10, 11, Control.Idle)
+                .Tweak("orc", Sturdy)
+                .Tweak("elf", c => { c.SetDisplayedRace("Elf"); Sturdy(c); })
+                .Tweak("halfelf", c => { c.SetDisplayedRace("Half-Elf"); RulesScenarios.StripArmor(c); Sturdy(c); })
+                .Initiative("orc", "elf", "halfelf")
+                .Expect("Round 1: the orc attacks the elf", FirstAttackOn("orc", "elf"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-053 (armor priority): an AI-run orc with the armor-priority switch (the armor-targeting preset's "Uses
+        /// Armor-Based Targeting", CharacterController.AIControl) and a profile that prefers medium armor (+20) has two
+        /// adjacent foes: one in the Fighter kit's scale mail (medium) and one unarmored. Before batch 13 step 7 the
+        /// profile path ran first and the switch was unreachable, so the orc took the armored foe; the switch now comes
+        /// first and picks the least armored foe (unarmored 100, medium 50).
+        /// </summary>
+        private static ScenarioDef AiArmorPriorityReachable()
+        {
+            return Rules("rules/ai-armor-priority-reachable", "The AI armor-priority switch is reachable for a creature with a profile (AI-053)")
+                .Covers("AI-053", "batch 13 step 7")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Profile("orc", FactProfile(new DND35.AI.TagPriority("Armor: Medium Armor", 20f)))
+                .Pc("armored", ActorSource.Stats(() => RulesScenarios.Fighter("Armored Hero", 3)), 11, 10, Control.Idle)
+                .Pc("bare", ActorSource.Stats(() => RulesScenarios.Fighter("Bare Hero", 3)), 10, 11, Control.Idle)
+                .Tweak("orc", c => { c.AIControl |= DND35.AI.Knowledge.AIControlFlags.ArmorPriorityTargeting; Sturdy(c); })
+                .Tweak("armored", Sturdy)
+                .Tweak("bare", c => { RulesScenarios.StripArmor(c); Sturdy(c); })
+                .Initiative("orc", "armored", "bare")
+                .Expect("Round 1: the orc attacks the unarmored foe", FirstAttackOn("orc", "bare"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-053 (flanking term): an AI-run orc without a profile (the default score, AIService.GetTargetPriority) has two
+        /// adjacent foes: a fighter 3 that an idle goblin ally threatens from the opposite side, so the orc flanks it
+        /// (PHB p.153), and a fighter 4, which scores 0.7 more as a threat. The old "flanking" term only tested that the orc
+        /// threatens the target, true for both, so the orc took the fighter 4; the term now tests a flank (+2.5), and the
+        /// orc goes for the flanked fighter. A profile-less orc opens with a trip on a standing foe (AI-035), so the check
+        /// reads its first round-1 attack or maneuver, whichever comes first.
+        /// </summary>
+        private static ScenarioDef AiFlankingPriority()
+        {
+            return Rules("rules/ai-flanking-priority", "The default AI target score's flanking term needs a flank, not just threat (AI-053; PHB p.153)")
+                .Covers("AI-053", "PHB p.153", "batch 13 step 7")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Profile("orc", () => null)
+                .Npc("ally", "goblin", 12, 10, Control.Idle)
+                .Pc("flanked", ActorSource.Stats(() => RulesScenarios.Fighter("Flanked Hero", 3)), 11, 10, Control.Idle)
+                .Pc("other", ActorSource.Stats(() => RulesScenarios.Fighter("Veteran Hero", 4)), 10, 11, Control.Idle)
+                .Tweak("orc", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Tweak("flanked", Sturdy)
+                .Tweak("other", Sturdy)
+                .Initiative("orc", "ally", "flanked", "other")
+                .Expect("Round 1: the orc's first attack or maneuver is on the flanked fighter", v =>
+                {
+                    TraceEvent first = v.Attacks("orc", null, aoo: false, round: 1)
+                        .Concat(v.Maneuvers("orc").Where(e => e.Round == 1 && !e.Bool("counter")))
+                        .OrderBy(e => e.Seq)
+                        .FirstOrDefault();
+                    if (first == null)
+                        return ExpectResult.Inconclusive("no round-1 attack or maneuver");
+                    return first.Str("target") == "flanked"
+                        ? ExpectResult.Pass(first.Ev + " on flanked", first.Seq)
+                        : ExpectResult.Fail(first.Ev + " on " + first.Str("target") + ", expected flanked", first.Seq);
+                })
                 .Build();
         }
     }

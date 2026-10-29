@@ -1161,6 +1161,9 @@ public partial class GameManager : MonoBehaviour
                 {
                     PCs[i].Stats.LastEnergyDamageTaken = null;
                     PCs[i].EndTotalDefense();
+                    // So do its remembered squares, pinpoints and auto-miss counts (AI-021): the tracker held creatures of
+                    // the last fight, and a reused enemy slot is a different creature.
+                    PCs[i].GetComponent<LastKnownPositionTracker>()?.ClearAllPositions();
                 }
 
         if (Grid != null)
@@ -3198,8 +3201,8 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Records <paramref name="invisibleCharacter"/>'s square in the memory of every enemy that sees it, PC or NPC (the
-    /// controller store and the LastKnownPositionTracker). Called by the invisibility spells just before the effect is
+    /// Records <paramref name="invisibleCharacter"/>'s square in the memory of every enemy that sees it, PC or NPC (its
+    /// LastKnownPositionTracker, the one position store since batch 13 step 7, AI-021). Called by the invisibility spells just before the effect is
     /// applied, so the enemies that watched it vanish know where it was (PHB p.152, DMG p.295; CMB-094).
     /// </summary>
     private void UpdateEnemyLastKnownPositionForInvisibility(CharacterController invisibleCharacter)
@@ -3217,14 +3220,12 @@ public partial class GameManager : MonoBehaviour
             if (!TeamUtility.IsEnemy(observer, invisibleCharacter))
                 continue;
 
-            // Only an observer that sees the creature as it vanishes learns its square (both stores agree): the caller runs
+            // Only an observer that sees the creature as it vanishes learns its square: the caller runs
             // this before the invisibility effect is applied, so a blinded observer or one without line of sight learns
             // nothing (DMG p.295; CMB-094).
             bool incomingIsRangedAttack = observer.IsEquippedWeaponRanged();
             if (!observer.CanSee(invisibleCharacter, incomingIsRangedAttack))
                 continue;
-
-            observer.UpdateLastKnownPosition(invisibleCharacter, incomingIsRangedAttack);
 
             LastKnownPositionTracker tracker = observer.GetComponent<LastKnownPositionTracker>();
             tracker?.UpdateLastKnownPosition(invisibleCharacter);

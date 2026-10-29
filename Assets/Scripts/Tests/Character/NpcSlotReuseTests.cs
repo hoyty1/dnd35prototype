@@ -352,10 +352,14 @@ public static class NpcSlotReuseTests
 
             Spawn(slot, adept, SlotPos);
             Assert(slot.Spellcasting != null, "CRE-046 control: the adept spawns with a SpellcastingComponent");
+            Assert(slot.AIControl == DND35.AI.Knowledge.AIControlFlags.MagicMissileOnly,
+                "batch 13 step 7 control: the adept's AI:MagicMissileOnly tag gives its slot the MagicMissileOnly control flag");
 
             Spawn(slot, Def("orc_warrior"), SlotPos);
             Assert(slot.Spellcasting == null && slot.GetComponent<SpellcastingComponent>() == null,
                 "CRE-046: an orc warrior in the adept's slot has no SpellcastingComponent");
+            Assert(slot.AIControl == DND35.AI.Knowledge.AIControlFlags.None,
+                "CRE-046: an orc warrior in the adept's slot has no AI control flag (batch 13 step 7)");
 
             global::Inventory inv = slot.InventoryComp != null ? slot.InventoryComp.CharacterInventory : null;
             ItemData main = inv != null ? inv.RightHandSlot : null;

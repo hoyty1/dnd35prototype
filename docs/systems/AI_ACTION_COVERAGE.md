@@ -17,7 +17,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |
 | Withdraw | Partial | DefensiveMelee <30% HP; Frightened; Suggested; a Restricted Withdraw (standard action, speed) for a creature limited to one action, never blinded (batch 12 step 22, the shared `MovementService.CanStartMovement`) | Yes | AI-010 |
 | Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Untyped +2 (CMB-003); one charge core for both sides since batch 12 step 21 (flanking, Spirited Charge, the partial charge of a single-action creature, D2); the planner the AI reads (`CanChargeTargetForAI`) refuses a charge whose closest attack space is taken or whose lines to it cross any creature but a helpless one, an ally too (PHB p.154; CMB-132, CMB-199 fixed 2026-10-29), so the AI picks another action (`rules/charge-blocked-by-ally-ai`) |
-| Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
+| Seek flanking | Used | +3 movement term if `SeekFlanking`; the default target score adds +2.5 for a target the NPC already flanks (`CombatUtils.IsAttackerFlanking`, batch 13 step 7, AI-053) | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
 | Cover, terrain, hazards | Never | `UseCover` unread; no cover system | No | paths through walls of fire, clouds, webs (inferred) |
 | Stand up / drop prone / crawl | Partial | stands up at turn start when prone (`TryStandUpFromProneForAI`, move action, provokes; charmed NPCs too, not confused ones); never drops prone or crawls. Prone creatures get no ordinary movement (`GetCurrentMoveRangeSquares` is 0) | Yes | CMB-074 |
 | Escape entangle | Auto | `TryExecuteAnimateRopeEscapeForNpc`, standard action | Yes | CMB-055 |
@@ -89,7 +89,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Potions, wands, scrolls | Never | charmed-heals-charmer exception | Yes | AI-009, ITM-005, AI-054; 11.8.3 |
 | Rods, staves, activated rings and wondrous items | Never | | No (unreachable for PCs too) | ITM-018, ITM-019, ITM-024 |
 | Whirlwind Attack, Manyshot, Stunning Fist, Spring Attack, Shot on the Run, Tumble, mounted combat | Never | | No (unusable for PCs too) | CMB-022, CMB-023, CMB-027, CMB-031 |
-| Invisible/concealed targets | Used | tiers, Listen, last-known attacks (the turn-start Listen check is shared with PCs, `PerceptionRules.ProcessTurnStart`, batch 12 step 8) | Manual (a pinpointed target in the ranged list since batch 12 step 8; no believed-square attack, CMB-094) | AI-021, GRID-009, CMB-094, CMB-182, CMB-183 |
+| Invisible/concealed targets | Used | tiers, Listen, last-known attacks (the turn-start Listen check is shared with PCs, `PerceptionRules.ProcessTurnStart`, batch 12 step 8; one position store, the `LastKnownPositionTracker`, since batch 13 step 7) | Manual (a pinpointed target in the ranged list since batch 12 step 8; no believed-square attack, CMB-094) | GRID-009, CMB-094, CMB-182, CMB-183 |
 | Retreat, morale, surrender | Partial | 8.9 | n/a | AI-010; 11.8.5 |
 | Protect allies, focus fire | Never | each NPC scores alone | n/a | gap |
 

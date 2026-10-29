@@ -106,6 +106,17 @@
       "notes": "Batch 12 step 8 (CMB-094; added 2026-10-28): the LastKnownPositionTracker every combatant has from Init. A Listen pinpoint records the square, becomes the last-known square and lapses once the creature leaves it (DMG p.295); a deafened creature automatically fails Listen and pinpoints nothing (PHB p.307); a PC-side PerceptionRules.ProcessTurnStart records a visible enemy and pinpoints it once it is invisible and has moved, and CanLocateForRangedAttack accepts it. +50 Listen fixture, so the unseeded d20 always beats DC 20. Play mode (CharacterController.Init, TST-009)."
     },
     {
+      "type": "Tests.AI.KnowledgeFactsTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 45,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 13 step 7 (AI-078, AI-021; added 2026-10-29): the typed target facts AI scoring reads. Every TagPriority string of every AIProfile type parses into a FactQuery; matching is whole (Elf is not Half-Elf); HP State: Staggered reads the BadlyHurt wound band (PHB p.313), Disabled and Dying stay hit point states; the wound bands; the omniscient view of a live creature (creature type spellings normalized, a mindless creature not undead, MM p.313); a swappable KnowledgeService.Provider; the control tags' AIControlFlags. Play mode (CharacterController.Init, TST-009)."
+    },
+    {
       "type": "Tests.AI.AreaAimSearchTests",
       "needs": "play",
       "skip": "",
@@ -253,11 +264,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 57,
+      "passed": 59,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one. Batch 13 step 4 (2026-10-29, CMB-179): a respawned slot keeps no total defense; 57/57 (20261029T190209Z-play)."
+      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one. Batch 13 step 4 (2026-10-29, CMB-179): a respawned slot keeps no total defense; 57/57 (20261029T190209Z-play). Batch 13 step 7 (2026-10-29): +2, the adept's slot has the MagicMissileOnly AIControl flag and an orc warrior spawned into it has none (CRE-046)."
     },
     {
       "type": "Tests.Character.NpcProficiencyTests",
