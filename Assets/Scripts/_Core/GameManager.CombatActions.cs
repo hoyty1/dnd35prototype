@@ -43,8 +43,9 @@ public partial class GameManager
 
         // Determine the equipped weapon's range semantics based on selected attack type.
         ItemData weapon = pc.GetEquippedMainWeapon();
-        bool usingThrownAttack = IsUsingThrownAttackMode(pc, weapon);
-        bool isRangedWeapon = IsAttackModeRanged(pc, weapon);
+        AttackIntent uiIntent = AttackIntent.ForUi(this, pc);
+        bool usingThrownAttack = IsUsingThrownAttackMode(pc, weapon, uiIntent);
+        bool isRangedWeapon = IsAttackModeRanged(pc, weapon, uiIntent);
         bool isThrownWeapon = usingThrownAttack || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
         int rangeIncrement = (weapon != null && isRangedWeapon) ? weapon.RangeIncrement : 0;
 
@@ -187,7 +188,7 @@ public partial class GameManager
                 case PendingAttackMode.LayOnHands: modeStr = "LAY ON HANDS"; break;
             }
 
-            if (_pendingAttackMode == PendingAttackMode.Single && AttackIntent.ForUi(this, pc).ThrownSelected)
+            if (_pendingAttackMode == PendingAttackMode.Single && uiIntent.ThrownSelected)
                 modeStr = "THROWN ATTACK";
             else if (_pendingAttackMode == PendingAttackMode.Single && pc.IsUsingFlurryOfBlows)
                 modeStr = "FLURRY OF BLOWS";
@@ -228,7 +229,7 @@ public partial class GameManager
         if (pc == null || cell == null)
             return null;
 
-        bool isRanged = IsAttackModeRanged(pc, pc.GetEquippedMainWeapon());
+        bool isRanged = IsAttackModeRanged(pc, pc.GetEquippedMainWeapon(), AttackIntent.ForUi(this, pc));
         return cell.GetOccupantOtherThan(pc, o => o.Stats != null && !o.Stats.IsDead
             && pc.IsTargetInCurrentWeaponRange(o)
             && (!isRanged || pc.CanLocateForRangedAttack(o)));
@@ -237,6 +238,7 @@ public partial class GameManager
     private List<CharacterController> GetValidRangedTargets(CharacterController attacker, AttackIntent intent = null)
     {
         var valid = new List<CharacterController>();
+        intent ??= AttackIntent.ForUi(this, attacker);
         if (attacker == null || !IsAttackModeRanged(attacker, null, intent))
             return valid;
 
@@ -304,6 +306,7 @@ public partial class GameManager
         if (attacker == null)
             return new List<CharacterController>();
 
+        intent ??= AttackIntent.ForUi(this, attacker);
         return IsAttackModeRanged(attacker, null, intent)
             ? GetValidRangedTargets(attacker, intent)
             : GetValidMeleeTargets(attacker);
@@ -315,6 +318,7 @@ public partial class GameManager
         if (attacker == null || target == null || target.Stats == null || target.Stats.IsDead)
             return false;
 
+        intent ??= AttackIntent.ForUi(this, attacker);
         if (IsUsingThrownAttackMode(attacker, null, intent))
             return attacker.IsTargetInThrownWeaponRange(target);
 
@@ -328,7 +332,7 @@ public partial class GameManager
 
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = IsUsingThrownAttackMode(attacker, weapon) || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
+        bool isThrownWeapon = IsUsingThrownAttackMode(attacker, weapon, AttackIntent.ForUi(this, attacker)) || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
         List<Vector2Int> attackerSquares = attacker.GetOccupiedSquaresAt(attackerPosition);
 
         foreach (CharacterController candidate in GetAllCharacters())
@@ -2686,6 +2690,13 @@ public partial class GameManager
         }
     }
 
+    /// <summary>
+    /// The Full Attack button (origin C, batch 12 step 17; CMB-173): declares the full attack (the full-round action, PHB
+    /// p.143; Rapid Shot first when its toggle is on, PHB p.99, D9) and runs the one attack-sequence executor
+    /// (RunAttackSequence) with the player's choices (UiAttackDecider: the 5-foot steps and a new target when one is needed,
+    /// <see cref="PromptFullAttackStep"/>; Haste's natural-attack chooser). This coroutine keeps only the UI: the optional
+    /// 5-foot step after the attacks, the completion line and the end of the turn.
+    /// </summary>
     private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget)
     {
         if (attacker == null || initialTarget == null)
@@ -2694,232 +2705,55 @@ public partial class GameManager
             yield break;
         }
 
-        attacker.Actions.UseFullRoundAction();
-
-        // The PC UI's attack selection, read once (AttackIntent.ForUi); every step of this full attack uses it.
-        AttackIntent sequenceIntent = AttackIntent.ForUi(this, attacker);
-        bool rangedMode = IsAttackModeRanged(attacker, null, sequenceIntent);
+        AttackSequenceRequest request = AttackSequenceRequest.ForUiFullAttack(this, attacker, initialTarget);
+        bool rangedMode = IsAttackModeRanged(attacker, null, request.Intent);
         string modeLabel = rangedMode ? "ranged" : "melee";
-        // A thrown full attack (a javelin, a thrown dagger): each step needs a throwable weapon in hand (PHB p.113).
-        bool thrownSequence = sequenceIntent.IsThrowOf(sequenceIntent.Weapon);
 
-        RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget, sequenceIntent);
-        int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
-        if (plannedAttackCount <= 0)
+        // A ranged full attack first runs the executor's weapon checks (a loaded crossbow, ammunition): a shot that cannot be
+        // made spends nothing (RunAttackSequence stage 4, CanShootWithWeapon). Rapid Shot is declared before the first attack
+        // and commits the turn to the full attack (D9); then the full attack.
+        ItemData firstWeapon = StepWeapon(request, attacker);
+        if (rangedMode && !CanShootWithWeapon(attacker, firstWeapon, out _))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no available attacks."));
-            StartCoroutine(DelayedEndActivePCTurn(0.8f));
+            ShowActionChoices();
+            yield break;
+        }
+        if (rangedMode && request.Intent.RapidShot)
+            TryDeclareRapidShotForAttack(attacker, firstWeapon, true);
+        if (!attacker.TryCommitFullAttackAction(out string fullAttackRefusal))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot full attack: {fullAttackRefusal}."));
+            ShowActionChoices();
             yield break;
         }
 
-        CharacterController currentTarget = initialTarget;
-        int attacksMade = 0;
-
-        // D&D 3.5: You can take a 5-foot step before a full attack.
-        if (CanTakeFiveFootStep(attacker))
+        request.ReportStep = step =>
         {
-            yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
-                attacker,
-                "Before attacks:",
-                requireReachableTargetAfterStep: false,
-                rangedMode: rangedMode));
-        }
-
-        for (int attackIndex = 0; attackIndex < plannedAttackCount; attackIndex++)
-        {
-            if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
-                break;
-
-            int remainingAttacks = plannedAttackCount - attackIndex;
-            bool needsRetarget = currentTarget == null
-                || currentTarget.Stats == null
-                || currentTarget.Stats.IsDead
-                || !IsTargetInCurrentWeaponRange(attacker, currentTarget, sequenceIntent)
-                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163); nothing passes a
-                // Resilient Sphere (CMB-092); a failed ward save bars the target (D6): the shared gate.
-                || !IsDirectlyAttackableNoReach(attacker, currentTarget);
-
-            if (needsRetarget)
-            {
-                if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
-                {
-                    Legality sequenceLegality = AttackLegality.Check(attacker, currentTarget, DirectAttackKind.Weapon, null,
-                        AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", !sequenceLegality.Ok
-                        ? sequenceLegality.Reason
-                        : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
-                }
-
-                List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker, sequenceIntent);
-
-                if (validTargets.Count == 0 && CanTakeFiveFootStep(attacker))
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"No valid {modeLabel} targets right now. You may take a 5-foot step to continue."));
-
-                    yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
-                        attacker,
-                        "Step to reach another target:",
-                        requireReachableTargetAfterStep: true,
-                        rangedMode: rangedMode));
-
-                    if (_fullAttackFiveFootStepSelectionCancelled || !_fullAttackFiveFootStepWasTaken)
-                    {
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused."));
-                        break;
-                    }
-
-                    validTargets = GetValidTargetsForCurrentWeapon(attacker, sequenceIntent);
-                }
-
-                if (validTargets.Count == 0)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No valid {modeLabel} targets for {remainingAttacks} remaining attack(s)."));
-                    break;
-                }
-
-                yield return StartCoroutine(WaitForFullAttackRetargetSelection(attacker, remainingAttacks));
-
-                if (_rangedRetargetSelectionCancelled || _selectedRangedRetarget == null)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused."));
-                    break;
-                }
-
-                currentTarget = _selectedRangedRetarget;
-                _selectedRangedRetarget = null;
-                _rangedRetargetSelectionCancelled = false;
-
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}."));
-            }
-
-            // Haste's extra natural attack: the player picks the natural weapon when the sequence reaches it
-            // (PHB p.239; owner decision 2026-10-07, CMB-106; CMB-124). Cancel uses the default.
-            int hasteNaturalAttackIndex = -1;
-            if (!rangedMode && attacker.IsHasteExtraNaturalStep(attackIndex) && attacker.CanUseHasteExtraNaturalAttack())
-            {
-                Coroutine hasteChoice = AttackDeciders.For(attacker).ChooseHasteNaturalAttack(this, attacker, currentTarget, null, 0, choice => hasteNaturalAttackIndex = choice);
-                if (hasteChoice != null)
-                    yield return hasteChoice;
-                if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead
-                    || currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
-                    break;
-            }
-
-            // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): this step's attempt rolls the attacker's one save; a
-            // failure loses this attack, and the next one goes to another target (the warded one now fails the gate).
-            if (AttackLegality.CommitWard(attacker, currentTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
-            {
-                attacksMade++;
-                UpdateAllStatsUI();
-                yield return new WaitForSeconds(0.35f);
-                continue;
-            }
-
-            // Recompute flanking/range context each attack in case target/position changed.
-            var allCombatants = GetAllCharacters();
-            CharacterController flankPartner;
-            bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, currentTarget, allCombatants, out flankPartner);
-            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
-            // The weapon in hand for this step: after a throw the hook drew the next one (or none is left).
-            ItemData stepWeapon = attacker.GetEquippedMainWeapon();
-            sequenceIntent.Weapon = stepWeapon;
-            RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget, sequenceIntent);
-
-            // A ranged or thrown attack provokes from each threatening foe, step by step (PHB p.141 Table 8-2), and a
-            // projectile weapon needs a piece of ammunition for each shot (PHB p.113): the same helpers as the Attack
-            // button's sequence (CombatFlowService; step 17 merges the copies).
-            if (rangedMode && _combatFlowService != null)
-            {
-                if (stepWeapon != null && stepWeapon.IsProjectileWeapon && !_combatFlowService.CheckAmmoAvailable(attacker, stepWeapon))
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early: no ammunition. {remainingAttacks} attack(s) unused."));
-                    break;
-                }
-                if (thrownSequence && !sequenceIntent.IsThrowOf(stepWeapon))
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} has no throwable weapon in hand. {remainingAttacks} attack(s) unused."));
-                    break;
-                }
-                if (!_combatFlowService.ResolveRangedAttackAoOIfProvoked(attacker))
-                    break;
-                if (CurrentPhase == TurnPhase.CombatOver)
-                    yield break;
-            }
-
-            FullAttackResult stepResult = attacker.FullAttack(
-                currentTarget,
-                isFlanking,
-                flankBonus,
-                partnerName,
-                rangeInfo,
-                startAttackIndex: attackIndex,
-                maxAttacks: 1,
-                hasteNaturalAttackIndex: hasteNaturalAttackIndex);
-
-            if (stepResult == null || stepResult.Attacks.Count == 0)
-                break;
-
-            attacksMade++;
-            CombatResult attack = stepResult.Attacks[0];
-            string label = (stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0)
-                ? stepResult.AttackLabels[0]
-                : $"Attack {attackIndex + 1}";
-
-            CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
+            CombatUI?.ShowCombatLog(step.Result.GetAttackBreakdown(step.Label));
             UpdateAllStatsUI();
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
+        };
 
-            // The one post-attack hook (origin C): the thrown drop and the ammunition, Concentration per hit, melee
-            // reactions, the free trip, Improved Grab (the player's prompt, MM p.310), the summon cleanup and the
-            // combat-end check for the target and the attacker (CORE-011, CORE-037).
-            AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.PcFullAttackButton, attacker, currentTarget, sequenceIntent).With(stepResult.Attacks);
-            stepResolution.RangeInfo = rangeInfo;
-            stepResolution.CombatEndContext = "ExecuteFullAttackSequence";
-            var stepOutcome = new PostAttackOutcome();
-            IEnumerator stepPost = OnAttackResolved(stepResolution, stepOutcome);
-            while (stepPost.MoveNext())
-                yield return stepPost.Current;
+        var outcome = new AttackSequenceOutcome();
+        IEnumerator run = RunAttackSequence(request, outcome);
+        while (run.MoveNext())
+            yield return run.Current;
 
-            if (stepOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
-                yield break;
-            if (stepOutcome.AttackerOutOfFight)
-                break;
+        if (outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
+            yield break;
 
-            // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): once its Improved Grab takes
-            // hold, this button's remaining attacks are not made as ordinary attacks. A hold with one body part (MM p.310)
-            // leaves it ungrappled, so its remaining attacks go on against other opponents.
-            if (attacker.IsGrappling())
-            {
-                int attacksLeft = plannedAttackCount - (attackIndex + 1);
-                if (attacksLeft > 0)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{attacker.Stats.CharacterName} is grappling: its {attacksLeft} remaining attack(s) are not made as ordinary attacks (PHB p.156)."));
-                break;
-            }
-
-            if (attack.TargetKilled)
-            {
-                int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
-                if (attacksRemainingAfterKill > 0)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining."));
-                    currentTarget = null;
-                }
-            }
-
-            // D&D 3.5: You can 5-foot step between attacks during a full attack.
-            if (attackIndex < plannedAttackCount - 1 && CanTakeFiveFootStep(attacker))
-            {
-                yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
-                    attacker,
-                    "Between attacks:",
-                    requireReachableTargetAfterStep: false,
-                    rangedMode: rangedMode));
-            }
-
-            yield return new WaitForSeconds(0.35f);
-        }
+        // The budget is fixed by the first commit; a full attack refused at its first step reads it from the ladder.
+        int budget = attacker.ProgressiveAttackPool.MainHandBudget > 0
+            ? attacker.ProgressiveAttackPool.MainHandBudget
+            : attacker.GetMainHandAttackBudget(rangedMode ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind());
+        int left = Mathf.Max(0, budget - attacker.ProgressiveAttackPool.MainHandStepsUsed);
+        if (outcome.AttacksMade == 0 && !string.IsNullOrEmpty(outcome.StopReason) && !outcome.AttackerOutOfFight && !outcome.StartedGrapple)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} makes no attack ({outcome.StopReason})."));
+        else if (outcome.StartedGrapple && left > 0)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{attacker.Stats.CharacterName} is grappling: its {left} remaining attack(s) are not made as ordinary attacks (PHB p.156)."));
+        else if (left > 0 && !string.IsNullOrEmpty(outcome.StopReason) && !outcome.AttackerOutOfFight)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early ({outcome.StopReason}). {left} attack(s) unused."));
 
         // D&D 3.5: You can also 5-foot step after attacks (not an attacker a reaction or an AoO dropped).
         if (CanTakeFiveFootStep(attacker) && CurrentPhase != TurnPhase.CombatOver && !CombatEndRules.IsOutOfFight(attacker))
@@ -2938,21 +2772,128 @@ public partial class GameManager
         _fullAttackFiveFootStepSelectionCancelled = false;
         _fullAttackFiveFootStepWasTaken = false;
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{attacker.Stats.CharacterName} completes {modeLabel} full attack ({attacksMade}/{plannedAttackCount} attacks used)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{attacker.Stats.CharacterName} completes {modeLabel} full attack ({outcome.AttacksMade}/{budget} attacks used)."));
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
         StartCoroutine(DelayedEndActivePCTurn(1.0f));
     }
-    private void PerformFullAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
+
+    /// <summary>
+    /// The player's answer to IAttackDecider.ChooseNextStep on the Full Attack button (origin C, batch 12 step 17): the
+    /// optional 5-foot step before the first attack and between attacks (PHB p.144), then the current target while it is
+    /// alive, in reach or range and attackable (the hold bar, the Resilient Sphere, a known failed ward save: the shared
+    /// gate), else a new target the player clicks, with a 5-foot step offered first when none is in reach; cancelling ends
+    /// the full attack. The slain line of the step just made is logged here.
+    /// </summary>
+    internal IEnumerator PromptFullAttackStep(AttackSequenceState state, Action<AttackStepChoice> answer)
     {
-        if (_combatFlowService != null)
+        AttackSequenceRequest req = state.Request;
+        CharacterController attacker = req.Attacker;
+        AttackIntent intent = req.Intent;
+        bool rangedMode = IsAttackModeRanged(attacker, null, intent);
+        string modeLabel = rangedMode ? "ranged" : "melee";
+        AttackStepKind kind = rangedMode ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind();
+        CharacterController currentTarget = state.CurrentTarget;
+
+        AttackSequenceStep previous = state.TakePreviousStep();
+        int remaining = attacker.GetRemainingMainHandAttackSteps(kind);
+        if (previous != null && previous.Result != null && previous.Result.TargetKilled && currentTarget != null && currentTarget.Stats != null)
         {
-            _combatFlowService.PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-            return;
+            if (remaining > 0)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{currentTarget.Stats.CharacterName} is defeated! {remaining} attack(s) remaining."));
+            currentTarget = null;
         }
+
+        if (remaining <= 0)
+        {
+            answer?.Invoke(AttackStepChoice.StopWith("no attacks left"));
+            yield break;
+        }
+
+        // D&D 3.5: a 5-foot step before a full attack, or between its attacks (PHB p.144).
+        if (CanTakeFiveFootStep(attacker))
+        {
+            yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                attacker,
+                state.StepsTaken == 0 ? "Before attacks:" : "Between attacks:",
+                requireReachableTargetAfterStep: false,
+                rangedMode: rangedMode));
+        }
+        if (state.StepsTaken > 0)
+            yield return new WaitForSeconds(0.35f);
+
+        if (attacker.Stats == null || CombatEndRules.IsOutOfFight(attacker))
+        {
+            answer?.Invoke(AttackStepChoice.StopWith("the attacker is out of the fight"));
+            yield break;
+        }
+
+        bool needsRetarget = currentTarget == null
+            || currentTarget.Stats == null
+            || currentTarget.Stats.IsDead
+            || !IsTargetInCurrentWeaponRange(attacker, currentTarget, intent)
+            // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163); nothing passes a
+            // Resilient Sphere (CMB-092); a failed ward save bars the target (D6): the shared gate.
+            || !IsDirectlyAttackableNoReach(attacker, currentTarget);
+
+        if (needsRetarget)
+        {
+            if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
+            {
+                Legality sequenceLegality = AttackLegality.Check(attacker, currentTarget, DirectAttackKind.Weapon, null,
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", !sequenceLegality.Ok
+                    ? sequenceLegality.Reason
+                    : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
+            }
+
+            List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker, intent);
+
+            if (validTargets.Count == 0 && CanTakeFiveFootStep(attacker))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"No valid {modeLabel} targets right now. You may take a 5-foot step to continue."));
+
+                yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                    attacker,
+                    "Step to reach another target:",
+                    requireReachableTargetAfterStep: true,
+                    rangedMode: rangedMode));
+
+                if (_fullAttackFiveFootStepSelectionCancelled || !_fullAttackFiveFootStepWasTaken)
+                {
+                    answer?.Invoke(AttackStepChoice.StopWith("the player ended the full attack"));
+                    yield break;
+                }
+
+                validTargets = GetValidTargetsForCurrentWeapon(attacker, intent);
+            }
+
+            if (validTargets.Count == 0)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No valid {modeLabel} targets for {remaining} remaining attack(s)."));
+                answer?.Invoke(AttackStepChoice.StopWith("no valid target"));
+                yield break;
+            }
+
+            yield return StartCoroutine(WaitForFullAttackRetargetSelection(attacker, remaining));
+
+            if (_rangedRetargetSelectionCancelled || _selectedRangedRetarget == null)
+            {
+                answer?.Invoke(AttackStepChoice.StopWith("the player ended the full attack"));
+                yield break;
+            }
+
+            currentTarget = _selectedRangedRetarget;
+            _selectedRangedRetarget = null;
+            _rangedRetargetSelectionCancelled = false;
+            state.Outcome.TargetSwitches++;
+
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}."));
+        }
+
+        answer?.Invoke(AttackStepChoice.At(currentTarget));
     }
 
     private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,

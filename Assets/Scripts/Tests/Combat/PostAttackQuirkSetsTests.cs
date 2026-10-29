@@ -51,6 +51,8 @@ public static class PostAttackQuirkSetsTests
         Assert(typeof(AttackResolution).Assembly.GetType("PostAttackQuirk") == null, "the PostAttackQuirk type is gone");
         Assert(typeof(AttackResolution).Assembly.GetType("PostAttackQuirkSets") == null, "the PostAttackQuirkSets table is gone");
         Assert(typeof(AttackResolution).GetField("Quirks") == null, "AttackResolution has no quirk field");
+        Assert(typeof(AttackResolution).Assembly.GetType("AttackIntentQuirk") == null && typeof(AttackIntent).GetField("Quirks") == null,
+            "the AttackIntentQuirk type and the intent's quirk field are gone (batch 12 step 17, CMB-096)");
         foreach (AttackOrigin origin in Enum.GetValues(typeof(AttackOrigin)))
         {
             AttackResolution r = AttackResolution.Create(origin, null, null, null);
@@ -118,9 +120,9 @@ public static class PostAttackQuirkSetsTests
         Assert(GameManager.IsThrowableWeapon(dagger, meleeOnly: true) && !GameManager.IsThrowableWeapon(javelin, meleeOnly: true),
             "meleeOnly keeps the melee throwables (the off-hand draw)");
 
-        var npc = new AttackIntent { Quirks = AttackIntentQuirk.NpcIntentReadsUiThrownGlobal, LegacyUiMode = AttackMode.Thrown };
-        Assert(npc.IsThrowOf(javelin) && npc.IsThrowOf(dart), "an NPC intent (no mode) throws a javelin or a dart");
-        Assert(!npc.IsThrowOf(dagger), "an NPC intent never throws a dagger from the PC's copied selection (CMB-096)");
+        var noMode = new AttackIntent();
+        Assert(noMode.IsThrowOf(javelin) && noMode.IsThrowOf(dart), "an intent with no mode throws a javelin or a dart");
+        Assert(!noMode.IsThrowOf(dagger), "an intent with no mode never throws a dagger (only a declared throw does)");
         Assert(AttackIntent.ForMode(AttackMode.Thrown).IsThrowOf(dagger), "a declared throw throws a dagger");
         Assert(!AttackIntent.ForMode(AttackMode.Melee).IsThrowOf(dagger) && !AttackIntent.ForMode(AttackMode.Melee).IsThrowOf(javelin),
             "a melee intent (an AoO, a charge) throws nothing");
@@ -154,20 +156,21 @@ public static class PostAttackQuirkSetsTests
         Assert(AttackIntent.ToAttackType(null) == GameManager.AttackType.Melee, "no mode reads as Melee");
         Assert(new AttackIntent { Mode = AttackMode.Thrown }.ThrownSelected && !new AttackIntent().ThrownSelected, "ThrownSelected reads the mode");
 
+        // Batch 12 step 17 (CMB-096): the NPC intent's mode is its own (AttackIntent.ChooseAiMode), never a copy of the PC UI's.
         AttackIntent ai = AttackIntent.ForAI(null, null, null);
-        Assert(ai.Quirks == AttackIntentQuirk.NpcIntentReadsUiThrownGlobal && ai.Mode == null && ai.LegacyUiMode == AttackMode.Melee,
-            "ForAI carries NpcIntentReadsUiThrownGlobal, its PC-selection copy in LegacyUiMode (no GameManager: Melee) and no Mode");
-
-        // The legacy copy reaches the thrown-mode test only, and only under its quirk bit; the gate's Mode stays null.
-        var npcAfterPcThrow = new AttackIntent { LegacyUiMode = AttackMode.Thrown, Quirks = AttackIntentQuirk.NpcIntentReadsUiThrownGlobal };
-        Assert(npcAfterPcThrow.ThrownSelected && npcAfterPcThrow.Mode == null,
-            "an NPC intent after a PC throw: ThrownSelected through the quirk, Mode null for the legality gate");
-        Assert(!new AttackIntent { LegacyUiMode = AttackMode.Thrown }.ThrownSelected,
-            "LegacyUiMode without the quirk bit is not read");
-        Assert(!new AttackIntent { Mode = AttackMode.Melee, LegacyUiMode = AttackMode.Thrown, Quirks = AttackIntentQuirk.NpcIntentReadsUiThrownGlobal }.ThrownSelected,
-            "a set Mode wins over the legacy copy");
+        Assert(ai.Mode == AttackMode.Melee && ai.UiType == null && !ai.ThrownSelected,
+            "ForAI with no creature: Melee, no UI type, no throw");
+        ItemData longbowItem = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponLongbow);
+        ItemData daggerItem = ItemDatabase.Get(DND35e.Identifiers.ItemID.WeaponDagger);
+        Assert(AttackIntent.ChooseAiMode(null, longbowItem, null) == AttackMode.Ranged,
+            "an NPC with a bow shoots (Ranged)");
+        Assert(AttackIntent.ChooseAiMode(null, daggerItem, null) == AttackMode.Melee,
+            "an NPC with a dagger and no target out of its reach fights in melee");
         AttackIntent ui = AttackIntent.ForUi(null, null);
-        Assert(ui.Quirks == AttackIntentQuirk.None && ui.Mode == AttackMode.Melee && ui.Weapon == null, "ForUi without a GameManager: Melee, no weapon");
+        Assert(ui.Mode == AttackMode.Melee && ui.UiType == GameManager.AttackType.Melee && ui.Weapon == null,
+            "ForUi without a GameManager: Melee, the UI type Melee, no weapon");
+        Assert(new AttackIntent { Mode = AttackMode.Ranged, UiType = GameManager.AttackType.Melee }.UiAttackType == GameManager.AttackType.Melee,
+            "UiAttackType keeps the UI's own selection (the Attack button's Melee with a bow)");
     }
 }
 }

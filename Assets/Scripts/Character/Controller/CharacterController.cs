@@ -448,8 +448,9 @@ public class CharacterController : MonoBehaviour
     public int PowerAttackValue { get; private set; }
 
     /// <summary>
-    /// Whether Rapid Shot is enabled. When active during a full attack with a ranged weapon,
-    /// grants one extra attack at highest BAB but all attacks take -2 penalty.
+    /// The Rapid Shot toggle: the creature's standing choice to use Rapid Shot (the PC's button; the AI never sets it,
+    /// AI-055). It is read when the first ranged step of a turn starts, which declares Rapid Shot for that turn
+    /// (<see cref="TryDeclareRapidShot"/>, PHB p.99, D9); the declaration, not the toggle, gives the extra attack and the -2.
     /// </summary>
     public bool RapidShotEnabled { get; private set; }
 
@@ -668,6 +669,116 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null) { PowerAttackValue = 0; return; }
         PowerAttackValue = Mathf.Clamp(value, 0, Mathf.Max(1, Stats.BaseAttackBonus));
+    }
+
+    /// <summary>True once Rapid Shot is declared this turn (AttackPool.IsRapidShot; PHB p.99, D9).</summary>
+    public bool IsRapidShotDeclared => ProgressiveAttackPool.IsRapidShot;
+
+    /// <summary>
+    /// Whether this creature may declare Rapid Shot now for an attack with <paramref name="weapon"/> (PHB p.99; batch 12
+    /// decision D9): it has the feat, the weapon is a ranged weapon or a throw (<paramref name="ranged"/>), no attack was made
+    /// this turn (the -2 applies to the first attack, so the choice cannot wait until after it, PHB p.143), and the full
+    /// attack action is free: its full-round action (not while slowed or limited to one action, PHB p.280, p.145) or a full
+    /// attack already declared with no attack made (the Full Attack button).
+    /// </summary>
+    public bool CanDeclareRapidShot(ItemData weapon, bool ranged, out string reason)
+    {
+        reason = string.Empty;
+        if (Stats == null || !Stats.HasFeat("Rapid Shot"))
+        {
+            reason = "no Rapid Shot feat";
+            return false;
+        }
+
+        if (!ranged)
+        {
+            reason = "Rapid Shot needs a ranged attack (PHB p.99)";
+            return false;
+        }
+
+        AttackPool pool = ProgressiveAttackPool;
+        if (pool.IsRapidShot)
+            return true;
+
+        if (pool.AttacksCommitted > 0 || pool.PendingStepPaid || pool.Mode == ProgressiveAttackMode.StandardAttackCommitted)
+        {
+            reason = "Rapid Shot is declared before the first attack of the turn (PHB p.99, p.143)";
+            return false;
+        }
+
+        if (!pool.IsFullAttack && (Actions == null || !Actions.HasFullRoundAction))
+        {
+            reason = "Rapid Shot needs the full attack action (PHB p.99)";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Declare Rapid Shot for this turn (PHB p.99, D9; the flurry precedent, <see cref="TryBeginFlurryOfBlows"/>): spends the
+    /// full-round action unless a full attack is already declared, and makes this turn a full attack with Rapid Shot's extra
+    /// attack (<see cref="AttackPool.MarkRapidShot"/>). True when Rapid Shot is (already) declared.
+    /// </summary>
+    public bool TryDeclareRapidShot(ItemData weapon, bool ranged, out string reason)
+    {
+        if (IsRapidShotDeclared)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (!CanDeclareRapidShot(weapon, ranged, out reason))
+            return false;
+
+        if (!ProgressiveAttackPool.IsFullAttack)
+            Actions.UseFullRoundAction();
+        ProgressiveAttackPool.MarkRapidShot();
+        Debug.Log($"[RapidShot] {Stats.CharacterName} declares Rapid Shot with {(weapon != null ? weapon.Name : "a ranged attack")}: {GetIterativeAttackCount()} attack(s), -2 on each (PHB p.99)");
+        return true;
+    }
+
+    /// <summary>
+    /// Declare a full attack (the Full Attack button, PHB p.143): spends the full-round action and makes this turn a full
+    /// attack before its first attack, so its steps pay nothing more. True when the turn is (already) a full attack.
+    /// </summary>
+    public bool TryCommitFullAttackAction(out string reason)
+    {
+        reason = string.Empty;
+        AttackPool pool = ProgressiveAttackPool;
+        if (pool.IsFullAttack)
+            return true;
+
+        // The Attack button pays the first step before the target click (GameManager.StartAttackSequence): with no attack
+        // made yet the turn may still become a full attack, for the move action, as a second attack would (PHB p.143).
+        if (pool.PendingStepPaid && pool.AttacksCommitted == 0 && pool.Mode == ProgressiveAttackMode.StandardAttackCommitted)
+        {
+            if (Actions == null || Actions.SingleActionOnly || !Actions.HasMoveAction)
+            {
+                reason = "a full attack needs the unspent move action (PHB p.143)";
+                return false;
+            }
+
+            Actions.UseMoveAction();
+            pool.MarkFullAttackCommitted();
+            return true;
+        }
+
+        if (pool.HasStartedAttacking)
+        {
+            reason = "a full attack is declared before the first attack of the turn (PHB p.143)";
+            return false;
+        }
+
+        if (Actions == null || !Actions.HasFullRoundAction)
+        {
+            reason = "a full attack needs the full-round action (PHB p.143)";
+            return false;
+        }
+
+        Actions.UseFullRoundAction();
+        pool.MarkFullAttackCommitted();
+        return true;
     }
 
     /// <summary>Toggle Rapid Shot on/off.</summary>
@@ -1540,7 +1651,9 @@ public class CharacterController : MonoBehaviour
         int stepBab = GetMainHandAttackStepBAB(stepIndex) + babAdjustment;
         if (!IsUsingFlurryOfBlows)
         {
-            stepLabel = $"Attack {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
+            stepLabel = IsRapidShotDeclared && stepIndex == 0
+                ? $"Attack 1 (Rapid Shot, BAB {CharacterStats.FormatMod(stepBab)})"
+                : $"Attack {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
             return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, stepBab, weapon);
         }
 
@@ -6301,10 +6414,11 @@ public class CharacterController : MonoBehaviour
         // so all attack entry points (single, full-attack, flurry, grapple strike, etc.) follow
         // the same rules and never roll against an empty square.
 
-        // Shared per-attack modifier (CMB-043): the same terms FullAttack, DualWieldAttack and FlurryOfBlows add.
+        // Shared per-attack modifier (CMB-043): the same terms FullAttack, DualWieldAttack and FlurryOfBlows add. A declared
+        // Rapid Shot puts its -2 on every ranged attack of the round, each step of the shared sequence included (PHB p.99, D9).
         AttackBonusBreakdown atkBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
             isFlanking, flankingBonus, baseAttackBonusOverride ?? Stats.BaseAttackBonus,
-            IsWeaponTwoHanded(equippedWeapon));
+            IsWeaponTwoHanded(equippedWeapon), IsRapidShotDeclared);
         // Caller-supplied penalty (two-weapon off-hand, Manyshot, Mobility AoO); shown as the dual-wield entry below.
         atkBonus.SequenceModifier = additionalAttackModifier;
         atkBonus.SituationalBonus = situationalAttackBonus;
@@ -6433,8 +6547,9 @@ public class CharacterController : MonoBehaviour
     /// Returns how many attacks this character can make during a full attack right now: the same steps
     /// <see cref="FullAttack"/> resolves. Natural attacks: one per natural attack plus Haste's extra one (CMB-106).
     /// Otherwise the iterative ladder (a flurry's steps while flurrying, CHR-003) with Haste's extra attack at the
-    /// highest bonus (CharacterCombatStats.GetIterativeAttackCount, PHB p.239; CMB-044, CMB-173), plus Rapid Shot's
-    /// extra attack when it is active with a ranged weapon (PHB p.99).
+    /// highest bonus and a declared Rapid Shot's (CharacterCombatStats.GetIterativeAttackCount, PHB p.239, p.99; CMB-044),
+    /// plus, before the declaration, Rapid Shot's extra attack when the toggle is on and it could be declared for a ranged
+    /// attack now (<see cref="CanDeclareRapidShot"/>, D9).
     /// </summary>
     public int GetPlannedFullAttackCount(RangeInfo rangeInfo = null)
     {
@@ -6452,9 +6567,7 @@ public class CharacterController : MonoBehaviour
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange))
                         && rangeInfo != null && !rangeInfo.IsMelee;
 
-        bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
-        bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
-        if (rapidShotActive)
+        if (!IsRapidShotDeclared && RapidShotEnabled && CanDeclareRapidShot(equippedWeapon, isRanged, out _))
             count += 1;
 
         return Mathf.Max(0, count);
@@ -6508,7 +6621,7 @@ public class CharacterController : MonoBehaviour
         // Shared per-attack modifier (CMB-043): the same terms as a single Attack; each attack
         // below only swaps in its BAB step, sequence penalty, Aid Another and Magic Stone.
         AttackBonusBreakdown sequenceBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
-            isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon), RapidShotEnabled);
+            isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon), IsRapidShotDeclared);
         bool rapidShotActive = sequenceBonus.Feats.RapidShotActive;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel,
@@ -6638,9 +6751,9 @@ public class CharacterController : MonoBehaviour
             allBabSteps.Insert(0, babSteps[0]);
             Debug.Log($"[FullAttack] Rapid Shot: attack count {baseAttackCount} → {allBabSteps.Count}");
         }
-        else if (RapidShotEnabled && Stats.HasFeat("Rapid Shot") && !isRanged)
+        else if (IsRapidShotDeclared && !isRanged)
         {
-            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot ON but weapon is not ranged");
+            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot declared but the attack is not ranged");
         }
 
         // Haste grants one extra attack at highest BAB (PHB p.239)
@@ -13026,8 +13139,8 @@ public class CharacterController : MonoBehaviour
         ProgressiveAttackPool.MarkTurnStartedGrappling(IsGrappling());
         AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
         ThreatSystem.ClearMovementOpportunities(this); // a new round of movement opportunities (PHB p.138, CMB-128)
-        // Note: PowerAttackValue and RapidShotEnabled persist between turns
-        // They are player-controlled and reset only when the player changes them
+        // Note: PowerAttackValue and the RapidShotEnabled toggle persist between turns (the creature's standing choices);
+        // a Rapid Shot declaration is per turn (AttackPool.IsRapidShot, cleared above with the pool; D9)
 
         // Reset AoO counters for the new round
         ThreatSystem.ResetAoOForTurn(this);
@@ -15934,7 +16047,7 @@ public class CharacterController : MonoBehaviour
     /// Declare a flurry of blows (<see cref="TryBeginFlurryOfBlows"/>, unless already declared this turn) and resolve all
     /// its remaining attacks against <paramref name="target"/> through <see cref="FullAttack"/>, the shared full attack
     /// (PHB p.40-41; CHR-003). The PC Flurry button and the AI step the same sequence one attack at a time instead
-    /// (GameManager full attack sequence, PerformNPCMeleeAttackSequence); this one-call form is for tests and scripts.
+    /// (the one attack-sequence executor, GameManager.RunAttackSequence); this one-call form is for tests and scripts.
     /// Returns an empty result when the flurry cannot be declared.
     /// </summary>
     public FullAttackResult FlurryOfBlows(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)

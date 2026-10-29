@@ -2022,7 +2022,8 @@ public static class GrappleDamageRulesTests
         System.Func<CharacterController, CharacterController, bool> tryStepManeuver, out int maneuversUsed)
     {
         MethodInfo method = typeof(GameManager).GetMethod("PerformNPCMeleeAttackSequence", BindingFlags.Instance | BindingFlags.NonPublic);
-        object[] args = { npc, target, null, tryStepManeuver, false, 0, 0, null, null }; // last: no resume state (CMB-079)
+        // The synchronous form of the AI attack sequence (batch 12 step 17: AttackSequenceRequest.ForAI through RunAttackSequence).
+        object[] args = { npc, target, null, tryStepManeuver, false, 0, 0, null };
         var result = (FullAttackResult)method.Invoke(gm, args);
         maneuversUsed = (int)args[5];
         return result;

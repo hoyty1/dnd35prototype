@@ -21,15 +21,15 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Escape entangle | Auto | `TryExecuteAnimateRopeEscapeForNpc`, standard action | Yes | CMB-055 |
 | Break Wall of Ice | Used | only when blocked and out of reach | Yes | |
 | Single attack | Used | after moving | Yes | |
-| Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles; same attack modifier as a single attack (shared builder, CMB-043 fixed); one iterative ladder with Haste for both sides (CMB-044 fixed 2026-10-28) | Yes | CMB-091 |
+| Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles; same attack modifier as a single attack (shared builder, CMB-043 fixed); one iterative ladder with Haste for both sides (CMB-044 fixed 2026-10-28); melee, ranged and thrown through the one attack-sequence executor the PC buttons use, each shot with its own reload, ammunition and AoOs (CMB-091 fixed 2026-10-28) | Yes | |
 | Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | AI-055 (off-hand damage now half STR, CMB-008 fixed 2026-10-09) |
 | Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks, except Haste's extra natural attack (PHB p.239, owner decision 2026-10-07): `AIProfile.ChooseHasteNaturalAttackIndex` (default `AI/NaturalAttackChoice.cs`: a rider that matters against the target (an Improved Grab trigger only against a target small enough to grab), then the highest bonus, then the higher average damage) | Yes (picks each natural attack, and with Haste a used one again through the natural-attack buttons, or the Haste attack's weapon in the chooser of the Full Attack button and pounce, CMB-124) | CMB-077 |
 | Natural + weapon combination | Never | naturals only with no weapon | n/a | CMB-077 |
 | Ranged attack | Used | any routine with a ranged weapon equipped; kiter manages AoO risk | Yes | Ranged-listed bows are held by creatures the AI runs through the ranged routine (`AIService.RoutesToRangedTurn`) and carried by others (ITM-004 fixed 2026-10-08); NPCs cannot switch weapons (ITM-069); CRE-052 (missing crossbow ids) |
-| Thrown weapons | Partial | only `WeaponCat == Ranged` items (javelins, darts); each throw drops the weapon in the target's square and draws the next from the pack (batch 12 step 14) | Yes | CMB-096 |
+| Thrown weapons | Partial | javelins and darts (`WeaponCat == Ranged`) are always thrown; a melee throwable (dagger, spear, handaxe) only at a target beyond its melee reach and within thrown range (`AttackIntent.ChooseAiMode`, AI stopgap, CMB-096 fixed 2026-10-28); the AI never closes in to throw or chooses a throw over a melee swing; each throw drops the weapon in the target's square and draws the next from the pack (batch 12 step 14) | Yes | |
 | Switch weapons, draw, pick up, drop held item | Never | only the UndeadMindless free re-equip; disarmed NPCs never re-arm | Partial (pick up, drop) | ITM-005 |
 | Reload | Partial | forced when unloaded; ends the turn | Yes | CMB-032 |
-| Power Attack, Rapid Shot | Never | `UsePowerAttack` unread; no NPC caller of `SetRapidShot` | Yes | AI-026 (Power Attack), AI-055 (Rapid Shot) |
+| Power Attack, Rapid Shot | Never | `UsePowerAttack` unread; no NPC caller of `SetRapidShot` (the rule is shared: an NPC whose toggle is on declares Rapid Shot before its first shot, D9, batch 12 step 17) | Yes | AI-026 (Power Attack), AI-055 (Rapid Shot) |
 | Combat Expertise | Never | never written | No | CHR-021, AI-031 |
 | Fight defensively | Partial | cornered Frightened only | Yes | UI-007 |
 | Total defense | Never | no code | No | gap |

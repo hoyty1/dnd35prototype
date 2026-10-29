@@ -41,7 +41,7 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 
 | Folder | Contents |
 |---|---|
-| `_Core/` | `GameManager.cs` (about 11.5K lines) + 12 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
+| `_Core/` | `GameManager.cs` (about 11.5K lines) + 15 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
 | `Combat/` | `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
 | `Spell/` | `Data/`, `Database/`, `Casting/` (SpellCaster), `Components/` (StatusEffectManager, MetamagicData); GameManager partials in `Resolution/`, `Special/`, `Domain/` |
 | `Character/` | `Controller/CharacterController.cs` (about 12K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
@@ -55,7 +55,7 @@ Where to look first:
 
 | Concern | Start at |
 |---|---|
-| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack` (a flurry is `TryBeginFlurryOfBlows`, then the shared sequence) (modifier from `BuildAttackBonus`, damage modifier from `BuildWeaponDamageBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack`; after the roll, every path's `GameManager.OnAttackResolved` (`_Core/GameManager.AttackResolved.cs`, the same stages for every path, Cleave and the target's reactions included) |
+| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack` (a flurry is `TryBeginFlurryOfBlows`, then the shared sequence) (modifier from `BuildAttackBonus`, damage modifier from `BuildWeaponDamageBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack`; every attack sequence (the Attack and Full Attack buttons, NPC attacks, AoOs) steps through `GameManager.RunAttackSequence` (`_Core/GameManager.AttackCore.cs`); after the roll, every path's `GameManager.OnAttackResolved` (`_Core/GameManager.AttackResolved.cs`, the same stages for every path, Cleave and the target's reactions included) |
 | Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; non-weapon damage `GameManager.DealDamage` (`_Core/GameManager.Damage.cs`); `Combat/Core/DamageModel.cs` (`DamagePackets`) |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |
@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 63 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 66 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); area handlers sit in an area registry in the same file (`BuildAreaHandlers`, the generic loop as fallback); unclaimed single-target spells fall to `ApplySpellBuff`.

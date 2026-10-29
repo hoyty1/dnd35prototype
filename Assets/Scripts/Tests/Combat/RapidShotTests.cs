@@ -42,6 +42,7 @@ public static class RapidShotTests
         TestRangedFullAttackUsesDexLikeSingleAttack();
         TestRapidShotFullAttackIsSingleAttackMinusTwo();
         TestHastedRapidShotPlannedCountMatchesFullAttack();
+        TestRapidShotDeclaredBeforeFirstAttack();
         TestFinesseSingleAndFullAttackModifiersMatch();
         TestMoraleBonusReachesEveryAttackPath();
         TestDualWieldUsesEachWeaponsFinesse();
@@ -202,14 +203,15 @@ public static class RapidShotTests
         Assert(allAttackBonuses.Count == 1, $"Without Rapid Shot enabled, should have 1 attack (got {allAttackBonuses.Count})");
     }
 
-    /// <summary>Test: Rapid Shot does not apply to single (standard) attack action.</summary>
+    /// <summary>
+    /// Test: Rapid Shot does not apply to an attack action (PHB p.99: it needs the full attack action). Since batch 12 step 17
+    /// (D9) the -2 and the extra attack come from the declaration (CharacterController.TryDeclareRapidShot), never from the
+    /// toggle alone; TestRapidShotDeclaredBeforeFirstAttack checks a single attack with the toggle on.
+    /// </summary>
     private static void TestRapidShotNotOnSingleAttack()
     {
         Debug.Log("--- Test: Rapid Shot does not apply to single attack ---");
-        // The Attack() method (single attack) does not check for Rapid Shot
-        // Only FullAttack() does. This is correct per D&D 3.5 rules.
-        // Verified by code inspection: Attack() method has no Rapid Shot logic.
-        Assert(true, "Single Attack (standard action) does not include Rapid Shot logic");
+        Assert(true, "An attack action makes no Rapid Shot attack: only a declaration does (see TestRapidShotDeclaredBeforeFirstAttack)");
     }
 
     // ========== SHARED ATTACK MODIFIER (CMB-043, CMB-002) ==========
@@ -308,7 +310,8 @@ public static class RapidShotTests
 
     /// <summary>
     /// A hasted archer with Rapid Shot on (CMB-044, CMB-173): the planned full attack and FullAttack both have the
-    /// ladder's steps plus the Rapid Shot attack (first, PHB p.99) and Haste's attack at the highest bonus (PHB p.239).
+    /// ladder's steps plus the Rapid Shot attack (first, PHB p.99) and Haste's attack at the highest bonus (PHB p.239). The
+    /// plan counts the toggle before the declaration and the declaration after it, never both (D9).
     /// </summary>
     private static void TestHastedRapidShotPlannedCountMatchesFullAttack()
     {
@@ -323,11 +326,14 @@ public static class RapidShotTests
             int plannedBefore = attacker.GetPlannedFullAttackCount(range);
             attacker.ApplyHasteEffect(10, null);
             int planned = attacker.GetPlannedFullAttackCount(range);
+            bool declared = attacker.TryDeclareRapidShot(attacker.GetEquippedMainWeapon(), true, out string declareReason);
+            int plannedDeclared = attacker.GetPlannedFullAttackCount(range);
             FullAttackResult full = attacker.FullAttack(target, false, 0, null, range);
 
-            Assert(plannedBefore == 3 && planned == 4 && full.Attacks.Count == 4,
-                "BAB +6 with Rapid Shot plans 3 attacks, hasted 4, and FullAttack makes 4",
-                $"before {plannedBefore}, planned {planned}, made {full.Attacks.Count}");
+            Assert(declared, "The fresh archer declares Rapid Shot (feat, full-round action, no attack yet)", declareReason);
+            Assert(plannedBefore == 3 && planned == 4 && plannedDeclared == 4 && full.Attacks.Count == 4,
+                "BAB +6 with Rapid Shot plans 3 attacks, hasted 4 (before and after the declaration), and FullAttack makes 4",
+                $"before {plannedBefore}, planned {planned}, declared {plannedDeclared}, made {full.Attacks.Count}");
             if (full.Attacks.Count == 4)
             {
                 Assert(full.Attacks[0].BreakdownBAB == 6 && full.Attacks[1].BreakdownBAB == 6 && full.Attacks[2].BreakdownBAB == 1
@@ -422,6 +428,10 @@ public static class RapidShotTests
 
             CombatResult single = attacker.Attack(target, false, 0, null, range);
             attacker.SetRapidShot(true);
+            FullAttackResult undeclared = attacker.FullAttack(target, false, 0, null, range);
+            Assert(undeclared.Attacks.Count == 2, "The toggle alone gives no Rapid Shot attack: it is declared before the first attack (D9)",
+                $"got {undeclared.Attacks.Count}");
+            attacker.TryDeclareRapidShot(attacker.GetEquippedMainWeapon(), true, out _);
             FullAttackResult full = attacker.FullAttack(target, false, 0, null, range);
 
             Assert(full.Attacks.Count == 3, "BAB +6 Rapid Shot full attack makes 3 attacks", $"got {full.Attacks.Count}");
@@ -439,6 +449,67 @@ public static class RapidShotTests
         {
             if (attacker != null) attacker.SetRapidShot(false);
             Cleanup(attacker, target);
+        }
+    }
+
+    /// <summary>
+    /// Decision D9 (batch 12 step 17; PHB p.99, p.143): Rapid Shot is declared before the first attack of the turn and
+    /// commits the turn to the full attack. A fresh archer may declare it: the full-round action is spent, the turn is a full
+    /// attack, the sequence has the extra step first at the highest bonus, and every step's attack (Attack at the step's BAB,
+    /// as the shared sequence makes it) takes -2. After an attack, after a move, or with a melee weapon it cannot be
+    /// declared; the declaration ends with the turn's attack pool.
+    /// </summary>
+    private static void TestRapidShotDeclaredBeforeFirstAttack()
+    {
+        Debug.Log("--- Test: Rapid Shot is declared before the first attack (D9) ---");
+        CharacterController archer = null, late = null, mover = null, target = null;
+        try
+        {
+            archer = CreateCombatant("RapidDeclare", "Fighter", 6, 6, 16, 12, Vector2Int.zero, ItemID.WeaponLongbow, null, "Rapid Shot");
+            late = CreateCombatant("RapidLate", "Fighter", 6, 6, 16, 12, new Vector2Int(0, 2), ItemID.WeaponLongbow, null, "Rapid Shot");
+            mover = CreateCombatant("RapidMoved", "Fighter", 6, 6, 16, 12, new Vector2Int(0, 4), ItemID.WeaponLongbow, null, "Rapid Shot");
+            target = CreateDummy("RapidDeclareTarget", new Vector2Int(8, 0));
+            RangeInfo range = RangeCalculator.GetRangeInfo(8, 100, false);
+            ItemData bow = archer.GetEquippedMainWeapon();
+
+            archer.SetRapidShot(true);
+            CombatResult before = archer.Attack(target, false, 0, null, range, 6, bow);
+            Assert(!archer.IsRapidShotDeclared && AttackMod(before) == AttackMod(archer.Attack(target, false, 0, null, range, 6, bow)),
+                "The toggle alone puts no -2 on an attack (an attack action has no Rapid Shot, PHB p.99)");
+            Assert(!archer.CanDeclareRapidShot(bow, false, out _), "No Rapid Shot for a melee attack");
+
+            bool declared = archer.TryDeclareRapidShot(bow, true, out string reason);
+            Assert(declared && archer.IsRapidShotDeclared && archer.ProgressiveAttackPool.IsFullAttack
+                && !archer.Actions.HasStandardAction && !archer.Actions.HasMoveAction,
+                "Declaring spends the full-round action and makes the turn a full attack", reason);
+            Assert(archer.GetIterativeAttackCount() == 3 && archer.GetIterativeAttackBAB(0) == 6
+                && archer.GetIterativeAttackBAB(1) == 6 && archer.GetIterativeAttackBAB(2) == 1,
+                "The sequence has Rapid Shot's step first: +6, +6, +1",
+                $"count {archer.GetIterativeAttackCount()}, steps {archer.GetIterativeAttackBAB(0)}/{archer.GetIterativeAttackBAB(1)}/{archer.GetIterativeAttackBAB(2)}");
+            CombatResult step0 = archer.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 0, false, 0, null, range, bow, 0, out string label0);
+            CombatResult step2 = archer.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 2, false, 0, null, range, bow, 0, out _);
+            Assert(step0 != null && AttackMod(step0) == AttackMod(before) - 2 && step2 != null && AttackMod(step2) == AttackMod(before) - 7,
+                "Each step of the shared sequence takes Rapid Shot's -2 (+6 step: single - 2; +1 step: single - 7)",
+                $"single {AttackMod(before)}, steps {AttackMod(step0)}/{AttackMod(step2)}");
+            Assert(label0 != null && label0.Contains("Rapid Shot"), "The first step is labelled Rapid Shot", label0);
+
+            late.SetRapidShot(true);
+            late.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+            Assert(!late.CanDeclareRapidShot(bow, true, out string lateReason) && !late.IsRapidShotDeclared,
+                "After the turn's first attack Rapid Shot can no longer be declared (PHB p.143)", lateReason);
+
+            mover.SetRapidShot(true);
+            mover.Actions.UseMoveAction();
+            Assert(!mover.CanDeclareRapidShot(bow, true, out string moverReason),
+                "After a move action Rapid Shot needs the full attack action it no longer has", moverReason);
+
+            archer.ProgressiveAttackPool.Clear();
+            Assert(!archer.IsRapidShotDeclared && archer.RapidShotEnabled,
+                "The declaration ends with the turn's attack pool; the toggle stays the archer's standing choice");
+        }
+        finally
+        {
+            Cleanup(archer, late, mover, target);
         }
     }
 

@@ -52,6 +52,8 @@ public class CharacterCombatStats : MonoBehaviour
     /// Shot add their attack in the full-attack sequence (<see cref="GetIterativeAttackCount"/>,
     /// CharacterController.GetPlannedFullAttackCount and FullAttack).
     /// </summary>
+    private bool IsRapidShotDeclared => _character != null && _character.ProgressiveAttackPool.IsRapidShot;
+
     public static List<int> GetBaseAttackLadder(int baseAttackBonus)
     {
         var bonuses = new List<int> { baseAttackBonus };
@@ -65,12 +67,15 @@ public class CharacterCombatStats : MonoBehaviour
 
     /// <summary>
     /// Attacks of a weapon (or unarmed) full attack: the steps of <see cref="GetAttackBonuses"/> (the flurry's while the
-    /// creature flurries) plus Haste's extra attack at the highest bonus (PHB p.239). Rapid Shot's attack is not
-    /// counted here: it depends on the attack being ranged (CharacterController.GetPlannedFullAttackCount adds it).
+    /// creature flurries) plus Haste's extra attack at the highest bonus (PHB p.239), plus Rapid Shot's extra attack once it
+    /// is declared this turn (PHB p.99; AttackPool.IsRapidShot, D9: declared before the first attack, so the turn's
+    /// budget includes it). Before the declaration, CharacterController.GetPlannedFullAttackCount adds it for the toggle.
     /// </summary>
     public int GetIterativeAttackCount()
     {
         int count = GetAttackBonuses().Count;
+        if (IsRapidShotDeclared)
+            count++;
 
         // Haste grants one extra attack at highest BAB (PHB p.239)
         if (_character != null && _character.HasActiveHasteEffect
@@ -82,9 +87,20 @@ public class CharacterCombatStats : MonoBehaviour
         return count;
     }
 
+    /// <summary>
+    /// The BAB of step <paramref name="attackIndex"/> of the full attack, in FullAttack's order: Rapid Shot's extra attack
+    /// first at the highest bonus once declared (PHB p.99), then the ladder, then Haste's extra attack at the highest bonus.
+    /// </summary>
     public int GetIterativeAttackBAB(int attackIndex)
     {
         List<int> bonuses = GetAttackBonuses();
+
+        if (IsRapidShotDeclared)
+        {
+            if (attackIndex == 0)
+                return bonuses.Count > 0 ? bonuses[0] : 0;
+            attackIndex--;
+        }
 
         // Haste extra attack is appended at the end and uses highest BAB
         bool hasteExtraAttack = _character != null && _character.HasActiveHasteEffect

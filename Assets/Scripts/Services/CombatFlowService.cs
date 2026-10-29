@@ -140,13 +140,6 @@ public class CombatFlowService : MonoBehaviour
         return $"🗡 {attackerName} attacks ({mode})\n{result.GetDetailedSummary()}";
     }
 
-    // Convenience wrappers named by extraction spec.
-    public void ExecuteIterativeAttacks(CharacterController attacker, CharacterController target, bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo)
-        => PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-
-    public void ExecuteDualWieldAttacks(CharacterController attacker, CharacterController target, bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo)
-        => PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-
     // ===== Delegated GameManager combat flow =====
     public void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
@@ -216,14 +209,17 @@ public class CombatFlowService : MonoBehaviour
     }
 
     /// <summary>
-    /// The attack's range information for the mode of <paramref name="intent"/> (AttackIntent.ForUi for the PC flows,
-    /// AttackIntent.ForAI for an NPC, whose mode still copies the PC selection: AttackIntentQuirk.NpcIntentReadsUiThrownGlobal).
+    /// The attack's range information for the mode of <paramref name="intent"/>, read from the intent only (batch 12 step
+    /// 17, CMB-096): AttackIntent.ForUi for the PC flows, AttackIntent.ForAI for an NPC (its own mode). The weapon is the
+    /// intent's (a thrown weapon in hand), else the main weapon.
     /// </summary>
     public RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target, AttackIntent intent)
     {
-        ItemData weapon = attacker != null ? attacker.GetEquippedMainWeapon() : null;
-        bool usingThrownAttack = _gameManager != null && _gameManager.Combat_IsUsingThrownAttackMode(attacker, weapon, intent);
-        bool isRangedAttack = _gameManager != null && _gameManager.Combat_IsAttackModeRanged(attacker, weapon, intent);
+        ItemData weapon = intent != null && intent.Weapon != null
+            ? intent.Weapon
+            : (attacker != null ? attacker.GetEquippedMainWeapon() : null);
+        bool usingThrownAttack = GameManager.IsUsingThrownAttackMode(attacker, weapon, intent);
+        bool isRangedAttack = GameManager.IsAttackModeRanged(attacker, weapon, intent);
 
         int sqDist = attacker != null && target != null
             ? attacker.GetMinimumDistanceToTarget(target, chebyshev: false)
@@ -279,13 +275,18 @@ public class CombatFlowService : MonoBehaviour
     }
 
     /// <summary>
-    /// The AoOs a ranged attack provokes from each threatening foe (PHB p.141 Table 8-2), before the attack; false when
-    /// the attacker is slain by them. Used by the Attack button's sequence and the Full Attack button (step 17 merges it
-    /// with the NPC copy, GameManager.ResolveRangedAttackAoOForNPCAttackIfProvoked).
+    /// The one ranged-attack AoO helper (batch 12 step 17, CMB-045; PHB p.141 Table 8-2): a ranged or thrown attack provokes
+    /// from each threatening foe, before the attack. Every attacker uses it, before every shot: the attack-sequence executor
+    /// (GameManager.RunAttackSequence, PC and NPC), the single attack and the off-hand throw. Whether the attack is ranged
+    /// comes from <paramref name="rangeInfo"/>, else the intent's mode, else (the old NPC copy's fallback) the attacker's main
+    /// weapon. Returns true when nothing was provoked or the attacker survived; false when the AoOs slew it.
     /// </summary>
-    public bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker)
+    public bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker, RangeInfo rangeInfo = null, AttackIntent intent = null)
     {
         if (_gameManager == null || attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+            return true;
+
+        if (!IsRangedOrThrownAttack(attacker, rangeInfo, intent))
             return true;
 
         List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(
@@ -329,16 +330,18 @@ public class CombatFlowService : MonoBehaviour
 
     /// <summary>
     /// True when the attack is ranged or thrown (it provokes from threatening foes, PHB p.137): the range info when there
-    /// is one, else the intent's mode (read from the UI by <see cref="AttackIntent.ForUi"/> just before; the off-hand path
-    /// always has range info and passes null).
+    /// is one, else the intent's mode, else a ranged weapon in the main hand (the NPC copy's fallback, CMB-045).
     /// </summary>
-    private static bool IsRangedOrThrownAttack(RangeInfo rangeInfo, AttackIntent intent)
+    private static bool IsRangedOrThrownAttack(CharacterController attacker, RangeInfo rangeInfo, AttackIntent intent)
     {
         if (rangeInfo != null)
             return !rangeInfo.IsMelee;
 
         AttackMode? mode = intent?.Mode;
-        return mode == AttackMode.Ranged || mode == AttackMode.Thrown;
+        if (mode.HasValue)
+            return mode == AttackMode.Ranged || mode == AttackMode.Thrown;
+
+        return attacker != null && attacker.IsEquippedWeaponRanged();
     }
 
     private void LogDeathPoint(string context, CharacterController attacker, CharacterController target)
@@ -394,7 +397,7 @@ public class CombatFlowService : MonoBehaviour
             : RangeCalculator.GetRangeInfo(sqDist, 0, false);
 
 
-        if (IsRangedOrThrownAttack(rangeInfo, null) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        if (!ResolveRangedAttackAoOIfProvoked(attacker, rangeInfo))
             return null;
 
         CombatResult result = attacker.Attack(
@@ -456,6 +459,13 @@ public class CombatFlowService : MonoBehaviour
         return attacker != null ? attacker.GetIterativeAttackBAB(attackIndex) : 0;
     }
 
+    /// <summary>
+    /// One click of the Attack button's sequence (origin B, batch 12 step 17): the clicked target as the next step of the
+    /// one attack-sequence executor (GameManager.RunAttackSequence, AttackSequenceRequest.ForUiAttack), the stages every
+    /// attacker runs: the step's legality, a ranged step's weapon, reload and ammunition checks, the ward save, the AoOs a
+    /// shot provokes, the roll at the step's bonus (with Rapid Shot when declared, PHB p.99, D9) and the post-attack hook.
+    /// Then this flow's UI: the slain line, the next step's BAB, the end of the sequence, the pause.
+    /// </summary>
     public void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
@@ -482,140 +492,34 @@ public class CombatFlowService : MonoBehaviour
         if (sequenceEnteredFullAttack)
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
 
-        // Sanctuary and Hide from Undead (D6): a failed save loses this step of the sequence; the next step may go to
-        // another target (the warded one is then refused by the legality gate).
-        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
-        {
-            LoseAttackStepToWard(attacker, endSequence: false);
-            return;
-        }
-
-        // The PC UI's attack selection, read once for this step (AttackIntent.ForUi): the mode and the weapon (the thrown
-        // weapon in hand for a throw).
-        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
-        GameManager.AttackType attackType = intent.UiAttackType;
-        ItemData attackWeapon = intent.Weapon;
-
-
-        if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
-        {
-            Debug.Log("[AttackFlow] Early return in PerformIterativeSequenceAttack: attacker died/aborted from AoO before attack resolution.");
-            _gameManager.Combat_EndAttackSequence();
-            return;
-        }
-
-        // Ammo check for projectile weapons in iterative sequence
-        if (attackWeapon != null && attackWeapon.IsProjectileWeapon && !CheckAmmoAvailable(attacker, attackWeapon))
-        {
-            Debug.Log("[AttackFlow] No ammo available, ending attack sequence.");
-            _gameManager.Combat_EndAttackSequence();
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
-
-        bool useNaturalFullAttackStep = attackType == GameManager.AttackType.Melee
-            && ShouldUseNaturalAttackStep(attacker, attackWeapon);
-        intent.Hand = useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
-
-        CombatResult result;
-        string attackModeLog;
-        int attackNumber = _gameManager.Combat_GetTotalAttacksUsed() + 1;
+        AttackSequenceRequest request = AttackSequenceRequest.ForUiAttack(_gameManager, attacker, target);
+        GameManager.AttackType attackType = request.Intent.UiAttackType;
         string strengthPenaltySuffix = GetEnfeeblementStrengthPenaltyLabel(attacker);
-
-        if (useNaturalFullAttackStep)
-        {
-            // Next natural attack not already used this turn (natural-attack buttons mark theirs). When
-            // all are used, Haste's extra natural attack if it is unused, with the default natural
-            // attack (the highest bonus; the natural-attack buttons let the player pick, CMB-106).
-            int naturalAttackIndex = _gameManager.Combat_ResolveNextUnusedNaturalAttackIndex(attacker, _gameManager.Combat_GetTotalAttacksUsed());
-            bool hasteExtraStep = naturalAttackIndex < 0 && attacker.CanUseHasteExtraNaturalAttack();
-            if (hasteExtraStep)
-                naturalAttackIndex = attacker.GetDefaultHasteNaturalAttackIndex();
-            if (naturalAttackIndex < 0)
-            {
-                Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} has no unused natural attack left; ending sequence.");
-                _gameManager.Combat_EndAttackSequence();
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
-
-            // Shared step resolver (PC_NPC_PARITY plan step 6; the NPC melee sequence uses it too).
-            // The Haste step is the step after the natural attacks, made with the chosen natural attack.
-            result = attacker.ResolveAttackSequenceStep(
-                target,
-                AttackStepKind.NaturalSequence,
-                hasteExtraStep ? attacker.GetHasteExtraNaturalStepIndex() : naturalAttackIndex,
-                isFlanking,
-                flankBonus,
-                partnerName,
-                rangeInfo,
-                attackWeapon,
-                0,
-                out string naturalStepLabel,
-                hasteExtraStep ? naturalAttackIndex : -1);
-
-            if (result == null)
-            {
-                Debug.LogWarning($"[Attack][Sequence] Natural attack step produced no attacks for {attacker.Stats.CharacterName} at index {naturalAttackIndex}; ending sequence.");
-                _gameManager.Combat_EndAttackSequence();
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
-
-            _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
-
-            string naturalLabel = !string.IsNullOrEmpty(naturalStepLabel)
-                ? naturalStepLabel
-                : "Natural attack";
-            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee{strengthPenaltySuffix}) {naturalLabel}";
-        }
-        else
-        {
-            // Shared step resolver at the sequence cursor. The adjustment keeps the BAB this flow
-            // tracks (it includes the dual-wield main-hand penalty), so the roll is unchanged.
-            int weaponStep = _gameManager.Combat_GetTotalAttacksUsed();
-            int babAdjustment = _gameManager.Combat_GetCurrentAttackBAB() - attacker.GetMainHandAttackStepBAB(weaponStep);
-            result = attacker.ResolveAttackSequenceStep(
-                target,
-                AttackStepKind.MainHand,
-                weaponStep,
-                isFlanking,
-                flankBonus,
-                partnerName,
-                rangeInfo,
-                attackWeapon,
-                babAdjustment,
-                out _);
-
-            if (result == null)
-            {
-                Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} has no valid target for the attack step; ending sequence.");
-                _gameManager.Combat_EndAttackSequence();
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
-
-            string modeLabel = attackType == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
-            string dwPenaltyInfo = _gameManager.Combat_IsDualWielding()
-                && (attackType == GameManager.AttackType.Melee || attackType == GameManager.AttackType.Thrown)
-                    ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetMainHandPenalty())}"
-                    : string.Empty;
-
-            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}{strengthPenaltySuffix}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
-        }
-
-        // The one post-attack hook (origin B): this step's log, the thrown drop and the ammunition, Concentration, melee
-        // reactions, the free trip, Improved Grab (the player's prompt, MM p.310; CMB-097), the summon cleanup and the
-        // combat-end check for the target and the attacker (CORE-011, CORE-037).
         string attackLog = null;
-        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSequence, attacker, target, intent).With(result);
-        resolution.RangeInfo = rangeInfo;
-        resolution.CombatEndContext = "PerformIterativeSequenceAttack";
-        resolution.ReportStep = () =>
+        request.ReportStep = step =>
         {
-            _gameManager.CombatUI?.ShowCombatLog(attackModeLog);
+            int attackNumber = step.StepIndex + 1;
+            string modeLog;
+            if (step.Kind == AttackStepKind.NaturalSequence)
+            {
+                if (step.NaturalAttackIndex >= 0 && !step.HasteNaturalStep)
+                    _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(step.NaturalAttackIndex);
+                string naturalLabel = !string.IsNullOrEmpty(step.Label) ? step.Label : "Natural attack";
+                modeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee{strengthPenaltySuffix}) {naturalLabel}";
+            }
+            else
+            {
+                string modeLabel = step.IsRanged
+                    ? (attackType == GameManager.AttackType.Thrown ? "Thrown" : "Ranged")
+                    : "Melee";
+                string dwPenaltyInfo = request.MainHandBabAdjustment != 0
+                    ? $", dual-wield penalty {CharacterStats.FormatMod(request.MainHandBabAdjustment)}"
+                    : string.Empty;
+                modeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}{strengthPenaltySuffix}) at BAB {CharacterStats.FormatMod(step.Result.BreakdownBAB)}{dwPenaltyInfo}";
+            }
+            _gameManager.CombatUI?.ShowCombatLog(modeLog);
 
-            attackLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
+            attackLog = BuildAttackLog(attacker, step.IsFlanking, step.PartnerName, step.Result);
             _gameManager.Combat_SetLastCombatLog(attackLog);
             _gameManager.CombatUI?.ShowCombatLog(attackLog);
 
@@ -625,18 +529,19 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.Combat_UpdateAllStatsUI();
             _gameManager.Combat_ClearHighlights();
         };
-        var outcome = new PostAttackOutcome();
-        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome,
-            onResumedDone: () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, useNaturalFullAttackStep, result, attackLog, outcome));
-        if (waitingOnDecider)
-            return;
 
-        ContinueIterativeSequenceAfterStep(attacker, target, attackType, useNaturalFullAttackStep, result, attackLog, outcome);
+        var outcome = new AttackSequenceOutcome();
+        _gameManager.RunAttackSequenceSync(request, outcome,
+            () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, outcome, attackLog));
     }
 
-    /// <summary>The rest of an Attack-button sequence step after the post-attack hook: the slain line, the step count and the next attack's BAB.</summary>
+    /// <summary>
+    /// The rest of an Attack-button click after the executor: a refused step returns to the action menu; a made or lost step
+    /// sets the next step's BAB or ends the sequence (a grapple that took hold, an attacker that dropped, no step left), the
+    /// slain line, and the pause before the menu.
+    /// </summary>
     private void ContinueIterativeSequenceAfterStep(CharacterController attacker, CharacterController target, GameManager.AttackType attackType,
-        bool useNaturalFullAttackStep, CombatResult result, string attackLog, PostAttackOutcome outcome)
+        AttackSequenceOutcome outcome, string attackLog)
     {
         if (outcome.CombatEnded)
         {
@@ -644,10 +549,19 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        if (outcome.TargetOutOfFight && result.TargetKilled && target.Team == CharacterTeam.Enemy)
-            _gameManager.CombatUI?.ShowCombatLog(attackLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
+        if (outcome.AttacksMade == 0 && outcome.StepsLostToWard == 0)
+        {
+            // Nothing was attempted: the legality gate, the ammunition or the weapon refused this click.
+            if (!string.IsNullOrEmpty(outcome.StopReason))
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {outcome.StopReason}."));
+            _gameManager.Combat_EndAttackSequence();
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
 
-        attacker.RegisterAttackMade(useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
+        CombatResult result = outcome.LastResult;
+        if (result != null && result.TargetKilled && target != null && target.Team == CharacterTeam.Enemy && CombatEndRules.IsOutOfFight(target))
+            _gameManager.CombatUI?.ShowCombatLog((attackLog ?? string.Empty) + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
 
         // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): after its Improved Grab takes hold the
         // sequence ends, and its remaining attacks are grapple actions through the grapple menu. A hold with one body part
@@ -675,8 +589,10 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.Combat_EndAttackSequence();
         }
 
+        _gameManager.Combat_UpdateAllStatsUI();
+        _gameManager.Combat_ClearHighlights();
         Debug.Log("[AttackFlow] Scheduling AfterAttackDelay from PerformIterativeSequenceAttack.");
-        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
+        _gameManager.Combat_StartAfterAttackDelay(attacker, outcome.AttacksMade > 0 ? 1.5f : 1.0f);
     }
 
     private static void PreserveSingleNaturalAttackActionEconomy(
@@ -787,6 +703,21 @@ public class CombatFlowService : MonoBehaviour
         bool standardConvertedToMoveBeforeAttack = attacker.Actions != null && attacker.Actions.StandardConvertedToMove;
         bool wasFirstWeaponAttackBeforeThis = !_gameManager.Combat_HasStartedAttackingThisTurn(attacker);
 
+        // The PC UI's attack selection, read once for this attack (AttackIntent.ForUi): the mode and the weapon (the thrown
+        // weapon in hand for a throw).
+        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
+        GameManager.AttackType attackType = intent.UiAttackType;
+        ItemData attackWeapon = intent.Weapon;
+
+        // A shot that cannot be made (an unloaded crossbow, no ammunition) spends nothing, rolls no ward save and provokes
+        // nothing: the executor's stage-4 checks, run before anything is paid (RunAttackSequence, CanShootWithWeapon).
+        bool rangedShot = attackWeapon != null && (attackWeapon.IsProjectileWeapon || attackType == GameManager.AttackType.Thrown);
+        if (rangedShot && !_gameManager.CanShootWithWeapon(attacker, attackWeapon, out _))
+        {
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         bool skipStandardCommit = _gameManager.Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag();
 
         // First attack of the turn pays the standard action, a later one the move action (PHB p.143).
@@ -815,22 +746,8 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        // The PC UI's attack selection, read once for this attack (AttackIntent.ForUi): the mode and the weapon (the thrown
-        // weapon in hand for a throw).
-        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
-        GameManager.AttackType attackType = intent.UiAttackType;
-        ItemData attackWeapon = intent.Weapon;
-
-
-        if (IsRangedOrThrownAttack(rangeInfo, intent) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        if (!ResolveRangedAttackAoOIfProvoked(attacker, rangeInfo, intent))
             return;
-
-        // Ammo check for projectile weapons (before attack resolution)
-        if (attackWeapon != null && attackWeapon.IsProjectileWeapon && !CheckAmmoAvailable(attacker, attackWeapon))
-        {
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
 
         CombatResult result;
         string naturalAttackModeLog = null;
@@ -948,66 +865,6 @@ public class CombatFlowService : MonoBehaviour
             return;
 
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
-    }
-
-    public void PerformFullAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_gameManager == null || attacker == null || target == null)
-            return;
-
-        attacker.Actions.UseFullRoundAction();
-
-
-        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-
-        string log = flankPrefix + result.GetFullSummary();
-        _gameManager.Combat_SetLastCombatLog(log);
-
-        if (GameManager.LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        _gameManager.CombatUI?.ShowCombatLog(log);
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-
-        if (result.TotalDamageDealt > 0)
-            _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
-
-        if (result.Attacks != null)
-        {
-            for (int i = 0; i < result.Attacks.Count; i++)
-            {
-                var attack = result.Attacks[i];
-                _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, attack, rangeInfo);
-
-                // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
-                if (attack.Hit && !attack.IsRangedAttack)
-                    MeleeReactionService.TriggerReactions(attacker, target, attack);
-
-                if (target == null || target.Stats == null || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
-                    break;
-            }
-        }
-
-        if (result.TargetKilled)
-        {
-            LogDeathPoint("PerformFullAttack:TargetKilled", attacker, target);
-            _gameManager.Combat_HandleSummonDeathCleanup(target);
-        }
-
-        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
-        if (CombatEndRules.IsOutOfFight(target))
-        {
-            _gameManager.Combat_UpdateAllStatsUI();
-            if (TryHandleVictoryAfterEnemyDeath("PerformFullAttack", attacker, target))
-                return;
-        }
-
-        _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
     }
 
     public void PerformDualWieldAttack(CharacterController attacker, CharacterController target,

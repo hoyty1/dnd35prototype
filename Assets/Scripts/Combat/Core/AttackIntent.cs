@@ -7,25 +7,6 @@ public enum AttackMode
 }
 
 /// <summary>
-/// Named differences in what an attack intent reads (batch 12 step 13, the batch 11 LegacyCastQuirk pattern): each
-/// bit is a legacy read that a later step removes.
-/// </summary>
-[System.Flags]
-public enum AttackIntentQuirk
-{
-    None = 0,
-
-    /// <summary>
-    /// The NPC intent copies the PC UI's attack-type selection (GameManager._currentAttackType) into
-    /// <see cref="AttackIntent.LegacyUiMode"/>, as the NPC range math read it through CalculateRangeInfo before the intent
-    /// existed: an NPC with a throwable melee weapon gets thrown range math while the PC's last selection was Thrown
-    /// (CMB-096). Only <see cref="AttackIntent.ThrownSelected"/> reads that copy; <see cref="AttackIntent.Mode"/> stays null,
-    /// so the legality gate derives the mode from the NPC's weapon. Set by <see cref="AttackIntent.ForAI"/>.
-    /// </summary>
-    NpcIntentReadsUiThrownGlobal = 1 << 0,
-}
-
-/// <summary>
 /// What an attacker means to do with one attack (batch 12 steps 12 and 13, docs/designs/pc_npc_parity_batch12.md): the
 /// mode (melee, ranged, thrown), the hand, the weapon, the round's declarations (Rapid Shot, flurry, two-weapon fighting,
 /// fighting defensively), the held-charge touch, an AoO, and the charge. The legality gate (<see cref="AttackLegality"/>)
@@ -33,24 +14,27 @@ public enum AttackIntentQuirk
 /// test (GameManager.IsUsingThrownAttackMode) read the mode, and the post-attack hook (GameManager.OnAttackResolved) the
 /// weapon and, for the thrown drop, <see cref="IsThrowOf"/>.
 /// Builders: <see cref="ForUi"/> is the attack paths' one reader of the PC UI's attack type (GameManager._currentAttackType,
-/// which the UI keeps writing; <see cref="ForAI"/> still copies it under <see cref="AttackIntentQuirk.NpcIntentReadsUiThrownGlobal"/>).
-/// ForUi also records _pendingAttackMode, but the UI's own dispatch (CombatFlowService.OnAttackTargetSelected, the
-/// GameManager.CombatActions button handlers) still reads that global directly. A null intent passed to the gate means
-/// "derive melee or ranged from the attacker's main weapon".
+/// which the UI keeps writing); <see cref="ForAI"/> chooses the NPC's mode from its own weapon and the target's distance
+/// (batch 12 step 17, CMB-096: it no longer copies the PC selection). ForUi also records _pendingAttackMode, but the UI's
+/// own dispatch (CombatFlowService.OnAttackTargetSelected, the GameManager.CombatActions button handlers) still reads that
+/// global directly. A null intent passed to the gate means "derive melee or ranged from the attacker's main weapon"; the
+/// mode tests (GameManager.IsUsingThrownAttackMode, IsAttackModeRanged, CombatFlowService.CalculateRangeInfo) read only the
+/// intent they are given (a null one throws nothing).
 /// </summary>
 public sealed class AttackIntent
 {
     /// <summary>
     /// Melee, ranged or thrown; null derives it from the main weapon (the legality gate, AttackLegality.IsInReachOrRange).
-    /// <see cref="ForAI"/> leaves it null: its copy of the PC selection is <see cref="LegacyUiMode"/>.
+    /// Both builders set it: <see cref="ForUi"/> from the UI selection (a ranged weapon on the Attack button's "melee"
+    /// selection is Ranged), <see cref="ForAI"/> from the NPC's weapon and the target's distance (<see cref="ChooseAiMode"/>).
     /// </summary>
     public AttackMode? Mode;
 
     /// <summary>
-    /// The PC UI's attack-type selection copied into an NPC intent (<see cref="AttackIntentQuirk.NpcIntentReadsUiThrownGlobal"/>,
-    /// CMB-096); null otherwise. Read only by <see cref="ThrownSelected"/> while <see cref="Mode"/> is null.
+    /// The PC UI's attack type as the UI selected it (ForUi only; null otherwise), for the code that still takes
+    /// GameManager.AttackType (<see cref="UiAttackType"/>): the Attack button selects "Melee" for a bow too.
     /// </summary>
-    public AttackMode? LegacyUiMode;
+    public GameManager.AttackType? UiType;
 
     /// <summary>The weapon used (a thrown weapon, an off-hand weapon); null means the main weapon or an unarmed or natural attack.</summary>
     public ItemData Weapon;
@@ -100,25 +84,19 @@ public sealed class AttackIntent
     /// </summary>
     public GameManager.PendingAttackMode? UiPendingMode;
 
-    /// <summary>The legacy reads this intent carries (<see cref="AttackIntentQuirk"/>).</summary>
-    public AttackIntentQuirk Quirks;
+    /// <summary>The PC UI's attack type (<see cref="UiType"/>), else the mode as one (Melee when unset), for the code that still takes GameManager.AttackType.</summary>
+    public GameManager.AttackType UiAttackType => UiType ?? ToAttackType(Mode);
 
-    /// <summary>The mode as the PC UI's attack type (Melee when unset), for the code that still takes GameManager.AttackType.</summary>
-    public GameManager.AttackType UiAttackType => ToAttackType(Mode);
+    /// <summary>True when the mode is Thrown (the declared throw; the thrown-mode test also needs a throwable melee weapon).</summary>
+    public bool ThrownSelected => Mode == AttackMode.Thrown;
 
-    /// <summary>
-    /// True when the mode is Thrown (the declared throw; the thrown-mode test also needs a throwable melee weapon). With no
-    /// mode, an NPC intent's <see cref="LegacyUiMode"/> under its quirk bit (CMB-096).
-    /// </summary>
-    public bool ThrownSelected => Mode == AttackMode.Thrown
-        || (Mode == null && (Quirks & AttackIntentQuirk.NpcIntentReadsUiThrownGlobal) != 0 && LegacyUiMode == AttackMode.Thrown);
+    /// <summary>A copy for one step of an attack sequence (GameManager.RunAttackSequence), which sets its own weapon and hand.</summary>
+    public AttackIntent CloneForStep() => (AttackIntent)MemberwiseClone();
 
     /// <summary>
-    /// True when this attack throws <paramref name="weapon"/> (batch 12 step 14, CMB-174, CMB-096 drop): a weapon with
-    /// IsThrown and a range increment (GameManager.IsThrowableWeapon) used with the mode Thrown, or a ranged thrown weapon
-    /// (a javelin, a dart) in any mode but Melee (it has no other use; an NPC intent leaves the mode null). The PC selection
-    /// an NPC intent copies (<see cref="LegacyUiMode"/>) is not read here: NPCs throw melee weapons only once they choose
-    /// the mode themselves (step 18), so the copy never drops an NPC's dagger or spear after a melee swing.
+    /// True when this attack throws <paramref name="weapon"/> (batch 12 steps 14 and 17, CMB-174, CMB-096): a weapon with
+    /// IsThrown and a range increment (GameManager.IsThrowableWeapon) used with the mode Thrown (a PC's or an NPC's declared
+    /// throw), or a ranged thrown weapon (a javelin, a dart) in any mode but Melee (it has no other use).
     /// </summary>
     public bool IsThrowOf(ItemData weapon)
     {
@@ -152,9 +130,15 @@ public sealed class AttackIntent
         ItemData weapon = type == GameManager.AttackType.Thrown && gm != null
             ? (gm.Combat_GetEquippedWeapon() ?? main)
             : main;
+        // The Attack button selects "Melee" for every weapon: with a ranged weapon in hand the attack is a ranged one (and
+        // a javelin thrown from it is dropped by the post-attack hook, IsThrowOf).
+        AttackMode mode = type == GameManager.AttackType.Melee && weapon != null && weapon.WeaponCat == WeaponCategory.Ranged
+            ? AttackMode.Ranged
+            : ToMode(type);
         var intent = new AttackIntent
         {
-            Mode = ToMode(type),
+            Mode = mode,
+            UiType = type,
             Weapon = weapon,
             UiPendingMode = gm != null ? gm.Combat_GetPendingAttackMode() : (GameManager.PendingAttackMode?)null,
             TwoWeapon = gm != null && gm.Combat_IsDualWielding(),
@@ -164,23 +148,37 @@ public sealed class AttackIntent
     }
 
     /// <summary>
-    /// An NPC's intent for an attack on <paramref name="target"/> with its main weapon. It copies what the NPC paths read
-    /// before the intent existed: the PC UI's attack-type selection goes into <see cref="LegacyUiMode"/>
-    /// (<see cref="AttackIntentQuirk.NpcIntentReadsUiThrownGlobal"/>, CMB-096), which only the thrown-mode test and the range
-    /// math read through <see cref="ThrownSelected"/>. <see cref="Mode"/> stays null, so the intent is safe to hand to the
-    /// legality gate (it derives melee or ranged from the weapon).
+    /// An NPC's intent for an attack on <paramref name="target"/> with its main weapon (batch 12 step 17, CMB-096): the mode
+    /// is the NPC's own (<see cref="ChooseAiMode"/>), never the PC UI's selection; <paramref name="gm"/> is not read (kept
+    /// for the builders' common shape).
     /// </summary>
     public static AttackIntent ForAI(GameManager gm, CharacterController actor, CharacterController target)
     {
-        GameManager.AttackType uiType = gm != null ? gm.Combat_GetCurrentAttackType() : GameManager.AttackType.Melee;
+        ItemData weapon = actor != null ? actor.GetEquippedMainWeapon() : null;
         var intent = new AttackIntent
         {
-            LegacyUiMode = ToMode(uiType),
-            Weapon = actor != null ? actor.GetEquippedMainWeapon() : null,
-            Quirks = AttackIntentQuirk.NpcIntentReadsUiThrownGlobal,
+            Mode = ChooseAiMode(actor, weapon, target),
+            Weapon = weapon,
         };
         CopyDeclarations(intent, actor);
         return intent;
+    }
+
+    /// <summary>
+    /// The NPC's attack mode with <paramref name="weapon"/> against <paramref name="target"/> (PHB p.113: throwing is the
+    /// wielder's choice for each attack): Ranged with a ranged weapon (a bow, a crossbow, a javelin); Thrown with a melee
+    /// weapon that can be thrown (a dagger, a spear, a handaxe) when the target is beyond its melee reach and within its
+    /// thrown range; Melee otherwise. AI stopgap (batch 13 catalog): it throws only at a target it cannot reach, and never
+    /// weighs a throw against closing in.
+    /// </summary>
+    public static AttackMode ChooseAiMode(CharacterController actor, ItemData weapon, CharacterController target)
+    {
+        if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
+            return AttackMode.Ranged;
+        if (actor != null && target != null && GameManager.IsThrowableWeapon(weapon, meleeOnly: true)
+            && !actor.IsTargetInCurrentWeaponRange(target) && actor.IsTargetInThrownWeaponRange(target, weapon))
+            return AttackMode.Thrown;
+        return AttackMode.Melee;
     }
 
     private static void CopyDeclarations(AttackIntent intent, CharacterController attacker)

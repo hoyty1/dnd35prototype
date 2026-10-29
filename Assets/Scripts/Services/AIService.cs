@@ -2620,7 +2620,7 @@ public class AIService : MonoBehaviour
 
     /// <summary>
     /// The per-step maneuver evaluation PerformMeleeAttackActionWithManeuvers hands to the NPC melee
-    /// sequence (GameManager.PerformNPCMeleeAttackSequence). Internal so the static suites can run the
+    /// sequence (GameManager.RunAttackSequence through NPCPerformAttack). Internal so the static suites can run the
     /// real profile evaluation through the loop.
     /// </summary>
     internal System.Func<CharacterController, CharacterController, bool> CreateMeleeStepManeuverEvaluator(AIProfile profile)
@@ -2685,7 +2685,7 @@ public class AIService : MonoBehaviour
     /// The AI-060 stopgap check (see the comment above <see cref="TryExecutePreferredManeuver"/>): true when the
     /// creature's per-turn maneuver memory forbids <paramref name="type"/> against <paramref name="target"/>.
     /// The grapple handoff does not pass through here: after a grapple takes hold,
-    /// GameManager.PerformNPCMeleeAttackSequence stops the step loop and NPCMeleeAttackSequence hands the
+    /// GameManager.RunAttackSequence stops the step loop and NPCAttackSequence hands the
     /// remaining steps to AI_GrappleRestrictedTurn as grapple actions, and the executor
     /// (TryNPCSpecialAttackIfBeneficial) refuses every maneuver but coup de grace while grappling.
     /// </summary>
@@ -3808,7 +3808,8 @@ public class AIService : MonoBehaviour
         CharacterController attacker,
         AIProfile profile,
         List<CharacterController> allCharacters,
-        bool requireInRange)
+        bool requireInRange,
+        Func<CharacterController, bool> inRange = null)
     {
         if (attacker == null || attacker.Stats == null)
             return null;
@@ -3845,7 +3846,8 @@ public class AIService : MonoBehaviour
             if (ignoreUnconscious && candidate.IsUnconscious)
                 continue;
 
-            if (requireInRange && !attacker.IsTargetInCurrentWeaponRange(candidate))
+            // In reach or range for the step's mode (a throw's thrown range; batch 12 step 17), else the weapon's reach or range.
+            if (requireInRange && !(inRange != null ? inRange(candidate) : attacker.IsTargetInCurrentWeaponRange(candidate)))
                 continue;
 
             candidates.Add(candidate);

@@ -720,14 +720,6 @@ public static class ThreatSystem
             return null;
         }
 
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the AoO is a direct attack, so its attempt rolls the
-        // threatener's one save against the casting; a failure loses the AoO (spent above).
-        if (AttackLegality.CommitWard(threatener, target, DirectAttackKind.AoO) == WardVerdict.Failed)
-        {
-            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName}'s AoO against {target.Stats.CharacterName} is lost to its ward (D6).");
-            return null;
-        }
-
         Debug.Log($"[ThreatSystem] === ATTACK OF OPPORTUNITY ===");
         Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes AoO against {target.Stats.CharacterName}!");
 
@@ -746,45 +738,58 @@ public static class ThreatSystem
         // can still be used when the primary slot is currently ranged.
         ItemData aooWeapon = ResolveBestAoOWeapon(threatener);
         GameManager gm = GameManager.Instance;
-        List<CharacterController> allCombatants = gm != null ? gm.GetAllCharactersForAI() : null;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(threatener, target, allCombatants, out CharacterController flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string flankPartnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : null;
-        CombatResult result = threatener.Attack(target, isFlanking, flankBonus, flankPartnerName, null, null, aooWeapon, mobilityPenalty);
+        string aooTrigger = trigger ?? (isFromMovement ? "movement" : "other");
 
-        // Mark this as an AoO in the result for logging
-        result.IsAttackOfOpportunity = true;
-
-        // Inert test hook; the trigger names what provoked the AoO (movement, spellcast, maneuver, standup, ...).
-        ScenarioHooks.AoOResolved?.Invoke(threatener, target, trigger ?? (isFromMovement ? "movement" : "other"), result);
-
-        if (result.Hit)
+        // The roll's own bookkeeping, before the post-attack hook: the AoO flag, the inert test hook (the trigger names what
+        // provoked the AoO: movement, spellcast, maneuver, standup, ...) and the debug lines.
+        System.Action<CombatResult> onResolved = r =>
         {
-            string critStr = result.CritConfirmed ? " (CRITICAL HIT!)" : "";
-            Debug.Log($"[ThreatSystem] AoO HIT! {threatener.Stats.CharacterName} deals {result.TotalDamage} damage to {target.Stats.CharacterName}{critStr}");
-            Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} HP: {result.DefenderHPBefore} → {result.DefenderHPAfter}");
-            if (result.TargetKilled)
-                Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} was SLAIN by the Attack of Opportunity!");
+            r.IsAttackOfOpportunity = true;
+            ScenarioHooks.AoOResolved?.Invoke(threatener, target, aooTrigger, r);
+            if (r.Hit)
+            {
+                string critStr = r.CritConfirmed ? " (CRITICAL HIT!)" : "";
+                Debug.Log($"[ThreatSystem] AoO HIT! {threatener.Stats.CharacterName} deals {r.TotalDamage} damage to {target.Stats.CharacterName}{critStr}");
+                Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} HP: {r.DefenderHPBefore} → {r.DefenderHPAfter}");
+                if (r.TargetKilled)
+                    Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} was SLAIN by the Attack of Opportunity!");
+            }
+            else
+            {
+                Debug.Log($"[ThreatSystem] AoO MISS! {threatener.Stats.CharacterName} rolled {r.DieRoll} + mods = {r.TotalRoll} vs AC {r.TargetAC}");
+            }
+        };
+
+        CombatResult result;
+        if (gm != null)
+        {
+            // The one attack-sequence executor (batch 12 step 17; AttackSequenceRequest.ForAoO), one step at full BAB: the
+            // ward's commit (Sanctuary and Hide from Undead, PHB p.274, p.241; D6: a failure loses the AoO spent above), the
+            // roll, and the post-attack hook (origin I) as for every attack: Concentration per hit (PHB p.70), the melee
+            // reactions (Fire Shield and the like), the innate free trip (a free action that spends no AoO, MM Trip (Ex),
+            // CMB-125), Improved Grab (MM p.310; D8, CMB-170: the AI decider, since an AoO happens inside another creature's
+            // action and cannot wait on a prompt), Cleave (D7), the summon cleanup and the combat-end check. The turned-undead
+            // fear break is the swing's own, before its roll (BreakTurningBeforeSwing, CMB-090).
+            var aooOutcome = new AttackSequenceOutcome();
+            gm.RunAttackSequenceSync(AttackSequenceRequest.ForAoO(threatener, target, aooWeapon, mobilityPenalty, onResolved), aooOutcome);
+            result = aooOutcome.LastResult;
+            if (result == null)
+            {
+                Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName}'s AoO against {target.Stats.CharacterName} made no attack ({aooOutcome.StopReason ?? "lost to its ward, D6"}).");
+                return null;
+            }
         }
         else
         {
-            Debug.Log($"[ThreatSystem] AoO MISS! {threatener.Stats.CharacterName} rolled {result.DieRoll} + mods = {result.TotalRoll} vs AC {result.TargetAC}");
-        }
-
-        // The one post-attack hook (origin I), as for every attack: Concentration per hit (PHB p.70), the AoO's melee
-        // reactions (Fire Shield and the like), the innate free trip (e.g., a wolf's bite; a free action that spends no AoO,
-        // MM Trip (Ex), CMB-125) with its aftermath, Improved Grab (MM p.310; D8, CMB-170: the AI decider, since an AoO
-        // happens inside another creature's action and cannot wait on a prompt), the summon cleanup and the combat-end
-        // check for both creatures. The turned-undead fear break is the swing's own, before its roll (BreakTurningBeforeSwing, CMB-090).
-        if (gm != null)
-        {
-            AttackIntent aooIntent = AttackIntent.ForMode(AttackMode.Melee, aooWeapon);
-            aooIntent.IsAoO = true;
-            gm.RunAttackResolvedSync(AttackResolution.Create(AttackOrigin.AoO, threatener, target, aooIntent, ActorSource.AI).With(result), new PostAttackOutcome());
-        }
-        else if (result.Hit)
-        {
-            MeleeReactionService.TriggerReactions(threatener, target, result);
+            if (AttackLegality.CommitWard(threatener, target, DirectAttackKind.AoO) == WardVerdict.Failed)
+                return null;
+            bool isFlanking = CombatUtils.IsAttackerFlanking(threatener, target, null, out CharacterController flankPartner);
+            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            string flankPartnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : null;
+            result = threatener.Attack(target, isFlanking, flankBonus, flankPartnerName, null, null, aooWeapon, mobilityPenalty);
+            onResolved(result);
+            if (result.Hit)
+                MeleeReactionService.TriggerReactions(threatener, target, result);
         }
 
         Debug.Log($"[ThreatSystem] === END AoO ===");

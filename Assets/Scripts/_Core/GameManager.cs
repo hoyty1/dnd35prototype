@@ -8498,7 +8498,12 @@ public partial class GameManager : MonoBehaviour
         if (totalNaturalAttacks <= 0)
             return 0;
 
-        int remaining = Mathf.Max(0, totalNaturalAttacks - _usedNaturalAttackSequenceIndices.Count);
+        int remaining = 0;
+        for (int i = 0; i < totalNaturalAttacks; i++)
+        {
+            if (!IsNaturalAttackIndexUsedThisTurn(attacker, i))
+                remaining++;
+        }
         if (attacker.CanUseHasteExtraNaturalAttack())
             remaining++;
         return remaining;
@@ -8545,7 +8550,7 @@ public partial class GameManager : MonoBehaviour
             for (int repeat = 0; repeat < count; repeat++)
             {
                 int index = globalIndex++;
-                if (_usedNaturalAttackSequenceIndices.Contains(index))
+                if (IsNaturalAttackIndexUsedThisTurn(attacker, index))
                     continue;
 
                 if (firstUnused < 0)
@@ -8636,7 +8641,18 @@ public partial class GameManager : MonoBehaviour
         return actor != null
             && actor == ActivePC
             && sequenceIndex >= 0
-            && _usedNaturalAttackSequenceIndices.Contains(sequenceIndex);
+            && IsNaturalAttackIndexUsedThisTurn(actor, sequenceIndex);
+    }
+
+    /// <summary>
+    /// A natural attack made or given up this turn: the PC UI's set, or the creature's own attack sequence
+    /// (AttackPool.IsNaturalAttackUsed), which also records a step the executor lost to a failed ward save (D6, batch 12
+    /// step 17) or used outside the buttons.
+    /// </summary>
+    internal bool IsNaturalAttackIndexUsedThisTurn(CharacterController actor, int sequenceIndex)
+    {
+        return _usedNaturalAttackSequenceIndices.Contains(sequenceIndex)
+            || (actor != null && actor.ProgressiveAttackPool.IsNaturalAttackUsed(sequenceIndex));
     }
 
     public bool CanUseNaturalAttackOption(CharacterController actor)
@@ -8795,6 +8811,22 @@ public partial class GameManager : MonoBehaviour
 
         bool usingInnateNaturalAttacks = UsesInnateNaturalAttackSequence(attacker, attackType, _equippedWeapon);
         AttackPool pool = attacker.ProgressiveAttackPool;
+
+        // Rapid Shot is declared before the first attack of the turn and commits the turn to the full attack (PHB p.99, D9).
+        // This flow pays the first step before the target click, so the toggle is read here, before the budget is fixed and
+        // the step paid (the executor's own check, RunAttackSequence stage 4, then finds it declared).
+        // A ranged attack first runs the executor's weapon checks (a loaded crossbow, ammunition), so a shot that cannot be
+        // made spends no action and declares nothing (RunAttackSequence stage 4, CanShootWithWeapon).
+        AttackIntent startIntent = AttackIntent.ForMode(AttackIntent.ToMode(attackType), _equippedWeapon);
+        bool startRanged = IsAttackModeRanged(attacker, _equippedWeapon, startIntent);
+        if (startRanged && !CanShootWithWeapon(attacker, _equippedWeapon, out _))
+        {
+            EndAttackSequence();
+            CombatUI?.UpdateActionButtons(attacker);
+            return;
+        }
+        TryDeclareRapidShotForAttack(attacker, _equippedWeapon, startRanged);
+
         pool.EnsureMainHandBudget(attacker.GetMainHandAttackBudget(usingInnateNaturalAttacks ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand));
 
         Debug.Log($"[Attack][Sequence] {attacker.Stats.CharacterName} starting attack sequence");
@@ -11762,12 +11794,12 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// Whether <paramref name="intent"/> throws <paramref name="weapon"/> (the main weapon when null): a declared throw
-    /// with a throwable melee weapon that has a range increment. A null intent is the PC UI's (AttackIntent.ForUi).
+    /// with a throwable melee weapon that has a range increment. It reads only the intent (batch 12 step 17, CMB-096): a
+    /// PC flow passes AttackIntent.ForUi, an NPC flow AttackIntent.ForAI; a null intent throws nothing.
     /// </summary>
-    private bool IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null)
+    internal static bool IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon, AttackIntent intent)
     {
-        intent ??= AttackIntent.ForUi(this, attacker);
-        if (!intent.ThrownSelected)
+        if (intent == null || !intent.ThrownSelected)
             return false;
 
         if (attacker == null)
@@ -11780,8 +11812,8 @@ public partial class GameManager : MonoBehaviour
             && weapon.RangeIncrement > 0;
     }
 
-    /// <summary>A ranged weapon, or a throw (<see cref="IsUsingThrownAttackMode"/>); a null intent is the PC UI's.</summary>
-    private bool IsAttackModeRanged(CharacterController attacker, ItemData weapon = null, AttackIntent intent = null)
+    /// <summary>A ranged weapon, or a throw by the intent (<see cref="IsUsingThrownAttackMode"/>; a null intent throws nothing).</summary>
+    internal static bool IsAttackModeRanged(CharacterController attacker, ItemData weapon, AttackIntent intent)
     {
         if (attacker == null)
             return false;

@@ -605,11 +605,22 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 52,
+      "passed": 53,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 12 steps 13-15 (2026-10-28; step 15: CMB-017, D7): the PostAttackQuirk type and table are gone and every origin A-J gets a plain resolution (no cleave flag, may wait, the AI decider without a creature); Cleave's drop test (CleaveRules.DroppedTarget, PHB p.92: a kill, below 0 hp or newly unconscious; never disabled at exactly 0, a ranged attack, an attack not made or a Mirror Image figure); the thrown drop's test (GameManager.IsThrowableWeapon with meleeOnly, AttackIntent.IsThrowOf: a javelin or dart thrown by an NPC intent, never a dagger from the copied PC selection, nothing on a melee intent, never a bow), the attack decider factory (AttackDeciders.For and its override; without a scene the AI declines the acid spray and neither decider asks with no Cleave candidate) and the AttackIntent mode mapping. Pure apart from ItemDatabase reads: no scene, no dice. After the step 15 review the drop test is per result (DefenderDownAfter: a later nonlethal knockout and an off-hand drop in a two-result batch are picked, not an earlier hit). 52/52 in its Play pass of 2026-10-28 (20261028T235610Z-play)."
+      "notes": "Batch 12 steps 13-15 (2026-10-28; step 15: CMB-017, D7): the PostAttackQuirk type and table are gone and every origin A-J gets a plain resolution (no cleave flag, may wait, the AI decider without a creature); Cleave's drop test (CleaveRules.DroppedTarget, PHB p.92: a kill, below 0 hp or newly unconscious; never disabled at exactly 0, a ranged attack, an attack not made or a Mirror Image figure); the thrown drop's test (GameManager.IsThrowableWeapon with meleeOnly, AttackIntent.IsThrowOf: a javelin or dart thrown by an NPC intent, never a dagger from the copied PC selection, nothing on a melee intent, never a bow), the attack decider factory (AttackDeciders.For and its override; without a scene the AI declines the acid spray and neither decider asks with no Cleave candidate) and the AttackIntent mode mapping. Pure apart from ItemDatabase reads: no scene, no dice. After the step 15 review the drop test is per result (DefenderDownAfter: a later nonlethal knockout and an off-hand drop in a two-result batch are picked, not an earlier hit). 52/52 in its Play pass of 2026-10-28 (20261028T235610Z-play). Batch 12 step 17 (CMB-096, 2026-10-28): the AttackIntentQuirk type is gone (+1); the NPC intent checks now pin its own mode (AttackIntent.ChooseAiMode: a bow Ranged, a dagger with no target out of reach Melee) and the UI type kept by ForUi, in place of the copied-selection checks; 53/53 in the Play pass 20261029T011710Z-play."
+    },
+    {
+      "type": "Tests.Combat.AttackSequenceStepTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 25,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-091, CMB-045, CMB-173, CMB-096, batch 12 step 17 decision D9 (2026-10-28): GameManager.RunAttackSequence, the one attack-sequence executor: the builders (ForAI, ForAoO, ForUiAttack, ForUiFullAttack), the stage order of a melee step and of a ranged step (the weapon checks before the ward, the AoO stage after the commit), an empty quiver stopping at the weapon checks with nothing spent, a BAB +6 full attack at +6/+1 with the move action spent by its second step, Rapid Shot declared from the toggle before the first shot (three shots +6/+6/+1, each -2, three arrows), and the stop on combat end before the first step and after the hook that ended it. AI requests run synchronously (RunAttackSequenceSync); unseeded dice, no check depends on a hit. Play only: CharacterController.Init needs Awake (TST-009) and the executor is a GameManager method. 17/17 in its first Play pass (20261029T011710Z-play). After the step 17 review (2026-10-28): the shared ranged weapon checks (GameManager.CanShootWithWeapon) refusing an empty quiver and Rapid Shot declaring nothing and spending nothing without a shot, the Full Attack button after a paid but unmade first step (the move action, PHB p.143), and a natural step lost to a ward staying used for the PC buttons (the attack pool read by IsNaturalAttackIndexUsedThisTurn): 25/25."
     },
     {
       "type": "Tests.Combat.AnimateRopeRulesTests",
@@ -1156,7 +1167,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 51,
+      "passed": 62,
       "failed": 6,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1181,7 +1192,7 @@
           "issue": "TST-028"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 16 (CMB-044, CMB-173, 2026-10-28): the ladder checks read CharacterCombatStats.GetBaseAttackLadder, plus the controller ladder check and the hasted Rapid Shot count (3 passes more), 51/57 in Play mode with the same failures."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 16 (CMB-044, CMB-173, 2026-10-28): the ladder checks read CharacterCombatStats.GetBaseAttackLadder, plus the controller ladder check and the hasted Rapid Shot count (3 passes more), 51/57 in Play mode with the same failures. Batch 12 step 17 (D9, CMB-091, CMB-173, 2026-10-28): Rapid Shot is declared before the first attack (CharacterController.TryDeclareRapidShot); the toggle alone gives no extra attack (+1 check), the hasted count before and after the declaration (+1), and TestRapidShotDeclaredBeforeFirstAttack (+9: the full-round action spent, the step ladder +6/+6/+1, -2 on each sequence step, no declaration after an attack, after a move or for melee, the pool clears it), 62/68 in Play mode with the same failures."
     },
     {
       "type": "Tests.Combat.RayOfEnfeeblementRulesTests",

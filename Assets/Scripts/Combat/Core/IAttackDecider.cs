@@ -20,6 +20,15 @@ public interface IAttackDecider
     /// <summary>True when every choice is answered at once (the AI).</summary>
     bool IsSynchronous { get; }
 
+    /// <summary>
+    /// The target of the next step of an attack sequence (GameManager.RunAttackSequence, batch 12 step 17), or stop
+    /// (<see cref="AttackStepChoice.StopWith"/>). PHB p.143: each attack of a full attack may go to any target in reach, and
+    /// a 5-foot step may come between them. The UI answers the Attack button's click with the clicked target and, on the
+    /// Full Attack button, offers the 5-foot step and asks for a new target when the last one dropped or left reach
+    /// (GameManager.PromptFullAttackStep); the AI keeps its target or retargets by its profile (GameManager.ChooseNextAttackStepForAI).
+    /// </summary>
+    Coroutine ChooseNextStep(GameManager gm, AttackSequenceState state, Action<AttackStepChoice> answer);
+
     /// <summary>After an Improved Grab trigger hit: grapple normally, hold with the body part (-20), or skip (MM p.310, CMB-148).</summary>
     Coroutine ChooseImprovedGrab(GameManager gm, CharacterController attacker, CharacterController target, CombatResult triggerHit,
         Action<GameManager.ImprovedGrabChoice> answer);
@@ -50,7 +59,7 @@ public interface IAttackDecider
         Action<bool> answer);
 }
 
-/// <summary>The player's choices, through the prompts (GameManager.PromptImprovedGrabChoice, PromptHasteNaturalAttackChoice, PromptCleaveTarget, PromptAttackedReaction).</summary>
+/// <summary>The player's choices, through the prompts (GameManager.PromptFullAttackStep, PromptImprovedGrabChoice, PromptHasteNaturalAttackChoice, PromptCleaveTarget, PromptAttackedReaction).</summary>
 public sealed class UiAttackDecider : IAttackDecider
 {
     public static readonly UiAttackDecider Instance = new UiAttackDecider();
@@ -58,6 +67,15 @@ public sealed class UiAttackDecider : IAttackDecider
     private UiAttackDecider() { }
 
     public bool IsSynchronous => false;
+
+    public Coroutine ChooseNextStep(GameManager gm, AttackSequenceState state, Action<AttackStepChoice> answer)
+    {
+        if (state != null && state.Request != null && state.Request.Kind == AttackSequenceKind.UiFullAttack && gm != null)
+            return gm.StartCoroutine(gm.PromptFullAttackStep(state, answer));
+        // The Attack button's click (and anything else the UI runs one step at a time): the clicked target.
+        answer?.Invoke(AttackStepChoice.At(state != null ? (state.CurrentTarget ?? state.Request?.InitialTarget) : null));
+        return null;
+    }
 
     public Coroutine ChooseImprovedGrab(GameManager gm, CharacterController attacker, CharacterController target, CombatResult triggerHit,
         Action<GameManager.ImprovedGrabChoice> answer)
@@ -102,7 +120,7 @@ public sealed class UiAttackDecider : IAttackDecider
     }
 }
 
-/// <summary>The AI's choices, answered at once from the creature's AIProfile (GameManager.ChooseImprovedGrabForAI, ChooseHasteNaturalAttackIndexForAI, ChooseCleaveTargetForAI, ShouldUseAttackedReactionForAI).</summary>
+/// <summary>The AI's choices, answered at once from the creature's AIProfile (GameManager.ChooseNextAttackStepForAI, ChooseImprovedGrabForAI, ChooseHasteNaturalAttackIndexForAI, ChooseCleaveTargetForAI, ShouldUseAttackedReactionForAI).</summary>
 public sealed class AiAttackDecider : IAttackDecider
 {
     public static readonly AiAttackDecider Instance = new AiAttackDecider();
@@ -110,6 +128,18 @@ public sealed class AiAttackDecider : IAttackDecider
     private AiAttackDecider() { }
 
     public bool IsSynchronous => true;
+
+    public Coroutine ChooseNextStep(GameManager gm, AttackSequenceState state, Action<AttackStepChoice> answer)
+    {
+        if (state != null && state.Request != null && state.Request.Kind == AttackSequenceKind.AI && gm != null)
+        {
+            answer?.Invoke(gm.ChooseNextAttackStepForAI(state));
+            return null;
+        }
+        // An AoO (and an AI request without a GameManager): the request's target.
+        answer?.Invoke(AttackStepChoice.At(state != null ? (state.CurrentTarget ?? state.Request?.InitialTarget) : null));
+        return null;
+    }
 
     public Coroutine ChooseImprovedGrab(GameManager gm, CharacterController attacker, CharacterController target, CombatResult triggerHit,
         Action<GameManager.ImprovedGrabChoice> answer)

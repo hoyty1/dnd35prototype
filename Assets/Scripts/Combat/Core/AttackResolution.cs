@@ -19,11 +19,11 @@ public enum AttackOrigin
     PcDualWield,
     /// <summary>E: the PC's off-hand attack (GameManager.HandleOffHandTargetClick).</summary>
     PcOffHand,
-    /// <summary>F: a step of the NPC melee sequence (GameManager.PerformNPCMeleeAttackSequence).</summary>
+    /// <summary>F: a melee step of an NPC attack sequence (GameManager.RunAttackSequence, AttackSequenceRequest.ForAI).</summary>
     NpcMelee,
-    /// <summary>G: the NPC ranged full attack (GameManager.NPCPerformAttack).</summary>
+    /// <summary>G: a ranged or thrown step of an NPC full attack (GameManager.RunAttackSequence).</summary>
     NpcRangedFull,
-    /// <summary>H: the NPC ranged single attack (GameManager.NPCPerformAttack).</summary>
+    /// <summary>H: a ranged or thrown NPC attack that is not (yet) a full attack (GameManager.RunAttackSequence).</summary>
     NpcRangedSingle,
     /// <summary>I: an attack of opportunity (ThreatSystem.ExecuteAoO).</summary>
     AoO,

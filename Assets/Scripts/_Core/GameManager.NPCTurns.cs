@@ -461,7 +461,7 @@ public partial class GameManager
         // one step of the NPC's own attack sequence at that step's bonus (an iterative BAB, or the
         // BAB of the natural attack it replaces, MM p.312), paid before the AoOs as the PC wrapper
         // does (CMB-102). In a natural sequence the NPC gives up the natural attack at the current
-        // step, the order PerformNPCMeleeAttackSequence resolves them in. Other maneuvers still cost
+        // step, the order the attack sequence (RunAttackSequence) resolves them in. Other maneuvers still cost
         // a standard action (or the full round for a coup de grace).
         bool replacesAttack = ManeuverActionCost.ReplacesMeleeAttack(choice.Value);
         int? stepBab = null;
@@ -582,57 +582,6 @@ public partial class GameManager
         return true;
     }
 
-    private bool ResolveRangedAttackAoOForNPCAttackIfProvoked(CharacterController attacker, RangeInfo rangeInfo)
-    {
-        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
-            return true;
-
-        bool isRangedOrThrownAttack = rangeInfo != null
-            ? !rangeInfo.IsMelee
-            : (attacker.IsEquippedWeaponRanged() || (attacker.GetEquippedMainWeapon()?.IsThrown ?? false));
-
-        if (!isRangedOrThrownAttack)
-            return true;
-
-        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(
-            attacker.GridPosition,
-            attacker,
-            GetAllCharacters());
-
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead);
-
-        if (threateningEnemies.Count == 0)
-            return true;
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity."));
-
-        foreach (CharacterController enemy in threateningEnemies)
-        {
-            if (!ThreatSystem.CanMakeAoOAgainst(enemy, attacker))
-            {
-                Debug.Log($"[AOO-DEBUG] {enemy?.Stats?.CharacterName ?? "<unknown>"} cannot make AoO now (used {enemy?.Stats?.AttacksOfOpportunityUsed}/{enemy?.Stats?.MaxAttacksOfOpportunity}).");
-                continue;
-            }
-
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker, trigger: "ranged");
-            if (aooResult == null)
-            {
-                Debug.Log($"[AOO-DEBUG] ExecuteAoO returned null for {enemy?.Stats?.CharacterName ?? "<unknown>"} vs {attacker.Stats.CharacterName}.");
-                continue;
-            }
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs ranged attack: {aooResult.GetDetailedSummary()}"));
-        }
-
-        if (attacker.Stats.IsDead)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{attacker.Stats.CharacterName} is slain before completing the ranged attack."));
-            return false;
-        }
-
-        return true;
-    }
-
     /// <summary>
     /// Whether a hit lets <paramref name="attacker"/> try Improved Grab on <paramref name="target"/>: the attacker has
     /// it, the attack hit with its trigger attack, the target is alive, neither is already in a grapple link (a holder
@@ -750,24 +699,12 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// NPC melee attack or full attack, one step at a time through the creature's own attack
-    /// sequence (CMB-102, PHB p.143). The first step spends the standard action and a second turns
-    /// the turn into a full attack (move action), so an NPC that moved, is slowed or can take only
-    /// one action gets one step, and Haste adds one step: an iterative step for a weapon or unarmed
-    /// sequence, or one extra natural attack after the natural attacks for a natural sequence, with
-    /// the natural attack the AI picks (ChooseHasteNaturalAttackIndexForAI; PHB p.239, owner decision
-    /// 2026-10-07, CMB-106). Before each
-    /// step, weapon or natural, <paramref name="tryStepManeuver"/> may replace that attack with trip,
-    /// disarm, sunder or grapple at that step's bonus: the iterative BAB, or the BAB of the natural
-    /// attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312; which types is
-    /// ManeuverActionCost.ReplacesMeleeAttack; the BAB is CharacterController.TryCommitManeuverSubstituteStep).
-    /// In a natural sequence the NPC is offered at most one substitute (an AI limit pending AI-035).
-    /// Each attack is resolved by CharacterController.ResolveAttackSequenceStep, the resolver the
-    /// PC iterative flow uses (PC_NPC_PARITY plan step 6).
-    /// A trip that failed against a controllable defender may leave the counter-trip prompt open
-    /// (PHB p.158, CMB-079): the loop then stops with <paramref name="resume"/>.Suspended set, and the
-    /// coroutine wrapper waits for the answer and calls again with the same <paramref name="resume"/>
-    /// to continue the sequence (null: a fresh sequence that cannot be resumed).
+    /// The NPC attack or full attack run synchronously (batch 12 step 17): an AI request (AttackSequenceRequest.ForAI with
+    /// <paramref name="profile"/> and <paramref name="tryStepManeuver"/>) through the one attack-sequence executor
+    /// (RunAttackSequence), the stages every attacker runs. For callers that cannot yield (the static suites); the NPC turn
+    /// drives the executor as a coroutine (<see cref="NPCAttackSequence"/>). The post-attack hook runs with the AI's choices
+    /// for a target's reaction (CallerCanWait false). When the sequence waits anyway (a controllable defender's counter-trip
+    /// prompt, CMB-079) the rest finishes as a coroutine and the returned result holds the attacks made so far.
     /// </summary>
     private FullAttackResult PerformNPCMeleeAttackSequence(
         CharacterController npc,
@@ -777,287 +714,112 @@ public partial class GameManager
         out bool startedGrappleInSequence,
         out int maneuversUsed,
         out int targetSwitchCount,
-        out string stopReason,
-        NpcMeleeSequenceResume resume)
+        out string stopReason)
     {
-        startedGrappleInSequence = false;
-        maneuversUsed = 0;
-        targetSwitchCount = 0;
-        stopReason = null;
-        if (resume != null)
-            resume.Suspended = false;
-
-        var aggregate = new FullAttackResult
-        {
-            Type = FullAttackResult.AttackType.FullAttack,
-            Attacker = npc,
-            Defender = initialTarget,
-            DefenderHPBefore = initialTarget != null && initialTarget.Stats != null ? initialTarget.Stats.CurrentHP : 0
-        };
-
-        if (npc == null || npc.Stats == null || initialTarget == null || initialTarget.Stats == null)
-            return aggregate;
-
-        bool adaptive = profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc);
-        CharacterController currentTarget = initialTarget;
-
-        // AI limit, not a rule (AI-035, CMB-102 open item 7): in a natural sequence the evaluation
-        // re-runs before every natural attack and the shipped profiles would retry a failed trip (or
-        // chain trip, disarm, grapple) with each one, never rolling the bites and claws an Improved
-        // Grab creature needs. Until AI-035 adds an odds check, a natural-attack NPC makes at most
-        // one maneuver substitute per sequence; its other natural attacks are rolled. PCs may replace
-        // as many natural attacks as they like. Weapon sequences keep the per-step evaluation.
-        bool naturalSubstituteUsed = resume != null && resume.NaturalSubstituteUsed;
-
-        // Safety cap; the attack sequence itself ends the loop (CanCommitAttack). Sized from the
-        // budget so that maneuvers and kill-retargets (iterations that commit no attack) cannot
-        // crowd out a many-headed creature's last steps.
-        int maxSequenceIterations = npc.GetMainHandAttackBudget(AttackStepKind.NaturalSequence)
-            + npc.GetIterativeAttackCount() + 8;
-        int iteration;
-        for (iteration = 0; iteration < maxSequenceIterations; iteration++)
-        {
-            if (npc.Stats == null || npc.Stats.IsDead || !npc.CanTakeTurnActions() || CurrentPhase == TurnPhase.CombatOver)
-                break;
-
-            // Same predicate as the PC iterative flow (CharacterController.UsesInnateNaturalAttackSequence).
-            AttackStepKind stepKind = npc.GetMeleeAttackStepKind();
-
-            if (!npc.CanCommitAttack(stepKind, out string cannotCommitReason))
-            {
-                stopReason = cannotCommitReason;
-                break;
-            }
-
-            bool needsNewTarget = currentTarget == null
-                || currentTarget.Stats == null
-                || currentTarget.Stats.IsDead
-                || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
-                || !npc.IsTargetInCurrentWeaponRange(currentTarget) // melee reach; never the PC thrown mode (CMB-096)
-                // The direct-attack gate, read only (AttackLegality): a creature holding with one body part attacks only
-                // other opponents (MM p.310, CMB-149), nothing passes a Resilient Sphere (PHB p.258, CMB-092), and a failed
-                // Sanctuary or Hide from Undead save bars the target (D6).
-                || !AttackLegality.Check(npc, currentTarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok;
-
-            if (needsNewTarget)
-            {
-                // Without an adaptive profile the NPC attacks only its chosen target, as before.
-                if (!adaptive)
-                {
-                    Legality stopLegality = currentTarget != null && currentTarget.Stats != null
-                        ? AttackLegality.Check(npc, currentTarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
-                        : Legality.Allowed();
-                    stopReason = currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead
-                        ? "target is down"
-                        : (!stopLegality.Ok ? stopLegality.Reason : "target is out of reach");
-                    break;
-                }
-
-                CharacterController inReachTarget = SelectBestAdaptiveFullAttackTarget(npc, profile, requireInRange: true);
-                if (inReachTarget != null)
-                {
-                    currentTarget = inReachTarget;
-                    targetSwitchCount++;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} shifts focus to {currentTarget.Stats.CharacterName}."));
-                }
-                else
-                {
-                    CharacterController steppedTarget = null;
-                    bool stepped = profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
-                        && TryTakeFiveFootStepForAdaptiveFullAttack(npc, profile, out steppedTarget);
-
-                    if (stepped)
-                    {
-                        currentTarget = steppedTarget;
-                        targetSwitchCount++;
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} re-engages {currentTarget.Stats.CharacterName} after a 5-foot step."));
-                    }
-                    else
-                    {
-                        int remainingAttacks = npc.GetRemainingMainHandAttackSteps(stepKind);
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s)."));
-                        break;
-                    }
-                }
-            }
-
-            if (currentTarget == null || currentTarget.Stats == null)
-                break;
-
-            // A maneuver may replace this attack (CMB-102), weapon or natural. In a natural sequence it
-            // replaces the natural attack of this step and rolls at that attack's BAB (primary full,
-            // secondary -5 or -2 with Multiattack, MM p.312; owner decision 2026-10-07); the other
-            // natural attacks still follow, as in the PC flow (the shared budget is the natural-attack count).
-            // A declared smite keeps this step an attack: the smite rides on the next melee attack
-            // (SmiteRules, CHR-020), so a maneuver substitute would waste it; a hit can still start a
-            // free trip (ResolveFreeTripAfterHit).
-            if (tryStepManeuver != null && !(naturalSubstituteUsed && stepKind == AttackStepKind.NaturalSequence)
-                && npc.Stats.DeclaredSmite == SmiteSource.None)
-            {
-                if (tryStepManeuver(npc, currentTarget))
-                {
-                    maneuversUsed++;
-                    if (stepKind == AttackStepKind.NaturalSequence)
-                        naturalSubstituteUsed = true;
-
-                    // A grapple started by a substitute: the remaining steps become grapple actions,
-                    // handed to AI_GrappleRestrictedTurn by the caller.
-                    if (npc.IsGrappling())
-                    {
-                        startedGrappleInSequence = true;
-                        break;
-                    }
-
-                    if (npc.Stats.IsDead || !npc.CanTakeTurnActions() || CurrentPhase == TurnPhase.CombatOver)
-                        break;
-
-                    // A failed trip waits on a controllable defender's counter-trip choice (PHB p.158,
-                    // CMB-079): stop here; NPCMeleeAttackSequence resumes after the answer.
-                    if (IsAwaitingCounterTripChoice && resume != null)
-                    {
-                        resume.Suspended = true;
-                        resume.NaturalSubstituteUsed = naturalSubstituteUsed;
-                        resume.Target = currentTarget;
-                        stopReason = "waiting for the defender's counter-trip choice";
-                        break;
-                    }
-
-                    // A non-substitute (coup de grace, bull rush) spent the standard or full-round
-                    // action, so the next CanCommitAttack fails and the loop ends.
-                    continue;
-                }
-            }
-
-            if (!npc.TryCommitAttack(stepKind, out int step, out string commitReason))
-            {
-                stopReason = commitReason;
-                break;
-            }
-
-            // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): this step's attempt rolls the NPC's one save against the
-            // target's casting; a failure loses this step (paid above), and the next step looks for another target.
-            if (AttackLegality.CommitWard(npc, currentTarget, DirectAttackKind.Weapon) == WardVerdict.Failed)
-            {
-                UpdateAllStatsUI();
-                if (!adaptive)
-                {
-                    stopReason = "lost the attack to the target's ward";
-                    break;
-                }
-                currentTarget = null;
-                continue;
-            }
-
-            CharacterController flankPartner;
-            bool isFlanking = CombatUtils.IsAttackerFlanking(npc, currentTarget, GetAllCharacters(), out flankPartner);
-            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            string partnerName = flankPartner != null && flankPartner.Stats != null
-                ? flankPartner.Stats.CharacterName
-                : null;
-
-            AttackIntent stepIntent = AttackIntent.ForAI(this, npc, currentTarget);
-            stepIntent.Hand = stepKind;
-            RangeInfo rangeInfo = CalculateRangeInfo(npc, currentTarget, stepIntent);
-
-            // Haste's extra natural attack (CMB-106): the AI picks which natural attack it uses (the NPC turn path is AI-run).
-            int hasteNaturalAttackIndex = -1;
-            if (stepKind == AttackStepKind.NaturalSequence && npc.IsHasteExtraNaturalStep(step))
-                AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, currentTarget, profile, 0, choice => hasteNaturalAttackIndex = choice);
-
-            // Weapon steps run through CharacterController.Attack, so its charm, fascination and
-            // command-undead breaks apply to NPC full attacks too (CMB-090).
-            CombatResult attack = npc.ResolveAttackSequenceStep(
-                currentTarget,
-                stepKind,
-                step,
-                isFlanking,
-                flankBonus,
-                partnerName,
-                rangeInfo,
-                npc.GetEquippedMainWeapon(),
-                0,
-                out string label,
-                hasteNaturalAttackIndex);
-
-            if (attack == null)
-                break;
-
-            if (string.IsNullOrEmpty(label))
-                label = $"Attack {step + 1}";
-
-            aggregate.Attacks.Add(attack);
-            aggregate.AttackLabels.Add(label);
-
-            CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
-
-            // The one post-attack hook (origin F): the thrown drop and ammunition, Concentration per hit (PHB p.70), melee
-            // reactions, the free trip, Improved Grab (the AI's choice), the summon cleanup and the combat-end check for the
-            // target and the attacker: a target or attacker dead, dying or unconscious may be the last of its side (CORE-011).
-            AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.NpcMelee, npc, currentTarget, stepIntent, ActorSource.AI).With(attack);
-            stepResolution.RangeInfo = rangeInfo;
-            stepResolution.CombatEndContext = "NPCPerformAttack.Sequence";
-            var stepOutcome = new PostAttackOutcome();
-            RunAttackResolvedSync(stepResolution, stepOutcome);
-            if (stepOutcome.CombatEnded)
-                break;
-            if (stepOutcome.AttackerOutOfFight)
-            {
-                stopReason = "the attacker is out of the fight";
-                break;
-            }
-
-            // A creature grappling acts only through grapple actions (PHB p.156; CMB-149): once its Improved Grab takes
-            // hold, the remaining steps become grapple actions against the grappled creature, through the same step
-            // counter (the caller hands them to AI_GrappleRestrictedTurn). A hold with one body part (MM p.310) leaves
-            // it ungrappled: its remaining attacks go on against other opponents (the retarget above).
-            if (npc.IsGrappling())
-            {
-                startedGrappleInSequence = true;
-                stopReason = "grappling: the remaining attacks become grapple actions (PHB p.156)";
-                break;
-            }
-
-            if (currentTarget.Stats.IsDead)
-            {
-                int attacksRemainingAfterKill = adaptive ? npc.GetRemainingMainHandAttackSteps(stepKind) : 0;
-                CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", attacksRemainingAfterKill > 0
-                    ? $"{currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining."
-                    : $"{currentTarget.Stats.CharacterName} has fallen, but the fight continues!"));
-
-                currentTarget = null;
-                continue;
-            }
-
-            if (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
-            {
-                if (adaptive && npc.GetRemainingMainHandAttackSteps(stepKind) > 0)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{currentTarget.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target."));
-
-                currentTarget = null;
-            }
-        }
-
-        // A break leaves iteration below the cap; reaching it means the cap cut the sequence short.
-        if (iteration >= maxSequenceIterations)
-            Debug.LogWarning($"[AI][Attack] {npc.Stats.CharacterName} melee sequence hit its safety cap of {maxSequenceIterations} iterations; remaining steps={npc.GetRemainingMainHandAttackSteps()}.");
-
-        aggregate.DefenderHPAfter = aggregate.Defender != null && aggregate.Defender.Stats != null
-            ? aggregate.Defender.Stats.CurrentHP
-            : aggregate.DefenderHPBefore;
-        aggregate.TargetKilled = aggregate.Defender != null && aggregate.Defender.Stats != null && aggregate.Defender.Stats.IsDead;
-
-        return aggregate;
+        AttackSequenceRequest request = AttackSequenceRequest.ForAI(this, npc, initialTarget, tryStepManeuver, profile);
+        request.CallerCanWait = false;
+        var outcome = new AttackSequenceOutcome();
+        RunAttackSequenceSync(request, outcome);
+        startedGrappleInSequence = outcome.StartedGrapple;
+        maneuversUsed = outcome.ManeuversUsed;
+        targetSwitchCount = outcome.TargetSwitches;
+        stopReason = outcome.StopReason;
+        return outcome.Aggregate;
     }
 
     /// <summary>
-    /// Where a suspended <see cref="PerformNPCMeleeAttackSequence"/> stopped: set when a counter-trip prompt
-    /// opened after a step (CMB-079), read when the sequence continues after the answer.
+    /// The AI's answer to IAttackDecider.ChooseNextStep (batch 12 step 17; CMB-102): the NPC keeps its target while it is a
+    /// valid one (alive, not an unconscious one its profile ignores, in reach or range for the step's mode, attackable:
+    /// AttackLegality's sphere, hold bar and known ward failure). Otherwise, with a profile that switches targets mid full
+    /// attack (AIProfile.ShouldSwitchTargetsMidFullAttack), the best target in reach (AIService.SelectAdaptiveFullAttackTarget),
+    /// else a 5-foot step to reach one (melee, AIProfile.ShouldTakeFiveFootStepToContinueFullAttack); without one it stops.
+    /// It logs the slain and unconscious lines of the step just made. When no step can be committed it stops first, so it
+    /// never steps or retargets for an attack it cannot make.
     /// </summary>
-    private sealed class NpcMeleeSequenceResume
+    internal AttackStepChoice ChooseNextAttackStepForAI(AttackSequenceState state)
     {
-        public bool Suspended;
-        public bool NaturalSubstituteUsed;
-        public CharacterController Target;
+        AttackSequenceRequest req = state.Request;
+        CharacterController npc = req.Attacker;
+        DND35.AI.AIProfile profile = req.Profile;
+        AttackIntent intent = req.Intent;
+        bool adaptive = profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc);
+        ItemData weapon = npc.GetEquippedMainWeapon();
+        bool ranged = IsAttackModeRanged(npc, weapon, intent);
+        AttackStepKind kind = ranged ? AttackStepKind.MainHand : npc.GetMeleeAttackStepKind();
+        CharacterController current = state.CurrentTarget;
+
+        // The lines for the step just made: a slain target, or an unconscious one the profile ignores.
+        AttackSequenceStep previous = state.TakePreviousStep();
+        if (previous != null && current != null && current.Stats != null)
+        {
+            if (current.Stats.IsDead)
+            {
+                int remainingAfterKill = adaptive ? npc.GetRemainingMainHandAttackSteps(kind) : 0;
+                CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", remainingAfterKill > 0
+                    ? $"{current.Stats.CharacterName} is defeated! {remainingAfterKill} attack(s) remaining."
+                    : $"{current.Stats.CharacterName} has fallen, but the fight continues!"));
+                current = null;
+            }
+            else if (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
+            {
+                if (adaptive && npc.GetRemainingMainHandAttackSteps(kind) > 0)
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{current.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target."));
+                current = null;
+            }
+        }
+
+        // A thrown sequence with no weapon left to throw stops before any focus shift or 5-foot step (the executor would stop).
+        if (state.ThrownSequence && (intent == null || !intent.IsThrowOf(weapon)))
+            return AttackStepChoice.StopWith("no weapon left to throw");
+
+        if (!npc.CanCommitAttack(kind, out string cannotCommitReason))
+            return AttackStepChoice.StopWith(cannotCommitReason);
+
+        AttackIntent probe = intent != null ? intent.CloneForStep() : null;
+        if (probe != null)
+            probe.Weapon = weapon;
+        Legality legality = current != null && current.Stats != null
+            ? AttackLegality.Check(npc, current, DirectAttackKind.Weapon, probe, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
+            : Legality.Refused("target is down");
+        bool needsNewTarget = current == null
+            || current.Stats == null
+            || current.Stats.IsDead
+            || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
+            || !IsTargetInStepRange(npc, current, probe)
+            || !legality.Ok;
+        if (!needsNewTarget)
+            return AttackStepChoice.At(current);
+
+        // Without an adaptive profile the NPC attacks only its chosen target.
+        if (!adaptive)
+        {
+            string why = current == null || current.Stats == null || current.Stats.IsDead
+                ? "target is down"
+                : (!legality.Ok ? legality.Reason : "target is out of reach");
+            return AttackStepChoice.StopWith(why);
+        }
+
+        // A new target in reach or range for this step's mode: a throw looks within thrown range, never only adjacent foes.
+        CharacterController inReachTarget = SelectBestAdaptiveFullAttackTarget(npc, profile, requireInRange: true,
+            inRange: candidate => IsTargetInStepRange(npc, candidate, probe));
+        if (inReachTarget != null && inReachTarget != current)
+        {
+            state.Outcome.TargetSwitches++;
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} shifts focus to {inReachTarget.Stats.CharacterName}."));
+            return AttackStepChoice.At(inReachTarget);
+        }
+
+        if (!ranged && profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
+            && TryTakeFiveFootStepForAdaptiveFullAttack(npc, profile, out CharacterController steppedTarget))
+        {
+            state.Outcome.TargetSwitches++;
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} re-engages {steppedTarget.Stats.CharacterName} after a 5-foot step."));
+            return AttackStepChoice.At(steppedTarget);
+        }
+
+        int remainingAttacks = npc.GetRemainingMainHandAttackSteps(kind);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s)."));
+        return AttackStepChoice.StopWith("no valid target");
     }
 
     /// <summary>
@@ -1086,77 +848,39 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Coroutine wrapper for <see cref="PerformNPCMeleeAttackSequence"/>: summary log, last-known
-    /// position search, and the grapple handoff after a grapple started by a substitute. When the
-    /// sequence stops for a controllable defender's counter-trip prompt (PHB p.158, CMB-079) it waits
-    /// for the answer and continues the same sequence.
+    /// The NPC turn's attack or full attack (origins F, G and H, batch 12 step 17): <paramref name="request"/> (an AI
+    /// request) run through the one attack-sequence executor as a coroutine, so a prompt it waits on (a controllable
+    /// defender's counter-trip choice, CMB-079; a controlled reactor's acid spray choice) is waited on. Then the summary
+    /// log, the last-known-position search after an auto-miss, and the grapple handoff after a grapple started in the
+    /// sequence (a substitute grapple, or an Improved Grab that took hold, CMB-149).
     /// </summary>
-    private IEnumerator NPCMeleeAttackSequence(
-        CharacterController npc,
-        CharacterController target,
-        Func<CharacterController, CharacterController, bool> tryStepManeuver)
+    private IEnumerator NPCAttackSequence(CharacterController npc, CharacterController target, AttackSequenceRequest request)
     {
-        var resume = new NpcMeleeSequenceResume();
-        FullAttackResult aggregate = PerformNPCMeleeAttackSequence(
-            npc,
-            target,
-            npc.aiProfile,
-            tryStepManeuver,
-            out bool startedGrappleInSequence,
-            out int maneuversUsed,
-            out int targetSwitchCount,
-            out string stopReason,
-            resume);
+        var outcome = new AttackSequenceOutcome();
+        IEnumerator run = RunAttackSequence(request, outcome);
+        while (run.MoveNext())
+            yield return run.Current;
 
-        while (resume.Suspended)
-        {
-            while (IsAwaitingCounterTripChoice)
-                yield return null;
-
-            if (CurrentPhase == TurnPhase.CombatOver || npc.Stats == null || npc.Stats.IsDead)
-                break;
-
-            FullAttackResult rest = PerformNPCMeleeAttackSequence(
-                npc,
-                resume.Target != null ? resume.Target : target,
-                npc.aiProfile,
-                tryStepManeuver,
-                out bool restStartedGrapple,
-                out int restManeuvers,
-                out int restSwitches,
-                out stopReason,
-                resume);
-            aggregate.Attacks.AddRange(rest.Attacks);
-            aggregate.AttackLabels.AddRange(rest.AttackLabels);
-            startedGrappleInSequence |= restStartedGrapple;
-            maneuversUsed += restManeuvers;
-            targetSwitchCount += restSwitches;
-        }
-
-        if (aggregate.Defender != null && aggregate.Defender.Stats != null)
-        {
-            aggregate.DefenderHPAfter = aggregate.Defender.Stats.CurrentHP;
-            aggregate.TargetKilled = aggregate.Defender.Stats.IsDead;
-        }
-
+        FullAttackResult aggregate = outcome.Aggregate;
         UpdateAllStatsUI();
 
-        int attacksMade = aggregate.Attacks.Count;
-        if (attacksMade == 0 && maneuversUsed == 0)
+        int attacksMade = outcome.AttacksMade;
+        string stopReason = outcome.StopReason;
+        if (attacksMade == 0 && outcome.ManeuversUsed == 0 && outcome.StepsLostToWard == 0)
         {
             string why = string.IsNullOrEmpty(stopReason) ? "no attack step available" : stopReason;
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} makes no attack: {why}."));
         }
-        else
+        else if (attacksMade > 0 || outcome.ManeuversUsed > 0)
         {
             string sequenceName = npc.ProgressiveAttackPool.IsFullAttack ? "full attack" : "attack";
-            string maneuverPart = maneuversUsed > 0 ? $", {maneuversUsed} maneuver(s)" : string.Empty;
-            string switchPart = targetSwitchCount > 0 ? $", {targetSwitchCount} target switch(es)" : string.Empty;
+            string maneuverPart = outcome.ManeuversUsed > 0 ? $", {outcome.ManeuversUsed} maneuver(s)" : string.Empty;
+            string switchPart = outcome.TargetSwitches > 0 ? $", {outcome.TargetSwitches} target switch(es)" : string.Empty;
             _lastCombatLog = $"✅ {npc.Stats.CharacterName} completes {sequenceName} ({attacksMade} attack(s){maneuverPart}, {aggregate.TotalDamageDealt} total damage{switchPart}).";
             CombatUI?.ShowCombatLog(_lastCombatLog);
         }
 
-        Debug.Log($"[AI][Attack] {npc.Stats.CharacterName} melee sequence: attacks={attacksMade}, maneuvers={maneuversUsed}, hits={aggregate.HitCount}, totalDamage={aggregate.TotalDamageDealt}, fullAttack={npc.ProgressiveAttackPool.IsFullAttack}, stop={stopReason ?? "-"}");
+        Debug.Log($"[AI][Attack] {npc.Stats.CharacterName} attack sequence ({request.Intent?.Mode}): attacks={attacksMade}, maneuvers={outcome.ManeuversUsed}, hits={aggregate.HitCount}, totalDamage={aggregate.TotalDamageDealt}, fullAttack={npc.ProgressiveAttackPool.IsFullAttack}, rapidShot={outcome.RapidShotDeclared}, stop={stopReason ?? "-"}");
 
         if (LogAttacksToConsole && attacksMade > 0)
             LogFullAttackToConsole(aggregate);
@@ -1167,11 +891,10 @@ public partial class GameManager
         if (FullAttackHadLastKnownPositionMiss(aggregate) && HandleConsecutiveLastKnownAutoMiss(npc, target))
             yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
 
-        // The remaining steps of a turn whose grapple was started in the sequence (a substitute grapple, or an
-        // Improved Grab that took hold, CMB-149) become grapple actions (PHB p.156); AI_GrappleRestrictedTurn draws them
-        // through the same attack sequence: grapple checks and grapple natural attacks, each on a step of the BAB
-        // ladder (CMB-127, CMB-146).
-        if (startedGrappleInSequence && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
+        // The remaining steps of a turn whose grapple was started in the sequence become grapple actions (PHB p.156);
+        // AI_GrappleRestrictedTurn draws them through the same attack sequence: grapple checks and grapple natural attacks,
+        // each on a step of the BAB ladder (CMB-127, CMB-146).
+        if (outcome.StartedGrapple && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
             yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
 
         yield return new WaitForSeconds(1.0f);
@@ -1181,9 +904,10 @@ public partial class GameManager
     private CharacterController SelectBestAdaptiveFullAttackTarget(
         CharacterController attacker,
         DND35.AI.AIProfile profile,
-        bool requireInRange)
+        bool requireInRange,
+        Func<CharacterController, bool> inRange = null)
         => _aiService != null
-            ? _aiService.SelectAdaptiveFullAttackTarget(attacker, profile, GetAllCharacters(), requireInRange)
+            ? _aiService.SelectAdaptiveFullAttackTarget(attacker, profile, GetAllCharacters(), requireInRange, inRange)
             : null;
 
     private bool TryTakeFiveFootStepForAdaptiveFullAttack(
@@ -1355,11 +1079,11 @@ public partial class GameManager
         => AIService.IsGiantBombardierBeetle(npc);
 
     /// <summary>
-    /// NPC attack action. Melee runs step by step through the creature's attack sequence
-    /// (<see cref="NPCMeleeAttackSequence"/>); before each step <paramref name="tryStepManeuver"/>
-    /// (the AI's maneuver evaluation) may replace that attack (CMB-102). Summons pass a trip-only
-    /// evaluation; callers that pass nothing (charmed, confused, the ranged kiter) get plain attacks. Ranged attacks still use
-    /// one FullAttack call or one Attack (CMB-091), with the maneuver tried once beforehand.
+    /// NPC attack action. Melee, ranged and thrown attacks run step by step through the one attack-sequence executor
+    /// (RunAttackSequence, through <see cref="NPCAttackSequence"/>; batch 12 step 17, CMB-091); before each melee step
+    /// <paramref name="tryStepManeuver"/> (the AI's maneuver evaluation) may replace that attack (CMB-102). Summons pass a
+    /// trip-only evaluation; callers that pass nothing (charmed, confused, the ranged kiter) get plain attacks. Before a
+    /// ranged or thrown sequence the maneuver is tried once.
     /// </summary>
     private IEnumerator NPCPerformAttack(
         CharacterController npc,
@@ -1436,211 +1160,36 @@ public partial class GameManager
             yield break;
         }
 
-        AttackIntent npcIntent = AttackIntent.ForAI(this, npc, target);
-        RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target, npcIntent);
-
-        CharacterController flankPartner;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string partnerName = flankPartner != null && flankPartner.Stats != null
-            ? flankPartner.Stats.CharacterName
-            : null;
+        // The NPC's own intent (AttackIntent.ForAI; CMB-096): melee, ranged, or a throw of a melee throwable at a target beyond
+        // its reach; never the PC UI's selection.
+        AttackSequenceRequest request = AttackSequenceRequest.ForAI(this, npc, target, tryStepManeuver, npc.aiProfile);
+        bool melee = request.Intent.Mode == AttackMode.Melee;
 
         // The bombardier beetle's acid spray is a reaction to being attacked or disturbed, not part of its own attack
         // (MM p.285, D1; GameManager.AttackedReactions.cs).
 
-        // Melee: one step at a time through the shared attack sequence (CMB-102). The split reads
-        // the NPC's own weapon, not the PC thrown-mode global (NPCs never throw melee weapons, CMB-096).
-        bool npcUsesRangedWeapon = npc.GetEquippedMainWeapon()?.WeaponCat == WeaponCategory.Ranged;
-        if (!npcUsesRangedWeapon)
+        if (melee)
         {
             // A smite rides on the sequence's first melee attack (SmiteRules, CHR-020); declared only with the target in reach.
             if (npc.IsTargetInCurrentWeaponRange(target))
                 TryNPCDeclareSmite(npc, target);
             TryNPCDeclareFlurryOfBlows(npc, target);
-            yield return StartCoroutine(NPCMeleeAttackSequence(npc, target, tryStepManeuver));
-            yield break;
         }
-
-        // Ranged (and thrown) attacks are unchanged (CMB-091). The AI's maneuver is tried once
-        // first, as before; the maneuver executor's reach gate refuses one out of reach (CMB-104).
-        if (tryStepManeuver != null && tryStepManeuver(npc, target))
+        else if (tryStepManeuver != null && tryStepManeuver(npc, target))
         {
-            // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
+            // Ranged and thrown: the AI's maneuver is tried once first, as before (a maneuver takes a melee attack's place, never
+            // a shot's); the maneuver executor's reach gate refuses one out of reach (CMB-104). A failed trip may be waiting on
+            // a controllable defender's counter-trip choice (CMB-079).
             while (IsAwaitingCounterTripChoice)
                 yield return null;
             yield return new WaitForSeconds(0.8f);
             yield break;
         }
 
-        // A projectile weapon needs a piece of ammunition to shoot (PHB p.113; CMB-019). With none, no attack is attempted:
-        // no ward save, no ranged-attack AoO (PHB p.141: the attack provokes, and none is made) and no action spent. The AI
-        // does not yet route an archer with an empty quiver to melee (AI-073).
-        ItemData rangedWeapon = npc.GetEquippedMainWeapon();
-        if (rangedWeapon != null && rangedWeapon.IsProjectileWeapon && _combatFlowService != null && !_combatFlowService.CheckAmmoAvailable(npc, rangedWeapon))
-        {
-            yield return new WaitForSeconds(0.6f);
-            yield break;
-        }
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the ranged attack's attempt rolls the NPC's one save. This
-        // one-target ranged branch cannot retarget, so a failure loses its first attack step, the standard action (as a
-        // single attack would); the turn may go on with its move action.
-        if (AttackLegality.CommitWard(npc, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
-        {
-            npc.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
-            UpdateAllStatsUI();
-            yield return new WaitForSeconds(0.6f);
-            yield break;
-        }
-
-        bool canUseFullAttack = npc.Actions != null
-            && npc.Actions.HasFullRoundAction
-            && npc.IsTargetInCurrentWeaponRange(target); // no full-round action while slowed (PHB p.280, CMB-095)
-
-        if (canUseFullAttack)
-        {
-            if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
-            {
-                yield return new WaitForSeconds(0.8f);
-                yield break;
-            }
-
-            npc.Actions.UseFullRoundAction();
-
-            // One step at a time (batch 12 step 14; CMB-019, CMB-091): each shot checks its ammunition (PHB p.113) and a
-            // thrown full attack the weapon in hand, and each goes through the post-attack hook (origin G): the thrown drop
-            // and the next draw, one piece of ammunition, Concentration per hit, melee reactions, the free trip, Improved
-            // Grab, the summon cleanup and the combat-end check. A crossbow's reload is checked by each step (FullAttack's
-            // CanAttackWithWeapon), so an unloaded crossbow ends the sequence. The AoOs the shots provoke are resolved once
-            // above, before the full-round action (CMB-091; step 17 makes them per shot).
-            ItemData firstWeapon = npc.GetEquippedMainWeapon();
-            bool thrownSequence = npcIntent.IsThrowOf(firstWeapon);
-            var fullResult = new FullAttackResult { Type = FullAttackResult.AttackType.FullAttack, Attacker = npc, Defender = target, DefenderHPBefore = target.Stats.CurrentHP };
-            const int MaxRangedSteps = 16;
-            for (int stepIndex = 0; stepIndex < MaxRangedSteps; stepIndex++)
-            {
-                if (npc.Stats.IsDead || CombatEndRules.IsOutOfFight(npc) || target.Stats.IsDead)
-                    break;
-
-                ItemData stepWeapon = npc.GetEquippedMainWeapon();
-                if (thrownSequence && !npcIntent.IsThrowOf(stepWeapon))
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no more weapons to throw."));
-                    break;
-                }
-                if (stepWeapon != null && stepWeapon.IsProjectileWeapon && _combatFlowService != null && !_combatFlowService.CheckAmmoAvailable(npc, stepWeapon))
-                    break;
-
-                npcIntent.Weapon = stepWeapon;
-                RangeInfo stepRangeInfo = CalculateRangeInfo(npc, target, npcIntent);
-                FullAttackResult stepResult = npc.FullAttack(target, isFlanking, flankBonus, partnerName, stepRangeInfo,
-                    startAttackIndex: stepIndex, maxAttacks: 1);
-                if (stepResult == null || stepResult.Attacks.Count == 0)
-                    break;
-
-                CombatResult shot = stepResult.Attacks[0];
-                string shotLabel = stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0 ? stepResult.AttackLabels[0] : $"Attack {stepIndex + 1}";
-                fullResult.Attacks.Add(shot);
-                fullResult.AttackLabels.Add(shotLabel);
-
-                AttackResolution stepResolution = AttackResolution.Create(AttackOrigin.NpcRangedFull, npc, target, npcIntent, ActorSource.AI).With(shot);
-                stepResolution.RangeInfo = stepRangeInfo;
-                stepResolution.CombatEndContext = "NPCPerformAttack.FullAttack";
-                stepResolution.ReportStep = () =>
-                {
-                    CombatUI?.ShowCombatLog(shot.GetAttackBreakdown(shotLabel));
-                    UpdateAllStatsUI();
-                };
-                var stepOutcome = new PostAttackOutcome();
-                IEnumerator stepPost = OnAttackResolved(stepResolution, stepOutcome);
-                while (stepPost.MoveNext())
-                    yield return stepPost.Current;
-
-                if (stepOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
-                    yield break;
-                // Grappling after a grab, or holding the target with one body part (MM p.310; CMB-163): no more shots at it.
-                if (npc.IsGrappling() || npc.IsBarredFromOrdinaryAttackOn(target, out _))
-                    break;
-            }
-
-            fullResult.DefenderHPAfter = target.Stats.CurrentHP;
-            fullResult.TargetKilled = target.Stats.IsDead;
-            string flankPrefix = isFlanking
-                ? $"⚔ {npc.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-                : string.Empty;
-
-            _lastCombatLog = flankPrefix + fullResult.GetFullSummary();
-
-            Debug.Log($"[AI][Attack] {npc.Stats.CharacterName} performed full attack: attacks={fullResult.Attacks.Count}, hits={fullResult.HitCount}, totalDamage={fullResult.TotalDamageDealt}");
-
-            if (LogAttacksToConsole)
-                LogFullAttackToConsole(fullResult);
-
-            UpdateAllStatsUI();
-
-            if (fullResult.TargetKilled)
-                CombatUI.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} has fallen, but the fight continues!"));
-
-            if (FullAttackHadLastKnownPositionMiss(fullResult) && HandleConsecutiveLastKnownAutoMiss(npc, target))
-                yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
-
-            yield return new WaitForSeconds(1.0f);
-            yield break;
-        }
-
-        if (!npc.CommitStandardAction())
-        {
-            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
-            yield return new WaitForSeconds(0.6f);
-            yield break;
-        }
-
-        if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
-        {
-            yield return new WaitForSeconds(0.8f);
-            yield break;
-        }
-
-        // The ammunition was checked before the action and the AoOs (above; PHB p.113, CMB-019).
-        ItemData singleWeapon = npc.GetEquippedMainWeapon();
-
-        CombatResult result = npc.Attack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
-
-        // The one post-attack hook (origin H): the log, the thrown drop and the ammunition, Concentration, melee reactions,
-        // the free trip, Improved Grab (the AI's choice), the summon cleanup and the combat-end check for the target and the
-        // attacker (CORE-011).
-        npcIntent.Weapon = singleWeapon;
-        AttackResolution singleResolution = AttackResolution.Create(AttackOrigin.NpcRangedSingle, npc, target, npcIntent, ActorSource.AI).With(result);
-        singleResolution.RangeInfo = npcRangeInfo;
-        singleResolution.CombatEndContext = "NPCPerformAttack.Single";
-        singleResolution.ReportStep = () =>
-        {
-            _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
-
-            if (LogAttacksToConsole)
-                Debug.Log("[Combat] " + _lastCombatLog);
-
-            CombatUI.ShowCombatLog(_lastCombatLog);
-            UpdateAllStatsUI();
-        };
-        var singleOutcome = new PostAttackOutcome();
-        IEnumerator singlePost = OnAttackResolved(singleResolution, singleOutcome);
-        while (singlePost.MoveNext())
-            yield return singlePost.Current;
-
-        if (singleOutcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
-            yield break;
-
-        if (result.TargetKilled)
-        {
-            CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
-        }
-
-        if (IsLastKnownPositionAutoMiss(result) && HandleConsecutiveLastKnownAutoMiss(npc, target))
-            yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
-
-        yield return new WaitForSeconds(1.0f);
+        // One step at a time through the one attack-sequence executor (batch 12 step 17; CMB-091, CMB-102), melee, ranged and
+        // thrown alike: each step's ammunition, weapon and reload (PHB p.113), the AoOs each shot provokes (PHB p.141), the ward
+        // save, the step's action (the standard action, then the move action for a full attack, PHB p.143) and the post-attack hook.
+        yield return StartCoroutine(NPCAttackSequence(npc, target, request));
     }
 
     private bool HandleConsecutiveLastKnownAutoMiss(CharacterController npc, CharacterController target)

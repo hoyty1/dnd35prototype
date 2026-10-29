@@ -274,7 +274,7 @@ public partial class GameManager
         int capable = 0;
         for (int i = 0; i < count; i++)
         {
-            if (!_usedNaturalAttackSequenceIndices.Contains(i) && attacker.CanNaturalAttackSunder(i))
+            if (!IsNaturalAttackIndexUsedThisTurn(attacker, i) && attacker.CanNaturalAttackSunder(i))
                 capable++;
         }
 
@@ -1571,7 +1571,7 @@ public partial class GameManager
 
     /// <summary>
     /// True while a controllable defender's counter-trip prompt waits for its answer (PHB p.158). An NPC
-    /// coroutine whose trip failed waits on it before its next step (NPCMeleeAttackSequence, the ranged
+    /// coroutine whose trip failed waits on it before its next step (GameManager.RunAttackSequence, the ranged
     /// maneuver paths), so the counter-trip lands before the tripper acts again.
     /// </summary>
     public bool IsAwaitingCounterTripChoice => _counterTripPromptOpen;

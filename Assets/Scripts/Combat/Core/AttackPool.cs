@@ -108,6 +108,16 @@ public sealed class AttackPool
     /// </summary>
     public bool IsFlurryOfBlows { get; private set; }
 
+    /// <summary>
+    /// Rapid Shot was declared this turn (PHB p.99; batch 12 decision D9): before the first attack, committing the turn to
+    /// the full attack. The sequence gets one extra ranged attack at the highest bonus (CharacterCombatStats.GetIterativeAttackCount
+    /// and GetIterativeAttackBAB put it first) and every attack of the round takes -2 (CharacterController.BuildAttackBonus
+    /// through AttackCalculator's Rapid Shot term, ranged attacks only: the attacks of that full attack, never a melee AoO
+    /// before the next turn, delegated RAW reading 2026-10-28, RULES_COVERAGE 4.1). It lasts until <see cref="Clear"/> at the start of the
+    /// creature's next turn, so a reused slot never carries it. Set by <see cref="CharacterController.TryDeclareRapidShot"/>.
+    /// </summary>
+    public bool IsRapidShot { get; private set; }
+
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
     public bool NextAttackNeedsMoveAction => Mode == ProgressiveAttackMode.StandardAttackCommitted && !PendingStepPaid;
@@ -126,6 +136,14 @@ public sealed class AttackPool
         RakeUsedThisTurn = false;
         BeganTurnGrappling = false;
         IsFlurryOfBlows = false;
+        IsRapidShot = false;
+    }
+
+    /// <summary>Declares Rapid Shot: the turn is a full attack (its actions are spent by the caller) with one extra ranged attack.</summary>
+    internal void MarkRapidShot()
+    {
+        IsRapidShot = true;
+        Mode = ProgressiveAttackMode.FullAttackCommitted;
     }
 
     /// <summary>Starts a flurry of blows: the turn is a full attack (its actions are spent by the caller) with the flurry steps.</summary>

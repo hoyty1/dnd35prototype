@@ -57,7 +57,7 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - `AIConsumableManager` has a healing threshold (`HealingPotionThreshold` 0.4), potion, scroll and wand name lists and pickers, but only tests attach it and it keeps its own lists instead of reading the inventory (AI-009).
   - The only live NPC consumable use is a charmed NPC feeding a healing potion to its charmer (`CharmedBehaviorController.TryUseHealingConsumableOnCaster`, about line 178): it removes the item and spends a standard action but resolves no AoO (AI-042 covers the charm behaviour).
 - **What blocks it.**
-  - The PC wrapper refuses any actor that is not `ActivePC` and ends the PC turn (AI-054). NPC use needs its own wrapper around `ApplyConsumableEffectAndConsume`, resolving provoked AoOs with `ThreatSystem.ExecuteAoO` as `ResolveRangedAttackAoOForNPCAttackIfProvoked` (NPCTurns.cs:406) does.
+  - The PC wrapper refuses any actor that is not `ActivePC` and ends the PC turn (AI-054). NPC use needs its own wrapper around `ApplyConsumableEffectAndConsume`, resolving provoked AoOs with `ThreatSystem.ExecuteAoO` as `CombatFlowService.ResolveRangedAttackAoOIfProvoked` does for every shot (the attack-sequence executor's RangedAoO stage, `GameManager.RunAttackSequence`).
   - Item use costs a full-round action for everyone (ITM-005). RAW, retrieving a stored item is a move action and drinking is a standard action, so an NPC could retrieve and drink in one turn but not also move.
   - Nothing decides between drinking, withdrawing and attacking; `FleeHealthThreshold` is unread (AI-010).
   - Wands and scrolls also need targets and Use Magic Device checks for non-casters (`WandValidator`), so start with self-targeted potions.
