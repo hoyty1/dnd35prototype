@@ -433,7 +433,7 @@ public partial class GameManager
         }
 
         if (cost.ChargeEnd)
-            return pc.Actions.HasFullRoundAction;
+            return ChargeRules.HasChargeAction(pc, out _, out _); // full-round, or a partial charge (D2, CMB-108)
 
         switch (cost.Action)
         {
@@ -458,7 +458,7 @@ public partial class GameManager
             case SpecialAttackType.Disarm: return useOffHand ? "Need an available off-hand disarm attack" : "Need at least one remaining main-hand disarm attack";
             case SpecialAttackType.Sunder: return useOffHand ? "Need an available off-hand sunder attack" : "Need at least one remaining main-hand sunder attack";
             case SpecialAttackType.CoupDeGrace: return "Need a full-round action, an adjacent helpless enemy, and a melee attack option";
-            case SpecialAttackType.BullRushCharge: return "Need a full-round action and valid charge movement";
+            case SpecialAttackType.BullRushCharge: return "Need a full-round action (or the single action of a partial charge) and valid charge movement";
             default: return "Need a standard action";
         }
     }

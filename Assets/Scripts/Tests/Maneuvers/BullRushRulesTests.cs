@@ -101,6 +101,13 @@ public static class BullRushRulesTests
                 "Charge bull rush: twice the speed minus the charge path cost");
             Assert(BullRushRules.GetMovementLimitSquares(actor, true, speed * 2 + 5) == 0,
                 "Charge bull rush that used all its movement: limit 0");
+            if (actor.Actions != null)
+            {
+                actor.Actions.SingleActionOnly = true;
+                Assert(BullRushRules.GetMovementLimitSquares(actor, true, 1) == Mathf.Max(0, speed - 1),
+                    "Partial charge bull rush (limited to one action): the speed minus the charge path cost (PHB p.154, D2)");
+                actor.Actions.SingleActionOnly = false;
+            }
 
             actor.HasTakenFiveFootStep = true;
             Assert(BullRushRules.GetMovementLimitSquares(actor, false, 0) == 0,

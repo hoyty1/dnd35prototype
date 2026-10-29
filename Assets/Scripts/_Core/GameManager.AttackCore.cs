@@ -57,7 +57,9 @@ public partial class GameManager
 
         bool aoo = req.Kind == AttackSequenceKind.AoO;
         bool heldTouch = req.Kind == AttackSequenceKind.HeldChargeTouch;
-        bool forcedOffHand = !aoo && !heldTouch && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand;
+        // The attack or pounce at the end of a charge (batch 12 step 21): prepaid steps, no ward commit (the charge's covers them).
+        bool charge = req.Kind == AttackSequenceKind.Charge;
+        bool forcedOffHand = !aoo && !heldTouch && !charge && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand;
         var state = new AttackSequenceState { Request = req, Outcome = o, CurrentTarget = firstTarget };
         bool naturalSubstituteUsed = false;
 
@@ -105,6 +107,12 @@ public partial class GameManager
             }
             CharacterController target = choice.Target;
             state.CurrentTarget = target;
+            // A charge's steps all go to the charge target; once it is dead the charge has nothing left to attack.
+            if (charge && target.Stats.IsDead)
+            {
+                o.StopReason = o.StopReason ?? "the charge's target is dead";
+                break;
+            }
 
             // The step's intent: the request's, with the weapon in hand now (a thrown weapon is dropped after each throw and
             // the next one drawn by the post-attack hook) and the step's hand: an off-hand step (an Off-Hand button, or the
@@ -145,7 +153,7 @@ public partial class GameManager
 
             // 2. One more step of this kind (an AoO is not a step of the attack sequence: ThreatSystem spent the AoO).
             Stage(req, o, AttackSequenceStage.CanCommitAttack);
-            if (!aoo && !attacker.CanCommitAttack(kind, out string cannotCommitReason))
+            if (!aoo && !charge && !attacker.CanCommitAttack(kind, out string cannotCommitReason))
             {
                 o.StopReason = cannotCommitReason;
                 break;
@@ -156,7 +164,7 @@ public partial class GameManager
             // substitute (an AI limit pending AI-035). A declared smite keeps the step an attack (SmiteRules, CHR-020).
             // The step's intent goes with the maneuver (its two-weapon state: the main-hand penalty, PHB p.160; batch 12 step 19).
             bool stepManeuvered = false;
-            if (req.TryStepManeuver != null && !ranged && !aoo && !heldTouch && kind != AttackStepKind.OffHand
+            if (req.TryStepManeuver != null && !ranged && !aoo && !heldTouch && !charge && kind != AttackStepKind.OffHand
                 && !(naturalSubstituteUsed && kind == AttackStepKind.NaturalSequence)
                 && attacker.Stats.DeclaredSmite == SmiteSource.None)
             {
@@ -197,6 +205,7 @@ public partial class GameManager
             if (!legality.Ok)
             {
                 o.StopReason = legality.Reason;
+                o.StoppedByLegality = true;
                 break;
             }
 
@@ -219,10 +228,11 @@ public partial class GameManager
                 }
             }
 
-            // 5. The ward's save (D6): a failure loses the step (it is still spent). A held-charge touch's ward is its cast's.
-            if (!heldTouch)
+            // 5. The ward's save (D6): a failure loses the step (it is still spent). A held-charge touch's ward is its cast's;
+            // a charge's is the charge's own commit, made once for its attack or pounce (ChargeCore).
+            if (!heldTouch && !charge)
                 Stage(req, o, AttackSequenceStage.WardCommit);
-            if (!heldTouch && AttackLegality.CommitWard(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent) == WardVerdict.Failed)
+            if (!heldTouch && !charge && AttackLegality.CommitWard(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent) == WardVerdict.Failed)
             {
                 if (!aoo && attacker.TryCommitAttack(kind, out _, out _) && kind == AttackStepKind.NaturalSequence)
                     LoseNextNaturalAttack(attacker);
@@ -245,7 +255,12 @@ public partial class GameManager
                 && attacker.ProgressiveAttackPool.OffHandStepsUsed == 0
                 && !attacker.CanStillReachFullAttack();
             bool hasteNaturalStep = false;
-            if (!aoo)
+            if (charge)
+            {
+                // Prepaid: the charge core spent the charge's action; the step index is the pounce's natural-attack index.
+                stepIndex = state.StepsTaken;
+            }
+            else if (!aoo)
             {
                 // The natural attack this step makes: the step's own when unused, else the first unused one, else Haste's
                 // extra natural attack (CMB-106); read before the step is recorded.
@@ -341,6 +356,15 @@ public partial class GameManager
             {
                 result = attacker.Attack(target, isFlanking, flankBonus, partnerName, null, null, req.AoOWeapon, req.AoOAttackModifier);
                 label = "Attack of opportunity";
+            }
+            else if (charge)
+            {
+                result = ResolveChargeStep(attacker, target, req, stepIndex, isFlanking, flankBonus, partnerName, out label);
+                if (result == null)
+                {
+                    o.StopReason = req.ChargePounce ? "no natural attack left" : "the step made no attack";
+                    break;
+                }
             }
             else
             {
@@ -444,6 +468,10 @@ public partial class GameManager
 
         if (iteration >= cap && !aoo)
             Debug.LogWarning($"[AttackSequence] {attacker.Stats?.CharacterName} hit the safety cap of {cap} iterations.");
+
+        // A pounce's rakes (MM p.313: no grapple needed; delegated RAW reading 2026-10-14, CMB-144), after its natural attacks.
+        if (charge && req.ChargePounce && !o.CombatEnded && CurrentPhase != TurnPhase.CombatOver)
+            ResolvePounceRakes(attacker, firstTarget, o);
 
         CharacterController defender = o.Aggregate.Defender;
         o.Aggregate.DefenderHPAfter = defender != null && defender.Stats != null ? defender.Stats.CurrentHP : o.Aggregate.DefenderHPBefore;

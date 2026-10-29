@@ -449,23 +449,38 @@ public static class MountSystemTests
         Assert(heavyLance == 3, "Spirited Charge with Heavy Lance gives ×3",
             $"Actual: {heavyLance}");
 
-        // Apply to actual damage
-        int baseDamage = 10;
+        // The charge attack's weapon damage multiplier (rolled into the weapon damage roll, CMB-013): mounted only
+        var lance = new ItemData { Name = "Lance" };
+        var sword = new ItemData { Name = "Longsword" };
         var go = new GameObject("TestRider_Lance");
         var rider = go.AddComponent<CharacterController>();
         rider.Stats = riderStats;
+        Assert(MountedCombatSystem.GetChargeDamageMultiplier(rider, lance) == 1,
+            "An unmounted charge has no Spirited Charge or lance multiplier");
         var mount = MountSystem.CreateMount(MountType.HeavyWarhorse);
         MountSystem.TryMount(rider, mount);
 
-        int result = MountedCombatSystem.ApplySpiritedChargeDamage(rider, baseDamage, "Lance");
-        Assert(result == 30, "10 base damage × 3 (lance) = 30",
-            $"Actual: {result}");
+        int lanceCharge = MountedCombatSystem.GetChargeDamageMultiplier(rider, lance);
+        Assert(lanceCharge == 3, "Mounted charge with a lance and Spirited Charge: x3 (PHB p.100)",
+            $"Actual: {lanceCharge}");
 
-        int swordResult = MountedCombatSystem.ApplySpiritedChargeDamage(rider, baseDamage, "Longsword");
-        Assert(swordResult == 20, "10 base damage × 2 (sword) = 20",
-            $"Actual: {swordResult}");
+        int swordCharge = MountedCombatSystem.GetChargeDamageMultiplier(rider, sword);
+        Assert(swordCharge == 2, "Mounted charge with a longsword and Spirited Charge: x2 (PHB p.100)",
+            $"Actual: {swordCharge}");
+
+        var go2 = new GameObject("TestRider_LanceNoFeat");
+        var plainRider = go2.AddComponent<CharacterController>();
+        plainRider.Stats = MakeStats("Lancer2", 8, "Fighter", feats: new[] { "Mounted Combat" });
+        MountSystem.TryMount(plainRider, MountSystem.CreateMount(MountType.HeavyWarhorse));
+        int plainLance = MountedCombatSystem.GetChargeDamageMultiplier(plainRider, lance);
+        Assert(plainLance == 2, "Mounted charge with a lance and no Spirited Charge: the lance's own x2 (PHB p.118)",
+            $"Actual: {plainLance}");
+        int plainSword = MountedCombatSystem.GetChargeDamageMultiplier(plainRider, sword);
+        Assert(plainSword == 1, "Mounted charge with a longsword and no Spirited Charge: x1",
+            $"Actual: {plainSword}");
 
         Object.DestroyImmediate(go);
+        Object.DestroyImmediate(go2);
         MountSystem.ClearAllMounts();
     }
 

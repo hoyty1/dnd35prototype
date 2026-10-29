@@ -917,6 +917,44 @@ public class CharacterController : MonoBehaviour
     private bool _resolvingFlurryOfBlowsAttack;
 
     /// <summary>
+    /// The weapon damage multiplier of the charge attack being resolved (Spirited Charge, PHB p.100), set only for the
+    /// length of <see cref="ResolveChargeAttack"/>; 1 otherwise. PerformSingleAttackWithCrit rolls it into the weapon damage
+    /// roll with a critical's multiplier (PHB p.134). Transient, so nothing to clear on slot reuse.
+    /// </summary>
+    private int _chargeDamageMultiplier = 1;
+
+    /// <summary>
+    /// The attack at the end of a charge (PHB p.154; batch 12 step 21, the charge core's one attack for PCs and NPCs): one
+    /// Attack with the charge's +2 as a per-attack term (CMB-003) and <paramref name="damageMultiplier"/>, Spirited Charge's
+    /// x2 (x3 with a lance) when mounted (PHB p.100). The multiplier is rolled into the weapon damage roll: x2 is two rolls of
+    /// the weapon dice and static modifier, and with a critical the multipliers add as PHB p.134 says (a x2 critical and a
+    /// x2 charge are x3); extra dice (sneak attack, energy) are added once, and damage reduction applies once (CMB-013).
+    /// </summary>
+    public CombatResult ResolveChargeAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName,
+        int damageMultiplier)
+    {
+        int multiplier = Mathf.Max(1, damageMultiplier);
+        _chargeDamageMultiplier = multiplier;
+        CombatResult result;
+        try
+        {
+            result = Attack(target, isFlanking, flankingBonus, flankingPartnerName, null,
+                situationalAttackBonus: 2, situationalLabel: "Charge");
+        }
+        finally
+        {
+            _chargeDamageMultiplier = 1;
+        }
+
+        if (result != null && result.Hit && multiplier > 1)
+        {
+            string note = $"Spirited Charge: weapon damage x{multiplier} (PHB p.100).";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+        }
+        return result;
+    }
+
+    /// <summary>
     /// A weapon a flurry may use (PHB p.40): an unarmed strike (null) or a special monk weapon
     /// (<see cref="CharacterStats.IsSpecialMonkWeapon"/>), in melee. A thrown shuriken flurry is not modelled.
     /// </summary>
@@ -8555,12 +8593,18 @@ public class CharacterController : MonoBehaviour
                             // Hit: deal 1d4 + STR damage (thrown projectile)
                             int snatchDamage = DiceRoller.D4() + target.Stats.STRMod;
                             snatchDamage = Mathf.Max(1, snatchDamage);
-                            this.Stats.TakeDamage(snatchDamage);
-                            result.SpecialAttackNote += $" Counter-attack hits for {snatchDamage} damage! (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {targetAC})";
+                            // The thrown-back projectile is a ranged weapon hit of its own damage type, so damage
+                            // reduction, immunity and the death handling apply (CMB-013).
+                            DamageType snatchType = DamageType.Piercing;
+                            if (weapon != null)
+                                foreach (DamageType t in weapon.GetDamageTypes()) { snatchType = t; break; }
+                            DamageResolutionResult snatchHit = GameManager.DealDamageFrom(this, snatchDamage,
+                                DamagePackets.Weapon("Snatch Arrows", snatchType, isRanged: true, sourceCreature: target));
+                            result.SpecialAttackNote += $" Counter-attack hits for {snatchHit.FinalDamage} damage{GameManager.DescribeMitigation(snatchHit)}! (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {snatchTargetAC})";
                         }
                         else
                         {
-                            result.SpecialAttackNote += $" Counter-attack misses. (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {targetAC})";
+                            result.SpecialAttackNote += $" Counter-attack misses. (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {snatchTargetAC})";
                         }
                     }
                 }
@@ -8711,7 +8755,16 @@ public class CharacterController : MonoBehaviour
             // rolls both the multiplier number of times and adds the rolls (PHB p.134 and p.140; CMB-004, owner ruling
             // 2026-10-08: RAW). Extra dice (sneak attack, enchantment riders) are added once below, never multiplied.
             int staticDamage = damageBonus.Total;
-            WeaponDamageRoll weaponRoll = WeaponDamageRoll.Roll(damageCount, damageDice, staticDamage, critConfirmed ? critMultiplier : 1);
+            // A specific weapon's own critical multiplier against this target (a mace of smiting's x4 against an outsider,
+            // DMG p.226; CMB-013), then a charge's multiplier (Spirited Charge, PHB p.100): multipliers add as PHB p.134 says
+            // (x2 and x2 are x3), each extra multiple one more roll of the weapon dice and static modifier.
+            if (critConfirmed && weapon != null && weapon.SpecificItemBehavior != null && target != null)
+            {
+                critMultiplier = weapon.SpecificItemBehavior.GetCriticalMultiplierAgainst(target, critMultiplier);
+                result.CritMultiplier = critMultiplier;
+            }
+            int damageRolls = (critConfirmed ? critMultiplier : 1) + Mathf.Max(0, _chargeDamageMultiplier - 1);
+            WeaponDamageRoll weaponRoll = WeaponDamageRoll.Roll(damageCount, damageDice, staticDamage, damageRolls);
             int baseDmgRoll = weaponRoll.DiceTotal;
             int rawWeaponDamage = weaponRoll.Total; // a weapon hit always deals at least 1 before mitigation (PHB p.134)
             if (critConfirmed)

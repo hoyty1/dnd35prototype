@@ -981,9 +981,10 @@ public partial class GameManager
             return;
         }
 
-        if (!charger.Actions.HasFullRoundAction)
+        // A full-round action, or a partial charge for a creature limited to one action (PHB p.154, D2; CMB-108).
+        if (!ChargeRules.HasChargeAction(charger, out _, out string chargeActionReason))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} needs a full-round action to charge."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} cannot charge: {chargeActionReason}"));
             return;
         }
 
@@ -1062,130 +1063,26 @@ public partial class GameManager
         return charger.GetMinimumDistanceToTarget(target, chebyshev: true);
     }
 
+    /// <summary>
+    /// The charge legality (<see cref="CanCharge"/>, the charge core's, PC and NPC alike) for the request the charger's
+    /// builder would make; <paramref name="logFailures"/> logs the refusal.
+    /// </summary>
     public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true, bool forBullRush = false)
     {
         if (charger == null || target == null || charger == target) return false;
         if (charger.Stats == null || target.Stats == null || target.Stats.IsDead) return false;
 
-        if (!TeamUtility.IsEnemy(charger, target))
+        // The legality reads no decider or presentation field, so one neutral request serves the PC and the AI.
+        Legality legality = CanCharge(new ChargeRequest
         {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "You can only charge an enemy target."));
-            return false;
-        }
-
-        int startingDistanceSquares = GetChargeStartingDistanceSquares(charger, target);
-        if (startingDistanceSquares <= ChargeBlockedDistanceSquares)
-        {
-            if (logFailures)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge {target.Stats.CharacterName}: target is within {ChargeBlockedDistanceSquares} squares ({startingDistanceSquares} squares away) from your starting position."));
-            }
-            return false;
-        }
-
-        if (!charger.Actions.HasFullRoundAction)
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need full-round action to charge."));
-            return false;
-        }
-
-        if (charger.HasTakenFiveFootStep)
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Cannot charge after taking a 5-foot step."));
-            return false;
-        }
-
-        // A prone creature cannot charge: it must stand up first, which spends the move
-        // action a charge needs (PHB p.143, CMB-074). Shared by the PC button and the AI.
-        if (charger.HasCondition(CombatConditionType.Prone))
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Prone creatures cannot charge; stand up first."));
-            return false;
-        }
-
-        // No normal movement while grappling (PHB p.156); the charge budget below would otherwise
-        // still allow the 2-square minimum. Shared by the PC button and the AI.
-        if (charger.IsGrappling())
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Grappling creatures cannot charge."));
-            return false;
-        }
-
-        // A bull rush needs no weapon (PHB p.154); it needs the shared size, swarm, incorporeal and
-        // grappling rules instead. Adjacency is the charge path's job (endpoints touch the target).
-        if (forBullRush)
-        {
-            if (!charger.CanBullRush(target, true, out string bullRushReason))
-            {
-                if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot bull rush {target.Stats.CharacterName}: {bullRushReason}."));
-                return false;
-            }
-        }
-        else if (!charger.HasMeleeWeaponEquipped())
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need a melee weapon (or natural/unarmed attack) to charge."));
-            return false;
-        }
-        // A creature holding the target with one body part may not attack it, so it cannot charge it (MM p.310;
-        // delegated RAW reading 2026-10-14, CMB-163). Shared by the PC charge and the NPC charge.
-        else if (charger.IsBarredFromOrdinaryAttackOn(target, out string chargeHoldReason))
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", chargeHoldReason));
-            return false;
-        }
-
-        // The direct-attack gate, read only (AttackLegality, batch 12 step 12), for the attack or the bull rush at the end of
-        // the charge: nothing passes a Resilient Sphere (PHB p.258, CMB-092), and a target whose ward the charger failed to
-        // overcome cannot be attacked (D6). The path test below keeps the charge's own reach. An unrolled ward is legal;
-        // the attack after the move rolls its save.
-        Legality chargeLegality = AttackLegality.Check(charger, target, DirectAttackKind.Charge,
-            forBullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
-        if (!chargeLegality.Ok)
-        {
-            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge {target.Stats.CharacterName}: {chargeLegality.Reason}."));
-            return false;
-        }
-
-        if (charger.Stats.IsFatiguedOrExhausted)
-        {
-            if (logFailures)
-            {
-                string fatigueState = charger.Stats.IsExhaustedState ? "Exhausted" : "Fatigued";
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{fatigueState} creatures cannot charge."));
-            }
-            return false;
-        }
-
-        if (charger.HasCondition(CombatConditionType.Entangled))
-        {
-            if (logFailures)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Entangled creatures cannot charge."));
-            return false;
-        }
-
-        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason, forBullRush))
-        {
-            if (logFailures)
-            {
-                int maxDistanceFeet = Mathf.Max(MinChargeMovementSquares, GetCurrentMoveRangeSquares(charger) * 2) * 5;
-                switch (failureReason)
-                {
-                    case ChargePathFailureReason.TooClose:
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge targets within {ChargeBlockedDistanceSquares} squares ({ChargeBlockedDistanceSquares * 5} ft). Move at least {MinChargeMovementSquares} squares ({MinChargeMovementSquares * 5} ft)."));
-                        break;
-                    case ChargePathFailureReason.TooFar:
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Target is too far to charge (max {maxDistanceFeet} ft)."));
-                        break;
-                    default:
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid charge path to target."));
-                        break;
-                }
-            }
-            return false;
-        }
-
-        return true;
+            Charger = charger,
+            Target = target,
+            BullRush = forBullRush,
+            Partial = charger.Actions != null && charger.Actions.SingleActionOnly,
+        });
+        if (!legality.Ok && logFailures)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", legality.Reason));
+        return legality.Ok;
     }
 
     public List<Vector2Int> GetChargePath(CharacterController charger, CharacterController target, bool forBullRush = false)
@@ -1223,7 +1120,7 @@ public partial class GameManager
         // CMB-153). The path starts outside the starting square, so only the squares entered are checked; leaving the
         // shared square provokes from the creature there, as any move out of a threatened square does (CMB-131).
         int minDistance = MinChargeMovementSquares; // Must move at least 2 squares (10 ft per PHB p.154)
-        int maxDistance = Mathf.Max(minDistance, GetCurrentMoveRangeSquares(charger) * 2);
+        int maxDistance = GetChargeMaxDistanceSquares(charger); // double the speed; the speed for a partial charge (D2)
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
         int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);
 
@@ -1509,289 +1406,56 @@ public partial class GameManager
         onResolved?.Invoke(choice);
     }
 
+    /// <summary>
+    /// The PC's charge (the confirmation click): the charge core (<see cref="ExecuteCharge(ChargeRequest, ChargeOutcome)"/>,
+    /// the same executor as the NPC's) with the PC UI's request, then the PC UI continuation: the charge mode's state is
+    /// cleared, a refused charge goes back to the action menu, a charge an AoO stopped or a bull rush charge whose charger
+    /// was dropped ends the turn, and any other charge waits <see cref="AfterAttackDelay"/>.
+    /// </summary>
     private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
     {
         Debug.Log($"[Charge] Starting charge attack | attacker={charger?.Stats?.CharacterName ?? charger?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | frame={Time.frameCount}");
 
-        if (!CanChargeTarget(charger, target, logFailures: true, forBullRush: _pendingChargeBullRush))
+        ChargeRequest request = ChargeRequestForUi(charger, target, _pendingChargeBullRush);
+        Legality legality = CanCharge(request);
+        if (!legality.Ok)
         {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", legality.Reason));
             ShowActionChoices();
             yield break;
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        List<Vector2Int> path = GetChargePath(charger, target, _pendingChargeBullRush);
-        if (path == null || path.Count == 0)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Charge aborted: invalid path."));
-            ShowActionChoices();
-            yield break;
-        }
-
-        if (charger.Actions == null || !charger.Actions.HasFullRoundAction)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} cannot charge: no full-round action remaining."));
-            ShowActionChoices();
-            yield break;
-        }
-
-        charger.Actions.UseFullRoundAction();
-
-        CombatUI?.ShowCombatLog(_pendingChargeBullRush
-            ? $"🏇 {charger.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
-            : $"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
-
-        // Resolve AoOs before each step (shared helper, PHB p.137) so the charge stops
-        // in place if an AoO drops, trips or otherwise stops the charger.
-        Vector2Int chargeStart = charger.GridPosition;
-        var provokedAoOs = CheckForAoO(charger, path);
-        bool interruptedByAoO = false;
-        var aooOutcome = new MovementAoOStepOutcome();
-        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
-        {
-            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(charger, provokedAoOs, pathIndex, "AoO during charge", 0.8f, aooOutcome));
-            if (aooOutcome.StopMovement)
-            {
-                interruptedByAoO = true;
-                break;
-            }
-
-            var stepPath = new List<Vector2Int> { path[pathIndex] };
-            if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
-            else
-                yield return StartCoroutine(charger.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
-        }
-
-        if (path.Count > 0)
-            charger.HasMovedThisTurn = true;
-
-        CheckTurnUndeadProximityBreakingForMover(charger);
-        PruneTurnUndeadTrackers();
-
-        if (interruptedByAoO)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{charger.Stats.CharacterName}'s charge is interrupted ({aooOutcome.Reason})."));
-            UpdateAllStatsUI();
-            _chargeTarget = null;
-            _pendingChargePath.Clear();
-            _pendingChargeBullRush = false;
-            if (IsPlayerTurn)
-                EndActivePCTurn();
-            yield break;
-        }
-
-        InvalidatePreviewThreats();
-
-        // Flanking from the square the charge ended in, as NPCExecuteCharge does (PHB p.153; CMB-018).
-        CharacterController chargeFlankPartner;
-        bool isFlankingCharge = CombatUtils.IsAttackerFlanking(charger, target, GetAllCharacters(), out chargeFlankPartner);
-        int chargeFlankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
-        string chargeFlankPartnerName = chargeFlankPartner != null && chargeFlankPartner.Stats != null
-            ? chargeFlankPartner.Stats.CharacterName
-            : null;
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attack (or bull rush) after the move is the attempt,
-        // and rolls the charger's one save; a failure loses it (the charge's full-round action is spent).
-        bool chargeLostToWard = AttackLegality.CommitWard(charger, target, DirectAttackKind.Charge,
-            _pendingChargeBullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null) == WardVerdict.Failed;
-
-        if (chargeLostToWard)
-        {
-            // Logged by the commit.
-        }
-        else if (_pendingChargeBullRush)
-        {
-            var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(charger, target,
-                SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
-            if (chargeBullRushOutcome.AttackerIncapacitated)
-                yield break;
-        }
-        else
-        {
-            bool usedPounce = charger.Stats != null
-                && charger.Stats.HasPounce
-                && charger.Stats.HasNaturalAttacks
-                && charger.GetEquippedMainWeapon() == null;
-
-            if (usedPounce)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{charger.Stats.CharacterName} uses Pounce and unleashes a full natural attack at the end of the charge!"));
-
-                // A pounce is a full attack, so Haste adds one natural attack; the player picks its natural
-                // weapon (PHB p.239; owner decision 2026-10-07, CMB-106; CMB-124). Cancel uses the default. The
-                // chooser's labels add the charge's +2 (PHB p.154), which is applied just below.
-                int pounceHasteNaturalAttackIndex = -1;
-                if (charger.CanUseHasteExtraNaturalAttack())
-                {
-                    Coroutine hasteChoice = AttackDeciders.For(charger).ChooseHasteNaturalAttack(this, charger, target, null, 2,
-                        choice => pounceHasteNaturalAttackIndex = choice);
-                    if (hasteChoice != null)
-                        yield return hasteChoice;
-                }
-
-                // One step at a time through the post-attack hook (D8, CMB-169), the choices by the charger's decider.
-                AttackIntent pounceIntent = AttackIntent.ForUi(this, charger);
-                pounceIntent.Mode = AttackMode.Melee;
-                pounceIntent.IsCharge = true;
-                pounceIntent.IsPounce = true;
-                IEnumerator pounce = RunPounceSequence(charger, target, pounceIntent, null, isFlankingCharge, chargeFlankingBonus,
-                    chargeFlankPartnerName, pounceHasteNaturalAttackIndex, "⚡", "Charge Pounce (+2)");
-                while (pounce.MoveNext())
-                    yield return pounce.Current;
-                if (CurrentPhase == TurnPhase.CombatOver)
-                    yield break;
-            }
-            else
-            {
-                // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
-                CombatResult result = charger.Attack(target, isFlankingCharge, chargeFlankingBonus, chargeFlankPartnerName, null,
-                    situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
-
-                if (result != null)
-                {
-                    // Spirited Charge: multiply damage if mounted (×2 melee, ×3 lance)
-                    if (result.Hit && result.TotalDamage > 0 && MountSystem.IsMounted(charger))
-                    {
-                        int originalDamage = result.TotalDamage;
-                        int multipliedDamage = MountedCombatSystem.ProcessMountedChargeDamage(charger, originalDamage, result.WeaponName);
-                        if (multipliedDamage > originalDamage)
-                        {
-                            int extraDamage = multipliedDamage - originalDamage;
-                            if (target.Stats != null)
-                                target.Stats.TakeDamage(extraDamage);
-                            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                                ? $"Spirited Charge: {multipliedDamage} total damage!"
-                                : $"{result.SpecialAttackNote} Spirited Charge: {multipliedDamage} total damage!";
-                            Debug.Log($"[Charge] Spirited Charge bonus damage: {originalDamage} → {multipliedDamage} (+{extraDamage})");
-                        }
-                    }
-
-                    // The one post-attack hook (origin J): the free trip before the charge's log, the log, Concentration,
-                    // melee reactions and Improved Grab, the choice by the charger's decider. No rake: a creature cannot
-                    // begin a grapple and rake in the same turn (MM p.314, CMB-144).
-                    AttackIntent chargeIntent = AttackIntent.ForUi(this, charger);
-                    chargeIntent.Mode = AttackMode.Melee;
-                    chargeIntent.IsCharge = true;
-                    AttackResolution chargeResolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, chargeIntent).With(result);
-                    chargeResolution.RangeInfo = CalculateRangeInfo(charger, target, chargeIntent);
-                    chargeResolution.ReportStep = () => CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Attack (+2): {result.GetDetailedSummary()}"));
-                    IEnumerator chargePost = OnAttackResolved(chargeResolution, new PostAttackOutcome());
-                    while (chargePost.MoveNext())
-                        yield return chargePost.Current;
-                }
-            }
-        }
-
-        // D&D 3.5e: charge AC penalty lasts until the start of this charger's next turn.
-        ApplyChargePenaltyUntilStartOfNextTurn(charger);
-        CombatUI.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{charger.Stats.CharacterName} is charging: -2 AC until next turn."));
+        var outcome = new ChargeOutcome();
+        IEnumerator run = ExecuteCharge(request, outcome);
+        while (run.MoveNext())
+            yield return run.Current;
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         _chargeTarget = null;
         _pendingChargePath.Clear();
         _pendingChargeBullRush = false;
-
         UpdateAllStatsUI();
 
-        Debug.Log($"[Charge] Coroutine ending | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
+        if (!outcome.Started)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", outcome.RefusedReason));
+            ShowActionChoices();
+            yield break;
+        }
 
-        // Victory or defeat when the charge (or an AoO on the way) dropped the last creature of a side (CORE-011).
-        CheckCombatVictory("ExecuteCharge.Final", target);
+        if (outcome.InterruptedByAoO || outcome.ChargerDropped)
+        {
+            if (IsPlayerTurn && CurrentPhase != TurnPhase.CombatOver)
+                EndActivePCTurn();
+            yield break;
+        }
 
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;
 
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
-    }
-
-    /// <summary>
-    /// A pounce (MM p.313: a full attack at the end of a charge), PC and NPC alike: each natural attack is one step
-    /// (CharacterController.FullAttack with startAttackIndex and maxAttacks 1, as the Full Attack button steps), with the
-    /// charge's +2 (PHB p.154), and each step goes through the post-attack hook, so an Improved Grab follows its trigger hit
-    /// at once (MM p.310; decision D8, CMB-169). Once the grab takes hold the charger is grappling and makes no more
-    /// ordinary attacks (PHB p.156; CMB-149); a hold with one body part (MM p.310) leaves it free to go on. Then the
-    /// pounce's rakes (no grapple needed, MM p.313; delegated RAW reading 2026-10-14, CMB-144), whose Concentration checks
-    /// and melee reactions follow (step 16 makes them steps of the sequence).
-    /// </summary>
-    private IEnumerator RunPounceSequence(CharacterController charger, CharacterController target, AttackIntent intent, ActorSource? deciderSource,
-        bool isFlanking, int flankingBonus, string flankingPartnerName, int hasteNaturalAttackIndex, string logIcon, string logLabel)
-    {
-        const int MaxPounceSteps = 16;
-        for (int step = 0; step < MaxPounceSteps; step++)
-        {
-            if (charger == null || charger.Stats == null || CombatEndRules.IsOutOfFight(charger)
-                || target == null || target.Stats == null || target.Stats.IsDead)
-                break;
-
-            FullAttackResult stepResult;
-            charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
-            try
-            {
-                stepResult = charger.FullAttack(target, isFlanking, flankingBonus, flankingPartnerName, null,
-                    startAttackIndex: step, maxAttacks: 1, hasteNaturalAttackIndex: hasteNaturalAttackIndex);
-            }
-            finally
-            {
-                charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
-            }
-
-            if (stepResult == null || stepResult.Attacks.Count == 0)
-                break;
-
-            string label = stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0 ? stepResult.AttackLabels[0] : $"Attack {step + 1}";
-            CombatResult attack = stepResult.Attacks[0];
-            // The charge's +2 was a bonus entry for this step only: record it on the result, so a Cleave attack after this
-            // step repeats it ("at the same bonus", PHB p.92, D7; CharacterController.ResolveCleaveAttack).
-            if (attack != null && attack.SituationalAttackBonus == 0)
-            {
-                attack.SituationalAttackBonus = 2;
-                attack.SituationalAttackLabel = "Charge";
-            }
-            AttackResolution resolution = AttackResolution.Create(AttackOrigin.Charge, charger, target, intent, deciderSource).With(attack);
-            resolution.RangeInfo = CalculateRangeInfo(charger, target, intent);
-            resolution.CombatEndContext = "Charge.Pounce";
-            resolution.ReportStep = () => CombatUI?.ShowCombatLog(CombatLogHelper.Damage(logIcon, $"{logLabel}: {attack.GetAttackBreakdown(label)}"));
-            var outcome = new PostAttackOutcome();
-            IEnumerator post = OnAttackResolved(resolution, outcome);
-            while (post.MoveNext())
-                yield return post.Current;
-
-            if (outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
-                yield break;
-
-            if (charger.IsGrappling())
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{charger.Stats.CharacterName} is grappling: the pounce's remaining attacks are not made as ordinary attacks (PHB p.156)."));
-                break;
-            }
-
-            // A hold with one body part bars every attack on the held creature (MM p.310; CMB-163): the pounce has no other target.
-            if (charger.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", holdReason));
-                break;
-            }
-        }
-
-        // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
-        if (charger == null || charger.Stats == null || !charger.Stats.HasRake || CombatEndRules.IsOutOfFight(charger)
-            || target == null || target.Stats == null || target.Stats.IsDead)
-            yield break;
-
-        FullAttackResult rakeResult;
-        charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge");
-        try
-        {
-            rakeResult = charger.PerformRakeAttacks(target, isFlanking, flankingBonus, flankingPartnerName);
-        }
-        finally
-        {
-            charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
-        }
-        ResolvePounceRakeAftermath(charger, target, rakeResult);
     }
 
     /// <summary>A pounce's rakes: their log lines, then each rake hit's Concentration check and melee reactions.</summary>
@@ -1897,19 +1561,14 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// A bull rush charge whose charger an AoO dropped: clear the charge state, end a PC turn (the
-    /// victory and defeat checks have run) and tell the caller to stop.
+    /// A bull rush charge whose charger an AoO dropped: tell the charge core to stop (ChargeOutcome.ChargerDropped; the
+    /// victory and defeat checks have run). The PC wrapper ends the PC's turn; an NPC's charge ends nothing else.
     /// </summary>
     private void EndChargeBullRushForDroppedCharger(ChargeBullRushOutcome outcome)
     {
         UpdateAllStatsUI();
-        _chargeTarget = null;
-        _pendingChargePath.Clear();
-        _pendingChargeBullRush = false;
         if (outcome != null)
             outcome.AttackerIncapacitated = true;
-        if (IsPlayerTurn)
-            EndActivePCTurn();
     }
 
     private void ApplyChargePenaltyUntilStartOfNextTurn(CharacterController actor)
@@ -1948,147 +1607,18 @@ public partial class GameManager
     private bool ShouldNPCUseCharge(CharacterController npc, CharacterController target)
         => _aiService != null ? _aiService.ShouldNPCCharge(npc, target) : false;
 
+    /// <summary>
+    /// The NPC's charge: the charge core (<see cref="ExecuteCharge(ChargeRequest, ChargeOutcome)"/>, the same executor as
+    /// the PC's) with the AI's request (a refused charge does nothing), then the NPC pacing wait.
+    /// </summary>
     private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target, bool bullRush = false)
     {
-        if (!CanChargeTarget(npc, target, logFailures: false, forBullRush: bullRush))
-            yield break;
+        var outcome = new ChargeOutcome();
+        IEnumerator run = ExecuteCharge(ChargeRequestForAI(npc, target, bullRush), outcome);
+        while (run.MoveNext())
+            yield return run.Current;
 
-        List<Vector2Int> path = GetChargePath(npc, target, bullRush);
-        if (path == null || path.Count == 0)
-            yield break;
-
-        if (npc.Actions == null || !npc.Actions.HasFullRoundAction)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot charge: no full-round action remaining."));
-            yield break;
-        }
-
-        npc.Actions.UseFullRoundAction();
-
-        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", bullRush
-            ? $"🏇 {npc.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
-            : $"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!"));
-
-        // Same shared AoO helper as the PC charge: each AoO resolves before its step.
-        Vector2Int chargeStart = npc.GridPosition;
-        var provokedAoOs = CheckForAoO(npc, path);
-        bool interruptedByAoO = false;
-        var aooOutcome = new MovementAoOStepOutcome();
-        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
-        {
-            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(npc, provokedAoOs, pathIndex, $"AoO vs {npc.Stats.CharacterName}", 0.5f, aooOutcome));
-            if (aooOutcome.StopMovement)
-            {
-                interruptedByAoO = true;
-                break;
-            }
-
-            var stepPath = new List<Vector2Int> { path[pathIndex] };
-            if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(npc, stepPath, NpcChargeMoveSecondsPerStep, markAsMoved: false));
-            else
-                yield return StartCoroutine(npc.MoveAlongPath(stepPath, NpcChargeMoveSecondsPerStep, markAsMoved: false));
-        }
-
-        if (path.Count > 0)
-            npc.HasMovedThisTurn = true;
-
-        CheckTurnUndeadProximityBreakingForMover(npc);
-        PruneTurnUndeadTrackers();
-
-        if (interruptedByAoO)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{npc.Stats.CharacterName}'s charge is interrupted ({aooOutcome.Reason})."));
-            UpdateAllStatsUI();
-            yield break;
-        }
-
-        CharacterController flankPartner;
-        bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
-        int flankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
-
-        bool usedPounce = !bullRush
-            && npc.Stats != null
-            && npc.Stats.HasPounce
-            && npc.Stats.HasNaturalAttacks
-            && npc.GetEquippedMainWeapon() == null;
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the PC charge: the attack (or bull rush) after the
-        // move rolls the charger's one save; a failure loses it.
-        bool npcChargeLostToWard = AttackLegality.CommitWard(npc, target, DirectAttackKind.Charge,
-            bullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null) == WardVerdict.Failed;
-
-        // The AI may smite with the charge's attack (or a pounce's first attack), as a PC may declare its smite before
-        // charging (SmiteRules, CHR-020). A bull rush on a charge makes no attack, so it declares nothing.
-        if (!bullRush && !npcChargeLostToWard)
-            TryNPCDeclareSmite(npc, target);
-
-        if (npcChargeLostToWard)
-        {
-            // Logged by the commit.
-        }
-        else if (bullRush)
-        {
-            // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).
-            var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(npc, target,
-                SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
-            if (chargeBullRushOutcome.AttackerIncapacitated)
-                yield break;
-        }
-        else if (usedPounce)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{npc.Stats.CharacterName} uses Pounce!"));
-            // A pounce is a full attack, so Haste adds one natural attack, the AI's pick (CMB-106).
-            int npcPounceHasteIndex = -1;
-            AttackDeciders.For(npc, ActorSource.AI).ChooseHasteNaturalAttack(this, npc, target, null, 0, choice => npcPounceHasteIndex = choice);
-
-            // One step at a time through the post-attack hook (D8, CMB-169), as on the PC charge, with the AI's choices (the
-            // NPC turn path is AI-run).
-            AttackIntent npcPounceIntent = AttackIntent.ForAI(this, npc, target);
-            npcPounceIntent.Mode = AttackMode.Melee;
-            npcPounceIntent.IsCharge = true;
-            npcPounceIntent.IsPounce = true;
-            string flankText = isFlankingCharge ? " + Flanking" : "";
-            IEnumerator npcPounce = RunPounceSequence(npc, target, npcPounceIntent, ActorSource.AI, isFlankingCharge, flankingBonus,
-                flankPartner != null ? flankPartner.Stats.CharacterName : null, npcPounceHasteIndex, "☠", $"Charge Pounce (+2{flankText})");
-            while (npcPounce.MoveNext())
-                yield return npcPounce.Current;
-            if (CurrentPhase == TurnPhase.CombatOver)
-                yield break;
-        }
-        else
-        {
-            // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
-            CombatResult result = npc.Attack(target, isFlankingCharge, flankingBonus,
-                flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
-                situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
-
-            if (result != null)
-            {
-                // The one post-attack hook (origin J), as on the PC charge, with the AI's choices. No rake: a creature
-                // cannot begin a grapple and rake in the same turn (MM p.314, CMB-144).
-                AttackIntent npcChargeIntent = AttackIntent.ForAI(this, npc, target);
-                npcChargeIntent.Mode = AttackMode.Melee;
-                npcChargeIntent.IsCharge = true;
-                AttackResolution npcChargeResolution = AttackResolution.Create(AttackOrigin.Charge, npc, target, npcChargeIntent, ActorSource.AI).With(result);
-                npcChargeResolution.RangeInfo = CalculateRangeInfo(npc, target, npcChargeIntent);
-                string flankText = isFlankingCharge ? " + Flanking" : "";
-                npcChargeResolution.ReportStep = () => CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Attack (+2{flankText}): {result.GetDetailedSummary()}"));
-                IEnumerator npcChargePost = OnAttackResolved(npcChargeResolution, new PostAttackOutcome());
-                while (npcChargePost.MoveNext())
-                    yield return npcChargePost.Current;
-            }
-        }
-
-        ApplyChargePenaltyUntilStartOfNextTurn(npc);
-        UpdateAllStatsUI();
-
-        Debug.Log($"[Charge][NPC] Coroutine ending | attacker={npc?.Stats?.CharacterName ?? npc?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
-        // Victory or defeat for either side when the charge dropped the last creature of a side (CORE-011).
-        CheckCombatVictory("NPCExecuteCharge.Final", target);
-
-        if (CurrentPhase == TurnPhase.CombatOver)
+        if (!outcome.Started || outcome.InterruptedByAoO || outcome.ChargerDropped || outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
             yield break;
 
         yield return new WaitForSeconds(0.8f);

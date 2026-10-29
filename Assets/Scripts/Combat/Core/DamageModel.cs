@@ -330,6 +330,24 @@ public static class DamagePackets
         };
 
     /// <summary>
+    /// Damage from a weapon hit rolled outside the weapon attack pipeline (a snatched arrow thrown back, PHB p.101; demon
+    /// armor's claws): typed physical damage of the weapon, with <paramref name="extraTags"/> (the weapon's magic,
+    /// material or alignment, DMG p.291), so damage reduction applies unless the tags bypass it (CMB-013).
+    /// </summary>
+    public static DamagePacket Weapon(string sourceName, DamageType type, DamageBypassTag extraTags = DamageBypassTag.None,
+        bool isRanged = false, CharacterController sourceCreature = null)
+        => new DamagePacket
+        {
+            Types = new HashSet<DamageType> { type },
+            AttackTags = PhysicalTag(type) | extraTags | (isRanged ? DamageBypassTag.Ranged : DamageBypassTag.None),
+            IsRanged = isRanged,
+            IsNonlethal = false,
+            Source = AttackSource.Weapon,
+            SourceName = sourceName,
+            SourceCreature = sourceCreature,
+        };
+
+    /// <summary>
     /// Damage from a creature's own nonmagical attack that is not a weapon roll (a swarm attack, spittle): physical
     /// damage counts as a natural attack, so damage reduction applies unless the damage type bypasses it (MM p.316);
     /// energy damage ignores damage reduction (MM p.307).

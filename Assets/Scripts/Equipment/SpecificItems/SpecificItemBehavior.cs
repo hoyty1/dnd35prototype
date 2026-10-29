@@ -83,6 +83,14 @@ public abstract class SpecificItemBehavior
     public virtual void OnCriticalHit(CharacterController target, int damage, List<string> logNotes) { }
 
     /// <summary>
+    /// This weapon's critical multiplier against <paramref name="target"/> on a confirmed critical hit, given the weapon's
+    /// own <paramref name="multiplier"/>: the weapon damage roll uses it (WeaponDamageRoll, PHB p.134), so the extra damage
+    /// is rolled, multiplied and mitigated with the rest of the hit (a mace of smiting's x4 against an outsider, DMG specific weapons;
+    /// CMB-013). Default: the weapon's own multiplier.
+    /// </summary>
+    public virtual int GetCriticalMultiplierAgainst(CharacterController target, int multiplier) => multiplier;
+
+    /// <summary>
     /// Called after damage is applied and target is confirmed alive.
     /// Use for on-hit effects like poison, negative levels, sleep, etc.
     /// </summary>

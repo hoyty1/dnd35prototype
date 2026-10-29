@@ -3782,7 +3782,8 @@ public class AIService : MonoBehaviour
     /// <summary>
     /// Determines whether an NPC should use a charge action to reach a target.
     /// D&D 3.5e PHB p.154: Charge is a full-round action when target is beyond melee reach
-    /// but reachable via a valid straight-line charge path.
+    /// but reachable via a valid straight-line charge path; a creature limited to one action makes a partial charge
+    /// (a standard action, up to its speed; D2, CMB-108), which the charge core's legality admits.
     /// </summary>
     /// <param name="npc">The NPC considering a charge.</param>
     /// <param name="target">The intended charge target.</param>
@@ -3790,9 +3791,10 @@ public class AIService : MonoBehaviour
     public bool ShouldNPCCharge(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null) return false;
-        if (npc.Actions == null || !npc.Actions.HasFullRoundAction)
+        // A full-round action, or a partial charge for a creature limited to one action (PHB p.154, D2; CMB-108).
+        if (!ChargeRules.HasChargeAction(npc, out bool partialCharge, out string chargeActionReason))
         {
-            Debug.Log($"[AI Charge] {npc?.Stats?.CharacterName}: no full-round action available, skipping charge.");
+            Debug.Log($"[AI Charge] {npc?.Stats?.CharacterName}: {chargeActionReason} Skipping charge.");
             return false;
         }
         if (!npc.HasMeleeWeaponEquipped())
@@ -3811,7 +3813,7 @@ public class AIService : MonoBehaviour
         }
 
         bool canCharge = _gameManager.CanChargeTargetForAI(npc, target);
-        Debug.Log($"[AI Charge] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={dist}, canCharge={canCharge}");
+        Debug.Log($"[AI Charge] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={dist}, canCharge={canCharge}, partial={partialCharge}");
         return canCharge;
     }
 

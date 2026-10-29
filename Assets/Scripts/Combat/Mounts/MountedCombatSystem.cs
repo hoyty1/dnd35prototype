@@ -89,25 +89,6 @@ public static class MountedCombatSystem
         return isLance ? 3 : 2;
     }
 
-    /// <summary>
-    /// Apply Spirited Charge damage multiplier to base damage.
-    /// Only active when mounted and charging.
-    /// </summary>
-    public static int ApplySpiritedChargeDamage(CharacterController rider, int baseDamage, string weaponName)
-    {
-        if (rider == null || rider.Stats == null) return baseDamage;
-        if (!MountSystem.IsMounted(rider)) return baseDamage;
-
-        int multiplier = GetSpiritedChargeDamageMultiplier(rider.Stats, weaponName);
-        if (multiplier > 1)
-        {
-            int result = baseDamage * multiplier;
-            Debug.Log($"[MountedCombat] Spirited Charge: {rider.Stats.CharacterName} deals {multiplier}× damage ({baseDamage} → {result}) with {weaponName}");
-            return result;
-        }
-        return baseDamage;
-    }
-
     // ════════════════════════════════════════════════════════════════
     // RIDE-BY ATTACK (PHB p.99)
     // ════════════════════════════════════════════════════════════════
@@ -184,10 +165,12 @@ public static class MountedCombatSystem
 
         if (hit)
         {
-            damage = hoof.RollDamage();
-            target.Stats.TakeDamage(damage);
+            // A natural attack's damage: damage reduction and the death handling apply (MM p.316; CMB-013).
+            DamageResolutionResult hoofHit = GameManager.DealDamageFrom(target, hoof.RollDamage(),
+                DamagePackets.CreatureAttack($"{mount.Data.Name} {hoof.Name}", NaturalAttackDamageType(hoof)));
+            damage = hoofHit.FinalDamage;
             log = $"🐎 Trample: {mount.Data.Name} hoof attack hits {target.Stats.CharacterName}! " +
-                  $"(d20({roll})+{hoof.AttackBonus}+4(prone)={totalAttack} vs AC {targetAC}) for {damage} damage";
+                  $"(d20({roll})+{hoof.AttackBonus}+4(prone)={totalAttack} vs AC {targetAC}) for {damage} damage{GameManager.DescribeMitigation(hoofHit)}";
         }
         else
         {
@@ -264,10 +247,12 @@ public static class MountedCombatSystem
 
             if (hit)
             {
-                int damage = attack.RollDamage();
-                target.Stats.TakeDamage(damage);
+                // A natural attack's damage: damage reduction and the death handling apply (MM p.316; CMB-013).
+                DamageResolutionResult mountHit = GameManager.DealDamageFrom(target, attack.RollDamage(),
+                    DamagePackets.CreatureAttack($"{mount.Data.Name} {attack.Name}", NaturalAttackDamageType(attack)));
+                int damage = mountHit.FinalDamage;
                 totalDamage += damage;
-                logs.Add($"{attack.Name} hits! (d20({roll})+{attack.AttackBonus}={totalAttack} vs AC {targetAC}) → {damage} dmg");
+                logs.Add($"{attack.Name} hits! (d20({roll})+{attack.AttackBonus}={totalAttack} vs AC {targetAC}) → {damage} dmg{GameManager.DescribeMitigation(mountHit)}");
             }
             else
             {
@@ -308,11 +293,33 @@ public static class MountedCombatSystem
     public static int GetChargeACPenalty() => -2;
 
     /// <summary>
-    /// Process damage for a mounted charge attack.
-    /// Includes Spirited Charge multiplier if applicable.
+    /// The weapon damage multiplier of a charge attack by <paramref name="rider"/> with <paramref name="weapon"/> when
+    /// mounted: a lance's own x2 from the back of a charging mount, with or without a feat (PHB p.118), Spirited Charge's x2
+    /// with any other melee weapon, and x3 with a lance and the feat (PHB p.100); else 1. The charge core passes it into the
+    /// weapon damage roll (CharacterController.ResolveChargeAttack), PC and NPC alike (CMB-018, CMB-013).
     /// </summary>
-    public static int ProcessMountedChargeDamage(CharacterController rider, int baseDamage, string weaponName)
+    public static int GetChargeDamageMultiplier(CharacterController rider, ItemData weapon)
     {
-        return ApplySpiritedChargeDamage(rider, baseDamage, weaponName);
+        if (rider == null || rider.Stats == null || !MountSystem.IsMounted(rider))
+            return 1;
+        string weaponName = weapon != null ? weapon.Name : null;
+        if (rider.Stats.HasFeat("Spirited Charge"))
+            return GetSpiritedChargeDamageMultiplier(rider.Stats, weaponName);
+        return IsLance(weaponName) ? 2 : 1;
+    }
+
+    /// <summary>A lance (PHB p.118), by name as the Spirited Charge rule reads it.</summary>
+    private static bool IsLance(string weaponName)
+        => !string.IsNullOrEmpty(weaponName) && weaponName.ToLowerInvariant().Contains("lance");
+
+    /// <summary>The damage type of a mount's natural attack by its name (MM p.312: a gore or sting pierces, a claw slashes, a hoof or slam bludgeons; a bite deals all three, counted here as piercing, one type per packet).</summary>
+    private static DamageType NaturalAttackDamageType(MountNaturalAttack attack)
+    {
+        string name = attack != null && attack.Name != null ? attack.Name.ToLowerInvariant() : string.Empty;
+        if (name.Contains("bite") || name.Contains("gore") || name.Contains("sting"))
+            return DamageType.Piercing;
+        if (name.Contains("claw") || name.Contains("talon"))
+            return DamageType.Slashing;
+        return DamageType.Bludgeoning;
     }
 }

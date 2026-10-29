@@ -649,7 +649,8 @@ public class ActionButtonPanel : MonoBehaviour
         else attackDefensivelyLabel = context.UsingUnarmedStrike ? $"Fighting Defensively (Std, {context.AttackSourceLabel})" : "Fighting Defensively (Std)";
         states.Set(AttackDefensivelyButton, new ActionButtonState(true, canAttackDefensively, attackDefensivelyLabel));
 
-        bool hasFullRound = context.Actions.HasFullRoundAction;
+        // A full-round action, or a partial charge (a standard action) for a creature limited to one action (PHB p.154, D2; CMB-108).
+        bool hasChargeAction = ChargeRules.HasChargeAction(pc, out bool partialCharge, out _);
         bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
         bool fatigueRestricted = pc.Stats != null && pc.Stats.IsFatiguedOrExhausted;
         bool entangledRestricted = pc.Stats != null && pc.Stats.IsEntangledState;
@@ -657,7 +658,7 @@ public class ActionButtonPanel : MonoBehaviour
         bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
         bool blockedByProne = context.IsProne;
         bool hasAnyChargeTarget = context.Gm != null && context.Gm.HasAnyValidChargeTarget(pc);
-        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigueRestricted && !entangledRestricted && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
+        bool canChargeTarget = hasChargeAction && hasMeleeThreat && !fatigueRestricted && !entangledRestricted && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
 
         string chargeLabel;
         if (context.IsPinned) chargeLabel = "Charge (Pinned: no)";
@@ -667,9 +668,9 @@ public class ActionButtonPanel : MonoBehaviour
         else if (entangledRestricted) chargeLabel = "Charge (Entangled)";
         else if (blockedByProne) chargeLabel = "Charge (Prone)";
         else if (blockedByFiveFootStep) chargeLabel = "Charge (After 5-ft step: no)";
-        else if (!hasFullRound) chargeLabel = "Charge (Used)";
+        else if (!hasChargeAction) chargeLabel = context.Actions.MoveActionOnly ? "Charge (Move action only: no)" : "Charge (Used)";
         else if (!hasAnyChargeTarget) chargeLabel = "Charge (No valid target)";
-        else chargeLabel = "Charge (Full-Round)";
+        else chargeLabel = partialCharge ? "Charge (Partial, Std)" : "Charge (Full-Round)";
         states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigueRestricted || entangledRestricted || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
     }
 

@@ -14,7 +14,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Run (×4) | Never | Frightened "run" is 1× (it provokes like any move) | No | game-wide gap (PHB ch.8) |
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |
 | Withdraw | Partial | DefensiveMelee <30% HP; Frightened | Yes | AI-010 |
-| Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Untyped +2 (CMB-003); flanking on both sides since batch 12 step 2; CMB-018 (the charge core) |
+| Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Untyped +2 (CMB-003); one charge core for both sides since batch 12 step 21 (flanking, Spirited Charge, the partial charge of a single-action creature, D2) |
 | Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
 | Cover, terrain, hazards | Never | `UseCover` unread; no cover system | No | paths through walls of fire, clouds, webs (inferred) |
 | Stand up / drop prone / crawl | Partial | stands up at turn start when prone (`TryStandUpFromProneForAI`, move action, provokes; charmed NPCs too, not confused ones); never drops prone or crawls. Prone creatures get no ordinary movement (`GetCurrentMoveRangeSquares` is 0) | Yes | CMB-074 |

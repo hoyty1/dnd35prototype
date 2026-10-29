@@ -51,7 +51,7 @@ public static class BullRushRules
     /// <see cref="GetSpeedSquares"/>), and a move action taken earlier in the same turn does not count
     /// against it; a charge bull rush allows twice the speed minus the squares the charge already
     /// cost, so the charge distance plus the follow distance is at most twice the speed (PHB
-    /// p.154-155). Owner ruling 2026-10-08 (CMB-129): after a standard bull rush the squares followed are
+    /// p.154-155), or the speed for a partial charge (a creature limited to one action, D2). Owner ruling 2026-10-08 (CMB-129): after a standard bull rush the squares followed are
     /// independent of the move action in both directions, so they are not deducted from a move action taken
     /// later in the turn either (GameManager.ExecuteBullRushMovement records no squares; a later move reads
     /// the whole budget from GameManager.GetCurrentMoveRangeSquares). It is 0, so the
@@ -73,7 +73,10 @@ public static class BullRushRules
         if (!isCharge)
             return speed;
 
-        return Mathf.Max(0, speed * 2 - Mathf.Max(0, squaresAlreadyMoved));
+        // The charge's own budget: twice the speed, or the speed for a partial charge by a creature limited to one
+        // action (PHB p.154, D2), so the charge distance plus the follow distance stays within the charge's movement.
+        int chargeBudget = attacker.Actions != null && attacker.Actions.SingleActionOnly ? speed : speed * 2;
+        return Mathf.Max(0, chargeBudget - Mathf.Max(0, squaresAlreadyMoved));
     }
 
     /// <summary>

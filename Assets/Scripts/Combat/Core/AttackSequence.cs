@@ -16,7 +16,14 @@ public enum AttackSequenceKind
     /// The touch that delivers a held charge after its casting round (batch 12 step 18, SPL-156): one melee touch attack in
     /// place of a regular attack, PC and NPC alike (<see cref="AttackSequenceRequest.ForHeldChargeTouch"/>).
     /// </summary>
-    HeldChargeTouch
+    HeldChargeTouch,
+    /// <summary>
+    /// The attack or pounce at the end of a charge (origin J; batch 12 step 21, <see cref="AttackSequenceRequest.ForCharge"/>):
+    /// the charge core paid the charge's action, so the steps are prepaid (no attack-ladder commit and no ward commit: the
+    /// charge's own commit covers its attacks), each with the charge's +2 (PHB p.154). One step for a charge attack; a
+    /// pounce's natural attacks are its steps, then its rakes (MM p.313).
+    /// </summary>
+    Charge
 }
 
 /// <summary>
@@ -111,8 +118,8 @@ public sealed class AttackSequenceState
 /// One attack or full attack for <c>GameManager.RunAttackSequence</c> (batch 12 step 17, docs/designs/pc_npc_parity_batch12.md;
 /// the batch 11 cast-core pattern): who attacks, the first target, the intent, the decider that picks each step's target,
 /// and the caller's own pieces. Built by <see cref="ForUiAttack"/>, <see cref="ForUiFullAttack"/>, <see cref="ForUiOffHand"/>,
-/// <see cref="ForUiTwoWeaponFullAttack"/>, <see cref="ForAI"/>, <see cref="ForAoO"/> and <see cref="ForHeldChargeTouch"/> (the
-/// charge's builder comes with the charge core). The executor commits costs only through the
+/// <see cref="ForUiTwoWeaponFullAttack"/>, <see cref="ForAI"/>, <see cref="ForAoO"/>, <see cref="ForHeldChargeTouch"/> and
+/// <see cref="ForCharge"/> (the charge core's, batch 12 step 21). The executor commits costs only through the
 /// attack sequence (CharacterController.TryCommitAttack); the caller does the UI continuation.
 /// </summary>
 public sealed class AttackSequenceRequest
@@ -164,6 +171,18 @@ public sealed class AttackSequenceRequest
     /// whether the delivery passed the cast core's Legality stage.
     /// </summary>
     public Func<CharacterController, CharacterController, int, bool> DeliverHeldCharge;
+
+    /// <summary>A charge's pounce (MM p.313): every natural attack is a step, then the rakes (<see cref="ForCharge"/>).</summary>
+    public bool ChargePounce;
+
+    /// <summary>A pounce's Haste natural attack, chosen before the pounce (PHB p.239; CMB-106, CMB-124); -1 for the default.</summary>
+    public int ChargeHasteNaturalAttackIndex = -1;
+
+    /// <summary>
+    /// A charge attack's weapon damage multiplier (Spirited Charge, PHB p.100: x2, x3 with a lance), rolled into the weapon
+    /// damage roll with a critical's (PHB p.134; CharacterController.ResolveChargeAttack); 1 for none.
+    /// </summary>
+    public int ChargeDamageMultiplier = 1;
 
     /// <summary>An AoO's weapon (null: unarmed or natural) and its attack modifier (Mobility's -4).</summary>
     public ItemData AoOWeapon;
@@ -279,6 +298,38 @@ public sealed class AttackSequenceRequest
         };
     }
 
+    /// <summary>
+    /// The attack or pounce at the end of a charge (origin J; batch 12 step 21, GameManager.ExecuteCharge), PC and NPC alike:
+    /// the charger's <paramref name="intent"/> (melee, IsCharge) and <paramref name="decider"/>, the charge target for every
+    /// step. One charge attack with the charge's +2 and <paramref name="damageMultiplier"/> (Spirited Charge), or with
+    /// <paramref name="pounce"/> a full natural attack, each step with the charge's +2, then the rakes (MM p.313). The charge
+    /// core paid the action and committed the ward; the executor pays nothing.
+    /// </summary>
+    public static AttackSequenceRequest ForCharge(CharacterController charger, CharacterController target, AttackIntent intent,
+        IAttackDecider decider, bool pounce, int hasteNaturalAttackIndex, int damageMultiplier, Action<AttackSequenceStep> reportStep)
+    {
+        if (intent == null)
+            intent = AttackIntent.ForMode(AttackMode.Melee);
+        intent.Mode = AttackMode.Melee;
+        intent.IsCharge = true;
+        intent.IsPounce = pounce;
+        return new AttackSequenceRequest
+        {
+            Kind = AttackSequenceKind.Charge,
+            Origin = AttackOrigin.Charge,
+            Attacker = charger,
+            InitialTarget = target,
+            Intent = intent,
+            Decider = decider ?? AttackDeciders.For(charger),
+            MaxSteps = pounce ? int.MaxValue : 1,
+            ChargePounce = pounce,
+            ChargeHasteNaturalAttackIndex = pounce ? hasteNaturalAttackIndex : -1,
+            ChargeDamageMultiplier = pounce ? 1 : Math.Max(1, damageMultiplier),
+            CombatEndContext = pounce ? "Charge.Pounce" : null,
+            ReportStep = reportStep,
+        };
+    }
+
     /// <summary>The PC's Full Attack button (origin C): the PC UI's intent, read once, for every step; the attacker's decider.</summary>
     public static AttackSequenceRequest ForUiFullAttack(GameManager gm, CharacterController attacker, CharacterController target)
     {
@@ -367,6 +418,9 @@ public sealed class AttackSequenceOutcome
 
     public bool CombatEnded;
     public bool AttackerOutOfFight;
+
+    /// <summary>The stop came from the step's legality (stage 3: the sphere, the hold bar, a known ward failure, reach or range).</summary>
+    public bool StoppedByLegality;
 
     /// <summary>The attacker started grappling in the sequence (a maneuver, an Improved Grab): its remaining attacks are grapple actions (PHB p.156).</summary>
     public bool StartedGrapple;

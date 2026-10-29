@@ -36,6 +36,20 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// <see cref="DealDamage"/> for a caller outside the GameManager (an item behaviour, a mount, a feat's counter-attack):
+    /// through the scene's GameManager when there is one, else only the mitigation pipeline (a static suite without a scene).
+    /// </summary>
+    public static DamageResolutionResult DealDamageFrom(CharacterController target, int rawDamage, DamagePacket packet)
+    {
+        if (Instance != null)
+            return Instance.DealDamage(target, rawDamage, packet);
+        DamageResolutionResult result = ApplyDamagePacket(target, rawDamage, packet);
+        if (target != null && target.Stats != null && target.Stats.IsDead)
+            target.OnDeath();
+        return result;
+    }
+
+    /// <summary>
     /// Only the mitigation pipeline, for a caller whose own pipeline runs the after-damage checks with the damage
     /// taken (the single-target spell pipelines read <c>SpellResult.DamageDealt</c> and <c>TargetKilled</c>).
     /// </summary>

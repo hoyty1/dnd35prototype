@@ -140,7 +140,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 67 files (since batch 12 step 19 added `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 68 files (since batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -188,12 +188,13 @@ There are 67 files (since batch 12 step 19 added `Combat/Maneuvers/GameManager.M
 | **Spell/Domain/** (3) | | |
 | GameManager_DomainPowers.cs | 987 | Cleric granted powers (`OnDomainPowerButtonPressed`, `TickDomainPowerDurations`). |
 | GameManager_DomainSpells.cs / _DomainAreaSpells.cs | 569 / 256 | Domain spells (Hold Animal, Heat Metal, ...) and domain area spells (Entangle, Spike Stones, ...). |
-| **Combat/Maneuvers/** (5) | | |
+| **Combat/Maneuvers/** (6) | | |
+| ChargeCore.cs | 563 | The one charge core for PCs and NPCs (batch 12 step 21): `ChargeRequest`, `ChargeOutcome`, `ChargeRules.HasChargeAction` (the full-round action or the partial charge, D2), the request builders `ChargeRequestForUi`/`ChargeRequestForAI`, `CanCharge` (pure legality), `ExecuteCharge(ChargeRequest, ChargeOutcome)` (pay, the step loop with its AoOs, the end, the -2 AC, the combat-end check), `ResolveChargeEnd` (flanking, ward, smite, Spirited Charge, the bull rush or `AttackSequenceRequest.ForCharge`), the pounce step and rakes. |
 | GameManager.ManeuverCore.cs | 565 | The maneuver core's legality and executor for PCs and NPCs (batch 12 step 19): `CanStartManeuver`, `TryPayManeuver` (the cost table `ManeuverActionCost.For`), `ExecuteManeuver` (pay, ward, initiation AoOs, resolution, aftermath, post-attack hook), `CanAffordManeuverForUi` and the UI decider's prompts. Its types (`ManeuverRequest`, `IManeuverDecider` and the two deciders) are in `ManeuverCore.cs`. |
 | GrappleSystem.cs | 2,024 | Grapple suite (`OnGrapple*ButtonPressed`), also `OnOverrunButtonPressed`. |
 | OverrunSystem.cs | 897 | The one overrun for PCs and NPCs (`RunOverrunMove`): the PC destination selection, the AI plan, the defender's avoid-or-block prompt and the block. |
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and `TryPushTargetAway` (Gust of Wind's push); some trip/feint helpers. |
-| SupportActions.cs | 2,031 | Aid Another, Charge. |
+| SupportActions.cs | 1,621 | Aid Another; the charge mode (button, targeting, path, `CanChargeTarget` over `CanCharge`), the thin PC and NPC charge wrappers and the charge bull rush (`ResolveChargeBullRush`). |
 | **Combat/Special/** (5) | | |
 | TurnUndeadSystem.cs | 997 | Turn/rebuke undead and turned-state trackers. |
 | TemplateSmiteSystem.cs | 118 | The PC Smite button and the AI smite declaration over `SmiteRules` (paladin and template smites; CHR-020). |
@@ -278,7 +279,7 @@ Assets/Scripts/
     Core/ (17)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
                          DamageModel, BullRushRules, PerceptionRules (turn-start Listen check, every actor, CMB-094),
                          dormant CombatStateMachine/InitiativeSystem
-    Conditions/ (11), Behaviors/ (4), Maneuvers/ (8), Special/ (3), Reactions/ (3),
+    Conditions/ (11), Behaviors/ (4), Maneuvers/ (9), Special/ (3), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
   Spell/ (1: BonusType)
     Data/ (8)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...

@@ -94,9 +94,12 @@ public class DemonArmorBehavior : SpecificItemBehavior
         // Roll claw damage: 1d10 + 1 (enhancement)
         int damage = DiceService.D10("Demon Armor claw 1d10") + ClawEnhancement;
 
-        // Apply damage
-        target.Stats.CurrentHP -= damage;
-        logNotes?.Add($"👿 <color=#8B0000>Demon Armor</color> claw attack hits {target.Stats.CharacterName} for {damage} damage!");
+        // The claws are +1 slashing weapons (DMG specific armor): a weapon packet, so damage reduction, temporary hit points and the
+        // death handling apply (CMB-013).
+        DamageResolutionResult clawHit = GameManager.DealDamageFrom(target, damage,
+            DamagePackets.Weapon("Demon Armor claw", DamageType.Slashing, DamageBypassTag.Magic, sourceCreature: Wielder));
+        damage = clawHit.FinalDamage;
+        logNotes?.Add($"👿 <color=#8B0000>Demon Armor</color> claw attack hits {target.Stats.CharacterName} for {damage} damage{GameManager.DescribeMitigation(clawHit)}!");
         Log($"Claw attack: {damage} damage to {target.Stats.CharacterName}");
 
         // Contagion effect: Fort save DC 14
@@ -113,12 +116,6 @@ public class DemonArmorBehavior : SpecificItemBehavior
         {
             logNotes?.Add($"{target.Stats.CharacterName} resists contagion (Fort DC {ContagionDC}, rolled {save.Roll}+{save.Total - save.Roll}={save.Total})");
             Log($"Contagion resisted by {target.Stats.CharacterName}");
-        }
-
-        // Check if target died
-        if (target.Stats.CurrentHP <= -10)
-        {
-            target.OnDeath();
         }
 
         return true;
