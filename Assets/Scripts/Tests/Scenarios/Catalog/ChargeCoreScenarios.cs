@@ -12,7 +12,10 @@ namespace Tests.Scenarios
     /// creature limited to one action makes a partial charge, a standard action moving up to its speed (PHB p.154, p.280;
     /// D2): a disabled PC through the Charge button, a slowed AI orc on its own. Spirited Charge multiplies the weapon damage
     /// roll, so damage reduction applies once (PHB p.100, p.134; CMB-013). An AI charge that ends opposite an ally flanks
-    /// (PHB p.153), as the PC's does (rules/charge-flanking-ui).
+    /// (PHB p.153), as the PC's does (rules/charge-flanking-ui). A charge needs a clear line (PHB p.154; CMB-132, CMB-199):
+    /// no charge through an ally's square, for a Ui PC or an AI creature (rules/charge-blocked-by-ally, -ai), and a charge
+    /// passes a helpless creature's square (rules/charge-past-helpless, -ai); a charge ends in the closest space from which
+    /// the charger can attack, and an ally there bars it (rules/charge-closest-space-taken).
     /// </summary>
     public static class ChargeCoreScenarios
     {
@@ -25,6 +28,11 @@ namespace Tests.Scenarios
             yield return S("spirited-charge-dr", () => SpiritedChargeDr(false));
             yield return S("spirited-charge-crit", () => SpiritedChargeDr(true));
             yield return S("charge-flanking-ai", ChargeFlankingAi);
+            yield return S("charge-blocked-by-ally", ChargeBlockedByAllyUi);
+            yield return S("charge-blocked-by-ally-ai", ChargeBlockedByAllyAi);
+            yield return S("charge-past-helpless", ChargePastHelplessUi);
+            yield return S("charge-past-helpless-ai", ChargePastHelplessAi);
+            yield return S("charge-closest-space-taken", ChargeClosestSpaceTaken);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ChargeCoreScenarios rules/" + name, build);
@@ -324,6 +332,245 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("flank true, flankBonus 2, mod " + atk.Int("mod"), atk.Seq)
                         : ExpectResult.Fail("flank " + atk.Bool("flank") + ", flankBonus " + atk.Int("flankBonus") + ", mod " + atk.Int("mod"), atk.Seq);
                 })
+                .Build();
+        }
+
+        // ── CMB-132, CMB-199: the clear path ───────────────────────────
+
+        private static bool MovedInto(TraceView v, string key, int round, Vector2Int square)
+            => v.Moves(key, round).Any(e => e.Get("to") is Vector2Int t && t == square);
+
+        /// <summary>
+        /// CMB-132, CMB-199 (PHB p.154): a Ui fighter 4 at (10,10) and a sturdy dummy at (13,10) with an idle ally at
+        /// (11,10) between them. Every line from the hero's space to a space from which it could attack the dummy passes
+        /// through the ally's square (the two diagonal end spaces cross it too), so the charge has no clear path: the
+        /// planner refuses it, the Charge highlight has no target, the refusal names the ally, and the Charge button's
+        /// step is refused with nothing spent. The hero then moves (a move may pass an ally) and attacks: its full turn was
+        /// still there. Before the fix the planner accepted the path through the ally, and since batch 12 step 23 the charge
+        /// stopped at the ally's square after paying the full-round action.
+        /// </summary>
+        private static ScenarioDef ChargeBlockedByAllyUi()
+        {
+            return Rules("rules/charge-blocked-by-ally", "A Ui PC cannot charge through an ally's square: refused with nothing spent, and the turn goes on (PHB p.154; CMB-132, CMB-199)")
+                .Covers("CMB-132", "CMB-199", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Ally", 1)), 11, 10, Control.Idle)
+                .Npc("dummy", "target_dummy", 13, 10, Control.Idle)
+                .Tweak("hero", RulesScenarios.StripOffHand)
+                .Tweak("dummy", SturdyNoAoO)
+                .Force(20, 19, null, -1)
+                .Initiative("hero", "ally", "dummy")
+                .Turn("hero", 1,
+                    Step.Assert("the line to every end space passes through the ally: no charge, and the Charge highlight has no target", ctx =>
+                        !ctx.Gm.CanChargeTargetForAI(ctx.Get("hero"), ctx.Get("dummy"))
+                        && !ctx.Gm.HasAnyValidChargeTarget(ctx.Get("hero"))),
+                    Step.Assert("the refusal names the ally in the way (PHB p.154)", ctx =>
+                    {
+                        Legality l = ctx.Gm.CanCharge(ctx.Gm.ChargeRequestForUi(ctx.Get("hero"), ctx.Get("dummy"), false));
+                        return !l.Ok && l.Reason.Contains("Ally is in the way");
+                    }),
+                    Step.Charge("dummy"),
+                    Step.Assert("nothing was spent: the full-round action is left and the hero has not moved", ctx =>
+                        ctx.Get("hero").Actions.HasFullRoundAction && ctx.Get("hero").GridPosition == new Vector2Int(10, 10)),
+                    Step.Move(12, 9),
+                    Step.Attack("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The Charge step is refused", Expect.StepStatus("hero", 1, "Charge", 0, "refused"))
+                .Expect("No charge is made or interrupted", v =>
+                    v.Log("Hero charges").Count == 0 && v.Log("charge is interrupted").Count == 0
+                        ? ExpectResult.Pass("no charge")
+                        : ExpectResult.Fail(v.Log("Hero charges").Count + " charge line(s), " + v.Log("charge is interrupted").Count + " interrupted"))
+                .Expect("The hero moves and then attacks the dummy (a move and a standard action: the turn was still whole)", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("hero", "dummy", false, 1);
+                    return attacks.Count == 1 && MovedInto(v, "hero", 1, new Vector2Int(12, 9))
+                        ? ExpectResult.Pass("moved to (12,9), one attack", attacks[0].Seq)
+                        : ExpectResult.Fail(attacks.Count + " attack(s), moves " + v.Moves("hero", 1).Count);
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-132, CMB-199 (PHB p.154): the AI side of rules/charge-blocked-by-ally. An AI orc warrior at (10,10), an idle
+        /// goblin of its own side at (11,10) and an idle hero at (13,10): every charge line passes through the goblin, so
+        /// the AI's charge check (CanChargeTargetForAI, the same planner) refuses it, and the orc does something else (it
+        /// moves up and attacks or makes a maneuver; seeds 1-5: a move and a trip) instead of losing its turn at the goblin's
+        /// square, as it did after batch 12 step 23.
+        /// </summary>
+        private static ScenarioDef ChargeBlockedByAllyAi()
+        {
+            return Rules("rules/charge-blocked-by-ally-ai", "An AI creature cannot charge through an ally's square: it picks another action (PHB p.154; CMB-132, CMB-199)")
+                .Covers("CMB-132", "CMB-199", "PHB p.154")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Npc("goblin", "goblin", 11, 10, Control.Idle)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 13, 10, Control.Idle)
+                .Tweak("orc", Sturdy)
+                .Tweak("goblin", Sturdy)
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); SturdyNoAoO(c); })
+                .Initiative("orc", "goblin", "hero")
+                .Expect("The orc's turn is an AI turn", Expect.Controller("orc", "ai"))
+                .Expect("The orc makes no charge, and none is interrupted", v =>
+                    v.Log("Orc Warrior charges").Count == 0 && v.Log("charge is interrupted").Count == 0
+                        ? ExpectResult.Pass("no charge")
+                        : ExpectResult.Fail(v.Log("Orc Warrior charges").Count + " charge line(s), " + v.Log("charge is interrupted").Count + " interrupted"))
+                .Expect("The orc does something else with its turn: it moves or attacks", v =>
+                {
+                    int moves = v.Moves("orc", 1).Count;
+                    int attacks = v.Attacks("orc", null, false, 1).Count;
+                    return moves + attacks > 0
+                        ? ExpectResult.Pass(moves + " move(s), " + attacks + " attack(s)")
+                        : ExpectResult.Fail("the orc neither moved nor attacked");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-132, CMB-199 (PHB p.154: helpless creatures do not stop a charge): a Ui fighter 4 at (8,10) charges a sturdy
+        /// dummy at (13,10) along row 10, past a paralyzed (helpless) goblin at (10,10). Two more dummies at (12,9) and
+        /// (12,11) hold the diagonal end spaces, so the nearest end space is (12,10) and the line is the row: the charge
+        /// steps through the goblin's square, ends at (12,10) (not in the goblin's square) and hits (every d20 a 19).
+        /// Before the fix the planner refused a path past a helpless opponent's square.
+        /// </summary>
+        private static ScenarioDef ChargePastHelplessUi()
+        {
+            return Rules("rules/charge-past-helpless", "A Ui PC's charge passes through a helpless creature's square and hits (PHB p.154; CMB-132, CMB-199)")
+                .Covers("CMB-132", "CMB-199", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 8, 10, Control.Ui)
+                .Npc("goblin", "goblin", 10, 10, Control.Idle)
+                .Npc("dummy", "target_dummy", 13, 10, Control.Idle)
+                .Npc("north", "target_dummy", 12, 9, Control.Idle)
+                .Npc("south", "target_dummy", 12, 11, Control.Idle)
+                .Tweak("hero", RulesScenarios.StripOffHand)
+                .Tweak("goblin", c => { Sturdy(c); c.ApplyCondition(CombatConditionType.Paralyzed, 100, "scenario"); })
+                .Tweak("dummy", SturdyNoAoO)
+                .Tweak("north", SturdyNoAoO)
+                .Tweak("south", SturdyNoAoO)
+                .Force(20, 19, null, -1)
+                .Initiative("hero", "goblin", "dummy", "north", "south")
+                .Turn("hero", 1,
+                    Step.Assert("the paralyzed goblin is helpless, and the charge past it is legal", ctx =>
+                        ChargeRules.LetsChargePass(ctx.Get("goblin")) && ctx.Gm.CanChargeTargetForAI(ctx.Get("hero"), ctx.Get("dummy"))),
+                    Step.Assert("the charge path runs straight along the row through the goblin's square to (12,10)", ctx =>
+                    {
+                        List<Vector2Int> path = ctx.Gm.GetChargePath(ctx.Get("hero"), ctx.Get("dummy"));
+                        return path.Count == 4 && path.Contains(new Vector2Int(10, 10)) && path[3] == new Vector2Int(12, 10);
+                    }),
+                    Step.Charge("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The Charge step is done", Expect.StepStatus("hero", 1, "Charge", 0, "done"))
+                .Expect("The charge passes through the goblin's square and is not interrupted", v =>
+                    MovedInto(v, "hero", 1, new Vector2Int(10, 10)) && v.Log("charge is interrupted").Count == 0
+                        ? ExpectResult.Pass("stepped through (10,10)")
+                        : ExpectResult.Fail("through the goblin " + MovedInto(v, "hero", 1, new Vector2Int(10, 10)) + ", interrupted " + v.Log("charge is interrupted").Count))
+                .Expect("The charge ends at (12,10), not in the goblin's square", v =>
+                {
+                    Vector2Int? p = Pos(v.Final("hero"));
+                    return p == new Vector2Int(12, 10) ? ExpectResult.Pass("at (12,10)") : ExpectResult.Fail("at " + p);
+                })
+                .Expect("The charge attack hits the dummy", v =>
+                {
+                    TraceEvent atk = v.Attacks("hero", "dummy", false, 1).FirstOrDefault();
+                    return atk != null && atk.Bool("hit") ? ExpectResult.Pass("hit, mod " + atk.Int("mod"), atk.Seq) : ExpectResult.Fail(atk == null ? "no charge attack" : "missed");
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-132, CMB-199 (PHB p.154): the AI side of rules/charge-past-helpless, the soak's case. An AI orc warrior at
+        /// (8,10) charges an idle hero at (13,10) along row 10 past a dying goblin of its own side at (10,10) (dying is
+        /// unconscious, so helpless); idle goblins at (12,9) and (12,11) hold the diagonal end spaces. The orc steps through
+        /// the dying goblin's square, ends at (12,10) and hits (every d20 a 19). After batch 12 step 23 such a charge stopped
+        /// behind the dying ally and cost the turn, every round.
+        /// </summary>
+        private static ScenarioDef ChargePastHelplessAi()
+        {
+            return Rules("rules/charge-past-helpless-ai", "An AI creature's charge passes through a dying ally's square and hits (PHB p.154; CMB-132, CMB-199)")
+                .Covers("CMB-132", "CMB-199", "PHB p.154")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 8, 10, Control.Ai)
+                .Npc("dying", "goblin", 10, 10, Control.Idle)
+                .Npc("north", "goblin", 12, 9, Control.Idle)
+                .Npc("south", "goblin", 12, 11, Control.Idle)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 13, 10, Control.Idle)
+                .Hp("dying", -3)
+                .Tweak("orc", Sturdy)
+                .Tweak("north", Sturdy)
+                .Tweak("south", Sturdy)
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); SturdyNoAoO(c); })
+                .Force(20, 19, null, -1)
+                .Initiative("orc", "north", "south", "hero")
+                .Expect("The orc's turn is an AI turn", Expect.Controller("orc", "ai"))
+                .Expect("The orc charges the hero (log)", v =>
+                    v.Log("Orc Warrior charges Hero!").Count == 1 ? ExpectResult.Pass("logged") : ExpectResult.Fail(v.Log("Orc Warrior charges Hero!").Count + " charge line(s)"))
+                .Expect("The charge passes through the dying goblin's square and is not interrupted", v =>
+                    MovedInto(v, "orc", 1, new Vector2Int(10, 10)) && v.Log("charge is interrupted").Count == 0
+                        ? ExpectResult.Pass("stepped through (10,10)")
+                        : ExpectResult.Fail("through the goblin " + MovedInto(v, "orc", 1, new Vector2Int(10, 10)) + ", interrupted " + v.Log("charge is interrupted").Count))
+                .Expect("The charge ends at (12,10), not in the dying goblin's square", v =>
+                {
+                    Vector2Int? p = Pos(v.Final("orc"));
+                    return p == new Vector2Int(12, 10) ? ExpectResult.Pass("at (12,10)") : ExpectResult.Fail("at " + p);
+                })
+                .Expect("The charge attack hits the hero", v =>
+                {
+                    TraceEvent atk = v.Attacks("orc", "hero", false, 1).FirstOrDefault();
+                    return atk != null && atk.Bool("hit") ? ExpectResult.Pass("hit, mod " + atk.Int("mod"), atk.Seq) : ExpectResult.Fail(atk == null ? "no charge attack" : "missed");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// PHB p.154 (the charge ends in the closest space from which the charger can attack; if that space is occupied, no
+        /// charge; CMB-132 review, 2026-10-29): a Ui fighter 4 at (10,10), a sturdy dummy at (14,12) and an idle ally at
+        /// (13,11), the one closest attack space (20 ft; every other one is farther). The space (13,13) beyond it, 20 ft by
+        /// another route, has a clear line, and before the review the planner charged there; now the planner refuses for the
+        /// PC and the AI alike, naming the ally in the closest space, and the Charge step is refused with nothing spent. The
+        /// hero then moves to (13,13) and attacks.
+        /// </summary>
+        private static ScenarioDef ChargeClosestSpaceTaken()
+        {
+            return Rules("rules/charge-closest-space-taken", "A charge whose closest attack space holds an ally is refused, not sent to another space (PHB p.154)")
+                .Covers("CMB-132", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Ally", 1)), 13, 11, Control.Idle)
+                .Npc("dummy", "target_dummy", 14, 12, Control.Idle)
+                .Tweak("hero", RulesScenarios.StripOffHand)
+                .Tweak("dummy", SturdyNoAoO)
+                .Force(20, 19, null, -1)
+                .Initiative("hero", "ally", "dummy")
+                .Turn("hero", 1,
+                    Step.Assert("the closest attack space holds the ally: no charge for the PC or the AI query, no Charge highlight", ctx =>
+                        !ctx.Gm.CanChargeTargetForAI(ctx.Get("hero"), ctx.Get("dummy"))
+                        && !ctx.Gm.HasAnyValidChargeTarget(ctx.Get("hero"))
+                        && ctx.Gm.GetChargePath(ctx.Get("hero"), ctx.Get("dummy")).Count == 0),
+                    Step.Assert("the refusal names the ally in the closest space (PHB p.154)", ctx =>
+                    {
+                        Legality l = ctx.Gm.CanCharge(ctx.Gm.ChargeRequestForUi(ctx.Get("hero"), ctx.Get("dummy"), false));
+                        return !l.Ok && l.Reason.Contains("Ally occupies the closest space");
+                    }),
+                    Step.Charge("dummy"),
+                    Step.Assert("nothing was spent: the full-round action is left and the hero has not moved", ctx =>
+                        ctx.Get("hero").Actions.HasFullRoundAction && ctx.Get("hero").GridPosition == new Vector2Int(10, 10)),
+                    Step.Move(13, 13),
+                    Step.Attack("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The Charge step is refused", Expect.StepStatus("hero", 1, "Charge", 0, "refused"))
+                .Expect("No charge is made", v =>
+                    v.Log("Hero charges").Count == 0 ? ExpectResult.Pass("no charge") : ExpectResult.Fail(v.Log("Hero charges").Count + " charge line(s)"))
+                .Expect("The hero moves to (13,13) and then attacks the dummy", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("hero", "dummy", false, 1);
+                    return attacks.Count == 1 && MovedInto(v, "hero", 1, new Vector2Int(13, 13))
+                        ? ExpectResult.Pass("moved to (13,13), one attack", attacks[0].Seq)
+                        : ExpectResult.Fail(attacks.Count + " attack(s), moves " + v.Moves("hero", 1).Count);
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
                 .Build();
         }
     }

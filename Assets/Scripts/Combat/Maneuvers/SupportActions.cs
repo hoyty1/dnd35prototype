@@ -1052,7 +1052,9 @@ public partial class GameManager
         None,
         NoPath,
         TooClose,
-        TooFar
+        TooFar,
+        /// <summary>Every end space in range has a line that is not clear (PHB p.154; CMB-132): a creature, a wall, difficult terrain.</summary>
+        LineBlocked
     }
 
     private int GetChargeStartingDistanceSquares(CharacterController charger, CharacterController target)
@@ -1100,10 +1102,40 @@ public partial class GameManager
         out int bestPathCost,
         out ChargePathFailureReason failureReason,
         bool forBullRush = false)
+        => TryBuildChargePath(charger, target, out bestPath, out bestPathCost, out failureReason, out _, forBullRush);
+
+    /// <summary>
+    /// The one charge planner for PCs and NPCs (the Charge button and its highlight, <see cref="CanCharge"/>, the AI's
+    /// CanChargeTargetForAI, NPCExecuteCharge, the partial charge and the bull rush charge), PHB p.154 (Movement During a
+    /// Charge; CMB-132):
+    /// 1. The end space is the closest space from which the charger can attack the target (a bull rush: one next to it),
+    ///    measured as a straight move on open ground whoever stands where (<see cref="SquareGridUtils.GetDistance"/>); the
+    ///    charger's own space counts, so a charger that can already attack (reach) has no charge. That distance must be at
+    ///    least 10 ft (<see cref="ChargePathFailureReason.TooClose"/>) and at most the charge's budget
+    ///    (<see cref="ChargePathFailureReason.TooFar"/>).
+    /// 2. That space must be free and every line from the starting space to it clear (<see cref="FindChargeLineBlocker"/>):
+    ///    no square that the two spaces' convex hull covers may block movement (a wall; a barrier on a step), slow it
+    ///    (difficult terrain) or hold a creature, an ally or the target too; a helpless or dead creature does not stop a
+    ///    charge (<see cref="ChargeRules.LetsChargePass"/>), and the charger's own starting space does not block it (owner
+    ///    interpretation 2026-10-11, CMB-153). Otherwise <see cref="ChargePathFailureReason.LineBlocked"/>, with
+    ///    <paramref name="blockedReason"/> naming what is in the way.
+    /// When several spaces tie as closest, any one that is free and clear will do, the one <see cref="IsBetterChargeEndpoint"/>
+    /// prefers first (delegated RAW readings 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1). The path is the straight steps
+    /// toward that space (<see cref="SquareGridUtils.GetStraightLinePath"/>).
+    /// </summary>
+    private bool TryBuildChargePath(
+        CharacterController charger,
+        CharacterController target,
+        out List<Vector2Int> bestPath,
+        out int bestPathCost,
+        out ChargePathFailureReason failureReason,
+        out string blockedReason,
+        bool forBullRush = false)
     {
         bestPath = null;
         bestPathCost = int.MaxValue;
         failureReason = ChargePathFailureReason.NoPath;
+        blockedReason = null;
 
         if (charger == null || target == null || charger.Stats == null || target.Stats == null || Grid == null)
             return false;
@@ -1116,105 +1148,225 @@ public partial class GameManager
         }
 
         // A charger that shares its square with another creature (after a pin release, PHB p.157) may charge out of
-        // it: the creature in the starting square does not block the charge line (owner interpretation 2026-10-11,
-        // CMB-153). The path starts outside the starting square, so only the squares entered are checked; leaving the
-        // shared square provokes from the creature there, as any move out of a threatened square does (CMB-131).
+        // it: the creature in the starting space does not block the charge line (owner interpretation 2026-10-11,
+        // CMB-153); leaving the shared square provokes from the creature there, as any move out of a threatened square
+        // does (CMB-131).
         int minDistance = MinChargeMovementSquares; // Must move at least 2 squares (10 ft per PHB p.154)
         int maxDistance = GetChargeMaxDistanceSquares(charger); // double the speed; the speed for a partial charge (D2)
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
-        int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);
+        Vector2Int start = charger.GridPosition;
+        var startingSpace = new HashSet<Vector2Int>(charger.GetOccupiedSquaresAt(start));
 
-        bool foundReachableEndpoint = false;
-        int shortestReachableCost = int.MaxValue;
-        Vector2Int bestEndpoint = default;
-
+        // 1. The closest attack spaces, by the open-ground distance of a straight move, whoever stands there.
+        int closestCost = int.MaxValue;
+        var closest = new List<Vector2Int>();
         foreach (Vector2Int endpoint in GetChargeEndpointCandidates(charger, target, moverSizeSquares, forBullRush))
         {
-            AoOPathResult pathResult = FindPath(
-                charger,
-                endpoint,
-                avoidThreats: false,
-                maxRangeOverride: searchRange,
-                allowThroughAllies: true,
-                allowThroughEnemies: false);
+            int cost = SquareGridUtils.GetDistance(start, endpoint);
+            if (cost > closestCost)
+                continue;
+            if (cost < closestCost)
+            {
+                closestCost = cost;
+                closest.Clear();
+            }
+            closest.Add(endpoint);
+        }
 
-            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+        if (closest.Count == 0)
+        {
+            failureReason = ChargePathFailureReason.NoPath;
+            return false;
+        }
+        if (closestCost < minDistance)
+        {
+            failureReason = ChargePathFailureReason.TooClose;
+            return false;
+        }
+        if (closestCost > maxDistance)
+        {
+            failureReason = ChargePathFailureReason.TooFar;
+            return false;
+        }
+
+        // 2. A closest space that is free, with every line to it clear; the reported blocker is the preferred space's.
+        Vector2Int targetPos = target.GridPosition;
+        Vector2Int bestEndpoint = default;
+        Vector2Int blockedEndpoint = default;
+        bool haveBlocked = false;
+        for (int i = 0; i < closest.Count; i++)
+        {
+            Vector2Int endpoint = closest[i];
+            List<Vector2Int> candidatePath = SquareGridUtils.GetStraightLinePath(start, endpoint);
+            string blocker = DescribeChargeEndSpaceBlocker(charger, endpoint, moverSizeSquares);
+            if (blocker == null && SquareGridUtils.CalculatePathCost(start, candidatePath, ignoreDifficultTerrain: true) >= SquareGridUtils.BlockedPathCost)
+                blocker = "a barrier blocks the way";
+            if (blocker == null)
+                blocker = FindChargeLineBlocker(charger, target, start, endpoint, moverSizeSquares, startingSpace);
+
+            if (blocker != null)
+            {
+                if (!haveBlocked || IsBetterChargeEndpoint(endpoint, blockedEndpoint, targetPos))
+                {
+                    haveBlocked = true;
+                    blockedEndpoint = endpoint;
+                    blockedReason = blocker;
+                }
+                continue;
+            }
+
+            if (bestPath != null && !IsBetterChargeEndpoint(endpoint, bestEndpoint, targetPos))
                 continue;
 
-            List<Vector2Int> candidatePath = pathResult.Path;
-            if (candidatePath[candidatePath.Count - 1] != endpoint)
-                continue;
-
-            if (ContainsChargeBlockingTerrain(candidatePath))
-                continue;
-
-            int pathCost = SquareGridUtils.CalculatePathCost(charger.GridPosition, candidatePath);
-            foundReachableEndpoint = true;
-            if (pathCost < shortestReachableCost)
-                shortestReachableCost = pathCost;
-
-            if (pathCost < minDistance || pathCost > maxDistance)
-                continue;
-
-            bool isBetterPath = bestPath == null
-                || pathCost < bestPathCost
-                || (pathCost == bestPathCost && IsBetterChargeEndpoint(endpoint, bestEndpoint, target.GridPosition));
-
-            if (!isBetterPath)
-                continue;
-
-            bestPath = new List<Vector2Int>(candidatePath);
-            bestPathCost = pathCost;
+            bestPath = candidatePath;
+            bestPathCost = closestCost;
             bestEndpoint = endpoint;
         }
 
         if (bestPath != null)
         {
             failureReason = ChargePathFailureReason.None;
+            blockedReason = null;
             return true;
         }
 
-        if (!foundReachableEndpoint)
-        {
-            failureReason = ChargePathFailureReason.NoPath;
-            return false;
-        }
-
-        if (shortestReachableCost < minDistance)
-            failureReason = ChargePathFailureReason.TooClose;
-        else if (shortestReachableCost > maxDistance)
-            failureReason = ChargePathFailureReason.TooFar;
-        else
-            failureReason = ChargePathFailureReason.NoPath;
-
+        failureReason = ChargePathFailureReason.LineBlocked;
         return false;
     }
 
+    /// <summary>
+    /// Why the closest space at <paramref name="endpoint"/> cannot be the charge's end (null: it can): a square of it is a
+    /// wall or holds a creature that is not dead (PHB p.154: if that space is occupied or otherwise blocked, you can't
+    /// charge). A helpless creature's square may be passed but not ended in.
+    /// </summary>
+    private string DescribeChargeEndSpaceBlocker(CharacterController charger, Vector2Int endpoint, int moverSizeSquares)
+    {
+        List<Vector2Int> footprint = charger.GetOccupiedSquaresAt(endpoint);
+        for (int i = 0; i < footprint.Count; i++)
+        {
+            if (SquareGridUtils.IsCellBlockedByWall(footprint[i]))
+                return "a wall blocks the closest space";
+        }
+
+        if (Grid.CanTraversePathNode(endpoint, moverSizeSquares, charger, isDestinationNode: true, allowThroughAllies: true))
+            return null;
+
+        for (int i = 0; i < footprint.Count; i++)
+        {
+            SquareCell cell = Grid.GetCell(footprint[i]);
+            if (cell == null || !cell.IsOccupied)
+                continue;
+            IReadOnlyList<CharacterController> occupants = cell.Occupants;
+            for (int o = 0; o < occupants.Count; o++)
+            {
+                CharacterController occupant = occupants[o];
+                if (occupant == null || occupant == charger || (occupant.Stats != null && occupant.Stats.IsDead))
+                    continue;
+                return $"{DescribeChargeBlockingCreature(charger, occupant)} occupies the closest space";
+            }
+        }
+
+        return "the closest space is blocked";
+    }
+
+    /// <summary>
+    /// What stops a charge from <paramref name="start"/> to <paramref name="endpoint"/> (null: every line is clear, PHB p.154,
+    /// CMB-132): a square that the convex hull of the starting and ending spaces covers
+    /// (<see cref="SquareGridUtils.GetSquaresCoveredBySweptSpace"/>: every line between the two spaces) and that is off the
+    /// grid, a wall square or difficult terrain, or that holds a creature the charge may not pass (anyone but a helpless or
+    /// dead creature, <see cref="ChargeRules.LetsChargePass"/>; the target always, whose space a charge never crosses). The
+    /// charger's starting space is left out (CMB-153).
+    /// </summary>
+    private string FindChargeLineBlocker(CharacterController charger, CharacterController target, Vector2Int start, Vector2Int endpoint,
+        int moverSizeSquares, HashSet<Vector2Int> startingSpace)
+    {
+        List<Vector2Int> covered = SquareGridUtils.GetSquaresCoveredBySweptSpace(start, endpoint, moverSizeSquares);
+        for (int i = 0; i < covered.Count; i++)
+        {
+            string blocker = DescribeChargeSquareBlocker(charger, target, covered[i], startingSpace);
+            if (blocker != null)
+                return blocker;
+        }
+
+        return null;
+    }
+
+    /// <summary>Why <paramref name="square"/> stops a charge (null: it does not); see FindChargeLineBlocker.</summary>
+    private string DescribeChargeSquareBlocker(CharacterController charger, CharacterController target, Vector2Int square,
+        HashSet<Vector2Int> startingSpace)
+    {
+        if (startingSpace.Contains(square))
+            return null;
+
+        SquareCell cell = Grid.GetCell(square);
+        if (cell == null)
+            return "the way leaves the battlefield";
+        if (SquareGridUtils.IsCellBlockedByWall(square))
+            return "a wall blocks the way";
+        if (IsDifficultTerrain(square))
+            return "difficult terrain is in the way";
+        if (!cell.IsOccupied)
+            return null;
+
+        IReadOnlyList<CharacterController> occupants = cell.Occupants;
+        for (int i = 0; i < occupants.Count; i++)
+        {
+            CharacterController occupant = occupants[i];
+            if (occupant == null || occupant == charger)
+                continue;
+            if (occupant != target && ChargeRules.LetsChargePass(occupant))
+                continue;
+            return $"{DescribeChargeBlockingCreature(charger, occupant)} is in the way";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The name a charge refusal gives a creature in the way: its name when the charger can see it, otherwise "something",
+    /// so a refused charge does not reveal an unseen creature (CharacterController.CanSee).
+    /// </summary>
+    private static string DescribeChargeBlockingCreature(CharacterController charger, CharacterController occupant)
+    {
+        if (occupant == null || (charger != null && !charger.CanSee(occupant)))
+            return "something";
+        return occupant.Stats != null ? occupant.Stats.CharacterName : occupant.name;
+    }
+
+    /// <summary>
+    /// The spaces from which the charger could attack the target (a bull rush: next to it), the charger's own included,
+    /// whose footprint is on the grid, whoever stands there (PHB p.154 picks the closest of them before asking whether it
+    /// is free); none overlaps the target's space.
+    /// </summary>
     private IEnumerable<Vector2Int> GetChargeEndpointCandidates(CharacterController charger, CharacterController target, int moverSizeSquares, bool forBullRush = false)
     {
         if (charger == null || target == null || Grid == null)
             yield break;
 
-        List<Vector2Int> targetSquares = forBullRush ? target.GetOccupiedSquares() : null;
+        List<Vector2Int> targetSquares = target.GetOccupiedSquares();
 
         foreach (var kvp in Grid.Cells)
         {
             Vector2Int endpoint = kvp.Key;
-
-            if (endpoint == charger.GridPosition)
-                continue;
+            List<Vector2Int> footprint = charger.GetOccupiedSquaresAt(endpoint);
 
             if (forBullRush)
             {
                 // A bull rush enters the defender's space, so the charge ends adjacent to it
                 // (PHB p.154), whatever the charger's reach.
-                if (!IsFootprintAdjacentToSquares(charger.GetOccupiedSquaresAt(endpoint), targetSquares))
+                if (!IsFootprintAdjacentToSquares(footprint, targetSquares))
                     continue;
             }
             else if (!CombatUtils.CanThreatenTargetFromPosition(charger, endpoint, target))
                 continue;
 
-            if (!Grid.CanTraversePathNode(endpoint, moverSizeSquares, charger, isDestinationNode: true, allowThroughAllies: true))
+            if (!Grid.CanPlaceCreature(endpoint, moverSizeSquares, charger, ignoreOtherOccupants: true))
+                continue;
+
+            bool overlapsTarget = false;
+            for (int i = 0; i < footprint.Count && !overlapsTarget; i++)
+                overlapsTarget = targetSquares.Contains(footprint[i]);
+            if (overlapsTarget)
                 continue;
 
             yield return endpoint;
@@ -1253,20 +1405,6 @@ public partial class GameManager
             return candidate.y < currentBest.y;
 
         return candidate.x < currentBest.x;
-    }
-
-    private bool ContainsChargeBlockingTerrain(List<Vector2Int> path)
-    {
-        if (path == null || path.Count == 0)
-            return true;
-
-        for (int i = 0; i < path.Count; i++)
-        {
-            if (IsDifficultTerrain(path[i]))
-                return true;
-        }
-
-        return false;
     }
 
     /// <summary>Whether <paramref name="pos"/> is difficult terrain (MovementService's set; SquareGridUtils.StepCost reads it too).</summary>

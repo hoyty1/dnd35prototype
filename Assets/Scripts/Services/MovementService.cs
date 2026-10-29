@@ -341,13 +341,18 @@ public class MovementService : MonoBehaviour
 
     // ========== MOVEMENT EXECUTION ==========
 
+    /// <summary>
+    /// Moves <paramref name="mover"/> along <paramref name="path"/> (CharacterController.MoveAlongPath).
+    /// <paramref name="allowThroughEnemies"/> lets it pass an opponent's space short of the destination: the overrun
+    /// (through MoveAlongPath) and the charge past a helpless opponent (PHB p.154; GameManager.ExecuteCharge, CMB-199) set it.
+    /// </summary>
     public IEnumerator ExecuteMovement(CharacterController mover, List<Vector2Int> path, float secondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true,
-        MoveKind kind = MoveKind.Move)
+        MoveKind kind = MoveKind.Move, bool allowThroughEnemies = false)
     {
         if (mover == null || path == null || path.Count == 0)
             yield break;
 
-        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved, lastStepIsDestination, kind: kind);
+        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved, lastStepIsDestination, allowThroughEnemies, kind);
     }
 
     // ========== MOVEMENT STEP HOOKS (batch 12 step 23; GRID-018) ==========

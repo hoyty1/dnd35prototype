@@ -286,4 +286,89 @@ public static class SquareGridUtils
 
         return cost;
     }
+
+    /// <summary>
+    /// The squares whose interior meets the convex hull of a space of <paramref name="sizeSquares"/> squares a side at
+    /// <paramref name="fromAnchor"/> and the same space at <paramref name="toAnchor"/> (anchors are the footprint's lowest
+    /// corner square, as CharacterController.GetOccupiedSquaresAt): the squares that some line from a point of the starting
+    /// space to a point of the ending space passes through, both spaces included (the charge's clear-path test, which bars
+    /// every such line, PHB p.154; CMB-132; delegated RAW reading 2026-10-29, docs/systems/RULES_COVERAGE.md 4.1).
+    /// A square the hull only touches at an edge or a corner is not passed through, so a straight charge along a row does
+    /// not meet the rows beside it, while a diagonal one meets the squares orthogonally beside the diagonal.
+    /// </summary>
+    public static System.Collections.Generic.List<Vector2Int> GetSquaresCoveredBySweptSpace(Vector2Int fromAnchor, Vector2Int toAnchor, int sizeSquares)
+    {
+        var squares = new System.Collections.Generic.List<Vector2Int>();
+        int s = Mathf.Max(1, sizeSquares);
+        const double inset = 1e-4; // a square's interior, so bare edge or corner contact does not count
+
+        // The hull is the starting box swept along the anchor-to-anchor segment: its edges are the boxes' axis-aligned
+        // ones and two parallel to the segment, so a separating-axis test on x, y and the segment's normal decides it.
+        double hx0 = Mathf.Min(fromAnchor.x, toAnchor.x) - 0.5, hx1 = Mathf.Max(fromAnchor.x, toAnchor.x) + s - 0.5;
+        double hy0 = Mathf.Min(fromAnchor.y, toAnchor.y) - 0.5, hy1 = Mathf.Max(fromAnchor.y, toAnchor.y) + s - 0.5;
+        double nx = -(toAnchor.y - fromAnchor.y), ny = toAnchor.x - fromAnchor.x;
+        bool moves = nx != 0.0 || ny != 0.0;
+        ProjectBox(fromAnchor.x - 0.5, fromAnchor.y - 0.5, fromAnchor.x + s - 0.5, fromAnchor.y + s - 0.5, nx, ny, out double hn0, out double hn1);
+
+        int minX = Mathf.Min(fromAnchor.x, toAnchor.x), maxX = Mathf.Max(fromAnchor.x, toAnchor.x) + s - 1;
+        int minY = Mathf.Min(fromAnchor.y, toAnchor.y), maxY = Mathf.Max(fromAnchor.y, toAnchor.y) + s - 1;
+        for (int x = minX; x <= maxX; x++)
+        {
+            double sx0 = x - 0.5 + inset, sx1 = x + 0.5 - inset;
+            if (sx1 <= hx0 || sx0 >= hx1)
+                continue;
+            for (int y = minY; y <= maxY; y++)
+            {
+                double sy0 = y - 0.5 + inset, sy1 = y + 0.5 - inset;
+                if (sy1 <= hy0 || sy0 >= hy1)
+                    continue;
+                if (moves)
+                {
+                    ProjectBox(sx0, sy0, sx1, sy1, nx, ny, out double sn0, out double sn1);
+                    if (sn1 <= hn0 || sn0 >= hn1)
+                        continue;
+                }
+                squares.Add(new Vector2Int(x, y));
+            }
+        }
+
+        return squares;
+    }
+
+    /// <summary>The interval a box projects to on the axis (<paramref name="ax"/>, <paramref name="ay"/>).</summary>
+    private static void ProjectBox(double x0, double y0, double x1, double y1, double ax, double ay, out double min, out double max)
+    {
+        double a = x0 * ax + y0 * ay, b = x1 * ax + y0 * ay, c = x0 * ax + y1 * ay, d = x1 * ax + y1 * ay;
+        min = System.Math.Min(System.Math.Min(a, b), System.Math.Min(c, d));
+        max = System.Math.Max(System.Math.Max(a, b), System.Math.Max(c, d));
+    }
+
+    /// <summary>
+    /// The steps of a move straight from <paramref name="from"/> to <paramref name="to"/> (the start left out, the end
+    /// included): one square per step along the longer axis, the other axis following the line between the centres
+    /// (Bresenham). It has the fewest steps and diagonals a move between the two squares can have, so it costs
+    /// <see cref="GetDistance"/> on open ground, and every footprint it enters lies in the swept space
+    /// (<see cref="GetSquaresCoveredBySweptSpace"/>). The charge's path (PHB p.154: the charger moves directly toward the
+    /// opponent; CMB-132).
+    /// </summary>
+    public static System.Collections.Generic.List<Vector2Int> GetStraightLinePath(Vector2Int from, Vector2Int to)
+    {
+        var path = new System.Collections.Generic.List<Vector2Int>();
+        int dx = to.x - from.x, dy = to.y - from.y;
+        int steps = Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy));
+        for (int i = 1; i <= steps; i++)
+        {
+            // Integer rounding of from + d * i / steps, half away from zero, on each axis.
+            path.Add(new Vector2Int(from.x + RoundedFraction(dx, i, steps), from.y + RoundedFraction(dy, i, steps)));
+        }
+
+        return path;
+    }
+
+    private static int RoundedFraction(int d, int i, int steps)
+    {
+        int n = System.Math.Abs(d) * i * 2 + steps; // round(|d| * i / steps) = floor((2|d|i + steps) / (2 steps))
+        int value = n / (steps * 2);
+        return d < 0 ? -value : value;
+    }
 }

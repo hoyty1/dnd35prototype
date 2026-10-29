@@ -85,6 +85,28 @@ public sealed class ChargeOutcome
 public static class ChargeRules
 {
     /// <summary>
+    /// Whether a charge may pass through <paramref name="occupant"/>'s square (PHB p.154: helpless creatures do not stop a
+    /// charge; CMB-132): a helpless creature (CharacterController.IsHelplessForCoupDeGrace: unconscious, dying, stable,
+    /// asleep, paralyzed, petrified, helpless) or a dead one. Every other creature, an ally too, blocks the charge line. The
+    /// charge may not end in such a square (the end space must be free).
+    /// </summary>
+    public static bool LetsChargePass(CharacterController occupant)
+    {
+        if (occupant == null || occupant.Stats == null || occupant.Stats.IsDead)
+            return true;
+        return IsPassableHelpless(occupant);
+    }
+
+    /// <summary>
+    /// A living creature whose square another creature may move through because it cannot block (PHB p.147 for ordinary
+    /// movement and the overrun, PHB p.154 for the charge): unconscious, dying, stable or helpless (paralyzed, asleep,
+    /// bound; CharacterController.IsHelplessForCoupDeGrace). The one test the charge (<see cref="LetsChargePass"/>) and the
+    /// overrun (GameManager.IsPassableHelplessOpponent) read.
+    /// </summary>
+    public static bool IsPassableHelpless(CharacterController occupant)
+        => occupant != null && occupant.Stats != null && !occupant.Stats.IsDead && occupant.IsHelplessForCoupDeGrace();
+
+    /// <summary>
     /// The action <paramref name="charger"/> can charge with this turn: a full-round action, or, for a creature limited to
     /// one standard or move action (<see cref="ActionEconomy.SingleActionOnly"/>: disabled, staggered, slowed, single
     /// actions only), a partial charge as a standard action (<paramref name="partial"/> true; PHB p.154, p.280; D2). A
@@ -260,12 +282,18 @@ public partial class GameManager
         if (chargeBudget < MinChargeMovementSquares)
             return Legality.Refused($"Cannot move the {MinChargeMovementSquares * 5} ft a charge needs (at most {chargeBudget * 5} ft{(partial ? " on a partial charge" : string.Empty)}).");
 
-        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason, req.BullRush))
+        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason, out string blockedReason, req.BullRush))
         {
             switch (failureReason)
             {
+                // PHB p.154 (CMB-132): the closest space from which the charger can attack is occupied, or a line to it
+                // is not clear; the PC highlight drops the target and the AI picks another action, and nothing is spent.
+                case ChargePathFailureReason.LineBlocked:
+                    return Legality.Refused($"Cannot charge {target.Stats.CharacterName}: no clear path ({blockedReason}; PHB p.154).");
+                // The closest space from which the charger can attack is under 10 ft away (or is its own): a charge must
+                // move at least 10 ft to it (PHB p.154).
                 case ChargePathFailureReason.TooClose:
-                    return Legality.Refused($"Cannot charge targets within {ChargeBlockedDistanceSquares} squares ({ChargeBlockedDistanceSquares * 5} ft). Move at least {MinChargeMovementSquares} squares ({MinChargeMovementSquares * 5} ft).");
+                    return Legality.Refused($"Cannot charge {target.Stats.CharacterName}: the closest space to attack it from is less than {MinChargeMovementSquares * 5} ft away, and a charge moves at least {MinChargeMovementSquares * 5} ft (PHB p.154).");
                 case ChargePathFailureReason.TooFar:
                     return Legality.Refused($"Target is too far to charge (max {GetChargeMaxDistanceSquares(charger) * 5} ft{(partial ? ", a partial charge moves up to the speed" : string.Empty)}).");
                 default:
@@ -292,7 +320,8 @@ public partial class GameManager
     /// The one charge executor for PCs and NPCs (batch 12 step 21; CMB-018, CMB-108; PHB p.154-155). It checks the request
     /// (<see cref="CanCharge"/>), pays the charge's action (the full-round action, or the standard action of a partial
     /// charge, D2: CharacterController.CommitStandardAction, so a disabled charger's act is strenuous, PHB p.145), moves one
-    /// square at a time with each provoked AoO resolved before its step (PHB p.137; ResolveMovementAoOsBeforeStep), then
+    /// square at a time with each provoked AoO resolved before its step (PHB p.137; ResolveMovementAoOsBeforeStep), passing
+    /// a helpless creature's square short of the end (PHB p.154; ChargeStepCanPass, CMB-199), then
     /// resolves the end of the charge (<see cref="ResolveChargeEnd"/>), applies the charge's -2 AC until the charger's next
     /// turn and checks the end of combat. It does no UI continuation: the thin wrappers (the PC's ExecuteCharge and the
     /// NPC's NPCExecuteCharge) do.
@@ -344,6 +373,7 @@ public partial class GameManager
         // Resolve AoOs before each step (shared helper, PHB p.137) so the charge stops in place if an AoO drops, trips or
         // otherwise stops the charger.
         Vector2Int chargeStart = charger.GridPosition;
+        var chargeStartSpace = new HashSet<Vector2Int>(charger.GetOccupiedSquares());
         var provokedAoOs = CheckForAoO(charger, path);
         bool interruptedByAoO = false;
         var aooOutcome = new MovementAoOStepOutcome();
@@ -352,6 +382,19 @@ public partial class GameManager
             // A step the charger cannot take (a barrier, a hold, Grease's failed Balance check) provokes nothing: it never
             // leaves its square (PHB p.137, p.237). The charge stops there.
             if (MovementService.IsStepRefused(charger, charger.GridPosition, path[pathIndex], MoveKind.Charge))
+            {
+                interruptedByAoO = true;
+                aooOutcome.StopMovement = true;
+                aooOutcome.Reason = "stopped on the way";
+                break;
+            }
+
+            // Only the last step is the charge's end space; a step short of it may pass a square that only a helpless (or
+            // dead) creature holds (PHB p.154, CMB-199), an opponent's too. The planner refused a line through any other
+            // creature (CMB-132); one that is there now (it stood up, it moved in) stops the charge before the step, which,
+            // like a refused step, provokes nothing (PHB p.137).
+            bool lastStep = pathIndex == path.Count - 1;
+            if (!lastStep && !ChargeStepCanPass(charger, target, path[pathIndex], chargeStartSpace))
             {
                 interruptedByAoO = true;
                 aooOutcome.StopMovement = true;
@@ -368,9 +411,11 @@ public partial class GameManager
 
             var stepPath = new List<Vector2Int> { path[pathIndex] };
             if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, req.SecondsPerStep, markAsMoved: false, kind: MoveKind.Charge));
+                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, req.SecondsPerStep, markAsMoved: false,
+                    lastStepIsDestination: lastStep, kind: MoveKind.Charge, allowThroughEnemies: !lastStep));
             else
-                yield return StartCoroutine(charger.MoveAlongPath(stepPath, req.SecondsPerStep, markAsMoved: false, kind: MoveKind.Charge));
+                yield return StartCoroutine(charger.MoveAlongPath(stepPath, req.SecondsPerStep, markAsMoved: false,
+                    lastStepIsDestination: lastStep, allowThroughEnemies: !lastStep, kind: MoveKind.Charge));
 
             // Refused or ended on the way (a barrier, a movement step rule such as Grease's Balance check, an area's damage):
             // the charge stops there rather than jump to the next square (batch 12 step 23).
@@ -425,6 +470,37 @@ public partial class GameManager
         // Victory or defeat for either side when the charge (or an AoO on the way) dropped the last creature of a side (CORE-011).
         CheckCombatVictory(req.CombatEndContext, target);
         o.CombatEnded = CurrentPhase == TurnPhase.CombatOver;
+    }
+
+    /// <summary>
+    /// Whether the charger's footprint at <paramref name="step"/>, a step short of the charge's end, holds only creatures
+    /// the charge may pass (<see cref="ChargeRules.LetsChargePass"/>: helpless or dead, PHB p.154; CMB-199) or the creature
+    /// that shares the charger's starting space (owner interpretation 2026-10-11, CMB-153). The target's own space never
+    /// passes: a charge (other than a bull rush, which ends next to it) does not enter it.
+    /// </summary>
+    private bool ChargeStepCanPass(CharacterController charger, CharacterController target, Vector2Int step, HashSet<Vector2Int> startingSpace)
+    {
+        if (Grid == null)
+            return true;
+        List<Vector2Int> footprint = charger.GetOccupiedSquaresAt(step);
+        for (int i = 0; i < footprint.Count; i++)
+        {
+            if (startingSpace.Contains(footprint[i]))
+                continue;
+            SquareCell cell = Grid.GetCell(footprint[i]);
+            if (cell == null || !cell.IsOccupied)
+                continue;
+            IReadOnlyList<CharacterController> occupants = cell.Occupants;
+            for (int o = 0; o < occupants.Count; o++)
+            {
+                CharacterController occupant = occupants[o];
+                if (occupant == null || occupant == charger)
+                    continue;
+                if (occupant == target || !ChargeRules.LetsChargePass(occupant))
+                    return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>

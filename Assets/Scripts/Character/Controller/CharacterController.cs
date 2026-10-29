@@ -4332,8 +4332,9 @@ public class CharacterController : MonoBehaviour
     /// Pass <paramref name="lastStepIsDestination"/> false when the path is one segment of a
     /// longer move (the movement AoO helper pauses mid-path), so the segment may end in an
     /// ally's square that the full move only passes through. <paramref name="allowThroughEnemies"/> lets the mover pass an
-    /// opponent's space short of the destination: only the overrun sets it, for a defender that let it by or was knocked
-    /// prone (GameManager.RunOverrunMove, PHB p.157). Each step passes the one barrier rule
+    /// opponent's space short of the destination: the overrun sets it, for a defender that let it by or was knocked
+    /// prone (GameManager.RunOverrunMove, PHB p.157), and the charge for a helpless opponent it passes (PHB p.154;
+    /// GameManager.ExecuteCharge, CMB-199). Each step passes the one barrier rule
     /// (SquareGridUtils.IsStepBlockedByBarrier: sphere boundaries, wall squares and corners; GRID-013) and runs the
     /// movement step hooks (MovementService.RunBeforeStepHooks before it, RunAfterStepHooks after it: Grease, the Wall of
     /// Ice breach, zone entry; batch 12 step 23, GRID-018) with <paramref name="kind"/>.

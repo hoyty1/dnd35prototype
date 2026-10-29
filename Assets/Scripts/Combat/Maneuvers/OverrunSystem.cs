@@ -523,10 +523,10 @@ public partial class GameManager
     /// <summary>
     /// An opponent whose space anyone may move through with no overrun, since it cannot block (PHB p.147: a helpless
     /// opponent's square): unconscious, dying, stable or helpless (paralyzed, asleep, bound;
-    /// <see cref="CharacterController.IsHelplessForCoupDeGrace"/>).
+    /// <see cref="CharacterController.IsHelplessForCoupDeGrace"/>); the one test the charge reads too (ChargeRules.IsPassableHelpless).
     /// </summary>
     private static bool IsPassableHelplessOpponent(CharacterController occupant)
-        => occupant != null && occupant.Stats != null && !occupant.Stats.IsDead && occupant.IsHelplessForCoupDeGrace();
+        => ChargeRules.IsPassableHelpless(occupant);
 
     /// <summary>
     /// The living opponents whose space the attacker's footprint enters at <paramref name="basePosition"/>, other than those

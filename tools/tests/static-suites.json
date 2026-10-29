@@ -605,11 +605,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 54,
+      "passed": 66,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "GRID-019, GRID-022, batch 12 step 22 (2026-10-29): the one movement legality MovementService.CanStartMovement for every mover (PHB p.143-144): no 5-foot step in a round with other movement either way round, one only, none at speed 5 ft; no movement while prone, pinned or paralyzed; no withdraw while blinded; Restricted Withdraw (a standard action at speed) for slowed and disabled creatures and no full-round withdraw for them; a nauseated creature moves but never double moves, runs, withdraws or charges; the move, double move, withdraw, run and charge budgets; no run or charge while entangled, fatigued or exhausted, and a run at three times the speed in heavy armor or with a heavy load (step 22 review); CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule. Play only: CharacterController.Init needs Awake (TST-009). 44/44 in its first Play pass, 54/54 after the review (20261029T065935Z-play)."
+      "notes": "GRID-019, GRID-022, batch 12 step 22 (2026-10-29): the one movement legality MovementService.CanStartMovement for every mover (PHB p.143-144): no 5-foot step in a round with other movement either way round, one only, none at speed 5 ft; no movement while prone, pinned or paralyzed; no withdraw while blinded; Restricted Withdraw (a standard action at speed) for slowed and disabled creatures and no full-round withdraw for them; a nauseated creature moves but never double moves, runs, withdraws or charges; the move, double move, withdraw, run and charge budgets; no run or charge while entangled, fatigued or exhausted, and a run at three times the speed in heavy armor or with a heavy load (step 22 review); CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule. Play only: CharacterController.Init needs Awake (TST-009). 44/44 in its first Play pass, 54/54 after the review (20261029T065935Z-play). CMB-132, CMB-199 (2026-10-29): the charge line geometry (SquareGridUtils.GetSquaresCoveredBySweptSpace: every line between the starting and ending spaces, their convex hull, so a diagonal charge covers the squares orthogonally beside the diagonal while an edge or corner touch is not a crossing, for 1x1 and 2x2 chargers; GetStraightLinePath stays in that space and costs the open-ground distance) and which creatures a charge passes (ChargeRules.LetsChargePass: paralyzed, asleep and dying yes, awake and prone no; PHB p.154); 66/66 after the review (20261029T102008Z-play)."
     },
     {
       "type": "Tests.Combat.AttackLegalityTests",

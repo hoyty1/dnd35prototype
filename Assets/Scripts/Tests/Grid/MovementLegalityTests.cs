@@ -17,7 +17,10 @@ namespace Tests.Grid
 /// - the budgets: a move its speed, a double move or withdraw double, a run four times (three times in heavy armor or
 ///   with a heavy load, PHB p.144, p.162);
 /// - no run or charge while entangled (PHB p.309), fatigued (p.308) or exhausted;
-/// - CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule.
+/// - CombatFlowService.CanPerformWithdraw and GameManager.GetWithdrawMoveRangeSquares read the same rule;
+/// - the charge's clear path (PHB p.154; CMB-132, CMB-199): the squares every line between the starting and ending spaces
+///   passes through (their convex hull; an edge or corner touch is not a crossing), the straight steps inside it, and which
+///   creatures a charge may pass (helpless or dead ones only; ChargeRules.LetsChargePass).
 /// Play mode only: CharacterController.Init needs Awake (TST-009).
 /// </summary>
 public static class MovementLegalityTests
@@ -53,6 +56,8 @@ public static class MovementLegalityTests
             TestFatiguedNoRunOrCharge();
             TestRunMultiplierHeavyArmorAndLoad();
             TestWithdrawServiceAgrees();
+            TestChargeLineGeometry();
+            TestChargePassesOnlyHelplessCreatures();
         }
         finally
         {
@@ -287,6 +292,70 @@ public static class MovementLegalityTests
         armored.Stats.EquippedArmorItem = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.ArmorPlate);
         Assert(armored.Stats.EquippedArmorItem != null && MovementService.RunMultiplier(armored) == 3,
             "In heavy armor (full plate) a run is three times the speed (PHB p.144)");
+    }
+
+    /// <summary>
+    /// The charge line (PHB p.154, CMB-132): SquareGridUtils.GetSquaresCoveredBySweptSpace (every line between the starting
+    /// and ending spaces: their convex hull; an edge or corner touch is not a crossing) and GetStraightLinePath.
+    /// </summary>
+    private static void TestChargeLineGeometry()
+    {
+        var straight = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(0, 0), new Vector2Int(4, 0), 1));
+        Assert(straight.Count == 5 && straight.Contains(new Vector2Int(2, 0)) && !straight.Contains(new Vector2Int(2, 1))
+               && !straight.Contains(new Vector2Int(2, -1)),
+            $"A straight charge along a row covers the 5 squares of its row only ({straight.Count})");
+
+        var diagonal = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(0, 0), new Vector2Int(2, 2), 1));
+        Assert(diagonal.Count == 7 && diagonal.Contains(new Vector2Int(1, 1))
+               && diagonal.Contains(new Vector2Int(1, 0)) && diagonal.Contains(new Vector2Int(0, 1))
+               && !diagonal.Contains(new Vector2Int(2, 0)) && !diagonal.Contains(new Vector2Int(0, 2)),
+            $"A diagonal charge covers the squares orthogonally beside the diagonal, not the corners it only touches ({diagonal.Count})");
+
+        var shallow = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(0, 0), new Vector2Int(3, 1), 1));
+        Assert(shallow.Contains(new Vector2Int(1, 1)) && shallow.Contains(new Vector2Int(2, 0)) && shallow.Count == 8,
+            $"A charge from (0,0) to (3,1) covers (1,1) and (2,0), which some line between the two spaces crosses ({shallow.Count})");
+
+        var large = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(0, 0), new Vector2Int(3, 1), 2));
+        Assert(large.Contains(new Vector2Int(1, 2)) && large.Contains(new Vector2Int(4, 2)) && !large.Contains(new Vector2Int(0, 3)),
+            "A 2x2 charger's swept space from anchor (0,0) to (3,1) covers (1,2), beyond its footprint's own rows at the start");
+
+        var largeStraight = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(0, 0), new Vector2Int(3, 0), 2));
+        Assert(largeStraight.Count == 10 && largeStraight.Contains(new Vector2Int(4, 1)) && !largeStraight.Contains(new Vector2Int(1, 2)),
+            $"A 2x2 charger moving along its rows covers those two rows only ({largeStraight.Count})");
+
+        List<Vector2Int> path = SquareGridUtils.GetStraightLinePath(new Vector2Int(10, 10), new Vector2Int(13, 9));
+        var swept = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(10, 10), new Vector2Int(13, 9), 1));
+        Assert(path.Count == 3 && path[path.Count - 1] == new Vector2Int(13, 9) && path.TrueForAll(swept.Contains)
+               && SquareGridUtils.CalculatePathCost(new Vector2Int(10, 10), path) == SquareGridUtils.GetDistance(new Vector2Int(10, 10), new Vector2Int(13, 9)),
+            $"The straight steps end at the end space, stay in the swept space and cost the open-ground distance ({string.Join(" ", path)})");
+
+        List<Vector2Int> back = SquareGridUtils.GetStraightLinePath(new Vector2Int(5, 5), new Vector2Int(1, 3));
+        var backSwept = new HashSet<Vector2Int>(SquareGridUtils.GetSquaresCoveredBySweptSpace(new Vector2Int(5, 5), new Vector2Int(1, 3), 1));
+        Assert(back.Count == 4 && back[3] == new Vector2Int(1, 3) && back.TrueForAll(backSwept.Contains),
+            $"The steps toward lower coordinates also stay in the swept space ({string.Join(" ", back)})");
+    }
+
+    /// <summary>Helpless creatures do not stop a charge, every other one does, an ally too (PHB p.154; ChargeRules.LetsChargePass).</summary>
+    private static void TestChargePassesOnlyHelplessCreatures()
+    {
+        CharacterController awake = Create("ChargeAwake");
+        Assert(!ChargeRules.LetsChargePass(awake), "A creature that is not helpless stops a charge, even an ally (PHB p.154)");
+
+        CharacterController paralyzed = Create("ChargeParalyzed");
+        paralyzed.ApplyCondition(CombatConditionType.Paralyzed, 10, "test");
+        Assert(ChargeRules.LetsChargePass(paralyzed), "A paralyzed (helpless) creature does not stop a charge (PHB p.154)");
+
+        CharacterController asleep = Create("ChargeAsleep");
+        asleep.ApplyCondition(CombatConditionType.Asleep, 10, "test");
+        Assert(ChargeRules.LetsChargePass(asleep), "A sleeping (helpless) creature does not stop a charge");
+
+        CharacterController dying = Create("ChargeDying");
+        dying.Stats.CurrentHP = -3;
+        Assert(ChargeRules.LetsChargePass(dying), $"A dying (unconscious, helpless) creature does not stop a charge (hp {dying.Stats.CurrentHP})");
+
+        CharacterController prone = Create("ChargeProne");
+        prone.ApplyCondition(CombatConditionType.Prone, 10, "test");
+        Assert(!ChargeRules.LetsChargePass(prone), "A prone creature is not helpless and stops a charge");
     }
 
     private static void TestWithdrawServiceAgrees()
