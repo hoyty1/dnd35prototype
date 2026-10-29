@@ -196,7 +196,8 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Fighter", 6)), 7, 10, Control.Scripted)
                 .Npc("orc", "orc_berserker", 10, 10, Control.Idle)
-                .Tweak("fighter", c => { Sturdy(c); Slow(c); })
+                // Unarmored: its 30-ft speed halves to 3 squares (the kit's scale mail would make it 20 ft, PHB p.123; ITM-010).
+                .Tweak("fighter", c => { RulesScenarios.StripArmor(c); Sturdy(c); Slow(c); })
                 .Tweak("orc", SturdyNoAoO)
                 .Initiative("fighter", "orc")
                 .Force(20, 20, "Bull rush check")

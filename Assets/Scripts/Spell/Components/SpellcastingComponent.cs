@@ -2270,6 +2270,25 @@ public class SpellcastingComponent : MonoBehaviour
         return slotLevel >= 0 && SpellSlots.Any(s => IsConvertibleClericSlot(s) && s.Level == slotLevel);
     }
 
+    /// <summary>
+    /// The SpellIds of the prepared spells of <paramref name="slotLevel"/> this cleric may give up for a spontaneous cure
+    /// or inflict spell (PHB p.32: any prepared spell but a domain spell; <see cref="IsConvertibleClericSlot"/>), one entry
+    /// per convertible slot in slot order (a spell prepared twice appears twice). Empty when there is none. The AI picks
+    /// its sacrifice from it (AiConversionPlanner; CHR-070).
+    /// </summary>
+    public List<string> GetConvertiblePreparedSpellIds(int slotLevel)
+    {
+        var ids = new List<string>();
+        if (Stats == null || !Stats.IsCleric || Stats.SpontaneousCasting == SpontaneousCastingType.None || slotLevel < 0)
+            return ids;
+        foreach (SpellSlot s in SpellSlots)
+        {
+            if (IsConvertibleClericSlot(s) && s.Level == slotLevel && s.PreparedSpell != null && !string.IsNullOrEmpty(s.PreparedSpell.SpellId))
+                ids.Add(s.PreparedSpell.SpellId);
+        }
+        return ids;
+    }
+
     /// <summary>The slot level a spell of <paramref name="spellLevel"/> takes with <paramref name="metamagic"/> (PHB p.88), or the spell's level.</summary>
     private static int MetamagicSlotLevel(int spellLevel, MetamagicData metamagic)
     {

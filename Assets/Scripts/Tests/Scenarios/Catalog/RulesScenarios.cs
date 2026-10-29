@@ -331,6 +331,20 @@ namespace Tests.Scenarios
             return s;
         }
 
+        /// <summary>
+        /// Takes off the class kit's armor (the Fighter kit's scale mail is medium armor, which slows a 30-ft creature to
+        /// 20 ft, PHB p.123; ITM-010), for a scenario whose distances are set for an unarmored 30-ft speed and that does
+        /// not test armor.
+        /// </summary>
+        internal static void StripArmor(CharacterController c)
+        {
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.ArmorRobeSlot = null;
+            inv.CharacterInventory.RecalculateStats();
+        }
+
         /// <summary>Removes the shield and spiked gauntlet of the Fighter kit, so the PC menu shows no dual-wield prompt.</summary>
         internal static void StripOffHand(CharacterController c)
         {
@@ -412,7 +426,7 @@ namespace Tests.Scenarios
         /// <summary>
         /// GRID-001 (PHB p.143): a withdraw moves up to double speed, and leaving the start square provokes no AoO from
         /// a visible enemy. The mover at (10,10) withdraws 9 squares east, to (19,10), from the enemy at (9,10): beyond
-        /// one move (30 ft for the hero, 40 ft for the barbarian orc; a fixture step checks the budget) and within the withdraw's double move, and only the start square
+        /// one move (30 ft for the hero, its kit's scale mail taken off; 30 ft for the barbarian orc, whose hide armor slows its 40 ft, PHB p.123, ITM-010; a fixture step checks the budget) and within the withdraw's double move, and only the start square
         /// is threatened. Scripted: an NPC orc through the NPC withdraw executor; Ui: a PC hero through the PC Withdraw
         /// button and click, which before the fix was cut to a single move and provoked on leaving the start square.
         /// </summary>
@@ -429,7 +443,7 @@ namespace Tests.Scenarios
             if (ui)
                 b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
                  .Npc("orc", "orc_berserker", 9, 10, Control.Scripted)
-                 .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); });
+                 .Tweak("hero", c => { StripOffHand(c); StripArmor(c); SturdyDummy(c); });
             else
                 b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 9, 10, Control.Scripted)
                  .Npc("orc", "orc_berserker", 10, 10, Control.Scripted)
@@ -6956,18 +6970,12 @@ namespace Tests.Scenarios
                 ok &= SpawnedProgressionCheck(ctx, row, "DMG row vampire, 5th-level fighter", 5, 5, 4, 1, 1);
             }
 
-            // Dire animals: good Will beside the animal's good Fort and Ref (MM p.63-65), on the spawn and on the
-            // Lion's Shield summon's own stats builder.
+            // Dire animals: good Will beside the animal's good Fort and Ref (MM p.63-65). The Lion's Shield's dire lion
+            // spawns through this same spawn since CRE-005 (GameManager.SpawnItemSummon; rules/lion-shield-summon).
             NPCDefinition wolf = NPCDatabase.Get("dire_wolf");
             ok &= wolf != null && SpawnedProgressionCheck(ctx, wolf.Clone(), "dire wolf (MM p.65)", 6, 4, 5, 5, 5, 8, 7, 6);
             NPCDefinition lion = NPCDatabase.Get("dire_lion");
-            if (lion != null)
-            {
-                CharacterStats summon = LionsShieldBehavior.BuildSummonStats(lion.Clone());
-                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion BAB (MM p.63)", summon.BaseAttackBonus, 6);
-                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion base Will (good)", summon.ClassWillSave, 6);
-                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion Will (MM p.63)", summon.WillSave, 7);
-            }
+            ok &= lion != null && SpawnedProgressionCheck(ctx, lion.Clone(), "dire lion (MM p.63)", 8, 6, 6, 6, 6, 9, 8, 7);
 
             ok &= ProgressionCheck(ctx, "goblin template still 1 HD", NPCDatabase.Get("goblin").HitDice, 1);
             ok &= ProgressionCheck(ctx, "ogre template still 4 HD", NPCDatabase.Get("ogre").HitDice, 4);

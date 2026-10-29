@@ -571,7 +571,7 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             STR = 27, DEX = 15, CON = 19, WIS = 12, INT = 10, CHA = 11,
             NaturalArmorBonus = 11,
-            BaseSpeed = 6, // 30 ft (40 ft -10 armor)
+            BaseSpeed = 8, // 40 ft base; hide armor slows it to 30 ft (MM p.124, PHB p.123, ITM-010)
             BaseHitDieHP = 119,
             BAB = 10,
             NaturalAttacks = new List<NaturalAttackDefinition>(),

@@ -254,6 +254,9 @@ public static class SkeletonTemplate
         skel.KnownSpellIds = new List<string>();
         skel.PreparedSpellSlotIds = new List<string>();
         skel.ClericDomains = new List<string>();
+        skel.ClericSpontaneousChoice = SpontaneousCastingType.None;
+        skel.InnateSpellcastingClass = null; // a dragon's sorcerer casting is lost too (MM p.225, p.266: no special attacks or spells)
+        skel.InnateCasterLevel = 0;
 
         // ── CR ──
         skel.ChallengeRating = GetSkeletonCR(racialHD);

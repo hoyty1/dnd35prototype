@@ -143,8 +143,8 @@ public static class CreatureTypeProgressionDatabase
     /// definition's overrides of them, its fixed <see cref="NPCDefinition.BaseAttackBonusOverride"/>, and the class that
     /// only stands in for those racial HD (<see cref="CharacterStats.RacialHitDiceStandInClass"/>), so the stand-in's
     /// levels are not counted a second time as class levels. CharacterStats then adds the real class levels (CRE-004).
-    /// Every path that builds a creature from a definition calls this (GameManager.InitializeNPCFromDefinition,
-    /// LionsShieldBehavior.BuildSummonStats).
+    /// The one path that builds a creature from a definition calls this (GameManager.InitializeNPCFromDefinition, which
+    /// the Lion's Shield summon also takes since CRE-005).
     /// </summary>
     public static void ApplyToStats(CharacterStats stats, NPCDefinition def)
     {

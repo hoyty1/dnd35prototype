@@ -70,6 +70,8 @@ public static class CreatureProgressionTests
             TestNpcMatchesPc();
             TestToughnessSpawnsAtDefinitionTotal();
             TestEliteNpcSpawn();
+            TestDireLionDefinitionSpawn();
+            TestNeutralClericSpontaneousChoice();
         }
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
@@ -325,15 +327,7 @@ public static class CreatureProgressionTests
 
     private static void TestApplyToStatsOutsideTheSpawn()
     {
-        Debug.Log("--- Other stat paths: the Lion's Shield summon builds its dire lion with the same helper ---");
-        NPCDefinition lion = Template("dire_lion");
-        if (lion != null)
-        {
-            // The summon's own stats builder (LionsShieldBehavior.ActivateSummon calls it).
-            CharacterStats s = LionsShieldBehavior.BuildSummonStats(lion.Clone());
-            CheckBase(s, "Lion's Shield dire lion (8 animal HD behind a Warrior stand-in; MM p.63 BAB +6, good Will)", 8, 6, 6, 6, 6);
-            CheckTotals(s, "Lion's Shield dire lion (MM p.63)", 9, 8, 7);
-        }
+        Debug.Log("--- Other stat paths: ApplyToStats alone ---");
 
         // ApplyToStats alone marks the stand-in class, so the stand-in's levels are not counted again as class levels.
         NPCDefinition ogre = Template("ogre");
@@ -459,6 +453,88 @@ public static class CreatureProgressionTests
         TestDragonCasterLevelIsNotAClass();
     }
 
+    /// <summary>
+    /// The dire lion's definition spawns with the MM's numbers (MM p.63). This is a plain definition spawn
+    /// (InitializeNPCFromDefinition, the path every summon and, since CRE-005, the Greater Lion's Shield's lion take); it
+    /// does not call GameManager.SpawnItemSummon or LionsShieldBehavior. The CRE-005 coverage of the item's own spawn
+    /// (side, initiative, summon tracker, AI-015 parity, no Augment Summoning) is rules/lion-shield-summon.
+    /// </summary>
+    private static void TestDireLionDefinitionSpawn()
+    {
+        Debug.Log("--- The dire lion definition spawns with its MM numbers (the Lion's Shield lion: rules/lion-shield-summon) ---");
+        NPCDefinition lion = Template("dire_lion");
+        if (lion == null)
+            return;
+        CharacterController cc = Spawn(lion.Clone(), "dire_lion");
+        try
+        {
+            CharacterStats s = cc.Stats;
+            CheckBase(s, "dire lion (8 animal HD behind a Warrior stand-in; MM p.63 BAB +6, good Will)", 8, 6, 6, 6, 6);
+            CheckTotals(s, "dire lion (MM p.63)", 9, 8, 7);
+        }
+        finally
+        {
+            Cleanup(cc);
+        }
+    }
+
+    /// <summary>
+    /// CHR-070 (PHB p.32): a cleric neutral on the good-evil axis converts as its definition chose
+    /// (NPCDefinition.ClericSpontaneousChoice, copied by Clone); a neutral cleric left at None is a data error that
+    /// converts nothing (the spawn warns); a good cleric converts into cure spells whatever the field says. Every
+    /// database entry with cleric levels that is neutral on the good-evil axis must record a choice.
+    /// </summary>
+    private static void TestNeutralClericSpontaneousChoice()
+    {
+        Debug.Log("--- A neutral NPC cleric converts as its definition chose (CHR-070) ---");
+        NPCDefinition cleric = Template("human_cleric");
+        if (cleric == null)
+            return;
+        (Alignment alignment, SpontaneousCastingType choice, SpontaneousCastingType want, string what)[] cases =
+        {
+            (Alignment.TrueNeutral, SpontaneousCastingType.Inflict, SpontaneousCastingType.Inflict, "a neutral cleric that chose inflict converts into inflict spells"),
+            (Alignment.LawfulNeutral, SpontaneousCastingType.Cure, SpontaneousCastingType.Cure, "a lawful neutral cleric that chose cure converts into cure spells"),
+            (Alignment.TrueNeutral, SpontaneousCastingType.None, SpontaneousCastingType.None, "a neutral cleric left at None (a data error) converts none"),
+            (Alignment.NeutralGood, SpontaneousCastingType.Inflict, SpontaneousCastingType.Cure, "a good cleric converts into cure spells whatever the field says")
+        };
+        foreach (var c in cases)
+        {
+            NPCDefinition def = cleric.Clone();
+            def.CharacterAlignment = c.alignment;
+            def.ClericSpontaneousChoice = c.choice;
+            Assert(def.Clone().ClericSpontaneousChoice == c.choice, "Clone copies ClericSpontaneousChoice (" + c.choice + ")");
+            CharacterController cc = Spawn(def, "cleric_" + c.alignment + "_" + c.choice);
+            try
+            {
+                Assert(cc.Stats.SpontaneousCasting == c.want, c.what, "got " + cc.Stats.SpontaneousCasting);
+            }
+            finally
+            {
+                Cleanup(cc);
+            }
+        }
+        Assert(cleric.ClericSpontaneousChoice == SpontaneousCastingType.None, "the human_cleric template is unchanged");
+
+        // PHB p.32: a cleric neither good nor evil must choose cure or inflict; None is not a RAW state for one.
+        var missing = new List<string>();
+        foreach (NPCDefinition def in NPCDatabase.AllNPCs)
+        {
+            if (def == null || !HasClericLevels(def))
+                continue;
+            bool neutralAxis = !AlignmentHelper.IsGood(def.CharacterAlignment) && !AlignmentHelper.IsEvil(def.CharacterAlignment);
+            if (neutralAxis && def.ClericSpontaneousChoice == SpontaneousCastingType.None)
+                missing.Add(def.Id);
+        }
+        Assert(missing.Count == 0, "every neutral NPC cleric entry records its spontaneous choice (PHB p.32)",
+            "missing: " + string.Join(", ", missing));
+    }
+
+    /// <summary>True when <paramref name="def"/> has cleric levels (an NPCDefinition has one class, CharacterClass).</summary>
+    private static bool HasClericLevels(NPCDefinition def)
+    {
+        return string.Equals(def.CharacterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void TestDragonCasterLevelIsNotAClass()
     {
         // A dragon casts as a sorcerer of a level set by its age (MM p.68-70); the spawn injects a Sorcerer entry for
@@ -488,6 +564,13 @@ public static class CreatureProgressionTests
             Assert(s.GetClassLevel("Sorcerer") > 0 && s.IsSpellcaster, dragon.Id + " casts as a sorcerer (injected caster level)",
                 "sorcerer level " + s.GetClassLevel("Sorcerer"));
             CheckBase(s, dragon.Id + ": the sorcerer caster level adds no BAB or saves", hd, hd, 2 + hd / 2, 2 + hd / 2, 2 + hd / 2);
+            // CRE-016: the caster level is stored on the definition (MM p.68-69 age table) and adds no character level.
+            Assert(dragon.InnateSpellcastingClass == "Sorcerer" && dragon.InnateCasterLevel > 0
+                   && s.GetClassLevel("Sorcerer") == dragon.InnateCasterLevel,
+                dragon.Id + ": the definition stores its sorcerer caster level and the spawn uses it (CRE-016)",
+                $"definition {dragon.InnateSpellcastingClass ?? "null"} {dragon.InnateCasterLevel}, spawned sorcerer {s.GetClassLevel("Sorcerer")}");
+            Assert(s.Level == hd, dragon.Id + ": Level stays the Hit Dice, the caster level adds none (CRE-016)",
+                $"Level {s.Level}, HD {hd}");
         }
         finally
         {

@@ -13,8 +13,8 @@ namespace Tests.Character
 /// the weapons its entry describes, but a humanoid with real class levels only its class's; the shapechanger subtype
 /// simple weapons, p.314). MM attack bonuses: goblin morningstar +2 (p.133), hobgoblin longsword +2 (p.153), ogre
 /// greatclub +8 (p.199); gnoll battleaxe and shortbow, leather armor and heavy steel shield (p.130). The MM orc (p.203)
-/// attacks with a falchion at +4; the game's orc_warrior carries a greataxe and scale mail instead (database gear),
-/// which at the same STR and BAB has the same +4.
+/// attacks with a falchion at +4; the game's orc_warrior carries a greataxe instead (database gear; its studded leather
+/// is the MM's), which at the same STR and BAB has the same +4.
 /// The class-table tests need no scene; the spawn tests go through GameManager.InitializeNPCFromDefinition and need
 /// Play mode (a scene GameManager). Spawned controllers sit off the grid and are destroyed afterwards.
 /// </summary>
@@ -273,8 +273,8 @@ public static class NpcProficiencyTests
 
     private static void TestOrcWarriorGreataxe()
     {
-        // Warrior 1: BAB +1, STR 17 = +4. The MM orc's +4 is for a falchion (MM p.203); orc_warrior's greataxe and scale
-        // mail are database gear, with the same bonus at the same STR and BAB.
+        // Warrior 1: BAB +1, STR 17 = +4. The MM orc's +4 is for a falchion (MM p.203); orc_warrior's greataxe is
+        // database gear, with the same bonus at the same STR and BAB.
         CheckMainWeapon("orc_warrior", "greataxe", true, 4, 1, 0, "MM p.203 falchion +4, database greataxe");
     }
 

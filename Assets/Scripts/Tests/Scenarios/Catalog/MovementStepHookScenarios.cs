@@ -248,6 +248,8 @@ namespace Tests.Scenarios
                 .Pc("wiz", ActorSource.Stats(() => Wizard("Grease Wizard", 3)), 2, 2, Control.Idle)
                 .Npc("orc", "orc_warrior", 2, 18, Control.Idle)
                 .Force(20, 18, GreaseAreaEffect.BalanceDiceContext, 1)
+                // Unarmored, so its speed is 30 ft (the kit's scale mail would make it 20 ft, PHB p.123; ITM-010).
+                .Tweak("hero", RulesScenarios.StripArmor)
                 // The grease's caster acts first, so its turn (with Grease's repeated save, D12) comes before the band exists.
                 .Initiative("wiz", "hero", "orc")
                 .Turn("hero", 1,
@@ -563,6 +565,8 @@ namespace Tests.Scenarios
                 .Pc("wiz", ActorSource.Stats(() => Wizard("Tentacle Wizard", 7)), 2, 2, Control.Idle)
                 .Force(20, 20, BlackTentaclesAreaEffect.TentacleGrappleDiceContext, 2)
                 .Force(20, 1, BlackTentaclesAreaEffect.CreatureGrappleDiceContext, 2)
+                // Unarmored, so its 30-ft move reaches the tentacles (the kit's scale mail would make it 20 ft, PHB p.123; ITM-010).
+                .Tweak("hero", RulesScenarios.StripArmor)
                 .Initiative("brute", "hero", "wiz")
                 .Turn("brute", 1,
                     Step.Assert("the tentacles rise", ctx =>

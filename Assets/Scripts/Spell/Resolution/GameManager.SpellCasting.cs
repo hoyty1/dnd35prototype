@@ -143,7 +143,10 @@ public partial class GameManager
         UpdateInitiativeUI();
     }
 
-    private CharacterController SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonMonsterOption option)
+    /// <param name="applyAugmentSummoning">False for a creature an item calls (<see cref="SpawnItemSummon"/>): Augment
+    /// Summoning affects only creatures conjured with a summon spell (PHB p.89).</param>
+    private CharacterController SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonMonsterOption option,
+        bool applyAugmentSummoning = true)
     {
         if (caster == null || option == null)
             return null;
@@ -230,8 +233,9 @@ public partial class GameManager
                 summon.Stats.CharacterAlignment = Alignment.TrueNeutral;
             }
 
-            // Augment Summoning (PHB p.89): summoned creatures gain +4 STR, +4 CON
-            if (caster != null && caster.Stats != null && FeatManager.HasAugmentSummoning(caster.Stats))
+            // Augment Summoning (PHB p.89): creatures conjured with a summon spell gain +4 STR, +4 CON; an item's
+            // creature does not (SpawnItemSummon passes false).
+            if (applyAugmentSummoning && caster != null && caster.Stats != null && FeatManager.HasAugmentSummoning(caster.Stats))
             {
                 FeatManager.ApplyAugmentSummoningBonuses(summon.Stats);
                 Debug.Log($"[Summon] Augment Summoning applied to {summon.Stats.CharacterName}: +4 STR, +4 CON");
@@ -252,6 +256,47 @@ public partial class GameManager
             summonVisual = summon.gameObject.AddComponent<SummonedCreatureVisual>();
         summonVisual.Init(summon, isCelestial, isFiendish);
 
+        return summon;
+    }
+
+    /// <summary>
+    /// A creature an item calls to its wielder's side (the Greater Lion's Shield's dire lion, LionsShieldBehavior): the
+    /// same spawn as a summon spell's creature (<see cref="SpawnSummonedCreature"/>: InitializeNPCFromDefinition with
+    /// the entry's feats, DR, SR, immunities and gear, the wielder's side and control, the index-parallel AI behaviour
+    /// entry, AI-015), placed on the nearest open space within 10 ft. of the wielder that the wielder has line of effect
+    /// to, without the wielder's Augment Summoning (PHB p.89: summon spells only), inserted into the initiative after
+    /// the wielder and registered with the summon tracker for
+    /// <paramref name="durationRounds"/> rounds, after which it disappears (<see cref="TickSummonDurations"/>; CRE-005).
+    /// Null when the entry is missing or no space is free.
+    /// </summary>
+    public CharacterController SpawnItemSummon(CharacterController wielder, string npcDefinitionId, int durationRounds)
+    {
+        if (wielder == null || wielder.Stats == null || string.IsNullOrEmpty(npcDefinitionId) || Grid == null)
+            return null;
+
+        NPCDefinition baseDef = NPCDatabase.Get(npcDefinitionId);
+        if (baseDef == null)
+        {
+            Debug.LogError($"[Summon] Missing NPC definition '{npcDefinitionId}' for an item summon.");
+            return null;
+        }
+
+        int sizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
+        SquareCell cell = FindBestAdditionalSummonCell(wielder, wielder.GridPosition, sizeSquares, maxRangeFromCaster: 2);
+        if (cell == null)
+        {
+            Debug.LogWarning($"[Summon] No free space within 10 ft. of {wielder.Stats.CharacterName} for {baseDef.Name}.");
+            return null;
+        }
+
+        var option = new SummonMonsterOption { DisplayName = baseDef.Name, NpcDefinitionId = npcDefinitionId, TemplateId = null };
+        CharacterController summon = SpawnSummonedCreature(wielder, cell.Coords, option, applyAugmentSummoning: false);
+        if (summon == null)
+            return null;
+
+        InsertIntoInitiative(summon, wielder);
+        RegisterActiveSummon(summon, wielder, sourceSpellId: null, durationRoundsOverride: Mathf.Max(1, durationRounds));
+        UpdateAllStatsUI();
         return summon;
     }
 

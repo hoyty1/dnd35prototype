@@ -263,7 +263,10 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair("longsword", EquipSlot.MainHand),
                 new EquipmentSlotPair("light_crossbow", EquipSlot.Ranged),
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+                // MM p.149: studded leather and a light shield (AC 16), not chainmail, which would also slow it to 15 ft
+                // (PHB p.123; found re-auditing armored entries for ITM-010).
+                new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.OffHand)
             },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Ranged,
@@ -432,7 +435,7 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             STR = 25, DEX = 8, CON = 19, WIS = 10, INT = 6, CHA = 7,
             NaturalArmorBonus = 9,
-            BaseSpeed = 6, // 30 ft (40 ft base -10 armor)
+            BaseSpeed = 8, // 40 ft base; hide armor slows it to 30 ft (MM p.123, PHB p.123, ITM-010)
             BaseHitDieHP = 102,
             BAB = 9,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
@@ -524,8 +527,9 @@ public static partial class NPCDatabase
             Immunities = new CreatureImmunities { immuneToElectricity = true },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("greatsword", EquipSlot.MainHand),
-                new EquipmentSlotPair("full_plate", EquipSlot.Armor)
+                // MM p.17: AC 19 (+9 natural), speed 40 ft; no armor (the full plate is the hound archon hero's, MM
+                // p.17-18; found re-auditing armored entries for ITM-010: it slowed the archon to 30 ft).
+                new EquipmentSlotPair("greatsword", EquipSlot.MainHand)
             },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.7f, 0.65f, 0.5f, 1f),

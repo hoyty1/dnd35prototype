@@ -28,7 +28,7 @@ public static partial class NPCDatabase
             {
                 new DamageResistanceEntry { Type = DamageType.Fire, Amount = 10 }
             },
-            BaseSpeed = 4, // 20 ft (armor), fly 20 ft (perfect)
+            BaseSpeed = 6, // 30 ft base, fly 20 ft (perfect); chainmail slows it to 20 ft (MM p.116, PHB p.123, ITM-010)
             BaseHitDieHP = 33,
             BAB = 6,
             NaturalAttacks = new List<NaturalAttackDefinition>(),

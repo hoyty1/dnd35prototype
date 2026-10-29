@@ -116,8 +116,10 @@ public static class EncumbranceTests
         Assert(stats.ArmorCheckPenalty == 6,
             "Heavy load applies ACP 6",
             $"got {stats.ArmorCheckPenalty}");
-        Assert(stats.SpeedInFeet == 15 && stats.MoveRange == 3,
-            "Heavy load reduces 30 ft speed to 15 ft (3 squares)",
+        // PHB p.162 Table 9-2: a heavy load gives the same speed as a medium one, 30 ft to 20 ft (ITM-010; before, a
+        // flat half gave 15 ft).
+        Assert(stats.SpeedInFeet == 20 && stats.MoveRange == 4,
+            "Heavy load reduces 30 ft speed to 20 ft (4 squares, PHB Table 9-2)",
             $"got {stats.SpeedInFeet} ft / {stats.MoveRange} sq");
     }
 

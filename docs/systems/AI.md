@@ -495,7 +495,7 @@ An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster cl
 | evil_acolyte_test, gust_druid, mist_wizard | nothing |
 | lich (Wizard 11) | nothing: its list starts with 1st-level spells, every index lands in a slot of another level (SPL-015) |
 | vampire | nothing: `CharacterClass = "Fighter"` (CRE-030) |
-| 60 dragons | spontaneous Sorcerer via an injected class level; cantrips plus some 1st-4th level (CRE-016); castable on the NPC executor since 2026-10-14 (SPL-123: a scripted juvenile red dragon casts Shield in `rules/npc-cast-spontaneous`; AI-run, the young and juvenile red dragons breathe and cast no cantrip in `rules/dragon-ai-breath-young` and `-juvenile`, AI-037) |
+| 60 dragons | spontaneous Sorcerer via an injected caster-level entry (the CL stored on the definition, no character level since batch 12 step 24); cantrips plus some 1st-4th level (CRE-016); castable on the NPC executor since 2026-10-14 (SPL-123: a scripted juvenile red dragon casts Shield in `rules/npc-cast-spontaneous`; AI-run, the young and juvenile red dragons breathe and cast no cantrip in `rules/dragon-ai-breath-young` and `-juvenile`, AI-037) |
 | Spellcaster/Caster-archetype monsters, DMG class-levelled casters, paladins | nothing (no lists; SLAs text only; ENC-021, CHR-024, CRE-062) |
 | human_cleric | the DMG p.114 sample cleric's prepared spells (5/5/4/3, Healing and Protection domains; CRE-062, 2026-10-14); but its AI is Humanoid on DefensiveMelee, and `AIService.ExecuteDefensiveMeleeTurn` never casts, so on its own turns it casts only when scripted (the NPC executor cast Prayer from a 3rd-level slot in `rules/prayer-cast`, 2026-10-14); when charmed (`charm_person_test`) it heals its charmer with a prepared cure spell (`CharmedBehaviorController.TryGetBestHealingSpell` through `TryNPCPerformSpellCastForAI`) |
 
@@ -647,7 +647,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 | Summon Monster / Nature's Ally of a player-controlled caster | Player, controllable | PC turn |
 | Summon Monster / Nature's Ally of an AI-run caster (an NPC's, or an AI-run party member's; batch 11 step 27) | the caster's team, not controllable | `AI_SummonedCreature` |
 | PC-cast swarm options, Summon Swarm | Player, not controllable | swarm routine (Summon Swarm is indiscriminate) |
-| Lion's Shield lion | wielder's team | not a recognised summon; no `_npcAIBehaviors` entry (AI-015) |
+| Lion's Shield lion | wielder's team | a summon since batch 12 step 24 (`GameManager.SpawnItemSummon`: initiative, `_npcAIBehaviors` entry, 10-round summon tracker; CRE-005); the item itself is unreachable in play (ITM-025) |
 | Test allies (dire_tiger, template tests) | Player, controllable | PC turn |
 
 NPCs summon since batch 11 step 27 (7.9); their creatures join the initiative after them and are evicted with the other non-pool creatures before the next encounter (`EnsureNPCPoolSize`, CRE-046), with their `_npcAIBehaviors` entries (AI-015). No definition sets `IsAlly`, nothing uses `CharacterTeam.Neutral` (the AI's own side tests go through `TeamUtility` since batch 11 step 22), and defeat/victory checks would not count an allied AI NPC.

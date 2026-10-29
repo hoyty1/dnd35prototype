@@ -209,7 +209,7 @@ public static partial class NPCDatabase
             // PHB Paladin: high STR, CHA for divine abilities, decent CON
             STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
             NaturalArmorBonus = 0,
-            BaseSpeed = 4, // 20 ft in full plate
+            BaseSpeed = 6, // 30 ft base; full plate slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 24, // 3d10+6 average
             BAB = 3, // Paladin 3: +3 (full BAB)
             NaturalAttacks = new List<NaturalAttackDefinition>(),
@@ -265,7 +265,7 @@ public static partial class NPCDatabase
             // at 4th; humans have no adjustments.
             STR = 14, DEX = 8, CON = 12, WIS = 14, INT = 10, CHA = 15,
             NaturalArmorBonus = 0,
-            BaseSpeed = 4, // 20 ft in full plate
+            BaseSpeed = 6, // 30 ft base; full plate slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 37, // DMG p.118 sample: 10 (maximum first die) + 4d10 averaged 22 + CON 5
             FirstHitDieMaximized = true,
             BAB = 5, // Paladin 5: +5 (full BAB)
@@ -323,7 +323,7 @@ public static partial class NPCDatabase
             // Level 7: +1 STR from level 4 ability increase
             STR = 17, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
             NaturalArmorBonus = 0,
-            BaseSpeed = 4, // 20 ft in full plate
+            BaseSpeed = 6, // 30 ft base; full plate slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 56, // 7d10+14 average
             BAB = 7, // Paladin 7: +7 (full BAB)
             NaturalAttacks = new List<NaturalAttackDefinition>(),

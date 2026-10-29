@@ -3299,6 +3299,9 @@ public class AIService : MonoBehaviour
         // and prepared candidates, so an equal score keeps the plain spell first. Each passes the same tests below.
         var candidates = new List<SpellData>(castable);
         candidates.AddRange(AiMetamagicPlanner.SpontaneousCandidates(caster, allCombatants));
+        // A cleric's spontaneous conversion (PHB p.32; CHR-070, batch 12 step 24): a cure or inflict spell it has not
+        // prepared, cast by giving up a prepared spell (AiConversionPlanner), after the prepared and metamagic candidates.
+        candidates.AddRange(AiConversionPlanner.Candidates(caster, castable));
         if (candidates.Count == 0)
             return result;
 

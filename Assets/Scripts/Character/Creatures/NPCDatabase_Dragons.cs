@@ -100,7 +100,8 @@ public static partial class NPCDatabase
         // Per-age spell lists are populated by DragonData.PopulateSpellcastingData().
         List<string> knownSpells = new List<string>();
         List<string> preparedSlots = new List<string>();
-        if (stats.SorcererCasterLevel > 0 && stats.SorcererSpellIds != null && stats.SorcererSpellIds.Count > 0)
+        bool castsAsSorcerer = stats.SorcererCasterLevel > 0 && stats.SorcererSpellIds != null && stats.SorcererSpellIds.Count > 0;
+        if (castsAsSorcerer)
         {
             knownSpells.AddRange(stats.SorcererSpellIds);
             // Sorcerer: spontaneous caster — prepared slots = all known spells
@@ -170,6 +171,9 @@ public static partial class NPCDatabase
             Feats = stats.Feats != null ? new List<string>(stats.Feats) : new List<string>(),
             KnownSpellIds = knownSpells,
             PreparedSpellSlotIds = preparedSlots,
+            // The age's sorcerer caster level (MM p.68-69 age table), stored here for the spawn (CRE-016).
+            InnateSpellcastingClass = castsAsSorcerer ? "Sorcerer" : null,
+            InnateCasterLevel = castsAsSorcerer ? stats.SorcererCasterLevel : 0,
             SpecialAbilities = specialAbilities,
             AIProfileArchetype = NPCAIProfileArchetype.Dragon,
             SpriteColor = template.SpriteColor,

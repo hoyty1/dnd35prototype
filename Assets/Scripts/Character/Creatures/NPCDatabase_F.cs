@@ -328,7 +328,7 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             STR = 31, DEX = 9, CON = 21, WIS = 14, INT = 10, CHA = 11,
             NaturalArmorBonus = 8,
-            BaseSpeed = 6, // 30 ft (in armor)
+            BaseSpeed = 8, // 40 ft base; half-plate slows it to 30 ft (MM p.121, PHB p.123, ITM-010)
             BaseHitDieHP = 142,
             BAB = 11,
             NaturalAttacks = new List<NaturalAttackDefinition>(),

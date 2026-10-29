@@ -81,6 +81,7 @@ namespace Tests.Scenarios
             yield return S("ai-spell-retry-refused", AiSpellRetryRefused);
             yield return S("npc-cast-fireball", NpcCastFireball);
             yield return S("npc-cast-bless", NpcCastBless);
+            yield return S("npc-cleric-converts-cure", NpcClericConvertsCure);
             yield return S("npc-cast-web", NpcCastWeb);
             yield return S("ai-area-aim", AiAreaAim);
             yield return S("cast-globe-damage", GlobeDamage);
@@ -983,6 +984,8 @@ namespace Tests.Scenarios
                 .Npc("skel", "skeleton_warrior", 8, 10, Control.Scripted)
                 .Npc("living", "target_dummy", 8, 12, Control.Idle)
                 .Tweak("cleric", c => Prepare(c, 2, SpellNames.CONSECRATE))
+                // Its banded mail off, so its 30-ft move leaves the area (heavy armor would slow it to 20 ft, PHB p.123; ITM-010).
+                .Tweak("skel", RulesScenarios.StripArmor)
                 .Initiative("cleric", "skel", "living")
                 .Turn("cleric", 1,
                     Step.Assert("record", ctx => { RecordLedger(ctx, "before"); return true; }),
@@ -2911,6 +2914,46 @@ namespace Tests.Scenarios
                 .Expect("The AI cleric casts Bless once", CastEvents("cleric", SpellNames.BLESS, 1))
                 .Expect("The cleric and both kobolds are blessed", FactsAre(("bless.cleric", true), ("bless.k1", true), ("bless.k2", true)))
                 .Expect("The hero, an enemy inside the burst, is not", FactIs("bless.hero", false))
+                .Build();
+        }
+
+        /// <summary>
+        /// CHR-070 (PHB p.32; batch 12 step 24): an AI-run Enemy-team cleric (human_cleric, Cleric 5, neutral good, so it
+        /// converts into cure spells; given the Healer profile) has only one 1st-level Bless left and no cure spell prepared.
+        /// Its kobold ally beside it is at 1 hit point. The AI converts: it gives up the Bless for Cure Light Wounds through
+        /// the cast core's conversion source (SpellCastRequest.AiSourceFor, the source the PC's Convert button builds) and
+        /// heals the kobold; the Bless slot is spent and Bless is not cast. Before CHR-070 the AI could not convert, so it cast
+        /// Bless or nothing.
+        /// </summary>
+        private static ScenarioDef NpcClericConvertsCure()
+        {
+            return Rules("rules/npc-cleric-converts-cure", "An AI cleric converts a prepared spell into a cure spell to heal an ally (PHB p.32; CHR-070)")
+                .Covers("CHR-070", "PHB p.32", "PHB p.215", "batch 12 step 24")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Watching Hero", 1)), 10, 16, Control.Scripted)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Npc("kobold", "kobold_warrior", 11, 10, Control.Idle)
+                .Profile("cleric", () => UnityEngine.ScriptableObject.CreateInstance<DND35.AI.Profiles.HealerAIProfile>())
+                .Tweak("cleric", c => { Prepare(c, 1, SpellNames.BLESS); SpendAllBut(c, SpellNames.BLESS); })
+                .Tweak("kobold", c => c.Stats.CurrentHP = 1)
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero", "kobold")
+                .Turn("hero", 1, Step.Assert("after the cleric's turn", ctx =>
+                {
+                    CharacterController cleric = ctx.Get("cleric");
+                    Fact(ctx, "spont", cleric.Stats.SpontaneousCasting);
+                    Fact(ctx, "kobold.healed", ctx.Get("kobold").Stats.CurrentHP > 1);
+                    List<SpellData> castable = cleric.Spellcasting.GetCastablePreparedSpells() ?? new List<SpellData>();
+                    Fact(ctx, "bless.left", castable.Count(s => s != null && s.SpellId == SpellNames.BLESS));
+                    StatusEffectManager sem = cleric.StatusEffectManager;
+                    Fact(ctx, "bless.cast", sem != null && sem.HasEffect(SpellNames.BLESS));
+                    return true;
+                }))
+                .Expect("The neutral good cleric converts into cure spells (PHB p.32)", FactIs("spont", SpontaneousCastingType.Cure))
+                .Expect("The AI cleric casts Cure Light Wounds once", CastEvents("cleric", SpellNames.CURE_LIGHT_WOUNDS, 1))
+                .Expect("The kobold is healed", FactIs("kobold.healed", true))
+                .Expect("The Bless is given up for it, not cast", FactsAre(("bless.left", 0), ("bless.cast", false)))
+                .Expect("The AI cleric casts no Bless", CastEvents("cleric", SpellNames.BLESS, 0))
                 .Build();
         }
 

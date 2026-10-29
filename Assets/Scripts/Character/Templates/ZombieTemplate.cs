@@ -221,6 +221,9 @@ public static class ZombieTemplate
         zombie.KnownSpellIds = new List<string>();
         zombie.PreparedSpellSlotIds = new List<string>();
         zombie.ClericDomains = new List<string>();
+        zombie.ClericSpontaneousChoice = SpontaneousCastingType.None;
+        zombie.InnateSpellcastingClass = null; // a dragon's sorcerer casting is lost too (MM p.225, p.266: no special attacks or spells)
+        zombie.InnateCasterLevel = 0;
 
         // ── CR ──
         zombie.ChallengeRating = GetZombieCR(doubledHD);

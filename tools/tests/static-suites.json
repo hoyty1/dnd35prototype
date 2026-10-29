@@ -165,11 +165,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 235,
+      "passed": 248,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; CRE-058 (delegated RAW readings 2026-10-14): elite DMG-table NPC rows (hobgoblin fighter 5, goblin rogue 5, lizardfolk druid 5: elite array by the DMG ch.4 tables, racial adjustments, increases, maximum first Hit Die, the first racial die when racial HD are kept), monster class levels (elite array, averaged dice; NPC classes average and keep a 1-HD humanoid's scores; printed-sample rows unchanged), a human class NPC's Table 6-1 alignment, class-legal alignments on every DMG table class row (CSV and hard-coded; the human and kobold rows have no base) and an elite spawn; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
+      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB, saves or Level and comes from InnateCasterLevel (CRE-016); the dire lion definition spawn (the Lion's Shield's own spawn is rules/lion-shield-summon, CRE-005); a neutral cleric's ClericSpontaneousChoice and every neutral cleric entry recording one (CHR-070, PHB p.32); CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; CRE-058 (delegated RAW readings 2026-10-14): elite DMG-table NPC rows (hobgoblin fighter 5, goblin rogue 5, lizardfolk druid 5: elite array by the DMG ch.4 tables, racial adjustments, increases, maximum first Hit Die, the first racial die when racial HD are kept), monster class levels (elite array, averaged dice; NPC classes average and keep a 1-HD humanoid's scores; printed-sample rows unchanged), a human class NPC's Table 6-1 alignment, class-legal alignments on every DMG table class row (CSV and hard-coded; the human and kobold rows have no base) and an elite spawn; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.CreatureTemplateOnceTests",
@@ -214,6 +214,17 @@
       "flakyFailures": 0,
       "knownFailures": [],
       "notes": ""
+    },
+    {
+      "type": "Tests.Character.ArmorSpeedTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 36,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "ITM-010 (batch 12 step 24, 2026-10-29): medium and heavy armor and medium or heavy loads slow every creature but a dwarf through CharacterStats.EffectiveSpeedFeet (PHB p.123, p.162, p.14; mithral one category lighter, DMG p.284; fast movement first, PHB p.25; other speeds two thirds rounded up to 5 ft, delegated RAW reading 2026-10-29); the NPC entries store their unarmored speed. Bare stats with an inventory. Added 2026-10-29; 36/36 in its first Play pass"
     },
     {
       "type": "Tests.Character.ExperienceCalculatorTests",

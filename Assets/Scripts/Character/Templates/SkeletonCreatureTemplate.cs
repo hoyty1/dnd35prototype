@@ -97,6 +97,9 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.KnownSpellIds = source.KnownSpellIds;
         target.PreparedSpellSlotIds = source.PreparedSpellSlotIds;
         target.ClericDomains = source.ClericDomains;
+        target.ClericSpontaneousChoice = source.ClericSpontaneousChoice;
+        target.InnateSpellcastingClass = source.InnateSpellcastingClass;
+        target.InnateCasterLevel = source.InnateCasterLevel;
         target.SpellResistance = source.SpellResistance;
 
         // Display

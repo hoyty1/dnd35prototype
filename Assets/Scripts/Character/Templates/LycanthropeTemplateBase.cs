@@ -113,6 +113,11 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.HasRacialHumanoidHitDice = source.HasRacialHumanoidHitDice;
         target.FirstHitDieMaximized = source.FirstHitDieMaximized;
 
+        // Spellcasting choices the template keeps (CRE-023)
+        target.ClericSpontaneousChoice = source.ClericSpontaneousChoice;
+        target.InnateSpellcastingClass = source.InnateSpellcastingClass;
+        target.InnateCasterLevel = source.InnateCasterLevel;
+
         // Display
         target.SpecialAbilities = source.SpecialAbilities;
         target.CreatureTags = source.CreatureTags;

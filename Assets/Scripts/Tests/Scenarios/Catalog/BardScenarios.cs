@@ -142,6 +142,8 @@ namespace Tests.Scenarios
                 .Tweak("bard", LoudBard)
                 .Tweak("dummyA", Sturdy)
                 .Tweak("dummyB", Sturdy)
+                // Unarmored, so its two 30-ft moves reach dummyA (the kit's scale mail would make them 20 ft, PHB p.123; ITM-010).
+                .Tweak("fighter", RulesScenarios.StripArmor)
                 .Initiative("bard", "fighter", "dummyA", "dummyB")
                 .Turn("bard", 1, Step.BardicMusic(BardicAbility.Fascinate, "dummyA", "dummyB"),
                     Step.Assert("both dummies are fascinated; one use spent; no standard action left", ctx =>
@@ -251,6 +253,8 @@ namespace Tests.Scenarios
                 .Npc("dummy", "target_dummy", 14, 10, Control.Scripted)
                 .Tweak("bard", LoudBard)
                 .Tweak("dummy", Sturdy)
+                // Unarmored, so its 30-ft move reaches the dummy (the kit's scale mail would make it 20 ft, PHB p.123; ITM-010).
+                .Tweak("fighter", RulesScenarios.StripArmor)
                 .Initiative("bard", "fighter", "dummy")
                 .Turn("bard", 1, Step.BardicMusic(BardicAbility.Fascinate, "dummy"),
                     Step.Assert("the dummy is fascinated", ctx => ctx.Get("dummy").HasCondition(CombatConditionType.Fascinated)))
@@ -291,6 +295,8 @@ namespace Tests.Scenarios
                 .Npc("dummy", "target_dummy", 14, 10, Control.Scripted)
                 .Tweak("bard", LoudBard)
                 .Tweak("dummy", Sturdy)
+                // Unarmored, so its 30-ft move reaches the dummy (the kit's scale mail would make it 20 ft, PHB p.123; ITM-010).
+                .Tweak("fighter", RulesScenarios.StripArmor)
                 .Initiative("bard", "fighter", "dummy")
                 .Turn("bard", 1, Step.BardicMusic(BardicAbility.Fascinate, "dummy"),
                     Step.Assert("the dummy is fascinated", ctx => ctx.Get("dummy").HasCondition(CombatConditionType.Fascinated)))

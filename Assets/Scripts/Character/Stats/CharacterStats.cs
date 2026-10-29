@@ -481,9 +481,15 @@ public class CharacterStats
         if (ClassLevels.Count == 0)
             ClassLevels.Add(new ClassLevelEntry(!string.IsNullOrWhiteSpace(CharacterClass) ? CharacterClass : "Fighter", Mathf.Max(1, Level)));
 
+        // The innate spellcasting entry (a dragon's sorcerer caster level, MM p.68-69) is a caster level, not class levels,
+        // so it adds nothing to Level (CRE-016): a dragon's Level stays its Hit Dice.
         int total = 0;
         for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            if (IsInnateSpellcastingEntry(ClassLevels[i]))
+                continue;
             total += Mathf.Max(1, ClassLevels[i].Level);
+        }
 
         int pending = Mathf.Max(0, PendingLevelUps);
         Level = Mathf.Max(1, total + pending);
@@ -2272,7 +2278,7 @@ public class CharacterStats
         for (int i = 0; i < ClassLevels.Count; i++)
         {
             ClassLevelEntry entry = ClassLevels[i];
-            if (entry != null && !string.IsNullOrWhiteSpace(entry.ClassName) && entry.Level > 0)
+            if (entry != null && !string.IsNullOrWhiteSpace(entry.ClassName) && entry.Level > 0 && !IsInnateSpellcastingEntry(entry))
                 total += entry.Level;
         }
         return total;
@@ -2302,7 +2308,16 @@ public class CharacterStats
         if (!string.IsNullOrEmpty(RacialHitDiceStandInClass)
             && string.Equals(entry.ClassName, RacialHitDiceStandInClass, StringComparison.OrdinalIgnoreCase))
             return true;
-        return !string.IsNullOrEmpty(InnateSpellcastingClass)
+        return IsInnateSpellcastingEntry(entry);
+    }
+
+    /// <summary>
+    /// True when <paramref name="entry"/> is the <see cref="InnateSpellcastingClass"/> entry: a caster level only, so it
+    /// adds no BAB, saves or Hit Dice (CRE-004) and no character level (<see cref="Level"/>, CRE-016).
+    /// </summary>
+    private bool IsInnateSpellcastingEntry(ClassLevelEntry entry)
+    {
+        return entry != null && !string.IsNullOrEmpty(InnateSpellcastingClass)
             && string.Equals(entry.ClassName, InnateSpellcastingClass, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -3414,15 +3429,57 @@ public class CharacterStats
         }
     }
 
-    public static float GetEncumbranceSpeedMultiplier(EncumbranceLevel level)
+    /// <summary>
+    /// True when the worn armor is medium or heavy for movement (PHB p.123 Table 7-6: those armors reduce speed; mithral
+    /// counts one category lighter, DMG p.284, <see cref="MaterialProperties.GetEffectiveArmorCategory"/>, as for
+    /// <see cref="BarbarianFastMovementBonus"/>). Light armor, a robe and no armor do not slow (ITM-010).
+    /// </summary>
+    public bool ArmorReducesSpeed
     {
-        switch (level)
+        get
         {
-            case EncumbranceLevel.Medium: return 2f / 3f;
-            case EncumbranceLevel.Heavy: return 0.5f;
-            case EncumbranceLevel.Overloaded: return 0f;
-            default: return 1f;
+            if (EquippedArmorItem == null || !EquippedArmorItem.IsArmor)
+                return false;
+            ArmorCategory cat = MaterialProperties.GetEffectiveArmorCategory(EquippedArmorItem);
+            return cat == ArmorCategory.Medium || cat == ArmorCategory.Heavy;
         }
+    }
+
+    /// <summary>
+    /// True when medium or heavy armor (<see cref="ArmorReducesSpeed"/>) or a medium or heavy load slows this creature
+    /// (PHB p.123, p.162). The worse of armor and load applies and the two do not stack (PHB p.162: "use the worse
+    /// figure"), and both give the same reduced speed, so one test covers both. A dwarf moves at its speed in any armor
+    /// and under any load (PHB p.14, <see cref="SpeedNotReducedByArmor"/>).
+    /// </summary>
+    public bool SpeedReducedByArmorOrLoad
+    {
+        get
+        {
+            if (SpeedNotReducedByArmor)
+                return false;
+            return ArmorReducesSpeed
+                || CurrentEncumbrance == EncumbranceLevel.Medium
+                || CurrentEncumbrance == EncumbranceLevel.Heavy;
+        }
+    }
+
+    /// <summary>
+    /// The speed in medium or heavy armor or under a medium or heavy load (PHB p.123 Table 7-6, p.162 Table 9-2): 30 ft
+    /// becomes 20 ft and 20 ft becomes 15 ft. PHB p.131 (barding) gives 40 ft to 30 ft, 50 ft to 35 ft and 60 ft to 40 ft.
+    /// This takes two thirds of the speed rounded up to the next 5 ft, which gives all of those rows and the MM's armored
+    /// speeds (40 to 30: ogre, hill and stone giants; 50 to 35: athach MM p.21, storm giant, zelekhut MM p.160, whose fly
+    /// 60 goes to 40; 60 to 40: titan). The one MM exception is the ogre barbarian (MM p.199, 40 ft in hide from 50 ft),
+    /// which adds fast movement after the armor reduction against PHB p.25; this code follows PHB p.25 and gives it 35 ft.
+    /// Speeds outside those tables (such as 15 ft to 10 ft) are the delegated RAW reading 2026-10-29
+    /// (RULES_COVERAGE.md 4.1; ITM-010). Never below 5 ft for a creature that can move.
+    /// </summary>
+    public static int ReducedSpeedFeet(int speedFeet)
+    {
+        if (speedFeet <= 0)
+            return 0;
+        // ceil(2s/3 / 5) * 5 in integers: ceil(2s/15) * 5.
+        int reduced = ((speedFeet * 2 + 14) / 15) * 5;
+        return Mathf.Max(5, reduced);
     }
 
     public static int CombineMostRestrictiveMaxDex(int firstCap, int secondCap)
@@ -4310,7 +4367,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Effective movement in feet after class bonuses, encumbrance penalties, and condition multipliers.
+    /// Effective movement in feet after class bonuses, the armor or load reduction (<see cref="ReducedSpeedFeet"/>), and condition multipliers.
     /// Rounded down to 5-ft increments per D&D movement granularity.
     /// </summary>
     public int EffectiveSpeedFeet
@@ -4322,13 +4379,15 @@ public class CharacterStats
 
             // BaseSpeed is the race's speed for a PC (set by the constructor) and the MM entry's speed for an NPC, whose
             // RaceData is attached without changing its speed (CRE-038).
+            // The barbarian's fast movement comes before the armor or load reduction (PHB p.25), as do the enhancement
+            // bonuses, which raise the creature's speed itself.
             int baseFeet = BaseSpeed * 5
                            + BarbarianFastMovementBonus * 5
                            + Mathf.Max(0, LandSpeedEnhancementWithItemsFeet);
 
-            float speed = baseFeet;
-            if (!SpeedNotReducedByArmor)
-                speed *= GetEncumbranceSpeedMultiplier(CurrentEncumbrance);
+            // Medium or heavy armor, or a medium or heavy load, the worse of the two only (PHB p.123, p.162; ITM-010):
+            // the speed for a creature whose base speed is the full total above, a dwarf excepted (PHB p.14).
+            float speed = SpeedReducedByArmorOrLoad ? ReducedSpeedFeet(baseFeet) : baseFeet;
 
             speed *= ConditionMovementMultiplier;
 

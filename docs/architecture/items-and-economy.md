@@ -188,7 +188,7 @@ Price for weapons is base + (effective bonus)^2 x 2000, and for armor and shield
 
 - `CharacterController` applies the masterwork +1 attack and the silver -1 damage (CharacterController.cs:6618-6621), and DR bypass through `ItemData.GetBypassTags`.
 - `Inventory` applies ACP, max Dex, ASF and weight through `ItemData.Effective*`, and adamantine armor DR.
-- `CharacterStats` uses the mithral category shift only for armor proficiency and the Barbarian fast-movement check.
+- `CharacterStats` uses the mithral category shift for armor proficiency, the Barbarian fast-movement check and the armor speed reduction (`CharacterStats.ArmorReducesSpeed`, PHB p.123).
 
 There is a data gap: base shields never set `ArmorMaterial`, so no mithral or darkwood shield variant can be created.
 

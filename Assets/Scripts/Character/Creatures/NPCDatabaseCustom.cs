@@ -534,7 +534,7 @@ public static partial class NPCDatabase
             // Hobgoblin: DEX +2, CON +2 already factored in
             STR = 15, DEX = 14, CON = 14, WIS = 12, INT = 10, CHA = 10,
             BAB = 2,
-            BaseSpeed = 4,    // 20 ft (heavy armor reduces from 30 ft)
+            BaseSpeed = 6,    // 30 ft base; the chainmail slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 25, // 3d10 + CON, solid HP
             CreatureTags = new List<string> { "Goblinoid" },
             Feats = new List<string> { "Weapon Focus", "Combat Expertise" },
@@ -1310,7 +1310,7 @@ public static partial class NPCDatabase
             INT = 10,
             CHA = 10,
             BAB = 2,
-            BaseSpeed = 4,
+            BaseSpeed = 6, // 30 ft base; the chainmail slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 20,
             EquipmentIds = new List<EquipmentSlotPair>
             {
@@ -1344,7 +1344,7 @@ public static partial class NPCDatabase
             INT = 8,
             CHA = 8,
             BAB = 2,
-            BaseSpeed = 8,
+            BaseSpeed = 6, // 30 ft base: fast movement adds its 10 ft (PHB p.25) and the hide armor then slows 40 ft to 30 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 24,
             EquipmentIds = new List<EquipmentSlotPair>
             {
@@ -1577,7 +1577,7 @@ public static partial class NPCDatabase
             INT = 10,
             CHA = 8,
             BAB = 4,
-            BaseSpeed = 4,
+            BaseSpeed = 6, // 30 ft base; the chainmail slows it to 20 ft (PHB p.123, ITM-010)
             BaseHitDieHP = 38,
             EquipmentIds = new List<EquipmentSlotPair>
             {

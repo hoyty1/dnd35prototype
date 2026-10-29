@@ -158,7 +158,7 @@ public static partial class NPCDatabase
             IsTallCreature = true,
             STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
             NaturalArmorBonus = 5,
-            BaseSpeed = 6, // 30 ft (40 ft base, -10 armor)
+            BaseSpeed = 8, // 40 ft base; hide armor slows it to 30 ft (MM p.199, PHB p.123, ITM-010)
             BaseHitDieHP = 29,
             BAB = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
@@ -325,7 +325,9 @@ public static partial class NPCDatabase
             SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Light Sensitivity: dazzled in bright sunlight" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair(ItemIDs.SCALE_MAIL, EquipSlot.Armor),
+                // MM p.203: studded leather (AC 13), speed 30 ft; scale mail would slow it to 20 ft (PHB p.123; found
+                // re-auditing armored entries for ITM-010).
+                new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
                 new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { ItemIDs.JAVELIN },

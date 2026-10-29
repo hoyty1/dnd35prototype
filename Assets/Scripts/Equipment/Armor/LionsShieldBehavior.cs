@@ -186,13 +186,10 @@ public class LionsShieldBehavior : SpecificItemBehavior
     // ────────────────────────────────────────────
 
     /// <summary>
-    /// Summons a dire lion ally that fights for the wielder for 10 rounds.
-    /// Uses GameManager.SpawnSummonedCreaturePublic if available; otherwise falls back to
-    /// a simplified spawn using NPCDatabase + SummoningService.
-    /// NOTE: Full creature initialization requires GameManager.InitializeNPCFromDefinition
-    /// which is private. This implementation creates the creature with core stats via
-    /// CharacterController.Init() and registers it for duration tracking. A future refactor
-    /// should expose a public SpawnAlly() helper on GameManager for item/ability summons.
+    /// Summons a dire lion ally that fights for the wielder for 10 rounds, through GameManager's own summon path
+    /// (GameManager.SpawnItemSummon: the spawn every summon spell's creature takes, InitializeNPCFromDefinition, so the lion
+    /// has its feats, DR, SR, immunities and AI behaviour entry, AI-015; a place in the initiative after the wielder; the
+    /// summon tracker that counts its rounds and removes it; CRE-005). The use is spent only when the lion appears.
     /// </summary>
     private bool ActivateSummon(List<string> logNotes)
     {
@@ -208,8 +205,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
             return false;
         }
 
-        // Look up the NPC definition to validate it exists
-        var npcDef = NPCDatabase.Get(_summonNpcId);
+        NPCDefinition npcDef = NPCDatabase.Get(_summonNpcId);
         if (npcDef == null)
         {
             logNotes.Add($"{ShieldName}: summon failed — '{_summonNpcId}' not found in NPC database.");
@@ -217,140 +213,19 @@ public class LionsShieldBehavior : SpecificItemBehavior
             return false;
         }
 
-        _summonsRemaining--;
-
-        var gm = GameManager.Instance;
-        var def = npcDef.Clone();
-        def.Name = $"Summoned {def.Name}";
-
-        // ── Create the summoned creature GameObject ──
-        var summonObj = new GameObject($"Summon_{def.Id}_{System.Guid.NewGuid():N}");
-        var sr = summonObj.AddComponent<SpriteRenderer>();
-        sr.color = def.SpriteColor;
-
-        var controller = summonObj.AddComponent<CharacterController>();
-
-        // Place adjacent to wielder
-        Vector2Int wielderPos = Wielder.GridPosition;
-        Vector2Int summonPos = FindAdjacentOpenTile(wielderPos);
-        summonObj.transform.position = gm.Grid.GetWorldPosition(summonPos);
-
-        // ── Initialize with core stats via public Init() ──
-        CharacterStats stats = BuildSummonStats(def);
-
-        controller.Init(stats, summonPos, null, null);
-        controller.SetTeam(Wielder.Team);
-
-        // Add to game tracking
-        gm.NPCs.Add(controller);
-
-        // Register with summoning service for duration tracking + auto-despawn
-        gm.Summoning.RegisterSummonedCreature(
-            controller,
-            Wielder,
-            SummonDurationRounds,
-            $"LionsShieldGreater_{_summonNpcId}"
-        );
-
-        string displayName = npcDef.Name;
-        logNotes.Add($"{ShieldName}: summoned a {displayName} ally for {SummonDurationRounds} rounds! ({_summonsRemaining}/{MaxSummonsPerDay} summons left)");
-        Log($"Summoned {displayName} at ({summonPos.x},{summonPos.y}) for {SummonDurationRounds} rounds");
-
-        return true;
-    }
-
-    /// <summary>
-    /// The summoned creature's stats, built from <paramref name="def"/> (already cloned and renamed). This replicates
-    /// the essential subset of GameManager.InitializeNPCFromDefinition; missing: feat application, template processing,
-    /// swarm traits, DR, ER, SR and immunities (CRE-005). BAB and base saves use the shared
-    /// <see cref="CreatureTypeProgressionDatabase.ApplyToStats"/> (CRE-004). Public so tests check this exact path.
-    /// </summary>
-    public static CharacterStats BuildSummonStats(NPCDefinition def)
-    {
-        int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
-        // The definition total is final (CON included); the constructor's CON term is undone below (CHR-001). Without
-        // one, the type's pooled average die plus CON, as every spawn from a definition (CRE-041). No feats are added
-        // here, so TotalMaxHP adds no feat hit points to the total.
-        CreatureTypeProgression typeProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
-        int baseHp = ClassProgression.CreatureMaxHitPoints(def.BaseHitDieHP, typeProgression.HitDie, hitDice, def.CON);
-        int resolvedBab = def.BAB > 0 ? def.BAB : (hitDice * 3 / 4);
-
-        CharacterStats stats = new CharacterStats(
-            name: def.Name,
-            level: def.Level,
-            characterClass: def.CharacterClass,
-            str: def.STR, dex: def.DEX, con: def.CON,
-            wis: def.WIS, intelligence: def.INT, cha: def.CHA,
-            bab: resolvedBab,
-            armorBonus: 0,
-            shieldBonus: 0,
-            damageDice: 0,
-            damageCount: 1,
-            bonusDamage: 0,
-            baseSpeed: def.BaseSpeed,
-            atkRange: 1,
-            baseHitDieHP: baseHp
-        );
-
-        stats.AdjustMaxHP(baseHp - stats.MaxHP);
-        stats.CurrentHP = stats.MaxHP;
-        stats.SetNaturalAttacks(def.NaturalAttacks);
-        stats.HitDice = hitDice;
-        // Racial HD by the creature type, as every spawn from a definition (CRE-004): the dire lion's 8 animal HD give
-        // BAB +6 and base saves +6/+6/+6 (MM p.63: the animal's good Fortitude and Reflex, and the dire animals' good
-        // Will), not 8 Warrior levels.
-        CreatureTypeProgressionDatabase.ApplyToStats(stats, def);
-        stats.NaturalArmorBonus = def.NaturalArmorBonus;
-        stats.SetBaseSizeCategory(def.SizeCategory);
-        stats.IsTallCreature = def.IsTallCreature;
-        stats.IsQuadruped = def.IsQuadruped;
-        stats.IsExceptionallyStable = def.IsExceptionallyStable;
-        stats.Beheading = def.Beheading;
-        stats.HasPounce = def.HasPounce;
-        stats.HasRake = def.HasRake;
-        stats.HasScent = def.HasScent;
-        stats.SetRakeAttack(def.RakeAttack);
-        stats.HasImprovedGrab = def.HasImprovedGrab;
-        stats.ImprovedGrabTriggerAttackName = def.ImprovedGrabTriggerAttackName;
-        stats.ImprovedGrabMaxTargetSize = def.ImprovedGrabMaxTargetSize;
-        stats.SourceNpcDefinitionId = def.Id;
-        stats.ChallengeRating = def.ChallengeRating;
-        stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Animal" : def.CreatureType;
-        stats.CharacterAlignment = def.CharacterAlignment; // as InitializeNPCFromDefinition does (CRE-002)
-        stats.CanMakeAttacksOfOpportunity = def.CanMakeAttacksOfOpportunity;
-        CreatureProficiency.ApplyFromDefinition(stats, def);
-
-        foreach (string tag in def.CreatureTags)
-            stats.CreatureTags.Add(tag);
-
-        return stats;
-    }
-
-    /// <summary>
-    /// Finds an adjacent open tile near the given position for creature placement.
-    /// Falls back to the origin tile if nothing is free.
-    /// </summary>
-    private Vector2Int FindAdjacentOpenTile(Vector2Int origin)
-    {
-        var gm = GameManager.Instance;
-        Vector2Int[] offsets = new Vector2Int[]
+        GameManager gm = GameManager.Instance;
+        CharacterController summon = gm != null ? gm.SpawnItemSummon(Wielder, _summonNpcId, SummonDurationRounds) : null;
+        if (summon == null)
         {
-            new Vector2Int(1, 0), new Vector2Int(-1, 0),
-            new Vector2Int(0, 1), new Vector2Int(0, -1),
-            new Vector2Int(1, 1), new Vector2Int(-1, -1),
-            new Vector2Int(1, -1), new Vector2Int(-1, 1)
-        };
-
-        foreach (var offset in offsets)
-        {
-            Vector2Int candidate = origin + offset;
-            var cell = gm.Grid?.GetCell(candidate);
-            if (cell != null && !cell.IsOccupied)
-            {
-                return candidate;
-            }
+            logNotes.Add($"{ShieldName}: the {npcDef.Name} cannot appear (no free space beside {Wielder.Stats?.CharacterName}).");
+            return false;
         }
 
-        return origin;
+        _summonsRemaining--;
+
+        logNotes.Add($"{ShieldName}: summoned a {npcDef.Name} ally for {SummonDurationRounds} rounds! ({_summonsRemaining}/{MaxSummonsPerDay} summons left)");
+        Log($"Summoned {npcDef.Name} at ({summon.GridPosition.x},{summon.GridPosition.y}) for {SummonDurationRounds} rounds");
+
+        return true;
     }
 }

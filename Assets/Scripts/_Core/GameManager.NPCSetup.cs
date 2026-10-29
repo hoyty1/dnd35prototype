@@ -568,19 +568,26 @@ public partial class GameManager
             }
         }
 
-        // The overrides above may change a cleric's alignment, which decides its spontaneous casting (PHB p.32).
-        ApplyNpcSpontaneousCasting(npc.Stats);
+        // The overrides above may change a cleric's alignment, which decides its spontaneous casting (PHB p.32); a cleric
+        // that is now neutral keeps the conversion it had.
+        ApplyNpcSpontaneousCasting(npc.Stats, npc.Stats != null ? npc.Stats.SpontaneousCasting : SpontaneousCastingType.None);
     }
 
     /// <summary>
-    /// Sets an NPC cleric's spontaneous casting from its alignment (PHB p.32): good converts into cure spells, evil into
-    /// inflict spells; a neutral NPC has no recorded choice and converts none (CRE-062). Called at spawn and again after
-    /// the preset overrides, which may change the alignment.
+    /// Sets an NPC cleric's spontaneous casting (PHB p.32), as character creation does for a PC: a good cleric converts
+    /// into cure spells and an evil one into inflict spells; a cleric neutral on the good-evil axis converts as it chose,
+    /// <paramref name="neutralChoice"/> (NPCDefinition.ClericSpontaneousChoice at spawn; CRE-062, CHR-070). PHB p.32 gives
+    /// a neutral cleric no "no choice" state, so a neutral cleric left at None is a data error: it converts nothing and a
+    /// warning is logged. Called at spawn and again after the preset overrides, which may change the alignment.
     /// </summary>
-    private static void ApplyNpcSpontaneousCasting(CharacterStats stats)
+    private static void ApplyNpcSpontaneousCasting(CharacterStats stats, SpontaneousCastingType neutralChoice)
     {
-        if (stats != null && stats.IsCleric)
-            stats.SpontaneousCasting = SpontaneousCastingHelper.GetDefaultForAlignment(stats.CharacterAlignment);
+        if (stats == null || !stats.IsCleric)
+            return;
+        SpontaneousCastingType byAlignment = SpontaneousCastingHelper.GetDefaultForAlignment(stats.CharacterAlignment);
+        stats.SpontaneousCasting = byAlignment != SpontaneousCastingType.None ? byAlignment : neutralChoice;
+        if (stats.SpontaneousCasting == SpontaneousCastingType.None)
+            Debug.LogWarning($"[GameManager] {stats.CharacterName}: neutral cleric has no spontaneous choice (PHB p.32, CHR-070); set NPCDefinition.ClericSpontaneousChoice.");
     }
 
     /// <summary>
@@ -967,49 +974,23 @@ public partial class GameManager
 
         inv.CharacterInventory.RecalculateStats();
 
-        // --- Dragon innate sorcerer spellcasting ---
-        // D&D 3.5e MM: Dragons cast as sorcerers at a caster level determined by age.
-        // Since dragons use Warrior class (IsSpellcaster = false), we inject a Sorcerer
-        // class level equal to their CasterLevel so the spellcasting system recognizes them.
-        bool isDragonCaster = string.Equals(def.CreatureType, "Dragon", System.StringComparison.OrdinalIgnoreCase)
-            && def.KnownSpellIds != null && def.KnownSpellIds.Count > 0;
-
-        if (isDragonCaster)
+        // --- Innate spellcasting (a true dragon casts as a sorcerer of its age's caster level, MM p.68-69) ---
+        // The definition carries the class and caster level (CRE-016). The class entry exists only so the shared
+        // spellcasting system gives the creature that class's spells per day; it is a caster level, not class levels: no
+        // BAB, saves, Hit Dice (CRE-004) or character level (CharacterStats.Level stays the Hit Dice; CRE-016).
+        if (!string.IsNullOrEmpty(def.InnateSpellcastingClass) && def.InnateCasterLevel > 0)
         {
-            // Determine sorcerer CL from the known spell count heuristic or look up from DragonData
-            int sorcererCL = 1;
-            // Try to find the dragon's actual CL from DragonData
-            string sourceId = def.Id;
-            foreach (DragonType dtype in DragonData.AllTypes())
-            {
-                foreach (DragonAgeCategory dage in DragonData.AllAges())
-                {
-                    if (string.Equals(DragonData.GetNPCId(dtype, dage), sourceId, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        var ageStats = DragonData.GetTemplate(dtype)?.AgeStats;
-                        if (ageStats != null && ageStats.ContainsKey(dage))
-                            sorcererCL = ageStats[dage].SorcererCasterLevel;
-                        break;
-                    }
-                }
-                if (sorcererCL > 1) break;
-            }
-
-            if (sorcererCL <= 0) sorcererCL = 1;
-
-            // Add Sorcerer class level so IsSpellcaster returns true
-            stats.ClassLevels.Add(new ClassLevelEntry("Sorcerer", sorcererCL));
-            // A caster level only: the dragon's BAB and saves stay those of its dragon Hit Dice (CRE-004).
-            stats.InnateSpellcastingClass = "Sorcerer";
+            stats.ClassLevels.Add(new ClassLevelEntry(def.InnateSpellcastingClass, def.InnateCasterLevel));
+            stats.InnateSpellcastingClass = def.InnateSpellcastingClass;
             stats.EnsureMulticlassDataInitialized();
 
-            Debug.Log($"[GameManager] Dragon {def.Name}: Injected Sorcerer CL {sorcererCL} for innate spellcasting ({def.KnownSpellIds.Count} spells known)");
+            Debug.Log($"[GameManager] {def.Name}: casts as a {def.InnateSpellcastingClass} of caster level {def.InnateCasterLevel} ({def.KnownSpellIds?.Count ?? 0} spells known)");
         }
 
         // A cleric's domains and spontaneous casting, as character creation sets them for a PC (PHB p.32): the domains
         // give the domain slots and the passive domain effects (caster-level bonuses), the War domain its weapon feats
         // through the same grant a PC gets (PHB p.191), and a good cleric converts prepared spells into cure spells, an
-        // evil one into inflict spells; a neutral NPC cleric has no choice recorded and converts none (CRE-062).
+        // evil one into inflict spells, and a neutral one as its definition chose (ClericSpontaneousChoice; CRE-062, CHR-070).
         if (def.ClericDomains != null && def.ClericDomains.Count > 0)
         {
             stats.ChosenDomains = new List<string>(def.ClericDomains);
@@ -1021,7 +1002,7 @@ public partial class GameManager
                     Debug.LogWarning($"[GameManager] {def.Name} ({def.Id}) has the {domain} domain, which a {stats.CharacterAlignment} cleric cannot take (PHB p.32, CHR-078).");
             }
         }
-        ApplyNpcSpontaneousCasting(stats);
+        ApplyNpcSpontaneousCasting(stats, def.ClericSpontaneousChoice);
 
         // The component kit every caster carries, as a PC gets it (batch 11 step 17, decision D3; SpellComponentKit): a
         // pouch, and the divine focus of a cleric, adept, paladin, druid or ranger. No priced components: an NPC has those

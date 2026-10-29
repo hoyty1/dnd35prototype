@@ -1167,7 +1167,7 @@ public static class SpecificItemDatabase
             PriorityTier = 3,
             HasCustomBehavior = true,
             UniqueProperties = { ["BiteDamage"] = "2d8+2", ["BitesPerDay"] = 3, ["SummonPerDay"] = 1, ["SummonNpcId"] = "dire_lion", ["SummonDuration"] = 10 },
-            ImplementationNotes = "Enhanced bite + dire lion summon. Uses NPCDatabase 'dire_lion' + SummoningService."
+            ImplementationNotes = "Enhanced bite + dire lion summon. Uses NPCDatabase 'dire_lion' through GameManager.SpawnItemSummon (CRE-005)."
         });
 
         Register(new SpecificItemDefinition

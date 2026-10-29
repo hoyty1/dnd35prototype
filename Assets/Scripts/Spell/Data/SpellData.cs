@@ -613,6 +613,20 @@ public class SpellData
     public MetamagicData AiChosenMetamagic;
 
     /// <summary>
+    /// The level of the cleric's prepared spell the AI chose to give up to cast this cure or inflict spell spontaneously
+    /// (PHB p.32; CHR-070), or -1 for none: set only on the AI's candidate clone (AiConversionPlanner.Candidates), never
+    /// on a database template, so the AI's legality probes and its cast build the conversion source from it
+    /// (SpellCastRequest.AiSourceFor), as the spell menu's Convert button does for a PC (GameManager.BuildSpellMenuCastSource).
+    /// The rules code never reads it. <see cref="Clone"/> clears it.
+    /// </summary>
+    [NonSerialized]
+    public int AiConversionLevel = -1;
+
+    /// <summary>The SpellId of the prepared spell the AI gives up with <see cref="AiConversionLevel"/>; null with none.</summary>
+    [NonSerialized]
+    public string AiConversionSacrificeId;
+
+    /// <summary>
     /// The duration line is "Instantaneous/..." with a timed part after the instantaneous effect (Death Knell, PHB p.217:
     /// Instantaneous/10 minutes per HD of subject): Extend Spell doubles that timed part (SpellDurationRules.IsExtendable;
     /// delegated RAW reading 2026-10-14).
@@ -645,6 +659,8 @@ public class SpellData
         clone.MetamagicDataRef = null; // Don't share mutable reference
         clone.IsPreparedMetamagicSlotSpell = false;
         clone.AiChosenMetamagic = null;
+        clone.AiConversionLevel = -1;
+        clone.AiConversionSacrificeId = null;
         return clone;
     }
 

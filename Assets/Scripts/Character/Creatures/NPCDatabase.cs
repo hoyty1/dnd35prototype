@@ -718,6 +718,27 @@ public class NPCDefinition
     public List<string> ClericDomains = new List<string>();
 
     /// <summary>
+    /// The spontaneous casting a cleric neutral on the good-evil axis chose (PHB p.32: such a cleric converts into cure
+    /// or inflict spells, as the player chooses). <see cref="SpontaneousCastingType.None"/> is not a RAW state for a
+    /// neutral cleric: it is a data error (the cleric converts nothing, the spawn logs a warning and
+    /// CreatureProgressionTests fails on a database entry left so); no entry or generator sets this yet, because no
+    /// neutral cleric entry exists (CHR-070). A good cleric always converts into cure spells and an evil one into inflict spells, whatever this
+    /// says (GameManager.ApplyNpcSpontaneousCasting; CHR-070). Read at spawn only for a creature with cleric levels.
+    /// </summary>
+    public SpontaneousCastingType ClericSpontaneousChoice = SpontaneousCastingType.None;
+
+    /// <summary>
+    /// The class a creature casts spells as without having its levels (MM p.68-69: a true dragon "casts spells as a
+    /// sorcerer" of a caster level set by its age), or null. With <see cref="InnateCasterLevel"/> above 0 the spawn gives
+    /// the creature a caster-level entry of that class (GameManager.InitializeNPCFromDefinition), which adds no BAB,
+    /// saves, Hit Dice or character level (CharacterStats.InnateSpellcastingClass; CRE-004, CRE-016).
+    /// </summary>
+    public string InnateSpellcastingClass;
+
+    /// <summary>The caster level of <see cref="InnateSpellcastingClass"/> (MM p.68-69 for a dragon's age); 0: none.</summary>
+    public int InnateCasterLevel;
+
+    /// <summary>
     /// A ranger's combat style (PHB p.48), copied to the creature at spawn by <see cref="RangerRules.ApplyNpcChoices"/>.
     /// None: the DMG p.122 sample NPC ranger's choice (archery). Read only for a creature with ranger levels (CHR-020).
     /// </summary>
@@ -956,6 +977,9 @@ public class NPCDefinition
         clone.ClericDomains = ClericDomains != null
             ? new List<string>(ClericDomains)
             : new List<string>();
+        clone.ClericSpontaneousChoice = ClericSpontaneousChoice;
+        clone.InnateSpellcastingClass = InnateSpellcastingClass;
+        clone.InnateCasterLevel = InnateCasterLevel;
         clone.RangerStyle = RangerStyle;
         clone.RangerFavoredEnemies = CloneFavoredEnemies(RangerFavoredEnemies);
         clone.SpecialAbilities = SpecialAbilities != null

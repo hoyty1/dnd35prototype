@@ -209,12 +209,24 @@ public sealed class SpellCastRequest
     }
 
     /// <summary>
-    /// The source of an NPC (AI-run) cast of <paramref name="spell"/>: the slot kind the PC spell menu would give the same
-    /// cast (<see cref="CastSource.SlotKindFor"/>). The AI's spell choice reads it to skip what the casting-action rules
-    /// refuse (CastActionRules, AIService.SelectSpell).
+    /// The source of an NPC (AI-run) cast of <paramref name="spell"/>: a cleric's spontaneous conversion when the spell is
+    /// the AI's conversion candidate (SpellData.AiConversionLevel, AiConversionPlanner: a cure or inflict spell the cleric
+    /// has not prepared, cast by giving up the prepared spell the AI chose, PHB p.32; CHR-070), the same source the spell
+    /// menu's Convert button gives a PC's cast (GameManager.BuildSpellMenuCastSource); else the slot kind the PC spell menu
+    /// would give the same cast (<see cref="CastSource.SlotKindFor"/>). The AI's spell choice reads it to skip what the
+    /// casting-action rules refuse (CastActionRules, AIService.SelectSpell).
     /// </summary>
     public static CastSource AiSourceFor(CharacterController caster, SpellData spell)
     {
+        if (spell != null && spell.AiConversionLevel >= 0)
+        {
+            return new CastSource
+            {
+                Kind = CastSourceKind.SpontaneousConversion,
+                ConversionLevel = spell.AiConversionLevel,
+                SacrificedSpellId = spell.AiConversionSacrificeId
+            };
+        }
         return new CastSource { Kind = CastSource.SlotKindFor(caster != null ? caster.Spellcasting : null, spell) };
     }
 
