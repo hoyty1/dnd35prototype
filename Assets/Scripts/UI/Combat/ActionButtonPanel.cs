@@ -222,7 +222,7 @@ public class ActionButtonPanel : MonoBehaviour
 
         context.Gm = GameManager.Instance;
         context.Actions = pc.Actions;
-        context.HasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
+        context.HasIterativeAttacks = pc.GetIterativeAttackCount() > 1; // the one ladder, with Haste (CMB-044)
         context.HasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         context.IsGrappling = pc.IsGrappling();
         context.IsProne = pc.HasCondition(CombatConditionType.Prone);

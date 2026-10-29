@@ -1317,11 +1317,12 @@ public class CharacterStats
         if (!IsMonk)
             return new int[0];
 
-        int[] iterative = GetIterativeBaseAttackBonuses();
-        var steps = new List<int>(iterative.Length + 2) { iterative[0] };
+        // The one iterative ladder (CMB-044), with the extra attack(s) after the first step.
+        List<int> iterative = CharacterCombatStats.GetBaseAttackLadder(BaseAttackBonus);
+        var steps = new List<int>(iterative.Count + 2) { iterative[0] };
         for (int i = 0; i < FlurryOfBlowsExtraAttacks; i++)
             steps.Add(iterative[0]);
-        for (int i = 1; i < iterative.Length; i++)
+        for (int i = 1; i < iterative.Count; i++)
             steps.Add(iterative[i]);
         return steps.ToArray();
     }
@@ -5121,42 +5122,6 @@ public class CharacterStats
     }
 
     // ========== COMBAT METHODS ==========
-
-    /// <summary>
-    /// Get the list of iterative attack bonuses for a Full Attack based on BAB.
-    /// BAB +6 → [+6, +1], BAB +11 → [+11, +6, +1], etc.
-    /// </summary>
-    public int[] GetIterativeAttackBonuses()
-    {
-        int[] steps = GetIterativeBaseAttackBonuses();
-        for (int i = 0; i < steps.Length; i++)
-            steps[i] += STRMod + SizeModifier;
-        return steps;
-    }
-
-    /// <summary>
-    /// The BAB step of each iterative attack, without ability or size: BAB +6 → [+6, +1].
-    /// CharacterController.FullAttack adds the shared attack modifier to each step (CMB-043).
-    /// </summary>
-    public int[] GetIterativeBaseAttackBonuses()
-    {
-        var steps = new System.Collections.Generic.List<int>();
-        int bab = BaseAttackBonus;
-        while (bab > 0)
-        {
-            steps.Add(bab);
-            bab -= 5;
-        }
-        // Always have at least one attack
-        if (steps.Count == 0)
-            steps.Add(BaseAttackBonus);
-        return steps.ToArray();
-    }
-
-    /// <summary>
-    /// Number of iterative attacks this character gets on a full attack.
-    /// </summary>
-    public int IterativeAttackCount => Mathf.Max(1, 1 + (BaseAttackBonus - 1) / 5);
 
     /// <summary>
     /// Roll a d20 + total attack bonus vs target AC.

@@ -396,11 +396,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 117,
+      "passed": 118,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CHR-003, CRE-042 (2026-10-14): the monk by monk level (PHB p.39-42, Tables 3-10 and 3-11, p.101): flurry penalty and steps (total BAB plus the extra attack, two from 11th), declared as a full attack through the shared attack sequence, the penalty on attacks until the next turn, full Strength, no off-hand, refusals; unarmed damage by level and size; AC bonus (Wisdom plus level, touch AC, lost by armor, shield, load, helpless or pinned); fast movement; bracers of armor are not armor; the NPC monk entries and spawns; a maneuver touch attack in the flurry; the AI flurry choice; a grapple started mid-flurry (the extra attack ends, the penalty stays on grapple attack rolls; delegated RAW reading 2026-10-14). Play only (CharacterController.Init, TST-009; NPC spawns need the scene GameManager). 117/117 in a fresh Play session with the baseline seed on 2026-10-14 (20261015T012509Z-play)"
+      "notes": "CHR-003, CRE-042 (2026-10-14): the monk by monk level (PHB p.39-42, Tables 3-10 and 3-11, p.101): flurry penalty and steps (total BAB plus the extra attack, two from 11th), declared as a full attack through the shared attack sequence, the penalty on attacks until the next turn, full Strength, no off-hand, refusals; unarmed damage by level and size; AC bonus (Wisdom plus level, touch AC, lost by armor, shield, load, helpless or pinned); fast movement; bracers of armor are not armor; the NPC monk entries and spawns; a maneuver touch attack in the flurry; the AI flurry choice; a grapple started mid-flurry (the extra attack ends, the penalty stays on grapple attack rolls; delegated RAW reading 2026-10-14). Play only (CharacterController.Init, TST-009; NPC spawns need the scene GameManager). 117/117 in a fresh Play session with the baseline seed on 2026-10-14 (20261015T012509Z-play) Batch 12 step 16 (CMB-044, 2026-10-28): +1 (the flurry steps are the one ladder plus the extra attack), 118/118 in Play mode."
     },
     {
       "type": "Tests.Classes.PaladinClassRulesTests",
@@ -1156,7 +1156,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 48,
+      "passed": 51,
       "failed": 6,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1181,7 +1181,7 @@
           "issue": "TST-028"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). Batch 12 step 16 (CMB-044, CMB-173, 2026-10-28): the ladder checks read CharacterCombatStats.GetBaseAttackLadder, plus the controller ladder check and the hasted Rapid Shot count (3 passes more), 51/57 in Play mode with the same failures."
     },
     {
       "type": "Tests.Combat.RayOfEnfeeblementRulesTests",
@@ -1773,7 +1773,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 613,
+      "passed": 623,
       "failed": 6,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1802,7 +1802,7 @@
           "issue": "TST-027"
         }
       ],
-      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 6 checks of rewritten log text (the Break Pin message check went with that dead action on 2026-10-14). The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it, and the 22 trip checks of CMB-079 (432 on 2026-10-08); 467 after the CMB-102 natural-weapon rulings of 2026-10-08 (six tests replaced the natural sunder refusal; they also cover the PHB p.155/p.158 size and handedness terms of disarm and sunder); 476 after CMB-126; 493 after CMB-127 (six grapple natural-attack tests replaced the old Haste grapple-routine test, two of them for grapple checks staying on the BAB ladder and refused natural attacks); 500 after CMB-125 (the Trip (Ex) trigger attack: helper, NPC data, AI rider count and the shared free-trip path); 564 after the grapple rulings of 2026-10-11 (CMB-130, CMB-144, CMB-146, CMB-148, CMB-149, CMB-152 and the Improved Grab hold checks of CMB-163); 578 after the maneuver rulings of 2026-10-11 (CMB-134 counter-trip Improved Trip attack, CMB-141 unarmed sunder and the nonlethal-mode weapon sunder, CMB-154 square-mate bull rush and overrun). 2026-10-14, grapple follow-up (CMB-148, CMB-144, CMB-087): the Break Pin action and its two checks removed; TestImprovedGrabDamageOnPinEscape, TestImprovedGrabNonlethalHoldDamageOnEveryCheck, TestGrappleDamageModeRuleUnarmedVariants, TestNaturalAttackAndRakeNonlethalAtMinus4 and TestPounceGrabRakeCreatureData added: 596 passed, 6 failed (the TST-027 log-text checks). 2026-10-14, CMB-163 and CMB-165 delegated readings: the Improved Grab hold attack and AoO bar and the body-plan drag limit asserted in TestImprovedGrabHoldAndEstablishingDamage, TestSunderShieldDefenderRollsWithItsWeapon added: 607 passed; after review the summon target and smite bar, the bull rush bar and the ranged-weapon sunder defender: 610 passed, 6 failed (the same TST-027 checks). 2026-10-14, CHR-020: the summon smite checks go through the shared SmiteRules declaration (no smite declared on a held creature; a declared template smite on the bite is an ordinary attack whose hit trips): still 610 passed, 6 failed."
+      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 6 checks of rewritten log text (the Break Pin message check went with that dead action on 2026-10-14). The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it, and the 22 trip checks of CMB-079 (432 on 2026-10-08); 467 after the CMB-102 natural-weapon rulings of 2026-10-08 (six tests replaced the natural sunder refusal; they also cover the PHB p.155/p.158 size and handedness terms of disarm and sunder); 476 after CMB-126; 493 after CMB-127 (six grapple natural-attack tests replaced the old Haste grapple-routine test, two of them for grapple checks staying on the BAB ladder and refused natural attacks); 500 after CMB-125 (the Trip (Ex) trigger attack: helper, NPC data, AI rider count and the shared free-trip path); 564 after the grapple rulings of 2026-10-11 (CMB-130, CMB-144, CMB-146, CMB-148, CMB-149, CMB-152 and the Improved Grab hold checks of CMB-163); 578 after the maneuver rulings of 2026-10-11 (CMB-134 counter-trip Improved Trip attack, CMB-141 unarmed sunder and the nonlethal-mode weapon sunder, CMB-154 square-mate bull rush and overrun). 2026-10-14, grapple follow-up (CMB-148, CMB-144, CMB-087): the Break Pin action and its two checks removed; TestImprovedGrabDamageOnPinEscape, TestImprovedGrabNonlethalHoldDamageOnEveryCheck, TestGrappleDamageModeRuleUnarmedVariants, TestNaturalAttackAndRakeNonlethalAtMinus4 and TestPounceGrabRakeCreatureData added: 596 passed, 6 failed (the TST-027 log-text checks). 2026-10-14, CMB-163 and CMB-165 delegated readings: the Improved Grab hold attack and AoO bar and the body-plan drag limit asserted in TestImprovedGrabHoldAndEstablishingDamage, TestSunderShieldDefenderRollsWithItsWeapon added: 607 passed; after review the summon target and smite bar, the bull rush bar and the ranged-weapon sunder defender: 610 passed, 6 failed (the same TST-027 checks). 2026-10-14, CHR-020: the summon smite checks go through the shared SmiteRules declaration (no smite declared on a held creature; a declared template smite on the bite is an ordinary attack whose hit trips): still 610 passed, 6 failed. Batch 12 step 16 (CMB-087, CMB-173, 2026-10-28): +8 (TestRakeAndGrappleWeaponAttacksUseSharedAttackBonus, 7; the weapon Haste planned count, 1), 621/627 in Play mode with the same 6 known failures; after the review, +2 (the light-weapon Power Attack damage filter for the grapple weapon attacks, PHB p.98), 623/629."
     },
     {
       "type": "Tests.Maneuvers.OverrunRulesTests",

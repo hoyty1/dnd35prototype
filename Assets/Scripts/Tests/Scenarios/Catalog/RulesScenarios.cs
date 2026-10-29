@@ -235,6 +235,7 @@ namespace Tests.Scenarios
             yield return S("haste-natural-full-attack-ui", () => HasteNaturalChooserUi(pounce: false, hasteAttack: "Claw"));
             yield return S("haste-natural-full-attack-ui-default", () => HasteNaturalChooserUi(pounce: false, hasteAttack: null));
             yield return S("haste-natural-pounce-ui", () => HasteNaturalChooserUi(pounce: true, hasteAttack: "Claw"));
+            yield return S("haste-weapon-full-attack-ui", HasteWeaponFullAttackUi);
             yield return S("charge-flanking-ui", ChargeFlankingUi);
             yield return S("bombardier-acid-spray", BombardierAcidSpray);
             yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
@@ -3810,6 +3811,50 @@ namespace Tests.Scenarios
                         : Expect.ModSequence(key, 1, 8, 3, 3, picked ? 3 : 8));
 
             return b.Build();
+        }
+
+        /// <summary>
+        /// CMB-044, CMB-173 (batch 12 step 16): a hasted Ui fighter 6 with a longsword presses Full Attack next to a sturdy
+        /// dummy. The button's count (GetPlannedFullAttackCount) now comes from the one iterative ladder with Haste's step
+        /// (CharacterCombatStats.GetIterativeAttackCount), so the hero makes both iteratives and Haste's extra attack at
+        /// the highest bonus (PHB p.239): BAB 6 + STR 3 + Weapon Focus 1 + Haste 1 = +11, then +6, then +11. Before the fix
+        /// the button stopped after two attacks. The tweak sets Haste's +1 attack bonus as the Haste spell does.
+        /// </summary>
+        private static ScenarioDef HasteWeaponFullAttackUi()
+        {
+            const string key = "hero";
+            return Rules("rules/haste-weapon-full-attack-ui",
+                    "The PC Full Attack button makes a hasted fighter's extra weapon attack: +11, +6, then Haste's +11 (PHB p.239; CMB-044, CMB-173)")
+                .Covers("CMB-044", "CMB-173", "PHB p.239", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() =>
+                {
+                    CharacterStats s = Fighter("Hero", 6, "Weapon Focus");
+                    s.WeaponFocusChoice = "Longsword";
+                    return s;
+                }), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak(key, c =>
+                {
+                    StripOffHand(c);
+                    c.Stats.HasteAttackBonus = 1;
+                    c.Stats.HasteACBonus = 1;
+                    c.Stats.HasteReflexBonus = 1;
+                    c.ApplyHasteEffect(10, null);
+                })
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn(key, 1,
+                    Step.Assert("the hasted hero plans three attacks on the Full Attack button (two iteratives and Haste's)", ctx =>
+                        ctx.Get(key).GetPlannedFullAttackCount() == 3),
+                    Step.FullAttack("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller(key, "ui"))
+                .Expect("The Full Attack step is done and the planned count included the Haste attack", Expect.All(
+                    Expect.StepStatus(key, 1, "FullAttack", 0, "done"),
+                    Expect.AssertsPass()))
+                .Expect("Three attacks: +11, +6, then Haste's at the highest bonus, +11 (PHB p.239)", Expect.ModSequence(key, 1, 11, 6, 11))
+                .Build();
         }
 
         /// <summary>

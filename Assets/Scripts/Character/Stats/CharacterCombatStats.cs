@@ -41,15 +41,33 @@ public class CharacterCombatStats : MonoBehaviour
         }
 
         int bab = _character != null && _character.Stats != null ? _character.Stats.BaseAttackBonus : 0;
-        var bonuses = new List<int> { bab };
+        return GetBaseAttackLadder(bab);
+    }
 
-        if (bab >= 6) bonuses.Add(bab - 5);
-        if (bab >= 11) bonuses.Add(bab - 10);
-        if (bab >= 16) bonuses.Add(bab - 15);
+    /// <summary>
+    /// The one iterative-attack ladder (PHB p.22, Table 3-1, and p.143, Full Attack; CMB-044): the base attack bonus, then one more attack at
+    /// -5 for each further +5, up to four attacks (BAB +6: +6/+1; +11: +11/+6/+1; +16: four). A base attack bonus of +5
+    /// or less (zero or a negative one too) gives one attack at that bonus. Without Haste, Rapid Shot or a flurry: the
+    /// flurry's steps are built on this ladder (CharacterStats.GetFlurryOfBlowsBaseAttackBonuses), Haste and Rapid
+    /// Shot add their attack in the full-attack sequence (<see cref="GetIterativeAttackCount"/>,
+    /// CharacterController.GetPlannedFullAttackCount and FullAttack).
+    /// </summary>
+    public static List<int> GetBaseAttackLadder(int baseAttackBonus)
+    {
+        var bonuses = new List<int> { baseAttackBonus };
+
+        if (baseAttackBonus >= 6) bonuses.Add(baseAttackBonus - 5);
+        if (baseAttackBonus >= 11) bonuses.Add(baseAttackBonus - 10);
+        if (baseAttackBonus >= 16) bonuses.Add(baseAttackBonus - 15);
 
         return bonuses;
     }
 
+    /// <summary>
+    /// Attacks of a weapon (or unarmed) full attack: the steps of <see cref="GetAttackBonuses"/> (the flurry's while the
+    /// creature flurries) plus Haste's extra attack at the highest bonus (PHB p.239). Rapid Shot's attack is not
+    /// counted here: it depends on the attack being ranged (CharacterController.GetPlannedFullAttackCount adds it).
+    /// </summary>
     public int GetIterativeAttackCount()
     {
         int count = GetAttackBonuses().Count;

@@ -356,6 +356,12 @@ public static class MonkClassRulesTests
                 "Declaring the flurry makes the turn a full attack and spends the full-round action (PHB p.40, p.143)");
             AssertEq(m.GetIterativeAttackCount(), 2, "Flurrying: two attack steps (the extra attack)");
             AssertEq(m.GetPlannedFullAttackCount(), 2, "The PC full attack sequence plans the flurry's two attacks");
+            // One ladder (CMB-044): the flurry's steps are the iterative ladder's +2 with the extra attack at +2, and the
+            // planned count and FullAttack read the same list (CharacterCombatStats.GetAttackBonuses).
+            var flurrySteps = m.GetAttackBonuses();
+            Assert(flurrySteps.Count == 2 && flurrySteps[0] == 2 && flurrySteps[1] == 2,
+                "The flurry's steps are +2/+2 (the one iterative ladder plus the extra attack, PHB p.40)",
+                $"got [{string.Join(",", flurrySteps)}]");
             // STR 16 (+3), Medium: a trip or grapple touch attack in the flurry at BAB +2 takes the -2 too (PHB p.40).
             AssertEq(m.GetManeuverMeleeTouchAttackModifier(2), 2 + 3 - 2, "A maneuver's touch attack in the flurry takes the flurry penalty");
 

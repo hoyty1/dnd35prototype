@@ -5959,7 +5959,8 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The one place a weapon attack roll's modifier is assembled (CMB-043). Attack, FullAttack
-    /// (iterative, natural and flurry) and DualWieldAttack all call this, then set the
+    /// (iterative, natural and flurry), DualWieldAttack, and since CMB-087 PerformRakeAttacks, ResolveAttackWhileGrappling
+    /// and ResolveUseOpponentWeapon all call this, then set the
     /// per-attack terms (BaseAttackBonus step, SequenceModifier, AidAnotherBonus, MagicStoneBonus). The flurry of blows
     /// penalty (FlurryPenalty) is set here for every attack while the creature flurries (PHB p.40; CHR-003).
     /// Rules applied: ability is DEX for ranged attacks and Weapon Finesse, else STR (PHB p.134, p.102);
@@ -6123,6 +6124,19 @@ public class CharacterController : MonoBehaviour
         {
             WeaponSpecDamageBonus = Stats != null ? AttackCalculator.GetWeaponSpecBonus(Stats, weapon) : 0
         };
+    }
+
+    /// <summary>
+    /// <paramref name="feats"/> with no Power Attack damage when <paramref name="weapon"/> is a light weapon: PHB p.98
+    /// gives a light weapon the Power Attack penalty but no damage bonus (an unarmed strike, null here, and natural weapons
+    /// keep it). Used by the grapple weapon attacks, which are always made with a light weapon (PHB p.156). The shared
+    /// builder still adds it for every other light-weapon attack (CMB-088); this goes once CMB-088 is fixed at its root.
+    /// </summary>
+    internal static AttackCalculator.FeatModifiers WithoutLightWeaponPowerAttackDamage(AttackCalculator.FeatModifiers feats, ItemData weapon)
+    {
+        if (weapon != null && weapon.IsLightWeapon)
+            feats.PowerAttackDamageBonus = 0;
+        return feats;
     }
 
     /// <summary>
@@ -6416,8 +6430,11 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Returns how many attacks this character can make during a full attack right now,
-    /// including Rapid Shot when active with a ranged weapon.
+    /// Returns how many attacks this character can make during a full attack right now: the same steps
+    /// <see cref="FullAttack"/> resolves. Natural attacks: one per natural attack plus Haste's extra one (CMB-106).
+    /// Otherwise the iterative ladder (a flurry's steps while flurrying, CHR-003) with Haste's extra attack at the
+    /// highest bonus (CharacterCombatStats.GetIterativeAttackCount, PHB p.239; CMB-044, CMB-173), plus Rapid Shot's
+    /// extra attack when it is active with a ranged weapon (PHB p.99).
     /// </summary>
     public int GetPlannedFullAttackCount(RangeInfo rangeInfo = null)
     {
@@ -6425,12 +6442,7 @@ public class CharacterController : MonoBehaviour
         if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
             return Mathf.Max(0, GetNaturalAttackStepBudget()); // with Haste's extra natural attack (CMB-106)
 
-        // A flurry's steps, with Haste's extra attack: the same list FullAttack resolves (CHR-003).
-        if (IsUsingFlurryOfBlows)
-            return Mathf.Max(0, GetIterativeAttackCount());
-
-        int[] attackBonuses = Stats.GetIterativeAttackBonuses();
-        int count = attackBonuses != null ? attackBonuses.Length : 0;
+        int count = GetIterativeAttackCount();
 
         bool useThrownRange = equippedWeapon != null
             && equippedWeapon.IsThrown
@@ -6614,8 +6626,10 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        // Build the list of BAB steps, inserting the Rapid Shot extra attack
-        int[] babSteps = flurry ? Stats.GetFlurryOfBlowsBaseAttackBonuses() : Stats.GetIterativeBaseAttackBonuses();
+        // The BAB steps of the one iterative ladder (CMB-044: CharacterCombatStats.GetAttackBonuses, the flurry's steps
+        // while flurrying), then Rapid Shot's extra attack inserted first and Haste's appended at the highest bonus: the
+        // same steps GetPlannedFullAttackCount counts and GetIterativeAttackBAB indexes.
+        List<int> babSteps = GetAttackBonuses();
         var allBabSteps = new List<int>(babSteps);
         int baseAttackCount = allBabSteps.Count;
 
@@ -6922,61 +6936,72 @@ public class CharacterController : MonoBehaviour
         int critThreatMin = 20;
         int critMult = 2;
         int attackCount = Mathf.Max(1, rakeAttack.Count);
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        // Rake attacks are not subject to the usual -4 for attacking with a natural weapon in a grapple (MM p.314,
-        // CMB-144): leave the Grappled row's attack modifier out; every other condition still applies.
-        int conditionAttackPenalty = Stats.ConditionAttackPenalty - GetGrappledConditionAttackModifier();
-        int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // rake is always melee
         // A natural weapon may deal nonlethal damage at -4 like any lethal melee weapon (PHB p.146; delegated RAW reading 2026-10-14).
         DamageModeAttackProfile rakeDamageMode = GetRakeDamageModeProfile();
+
+        // The shared attack modifier (CMB-087; BuildAttackBonus, CMB-043) at the full BAB with no secondary penalty
+        // (rake attacks are primary, MM p.314): ability (Weapon Finesse: a natural weapon is light, PHB p.102), size,
+        // flanking, racial, feats, prone, fighting defensively, nonproficiency, the effect bonuses (Bless, Heroism, the
+        // charge's +2 on a pounce), conditions and Solid Fog, with three rake rules on top:
+        AttackBonusBreakdown rakeBonus = BuildAttackBonus(target, null, isRanged: false, rangeInfo: null,
+            isFlanking, flankingBonus, Stats.BaseAttackBonus, isTwoHanded: false);
+        // - no Weapon Focus, Weapon Specialization or Improved Critical with the claw (delegated RAW reading 2026-10-28,
+        //   RULES_COVERAGE 4.1): the MM stat blocks leave them off the rake (the dire tiger, MM p.65, has Weapon Focus
+        //   (claw), claws +20 and rake +18), though MM p.314 calls the rake two claw attacks;
+        rakeBonus.Feats.WeaponFocusBonus = 0;
+        rakeBonus.Feats.WeaponSpecDamageBonus = 0;
+        // - not subject to the usual -4 for attacking with a natural weapon in a grapple (MM p.314, CMB-144): the Grappled
+        //   row's attack modifier is left out; every other condition still applies;
+        rakeBonus.ConditionModifier -= GetGrappledConditionAttackModifier();
+        // - the rake's own damage mode, and its fixed 20/x2 critical.
+        rakeBonus.DamageModePenalty = rakeDamageMode.AttackPenalty;
+        rakeBonus.CritThreatMin = critThreatMin;
+        rakeBonus.CritMultiplier = critMult;
 
         for (int i = 0; i < attackCount; i++)
         {
             if (target.Stats.IsDead)
                 break;
 
-            // D&D 3.5e: rake attacks use PRIMARY attack bonuses (no -5 secondary penalty)
-            int baseBonus = Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
-            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty + solidFogAtkPenalty
-                + rakeDamageMode.AttackPenalty;
+            AttackBonusBreakdown atkBonus = rakeBonus;
+            atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
+            int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
 
-            // The rake's own Strength share (its data, MM p.314) plus the shared damage terms (CMB-003). No feat terms:
-            // the rake's attack modifier is still built by hand (CMB-087).
+            // The rake's own Strength share (its data, MM p.314) plus the shared damage terms (CMB-003), Power Attack
+            // included now that the attack roll takes its penalty (CMB-087).
             WeaponDamageBreakdown rakeDamage = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
-                default(AttackCalculator.FeatModifiers), naturalAttack: rakeAttack);
+                atkBonus.Feats, naturalAttack: rakeAttack);
 
             CombatResult atk = PerformSingleAttackWithCrit(
                 target,
-                atkMod,
+                atkBonus.Total,
                 isFlanking,
                 flankingBonus,
                 flankingPartnerName,
                 damageDice,
                 damageCount,
                 rakeDamage,
-                critThreatMin,
-                critMult,
+                atkBonus.CritThreatMin,
+                atkBonus.CritMultiplier,
                 null,
-                situationalTargetAcBonus: 0,
+                situationalTargetAcBonus: aidAnotherTargetAcBonus,
                 dealNonlethalDamage: rakeDamageMode.DealNonlethalDamage,
                 damageModeAttackPenalty: rakeDamageMode.AttackPenalty,
                 damageModePenaltySource: rakeDamageMode.PenaltySource);
 
+            atkBonus.ApplyToResult(atk, null);
+            atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
+            atk.FightingDefensivelyACBonus = target.IsFightingDefensively ? 2 : 0;
             atk.WeaponName = string.IsNullOrWhiteSpace(rakeAttack.Name) ? "Rake" : rakeAttack.Name;
-            atk.BreakdownBAB = baseBonus;
-            atk.BreakdownAbilityMod = Stats.STRMod;
-            atk.BreakdownAbilityName = "STR";
-            atk.WeaponNonProficiencyPenalty = 0;
-            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             atk.DefenderHPBefore = hpBeforeAtk;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
             atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
             result.Attacks.Add(atk);
-            result.AttackLabels.Add($"Rake {i + 1} ({CharacterStats.FormatMod(baseBonus)})");
+            result.AttackLabels.Add($"Rake {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})");
         }
 
         // The rake's extra claw attacks come once a turn (MM p.314), whichever path made them (CMB-127).
@@ -12120,29 +12145,27 @@ public class CharacterController : MonoBehaviour
 
         if (grappleSuccess)
         {
-            int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(opponentWeapon);
-            int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-            int attackBaseBonus = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
-            int attackMod = attackBaseBonus
-                            + Stats.STRMod
-                            + Stats.SizeModifier
-                            + Stats.ConditionAttackPenalty
-                            + GetProneAttackModifier(isMeleeAttack: true)
-                            + weaponNonProfPenalty
-                            + armorNonProfPenalty
-                            + useOpponentWeaponAttackPenalty
-                            // An attack roll in a flurry round takes the flurry penalty (PHB p.40; delegated RAW reading 2026-10-14).
-                            + FlurryAttackRollPenalty;
+            // The shared attack modifier (CMB-087; BuildAttackBonus, CMB-043: ability with Weapon Finesse, size, feats
+            // with this weapon, effect bonuses, conditions, prone, nonproficiency, the flurry penalty, PHB p.40) at the
+            // step's BAB, with the -4 for using the opponent's weapon (PHB p.156) as the sequence modifier. Lethal, as
+            // before: the attacker's damage-mode toggle does not apply to the opponent's weapon. The Grappled row's -4
+            // also applies through the condition modifier (CMB-145).
+            AttackBonusBreakdown atkBonus = BuildAttackBonus(opponent, opponentWeapon, isRanged: false, rangeInfo: null,
+                isFlanking: false, flankingBonus: 0, iterativeAttackBonusOverride ?? Stats.BaseAttackBonus, isTwoHanded: false);
+            atkBonus.SequenceModifier = useOpponentWeaponAttackPenalty;
+            atkBonus.SequenceLabel = "using opponent's weapon";
+            atkBonus.DamageModePenalty = 0;
+            int attackMod = atkBonus.Total;
 
             GetScaledWeaponDamageDice(opponentWeapon, out int scaledOpponentDamageCount, out int scaledOpponentDamageDice);
             int damageDice = Mathf.Max(1, scaledOpponentDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
             int damageCount = Mathf.Max(1, scaledOpponentDamageCount);
-            // Shared damage terms (CMB-003) with Weapon Specialization (a damage-only feat, PHB p.102); no Power Attack
-            // while the attack modifier is built by hand and takes no Power Attack penalty (CMB-087).
+            // Shared damage terms (CMB-003) with this attack's feat terms: Weapon Specialization with the weapon, and no
+            // Power Attack damage, since the opponent's weapon is a light one (PHB p.98, p.156; the penalty stays on the roll).
             WeaponDamageBreakdown weaponDamage = BuildWeaponDamageBonus(opponentWeapon, isRanged: false, isOffHand: false,
-                DamageOnlyFeatModifiers(opponentWeapon), opponentWeapon.BonusDamage);
-            int critThreatMin = opponentWeapon.CritThreatMin > 0 ? opponentWeapon.CritThreatMin : 20;
-            int critMultiplier = opponentWeapon.CritMultiplier > 0 ? opponentWeapon.CritMultiplier : 2;
+                WithoutLightWeaponPowerAttackDamage(atkBonus.Feats, opponentWeapon), opponentWeapon.BonusDamage);
+            int critThreatMin = atkBonus.CritThreatMin;
+            int critMultiplier = atkBonus.CritMultiplier;
 
             int hpBefore = opponent.Stats.CurrentHP;
             CombatResult attackResult = PerformSingleAttackWithCrit(
@@ -12162,12 +12185,7 @@ public class CharacterController : MonoBehaviour
                 damageModeAttackPenalty: 0,
                 damageModePenaltySource: string.Empty);
 
-            attackResult.BreakdownBAB = attackBaseBonus;
-            attackResult.BreakdownAbilityMod = Stats.STRMod;
-            attackResult.BreakdownAbilityName = "STR";
-            attackResult.SizeAttackBonus = Stats.SizeModifier;
-            attackResult.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
-            attackResult.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+            atkBonus.ApplyToResult(attackResult, null);
             attackResult.DefenderHPBefore = hpBefore;
             attackResult.DefenderHPAfter = opponent.Stats.CurrentHP;
 
@@ -12358,26 +12376,22 @@ public class CharacterController : MonoBehaviour
 
         DamageModeAttackProfile damageMode = ResolveDamageModeAttackProfile(weapon);
 
-        int weaponNonProfPenalty = isUnarmed ? 0 : Stats.GetWeaponNonProficiencyPenalty(weapon);
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int attackBaseBonus = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
-        int attackMod = attackBaseBonus
-                        + Stats.STRMod
-                        + Stats.SizeModifier
-                        + Stats.ConditionAttackPenalty
-                        + GetProneAttackModifier(isMeleeAttack: true)
-                        + weaponNonProfPenalty
-                        + armorNonProfPenalty
-                        + grappleAttackPenalty
-                        + damageMode.AttackPenalty
-                        // An attack roll in a flurry round takes the flurry penalty (PHB p.40; delegated RAW reading 2026-10-14).
-                        + FlurryAttackRollPenalty;
+        // The shared attack modifier (CMB-087; BuildAttackBonus, CMB-043: ability with Weapon Finesse, size, feats with
+        // this weapon or the unarmed strike, effect bonuses, conditions, prone, nonproficiency, the damage mode, the flurry
+        // penalty, PHB p.40) at the step's BAB, with the grapple attack's -4 (PHB p.156) as the sequence modifier. The
+        // Grappled row's -4 also applies through the condition modifier (CMB-145).
+        AttackBonusBreakdown atkBonus = BuildAttackBonus(opponent, weapon, isRanged: false, rangeInfo: null,
+            isFlanking: false, flankingBonus: 0, iterativeAttackBonusOverride ?? Stats.BaseAttackBonus, isTwoHanded: false);
+        atkBonus.SequenceModifier = grappleAttackPenalty;
+        atkBonus.SequenceLabel = "attacking in a grapple";
+        int attackMod = atkBonus.Total;
 
         int damageDice;
         int damageCount;
         int bonusDamage;
-        int critThreatMin;
-        int critMultiplier;
+        // The weapon's threat range after Improved Critical and keen effects (BuildAttackBonus; an unarmed strike 20/x2).
+        int critThreatMin = atkBonus.CritThreatMin;
+        int critMultiplier = atkBonus.CritMultiplier;
 
         string grappleAttackLabel = string.Empty;
 
@@ -12388,8 +12402,6 @@ public class CharacterController : MonoBehaviour
             damageCount = Mathf.Max(1, unarmed.damageCount);
             // Strength comes from the shared damage modifier once (it was added here and again by the attack core, CMB-003).
             bonusDamage = unarmed.bonusDamage;
-            critThreatMin = 20;
-            critMultiplier = 2;
         }
         else
         {
@@ -12397,14 +12409,12 @@ public class CharacterController : MonoBehaviour
             damageDice = Mathf.Max(1, scaledWeaponDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
             damageCount = Mathf.Max(1, scaledWeaponDamageCount);
             bonusDamage = weapon.BonusDamage;
-            critThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
-            critMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
         }
 
-        // Shared damage terms (CMB-003) with Weapon Specialization (a damage-only feat, PHB p.102); no Power Attack
-        // while the attack modifier is built by hand and takes no Power Attack penalty (CMB-087).
+        // Shared damage terms (CMB-003) with this attack's feat terms: Weapon Specialization, and Power Attack's damage
+        // only for an unarmed strike, never for the light weapon (PHB p.98, p.156; the penalty stays on the roll).
         WeaponDamageBreakdown grappleDamage = BuildWeaponDamageBonus(weapon, isRanged: false, isOffHand: false,
-            DamageOnlyFeatModifiers(weapon), bonusDamage);
+            WithoutLightWeaponPowerAttackDamage(atkBonus.Feats, weapon), bonusDamage);
 
         int hpBefore = opponent.Stats.CurrentHP;
         CombatResult attackResult = PerformSingleAttackWithCrit(
@@ -12424,12 +12434,7 @@ public class CharacterController : MonoBehaviour
             damageModeAttackPenalty: damageMode.AttackPenalty,
             damageModePenaltySource: damageMode.PenaltySource);
 
-        attackResult.BreakdownBAB = Stats.BaseAttackBonus;
-        attackResult.BreakdownAbilityMod = Stats.STRMod;
-        attackResult.BreakdownAbilityName = "STR";
-        attackResult.SizeAttackBonus = Stats.SizeModifier;
-        attackResult.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
-        attackResult.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+        atkBonus.ApplyToResult(attackResult, null);
         attackResult.DefenderHPBefore = hpBefore;
         attackResult.DefenderHPAfter = opponent.Stats.CurrentHP;
 

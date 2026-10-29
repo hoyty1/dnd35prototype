@@ -8,7 +8,8 @@ using UnityEngine;
 /// <summary>
 /// Every term of one weapon attack roll's modifier, built by
 /// CharacterController.BuildAttackBonus and used by Attack, FullAttack (iterative and
-/// natural; a flurry of blows is a FullAttack with the flurry steps) and DualWieldAttack so all of them add the same terms.
+/// natural; a flurry of blows is a FullAttack with the flurry steps), DualWieldAttack, and since CMB-087 PerformRakeAttacks,
+/// ResolveAttackWhileGrappling and ResolveUseOpponentWeapon, so all of them add the same terms.
 /// Terms resolved inside PerformSingleAttackWithCrit (weapon enhancement or masterwork,
 /// True Strike, invisible attacker, helpless or blinded target, bane, Destruction smite)
 /// are not part of this struct. The damage roll's terms are <see cref="WeaponDamageBreakdown"/> (CMB-003).

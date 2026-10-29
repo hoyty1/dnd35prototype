@@ -102,8 +102,7 @@ public static class RacialTraitRules
     /// a sling, or with a weapon that is thrown (a thrown weapon, or a melee weapon with the Throwing enchantment, DMG
     /// p.226). The bonus needs the weapon to be thrown: a dagger used in melee gets nothing (owner interpretation
     /// 2026-10-11, CHR-019). The attack paths built on <see cref="CharacterController.BuildAttackBonus"/> pass
-    /// <paramref name="isRanged"/>, for PCs and NPCs alike; the rake and grapple weapon attacks still sum their own
-    /// modifier (CMB-087).
+    /// <paramref name="isRanged"/>, for PCs and NPCs alike, the rake and the grapple weapon attacks included (CMB-087).
     /// </summary>
     public static int ThrownOrSlingAttackBonus(CharacterStats attacker, ItemData weapon, bool isRanged)
     {

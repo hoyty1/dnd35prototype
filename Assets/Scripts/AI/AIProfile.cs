@@ -524,7 +524,8 @@ namespace DND35.AI
                 flurryHits += HitChance(bab + penalty + otherTerms, targetAC);
 
             float plainHits = 0f;
-            foreach (int bab in self.Stats.GetIterativeBaseAttackBonuses())
+            // The plain ladder (CMB-044), not the controller's current steps, which are the flurry's while flurrying.
+            foreach (int bab in CharacterCombatStats.GetBaseAttackLadder(self.Stats.BaseAttackBonus))
                 plainHits += HitChance(bab + otherTerms, targetAC);
 
             return flurryHits > plainHits;

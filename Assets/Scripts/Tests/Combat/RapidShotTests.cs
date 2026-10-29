@@ -41,6 +41,7 @@ public static class RapidShotTests
         TestMeleeSingleAndFullAttackModifiersMatch();
         TestRangedFullAttackUsesDexLikeSingleAttack();
         TestRapidShotFullAttackIsSingleAttackMinusTwo();
+        TestHastedRapidShotPlannedCountMatchesFullAttack();
         TestFinesseSingleAndFullAttackModifiersMatch();
         TestMoraleBonusReachesEveryAttackPath();
         TestDualWieldUsesEachWeaponsFinesse();
@@ -99,10 +100,10 @@ public static class RapidShotTests
     private static void TestFullAttackButtonVisibility()
     {
         Debug.Log("--- Test: Full Attack button visibility with Rapid Shot ---");
-        // Rogue at level 2 has BAB=1, so IterativeAttackCount=1 (no iterative attacks)
+        // Rogue at level 2 has BAB=1, so the iterative ladder has one step (no iterative attacks)
         // But with Rapid Shot, Full Attack button should still be visible
         var rogue = new CharacterStats("TestRogue", 2, "Rogue", 10, 16, 12, 10, 10, 10, 1, 0, 0, 8, 1, 0, 6, 1, 12);
-        bool hasIterativeAttacks = rogue.IterativeAttackCount > 1;
+        bool hasIterativeAttacks = CharacterCombatStats.GetBaseAttackLadder(rogue.BaseAttackBonus).Count > 1;
         bool hasRapidShot = rogue.HasFeat("Rapid Shot");
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
 
@@ -111,18 +112,21 @@ public static class RapidShotTests
         Assert(fullAttackRelevant, "Full Attack button should be relevant (visible) due to Rapid Shot");
     }
 
-    /// <summary>Test: IterativeAttackCount at low BAB should be 1.</summary>
+    /// <summary>Test: the one iterative ladder (CharacterCombatStats.GetBaseAttackLadder, CMB-044) at low BAB has one step.</summary>
     private static void TestIterativeAttackCountAtLowBAB()
     {
         Debug.Log("--- Test: Iterative attack count at low BAB ---");
         var stats1 = new CharacterStats("BAB0", 1, "Rogue", 10, 10, 10, 10, 10, 10, 0, 0, 0, 6, 1, 0, 6, 1, 6);
-        Assert(stats1.IterativeAttackCount == 1, $"BAB=0 should have 1 attack (got {stats1.IterativeAttackCount})");
+        int count1 = CharacterCombatStats.GetBaseAttackLadder(stats1.BaseAttackBonus).Count;
+        Assert(count1 == 1, $"BAB=0 should have 1 attack (got {count1})");
 
         var stats2 = new CharacterStats("BAB1", 2, "Rogue", 10, 10, 10, 10, 10, 10, 1, 0, 0, 6, 1, 0, 6, 1, 10);
-        Assert(stats2.IterativeAttackCount == 1, $"BAB=1 should have 1 attack (got {stats2.IterativeAttackCount})");
+        int count2 = CharacterCombatStats.GetBaseAttackLadder(stats2.BaseAttackBonus).Count;
+        Assert(count2 == 1, $"BAB=1 should have 1 attack (got {count2})");
 
         var stats6 = new CharacterStats("BAB6", 6, "Fighter", 10, 10, 10, 10, 10, 10, 6, 0, 0, 8, 1, 0, 4, 1, 40);
-        Assert(stats6.IterativeAttackCount == 2, $"BAB=6 should have 2 attacks (got {stats6.IterativeAttackCount})");
+        int count6 = CharacterCombatStats.GetBaseAttackLadder(stats6.BaseAttackBonus).Count;
+        Assert(count6 == 2, $"BAB=6 should have 2 attacks (got {count6})");
     }
 
     /// <summary>Test: Rapid Shot adds extra attack bonus to the list.</summary>
@@ -131,8 +135,8 @@ public static class RapidShotTests
         Debug.Log("--- Test: Rapid Shot extra attack logic ---");
         // Simulate what FullAttack does when Rapid Shot is active
         var stats = new CharacterStats("TestRogue", 2, "Rogue", 10, 16, 12, 10, 10, 10, 1, 0, 0, 8, 1, 0, 6, 1, 12);
-        int[] attackBonuses = stats.GetIterativeAttackBonuses();
-        Assert(attackBonuses.Length == 1, $"BAB=1 should have 1 base attack bonus (got {attackBonuses.Length})");
+        List<int> attackBonuses = CharacterCombatStats.GetBaseAttackLadder(stats.BaseAttackBonus);
+        Assert(attackBonuses.Count == 1, $"BAB=1 should have 1 base attack bonus (got {attackBonuses.Count})");
 
         // Simulate Rapid Shot insertion
         var allAttackBonuses = new List<int>(attackBonuses);
@@ -182,7 +186,7 @@ public static class RapidShotTests
     {
         Debug.Log("--- Test: Rapid Shot disabled = no extra attack ---");
         var stats = new CharacterStats("TestRogue", 2, "Rogue", 10, 16, 12, 10, 10, 10, 1, 0, 0, 8, 1, 0, 6, 1, 12);
-        int[] attackBonuses = stats.GetIterativeAttackBonuses();
+        List<int> attackBonuses = CharacterCombatStats.GetBaseAttackLadder(stats.BaseAttackBonus);
 
         // Simulate Rapid Shot disabled
         bool rapidShotEnabled = false;
@@ -271,19 +275,72 @@ public static class RapidShotTests
         Assert(sum == AttackMod(result), testName, $"breakdown sums to {sum}, rolled modifier {AttackMod(result)}");
     }
 
-    /// <summary>Regression: splitting out the BAB steps keeps GetIterativeAttackBonuses unchanged.</summary>
+    /// <summary>
+    /// The one iterative ladder (CMB-044): CharacterCombatStats.GetBaseAttackLadder gives the BAB steps (+11/+6/+1, four
+    /// from +16, one at +5 or less), and the controller's steps (GetAttackBonuses) are that ladder.
+    /// </summary>
     private static void TestIterativeBaseAttackStepsMatchIterativeBonuses()
     {
-        Debug.Log("--- Test: iterative BAB steps + STR + size = iterative bonuses ---");
-        var stats = new CharacterStats("Iter", 11, "Fighter", 16, 12, 14, 10, 10, 10, 11, 0, 0, 8, 1, 0, 6, 1, 80);
-        int[] steps = stats.GetIterativeBaseAttackBonuses();
-        int[] bonuses = stats.GetIterativeAttackBonuses();
-        bool same = steps.Length == 3 && bonuses.Length == 3;
-        for (int i = 0; same && i < steps.Length; i++)
-            same = bonuses[i] == steps[i] + stats.STRMod + stats.SizeModifier;
-        Assert(same && steps[0] == 11 && steps[1] == 6 && steps[2] == 1,
-            "BAB +11 steps are +11/+6/+1 and GetIterativeAttackBonuses adds STR and size",
-            $"steps=[{string.Join(",", steps)}] bonuses=[{string.Join(",", bonuses)}]");
+        Debug.Log("--- Test: one iterative ladder (CMB-044) ---");
+        List<int> steps11 = CharacterCombatStats.GetBaseAttackLadder(11);
+        List<int> steps16 = CharacterCombatStats.GetBaseAttackLadder(16);
+        List<int> steps5 = CharacterCombatStats.GetBaseAttackLadder(5);
+        Assert(steps11.Count == 3 && steps11[0] == 11 && steps11[1] == 6 && steps11[2] == 1
+            && steps16.Count == 4 && steps16[3] == 1 && steps5.Count == 1 && steps5[0] == 5,
+            "BAB +11 steps are +11/+6/+1, +16 has four, +5 has one (PHB p.22, p.143)",
+            $"11=[{string.Join(",", steps11)}] 16=[{string.Join(",", steps16)}] 5=[{string.Join(",", steps5)}]");
+
+        CharacterController fighter = null;
+        try
+        {
+            fighter = CreateCombatant("IterLadder", "Fighter", 11, 11, 16, 12, Vector2Int.zero, ItemID.WeaponLongsword, null);
+            List<int> controllerSteps = fighter.GetAttackBonuses();
+            Assert(controllerSteps.Count == 3 && controllerSteps[0] == 11 && controllerSteps[1] == 6 && controllerSteps[2] == 1
+                && fighter.GetIterativeAttackCount() == 3 && fighter.GetPlannedFullAttackCount() == 3,
+                "The controller's steps, count and planned full attack follow the same ladder",
+                $"steps=[{string.Join(",", controllerSteps)}] count={fighter.GetIterativeAttackCount()} planned={fighter.GetPlannedFullAttackCount()}");
+        }
+        finally
+        {
+            Cleanup(fighter);
+        }
+    }
+
+    /// <summary>
+    /// A hasted archer with Rapid Shot on (CMB-044, CMB-173): the planned full attack and FullAttack both have the
+    /// ladder's steps plus the Rapid Shot attack (first, PHB p.99) and Haste's attack at the highest bonus (PHB p.239).
+    /// </summary>
+    private static void TestHastedRapidShotPlannedCountMatchesFullAttack()
+    {
+        Debug.Log("--- Test: hasted Rapid Shot full attack count (CMB-173) ---");
+        CharacterController attacker = null, target = null;
+        try
+        {
+            attacker = CreateCombatant("HasteRapid", "Fighter", 6, 6, 16, 12, Vector2Int.zero, ItemID.WeaponLongbow, null, "Rapid Shot");
+            target = CreateDummy("HasteRapidTarget", new Vector2Int(8, 0));
+            RangeInfo range = RangeCalculator.GetRangeInfo(8, 100, false);
+            attacker.SetRapidShot(true);
+            int plannedBefore = attacker.GetPlannedFullAttackCount(range);
+            attacker.ApplyHasteEffect(10, null);
+            int planned = attacker.GetPlannedFullAttackCount(range);
+            FullAttackResult full = attacker.FullAttack(target, false, 0, null, range);
+
+            Assert(plannedBefore == 3 && planned == 4 && full.Attacks.Count == 4,
+                "BAB +6 with Rapid Shot plans 3 attacks, hasted 4, and FullAttack makes 4",
+                $"before {plannedBefore}, planned {planned}, made {full.Attacks.Count}");
+            if (full.Attacks.Count == 4)
+            {
+                Assert(full.Attacks[0].BreakdownBAB == 6 && full.Attacks[1].BreakdownBAB == 6 && full.Attacks[2].BreakdownBAB == 1
+                    && full.Attacks[3].BreakdownBAB == 6 && AttackMod(full.Attacks[3]) == AttackMod(full.Attacks[0]),
+                    "Steps: Rapid Shot +6, +6, +1, then Haste at +6 with the same -2",
+                    $"BAB {full.Attacks[0].BreakdownBAB}/{full.Attacks[1].BreakdownBAB}/{full.Attacks[2].BreakdownBAB}/{full.Attacks[3].BreakdownBAB}");
+            }
+        }
+        finally
+        {
+            if (attacker != null) attacker.SetRapidShot(false);
+            Cleanup(attacker, target);
+        }
     }
 
     private static void TestMeleeSingleAndFullAttackModifiersMatch()

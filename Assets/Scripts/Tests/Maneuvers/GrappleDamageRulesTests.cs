@@ -114,6 +114,7 @@ public static class GrappleDamageRulesTests
         TestGrappleNaturalAttackIsOneAttack();
         TestGrappleNaturalAttackHasteAndOutOfOrderSteps();
         TestGrappleRakeRules();
+        TestRakeAndGrappleWeaponAttacksUseSharedAttackBonus();
         TestGrappleNaturalAttackStepsAndAiChoice();
         TestGrappleChecksStayIterativeForNaturalAttackers();
         TestGrappleNaturalAttackRefusesUsedOrMissingAttack();
@@ -3712,6 +3713,116 @@ public static class GrappleDamageRulesTests
         }
     }
 
+    /// <summary>
+    /// CMB-087: the rake and the grapple weapon attacks take the shared attack modifier (BuildAttackBonus). The rake: full
+    /// BAB, Weapon Finesse (DEX), the effect bonuses (a morale +1 here), no Weapon Focus even for the claw or the unarmed
+    /// strike (the rake is neither). The light-weapon grapple attack: the -4 grapple penalty as the sequence modifier, and
+    /// now Weapon Focus with the weapon and the effect bonuses; Power Attack takes its penalty but adds no damage with the
+    /// light weapon (PHB p.98), while an unarmed strike keeps the damage.
+    /// </summary>
+    private static void TestRakeAndGrappleWeaponAttacksUseSharedAttackBonus()
+    {
+        var cat = CreateBiteClawsCreature("RakeSharedBonus", 4, false);
+        var catTarget = CreateHasteTarget("RakeSharedBonusTarget");
+        var fighter = CreateTestCharacter("GrappleWeaponSharedBonus", "Fighter");
+        var defender = CreateWeakDefender("GrappleWeaponSharedBonusTarget");
+        try
+        {
+            cat.Stats.HasRake = true;
+            cat.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+
+            int RakeMod()
+            {
+                FullAttackResult r = cat.PerformRakeAttacks(catTarget, false, 0, null);
+                return r != null && r.Attacks.Count > 0 ? AttackModifier(r.Attacks[0]) : int.MinValue;
+            }
+
+            int plain = RakeMod();
+            Assert(plain == 4 + cat.Stats.STRMod + cat.Stats.SizeModifier,
+                $"CMB-087: the rake rolls BAB + STR + size at the full BAB (MM p.314; got {plain})");
+
+            cat.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
+            int morale = RakeMod();
+            Assert(morale == plain + 1, $"CMB-087: the rake takes the effect attack bonuses (Bless-style morale +1; {plain} -> {morale})");
+
+            if (!cat.Stats.HasFeat("Weapon Focus"))
+                cat.Stats.Feats.Add("Weapon Focus");
+            cat.Stats.WeaponFocusWeapons.Add("Claw");
+            cat.Stats.WeaponFocusWeapons.Add("Unarmed Strike");
+            int focus = RakeMod();
+            Assert(focus == morale, $"CMB-087: no Weapon Focus on a rake, even with Weapon Focus (claw) or (unarmed strike) ({morale} -> {focus})");
+
+            cat.Stats.Feats.Add("Weapon Finesse");
+            FullAttackResult finesseRake = cat.PerformRakeAttacks(catTarget, false, 0, null);
+            CombatResult finesseAttack = finesseRake != null && finesseRake.Attacks.Count > 0 ? finesseRake.Attacks[0] : null;
+            Assert(finesseAttack != null && AttackModifier(finesseAttack) == 4 + cat.Stats.DEXMod + cat.Stats.SizeModifier + 1
+                && finesseAttack.BreakdownAbilityName == "DEX(Finesse)" && finesseAttack.BreakdownBAB == 4,
+                $"CMB-087: Weapon Finesse gives the rake DEX (a natural weapon is light, PHB p.102; the leopard's rake +6, MM p.274; got {AttackModifier(finesseAttack)})");
+
+            // The light-weapon attack while grappling: BAB + STR + size, -4 (PHB p.156) as the sequence modifier and the
+            // Grappled row's -4 (CMB-145 keeps both).
+            fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.RightHand);
+            ItemData dagger = fighter.GetEquippedMainWeapon();
+            ConfigureVeryStrongGrappler(fighter);
+            ConfigureVeryWeakGrappler(defender);
+            // Sturdy, so the dagger hits never drop it and end the grapple between the checks.
+            defender.Stats.BonusMaxHP += 500;
+            defender.Stats.CurrentHP = defender.Stats.TotalMaxHP;
+            ForceGrappleState(fighter, defender);
+
+            int LightWeaponMod()
+            {
+                fighter.StartNewTurn();
+                defender.Stats.CurrentHP = defender.Stats.TotalMaxHP;
+                SpecialAttackResult r = fighter.ResolveGrappleAction(GrappleActionType.AttackWithLightWeapon);
+                return r != null && r.CheckRoll > 0 ? r.CheckTotal - r.CheckRoll : int.MinValue;
+            }
+
+            int weaponPlain = LightWeaponMod();
+            int expectedPlain = fighter.Stats.BaseAttackBonus + fighter.Stats.STRMod + fighter.Stats.SizeModifier - 4
+                + fighter.Stats.ConditionAttackPenalty + fighter.Stats.GetArmorNonProficiencyAttackPenalty()
+                + AttackCalculator.GetWeaponFocusBonus(fighter.Stats, dagger);
+            Assert(weaponPlain == expectedPlain,
+                $"CMB-087: the light-weapon grapple attack is BAB + STR + size - 4 (sequence) + conditions (expected {expectedPlain}, got {weaponPlain})");
+
+            fighter.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
+            bool hadFocus = AttackCalculator.GetWeaponFocusBonus(fighter.Stats, dagger) > 0;
+            if (!fighter.Stats.HasFeat("Weapon Focus"))
+                fighter.Stats.Feats.Add("Weapon Focus");
+            if (!hadFocus)
+                fighter.Stats.WeaponFocusWeapons.Add("Dagger");
+            int weaponBuffed = LightWeaponMod();
+            Assert(weaponBuffed == weaponPlain + 1 + (hadFocus ? 0 : 1),
+                $"CMB-087: the grapple weapon attack takes the effect bonuses and Weapon Focus with the weapon ({weaponPlain} -> {weaponBuffed})");
+
+            if (!fighter.Stats.HasFeat("Power Attack"))
+                fighter.Stats.Feats.Add("Power Attack"); // the positional constructor grants no fighter feats (TST-028)
+            fighter.SetPowerAttack(2);
+            int weaponPowerAttack = LightWeaponMod();
+            Assert(weaponPowerAttack == weaponBuffed - 2,
+                $"CMB-087: Power Attack's penalty applies to the grapple weapon attack ({weaponBuffed} -> {weaponPowerAttack})");
+
+            // Both grapple weapon attacks take their damage feat terms through this filter (PHB p.98: a light weapon takes
+            // the Power Attack penalty but gets no damage bonus; an unarmed strike, null, keeps it).
+            var paFeats = new AttackCalculator.FeatModifiers { PowerAttackPenalty = -2, PowerAttackDamageBonus = 2 };
+            AttackCalculator.FeatModifiers daggerFeats = CharacterController.WithoutLightWeaponPowerAttackDamage(paFeats, dagger);
+            AttackCalculator.FeatModifiers unarmedFeats = CharacterController.WithoutLightWeaponPowerAttackDamage(paFeats, null);
+            Assert(dagger != null && dagger.IsLightWeapon && daggerFeats.PowerAttackDamageBonus == 0 && daggerFeats.PowerAttackPenalty == -2,
+                $"PHB p.98: the dagger grapple attack keeps Power Attack's -2 but adds no damage (damage {daggerFeats.PowerAttackDamageBonus}, penalty {daggerFeats.PowerAttackPenalty})");
+            Assert(unarmedFeats.PowerAttackDamageBonus == 2,
+                $"PHB p.98: an unarmed grapple attack keeps Power Attack's damage (got {unarmedFeats.PowerAttackDamageBonus})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Rake and grapple weapon shared attack bonus check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (fighter != null) fighter.SetPowerAttack(0);
+            Cleanup(cat, catTarget, fighter, defender);
+        }
+    }
+
     private static void TestGrappleNaturalAttackStepsAndAiChoice()
     {
         GameManager gm = GameManager.Instance;
@@ -4686,6 +4797,7 @@ public static class GrappleDamageRulesTests
             fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
             mixed.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
             int fighterBefore = fighter.GetIterativeAttackCount();
+            int fighterPlannedBefore = fighter.GetPlannedFullAttackCount();
             fighter.ApplyHasteEffect(10, null);
             mixed.ApplyHasteEffect(10, null);
 
@@ -4693,6 +4805,8 @@ public static class GrappleDamageRulesTests
             Assert(fighterBefore == 3 && fighter.GetIterativeAttackCount() == 4 && fighter.GetMainHandAttackBudget(AttackStepKind.MainHand) == 4
                 && !fighter.HasHasteExtraNaturalAttack() && fighterFull.Attacks.Count == 4 && fighterFull.Attacks[3].BreakdownBAB == 11,
                 "Weapon Haste is unchanged: BAB +11 gets +11/+6/+1 plus one attack at +11 (PHB p.239)");
+            Assert(fighterPlannedBefore == 3 && fighter.GetPlannedFullAttackCount() == 4,
+                $"CMB-173: the PC Full Attack button plans the weapon Haste attack too (one ladder, CMB-044; before {fighterPlannedBefore}, hasted {fighter.GetPlannedFullAttackCount()})");
 
             FullAttackResult mixedFull = mixed.FullAttack(target, false, 0, null);
             Assert(mixed.GetEquippedMainWeapon() != null && !mixed.UsesInnateNaturalAttackSequence() && !mixed.HasHasteExtraNaturalAttack()
