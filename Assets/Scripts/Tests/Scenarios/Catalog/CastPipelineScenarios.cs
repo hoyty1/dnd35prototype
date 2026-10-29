@@ -49,6 +49,7 @@ namespace Tests.Scenarios
             yield return S("cast-combat-end-retaliation-ui", CastCombatEndRetaliationUi);
             yield return S("grappled-caster-legality-ui-area", GrappledCasterLegalityUiArea);
             yield return S("grapple-spontaneous-still-cast", GrappleSpontaneousStillCast);
+            yield return S("grappled-npc-casts-legal-only", GrappledNpcCastsLegalOnly);
             yield return S("npc-concentration-tracking", NpcConcentrationTracking);
             yield return S("cast-ui-summon-monster", UiSummonMonster);
             yield return S("cast-ui-summon-aoo-cancel", UiSummonAoOCancel);
@@ -1675,6 +1676,53 @@ namespace Tests.Scenarios
                 .Expect("The refusal is logged once", Expect.Count("log", e => (e.Str("text") ?? "").Contains("spells with somatic components are blocked"), 1, 1))
                 .Expect("No Burning Hands is cast", CastEvents("wizard", SpellNames.BURNING_HANDS, 0))
                 .Build();
+        }
+
+        /// <summary>
+        /// CMB-101, the AI half (batch 12 step 19; PHB p.156): an AI-run wizard 5 whose only prepared spells are Magic
+        /// Missile (V, S) and Blindness/Deafness (V only) is grappled by a Scripted grapple-drill orc in round 1 (touch and
+        /// grapple checks forced). On its turn the AI grapple turn's cast option (AIService.TryGrappledSpellcastForAI: the
+        /// weaker grappler casts) ranks its casts through the shared cast legality (CheckLegalityForAI meets
+        /// GrappleSpellcastRefusal): it casts Blindness/Deafness, the one spell with no somatic component, and never Magic
+        /// Missile.
+        /// </summary>
+        private static ScenarioDef GrappledNpcCastsLegalOnly()
+        {
+            return Rules("rules/grappled-npc-casts-legal-only", "A grappled AI caster casts only what the grapple allows: no somatic component (PHB p.156; CMB-101)")
+                .Covers("CMB-101", "PHB p.156", "PC_NPC_PARITY", "batch 12 step 19")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Grappled Wizard", 5)), 10, 10, Control.Ai)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Tweak("wizard", c => OnlyPrepared(c, (1, SpellNames.MAGIC_MISSILE), (2, SpellNames.BLINDNESS_DEAFNESS)))
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "wizard")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Turn("orc", 1, Step.Maneuver(SpecialAttackType.Grapple, "wizard"))
+                .Expect("The wizard is grappling when its turn starts", v =>
+                {
+                    JsonObj w = v.Snapshot("wizard", 1, "wizard");
+                    return w != null && w.Get("gr") is bool g && g ? ExpectResult.Pass("grappling") : ExpectResult.Fail("not grappling at its turn");
+                })
+                .Expect("It casts Blindness/Deafness (V only) and never Magic Missile (somatic)", Expect.All(
+                    CastEvents("wizard", SpellNames.BLINDNESS_DEAFNESS, 1),
+                    CastEvents("wizard", SpellNames.MAGIC_MISSILE, 0)))
+                .Build();
+        }
+
+        /// <summary>Empties every prepared slot of <paramref name="c"/> (cantrips included), then prepares one slot of each (level, spell) given.</summary>
+        private static void OnlyPrepared(CharacterController c, params (int level, string spellId)[] spells)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting");
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null && !slot.IsDomainSlot)
+                    slot.PreparedSpell = null;
+            sc.SyncPreparedSpellsFromSlots();
+            foreach ((int level, string spellId) in spells)
+                Prepare(c, level, spellId);
         }
 
         /// <summary>

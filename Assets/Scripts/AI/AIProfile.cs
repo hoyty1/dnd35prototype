@@ -856,6 +856,254 @@ namespace DND35.AI
             return Mathf.Max(1, maxIfFollowing);
         }
 
+        // ── Maneuver choices (batch 12 step 19, AiManeuverDecider; CMB-098, D10, D15). AI stopgaps until the batch 13
+        //    catalog: each answers one choice the rules leave to the creature, never a rule. ──
+
+        /// <summary>
+        /// The item a disarm or sunder by this creature aims at (the attacker chooses, PHB p.155, p.158; D15): a slot of
+        /// the target's disarmable held items or sunderable items, or null when it has none. <see cref="DefaultChooseManeuverItem"/>.
+        /// </summary>
+        public virtual EquipSlot? ChooseManeuverItem(CharacterController self, CharacterController target, SpecialAttackType type)
+            => DefaultChooseManeuverItem(self, target, type);
+
+        /// <summary>
+        /// The default item choice: the item whose loss costs the target most, by a fixed score (AI stopgap): a weapon first
+        /// (100, plus 10 per enhancement point, plus its average damage die), then a shield (50 plus 10 per enhancement
+        /// point), then armor (20 plus 10 per enhancement point); any other held item 10 plus 10 per enhancement point. The
+        /// first listed wins a tie.
+        /// </summary>
+        public static EquipSlot? DefaultChooseManeuverItem(CharacterController self, CharacterController target, SpecialAttackType type)
+        {
+            if (target == null)
+                return null;
+
+            EquipSlot? best = null;
+            float bestScore = float.NegativeInfinity;
+            if (type == SpecialAttackType.Sunder)
+            {
+                List<SunderableItemOption> options = target.GetSunderableItemOptions();
+                for (int i = 0; i < options.Count; i++)
+                {
+                    float score = ScoreManeuverItem(options[i].Item, options[i].Kind == SunderTargetKind.Shield, options[i].Kind == SunderTargetKind.Armor);
+                    if (score > bestScore) { bestScore = score; best = options[i].Slot; }
+                }
+                return best;
+            }
+
+            List<DisarmableHeldItemOption> held = target.GetDisarmableHeldItemOptions();
+            for (int i = 0; i < held.Count; i++)
+            {
+                ItemData item = held[i].HeldItem;
+                float score = ScoreManeuverItem(item, item != null && item.Type == ItemType.Shield, false);
+                if (score > bestScore) { bestScore = score; best = held[i].HandSlot; }
+            }
+            return best;
+        }
+
+        private static float ScoreManeuverItem(ItemData item, bool shield, bool armor)
+        {
+            if (item == null)
+                return 0f;
+            float enhancement = 10f * item.EnhancementBonus;
+            if (item.IsWeapon)
+                return 100f + enhancement + item.DamageCount * (item.DamageDice + 1) * 0.5f;
+            if (shield)
+                return 50f + enhancement;
+            if (armor)
+                return 20f + enhancement;
+            return 10f + enhancement;
+        }
+
+        /// <summary>
+        /// Where this creature takes the grapple after a won move check (PHB p.156; CMB-103): one of the destinations of
+        /// <paramref name="paths"/>, or null to stay. <see cref="DefaultChooseGrappleMoveDestination"/>.
+        /// </summary>
+        public virtual Vector2Int? ChooseGrappleMoveDestination(CharacterController self, IReadOnlyDictionary<Vector2Int, List<Vector2Int>> paths,
+            IList<CharacterController> opponents, IList<CharacterController> allCharacters)
+            => DefaultChooseGrappleMoveDestination(self, paths, opponents, allCharacters);
+
+        /// <summary>
+        /// The default grapple move (AI stopgap): the destination where the fewest enemies outside the grapple threaten the
+        /// grappler, then the path that provokes the fewest attacks of opportunity from those third parties (the move provokes
+        /// from them, CMB-152; ThreatSystem.AnalyzePathForAoOs), then the one nearest to an able ally of the grappler (to
+        /// bring the held foe to its friends), then the shortest path, then the lowest square (x, then y), so the choice is
+        /// deterministic. The current square is scored the same way (no path, so no AoO): when it is at least as good as the
+        /// best destination the grappler stays (null).
+        /// </summary>
+        public static Vector2Int? DefaultChooseGrappleMoveDestination(CharacterController self, IReadOnlyDictionary<Vector2Int, List<Vector2Int>> paths,
+            IList<CharacterController> opponents, IList<CharacterController> allCharacters)
+        {
+            if (self == null || paths == null || paths.Count == 0)
+                return null;
+
+            var all = allCharacters != null ? new List<CharacterController>(allCharacters) : new List<CharacterController>();
+            if (opponents != null)
+                all.RemoveAll(c => opponents.Contains(c));
+
+            var excluded = opponents != null ? new List<CharacterController>(opponents) : new List<CharacterController>();
+            Vector2Int? best = null;
+            int bestThreats = int.MaxValue, bestAoOs = int.MaxValue, bestAlly = int.MaxValue, bestLength = int.MaxValue;
+            foreach (KeyValuePair<Vector2Int, List<Vector2Int>> kv in paths)
+            {
+                int threats = ThreatSystem.GetThreateningEnemies(kv.Key, self, all).Count;
+                int aoos = kv.Value != null && kv.Value.Count > 0
+                    ? ThreatSystem.AnalyzePathForAoOs(self, kv.Value, all, excludedThreateners: excluded).Count
+                    : 0;
+                int ally = NearestAllyDistance(self, kv.Key, allCharacters);
+                int length = kv.Value != null ? kv.Value.Count : int.MaxValue;
+                if (IsBetterMoveSquare(threats, aoos, ally, length, kv.Key, bestThreats, bestAoOs, bestAlly, bestLength, best))
+                {
+                    best = kv.Key;
+                    bestThreats = threats;
+                    bestAoOs = aoos;
+                    bestAlly = ally;
+                    bestLength = length;
+                }
+            }
+            if (!best.HasValue)
+                return null;
+
+            // Stay when the current square is at least as good (by threats, then the ally distance; staying provokes nothing).
+            int hereThreats = ThreatSystem.GetThreateningEnemies(self.GridPosition, self, all).Count;
+            int hereAlly = NearestAllyDistance(self, self.GridPosition, allCharacters);
+            if (hereThreats < bestThreats || (hereThreats == bestThreats && bestAoOs > 0))
+                return null;
+            if (hereThreats == bestThreats && hereAlly <= bestAlly)
+                return null;
+            return best;
+        }
+
+        /// <summary>
+        /// The space this creature moves into after escaping a grapple (PHB p.156-157; D10): one of
+        /// <paramref name="squares"/>, or null to stay. <see cref="DefaultChooseGrappleEscapeSquare"/>.
+        /// </summary>
+        public virtual Vector2Int? ChooseGrappleEscapeSquare(CharacterController self, IList<Vector2Int> squares, CharacterController formerOpponent,
+            IList<CharacterController> allCharacters)
+            => DefaultChooseGrappleEscapeSquare(self, squares, formerOpponent, allCharacters);
+
+        /// <summary>
+        /// The default escape square (AI stopgap), replacing the old random pick: the square the fewest enemies threaten
+        /// (the former grapple opponent included: it may attack next turn), then the one nearest to an able ally, then the
+        /// lowest square (x, then y).
+        /// </summary>
+        public static Vector2Int? DefaultChooseGrappleEscapeSquare(CharacterController self, IList<Vector2Int> squares, CharacterController formerOpponent,
+            IList<CharacterController> allCharacters)
+        {
+            if (self == null || squares == null || squares.Count == 0)
+                return null;
+
+            var all = allCharacters != null ? new List<CharacterController>(allCharacters) : new List<CharacterController>();
+            Vector2Int? best = null;
+            int bestThreats = int.MaxValue, bestAlly = int.MaxValue;
+            for (int i = 0; i < squares.Count; i++)
+            {
+                int threats = ThreatSystem.GetThreateningEnemies(squares[i], self, all).Count;
+                int ally = NearestAllyDistance(self, squares[i], allCharacters);
+                if (IsBetterSquare(threats, ally, 0, squares[i], bestThreats, bestAlly, 0, best))
+                {
+                    best = squares[i];
+                    bestThreats = threats;
+                    bestAlly = ally;
+                }
+            }
+            return best;
+        }
+
+        private static bool IsBetterMoveSquare(int threats, int aoos, int ally, int length, Vector2Int square,
+            int bestThreats, int bestAoOs, int bestAlly, int bestLength, Vector2Int? best)
+        {
+            if (!best.HasValue) return true;
+            if (threats != bestThreats) return threats < bestThreats;
+            if (aoos != bestAoOs) return aoos < bestAoOs;
+            return IsBetterSquare(threats, ally, length, square, bestThreats, bestAlly, bestLength, best);
+        }
+
+        private static bool IsBetterSquare(int threats, int ally, int length, Vector2Int square,
+            int bestThreats, int bestAlly, int bestLength, Vector2Int? best)
+        {
+            if (!best.HasValue) return true;
+            if (threats != bestThreats) return threats < bestThreats;
+            if (ally != bestAlly) return ally < bestAlly;
+            if (length != bestLength) return length < bestLength;
+            if (square.x != best.Value.x) return square.x < best.Value.x;
+            return square.y < best.Value.y;
+        }
+
+        private static int NearestAllyDistance(CharacterController self, Vector2Int square, IList<CharacterController> allCharacters)
+        {
+            int best = int.MaxValue;
+            if (allCharacters == null)
+                return best;
+            for (int i = 0; i < allCharacters.Count; i++)
+            {
+                CharacterController c = allCharacters[i];
+                if (c == null || c == self || c.Stats == null || c.IsDead || c.Stats.IsDead || !TeamUtility.IsAlly(self, c))
+                    continue;
+                best = Mathf.Min(best, SquareGridUtils.GetDistance(square, c.GridPosition));
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Whether this creature opposes an escape attempt from its grapple (PHB p.156: an opponent need not try to hold an
+        /// escaping creature; D10). The AI always opposes; a profile may let go.
+        /// </summary>
+        public virtual bool ShouldOpposeGrappleEscape(CharacterController self, CharacterController escaper) => true;
+
+        /// <summary>
+        /// Whether this creature skips the grab after an Improved Grab trigger hit (the creature "can attempt" it, MM p.310;
+        /// CMB-098). <see cref="DefaultShouldSkipImprovedGrab"/>.
+        /// </summary>
+        public virtual bool ShouldSkipImprovedGrab(CharacterController self, CharacterController target, IList<CharacterController> allCharacters)
+            => DefaultShouldSkipImprovedGrab(self, target, allCharacters);
+
+        /// <summary>
+        /// The default (AI stopgap): skip only a hopeless grab, one whose opposed grapple check the grabber cannot win even
+        /// with a natural 20 against a natural 1: its grapple modifier + 19 at most the target's, since a tie goes to the
+        /// higher modifier (PHB p.64), the target's.
+        /// </summary>
+        public static bool DefaultShouldSkipImprovedGrab(CharacterController self, CharacterController target, IList<CharacterController> allCharacters)
+        {
+            if (self == null || target == null || self.Stats == null || target.Stats == null)
+                return false;
+            return self.GetGrappleModifier() + 19 <= target.GetGrappleModifier();
+        }
+
+        /// <summary>
+        /// Whether this creature feints <paramref name="target"/> before its attack (PHB p.155; a move action with Improved
+        /// Feint, PHB p.95; CMB-102). <see cref="DefaultShouldFeint"/>.
+        /// </summary>
+        public virtual bool ShouldFeint(CharacterController self, CharacterController target) => DefaultShouldFeint(self, target);
+
+        /// <summary>
+        /// The default (AI stopgap, kept minimal): feint only as a move action (Improved Feint) with both actions left, a
+        /// sneak attack to land (a rogue level) and one attack a turn anyway (BAB below +6), against a target in reach that
+        /// is not already flat-footed and has an Intelligence score (a feint against a nonintelligent creature is impossible,
+        /// PHB p.155), when the Bluff modifier is at least the target's opposed modifier as PHB p.155 gives it: Sense Motive
+        /// plus base attack bonus, with the Bluff at -4 against a nonhumanoid and -8 against animal Intelligence (1 or 2). The
+        /// resolver still rolls the CMB-177 formula; this estimate is the RAW one.
+        /// </summary>
+        public static bool DefaultShouldFeint(CharacterController self, CharacterController target)
+        {
+            if (self == null || target == null || self.Stats == null || target.Stats == null || self.Actions == null)
+                return false;
+            if (!self.Stats.HasFeat("Improved Feint") || self.Stats.GetClassLevel("Rogue") <= 0 || self.Stats.BaseAttackBonus >= 6)
+                return false;
+            if (!self.Actions.HasMoveAction || !self.Actions.HasStandardAction || target.IsFlatFootedCondition)
+                return false;
+            if (!self.IsTargetInCurrentWeaponRange(target) || self.IsEquippedWeaponRanged())
+                return false;
+            if (target.Stats.IsMindless || target.Stats.INT <= 0)
+                return false;
+            int bluff = self.Stats.GetSkillBonus("Bluff");
+            if (target.Stats.INT <= 2)
+                bluff -= 8;
+            else if (!TeamUtility.IsHumanoid(target))
+                bluff -= 4;
+            int opposed = target.Stats.GetSkillBonus("Sense Motive") + target.Stats.BaseAttackBonus;
+            return bluff >= opposed;
+        }
+
         /// <summary>
         /// Which natural attack this creature uses for Haste's extra attack on a full attack (PHB p.239;
         /// owner decision 2026-10-07, CMB-106): a natural-sequence index. Asked by the NPC melee

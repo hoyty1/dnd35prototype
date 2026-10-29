@@ -224,7 +224,7 @@ public static class BullRushRulesTests
     {
         var result = new SpecialAttackResult { Success = true, CheckTotal = 20 + margin, OpposedTotal = 20 };
         MethodInfo method = typeof(GameManager).GetMethod("ResolveBullRushPushAndFollow", BindingFlags.Instance | BindingFlags.NonPublic);
-        method.Invoke(gm, new object[] { attacker, target, result, isCharge, squaresMoved, null, 0 });
+        method.Invoke(gm, new object[] { attacker, target, result, isCharge, squaresMoved, null, 0, null });
     }
 
     private static void TestScenarioMediumFollowsLargeEast()

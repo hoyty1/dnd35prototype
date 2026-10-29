@@ -790,6 +790,8 @@ namespace Tests.Scenarios
                 if (!job.Decided)
                     TryRun(job, "counter-trip", () => HandleCounterTripPrompt(job, gm), Outcome.Exception);
                 if (!job.Decided)
+                    TryRun(job, "escape-opposition", () => HandleEscapeOppositionPrompt(job, gm), Outcome.Exception);
+                if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
             }
@@ -1293,6 +1295,22 @@ namespace Tests.Scenarios
             bool tripBack = key == null || !job.Def.CounterTripAnswers.TryGetValue(key, out bool answer) || answer;
             bool answered = gm.Harness_AnswerCounterTrip(tripBack);
             job.Ctx?.Note("counter-trip prompt for " + (key ?? "?") + " answered " + (tripBack ? "TripBack" : "Decline") + (answered ? string.Empty : " (not open)"));
+        }
+
+        /// <summary>
+        /// Answers an open escape-opposition prompt (a controllable grappler whose opponent tries to escape, PHB p.156, D10)
+        /// as the scenario says (<see cref="ScenarioDef.EscapeOppositionAnswers"/>; oppose by default), and notes it.
+        /// </summary>
+        private static void HandleEscapeOppositionPrompt(ScenarioJob job, GameManager gm)
+        {
+            CharacterController grappler = gm.Harness_PendingEscapeOppositionGrappler;
+            if (grappler == null)
+                return;
+
+            string key = job.Trace != null ? job.Trace.KeyOf(grappler) : null;
+            bool oppose = key == null || !job.Def.EscapeOppositionAnswers.TryGetValue(key, out bool answer) || answer;
+            bool answered = gm.Harness_AnswerEscapeOpposition(oppose);
+            job.Ctx?.Note("escape-opposition prompt for " + (key ?? "?") + " answered " + (oppose ? "Oppose" : "Allow") + (answered ? string.Empty : " (not open)"));
         }
 
         private static void HandleUiTurn(ScenarioJob job, GameManager gm)

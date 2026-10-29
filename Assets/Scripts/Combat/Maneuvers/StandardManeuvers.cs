@@ -155,8 +155,9 @@ public partial class GameManager
             return 0;
 
         int offHandBab = attacker.Stats.BaseAttackBonus;
-        if (_isDualWielding)
-            offHandBab += _offHandPenalty;
+        AttackIntent intent = UiManeuverIntent(attacker);
+        if (intent != null && intent.TwoWeapon)
+            offHandBab += attacker.GetDualWieldPenalties().offPenalty;
         return offHandBab;
     }
 
@@ -196,9 +197,9 @@ public partial class GameManager
         if (!attacker.HasMeleeWeaponEquipped())
             return false;
 
-        if (IsPcNaturalManeuverAttacker(attacker))
+        if (IsNaturalManeuverAttacker(attacker))
         {
-            if (GetPcSunderNaturalAttackIndex(attacker, out _) < 0)
+            if (GetManeuverSunderNaturalAttackIndex(attacker, out _) < 0)
                 return false;
         }
         else if (!attacker.CanSunderWithAttack(-1, out _))
@@ -215,8 +216,8 @@ public partial class GameManager
             return 0;
 
         int remaining = GetRemainingMainHandManeuverAttackActions(attacker);
-        if (IsPcNaturalManeuverAttacker(attacker))
-            remaining = Mathf.Min(remaining, GetPcSunderCapableNaturalAttackCount(attacker));
+        if (IsNaturalManeuverAttacker(attacker))
+            remaining = Mathf.Min(remaining, GetSunderCapableNaturalAttackCount(attacker));
         return remaining;
     }
 
@@ -225,32 +226,36 @@ public partial class GameManager
         if (!CanUseMainHandSunderAttackOption(attacker))
             return 0;
 
-        if (IsPcNaturalManeuverAttacker(attacker))
-            return attacker.GetNaturalAttackStepBAB(GetPcSunderNaturalAttackIndex(attacker, out _));
+        if (IsNaturalManeuverAttacker(attacker))
+            return attacker.GetNaturalAttackStepBAB(GetManeuverSunderNaturalAttackIndex(attacker, out _));
 
         return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
     }
 
-    /// <summary>The active PC fighting with its natural attacks: its maneuvers give up natural attacks it picks (CMB-102).</summary>
-    private bool IsPcNaturalManeuverAttacker(CharacterController attacker)
-        => attacker != null && attacker == ActivePC && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence;
+    /// <summary>
+    /// A creature fighting with its natural attacks, PC or NPC: its maneuvers give up the first natural attack not used this
+    /// turn (CMB-102; the ActivePC gate is gone since batch 12 step 19, so the NPC executor gives up the same one, which in its
+    /// in-order sequence is the one at its step).
+    /// </summary>
+    private bool IsNaturalManeuverAttacker(CharacterController attacker)
+        => attacker != null && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence;
 
     /// <summary>
     /// The natural attack a PC sunder gives up: the one every PC maneuver gives up (the first natural attack
-    /// not used this turn, <see cref="GetPcManeuverNaturalAttackIndex(CharacterController, out bool)"/>), when it
+    /// not used this turn, <see cref="GetManeuverNaturalAttackIndex(CharacterController, out bool)"/>), when it
     /// deals slashing or bludgeoning damage (PHB p.158, CMB-102); -1 when it does not. This is the NPC rule too:
     /// an NPC sunders with the natural attack at its current step (<see cref="CharacterController.CanSunderWithAttack"/>),
     /// and neither side can skip ahead to a later natural attack (CMB-102 open item 8). At Haste's extra natural
     /// attack (<paramref name="givesUpHasteExtraAttack"/>), the attacker's choice, it is made with a natural attack
     /// that can sunder (<see cref="CharacterController.GetSunderNaturalAttackIndexForStep"/>, as for NPCs; CMB-106).
     /// </summary>
-    private int GetPcSunderNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
+    private int GetManeuverSunderNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
     {
         givesUpHasteExtraAttack = false;
-        if (!IsPcNaturalManeuverAttacker(attacker))
+        if (!IsNaturalManeuverAttacker(attacker))
             return -1;
 
-        int index = GetPcManeuverNaturalAttackIndex(attacker, out bool hasteStep);
+        int index = GetManeuverNaturalAttackIndex(attacker, out bool hasteStep);
         if (index < 0)
             return -1;
 
@@ -265,9 +270,9 @@ public partial class GameManager
     }
 
     /// <summary>Unused natural attacks of the active PC that can sunder, plus Haste's extra natural attack while it is unused and one can: an upper bound, since each sunder needs the next unused natural attack to be one of them.</summary>
-    private int GetPcSunderCapableNaturalAttackCount(CharacterController attacker)
+    private int GetSunderCapableNaturalAttackCount(CharacterController attacker)
     {
-        if (!IsPcNaturalManeuverAttacker(attacker))
+        if (!IsNaturalManeuverAttacker(attacker))
             return 0;
 
         int count = attacker.Stats.GetTotalNaturalAttackCount();
@@ -316,8 +321,9 @@ public partial class GameManager
             return 0;
 
         int offHandBab = attacker.Stats.BaseAttackBonus;
-        if (_isDualWielding)
-            offHandBab += _offHandPenalty;
+        AttackIntent intent = UiManeuverIntent(attacker);
+        if (intent != null && intent.TwoWeapon)
+            offHandBab += attacker.GetDualWieldPenalties().offPenalty;
         return offHandBab;
     }
 
@@ -364,10 +370,10 @@ public partial class GameManager
     /// (<paramref name="givesUpHasteExtraAttack"/>), at the bonus of the default Haste natural attack
     /// (the highest; CMB-106).
     /// </summary>
-    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
+    private int GetManeuverNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
     {
         givesUpHasteExtraAttack = false;
-        if (attacker == null || attacker != ActivePC || attacker.GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
+        if (attacker == null || attacker.GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
             return -1;
 
         int index = ResolveNextAvailableNaturalAttackSequenceIndex(attacker, attacker.ProgressiveAttackPool.MainHandStepsUsed, null);
@@ -380,7 +386,7 @@ public partial class GameManager
         return index;
     }
 
-    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker) => GetPcManeuverNaturalAttackIndex(attacker, out _);
+    private int GetManeuverNaturalAttackIndex(CharacterController attacker) => GetManeuverNaturalAttackIndex(attacker, out _);
 
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel, bool iterativeOnly = false)
     {
@@ -397,15 +403,15 @@ public partial class GameManager
 
         int remaining = attacker.GetRemainingMainHandAttackSteps(GetManeuverStepKind(attacker, iterativeOnly));
 
-        // A PC's natural-attack buttons can use natural attacks out of order; never offer more
-        // substitutes than unused natural attacks (plus Haste's extra natural attack while unused, CMB-106).
-        if (!iterativeOnly && attacker == ActivePC && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
+        // Natural attacks can be used out of order (the PC's natural-attack buttons, a grapple attack's pick); never offer
+        // more substitutes than unused natural attacks (plus Haste's extra natural attack while unused, CMB-106).
+        if (!iterativeOnly && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
             remaining = Mathf.Min(remaining, GetRemainingNaturalAttackCount(attacker));
 
         return remaining;
     }
 
-    private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker, bool iterativeOnly = false)
+    private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker, bool iterativeOnly = false, bool grappleAction = false)
     {
         if (attacker == null || attacker.Stats == null)
             return 0;
@@ -416,19 +422,38 @@ public partial class GameManager
         int step = attacker.ProgressiveAttackPool.MainHandStepsUsed;
         int bab = iterativeOnly
             ? attacker.GetMainHandAttackStepBAB(step)
-            : attacker.GetManeuverSubstituteBAB(step, GetPcManeuverNaturalAttackIndex(attacker));
-        if (_isDualWielding && attacker == ActivePC && GetManeuverStepKind(attacker, iterativeOnly) == AttackStepKind.MainHand)
-            bab += _mainHandPenalty;
+            : attacker.GetManeuverSubstituteBAB(step, GetManeuverNaturalAttackIndex(attacker));
+        // A grapple action while grappling never takes the two-weapon penalty: a grappler cannot attack with two weapons
+        // (PHB p.156), and the grapple turn pays without an intent for every creature.
+        if (!grappleAction && GetManeuverStepKind(attacker, iterativeOnly) == AttackStepKind.MainHand)
+            bab += TwoWeaponMainHandPenalty(attacker, UiManeuverIntent(attacker));
         return bab;
     }
 
     /// <summary>
-    /// Commit the attack step a maneuver replaces. Returns the BAB the maneuver rolls at (with the PC
-    /// dual-wield main-hand penalty on a weapon step) and ends the PC Attack-button flow when no
-    /// main-hand step remains.
+    /// The PC UI's two-weapon state for its maneuvers, as an intent (batch 12 step 19): the one read of the dual-wield
+    /// prompt's state (GameManager._isDualWielding) for the maneuver costs and the menu's bonuses. Null for any creature but
+    /// the active PC, whose maneuvers take their intent from their own request (ManeuverRequest.ForAI).
+    /// </summary>
+    private AttackIntent UiManeuverIntent(CharacterController attacker, SpecialAttackType? type = null)
+        => attacker != null && attacker == ActivePC ? new AttackIntent { Maneuver = type, TwoWeapon = _isDualWielding } : null;
+
+    /// <summary>The main-hand two-weapon penalty a maneuver step takes when its intent fights with two weapons (PHB p.160).</summary>
+    private static int TwoWeaponMainHandPenalty(CharacterController attacker, AttackIntent intent)
+    {
+        if (attacker == null || intent == null || !intent.TwoWeapon)
+            return 0;
+        return attacker.GetDualWieldPenalties().mainPenalty;
+    }
+
+    /// <summary>
+    /// Commit the attack step a maneuver replaces, for PCs and NPCs alike (the maneuver core's cost, GameManager.TryPayManeuver).
+    /// Returns the BAB the maneuver rolls at (with the two-weapon main-hand penalty on a weapon step when
+    /// <paramref name="intent"/> fights with two weapons, PHB p.160) and ends the PC Attack-button flow when no main-hand
+    /// step remains.
     /// </summary>
     private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false, bool forSunder = false,
-        int naturalAttackIndexOverride = -1, bool hasteOverride = false)
+        int naturalAttackIndexOverride = -1, bool hasteOverride = false, AttackIntent intent = null)
     {
         attackBonusUsed = 0;
         reason = string.Empty;
@@ -463,10 +488,10 @@ public partial class GameManager
         else if (kind == AttackStepKind.NaturalSequence)
         {
             // A sunder gives up a natural attack that can sunder (PHB p.158, CMB-102); other maneuvers the next unused one.
-            naturalAttackIndex = forSunder && IsPcNaturalManeuverAttacker(attacker)
-                ? GetPcSunderNaturalAttackIndex(attacker, out givesUpHasteExtraAttack)
-                : GetPcManeuverNaturalAttackIndex(attacker, out givesUpHasteExtraAttack);
-            if (forSunder && IsPcNaturalManeuverAttacker(attacker) && naturalAttackIndex < 0)
+            naturalAttackIndex = forSunder && IsNaturalManeuverAttacker(attacker)
+                ? GetManeuverSunderNaturalAttackIndex(attacker, out givesUpHasteExtraAttack)
+                : GetManeuverNaturalAttackIndex(attacker, out givesUpHasteExtraAttack);
+            if (forSunder && IsNaturalManeuverAttacker(attacker) && naturalAttackIndex < 0)
             {
                 reason = "The next natural attack deals no slashing or bludgeoning damage, so it cannot sunder (PHB p.158).";
                 return false;
@@ -508,9 +533,9 @@ public partial class GameManager
                 Debug.Log($"[{maneuverLabel}][Flow] Replaces natural attack #{naturalAttackIndex + 1} ({attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"}).");
             }
         }
-        else if (_isDualWielding && attacker == ActivePC)
+        else
         {
-            attackBonusUsed += _mainHandPenalty;
+            attackBonusUsed += TwoWeaponMainHandPenalty(attacker, intent);
         }
 
         if (_isInAttackSequence && _attackingCharacter == attacker && !HasMoreAttacksAvailable())
@@ -520,12 +545,12 @@ public partial class GameManager
     }
 
     private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason, bool iterativeOnly = false,
-        int naturalAttackIndexOverride = -1, bool hasteOverride = false)
+        int naturalAttackIndexOverride = -1, bool hasteOverride = false, AttackIntent intent = null)
     {
         attacksRemaining = 0;
 
         if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason, iterativeOnly,
-                naturalAttackIndexOverride: naturalAttackIndexOverride, hasteOverride: hasteOverride))
+                naturalAttackIndexOverride: naturalAttackIndexOverride, hasteOverride: hasteOverride, intent: intent))
             return false;
 
         attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly);
@@ -620,7 +645,7 @@ public partial class GameManager
             return 0;
 
         if (attacker.IsHoldingWithImprovedGrab())
-            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true);
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true, grappleAction: true);
 
         if (!attacker.IsGrappling())
             return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: false);
@@ -628,7 +653,7 @@ public partial class GameManager
         bool naturalStep = IsGrappleNaturalAttackStep(attacker, actionType)
             || (!actionType.HasValue && GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: true) <= 0);
         if (!naturalStep)
-            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true);
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true, grappleAction: true);
 
         CharacterController.GrappleNaturalAttackOption option = attacker.GetDefaultGrappleNaturalAttackOption(GetGrappleNaturalAttackOptionsFor(attacker));
         return option.NaturalAttackIndex >= 0 ? attacker.GetNaturalAttackStepBAB(option.NaturalAttackIndex) : 0;
@@ -643,7 +668,7 @@ public partial class GameManager
     /// counts every grapple action still available.
     /// </summary>
     private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason,
-        GrappleActionType? actionType = null, int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false)
+        GrappleActionType? actionType = null, int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false, AttackIntent intent = null)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -667,7 +692,7 @@ public partial class GameManager
                 return false;
             }
 
-            if (!TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out _, out reason, iterativeOnly: true))
+            if (!TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out _, out reason, iterativeOnly: true, intent: intent))
                 return false;
 
             attacksRemaining = GetRemainingGrappleAttackActions(attacker, GrappleActionType.DamageOpponent);
@@ -689,7 +714,7 @@ public partial class GameManager
         }
 
         if (!isAlreadyGrappling)
-            return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+            return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason, intent: intent);
 
         bool naturalStep = IsGrappleNaturalAttackStep(attacker, actionType);
         if (naturalStep)
@@ -720,7 +745,7 @@ public partial class GameManager
 
         if (!TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out _, out reason,
                 iterativeOnly: !naturalStep,
-                naturalAttackIndexOverride: naturalAttackIndex, hasteOverride: naturalAttackIsHasteExtra))
+                naturalAttackIndexOverride: naturalAttackIndex, hasteOverride: naturalAttackIsHasteExtra, intent: intent))
             return false;
 
         attacksRemaining = GetRemainingGrappleAttackActions(attacker);
@@ -742,8 +767,8 @@ public partial class GameManager
     public int GetCurrentTripAttackBonus(CharacterController attacker)
         => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
 
-    private bool TryConsumeTripAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
-        => TryConsumeMainHandManeuverAttackAction(attacker, "Trip", out attackBonusUsed, out attacksRemaining, out reason);
+    private bool TryConsumeTripAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason, AttackIntent intent = null)
+        => TryConsumeMainHandManeuverAttackAction(attacker, "Trip", out attackBonusUsed, out attacksRemaining, out reason, intent: intent);
 
     public List<CharacterController> GetAdjacentHelplessEnemiesForCoupDeGrace(CharacterController attacker)
     {
@@ -808,7 +833,8 @@ public partial class GameManager
         return GetAdjacentHelplessEnemiesForCoupDeGrace(attacker).Count > 0;
     }
 
-    private bool TryConsumeDisarmAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon)
+    private bool TryConsumeDisarmAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon,
+        AttackIntent intent = null)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -824,7 +850,7 @@ public partial class GameManager
 
         if (!useOffHand)
         {
-            if (!TryCommitMainHandManeuverStep(attacker, "Disarm", out attackBonusUsed, out reason))
+            if (!TryCommitMainHandManeuverStep(attacker, "Disarm", out attackBonusUsed, out reason, intent: intent))
                 return false;
 
             usedOffHand = false;
@@ -848,8 +874,8 @@ public partial class GameManager
         }
 
         int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
-        if (_isDualWielding)
-            offHandBab += _offHandPenalty;
+        if (intent != null && intent.TwoWeapon)
+            offHandBab += attacker.GetDualWieldPenalties().offPenalty;
 
         // The off-hand maneuver is one attack of the creature's sequence (PHB p.143).
         if (!attacker.TryCommitAttack(AttackStepKind.OffHand, out _, out reason))
@@ -865,7 +891,8 @@ public partial class GameManager
         return true;
     }
 
-    private bool TryConsumeSunderAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData sunderWeapon)
+    private bool TryConsumeSunderAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData sunderWeapon,
+        AttackIntent intent = null)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -881,7 +908,7 @@ public partial class GameManager
 
         if (!useOffHand)
         {
-            if (!TryCommitMainHandManeuverStep(attacker, "Sunder", out attackBonusUsed, out reason, forSunder: true))
+            if (!TryCommitMainHandManeuverStep(attacker, "Sunder", out attackBonusUsed, out reason, forSunder: true, intent: intent))
                 return false;
 
             usedOffHand = false;
@@ -905,8 +932,8 @@ public partial class GameManager
         }
 
         int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
-        if (_isDualWielding)
-            offHandBab += _offHandPenalty;
+        if (intent != null && intent.TwoWeapon)
+            offHandBab += attacker.GetDualWieldPenalties().offPenalty;
 
         // The off-hand maneuver is one attack of the creature's sequence (PHB p.143).
         if (!attacker.TryCommitAttack(AttackStepKind.OffHand, out _, out reason))
@@ -975,55 +1002,21 @@ public partial class GameManager
             return;
         }
 
-        List<DisarmableHeldItemOption> options = target.GetDisarmableHeldItemOptions();
-        if (options.Count <= 1)
+        // The attacker picks the held item (PHB p.155; D15): the UI decider's menu (at once with one item), the AI's profile otherwise.
+        ManeuverDeciders.For(attacker).ChooseItem(this, attacker, target, SpecialAttackType.Disarm, selectedSlot =>
         {
-            EquipSlot? selectedSlot = options.Count == 1 ? options[0].HandSlot : null;
-            BeginDisarmSequence(attacker, target, selectedSlot);
-            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
-            return;
-        }
-
-        List<string> optionLabels = new List<string>(options.Count);
-        for (int i = 0; i < options.Count; i++)
-        {
-            string handLabel = options[i].HandSlot == EquipSlot.RightHand ? "Main Hand" : "Off-Hand";
-            string heldItemName = options[i].HeldItem != null ? options[i].HeldItem.Name : "Held Item";
-            optionLabels.Add($"{handLabel}: {heldItemName}");
-        }
-
-        CombatUI.ShowDisarmWeaponSelection(
-            target.Stats.CharacterName,
-            optionLabels,
-            onSelect: selectedIndex =>
-            {
-                if (selectedIndex < 0 || selectedIndex >= options.Count)
-                {
-                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
-                    return;
-                }
-
-                // Re-validate in case gear changed while prompt was open.
-                List<DisarmableHeldItemOption> latestOptions = target.GetDisarmableHeldItemOptions();
-                EquipSlot selectedSlot = options[selectedIndex].HandSlot;
-                bool slotStillValid = latestOptions.Exists(o => o.HandSlot == selectedSlot);
-                if (!slotStillValid)
-                {
-                    CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName}'s selected held item is no longer equipped."));
-                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
-                    return;
-                }
-
-                BeginDisarmSequence(attacker, target, selectedSlot);
-                ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
-            },
-            onCancel: () =>
+            if (!selectedSlot.HasValue)
             {
                 if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
                 else
                     ShowActionChoices();
-            });
+                return;
+            }
+
+            BeginDisarmSequence(attacker, target, selectedSlot);
+            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
+        });
     }
 
     private void HandleSunderTargetClick(CharacterController attacker, CharacterController target)
@@ -1045,51 +1038,21 @@ public partial class GameManager
             return;
         }
 
-        List<SunderableItemOption> options = target.GetSunderableItemOptions();
-        if (options.Count <= 1)
+        // The attacker picks the item (PHB p.158; D15): the UI decider's menu (at once with one item), the AI's profile otherwise.
+        ManeuverDeciders.For(attacker).ChooseItem(this, attacker, target, SpecialAttackType.Sunder, selectedSlot =>
         {
-            EquipSlot? selectedSlot = options.Count == 1 ? options[0].Slot : null;
-            BeginSunderSequence(attacker, target, selectedSlot);
-            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Sunder, sunderTargetSlot: selectedSlot);
-            return;
-        }
-
-        List<string> optionLabels = new List<string>(options.Count);
-        for (int i = 0; i < options.Count; i++)
-            optionLabels.Add(options[i].GetLabel());
-
-        CombatUI.ShowSunderItemSelection(
-            target.Stats.CharacterName,
-            optionLabels,
-            onSelect: selectedIndex =>
-            {
-                if (selectedIndex < 0 || selectedIndex >= options.Count)
-                {
-                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
-                    return;
-                }
-
-                // Re-validate in case gear changed while prompt was open.
-                List<SunderableItemOption> latestOptions = target.GetSunderableItemOptions();
-                EquipSlot selectedSlot = options[selectedIndex].Slot;
-                bool slotStillValid = latestOptions.Exists(o => o.Slot == selectedSlot);
-                if (!slotStillValid)
-                {
-                    CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName}'s selected item is no longer equipped."));
-                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
-                    return;
-                }
-
-                BeginSunderSequence(attacker, target, selectedSlot);
-                ExecuteSpecialAttack(attacker, target, SpecialAttackType.Sunder, sunderTargetSlot: selectedSlot);
-            },
-            onCancel: () =>
+            if (!selectedSlot.HasValue)
             {
                 if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
                 else
                     ShowActionChoices();
-            });
+                return;
+            }
+
+            BeginSunderSequence(attacker, target, selectedSlot);
+            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Sunder, sunderTargetSlot: selectedSlot);
+        });
     }
 
     private void BeginDisarmSequence(CharacterController attacker, CharacterController target, EquipSlot? targetSlot)
@@ -1164,7 +1127,8 @@ public partial class GameManager
         bool isCharge,
         int squaresMovedThisCharge,
         System.Action<bool> onComplete,
-        int diagonalsMovedThisCharge = 0)
+        int diagonalsMovedThisCharge = 0,
+        IManeuverDecider decider = null)
     {
         if (attacker == null || attacker.Stats == null || target == null || target.Stats == null
             || bullRushResult == null || !bullRushResult.Success)
@@ -1217,16 +1181,11 @@ public partial class GameManager
             return;
         }
 
-        if (attacker.IsControllable && CombatUI != null)
-        {
-            CombatUI.ShowBullRushExtraPushChoice(attacker, target, maxIfFollowing,
-                onSelect: followSquares => Execute(followSquares > 0, followSquares),
-                onCancel: () => Execute(false, 1));
-            return;
-        }
-
-        int chosen = ChooseBullRushPushForAI(attacker, target, maxIfFollowing, out bool aiFollows);
-        Execute(aiFollows, chosen);
+        // Stay or follow, and how far: the attacker's decider (IManeuverDecider.ChooseBullRushPush, batch 12 step 19): the
+        // maneuver request's (ExecuteManeuver passes ManeuverRequest.Decider, so an AI-run creature on the NPC turn path
+        // answers through the AI), else, for the charge bull rush, the attacker's own (the UI prompt for a controllable
+        // attacker, the AI profile otherwise).
+        (decider ?? ManeuverDeciders.For(attacker)).ChooseBullRushPush(this, attacker, target, maxIfFollowing, (follow, squares) => Execute(follow, squares));
     }
 
     /// <summary>
@@ -1567,7 +1526,7 @@ public partial class GameManager
     private bool _counterTripPromptOpen;
     private CharacterController _counterTripPromptDefender;
     private CharacterController _counterTripPromptTripper;
-    private Action _counterTripPromptDone;
+    private Action<bool> _counterTripPromptAnswer;
 
     /// <summary>
     /// True while a controllable defender's counter-trip prompt waits for its answer (PHB p.158). An NPC
@@ -1604,17 +1563,14 @@ public partial class GameManager
             return;
         }
 
-        if (target.IsControllable && CombatUI != null && !_counterTripPromptOpen)
+        // The defender's decider (IManeuverDecider.ChooseCounterTrip, batch 12 step 19): the prompt for a controllable
+        // defender (it answers later; IsAwaitingCounterTripChoice is true until then), the AI profile otherwise.
+        ManeuverDeciders.For(target).ChooseCounterTrip(this, target, attacker, tripBack =>
         {
-            OpenCounterTripPrompt(target, attacker, onDone);
-            return;
-        }
-
-        bool tripBack = _aiService != null
-            ? _aiService.ShouldCounterTrip(target, attacker)
-            : DND35.AI.AIProfile.DefaultShouldCounterTrip(target, attacker);
-        ResolveCounterTripChoice(target, attacker, tripBack);
-        onDone?.Invoke();
+            if (CurrentPhase != TurnPhase.CombatOver)
+                ResolveCounterTripChoice(target, attacker, tripBack);
+            onDone?.Invoke();
+        });
     }
 
     /// <summary>
@@ -1710,12 +1666,12 @@ public partial class GameManager
         EvaluateCombatEnd(sourceContext);
     }
 
-    private void OpenCounterTripPrompt(CharacterController defender, CharacterController tripper, Action onDone)
+    private void OpenCounterTripPrompt(CharacterController defender, CharacterController tripper, Action<bool> answer)
     {
         _counterTripPromptOpen = true;
         _counterTripPromptDefender = defender;
         _counterTripPromptTripper = tripper;
-        _counterTripPromptDone = onDone;
+        _counterTripPromptAnswer = answer;
 
         string defenderName = defender.Stats.CharacterName;
         string tripperName = tripper.Stats.CharacterName;
@@ -1750,20 +1706,15 @@ public partial class GameManager
             onCancel: () => AnswerCounterTripPrompt(false));
     }
 
-    /// <summary>The prompt's answer: resolve or decline the counter-trip, then run the caller's continuation.</summary>
+    /// <summary>The prompt's answer, handed to the UI decider's caller (HandleTripAftermath resolves or declines the counter-trip).</summary>
     private void AnswerCounterTripPrompt(bool tripBack)
     {
         if (!_counterTripPromptOpen)
             return;
 
-        CharacterController defender = _counterTripPromptDefender;
-        CharacterController tripper = _counterTripPromptTripper;
-        Action done = _counterTripPromptDone;
+        Action<bool> answer = _counterTripPromptAnswer;
         ClearCounterTripPrompt(hideDialog: false);
-
-        if (defender != null && tripper != null && CurrentPhase != TurnPhase.CombatOver)
-            ResolveCounterTripChoice(defender, tripper, tripBack);
-        done?.Invoke();
+        answer?.Invoke(tripBack);
     }
 
     /// <summary>Drops an unanswered counter-trip prompt without resolving it (a combat reset or a halted fight).</summary>
@@ -1773,7 +1724,7 @@ public partial class GameManager
         _counterTripPromptOpen = false;
         _counterTripPromptDefender = null;
         _counterTripPromptTripper = null;
-        _counterTripPromptDone = null;
+        _counterTripPromptAnswer = null;
         if (hideDialog && wasOpen)
             CombatUI?.HideConfirmationDialog();
     }

@@ -12,14 +12,13 @@ public class GrappleSystem : BaseCombatManeuver
 
 public partial class GameManager
 {
-    /// <summary>The dice context of the free adjacent square picked for a creature that cannot choose one after a grapple (DiceService; CORE-030).</summary>
-    public const string GrappleEscapeSquareContext = "Grapple escape square";
-
     private bool _isGrappleMoveSelection;
     private CharacterController _grappleMoveActor;
     private int _grappleMoveMaxRangeSquares;
     private readonly List<CharacterController> _grappleMoveOpponents = new List<CharacterController>();
     private readonly Dictionary<Vector2Int, List<Vector2Int>> _grappleMovePathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
+    // The UI decider's answer for the open grapple move selection (IManeuverDecider.ChooseGrappleMoveDestination; CMB-103).
+    private Action<Vector2Int?> _grappleMoveAnswer;
 
     // Active grapple context menu lock (pauses token alternation while contextual menu is open).
     private CharacterController _grappleContextMenuLockOwner;
@@ -29,6 +28,8 @@ public partial class GameManager
     private readonly List<Vector2Int> _freeAdjacentGrappleMoveDestinations = new List<Vector2Int>();
     // The escaper's former grapple opponent, which gets no AoO for the escape move (CMB-152).
     private CharacterController _freeAdjacentGrappleMoveFormerOpponent;
+    // The UI decider's answer for the open escape-square selection (IManeuverDecider.ChooseEscapeSquare; D10).
+    private Action<Vector2Int?> _freeAdjacentGrappleMoveAnswer;
 
     private bool TryGetPinnedGrappleOpponent(CharacterController actor, out CharacterController opponent)
     {
@@ -482,22 +483,57 @@ public partial class GameManager
             return false;
         }
 
-        bool actorCanSelectNow = actor.IsControllable
-            && CurrentPhase == TurnPhase.PCTurn
-            && ActivePC == actor;
-
-        if (!actorCanSelectNow)
+        // The escaper picks the space (PHB p.156-157; D10, batch 12 step 19): its decider answers, the UI through the square
+        // selection on the creature's own PC turn (answered by the click; it cannot be cancelled while a square is free,
+        // RefuseToSkipEscapeMove), the AI by its profile (AIProfile.ChooseGrappleEscapeSquare) at once. No random pick. The
+        // escape ends with the move (PHB p.156), so a null answer with squares free takes the default stopgap square.
+        bool waiting = true;
+        bool answeredNow = false;
+        Vector2Int? pickedNow = null;
+        ManeuverDeciders.For(actor).ChooseEscapeSquare(this, actor, validSquares, formerOpponent, square =>
         {
-            // One pick among the free squares through DiceService (the scenario RollFilter seam; CORE-030), clamped so a
-            // filter that returns a value for another die size cannot index past the list.
-            int pick = Mathf.Clamp(DiceService.Roll(1, validSquares.Count, GrappleEscapeSquareContext), 1, validSquares.Count) - 1;
-            Vector2Int selectedSquare = validSquares[pick];
-            autoMove = ExecuteFreeAdjacentGrappleMovement(actor, selectedSquare, formerOpponent, showActionChoicesAfterMove: false);
-            return false;
-        }
+            if (waiting)
+            {
+                answeredNow = true;
+                pickedNow = square;
+                return;
+            }
+            // The selection's click.
+            if (square.HasValue)
+            {
+                CurrentSubPhase = PlayerSubPhase.Animating;
+                StartCoroutine(ExecuteFreeAdjacentGrappleMovement(actor, square.Value, formerOpponent, showActionChoicesAfterMove: true));
+            }
+            else
+            {
+                CancelFreeAdjacentGrappleMovementSelection(actor);
+            }
+        });
+        waiting = false;
 
-        BeginFreeAdjacentGrappleMoveSelection(actor, validSquares);
-        _freeAdjacentGrappleMoveFormerOpponent = formerOpponent; // after Begin, which clears the selection state
+        if (!answeredNow)
+            return true; // the UI selection is open
+
+        if (!pickedNow.HasValue)
+            pickedNow = DND35.AI.AIProfile.DefaultChooseGrappleEscapeSquare(actor, validSquares, formerOpponent, GetAllCharactersForAI());
+        if (pickedNow.HasValue)
+            autoMove = ExecuteFreeAdjacentGrappleMovement(actor, pickedNow.Value, formerOpponent, showActionChoicesAfterMove: false);
+        return false;
+    }
+
+    /// <summary>
+    /// The UI decider's escape-square selection (D10): opens the square selection when <paramref name="escaper"/> can click
+    /// now (the controllable creature on its own PC turn) and answers with the square clicked; false otherwise (the AI answers).
+    /// </summary>
+    internal bool PromptGrappleEscapeSquare(CharacterController escaper, IList<Vector2Int> squares, CharacterController formerOpponent, Action<Vector2Int?> answer)
+    {
+        if (!CanSelectSquareNow(escaper) || squares == null || squares.Count == 0)
+            return false;
+
+        BeginFreeAdjacentGrappleMoveSelection(escaper, new List<Vector2Int>(squares));
+        // After Begin, which clears the selection state.
+        _freeAdjacentGrappleMoveFormerOpponent = formerOpponent;
+        _freeAdjacentGrappleMoveAnswer = answer;
         return true;
     }
 
@@ -506,6 +542,7 @@ public partial class GameManager
         _isFreeAdjacentGrappleMoveSelection = false;
         _freeAdjacentGrappleMoveActor = null;
         _freeAdjacentGrappleMoveFormerOpponent = null;
+        _freeAdjacentGrappleMoveAnswer = null;
         _freeAdjacentGrappleMoveDestinations.Clear();
     }
 
@@ -543,7 +580,7 @@ public partial class GameManager
 
         CombatUI?.SetActionButtonsVisible(false);
         CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Grapple ended: choose a free adjacent square");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} can move to an adjacent square (free action). Right-click/ESC to remain in place."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} finishes the escape by moving to an adjacent square (PHB p.156): choose one."));
     }
 
     /// <summary>True when <paramref name="actor"/> may make the free escape move to <paramref name="destination"/>: an adjacent square it fits in.</summary>
@@ -640,7 +677,9 @@ public partial class GameManager
 
         if (cell.Coords == actor.GridPosition)
         {
-            CancelFreeAdjacentGrappleMovementSelection(actor);
+            // The escape ends with the move (PHB p.156; D10): staying is no option while a square is free.
+            if (!RefuseToSkipEscapeMove(actor))
+                CancelFreeAdjacentGrappleMovementSelection(actor);
             return;
         }
 
@@ -653,10 +692,31 @@ public partial class GameManager
             return;
         }
 
-        // Captured first: the coroutine clears the selection state.
+        // The UI decider's answer (captured first: the move clears the selection state).
+        Action<Vector2Int?> answer = _freeAdjacentGrappleMoveAnswer;
+        if (answer != null)
+        {
+            answer(cell.Coords);
+            return;
+        }
         CharacterController formerOpponent = _freeAdjacentGrappleMoveFormerOpponent;
         CurrentSubPhase = PlayerSubPhase.Animating;
         StartCoroutine(ExecuteFreeAdjacentGrappleMovement(actor, cell.Coords, formerOpponent, showActionChoicesAfterMove: true));
+    }
+
+    /// <summary>
+    /// True (and logged) when <paramref name="escaper"/>'s escape-square selection must stay open: PHB p.156 has an escaper
+    /// finish the escape by moving into a space adjacent to its opponent, so it cannot stay while one of those spaces is free
+    /// (D10, batch 12 step 19 review). False when no square is free any more, so the selection may close.
+    /// </summary>
+    private bool RefuseToSkipEscapeMove(CharacterController escaper)
+    {
+        if (escaper == null || escaper.Stats == null || escaper.Stats.IsDead || Grid == null)
+            return false;
+        if (GetValidFreeAdjacentGrappleMoveSquares(escaper).Count == 0)
+            return false;
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{escaper.Stats.CharacterName} must finish the escape by moving into an adjacent square (PHB p.156): choose one of the highlighted squares."));
+        return true;
     }
 
     private void CancelFreeAdjacentGrappleMovementSelection(CharacterController actor)
@@ -678,63 +738,177 @@ public partial class GameManager
         _grappleMoveMaxRangeSquares = 0;
         _grappleMoveOpponents.Clear();
         _grappleMovePathsByDestination.Clear();
+        _grappleMoveAnswer = null;
     }
 
-    private void BeginGrappleMoveSelection(CharacterController actor)
+    /// <summary>
+    /// The grapple move after a won Move check, for PCs and NPCs alike (PHB p.156: up to half speed, bringing the others
+    /// along; CMB-103, batch 12 step 19): the destinations within half speed where the whole grapple fits
+    /// (<see cref="PrepareGrappleMove"/>), the mover's decider picks one (the UI selection on a PC's own turn, answered by the
+    /// click; the AI by AIProfile.ChooseGrappleMoveDestination), and <see cref="ExecuteGrappleMovement"/> drags the grapple
+    /// there, provoking from third parties only (CMB-152). <paramref name="uiFlow"/>: the PC grapple menu's flow, whose
+    /// continuation (the action choices, the after-attack delay) runs here; otherwise (the AI grapple turn) the returned
+    /// coroutine is the move the caller runs, or null when it stays.
+    /// </summary>
+    private IEnumerator StartGrappleMoveChoice(CharacterController actor, bool uiFlow)
     {
         if (actor == null || actor.Stats == null)
         {
-            ShowActionChoices();
-            return;
+            if (uiFlow)
+                ShowActionChoices();
+            return null;
         }
 
-        if (!actor.TryGetActiveGrappleOpponents(out List<CharacterController> opponents)
-            || opponents.Count == 0)
+        if (!PrepareGrappleMove(actor, out string failure))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot move the grapple: no valid grapple opponents."));
-            StartCoroutine(AfterAttackDelay(actor, 0.5f));
-            return;
+            if (!string.IsNullOrEmpty(failure))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", failure));
+            ClearGrappleMoveSelectionState();
+            if (uiFlow)
+                StartCoroutine(AfterAttackDelay(actor, 0.5f));
+            return null;
+        }
+
+        var paths = new Dictionary<Vector2Int, List<Vector2Int>>(_grappleMovePathsByDestination);
+        var opponents = new List<CharacterController>(_grappleMoveOpponents);
+        bool waiting = true;
+        bool answeredNow = false;
+        Vector2Int? pickedNow = null;
+        ManeuverDeciders.For(actor, uiFlow ? (ActorSource?)null : ActorSource.AI).ChooseGrappleMoveDestination(this, actor, paths, opponents, destination =>
+        {
+            if (waiting)
+            {
+                answeredNow = true;
+                pickedNow = destination;
+                return;
+            }
+            // The selection's click.
+            if (destination.HasValue && paths.TryGetValue(destination.Value, out List<Vector2Int> clickedPath))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{actor.Stats.CharacterName} selects grapple move destination ({destination.Value.x},{destination.Value.y})."));
+                StartCoroutine(ExecuteGrappleMovement(actor, clickedPath, uiContinuation: true));
+            }
+            else
+            {
+                CancelGrappleMoveSelection(actor);
+            }
+        });
+        waiting = false;
+
+        if (!answeredNow)
+            return null; // the UI selection is open
+
+        if (pickedNow.HasValue && paths.TryGetValue(pickedNow.Value, out List<Vector2Int> path))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{actor.Stats.CharacterName} takes the grapple to ({pickedNow.Value.x},{pickedNow.Value.y})."));
+            IEnumerator move = ExecuteGrappleMovement(actor, path, uiContinuation: uiFlow);
+            if (!uiFlow)
+                return move;
+            StartCoroutine(move);
+            return null;
+        }
+
+        if (uiFlow)
+        {
+            CancelGrappleMoveSelection(actor);
+            return null;
+        }
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{actor.Stats.CharacterName} chooses not to move after winning grapple control."));
+        ClearGrappleMoveSelectionState();
+        return null;
+    }
+
+    /// <summary>
+    /// Sets the grapple move's state (the mover, its opponents, half its speed) and collects its destinations into
+    /// _grappleMovePathsByDestination. False, with the log line, when there is nothing to choose: no opponents, no movement
+    /// (half speed 0) or no destination where the grapple fits.
+    /// </summary>
+    private bool PrepareGrappleMove(CharacterController actor, out string failure)
+    {
+        failure = null;
+        if (!actor.TryGetActiveGrappleOpponents(out List<CharacterController> opponents) || opponents.Count == 0)
+        {
+            failure = $"{actor.Stats.CharacterName} cannot move the grapple: no valid grapple opponents.";
+            return false;
         }
 
         int halfSpeedRange = Mathf.Max(0, GetMoveRangeSquaresIgnoringGrapple(actor) / 2);
         if (halfSpeedRange <= 0)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent."));
-            StartCoroutine(AfterAttackDelay(actor, 0.5f));
-            return;
+            failure = $"{actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent.";
+            return false;
         }
 
         ClearOverrunContinuationState();
         ClearFreeAdjacentGrappleMoveSelectionState();
         ClearGrappleMoveSelectionState();
-        _isGrappleMoveSelection = true;
         _grappleMoveActor = actor;
         _grappleMoveMaxRangeSquares = halfSpeedRange;
         _grappleMoveOpponents.AddRange(opponents);
+        CollectGrappleMoveDestinations(actor);
 
-        CurrentSubPhase = PlayerSubPhase.Moving;
-        ShowGrappleMoveRange(actor);
-        CombatUI?.SetActionButtonsVisible(false);
-
-        if (_highlightedCells.Count == 0)
+        if (_grappleMovePathsByDestination.Count == 0)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} beats the grapple check but has no valid destination within half speed ({halfSpeedRange} squares) while dragging grappled opponents."));
-            ClearGrappleMoveSelectionState();
-            StartCoroutine(AfterAttackDelay(actor, 0.5f));
-            return;
+            failure = $"{actor.Stats.CharacterName} beats the grapple check but has no valid destination within half speed ({halfSpeedRange} squares) while dragging grappled opponents.";
+            return false;
         }
-
-        CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Move while grappling: choose destination within half speed ({halfSpeedRange} sq)");
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"Move while grappling: select any highlighted square up to half speed ({halfSpeedRange} squares). Grappled opponents will be dragged with you."));
+        return true;
     }
 
+    /// <summary>
+    /// The UI decider's grapple move selection (CMB-103): highlights the destinations when <paramref name="actor"/> can click
+    /// now (the controllable creature on its own PC turn) and answers with the square clicked; false otherwise (the AI answers).
+    /// </summary>
+    internal bool PromptGrappleMoveDestination(CharacterController actor, IReadOnlyDictionary<Vector2Int, List<Vector2Int>> paths,
+        IList<CharacterController> opponents, Action<Vector2Int?> answer)
+    {
+        if (!CanSelectSquareNow(actor) || paths == null || paths.Count == 0)
+            return false;
+
+        _isGrappleMoveSelection = true;
+        _grappleMoveAnswer = answer;
+        CurrentSubPhase = PlayerSubPhase.Moving;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        foreach (Vector2Int destination in paths.Keys)
+        {
+            SquareCell cell = Grid.GetCell(destination);
+            if (cell == null)
+                continue;
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
+        }
+        HighlightCharacterFootprint(actor, HighlightType.Selected);
+        CombatUI?.SetActionButtonsVisible(false);
+        CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"Move while grappling: select any highlighted square up to half speed ({_grappleMoveMaxRangeSquares} squares). Grappled opponents will be dragged with you."));
+        return true;
+    }
+
+    /// <summary>Highlights the open grapple move selection's destinations again (after a cancelled AoO confirmation).</summary>
     private void ShowGrappleMoveRange(CharacterController actor)
     {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
+        foreach (Vector2Int destination in _grappleMovePathsByDestination.Keys)
+        {
+            SquareCell cell = Grid.GetCell(destination);
+            if (cell == null)
+                continue;
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
+        }
+        if (actor != null)
+            HighlightCharacterFootprint(actor, HighlightType.Selected);
+    }
+
+    /// <summary>Fills _grappleMovePathsByDestination with every square within half speed the grapple can be moved to.</summary>
+    private void CollectGrappleMoveDestinations(CharacterController actor)
+    {
         _grappleMovePathsByDestination.Clear();
 
-        if (actor == null || actor.Stats == null)
+        if (actor == null || actor.Stats == null || Grid == null)
             return;
 
         List<CharacterController> temporarilyClearedOpponents = TemporarilyClearOccupancy(_grappleMoveOpponents);
@@ -749,8 +923,6 @@ public partial class GameManager
                 if (!TryBuildGrappleMovePath(actor, candidate.Coords, out List<Vector2Int> path))
                     continue;
 
-                candidate.SetHighlight(HighlightType.Move);
-                _highlightedCells.Add(candidate);
                 _grappleMovePathsByDestination[candidate.Coords] = path;
             }
         }
@@ -758,8 +930,6 @@ public partial class GameManager
         {
             RestoreOccupancy(temporarilyClearedOpponents);
         }
-
-        HighlightCharacterFootprint(actor, HighlightType.Selected);
     }
 
     private List<CharacterController> TemporarilyClearOccupancy(List<CharacterController> characters)
@@ -991,17 +1161,35 @@ public partial class GameManager
             return;
         }
 
+        // The UI decider's answer (StartGrappleMoveChoice runs the move).
+        Action<Vector2Int?> answer = _grappleMoveAnswer;
+        _isGrappleMoveSelection = false;
+        if (answer != null)
+        {
+            answer(cell.Coords);
+            return;
+        }
+
         Vector2Int destination = selectedPath[selectedPath.Count - 1];
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{actor.Stats.CharacterName} selects grapple move destination ({destination.x},{destination.y})."));
-        StartCoroutine(ExecuteGrappleMovement(actor, selectedPath));
+        StartCoroutine(ExecuteGrappleMovement(actor, selectedPath, uiContinuation: true));
     }
 
-    private IEnumerator ExecuteGrappleMovement(CharacterController actor, List<Vector2Int> actorPath)
+    /// <summary>
+    /// Drags the grapple along <paramref name="actorPath"/> (PHB p.156; CMB-152 for the AoOs), for PCs and NPCs alike.
+    /// <paramref name="uiContinuation"/>: the PC flow's end (the turn ends when an AoO dropped the PC, else the action
+    /// choices); false for the AI grapple turn, which goes on by itself.
+    /// </summary>
+    private IEnumerator ExecuteGrappleMovement(CharacterController actor, List<Vector2Int> actorPath, bool uiContinuation = true)
     {
         if (actor == null || actor.Stats == null || actorPath == null || actorPath.Count == 0)
+        {
+            ClearGrappleMoveSelectionState();
             yield break;
+        }
 
-        CurrentSubPhase = PlayerSubPhase.Animating;
+        if (uiContinuation)
+            CurrentSubPhase = PlayerSubPhase.Animating;
 
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -1126,6 +1314,9 @@ public partial class GameManager
         if (EvaluateCombatEnd("GrappleMove"))
             yield break;
 
+        if (!uiContinuation)
+            yield break;
+
         if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
         {
             EndActivePCTurn();
@@ -1204,7 +1395,7 @@ public partial class GameManager
             bool hasIterativeAttack = CanUseGrappleAttackOption(actor, GrappleActionType.OpposedGrappleEscape);
             options.Add((
                 GrappleActionType.EscapeArtist,
-                $"Escape Artist check (Std): d20 + Escape Artist vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})",
+                $"Escape Artist check (Std): d20 + Escape Artist, opposed by {opponent.Stats.CharacterName}'s grapple check ({opponent.GetGrappleModifier():+#;-#;0})",
                 hasStandardAction,
                 hasStandardAction ? string.Empty : "Standard action already spent."));
             options.Add((
@@ -1333,7 +1524,7 @@ public partial class GameManager
                 AddOption(GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)");
                 AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
                 AddOption(GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})");
-                AddOption(GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})");
+                AddOption(GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist), opposed by {opponent.Stats.CharacterName}'s grapple check ({opponent.GetGrappleModifier():+#;-#;0})");
                 if (pinRenewalDue && opponentPinned)
                 {
                     options.Add((
@@ -1760,7 +1951,7 @@ public partial class GameManager
     }
 
     private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining,
-        int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false)
+        int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false, AttackIntent intent = null)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -1768,7 +1959,7 @@ public partial class GameManager
         if (actor == null || actor.Stats == null)
             return false;
 
-        if (!TryConsumeGrappleAttackAction(actor, out attackBonusUsed, out attacksRemaining, out string reason, actionType, naturalAttackIndex, naturalAttackIsHasteExtra))
+        if (!TryConsumeGrappleAttackAction(actor, out attackBonusUsed, out attacksRemaining, out string reason, actionType, naturalAttackIndex, naturalAttackIsHasteExtra, intent))
         {
             string fallback = string.IsNullOrWhiteSpace(reason)
                 ? "no grapple attacks remain in the shared pool"
@@ -1782,23 +1973,14 @@ public partial class GameManager
         return true;
     }
 
-    private bool ShouldPromptPlayerForGrappleEscapeOpposition(CharacterController escaper, out CharacterController grappler)
+    /// <summary>The creature whose grapple <paramref name="escaper"/> tries to escape (asked whether it opposes, D10), or null.</summary>
+    private static CharacterController GetGrappleEscapeOpponent(CharacterController escaper)
     {
-        grappler = null;
         if (escaper == null || escaper.Stats == null)
-            return false;
-
+            return null;
         if (!escaper.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
-            return false;
-
-        if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
-            return false;
-
-        if (!opponent.IsControllable)
-            return false;
-
-        grappler = opponent;
-        return true;
+            return null;
+        return opponent != null && opponent.Stats != null && !opponent.Stats.IsDead ? opponent : null;
     }
 
     private string BuildGrappleEscapeOppositionPromptMessage(CharacterController escaper, CharacterController grappler)
@@ -1836,55 +2018,104 @@ public partial class GameManager
         };
     }
 
-    private bool TryResolveOpposedGrappleEscapeWithPrompt(
+    /// <summary>
+    /// An opposed grapple check to escape (PHB p.156), for PCs and NPCs alike: the grappler may choose not to oppose it, which
+    /// counts as losing (D10, batch 12 step 19). Its decider answers (IManeuverDecider.ChooseOpposeEscape): the UI through the
+    /// "Oppose Escape / Allow Escape" prompt for a controllable grappler, the AI always opposes (AIProfile.ShouldOpposeGrappleEscape).
+    /// Opposed: the shared resolver rolls the check (a pinned Improved Grab grabber's won escape from the pin also deals its
+    /// hold damage, MM p.310, CMB-148). Allowed: a pinned escaper escapes only the pin, the grapple goes on (PHB p.156-157), and
+    /// no grapple check was won, so no hold damage. <paramref name="onResolved"/> gets the result, at once or after the prompt.
+    /// Returns false (nothing done) when the escaper grapples nobody; the caller then resolves the check itself.
+    /// <paramref name="escapeAction"/> is the escape made: the opposed grapple check, or the Escape Artist check that replaces it
+    /// (a standard action, opposed by the grappler's grapple check, PHB p.73, p.156), which the grappler may equally let go.
+    /// </summary>
+    private bool ResolveGrappleEscapeThroughOpposition(
         CharacterController escaper,
         int? iterativeAttackBonusOverride,
         Action<SpecialAttackResult> onResolved,
-        AttackDamageMode? holdDamageMode = null)
+        AttackDamageMode? holdDamageMode = null,
+        GrappleActionType escapeAction = GrappleActionType.OpposedGrappleEscape)
     {
-        if (!ShouldPromptPlayerForGrappleEscapeOpposition(escaper, out CharacterController grappler))
+        CharacterController grappler = GetGrappleEscapeOpponent(escaper);
+        if (grappler == null)
             return false;
 
-        if (escaper == null || escaper.Stats == null || grappler == null || grappler.Stats == null)
-            return false;
-
-        if (CombatUI == null)
-            return false;
-
-        string escaperName = escaper.Stats.CharacterName;
-        string grapplerName = grappler.Stats.CharacterName;
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{escaperName} attempts to escape {grapplerName}'s grapple!"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {grapplerName}'s decision..."));
-
-        CombatUI?.ShowConfirmationDialog(
-            title: "Escape Attempt",
-            message: BuildGrappleEscapeOppositionPromptMessage(escaper, grappler),
-            confirmLabel: "Oppose Escape",
-            cancelLabel: "Allow Escape",
-            onConfirm: () =>
+        ManeuverDeciders.For(grappler).ChooseOpposeEscape(this, grappler, escaper, oppose =>
+        {
+            if (oppose)
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} opposes the escape attempt!"));
-                // A pinned Improved Grab grabber's won escape from the pin also deals its hold damage (MM p.310, CMB-148).
                 SpecialAttackResult opposedResult = escaper.ResolveGrappleAction(
-                    GrappleActionType.OpposedGrappleEscape,
+                    escapeAction,
                     holdDamageMode,
                     null,
                     iterativeAttackBonusOverride);
                 onResolved?.Invoke(opposedResult);
-            },
-            onCancel: () =>
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} allows {escaperName} to escape."));
-                // A pinned escaper escapes only the pin; the grapple goes on (PHB p.156-157). Declining to oppose is not
-                // a won grapple check, so a pinned grabber deals no Improved Grab hold damage here (MM p.310).
-                bool pinOnly = escaper.EscapePinKeepingGrapple();
-                if (!pinOnly)
-                    escaper.ReleaseGrappleState("escape allowed by grappler");
-                onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler, pinOnly));
-            });
+                return;
+            }
 
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grappler.Stats.CharacterName} allows {escaper.Stats.CharacterName} to escape."));
+            bool pinOnly = escaper.EscapePinKeepingGrapple();
+            if (!pinOnly)
+                escaper.ReleaseGrappleState("escape allowed by grappler");
+            onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler, pinOnly));
+        });
         return true;
+    }
+
+    /// <summary>
+    /// The UI decider's escape-opposition prompt (D10): "Oppose Escape" or "Allow Escape" for a controllable grappler.
+    /// False without a UI (the AI answers: oppose).
+    /// </summary>
+    internal bool PromptGrappleEscapeOpposition(CharacterController grappler, CharacterController escaper, Action<bool> answer)
+    {
+        if (CombatUI == null || grappler == null || escaper == null || grappler.Stats == null || escaper.Stats == null)
+            return false;
+
+        string escaperName = escaper.Stats.CharacterName;
+        string grapplerName = grappler.Stats.CharacterName;
+        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"{escaperName} attempts to escape {grapplerName}'s grapple!"));
+        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {grapplerName}'s decision..."));
+
+        _escapeOppositionPromptGrappler = grappler;
+        _escapeOppositionPromptAnswer = answer;
+        CombatUI.ShowConfirmationDialog(
+            title: "Escape Attempt",
+            message: BuildGrappleEscapeOppositionPromptMessage(escaper, grappler),
+            confirmLabel: "Oppose Escape",
+            cancelLabel: "Allow Escape",
+            onConfirm: () => AnswerGrappleEscapeOppositionPrompt(true),
+            onCancel: () => AnswerGrappleEscapeOppositionPrompt(false));
+        return true;
+    }
+
+    private CharacterController _escapeOppositionPromptGrappler;
+    private Action<bool> _escapeOppositionPromptAnswer;
+
+    /// <summary>True while a controllable grappler's escape-opposition prompt waits for its answer (D10).</summary>
+    public bool IsAwaitingEscapeOppositionChoice => _escapeOppositionPromptAnswer != null;
+
+    /// <summary>Drops an unanswered escape-opposition prompt without resolving it (a combat reset or a halted fight).</summary>
+    private void ClearGrappleEscapeOppositionPrompt()
+    {
+        bool wasOpen = _escapeOppositionPromptAnswer != null;
+        _escapeOppositionPromptAnswer = null;
+        _escapeOppositionPromptGrappler = null;
+        if (wasOpen)
+            CombatUI?.HideConfirmationDialog();
+    }
+
+    /// <summary>The prompt's answer: true = Oppose Escape, false = Allow Escape.</summary>
+    private void AnswerGrappleEscapeOppositionPrompt(bool oppose)
+    {
+        Action<bool> answer = _escapeOppositionPromptAnswer;
+        CharacterController grappler = _escapeOppositionPromptGrappler;
+        _escapeOppositionPromptAnswer = null;
+        _escapeOppositionPromptGrappler = null;
+        if (answer == null)
+            return;
+        if (oppose && grappler != null && grappler.Stats != null)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grappler.Stats.CharacterName} opposes the escape attempt!"));
+        answer(oppose);
     }
 
     private void FinalizeGrappleActionResolution(
@@ -1921,9 +2152,10 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
+        // A won Move check (PHB p.156): the grapple moves where the mover's decider says (CMB-103).
         if (actionType == GrappleActionType.MoveHalfSpeed && result.Success)
         {
-            BeginGrappleMoveSelection(actor);
+            StartGrappleMoveChoice(actor, uiFlow: true);
             return;
         }
 
@@ -2003,6 +2235,8 @@ public partial class GameManager
         }
         else if (usesIterativeAttack)
         {
+            // No intent: a grappler cannot attack with two weapons (PHB p.156), so no grapple action takes the two-weapon
+            // main-hand penalty, for the PC menu as for the NPC grapple turn (no UiManeuverIntent here).
             if (!TryConsumeIterativeGrappleAttack(actor, actionType, out attackBonusUsed, out attacksRemaining, naturalAttackIndex, naturalAttackIsHasteExtra))
             {
                 ShowActionChoices();
@@ -2018,12 +2252,13 @@ public partial class GameManager
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        if (actionType == GrappleActionType.OpposedGrappleEscape
-            && TryResolveOpposedGrappleEscapeWithPrompt(
+        if ((actionType == GrappleActionType.OpposedGrappleEscape || actionType == GrappleActionType.EscapeArtist)
+            && ResolveGrappleEscapeThroughOpposition(
                 actor,
                 usesIterativeAttack ? attackBonusUsed : (int?)null,
                 onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining, formerOpponent),
-                grappleDamageModeOverride))
+                grappleDamageModeOverride,
+                actionType))
         {
             return;
         }
@@ -2092,7 +2327,17 @@ public partial class GameManager
         yield return StartCoroutine(AI_GrappleRestrictedTurn(actor, escapeOnly: true));
     }
 
-    private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc, bool escapeOnly = false)
+    /// <summary>
+    /// One grapple action of the AI grapple turn with the action given (the scenario harness's scripted grapple steps, an
+    /// AI-path executor like TryNPCSpecialAttackByTypeForAI): the same costs, resolver, escape opposition (D10), escape
+    /// square and grapple move (CMB-103) as the AI's own choice. Refused (logged) when the action is not legal now.
+    /// </summary>
+    public IEnumerator RunGrappleActionForAI(CharacterController npc, GrappleActionType action)
+    {
+        yield return StartCoroutine(AI_GrappleRestrictedTurn(npc, escapeOnly: false, forcedAction: action));
+    }
+
+    private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc, bool escapeOnly = false, GrappleActionType? forcedAction = null)
     {
         if (npc == null || npc.Stats == null)
             yield break;
@@ -2115,9 +2360,24 @@ public partial class GameManager
                 yield break;
             }
 
-            GrappleActionType? chosenAction = escapeOnly
-                ? ChooseNPCGrappleEscapeForFlight(npc, opponent, actorPinned, opponentPinned)
-                : ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
+            GrappleActionType? chosenAction;
+            if (forcedAction.HasValue)
+            {
+                chosenAction = BuildNPCLegalGrappleActions(npc, opponent, actorPinned, opponentPinned).Contains(forcedAction.Value)
+                    ? forcedAction
+                    : null;
+                if (!chosenAction.HasValue)
+                {
+                    Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} cannot take the grapple action {forcedAction.Value} now.");
+                    yield break;
+                }
+            }
+            else
+            {
+                chosenAction = escapeOnly
+                    ? ChooseNPCGrappleEscapeForFlight(npc, opponent, actorPinned, opponentPinned)
+                    : ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
+            }
             if (chosenAction == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no legal grapple actions available."));
@@ -2164,24 +2424,21 @@ public partial class GameManager
             }
 
             SpecialAttackResult result = null;
-            bool usedEscapePrompt = false;
-            if (chosenAction.Value == GrappleActionType.OpposedGrappleEscape)
-            {
-                usedEscapePrompt = TryResolveOpposedGrappleEscapeWithPrompt(
-                    npc,
-                    iterativeAttackBonusOverride,
-                    onResolved: resolved => result = resolved);
-            }
+            AttackDamageMode? grappleDamageModeOverride = ShouldForceLethalGrappleDamageForNPC(npc, chosenAction.Value)
+                ? AttackDamageMode.Lethal
+                : null;
+            // An escape, by grapple check or Escape Artist: the grappler may let it go (D10; a controllable grappler's prompt is
+            // waited on).
+            bool throughOpposition = (chosenAction.Value == GrappleActionType.OpposedGrappleEscape || chosenAction.Value == GrappleActionType.EscapeArtist)
+                && ResolveGrappleEscapeThroughOpposition(npc, iterativeAttackBonusOverride, resolved => result = resolved, grappleDamageModeOverride,
+                    chosenAction.Value);
 
-            if (!usedEscapePrompt)
+            if (!throughOpposition)
             {
-                AttackDamageMode? grappleDamageModeOverride = ShouldForceLethalGrappleDamageForNPC(npc, chosenAction.Value)
-                    ? AttackDamageMode.Lethal
-                    : null;
                 result = npc.ResolveGrappleAction(chosenAction.Value, grappleDamageModeOverride, null, iterativeAttackBonusOverride,
                     naturalPick.NaturalAttackIndex, naturalPick.IsHasteExtraAttack);
             }
-            else
+            else if (result == null)
             {
                 yield return new WaitUntil(() => result != null);
             }
@@ -2200,6 +2457,17 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{npcGrappleHeader}: {result.Log}"));
             }
             UpdateAllStatsUI();
+
+            // A won Move check takes the grapple where the AI decider says (PHB p.156; CMB-103), provoking from third parties
+            // only (CMB-152).
+            if (chosenAction.Value == GrappleActionType.MoveHalfSpeed && result != null && result.Success)
+            {
+                IEnumerator grappleMove = StartGrappleMoveChoice(npc, uiFlow: false);
+                if (grappleMove != null)
+                    yield return StartCoroutine(grappleMove);
+                if (CurrentPhase == TurnPhase.CombatOver || ThreatSystem.IsMoverIncapacitated(npc))
+                    yield break;
+            }
 
             // The escape move resolves its AoOs (third parties only, CMB-152) before the turn goes on.
             if (!TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result, opponent, out IEnumerator escapeMove) && escapeMove != null)
@@ -2221,6 +2489,10 @@ public partial class GameManager
 
             float pause = isFreeAction ? 0.35f : (usesIterativeAttack || isRake ? 0.45f : 0.8f);
             yield return new WaitForSeconds(pause);
+
+            // A given action (RunGrappleActionForAI) is one action.
+            if (forcedAction.HasValue)
+                break;
 
             // After a rake the grapple actions of the full attack follow (MM p.314, CMB-144).
             if (isRake)

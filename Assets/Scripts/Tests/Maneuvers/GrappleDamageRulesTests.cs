@@ -88,6 +88,7 @@ public static class GrappleDamageRulesTests
         TestAttackSequenceTripReplacesOneNaturalAttack();
         TestAttackSequenceStepResolverUsesStepBab();
         TestManeuverActionCostTable();
+        TestGrappleActionsTakeNoTwoWeaponPenalty();
         TestBullRushIsAStandardAction();
         TestBullRushTargetLimits();
         TestNpcManeuverCostsOneAttackStep();
@@ -1573,6 +1574,11 @@ public static class GrappleDamageRulesTests
     private static void TestAttackSequenceOffHandThenMainHandEntersFullAttack()
     {
         var attacker = CreateIterativeAttacker("SequenceOffHandFirst");
+        // An off-hand step needs an off-hand weapon (the off-hand cap, CanCommitAttack; PHB p.160).
+        global::Inventory inventory = attacker.GetComponent<InventoryComponent>().CharacterInventory;
+        inventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        inventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.LeftHand);
+        inventory.RecalculateStats();
 
         bool offHand = attacker.TryCommitAttack(AttackStepKind.OffHand, out int offHandStep, out _);
         bool mainHand = attacker.TryCommitAttack(AttackStepKind.MainHand, out int mainHandStep, out _);
@@ -1804,6 +1810,110 @@ public static class GrappleDamageRulesTests
             && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Feint)
             && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.CoupDeGrace),
             "Bull rush, overrun, feint and coup de grace do not replace a melee attack");
+
+        // The one cost table (batch 12 step 19, ManeuverActionCost.For) for every SpecialAttackType: each row's action.
+        foreach (SpecialAttackType type in (SpecialAttackType[])System.Enum.GetValues(typeof(SpecialAttackType)))
+        {
+            ManeuverCost cost = ManeuverActionCost.For(type, null);
+            ActionCostType expected = type == SpecialAttackType.CoupDeGrace || type == SpecialAttackType.BullRushCharge
+                ? ActionCostType.FullRound
+                : ActionCostType.Standard;
+            Assert(cost.Action == expected && cost.ReplacesMeleeAttack == ManeuverActionCost.ReplacesMeleeAttack(type),
+                $"Cost table row {type}: {cost} (expected {expected})");
+        }
+        Assert(ManeuverActionCost.For(SpecialAttackType.Overrun, null).MoveOrChargeOnly
+            && ManeuverActionCost.For(SpecialAttackType.BullRushCharge, null).ChargeEnd,
+            "Overrun happens only in a move or a charge (PHB p.157); the charge bull rush ends a charge (PHB p.154)");
+
+        // Feint: a standard action, a move action with Improved Feint (PHB p.155, p.95).
+        CharacterController feinter = CreateTestCharacter("CostTableFeinter");
+        try
+        {
+            Assert(ManeuverActionCost.For(SpecialAttackType.Feint, feinter).Action == ActionCostType.Standard,
+                "Feint without Improved Feint is a standard action (PHB p.155)");
+            feinter.Stats.AddFeats(new System.Collections.Generic.List<string> { "Improved Feint" });
+            Assert(ManeuverActionCost.For(SpecialAttackType.Feint, feinter).Action == ActionCostType.Move,
+                "Feint with Improved Feint is a move action (PHB p.95)");
+        }
+        finally
+        {
+            Cleanup(feinter);
+        }
+    }
+
+    private static void TestGrappleActionsTakeNoTwoWeaponPenalty()
+    {
+        // PHB p.156: a grappler cannot attack with two weapons, so no grapple action while grappling takes the two-weapon
+        // main-hand penalty (PHB p.160): a dual-wielding PC whose dual-wield prompt said yes rolls its grapple check at the
+        // same BAB as an NPC with the same gear (batch 12 step 19 review).
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; grapple two-weapon check needs Play mode");
+            return;
+        }
+
+        FieldInfo dualField = typeof(GameManager).GetField("_isDualWielding", BindingFlags.Instance | BindingFlags.NonPublic);
+        MethodInfo consume = typeof(GameManager).GetMethod("TryConsumeIterativeGrappleAttack", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(dualField != null && consume != null, "GameManager._isDualWielding and TryConsumeIterativeGrappleAttack exist for the grapple two-weapon check");
+        if (dualField == null || consume == null)
+            return;
+
+        var pc = CreateIterativeAttacker("TwoWeaponGrapplePc");
+        var npc = CreateIterativeAttacker("TwoWeaponGrappleNpc");
+        var pcFoe = CreateWeakDefender("TwoWeaponGrapplePcFoe");
+        var npcFoe = CreateWeakDefender("TwoWeaponGrappleNpcFoe");
+        foreach (CharacterController c in new[] { pc, npc })
+        {
+            global::Inventory inventory = c.GetComponent<InventoryComponent>().CharacterInventory;
+            inventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            inventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.LeftHand);
+            inventory.RecalculateStats();
+        }
+        pc.GridPosition = new Vector2Int(4, 4);
+        pcFoe.GridPosition = new Vector2Int(5, 4);
+        npc.GridPosition = new Vector2Int(8, 8);
+        npcFoe.GridPosition = new Vector2Int(9, 8);
+        npc.IsControllable = false;
+        bool savedDual = (bool)dualField.GetValue(gm);
+        ActivePcScope scope = null;
+        try
+        {
+            // Before the grapple it can fight with two weapons (CanDualWield is false while grappled, PHB p.156), and its
+            // two-weapon main-hand penalty is real, so the check below is not vacuous.
+            bool dualBefore = pc.CanDualWield();
+            ForceGrappleState(pc, pcFoe);
+            ForceGrappleState(npc, npcFoe);
+            scope = ActivePcScope.Enter(gm, pc);
+            int mainPenalty = pc.GetDualWieldPenalties().mainPenalty;
+            Debug.Log($"  [TwoWeaponGrapple] dual-wield before the grapple {dualBefore}, main-hand penalty {mainPenalty}");
+            Assert(scope != null && gm.ActivePC == pc && pc.IsGrappling() && npc.IsGrappling() && dualBefore && mainPenalty < 0,
+                "The dual-wielding grappler is the active PC, both creatures are grappling, and its two-weapon penalty is real");
+            if (scope == null)
+                return;
+
+            dualField.SetValue(gm, true);
+            int fullBab = pc.GetMainHandAttackStepBAB(0);
+            int pcShown = gm.GetCurrentGrappleAttackBonus(pc, GrappleActionType.DamageOpponent);
+            int npcShown = gm.GetCurrentGrappleAttackBonus(npc, GrappleActionType.DamageOpponent);
+            object[] pcArgs = { pc, GrappleActionType.DamageOpponent, 0, 0, -1, false, null };
+            object[] npcArgs = { npc, GrappleActionType.DamageOpponent, 0, 0, -1, false, null };
+            bool pcPaid = (bool)consume.Invoke(gm, pcArgs);
+            bool npcPaid = (bool)consume.Invoke(gm, npcArgs);
+            Assert(pcShown == fullBab && npcShown == fullBab && pcPaid && npcPaid && (int)pcArgs[2] == fullBab && (int)npcArgs[2] == fullBab,
+                $"Grapple actions take no two-weapon penalty for the PC or the NPC (PHB p.156): shown PC {pcShown}, NPC {npcShown}; paid PC {pcArgs[2]}, NPC {npcArgs[2]}; full BAB {fullBab}");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Grapple two-weapon check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            dualField.SetValue(gm, savedDual);
+            scope?.Dispose();
+            Cleanup(pc, npc, pcFoe, npcFoe);
+        }
     }
 
     private static void TestBullRushIsAStandardAction()
@@ -1987,6 +2097,13 @@ public static class GrappleDamageRulesTests
         target.GridPosition = new Vector2Int(1, 0);
         try
         {
+            // The cost table's overrun row is made only during a move or a charge (PHB p.157): the executor refuses a
+            // standing overrun and spends nothing (batch 12 step 19 review).
+            bool overrun = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Overrun);
+            Assert(!overrun && npc.Actions.HasStandardAction && npc.Actions.HasMoveAction
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 0 && target.GridPosition == new Vector2Int(1, 0),
+                "A standing NPC overrun is refused and spends nothing: overrun is made only in a move or a charge (PHB p.157)");
+
             bool firstTrip = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
             Assert(firstTrip
                 && npc.ProgressiveAttackPool.MainHandStepsUsed == 1
@@ -2300,7 +2417,7 @@ public static class GrappleDamageRulesTests
                 var babs = new System.Collections.Generic.List<int>();
                 for (int i = 0; i < 3; i++)
                 {
-                    object[] args = { pc, 0, 0, null };
+                    object[] args = { pc, 0, 0, null, null };
                     if ((bool)consumeTrip.Invoke(gm, args))
                         babs.Add((int)args[1]);
                     if (i == 0)
@@ -2309,7 +2426,7 @@ public static class GrappleDamageRulesTests
                             $"PC Trip after one trip: the bite is marked used, next trip at the claw's BAB {CharacterStats.FormatMod(secondary)}, 2 left" + tag);
                 }
 
-                object[] fourth = { pc, 0, 0, null };
+                object[] fourth = { pc, 0, 0, null, null };
                 bool fourthOk = (bool)consumeTrip.Invoke(gm, fourth);
                 Assert(babs.Count == 3 && babs[0] == 4 && babs[1] == secondary && babs[2] == secondary && !fourthOk && !gm.CanUseTripAttackOption(pc)
                     && gm.IsNaturalAttackSequenceIndexUsed(pc, 1) && gm.IsNaturalAttackSequenceIndexUsed(pc, 2) && !gm.CanUseNaturalAttackOption(pc),
@@ -2341,7 +2458,7 @@ public static class GrappleDamageRulesTests
                 gm.Combat_MarkNaturalAttackSequenceIndexUsed(1);
                 bool offeredAtBite = gm.GetCurrentTripAttackBonus(outOfOrder) == 4 && gm.GetRemainingTripAttackActions(outOfOrder) == 2;
 
-                object[] args = { outOfOrder, 0, 0, null };
+                object[] args = { outOfOrder, 0, 0, null, null };
                 bool tripped = (bool)consumeTrip.Invoke(gm, args);
                 Assert(clawCommitted && offeredAtBite && tripped && (int)args[1] == 4
                     && gm.IsNaturalAttackSequenceIndexUsed(outOfOrder, 0) && !gm.IsNaturalAttackSequenceIndexUsed(outOfOrder, 2)
@@ -2608,7 +2725,7 @@ public static class GrappleDamageRulesTests
             {
                 // The PC gives up the next unused natural attack, as the NPC gives up the one at its step
                 // (PC_NPC_PARITY; CMB-102 open item 8): with the gore next, the sunder is refused.
-                object[] refusedArgs = { goreClaws, false, 0, 0, null, false, null };
+                object[] refusedArgs = { goreClaws, false, 0, 0, null, false, null, null };
                 bool refused = !(bool)consumeSunder.Invoke(gm, refusedArgs);
                 Assert(!gm.CanUseSunderAttackOption(goreClaws) && gm.GetRemainingSunderAttackActions(goreClaws) == 0 && refused
                     && goreClaws.ProgressiveAttackPool.MainHandStepsUsed == 0 && !gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 0),
@@ -2620,7 +2737,7 @@ public static class GrappleDamageRulesTests
                 Assert(goreCommitted && gm.CanUseSunderAttackOption(goreClaws) && gm.GetRemainingSunderAttackActions(goreClaws) == 2
                     && gm.GetCurrentSunderAttackBonus(goreClaws) == 1,
                     "PC Sunder after the gore attacked: 2 sunders (the claws) at the claw's BAB +1");
-                object[] args = { goreClaws, false, 0, 0, null, false, null };
+                object[] args = { goreClaws, false, 0, 0, null, false, null, null };
                 bool consumed = (bool)consumeSunder.Invoke(gm, args);
                 Assert(consumed && (int)args[2] == 1 && gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 1) && !gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 2)
                     && goreClaws.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == 1 && gm.GetRemainingSunderAttackActions(goreClaws) == 1,
@@ -2834,7 +2951,9 @@ public static class GrappleDamageRulesTests
         // combatant gets +4 per size category of difference; the smaller one takes no penalty. A natural weapon
         // gets no handedness modifier, as on a disarm roll (owner interpretation 2026-10-11, CMB-141).
         System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
-        var bear = CreateBiteClawsCreature("SunderRollBear", 6, false);
+        // BAB +1 (bite +9 with STR 26), so the forced rolls (1 against 20) lose against every defender weapon below,
+        // the dagger (-6) included, and no weapon is destroyed between the checks.
+        var bear = CreateBiteClawsCreature("SunderRollBear", 1, false);
         var fighter = CreateIterativeAttacker("SunderRollFighter");
         var defender = CreateWeakDefender("SunderRollDefender");
         bear.GridPosition = new Vector2Int(16, 12);
@@ -2850,11 +2969,11 @@ public static class GrappleDamageRulesTests
             int defenderBase = PlainOpposedMod(defender);
 
             defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
-            var vsLongsword = ForcedSunderModifiers(bear, defender, 6);
+            var vsLongsword = ForcedSunderModifiers(bear, defender, 1);
             defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponGreataxe), EquipSlot.RightHand);
-            var vsGreataxe = ForcedSunderModifiers(bear, defender, 6);
+            var vsGreataxe = ForcedSunderModifiers(bear, defender, 1);
             defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.RightHand);
-            var vsDagger = ForcedSunderModifiers(bear, defender, 6);
+            var vsDagger = ForcedSunderModifiers(bear, defender, 1);
             Assert(vsLongsword.attack == bearBase && vsGreataxe.attack == bearBase && vsDagger.attack == bearBase
                 && vsLongsword.defense == defenderBase && vsGreataxe.defense == defenderBase + 4 && vsDagger.defense == defenderBase - 4,
                 $"The defender rolls with its own weapon: longsword {vsLongsword.defense}, greataxe {vsGreataxe.defense}, dagger {vsDagger.defense} (base {defenderBase}); the bite {vsLongsword.attack} gets no handedness modifier");
@@ -2862,11 +2981,11 @@ public static class GrappleDamageRulesTests
             defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
             bear.Stats.CurrentSizeCategory = SizeCategory.Large;
             int largeBearBase = PlainOpposedMod(bear);
-            var largeBear = ForcedSunderModifiers(bear, defender, 6);
+            var largeBear = ForcedSunderModifiers(bear, defender, 1);
             bear.Stats.CurrentSizeCategory = SizeCategory.Medium;
             defender.Stats.CurrentSizeCategory = SizeCategory.Large;
             int largeDefenderBase = PlainOpposedMod(defender);
-            var largeDefender = ForcedSunderModifiers(bear, defender, 6);
+            var largeDefender = ForcedSunderModifiers(bear, defender, 1);
             defender.Stats.CurrentSizeCategory = SizeCategory.Medium;
             Assert(largeBear.attack == largeBearBase + 4 && largeBear.defense == defenderBase
                 && largeDefender.attack == bearBase && largeDefender.defense == largeDefenderBase + 4,
@@ -3021,9 +3140,14 @@ public static class GrappleDamageRulesTests
                 "Hasted gore/claw/claw: the default Haste attack is the gore; a sunder at the Haste step uses the first claw");
 
             // NPC: the gore and both claws attack (three steps), then the sunder replaces Haste's extra attack.
+            // Each natural attack made is marked used, as the step resolver marks it (CMB-127): since batch 12 step 19 every
+            // creature's maneuver gives up the first natural attack not used this turn.
             bool stepsCommitted = true;
             for (int i = 0; i < 3; i++)
+            {
                 stepsCommitted &= npc.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+                npc.ProgressiveAttackPool.MarkNaturalAttackUsed(i);
+            }
             bool legal = npc.CanSunderWithAttack(-1, out string why);
             gm.TryNPCSpecialAttackByTypeForAI(npc, defender, SpecialAttackType.Sunder);
             int expectedClawMod = 1 + npc.Stats.STRMod + npc.Stats.SizeModifier + npc.Stats.ConditionAttackPenalty;
@@ -3047,7 +3171,7 @@ public static class GrappleDamageRulesTests
                 }
 
                 bool offered = gm.CanUseSunderAttackOption(pc) && gm.GetRemainingSunderAttackActions(pc) == 1 && gm.GetCurrentSunderAttackBonus(pc) == 1;
-                object[] args = { pc, false, 0, 0, null, false, null };
+                object[] args = { pc, false, 0, 0, null, false, null, null };
                 bool consumed = (bool)consumeSunder.Invoke(gm, args);
                 Assert(offered && consumed && (int)args[2] == 1 && pc.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
                     && pc.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == 1 && gm.GetRemainingSunderAttackActions(pc) == 0,
@@ -3882,7 +4006,7 @@ public static class GrappleDamageRulesTests
     private static bool ConsumeGrappleStep(GameManager gm, CharacterController attacker, GrappleActionType action, int naturalIndex, out int bab, out string reason)
     {
         MethodInfo consume = typeof(GameManager).GetMethod("TryConsumeGrappleAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
-        object[] args = { attacker, 0, 0, null, (GrappleActionType?)action, naturalIndex, false };
+        object[] args = { attacker, 0, 0, null, (GrappleActionType?)action, naturalIndex, false, null };
         bool ok = (bool)consume.Invoke(gm, args);
         bab = (int)args[1];
         reason = args[3] as string;
@@ -5021,7 +5145,7 @@ public static class GrappleDamageRulesTests
                 && gm.GetRemainingTripAttackActions(pc) == 1 && gm.GetCurrentTripAttackBonus(pc) == 4,
                 "After bite, claw, claw the used natural attacks are offered again for the Haste attack; one trip left, at the bite's +4");
 
-            object[] args = { pc, 0, 0, null };
+            object[] args = { pc, 0, 0, null, null };
             bool tripped = (bool)consumeTrip.Invoke(gm, args);
             Assert(tripped && (int)args[1] == 4 && pc.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
                 && !gm.CanUseNaturalAttackOption(pc) && !gm.IsHasteExtraNaturalAttackOption(pc, 0) && !gm.CanUseTripAttackOption(pc),

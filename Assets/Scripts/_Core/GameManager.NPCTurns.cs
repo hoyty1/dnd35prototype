@@ -331,10 +331,15 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The NPC maneuver executor. Returns true when it acted (the maneuver's step or action was spent);
-    /// then <paramref name="attempted"/> is the maneuver type and <paramref name="succeeded"/> its
-    /// result (false also when an initiation AoO foiled the attempt). Both outputs only report: the AI's
-    /// stopgap maneuver memory (AIService, AI-060) reads them; no rule does.
+    /// The NPC maneuver executor, the AI side of the maneuver core (batch 12 step 19, CMB-102): it picks the maneuver (the
+    /// forced one, else the legacy chooser) and builds the AI request (ManeuverRequest.ForAI: the AI decider, the item its
+    /// profile picks, D15, and the two-weapon state of the attack step it replaces), and the one executor
+    /// (ExecuteManeuver) does the rest, as for a PC: the legality, the cost of the table paid before the ward and the AoOs,
+    /// the resolution and its aftermath. Returns true when it acted (the cost was spent); then <paramref name="attempted"/>
+    /// is the maneuver type and <paramref name="succeeded"/> its result (false also when a ward save or an initiation AoO
+    /// foiled the attempt). Both outputs only report: the AI's stopgap maneuver memory (AIService, AI-060) reads them; no
+    /// rule does. A failed trip against a controllable defender may leave its counter-trip prompt open
+    /// (IsAwaitingCounterTripChoice); the NPC coroutines wait on it before the next step.
     /// </summary>
     private bool TryNPCSpecialAttackIfBeneficial(
         CharacterController npc,
@@ -353,11 +358,6 @@ public partial class GameManager
         bool hasCoupOption = HasNPCCoupDeGraceOption(npc, coupTargets);
 
         if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
-            return false;
-
-        // A maneuver that replaces an attack only needs the next attack step, iterative or natural
-        // (CMB-102); the exact cost per type is checked once the choice is known.
-        if (!npc.Actions.HasStandardAction && !hasCoupOption && !npc.CanCommitAttack(npc.GetManeuverSubstituteStepKind(), out _))
             return false;
 
         SpecialAttackType? choice = forcedChoice;
@@ -380,10 +380,7 @@ public partial class GameManager
             if (!hasCoupOption)
                 return false;
 
-            CharacterController coupTarget = (target != null && coupTargets.Contains(target))
-                ? target
-                : coupTargets[0];
-            target = coupTarget;
+            target = (target != null && coupTargets.Contains(target)) ? target : coupTargets[0];
         }
 
         // A charge bull rush is a charge, not an action here: it goes through
@@ -394,191 +391,17 @@ public partial class GameManager
             return false;
         }
 
-        // Same bull rush legality as the PC wrapper (size, swarm, incorporeal, grappling,
-        // adjacency; PHB p.154), checked before any cost or AoO (CMB-102).
-        if (choice.Value == SpecialAttackType.BullRushAttack
-            && !npc.CanBullRush(target, false, out string bullRushReason))
+        ManeuverRequest req = ManeuverRequest.ForAI(this, npc, target, choice.Value, _maneuverStepIntent);
+        ManeuverOutcome outcome = ExecuteManeuver(req, null);
+        if (outcome.Kind == ManeuverOutcomeKind.Refused)
         {
-            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot bull rush {target?.Stats?.CharacterName ?? "<null>"}: {bullRushReason}");
+            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} on {target?.Stats?.CharacterName ?? "<null>"}: {outcome.Reason}");
             return false;
-        }
-
-        // The Improved Grab hold bar, as on the PC wrapper (MM p.310; delegated RAW reading 2026-10-14, CMB-163): no
-        // trip, disarm, sunder or coup de grace on the creature this NPC holds with one body part, before any cost.
-        if (npc.IsBarredFromSpecialAttackOn(choice.Value, target, out string holdReason))
-        {
-            Debug.Log($"[AI][SpecialAttack] {holdReason}");
-            return false;
-        }
-
-        // The one direct-attack gate the PC wrapper runs too (AttackLegality, batch 12 step 12), before any cost or AoO:
-        // the Resilient Sphere (CMB-092), the maneuver's own reach (CMB-104: trip and grapple at natural reach, disarm and
-        // sunder at the weapon's, bull rush adjacent, so a ranged kiter no longer trips from thrown range) and a known
-        // failed ward save (D6).
-        bool gatedManeuver = IsDirectAttackManeuverForGate(choice.Value);
-        if (gatedManeuver)
-        {
-            Legality maneuverLegality = AttackLegality.CanDirectlyAttack(npc, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(choice.Value));
-            if (!maneuverLegality.Ok)
-            {
-                Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} on {target?.Stats?.CharacterName ?? "<null>"}: {maneuverLegality.Reason}");
-                return false;
-            }
-        }
-
-        // Same trip legality as the PC wrapper (size, swarm, incorporeal; PHB p.158, CMB-079), checked
-        // before any cost or AoO.
-        if (choice.Value == SpecialAttackType.Trip && !npc.CanTrip(target, out string tripReason))
-        {
-            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot trip {target?.Stats?.CharacterName ?? "<null>"}: {tripReason}");
-            return false;
-        }
-
-        // Sunder needs a weapon, a natural attack that deals slashing or bludgeoning damage or an unarmed strike
-        // (CharacterController.CanSunderWithAttack, the check the PC buttons and the AI use; PHB p.158,
-        // owner ruling 2026-10-08, CMB-102, and owner interpretation 2026-10-11, CMB-141), refused before any attack step or AoO is spent. A natural-attack
-        // NPC sunders with the natural attack at its current step; at Haste's extra natural attack it picks
-        // one that can sunder (GetSunderNaturalAttackIndexForStep).
-        if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithAttack(-1, out string sunderReason))
-        {
-            Debug.Log($"[AI][SpecialAttack] {sunderReason}");
-            return false;
-        }
-
-        int substituteNaturalIndex = -1;
-        bool substituteGivesUpHaste = false;
-        if (choice.Value == SpecialAttackType.Sunder && npc.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
-        {
-            int currentStep = npc.ProgressiveAttackPool.MainHandStepsUsed;
-            if (npc.IsHasteExtraNaturalStep(currentStep))
-            {
-                substituteNaturalIndex = npc.GetSunderNaturalAttackIndexForStep(currentStep);
-                substituteGivesUpHaste = substituteNaturalIndex >= 0;
-            }
-        }
-
-        // Trip, disarm, sunder and grapple replace one melee attack (PHB p.141 Table 8-2 note 7):
-        // one step of the NPC's own attack sequence at that step's bonus (an iterative BAB, or the
-        // BAB of the natural attack it replaces, MM p.312), paid before the AoOs as the PC wrapper
-        // does (CMB-102). In a natural sequence the NPC gives up the natural attack at the current
-        // step, the order the attack sequence (RunAttackSequence) resolves them in. Other maneuvers still cost
-        // a standard action (or the full round for a coup de grace).
-        bool replacesAttack = ManeuverActionCost.ReplacesMeleeAttack(choice.Value);
-        int? stepBab = null;
-        if (replacesAttack)
-        {
-            if (!npc.TryCommitManeuverSubstituteStep(substituteNaturalIndex, out int maneuverBab, out _, out string why, substituteGivesUpHaste))
-            {
-                Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} as an attack: {why}");
-                return false;
-            }
-
-            stepBab = maneuverBab;
-        }
-        else if (choice.Value != SpecialAttackType.CoupDeGrace && !npc.Actions.HasStandardAction)
-        {
-            return false;
-        }
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the PC wrapper: the attempt rolls the NPC's one save
-        // after the cost and before the initiation AoOs; a failure loses the step (a substitute paid it above) or the
-        // action, and the maneuver is never made.
-        if (gatedManeuver && AttackLegality.CommitWard(npc, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(choice.Value)) == WardVerdict.Failed)
-        {
-            if (!replacesAttack)
-            {
-                if (choice.Value == SpecialAttackType.CoupDeGrace)
-                    npc.Actions.UseFullRoundAction();
-                else
-                    npc.CommitStandardAction();
-            }
-
-            UpdateAllStatsUI();
-            attempted = choice.Value;
-            succeeded = false;
-            return true;
-        }
-
-        // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
-        // its action; an NPC dropped by the AoO ends its turn (callers return after this).
-        int hpBeforeManeuverAoOs = npc.Stats.CurrentHP;
-        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value);
-        if (maneuverAoOOutcome != ManeuverAoOOutcome.Proceed)
-        {
-            // The PC wrapper spends its action before the AoOs, so an AoO that drops the PC to
-            // 0 HP costs no extra strenuous-action hit point; match that for a dropped NPC.
-            bool droppedByAoO = maneuverAoOOutcome == ManeuverAoOOutcome.AttackerIncapacitated
-                || (hpBeforeManeuverAoOs > 0 && npc.Stats.CurrentHP <= 0);
-            // A substitute already paid its attack step above.
-            if (!replacesAttack)
-            {
-                if (choice.Value == SpecialAttackType.CoupDeGrace)
-                    npc.Actions.UseFullRoundAction();
-                else if (droppedByAoO)
-                    npc.Actions.UseStandardAction();
-                else
-                    npc.CommitStandardAction();
-            }
-
-            UpdateAllStatsUI();
-            attempted = choice.Value;
-            succeeded = false; // foiled before the check
-            return true;
-        }
-
-        var result = npc.ExecuteSpecialAttack(
-            choice.Value,
-            target,
-            disarmAttackBonusOverride: choice.Value == SpecialAttackType.Disarm ? stepBab : null,
-            grappleAttackBonusOverride: choice.Value == SpecialAttackType.Grapple ? stepBab : null,
-            tripAttackBonusOverride: choice.Value == SpecialAttackType.Trip ? stepBab : null,
-            sunderAttackBonusOverride: choice.Value == SpecialAttackType.Sunder ? stepBab : null);
-        CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"{npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}"));
-
-        // The target's reaction (the acid spray, D1) resolves as ExecuteSpecialAttack returns and can end the combat or
-        // drop the NPC: no aftermath then (the caller's loop stops on CombatOver).
-        if (CurrentPhase == TurnPhase.CombatOver || CombatEndRules.IsOutOfFight(npc))
-        {
-            UpdateAllStatsUI();
-            attempted = choice.Value;
-            succeeded = result != null && result.Success;
-            return true;
-        }
-
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
-        if (choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm)
-            MeleeReactionService.TriggerReactions(npc, target, null);
-
-        // The Improved Trip attack and the defender's counter-trip (PHB p.96, p.158; CMB-079), shared with
-        // the PC wrapper. A controllable defender's prompt may still be open when this returns
-        // (IsAwaitingCounterTripChoice); the NPC coroutines wait on it before the next step.
-        if (choice.Value == SpecialAttackType.Trip)
-            HandleTripAftermath(npc, target, result, null);
-
-        if (result.Success)
-        {
-            if (choice.Value == SpecialAttackType.BullRushAttack || choice.Value == SpecialAttackType.BullRushCharge)
-                ResolveBullRushPushAndFollow(npc, target, result, isCharge: false, squaresMovedThisCharge: 0, onComplete: null);
-            else if (choice.Value == SpecialAttackType.Overrun)
-                TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
-        }
-
-        // A substitute already paid its attack step before the AoOs. An AoO during a bull rush push
-        // or follow that dropped the NPC costs no extra strenuous-action hit point either (the PC
-        // wrapper commits before any AoO).
-        if (!replacesAttack)
-        {
-            if (choice.Value == SpecialAttackType.CoupDeGrace)
-                npc.Actions.UseFullRoundAction();
-            else if (hpBeforeManeuverAoOs > 0 && npc.Stats.CurrentHP <= 0)
-                npc.Actions.UseStandardAction();
-            else
-                npc.CommitStandardAction();
         }
 
         UpdateAllStatsUI();
         attempted = choice.Value;
-        succeeded = result != null && result.Success;
+        succeeded = outcome.Succeeded;
         return true;
     }
 
@@ -639,11 +462,21 @@ public partial class GameManager
 
     /// <summary>
     /// The AI's Improved Grab choice (MM p.310; owner ruling 2026-10-11, CMB-148): its profile's
-    /// (AIProfile.ShouldHoldWithImprovedGrab), else the default, between grappling normally and the -20 hold.
+    /// (AIProfile.ShouldHoldWithImprovedGrab), else the default, between grappling normally and the -20 hold; or skip the
+    /// grab (the creature "can attempt" it, MM p.310; CMB-098, batch 12 step 19) when its profile says the grab is not worth
+    /// it (AIProfile.ShouldSkipImprovedGrab; by default only a hopeless one).
     /// </summary>
     internal ImprovedGrabChoice ChooseImprovedGrabForAI(CharacterController attacker, CharacterController target)
     {
         List<CharacterController> all = GetAllCharacters();
+        bool skip = attacker != null && attacker.aiProfile != null
+            ? attacker.aiProfile.ShouldSkipImprovedGrab(attacker, target, all)
+            : DND35.AI.AIProfile.DefaultShouldSkipImprovedGrab(attacker, target, all);
+        if (skip)
+        {
+            Debug.Log($"[AI][ImprovedGrab] {attacker.Stats.CharacterName} skips the grab on {target?.Stats?.CharacterName ?? "its target"} (AIProfile.ShouldSkipImprovedGrab).");
+            return ImprovedGrabChoice.Skip;
+        }
         bool hold = attacker != null && attacker.aiProfile != null
             ? attacker.aiProfile.ShouldHoldWithImprovedGrab(attacker, target, all)
             : DND35.AI.AIProfile.DefaultShouldHoldWithImprovedGrab(attacker, target, all);

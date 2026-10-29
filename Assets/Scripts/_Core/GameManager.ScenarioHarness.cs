@@ -218,6 +218,7 @@ public partial class GameManager
         _turnService?.StopAllCoroutines();
         _turnService?.ForceResetWithoutCallbacks($"ScenarioHarness.Halt:{reason}");
         ClearCounterTripPrompt(hideDialog: true);
+        ClearGrappleEscapeOppositionPrompt();
         CurrentPhase = TurnPhase.CombatOver;
     }
 
@@ -700,6 +701,24 @@ public partial class GameManager
 
         CombatUI?.HideConfirmationDialog();
         AnswerCounterTripPrompt(tripBack);
+        return true;
+    }
+
+    /// <summary>The grappler whose escape-opposition prompt is open (PHB p.156, D10), else null.</summary>
+    internal CharacterController Harness_PendingEscapeOppositionGrappler
+        => _escapeOppositionPromptAnswer != null ? _escapeOppositionPromptGrappler : null;
+
+    /// <summary>
+    /// Answers the open escape-opposition prompt exactly as its buttons do: true = Oppose Escape, false = Allow Escape.
+    /// Returns false when no prompt is open.
+    /// </summary>
+    internal bool Harness_AnswerEscapeOpposition(bool oppose)
+    {
+        if (_escapeOppositionPromptAnswer == null)
+            return false;
+
+        CombatUI?.HideConfirmationDialog();
+        AnswerGrappleEscapeOppositionPrompt(oppose);
         return true;
     }
 

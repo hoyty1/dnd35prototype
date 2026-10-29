@@ -1106,6 +1106,7 @@ public partial class GameManager : MonoBehaviour
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
         ClearCounterTripPrompt(hideDialog: true);
+        ClearGrappleEscapeOppositionPrompt();
 
         _isSelectingWithdraw = false;
         _isSelectingBreakWallTarget = false;
@@ -8651,7 +8652,9 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     internal bool IsNaturalAttackIndexUsedThisTurn(CharacterController actor, int sequenceIndex)
     {
-        return _usedNaturalAttackSequenceIndices.Contains(sequenceIndex)
+        // The UI set is the active PC's own (its natural-attack buttons); since the maneuver steps of every creature read
+        // this (batch 12 step 19), another creature reads only its attack pool.
+        return (actor != null && actor == ActivePC && _usedNaturalAttackSequenceIndices.Contains(sequenceIndex))
             || (actor != null && actor.ProgressiveAttackPool.IsNaturalAttackUsed(sequenceIndex));
     }
 
@@ -9126,45 +9129,15 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        bool hasAction = type == SpecialAttackType.Feint
-            ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
-            : (type == SpecialAttackType.Grapple
-                ? hasGrappleAttackAvailable
-                : (type == SpecialAttackType.BullRushAttack
-                    ? hasBullRushAttackAvailable
-                    : (type == SpecialAttackType.Trip
-                        ? hasTripAttackAvailable
-                        : (type == SpecialAttackType.Disarm
-                            ? hasDisarmAttackAvailable
-                            : (type == SpecialAttackType.Sunder
-                                ? hasSunderAttackAvailable
-                                : (type == SpecialAttackType.CoupDeGrace
-                                    ? hasCoupDeGraceAttackAvailable
-                                    : (type == SpecialAttackType.BullRushCharge
-                                        ? pc.Actions.HasFullRoundAction
-                                        : pc.Actions.HasStandardAction)))))));
+        // The cost table (ManeuverActionCost.For, batch 12 step 19): an attack step left for trip, disarm, sunder and grapple,
+        // else the action the row names.
+        bool hasAction = CanAffordManeuverForUi(pc, type, useOffHandDisarm);
 
         Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} mainSunderAvailable={hasMainHandSunderAttackAvailable} offHandSunderAvailable={hasOffHandSunderAttackAvailable} coupDeGraceAvailable={hasCoupDeGraceAttackAvailable} requestedOffHand={useOffHandDisarm}");
 
         if (!hasAction)
         {
-            string reason = type == SpecialAttackType.Feint
-                ? "Need a standard action, or a move action with Improved Feint"
-                : (type == SpecialAttackType.Grapple
-                    ? "Need at least one remaining grapple attack"
-                    : (type == SpecialAttackType.BullRushAttack
-                        ? "Need a standard action (bull rush cannot be used while grappling)"
-                        : (type == SpecialAttackType.Trip
-                            ? "Need at least one remaining trip attack"
-                            : (type == SpecialAttackType.Disarm
-                                ? (useOffHandDisarm ? "Need an available off-hand disarm attack" : "Need at least one remaining main-hand disarm attack")
-                                : (type == SpecialAttackType.Sunder
-                                    ? (useOffHandDisarm ? "Need an available off-hand sunder attack" : "Need at least one remaining main-hand sunder attack")
-                                    : (type == SpecialAttackType.CoupDeGrace
-                                        ? "Need a full-round action, an adjacent helpless enemy, and a melee attack option"
-                                        : (type == SpecialAttackType.BullRushCharge
-                                            ? "Need a full-round action and valid charge movement"
-                                            : "Need a standard action")))))));
+            string reason = DescribeUnaffordableManeuver(type, useOffHandDisarm);
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use {type}: {reason}."));
             ShowActionChoices();
             return;
@@ -11347,6 +11320,11 @@ public partial class GameManager : MonoBehaviour
     private void CancelMovementSelection()
     {
         CharacterController pc = ActivePC;
+
+        // An escaper finishes its escape by moving into a space adjacent to its former opponent (PHB p.156; D10): the escape
+        // square selection cannot be cancelled while a square is free, so it stays open.
+        if (_isFreeAdjacentGrappleMoveSelection && RefuseToSkipEscapeMove(_freeAdjacentGrappleMoveActor))
+            return;
 
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();

@@ -980,43 +980,20 @@ public class CombatUI : MonoBehaviour
             return false;
 
         bool enabled;
-        switch (buttonName)
+        // The maneuvers read the one cost table (ManeuverActionCost.For through GameManager.CanAffordManeuverForUi, batch 12
+        // step 19, CMB-102), as the menu's selection does.
+        SpecialAttackType? maneuver = ManeuverForButton(buttonName, out bool offHand);
+        if (maneuver.HasValue)
         {
-            case "Grapple":
-                enabled = hasGrappleAttackAvailable;
-                break;
-            case "Bull Rush (Standard)":
-                enabled = hasBullRushAttackAvailable;
-                break;
-            case "Bull Rush (Charge)":
-                enabled = hasFullRoundAction;
-                break;
-            case "Disarm":
-                enabled = GameManager.Instance != null && GameManager.Instance.CanUseMainHandDisarmAttackOption(pc);
-                break;
-            case "Disarm (Off-Hand)":
-                enabled = GameManager.Instance != null && GameManager.Instance.CanUseOffHandDisarmAttackOption(pc);
-                break;
-            case "Sunder":
-                enabled = GameManager.Instance != null && GameManager.Instance.CanUseMainHandSunderAttackOption(pc);
-                break;
-            case "Sunder (Off-Hand)":
-                enabled = GameManager.Instance != null && GameManager.Instance.CanUseOffHandSunderAttackOption(pc);
-                break;
-            case "Feint":
-                enabled = hasStandardAction || canImprovedFeintMove;
-                break;
-            case "Coup de Grace":
-                enabled = GameManager.Instance != null && GameManager.Instance.CanUseCoupDeGraceAttackOption(pc);
-                break;
+            enabled = GameManager.Instance != null && GameManager.Instance.CanAffordManeuverForUi(pc, maneuver.Value, offHand);
+        }
+        else switch (buttonName)
+        {
             case "Aid Another":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out _);
                 break;
             case "Overrun":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseOverrun(pc, out _);
-                break;
-            case "Trip":
-                enabled = hasTripAttackAvailable;
                 break;
             default:
                 enabled = hasStandardAction;
@@ -1039,6 +1016,26 @@ public class CombatUI : MonoBehaviour
         }
 
         return enabled;
+    }
+
+    /// <summary>The maneuver a Special Attack menu button starts (and whether it is the off-hand one), or null for the others.</summary>
+    private static SpecialAttackType? ManeuverForButton(string buttonName, out bool offHand)
+    {
+        offHand = buttonName == "Disarm (Off-Hand)" || buttonName == "Sunder (Off-Hand)";
+        switch (buttonName)
+        {
+            case "Grapple": return SpecialAttackType.Grapple;
+            case "Bull Rush (Standard)": return SpecialAttackType.BullRushAttack;
+            case "Bull Rush (Charge)": return SpecialAttackType.BullRushCharge;
+            case "Disarm":
+            case "Disarm (Off-Hand)": return SpecialAttackType.Disarm;
+            case "Sunder":
+            case "Sunder (Off-Hand)": return SpecialAttackType.Sunder;
+            case "Feint": return SpecialAttackType.Feint;
+            case "Coup de Grace": return SpecialAttackType.CoupDeGrace;
+            case "Trip": return SpecialAttackType.Trip;
+            default: return null;
+        }
     }
 
     private void UpdateSpecialAttackButtonLabel(Button button, CharacterController pc, bool isEnabled)

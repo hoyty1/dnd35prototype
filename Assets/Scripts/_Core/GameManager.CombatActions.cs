@@ -1840,443 +1840,182 @@ public partial class GameManager
 
 
 
+    /// <summary>
+    /// The PC wrapper of the maneuver core (batch 12 step 19, CMB-102): after the Special Attack menu, the target click and
+    /// the item menu, it builds the UI request (ManeuverRequest.ForUi, with the hand chosen and the dual-wield state read once
+    /// as the intent, PcManeuverIntent) and runs the one executor (ExecuteManeuver: legality, the cost of the table before
+    /// the ward and the AoOs, the resolution and its aftermath), the NPC executor's. Its own part is the UI: the disarm and
+    /// sunder attempt counters and lines, and the continuation (<see cref="FinishPcManeuver"/>).
+    /// </summary>
     private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null, EquipSlot? sunderTargetSlot = null)
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
-        // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163), before any cost: this entry
-        // is also reached after the disarm and sunder item menus.
-        if (attacker.IsBarredFromSpecialAttackOn(type, target, out string holdReason))
+        bool useOffHand = type == SpecialAttackType.Disarm ? _pendingDisarmUseOffHandSelection
+            : type == SpecialAttackType.Sunder && _pendingSunderUseOffHandSelection;
+        EquipSlot? itemSlot = type == SpecialAttackType.Disarm ? disarmTargetSlot : type == SpecialAttackType.Sunder ? sunderTargetSlot : null;
+        ManeuverRequest req = ManeuverRequest.ForUi(attacker, target, type, itemSlot, useOffHand, PcManeuverIntent(attacker, type));
+
+        // The shared legality first (nothing spent), so a refused (gray) target costs nothing, as on the NPC executor: the
+        // Improved Grab hold bar (CMB-163), bull rush and trip limits, the direct-attack gate (CMB-092, CMB-104, D6), a
+        // coup de grace's target and the cost of the table.
+        Legality legality = CanStartManeuver(req);
+        if (!legality.Ok)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            _isSelectingSpecialAttack = false;
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type} on {target.Stats.CharacterName}: {legality.Reason.TrimEnd('.')}."));
+            ClearPcManeuverSelection(type);
             ShowActionChoices();
             return;
-        }
-
-        // Shared bull rush legality (CMB-102) before any side effect, so a refused (gray) target
-        // costs nothing and does not break turning, as on the NPC executor.
-        if (type == SpecialAttackType.BullRushAttack && !attacker.CanBullRush(target, false, out string bullRushReason))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot bull rush {target.Stats.CharacterName}: {bullRushReason}."));
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            _isSelectingSpecialAttack = false;
-            ShowActionChoices();
-            return;
-        }
-
-        // Shared trip legality (size, swarm, incorporeal; PHB p.158, CMB-079), also before any cost.
-        if (type == SpecialAttackType.Trip && !attacker.CanTrip(target, out string tripReason))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot trip {target.Stats.CharacterName}: {tripReason}."));
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            _isSelectingSpecialAttack = false;
-            ShowActionChoices();
-            return;
-        }
-
-        // The one direct-attack gate for maneuvers, shared with the NPC executor (AttackLegality, batch 12 step 12): the
-        // Resilient Sphere (CMB-092), the maneuver's reach (CMB-104: trip and grapple at natural reach, disarm and sunder
-        // at the weapon's) and a known failed ward save (D6), before any cost.
-        bool gatedManeuver = IsDirectAttackManeuverForGate(type);
-        if (gatedManeuver)
-        {
-            Legality maneuverLegality = AttackLegality.CanDirectlyAttack(attacker, target, DirectAttackKind.Maneuver, PcManeuverIntent(attacker, type));
-            if (!maneuverLegality.Ok)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type} on {target.Stats.CharacterName}: {maneuverLegality.Reason}."));
-                Grid.ClearAllHighlights();
-                _highlightedCells.Clear();
-                _isSelectingSpecialAttack = false;
-                if (type == SpecialAttackType.Sunder) { _pendingSunderUseOffHandSelection = false; ClearSunderSequenceState(); }
-                else if (type == SpecialAttackType.Disarm) { _pendingDisarmUseOffHandSelection = false; ClearDisarmSequenceState(); }
-                ShowActionChoices();
-                return;
-            }
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        string actionLabel = "standard action";
-        int? disarmAttackBonusOverride = null;
-        int disarmAttackBonusUsed = 0;
-        bool disarmUsedOffHand = false;
-        int disarmDualWieldPenaltyForLog = 0;
-        ItemData disarmAttackerWeaponOverride = null;
-        int? grappleAttackBonusOverride = null;
-        int? tripAttackBonusOverride = null;
-        int? sunderAttackBonusOverride = null;
-        int sunderAttackBonusUsed = 0;
-        bool sunderUsedOffHand = false;
-        int sunderDualWieldPenaltyForLog = 0;
-        ItemData sunderAttackerWeaponOverride = null;
+        if (type == SpecialAttackType.Disarm && (!_isDisarmSequenceActive || _disarmInitiator != attacker || _disarmTarget != target))
+            BeginDisarmSequence(attacker, target, disarmTargetSlot);
+        if (type == SpecialAttackType.Sunder && (!_isSunderSequenceActive || _sunderInitiator != attacker || _sunderTarget != target))
+            BeginSunderSequence(attacker, target, sunderTargetSlot);
 
-        if (type == SpecialAttackType.Feint)
+        req.OnPaid = pay =>
         {
-            if (!TryConsumeFeintAction(attacker, out actionLabel))
+            if (type == SpecialAttackType.Disarm)
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot feint: no eligible action remaining."));
-                ShowActionChoices();
-                return;
+                _disarmAttemptNumber++;
+                pay.ActionLabel = $"disarm attempt #{_disarmAttemptNumber} ({(pay.UsedOffHand ? "off-hand" : "main-hand")}), BAB {CharacterStats.FormatMod(pay.StepBab ?? 0)} ({pay.AttacksRemaining} remaining)";
             }
-        }
-        else if (type == SpecialAttackType.CoupDeGrace)
+            else if (type == SpecialAttackType.Sunder)
+            {
+                _sunderAttemptNumber++;
+                pay.ActionLabel = $"sunder attempt #{_sunderAttemptNumber} ({(pay.UsedOffHand ? "off-hand" : "main-hand")}), BAB {CharacterStats.FormatMod(pay.StepBab ?? 0)} ({pay.AttacksRemaining} remaining)";
+            }
+        };
+        req.OnResolvedReport = (result, pay) => ReportPcManeuverAttemptsLeft(attacker, type, pay);
+
+        ExecuteManeuver(req, outcome => FinishPcManeuver(attacker, target, type, outcome));
+    }
+
+    /// <summary>The PC's remaining-attempt lines after a trip, grapple, disarm or sunder (the Special Attack menu's counts).</summary>
+    private void ReportPcManeuverAttemptsLeft(CharacterController attacker, SpecialAttackType type, ManeuverPayment pay)
+    {
+        string name = attacker.Stats.CharacterName;
+        switch (type)
         {
-            if (!target.IsHelplessForCoupDeGrace())
+            case SpecialAttackType.Grapple:
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} is not helpless; Coup de Grace cannot be performed."));
-                ShowActionChoices();
-                return;
+                int left = GetRemainingGrappleAttackActions(attacker);
+                int nextBab = GetCurrentGrappleAttackBonus(attacker);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", left > 0
+                    ? $"{name} has {left} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."
+                    : $"{name} has no grapple attacks remaining this turn."));
+                break;
             }
-
-            if (target.IsImmuneToCriticalHits())
+            case SpecialAttackType.Trip:
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} is immune to critical hits and cannot be coup de graced."));
-                ShowActionChoices();
-                return;
+                int left = GetRemainingTripAttackActions(attacker);
+                int nextBab = GetCurrentTripAttackBonus(attacker);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", left > 0
+                    ? $"{name} has {left} trip attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."
+                    : $"{name} has no trip attempts remaining this turn."));
+                break;
             }
-
-            if (!attacker.Actions.HasFullRoundAction)
+            case SpecialAttackType.Disarm:
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Coup de Grace: full-round action already spent."));
-                ShowActionChoices();
-                return;
-            }
-
-            attacker.Actions.UseFullRoundAction();
-            actionLabel = "full-round action";
-        }
-        else if (type == SpecialAttackType.Disarm)
-        {
-            if (!_isDisarmSequenceActive || _disarmInitiator != attacker || _disarmTarget != target)
-                BeginDisarmSequence(attacker, target, disarmTargetSlot);
-
-            int disarmAttemptsBefore = GetRemainingDisarmAttackActions(attacker);
-            Debug.Log(
-                $"[Disarm][Flow] Starting attempt {_disarmAttemptNumber + 1} attacker={attacker.Stats.CharacterName} " +
-                $"target={target.Stats.CharacterName} stdAction={attacker.Actions.HasStandardAction} " +
-                $"moveAction={attacker.Actions.HasMoveAction} fullRound={attacker.Actions.HasFullRoundAction} " +
-                $"sharedSequenceActive={_isInAttackSequence} sequenceOwner={(_attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<null>")} " +
-                $"disarmAttemptsBefore={disarmAttemptsBefore} offHandAvailable={CanUseOffHandAttackOption(attacker)} requestedOffHand={_pendingDisarmUseOffHandSelection}");
-
-            bool useOffHandDisarm = _pendingDisarmUseOffHandSelection;
-            if (!TryConsumeDisarmAttackAction(attacker, useOffHandDisarm, out disarmAttackBonusUsed, out int disarmAttacksRemaining, out string disarmConsumeReason, out disarmUsedOffHand, out disarmAttackerWeaponOverride))
-            {
-                string reason = string.IsNullOrWhiteSpace(disarmConsumeReason)
-                    ? "no eligible disarm attack remaining"
-                    : disarmConsumeReason;
-                Debug.LogWarning($"[Disarm][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Disarm: {reason}."));
+                int left = GetRemainingDisarmAttackActions(attacker);
+                int nextBab = GetCurrentDisarmAttackBonus(attacker);
+                string hand = pay.UsedOffHand ? "off-hand" : "main-hand";
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Disarm] Attempt #{_disarmAttemptNumber} ({hand}) used BAB {CharacterStats.FormatMod(pay.StepBab ?? 0)}."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", left > 0
+                    ? $"{name} has {left} disarm-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."
+                    : $"{name} has no disarm-capable attacks remaining this turn."));
                 _pendingDisarmUseOffHandSelection = false;
                 ClearDisarmSequenceState();
-                ShowActionChoices();
-                return;
+                break;
             }
-
-            disarmAttackBonusOverride = disarmAttackBonusUsed;
-            if (_isDualWielding)
-                disarmDualWieldPenaltyForLog = disarmUsedOffHand ? _offHandPenalty : _mainHandPenalty;
-
-            _disarmAttemptNumber++;
-            string handLabel = disarmUsedOffHand ? "off-hand" : "main-hand";
-            actionLabel = $"disarm attempt #{_disarmAttemptNumber} ({handLabel}), BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)} ({disarmAttacksRemaining} remaining)";
-            Debug.Log(
-                $"[Disarm][Flow] Consume success actor={attacker.Stats.CharacterName} attempt={_disarmAttemptNumber} " +
-                $"hand={handLabel} usedBAB={CharacterStats.FormatMod(disarmAttackBonusUsed)} remaining={disarmAttacksRemaining} " +
-                $"stdActionNow={attacker.Actions.HasStandardAction} moveActionNow={attacker.Actions.HasMoveAction} fullRoundNow={attacker.Actions.HasFullRoundAction}");
-        }
-        else if (type == SpecialAttackType.Sunder)
-        {
-            if (!_isSunderSequenceActive || _sunderInitiator != attacker || _sunderTarget != target)
-                BeginSunderSequence(attacker, target, sunderTargetSlot);
-
-            int sunderAttemptsBefore = GetRemainingSunderAttackActions(attacker);
-            Debug.Log(
-                $"[Sunder][Flow] Starting attempt {_sunderAttemptNumber + 1} attacker={attacker.Stats.CharacterName} " +
-                $"target={target.Stats.CharacterName} stdAction={attacker.Actions.HasStandardAction} " +
-                $"moveAction={attacker.Actions.HasMoveAction} fullRound={attacker.Actions.HasFullRoundAction} " +
-                $"sharedSequenceActive={_isInAttackSequence} sequenceOwner={(_attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<null>")} " +
-                $"sunderAttemptsBefore={sunderAttemptsBefore} offHandAvailable={CanUseOffHandAttackOption(attacker)} requestedOffHand={_pendingSunderUseOffHandSelection}");
-
-            bool useOffHandSunder = _pendingSunderUseOffHandSelection;
-            if (!TryConsumeSunderAttackAction(attacker, useOffHandSunder, out sunderAttackBonusUsed, out int sunderAttacksRemaining, out string sunderConsumeReason, out sunderUsedOffHand, out sunderAttackerWeaponOverride))
+            case SpecialAttackType.Sunder:
             {
-                string reason = string.IsNullOrWhiteSpace(sunderConsumeReason)
-                    ? "no eligible sunder attack remaining"
-                    : sunderConsumeReason;
-                Debug.LogWarning($"[Sunder][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Sunder: {reason}."));
+                int left = GetRemainingSunderAttackActions(attacker);
+                int nextBab = GetCurrentSunderAttackBonus(attacker);
+                string hand = pay.UsedOffHand ? "off-hand" : "main-hand";
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Sunder] Attempt #{_sunderAttemptNumber} ({hand}) used BAB {CharacterStats.FormatMod(pay.StepBab ?? 0)}."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", left > 0
+                    ? $"{name} has {left} sunder-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."
+                    : $"{name} has no sunder-capable attacks remaining this turn."));
                 _pendingSunderUseOffHandSelection = false;
                 ClearSunderSequenceState();
+                break;
+            }
+        }
+    }
+
+    /// <summary>Clears the PC's special-attack selection (highlights, the disarm or sunder sequence) after a refused or spent maneuver.</summary>
+    private void ClearPcManeuverSelection(SpecialAttackType type)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _isSelectingSpecialAttack = false;
+        if (type == SpecialAttackType.Sunder) { _pendingSunderUseOffHandSelection = false; ClearSunderSequenceState(); }
+        else if (type == SpecialAttackType.Disarm) { _pendingDisarmUseOffHandSelection = false; ClearDisarmSequenceState(); }
+    }
+
+    /// <summary>
+    /// The PC wrapper's continuation once the maneuver core settled: a refusal (nothing spent) logs and reopens the action
+    /// choices; a failed ward save or an attempt foiled by an AoO ends the action; a resolved one finishes through
+    /// <see cref="FinalizeSpecialAttackResolution"/>, or ends the turn when a trip or bull rush dropped the attacker.
+    /// </summary>
+    private void FinishPcManeuver(CharacterController attacker, CharacterController target, SpecialAttackType type, ManeuverOutcome outcome)
+    {
+        switch (outcome.Kind)
+        {
+            case ManeuverOutcomeKind.Refused:
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type}: {(outcome.Reason ?? "no eligible action remaining").TrimEnd('.')}."));
+                ClearPcManeuverSelection(type);
                 ShowActionChoices();
                 return;
-            }
-
-            sunderAttackBonusOverride = sunderAttackBonusUsed;
-            if (_isDualWielding)
-                sunderDualWieldPenaltyForLog = sunderUsedOffHand ? _offHandPenalty : _mainHandPenalty;
-
-            _sunderAttemptNumber++;
-            string handLabel = sunderUsedOffHand ? "off-hand" : "main-hand";
-            actionLabel = $"sunder attempt #{_sunderAttemptNumber} ({handLabel}), BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)} ({sunderAttacksRemaining} remaining)";
-            Debug.Log(
-                $"[Sunder][Flow] Consume success actor={attacker.Stats.CharacterName} attempt={_sunderAttemptNumber} " +
-                $"hand={handLabel} usedBAB={CharacterStats.FormatMod(sunderAttackBonusUsed)} remaining={sunderAttacksRemaining} " +
-                $"stdActionNow={attacker.Actions.HasStandardAction} moveActionNow={attacker.Actions.HasMoveAction} fullRoundNow={attacker.Actions.HasFullRoundAction}");
-        }
-        else if (type == SpecialAttackType.Grapple)
-        {
-            Debug.Log($"[GameManager][Grapple] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingGrappleAttackActions(attacker)}");
-            if (!TryConsumeGrappleAttackAction(attacker, out int grappleAttackBonusUsed, out int grappleAttacksRemaining, out string grappleConsumeReason))
-            {
-                string reason = string.IsNullOrWhiteSpace(grappleConsumeReason)
-                    ? "no eligible attack remaining"
-                    : grappleConsumeReason;
-                Debug.LogWarning($"[GameManager][Grapple] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot initiate grapple: {reason}."));
-                ShowActionChoices();
+            case ManeuverOutcomeKind.WardFailed:
+            case ManeuverOutcomeKind.Foiled:
+                ClearPcManeuverSelection(type);
+                UpdateAllStatsUI();
+                StartCoroutine(AfterAttackDelay(attacker, 0.8f));
                 return;
-            }
-
-            grappleAttackBonusOverride = grappleAttackBonusUsed;
-            actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
-            Debug.Log($"[GameManager][Grapple] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(grappleAttackBonusUsed)} remaining={grappleAttacksRemaining}");
-        }
-        else if (type == SpecialAttackType.BullRushAttack)
-        {
-            // Bull rush is a standard action for every creature (PHB p.154, CMB-102), never one
-            // attack of a full attack. Its legality was checked at the top of this method.
-            if (!attacker.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot bull rush: standard action already spent."));
-                ShowActionChoices();
-                return;
-            }
-            actionLabel = "standard action";
-        }
-        else if (type == SpecialAttackType.Trip)
-        {
-            Debug.Log($"[GameManager][Trip] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingTripAttackActions(attacker)}");
-            if (!TryConsumeTripAttackAction(attacker, out int tripBabUsed, out int tripAttacksRemaining, out string tripConsumeReason))
-            {
-                string reason = string.IsNullOrWhiteSpace(tripConsumeReason)
-                    ? "no eligible attack remaining"
-                    : tripConsumeReason;
-                Debug.LogWarning($"[GameManager][Trip] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Trip: {reason}."));
-                ShowActionChoices();
-                return;
-            }
-
-            tripAttackBonusOverride = tripBabUsed;
-            actionLabel = $"attack BAB {CharacterStats.FormatMod(tripBabUsed)} ({tripAttacksRemaining} remaining)";
-            Debug.Log($"[GameManager][Trip] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(tripBabUsed)} remaining={tripAttacksRemaining}");
-        }
-        else
-        {
-            if (!attacker.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type}: standard action already spent."));
-                ShowActionChoices();
-                return;
-            }
-            actionLabel = "standard action";
         }
 
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6), as on the NPC executor: the attempt rolls the attacker's
-        // one save, after the cost and before the initiation AoOs; a failure loses the paid step or action and the maneuver
-        // is never made (so it provokes nothing).
-        if (gatedManeuver && AttackLegality.CommitWard(attacker, target, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(type)) == WardVerdict.Failed)
-        {
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            _isSelectingSpecialAttack = false;
-            if (type == SpecialAttackType.Sunder) { _pendingSunderUseOffHandSelection = false; ClearSunderSequenceState(); }
-            else if (type == SpecialAttackType.Disarm) { _pendingDisarmUseOffHandSelection = false; ClearDisarmSequenceState(); }
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(attacker, 0.8f));
-            return;
-        }
-
-        // Shared with the NPC executor (TryNPCSpecialAttackIfBeneficial, CMB-076).
-        if (ResolveManeuverInitiationAoOs(attacker, target, type) != ManeuverAoOOutcome.Proceed)
-        {
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            _isSelectingSpecialAttack = false;
-            if (type == SpecialAttackType.Sunder)
-            {
-                _pendingSunderUseOffHandSelection = false;
-                ClearSunderSequenceState();
-            }
-            else if (type == SpecialAttackType.Disarm)
-            {
-                _pendingDisarmUseOffHandSelection = false;
-                ClearDisarmSequenceState();
-            }
-            StartCoroutine(AfterAttackDelay(attacker, 0.8f));
-            return;
-        }
-
-        // The maneuver's hostile-action notice (a bard's fascination breaks) is sent by CharacterController.ExecuteSpecialAttack,
-        // shared with the NPC executor (CHR-026).
-
-        SpecialAttackResult result = attacker.ExecuteSpecialAttack(
-            type,
-            target,
-            disarmTargetSlot,
-            disarmAttackBonusOverride,
-            grappleAttackBonusOverride,
-            bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0,
-            disarmAttackerWeaponOverride: disarmAttackerWeaponOverride,
-            tripAttackBonusOverride: tripAttackBonusOverride,
-            disarmUsedOffHand: disarmUsedOffHand,
-            disarmDualWieldPenaltyForLog: disarmDualWieldPenaltyForLog,
-            sunderTargetSlot: sunderTargetSlot,
-            sunderAttackBonusOverride: sunderAttackBonusOverride,
-            sunderAttackerWeaponOverride: sunderAttackerWeaponOverride,
-            sunderUsedOffHand: sunderUsedOffHand,
-            sunderDualWieldPenaltyForLog: sunderDualWieldPenaltyForLog);
-        if (type == SpecialAttackType.Disarm)
-            CombatUI.ShowCombatLog(result.Log);
-        else
-            CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"SPECIAL [{type}] ({actionLabel}): {result.Log}"));
-        if (type == SpecialAttackType.Grapple)
-        {
-            int attacksRemaining = GetRemainingGrappleAttackActions(attacker);
-            int nextBab = GetCurrentGrappleAttackBonus(attacker);
-            Debug.Log($"[GameManager][Grapple] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
-
-            if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no grapple attacks remaining this turn."));
-        }
-        else if (type == SpecialAttackType.Trip)
-        {
-            int attacksRemaining = GetRemainingTripAttackActions(attacker);
-            int nextBab = GetCurrentTripAttackBonus(attacker);
-            Debug.Log($"[GameManager][Trip] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
-
-            if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} trip attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no trip attempts remaining this turn."));
-        }
-        else if (type == SpecialAttackType.Disarm)
-        {
-            int attacksRemaining = GetRemainingDisarmAttackActions(attacker);
-            int nextBab = GetCurrentDisarmAttackBonus(attacker);
-            int targetDisarmableItems = target != null ? target.GetDisarmableHeldItemOptions().Count : 0;
-            string handLabel = disarmUsedOffHand ? "off-hand" : "main-hand";
-
-            Debug.Log(
-                $"[Disarm][Flow] Completed attempt {_disarmAttemptNumber} attacker={attacker.Stats.CharacterName} " +
-                $"target={(target != null && target.Stats != null ? target.Stats.CharacterName : "<null>")} " +
-                $"success={result.Success} hand={handLabel} usedBAB={CharacterStats.FormatMod(disarmAttackBonusUsed)} " +
-                $"attacksRemaining={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} targetDisarmableItems={targetDisarmableItems}");
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Disarm] Attempt #{_disarmAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)}."));
-
-            if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} disarm-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no disarm-capable attacks remaining this turn."));
-
-            _pendingDisarmUseOffHandSelection = false;
-            ClearDisarmSequenceState();
-        }
-        else if (type == SpecialAttackType.Sunder)
-        {
-            int attacksRemaining = GetRemainingSunderAttackActions(attacker);
-            int nextBab = GetCurrentSunderAttackBonus(attacker);
-            int targetSunderableItems = target != null ? target.GetSunderableItemOptions().Count : 0;
-            string handLabel = sunderUsedOffHand ? "off-hand" : "main-hand";
-
-            Debug.Log(
-                $"[Sunder][Flow] Completed attempt {_sunderAttemptNumber} attacker={attacker.Stats.CharacterName} " +
-                $"target={(target != null && target.Stats != null ? target.Stats.CharacterName : "<null>")} " +
-                $"success={result.Success} hand={handLabel} usedBAB={CharacterStats.FormatMod(sunderAttackBonusUsed)} " +
-                $"attacksRemaining={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} targetSunderableItems={targetSunderableItems}");
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Sunder] Attempt #{_sunderAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)}."));
-
-            if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} sunder-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no sunder-capable attacks remaining this turn."));
-
-            _pendingSunderUseOffHandSelection = false;
-            ClearSunderSequenceState();
-        }
-
-        // The target's reaction to the maneuver (the bombardier beetle's acid spray, D1) resolves as ExecuteSpecialAttack
-        // returns and can end the combat: nothing of the maneuver's aftermath follows a victory or defeat.
         if (CurrentPhase == TurnPhase.CombatOver)
         {
             FinalizeSpecialAttackResolution(attacker, target);
             return;
         }
 
-        // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
-        if (type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm)
-            MeleeReactionService.TriggerReactions(attacker, target, null);
-
-        // The Improved Trip attack and the defender's counter-trip (PHB p.96, p.158; CMB-079), shared
-        // with the NPC executor. A controllable defender's prompt holds the finish until it is answered.
-        if (type == SpecialAttackType.Trip)
+        bool bullRush = type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge;
+        if ((type == SpecialAttackType.Trip || bullRush) && (outcome.AttackerDown || IsSpecialAttackerDropped(attacker)))
         {
-            // The Improved Trip attack's reactions, or the target's AoO before an unarmed one (PHB p.139), can drop
-            // the tripper; its turn then ends instead of offering more actions.
-            HandleTripAftermath(attacker, target, result, () =>
-            {
-                if (IsSpecialAttackerDropped(attacker))
-                    FinalizeSpecialAttackAttackerDropped(attacker, "during the trip");
-                else
-                    FinalizeSpecialAttackResolution(attacker, target);
-            });
+            FinalizeSpecialAttackAttackerDropped(attacker, type == SpecialAttackType.Trip ? "during the trip" : "during the bull rush");
             return;
-        }
-
-        if (result.Success)
-        {
-            if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)
-            {
-                ResolveBullRushPushAndFollow(attacker, target, result, isCharge: type == SpecialAttackType.BullRushCharge, squaresMovedThisCharge: 0,
-                    onComplete: attackerDown =>
-                    {
-                        if (attackerDown)
-                            FinalizeSpecialAttackAttackerDropped(attacker, "during the bull rush");
-                        else
-                            FinalizeSpecialAttackResolution(attacker, target);
-                    });
-                return;
-            }
-
-            if (type == SpecialAttackType.Overrun)
-                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
         }
 
         FinalizeSpecialAttackResolution(attacker, target);
     }
 
     /// <summary>
-    /// The PC wrapper's maneuver intent for the shared gate (AttackLegality, CMB-104): a disarm or sunder names the hand
-    /// chosen from the menu (the off-hand weapon, or the main weapon; none for an unarmed attempt), as
-    /// TryConsumeDisarmAttackAction and TryConsumeSunderAttackAction then use it; any other maneuver names none.
+    /// The PC wrapper's maneuver intent (ManeuverRequest.ForUi): a disarm or sunder names the hand chosen from the menu (the
+    /// off-hand weapon, or the main weapon; none for an unarmed attempt) for the shared gate's reach (AttackLegality,
+    /// CMB-104), as TryConsumeDisarmAttackAction and TryConsumeSunderAttackAction then use it; any other maneuver names
+    /// none. TwoWeapon is the dual-wield state.
     /// </summary>
     private AttackIntent PcManeuverIntent(CharacterController attacker, SpecialAttackType type)
     {
+        AttackIntent intent;
         if (attacker != null && (type == SpecialAttackType.Disarm || type == SpecialAttackType.Sunder))
         {
             bool offHand = type == SpecialAttackType.Disarm ? _pendingDisarmUseOffHandSelection : _pendingSunderUseOffHandSelection;
-            return AttackIntent.ForManeuverWith(type, offHand ? attacker.GetOffHandAttackWeapon() : attacker.GetEquippedMainWeapon());
+            intent = AttackIntent.ForManeuverWith(type, offHand ? attacker.GetOffHandAttackWeapon() : attacker.GetEquippedMainWeapon());
         }
-        return AttackIntent.ForManeuver(type);
+        else
+        {
+            intent = AttackIntent.ForManeuver(type);
+        }
+        // The dual-wield prompt's state, read once (batch 12 step 19): a maneuver step of a two-weapon round takes the
+        // main-hand (or off-hand) penalty (PHB p.160).
+        intent.TwoWeapon = _isDualWielding;
+        return intent;
     }
 
     /// <summary>

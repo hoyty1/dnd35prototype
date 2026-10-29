@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 66 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 67 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,7 +140,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 66 files (since batch 12 step 17 added `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 67 files (since batch 12 step 19 added `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -188,7 +188,8 @@ There are 66 files (since batch 12 step 17 added `GameManager.AttackCore.cs`, st
 | **Spell/Domain/** (3) | | |
 | GameManager_DomainPowers.cs | 987 | Cleric granted powers (`OnDomainPowerButtonPressed`, `TickDomainPowerDurations`). |
 | GameManager_DomainSpells.cs / _DomainAreaSpells.cs | 569 / 256 | Domain spells (Hold Animal, Heat Metal, ...) and domain area spells (Entangle, Spike Stones, ...). |
-| **Combat/Maneuvers/** (4) | | |
+| **Combat/Maneuvers/** (5) | | |
+| GameManager.ManeuverCore.cs | 565 | The maneuver core's legality and executor for PCs and NPCs (batch 12 step 19): `CanStartManeuver`, `TryPayManeuver` (the cost table `ManeuverActionCost.For`), `ExecuteManeuver` (pay, ward, initiation AoOs, resolution, aftermath, post-attack hook), `CanAffordManeuverForUi` and the UI decider's prompts. Its types (`ManeuverRequest`, `IManeuverDecider` and the two deciders) are in `ManeuverCore.cs`. |
 | GrappleSystem.cs | 2,024 | Grapple suite (`OnGrapple*ButtonPressed`), also `OnOverrunButtonPressed`. |
 | OverrunSystem.cs | 943 | Overrun destination selection and resolution. |
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and overrun's `TryPushTargetAway`; some trip/feint helpers. |
@@ -277,7 +278,7 @@ Assets/Scripts/
     Core/ (17)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
                          DamageModel, BullRushRules, PerceptionRules (turn-start Listen check, every actor, CMB-094),
                          dormant CombatStateMachine/InitiativeSystem
-    Conditions/ (11), Behaviors/ (4), Maneuvers/ (6), Special/ (3), Reactions/ (3),
+    Conditions/ (11), Behaviors/ (4), Maneuvers/ (8), Special/ (3), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
   Spell/ (1: BonusType)
     Data/ (8)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...

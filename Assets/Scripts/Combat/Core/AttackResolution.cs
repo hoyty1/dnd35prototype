@@ -28,7 +28,9 @@ public enum AttackOrigin
     /// <summary>I: an attack of opportunity (ThreatSystem.ExecuteAoO).</summary>
     AoO,
     /// <summary>J: the attack or pounce at the end of a charge, PC and NPC (GameManager.ExecuteCharge, NPCExecuteCharge).</summary>
-    Charge
+    Charge,
+    /// <summary>A maneuver that is an attack (trip, disarm, sunder, grapple, coup de grace), PC and NPC (GameManager.ExecuteManeuver, batch 12 step 19): the hook runs with no attack results, for the summon cleanup and the combat-end check.</summary>
+    Maneuver
 }
 
 /// <summary>

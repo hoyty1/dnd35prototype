@@ -11606,11 +11606,17 @@ public class CharacterController : MonoBehaviour
         {
             case GrappleActionType.EscapeArtist:
             {
+                // PHB p.73 (Escape Artist, Grappler) and p.156 (Escape from Grapple): the Escape Artist check replaces the
+                // escaper's grapple check and is opposed by the enemy's grapple check (the skill's table gives the "grappler's
+                // grapple check result" as the DC); ties go to the higher modifier, then a reroll (PHB p.64). Until the batch 12
+                // step 19 review it rolled against a fixed DC of 20 + the grapple modifier. The grappler's choice not to oppose
+                // (D10) is asked before this, by GameManager.ResolveGrappleEscapeThroughOpposition.
                 int roll = DiceService.D20("Escape Artist check");
                 int bonus = Stats.GetSkillBonus("Escape Artist");
                 int total = roll + bonus;
-                int dc = 20 + opponent.GetGrappleModifier();
-                bool success = total >= dc;
+                GrappleCheckResult eaOppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
+                int dc = eaOppCheck.Total;
+                bool success = DoesAttackerWinOpposedCheck(total, bonus, eaOppCheck.Total, eaOppCheck.Total - eaOppCheck.BaseRoll);
 
                 bool escapedPinOnly = false;
                 if (success)
@@ -11639,8 +11645,8 @@ public class CharacterController : MonoBehaviour
                 {
                     $"{Stats.CharacterName} attempts Escape Artist against {opponent.Stats.CharacterName}",
                     BuildD20Formula($"{Stats.CharacterName} Escape Artist", roll, bonus, total),
-                    $"Escape DC: 20 + {opponent.Stats.CharacterName} grapple mod ({opponent.GetGrappleModifier()}) = {dc}",
-                    $"Result: {(success ? "SUCCESS" : "FAILURE")} ({total} vs DC {dc})\n{outcome}"
+                    eaOppCheck.GetBreakdown(),
+                    BuildOpposedResultLine(Stats.CharacterName, total, opponent.Stats.CharacterName, eaOppCheck.Total, success) + "\n" + outcome
                 });
 
                 return new SpecialAttackResult
@@ -11649,6 +11655,7 @@ public class CharacterController : MonoBehaviour
                     Success = success,
                     CheckRoll = roll,
                     CheckTotal = total,
+                    OpposedRoll = eaOppCheck.BaseRoll,
                     OpposedTotal = dc,
                     Log = log
                 };
@@ -14843,8 +14850,12 @@ public class CharacterController : MonoBehaviour
                     return item != null;
                 }
             }
+            // The item the attacker chose (D15) is gone: no other item is attacked in its place.
+            return false;
         }
 
+        // No item named: a direct caller (the static suites) that leaves the choice open. Every maneuver request names the
+        // item its decider chose (ManeuverRequest.ItemSlot, D15), so the first option is never a game choice.
         item = options[0].Item;
         resolvedSlot = options[0].Slot;
         kind = options[0].Kind;
@@ -15866,8 +15877,12 @@ public class CharacterController : MonoBehaviour
                     return heldItem != null;
                 }
             }
+            // The held item the attacker chose (D15) is gone: no other item is disarmed in its place.
+            return false;
         }
 
+        // No item named: a direct caller (the static suites) that leaves the choice open. Every maneuver request names the
+        // held item its decider chose (ManeuverRequest.ItemSlot, D15), so the first option is never a game choice.
         handSlot = options[0].HandSlot;
         heldItem = options[0].HeldItem;
         return heldItem != null;

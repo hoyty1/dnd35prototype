@@ -257,6 +257,11 @@ namespace Tests.Scenarios
         /// true trips back, false declines. An actor not listed trips back.
         /// </summary>
         public Dictionary<string, bool> CounterTripAnswers = new Dictionary<string, bool>();
+        /// <summary>
+        /// How the runner answers a controllable grappler's escape-opposition prompt (PHB p.156, D10), by actor key: true
+        /// opposes, false lets the escaper go. An actor not listed opposes.
+        /// </summary>
+        public Dictionary<string, bool> EscapeOppositionAnswers = new Dictionary<string, bool>();
 
         /// <summary>A copy for one job with <paramref name="extra"/> actors appended (the lists are new, the rest is shared).</summary>
         internal ScenarioDef WithExtraActors(IEnumerable<ActorSpec> extra)
@@ -375,6 +380,9 @@ namespace Tests.Scenarios
             foreach (string k in CounterTripAnswers.Keys)
                 if (Find(k) == null)
                     problems.Add("counter-trip answer for unknown actor '" + k + "'");
+            foreach (string k in EscapeOppositionAnswers.Keys)
+                if (Find(k) == null)
+                    problems.Add("escape-opposition answer for unknown actor '" + k + "'");
 
             foreach (string k in Scripts.Keys)
             {
@@ -548,6 +556,7 @@ namespace Tests.Scenarios
         /// trip, PHB p.158): true trips back (the default for every actor), false declines.
         /// </summary>
         public ScenarioBuilder CounterTripAnswer(string key, bool tripBack) { _def.CounterTripAnswers[key] = tripBack; return this; }
+        public ScenarioBuilder EscapeOppositionAnswer(string key, bool oppose) { _def.EscapeOppositionAnswers[key] = oppose; return this; }
 
         /// <summary>Forces <paramref name="count"/> d<paramref name="sides"/> rolls (whose context contains <paramref name="ctx"/>, null for any) to <paramref name="value"/>; count -1 forces every one.</summary>
         public ScenarioBuilder Force(int sides, int value, string ctx = null, int count = 1)

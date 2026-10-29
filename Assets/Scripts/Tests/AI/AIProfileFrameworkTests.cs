@@ -73,6 +73,10 @@ namespace Tests.AI
             TestSecondMoveAfterSearchNeedsExplicitDoubleMove();
             TestAiTwoWeaponStopgap();
             TestAiRapidShotStopgap();
+            TestAiFeintStopgap();
+            TestAiImprovedGrabSkipStopgap();
+            TestAiManeuverItemStopgap();
+            TestAiGrappleMoveStaysWhenSafest();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -181,6 +185,132 @@ namespace Tests.AI
             {
                 TestHelpers.Cleanup(archer != null ? archer.gameObject : null, noFeat != null ? noFeat.gameObject : null,
                     thrower != null ? thrower.gameObject : null, target != null ? target.gameObject : null);
+            }
+        }
+
+        // ---- Batch 12 step 19 (CMB-102, CMB-098, CMB-103, D10, D15): the AI maneuver stopgaps ----
+
+        /// <summary>
+        /// AIProfile.DefaultShouldFeint (AI stopgap): a rogue 3 with Improved Feint, BAB +2, both actions and a high Bluff feints
+        /// an adjacent fighter that is not flat-footed (a move action, PHB p.95, p.155); not a mindless target (a feint against a
+        /// nonintelligent creature is impossible, PHB p.155), and not once its move action is spent.
+        /// </summary>
+        private static void TestAiFeintStopgap()
+        {
+            CharacterController rogue = null, target = null;
+            try
+            {
+                rogue = TestHelpers.CreateCharacter("FeintRogue", "Rogue", level: 3, bab: 2, gridPosition: Vector2Int.zero);
+                rogue.Stats.AddFeats(new List<string> { "Improved Feint" });
+                rogue.Stats.BaseAttackBonusOverride = 2;
+                rogue.Stats.InitializeSkills(rogue.Stats.CharacterClass, rogue.Stats.Level);
+                rogue.Stats.Skills["Bluff"].Ranks = 20;
+                global::Inventory rogueInventory = rogue.GetComponent<InventoryComponent>().CharacterInventory;
+                rogueInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponShortsword), EquipSlot.RightHand);
+                rogueInventory.RecalculateStats();
+                target = CreateArmedFighter("FeintTarget", 1, Vector2Int.right, ItemID.WeaponLongsword, null);
+                rogue.StartNewTurn();
+                target.StartNewTurn();
+
+                Assert(AIProfile.DefaultShouldFeint(rogue, target),
+                    "AI stopgap: an Improved Feint rogue (BAB +2, both actions) feints an adjacent target that is not flat-footed (PHB p.95, p.155)",
+                    $"flat-footed {target.IsFlatFootedCondition}, in reach {rogue.IsTargetInCurrentWeaponRange(target)}, bluff {rogue.Stats.GetSkillBonus("Bluff")}");
+                target.Stats.IsMindless = true;
+                Assert(!AIProfile.DefaultShouldFeint(rogue, target),
+                    "AI stopgap: no feint against a mindless (nonintelligent) target (PHB p.155)");
+                target.Stats.IsMindless = false;
+                rogue.Actions.UseMoveAction();
+                Assert(!AIProfile.DefaultShouldFeint(rogue, target),
+                    "AI stopgap: no feint once the move action is spent (the stopgap feints only as Improved Feint's move action)");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(rogue != null ? rogue.gameObject : null, target != null ? target.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AIProfile.DefaultShouldSkipImprovedGrab (AI stopgap): the grab is skipped only when it is hopeless, when even a
+        /// natural 20 against a natural 1 cannot win: the grabber's modifier + 19 at most the target's, a tie going to the
+        /// higher modifier (PHB p.64), the target's. One point less and the grab is tried.
+        /// </summary>
+        private static void TestAiImprovedGrabSkipStopgap()
+        {
+            CharacterController grabber = null, target = null;
+            try
+            {
+                grabber = CreateArmedFighter("GrabSkipGrabber", 1, Vector2Int.zero, null, null);
+                target = CreateArmedFighter("GrabSkipTarget", 1, Vector2Int.right, null, null);
+                int needed = grabber.GetGrappleModifier() + 19;
+                int nonBab = target.GetGrappleModifier() - target.Stats.BaseAttackBonus;
+                target.Stats.BaseAttackBonusOverride = needed - nonBab;
+                Assert(target.GetGrappleModifier() == needed && AIProfile.DefaultShouldSkipImprovedGrab(grabber, target, null),
+                    "AI stopgap: a grab whose best roll only ties the target's worst is skipped (the tie goes to the higher modifier, PHB p.64)",
+                    $"grabber {grabber.GetGrappleModifier()}, target {target.GetGrappleModifier()}");
+                target.Stats.BaseAttackBonusOverride = needed - nonBab - 1;
+                Assert(target.GetGrappleModifier() == needed - 1 && !AIProfile.DefaultShouldSkipImprovedGrab(grabber, target, null),
+                    "AI stopgap: a grab a natural 20 against a natural 1 can win is tried",
+                    $"grabber {grabber.GetGrappleModifier()}, target {target.GetGrappleModifier()}");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(grabber != null ? grabber.gameObject : null, target != null ? target.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AIProfile.DefaultChooseManeuverItem (AI stopgap, D15: the attacker picks the item, PHB p.155, p.158): a sunder aims
+        /// at the weapon over the shield; a disarm at the better of two held weapons (a longsword in the off hand over a dagger
+        /// in the main hand), not at the first one listed.
+        /// </summary>
+        private static void TestAiManeuverItemStopgap()
+        {
+            CharacterController attacker = null, shieldBearer = null, twoBlades = null;
+            try
+            {
+                attacker = CreateArmedFighter("ItemPickAttacker", 6, Vector2Int.zero, ItemID.WeaponLongsword, null);
+                shieldBearer = CreateArmedFighter("ItemPickShield", 1, Vector2Int.right, ItemID.WeaponLongsword, ItemID.ShieldHeavyWooden);
+                twoBlades = CreateArmedFighter("ItemPickTwoBlades", 1, Vector2Int.up, ItemID.WeaponDagger, ItemID.WeaponLongsword);
+
+                EquipSlot? sunderPick = AIProfile.DefaultChooseManeuverItem(attacker, shieldBearer, SpecialAttackType.Sunder);
+                Assert(sunderPick == EquipSlot.RightHand, "AI stopgap: a sunder aims at the weapon over the shield (D15)", "picked " + sunderPick);
+                EquipSlot? disarmPick = AIProfile.DefaultChooseManeuverItem(attacker, twoBlades, SpecialAttackType.Disarm);
+                Assert(disarmPick == EquipSlot.LeftHand,
+                    "AI stopgap: a disarm aims at the longsword in the off hand over the dagger in the main hand (D15)", "picked " + disarmPick);
+            }
+            finally
+            {
+                TestHelpers.Cleanup(attacker != null ? attacker.gameObject : null, shieldBearer != null ? shieldBearer.gameObject : null,
+                    twoBlades != null ? twoBlades.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AIProfile.DefaultChooseGrappleMoveDestination (AI stopgap, CMB-103): with no enemy around, a grappler beside its ally
+        /// stays (null) rather than drag the grapple away; with the ally farther than the destination, it moves there.
+        /// </summary>
+        private static void TestAiGrappleMoveStaysWhenSafest()
+        {
+            CharacterController grappler = null, ally = null;
+            try
+            {
+                grappler = CreateArmedFighter("MoveStayGrappler", 6, Vector2Int.zero, null, null);
+                ally = CreateArmedFighter("MoveStayAlly", 1, new Vector2Int(0, 1), null, null);
+                var all = new List<CharacterController> { grappler, ally };
+                var paths = new Dictionary<Vector2Int, List<Vector2Int>>
+                {
+                    { new Vector2Int(3, 0), new List<Vector2Int> { new Vector2Int(1, 0), new Vector2Int(2, 0), new Vector2Int(3, 0) } }
+                };
+                Vector2Int? stay = AIProfile.DefaultChooseGrappleMoveDestination(grappler, paths, new List<CharacterController>(), all);
+                Assert(!stay.HasValue, "AI stopgap: a grappler already beside its ally, with no enemy around, stays", "picked " + stay);
+
+                ally.GridPosition = new Vector2Int(5, 0);
+                Vector2Int? move = AIProfile.DefaultChooseGrappleMoveDestination(grappler, paths, new List<CharacterController>(), all);
+                Assert(move == new Vector2Int(3, 0), "AI stopgap: a grappler moves the grapple toward a farther ally (PHB p.156)", "picked " + move);
+            }
+            finally
+            {
+                TestHelpers.Cleanup(grappler != null ? grappler.gameObject : null, ally != null ? ally.gameObject : null);
             }
         }
 

@@ -65,7 +65,7 @@ namespace Tests.Scenarios
         public int ConvertLevel { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
-        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
+        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move", "EscapeArtist" };
 
         private Step(StepKind kind) { Kind = kind; }
 
@@ -392,7 +392,9 @@ namespace Tests.Scenarios
                 return Describe() + ": no natural attack name";
             if (control != Control.Ui)
             {
-                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack
+                // A grapple escape or move has the AI-path executor (GameManager.RunGrappleActionForAI, batch 12 step 19).
+                bool aiGrapple = Kind == StepKind.GrappleAction && (GrappleKind == "Escape" || GrappleKind == "Move" || GrappleKind == "EscapeArtist") && !HasCell;
+                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || (Kind == StepKind.GrappleAction && !aiGrapple) || Kind == StepKind.NaturalAttack
                     || Kind == StepKind.UseItem || Kind == StepKind.CastHeld || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert
                     || Kind == StepKind.DualWield)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
@@ -688,6 +690,18 @@ namespace Tests.Scenarios
                         ok = gm.TryMaintainConcentrationForAI(a);
                         yield return null;
                         break;
+
+                    case StepKind.GrappleAction:
+                    {
+                        // The AI grapple turn's own executor with the action given (batch 12 step 19): an escape through the
+                        // grappler's opposition choice (D10) and the escape square, or a grapple move (CMB-103).
+                        GrappleActionType action = s.GrappleKind == "Escape" ? GrappleActionType.OpposedGrappleEscape
+                            : s.GrappleKind == "EscapeArtist" ? GrappleActionType.EscapeArtist
+                            : GrappleActionType.MoveHalfSpeed;
+                        if (!a.IsGrappling()) { ok = false; note = "not grappling"; break; }
+                        yield return gm.StartCoroutine(gm.RunGrappleActionForAI(a, action));
+                        break;
+                    }
 
                     case StepKind.Maneuver:
                         if (target == null) { ok = false; note = "no target"; break; }
@@ -1422,6 +1436,7 @@ namespace Tests.Scenarios
                 case "ReleasePin": gm.OnGrappleReleasePinButtonPressed(); break;
                 case "Damage": gm.OnGrappleDamageButtonPressed(); break;
                 case "Escape": gm.OnGrappleEscapeCheckButtonPressed(); break;
+                case "EscapeArtist": gm.OnGrappleEscapeArtistButtonPressed(); break;
                 case "Attack": gm.OnGrappleUnarmedAttackButtonPressed(); break;
                 case "Move": gm.OnGrappleMoveButtonPressed(); break;
             }

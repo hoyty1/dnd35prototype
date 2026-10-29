@@ -285,6 +285,14 @@ public class AIService : MonoBehaviour
                 yield return new WaitForSeconds(0.5f);
                 yield break;
             }
+            // A grappler may cast a spell the grapple allows (PHB p.156; CMB-101): the cast candidates of the ordinary turn,
+            // each through the shared cast legality (CheckLegalityForAI meets GrappleSpellcastRefusal), in place of its grapple
+            // actions.
+            if (TryGrappledSpellcastForAI(npc, targetPC))
+            {
+                yield return new WaitForSeconds(0.5f);
+                yield break;
+            }
             yield return _gameManager.StartCoroutine(RunGrappleTurnForAI(npc));
             if (CombatEnded() || !CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
         }
@@ -2605,6 +2613,17 @@ public class AIService : MonoBehaviour
     /// </summary>
     private IEnumerator PerformMeleeAttackActionWithManeuvers(CharacterController npc, CharacterController target, AIProfile profile)
     {
+        // A feint before the attack (PHB p.155; a move action with Improved Feint, PHB p.95; CMB-102): an AI stopgap, by the
+        // profile (AIProfile.ShouldFeint; by default a rogue with Improved Feint that makes one attack anyway). The feint is
+        // the NPC row of the maneuver core (TryNPCSpecialAttackByTypeForAI, the PC's cost table).
+        bool feint = profile != null ? profile.ShouldFeint(npc, target) : AIProfile.DefaultShouldFeint(npc, target);
+        if (feint && _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Feint))
+        {
+            if (CombatEnded() || npc.IsDead || !npc.CanTakeTurnActions())
+                yield break;
+            yield return new WaitForSeconds(0.3f);
+        }
+
         yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(
             npc,
             target,
@@ -4378,6 +4397,31 @@ public class AIService : MonoBehaviour
                 Debug.LogWarning($"[AI] Unknown status effect type: {attack.OnHitStatusEffectType}");
                 break;
         }
+    }
+
+    /// <summary>
+    /// The cast option of a grappling NPC's turn (PHB p.156; CMB-101, batch 12 step 19): a grappler may cast a spell of one
+    /// standard action or less with no somatic component (no verbal one while pinned, CMB-080) and makes a Concentration
+    /// check; the cast core's legality refuses every other cast (GameManager.CheckCastGrappleLegality, through
+    /// CheckLegalityForAI, which ranks the candidates of <see cref="TryExecuteSpellcastAction"/>). AI stopgap (batch 13
+    /// catalog): a spellcaster casts instead of grappling when it is the weaker grappler (its grapple modifier below the
+    /// opponent's) or is pinned; otherwise it keeps grappling. The grapple opponent is the fallback target.
+    /// </summary>
+    private bool TryGrappledSpellcastForAI(CharacterController npc, CharacterController fallbackTarget)
+    {
+        if (npc == null || npc.Stats == null || !npc.Stats.IsSpellcaster || npc.Spellcasting == null)
+            return false;
+        if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool pinned, out _) || opponent == null)
+            return false;
+        bool weaker = npc.GetGrappleModifier() < opponent.GetGrappleModifier();
+        if (!weaker && !pinned)
+            return false;
+        // No score floor: a floor of 0 (as the dragon's cast-first step has) refused the only legal cast, Blindness/Deafness
+        // on the grappler, on every seed of rules/grappled-npc-casts-legal-only (batch 12 step 19 review), so the strategist's
+        // scores are not calibrated to 0 for a grappled caster; any legal candidate replaces the grapple actions (AI stopgap).
+        bool cast = TryExecuteSpellcastAction(npc, opponent ?? fallbackTarget);
+        Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} {(cast ? "casts" : "finds no legal cast")} while grappling (weaker={weaker}, pinned={pinned}).");
+        return cast;
     }
 
     /// <summary>

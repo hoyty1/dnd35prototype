@@ -234,23 +234,54 @@ public sealed class AttackPool
 }
 
 /// <summary>
-/// What a combat maneuver costs in the attack sequence. One switch case per maneuver type, so
-/// including or excluding a type is a one-line change on the NPC side (CMB-102). Read by the AI
-/// (GameManager.TryNPCSpecialAttackIfBeneficial, ShouldUseManeuver). The PC branches and availability
-/// helpers for trip, disarm, sunder and grapple still hard-code them as attack steps: change them with
-/// the table.
+/// What one maneuver costs (batch 12 step 19, CMB-102): the action it takes and whether it takes the place of one melee
+/// attack of an attack or full attack instead (PHB p.141 Table 8-2 note 7). <see cref="MoveOrChargeOnly"/> marks a
+/// maneuver made only during a move or a charge (overrun, PHB p.157), <see cref="ChargeEnd"/> one that ends a charge (the
+/// charge bull rush, PHB p.154).
+/// </summary>
+public readonly struct ManeuverCost
+{
+    public readonly ActionCostType Action;
+    public readonly bool ReplacesMeleeAttack;
+    public readonly bool MoveOrChargeOnly;
+    public readonly bool ChargeEnd;
+
+    public ManeuverCost(ActionCostType action, bool replacesMeleeAttack = false, bool moveOrChargeOnly = false, bool chargeEnd = false)
+    {
+        Action = action;
+        ReplacesMeleeAttack = replacesMeleeAttack;
+        MoveOrChargeOnly = moveOrChargeOnly;
+        ChargeEnd = chargeEnd;
+    }
+
+    public override string ToString()
+        => ReplacesMeleeAttack ? "one melee attack" : Action + (MoveOrChargeOnly ? " (in a move or charge)" : "") + (ChargeEnd ? " (end of a charge)" : "");
+}
+
+/// <summary>
+/// The one cost table of the combat maneuvers (batch 12 step 19, CMB-102): one row per <see cref="SpecialAttackType"/>,
+/// read by both sides. The PC wrapper (GameManager.ExecuteSpecialAttack, the Special Attack menu's availability
+/// GameManager.CanAffordManeuverForUi and CombatUI's buttons) and the NPC executor (GameManager.TryNPCSpecialAttackIfBeneficial,
+/// AIService.ShouldUseManeuver) build a ManeuverRequest whose cost comes from here, and the maneuver core
+/// (GameManager.ExecuteManeuver) pays it before the initiation AoOs.
 /// </summary>
 public static class ManeuverActionCost
 {
     /// <summary>
-    /// Maneuvers that may replace one melee attack of an attack or full attack, at that attack's
-    /// BAB (PHB p.141 Table 8-2 note 7). They cost one step of the creature's sequence through
-    /// <see cref="CharacterController.TryCommitManeuverSubstituteStep"/>: an iterative step, or for a
-    /// creature fighting with natural attacks one natural attack at that attack's BAB (MM p.312). Bull rush and overrun are not in this set:
-    /// for every creature, PC or NPC, they are a standard action or part of a charge (PHB p.154,
-    /// p.157), never one attack of a full attack and never an attack of opportunity.
+    /// The cost of <paramref name="type"/> for <paramref name="actor"/> (null: a creature without feats):
+    /// - trip, disarm, grapple and sunder take the place of one melee attack (PHB p.141 Table 8-2 note 7, p.155, p.156,
+    ///   p.158; sunder by owner decision 2026-10-07): one step of the creature's attack sequence through
+    ///   <see cref="CharacterController.TryCommitManeuverSubstituteStep"/>, an iterative step or, for a creature fighting
+    ///   with natural attacks, one natural attack at that attack's BAB (MM p.312);
+    /// - feint is a standard action (PHB p.155), a move action with Improved Feint (PHB p.95);
+    /// - coup de grace is a full-round action (PHB p.153);
+    /// - a standing bull rush is a standard action, the charge bull rush the end of a charge (PHB p.154), never one attack
+    ///   of a full attack;
+    /// - overrun is a standard action made only during a move or a charge (PHB p.157; the move-through is step 20);
+    /// - aid another (PHB p.154), turning undead (PHB p.159) and waking a sleeping ally (shaking it awake, PHB p.280) are
+    ///   standard actions.
     /// </summary>
-    public static bool ReplacesMeleeAttack(SpecialAttackType type)
+    public static ManeuverCost For(SpecialAttackType type, CharacterController actor)
     {
         switch (type)
         {
@@ -258,9 +289,22 @@ public static class ManeuverActionCost
             case SpecialAttackType.Disarm:  // PHB p.155
             case SpecialAttackType.Grapple: // PHB p.156
             case SpecialAttackType.Sunder:  // PHB p.158 (owner decision 2026-10-07)
-                return true;
-            default: // BullRushAttack p.154 and Overrun p.157: standard action or part of a charge; Feint p.155: standard (move with Improved Feint, p.95); CoupDeGrace: full round
-                return false;
+                return new ManeuverCost(ActionCostType.Standard, replacesMeleeAttack: true);
+            case SpecialAttackType.Feint:   // PHB p.155; Improved Feint PHB p.95
+                return actor != null && actor.Stats != null && actor.Stats.HasFeat("Improved Feint")
+                    ? new ManeuverCost(ActionCostType.Move)
+                    : new ManeuverCost(ActionCostType.Standard);
+            case SpecialAttackType.CoupDeGrace: // PHB p.153
+                return new ManeuverCost(ActionCostType.FullRound);
+            case SpecialAttackType.BullRushCharge: // PHB p.154: the end of a charge
+                return new ManeuverCost(ActionCostType.FullRound, chargeEnd: true);
+            case SpecialAttackType.Overrun: // PHB p.157: during a move or a charge
+                return new ManeuverCost(ActionCostType.Standard, moveOrChargeOnly: true);
+            default: // BullRushAttack p.154, AidAnother p.154, TurnUndead p.159, WakeSleepingAlly p.280
+                return new ManeuverCost(ActionCostType.Standard);
         }
     }
+
+    /// <summary>True when <paramref name="type"/> takes the place of one melee attack (<see cref="For"/>).</summary>
+    public static bool ReplacesMeleeAttack(SpecialAttackType type) => For(type, null).ReplacesMeleeAttack;
 }
