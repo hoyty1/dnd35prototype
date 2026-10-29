@@ -83,8 +83,8 @@ public sealed class FrightenedBehaviorController
 
     /// <summary>
     /// The frightened or panicked creature's turn, PC or NPC: flee from the source (<see cref="Flee"/>); when cornered a
-    /// frightened creature fights defensively (AI-044) and a panicked one cowers and does not attack (PHB glossary p.311;
-    /// the total defense it would typically take is not modelled, CMB-179). <paramref name="result"/> reports the outcome,
+    /// frightened creature fights defensively (AI-044) and a panicked one cowers, does not attack and takes total defense
+    /// (PHB glossary p.311; the catalog's shared action, CMB-179, D2). <paramref name="result"/> reports the outcome,
     /// so a PC's forced turn can give a cornered frightened PC its menu back (PHB p.310: it may fight).
     /// </summary>
     public IEnumerator ExecuteDecision(GameManager gameManager, CharacterController actor, FrightenedTurnDecision decision, FlightResult result = null)
@@ -113,6 +113,17 @@ public sealed class FrightenedBehaviorController
         if (isPanicked)
         {
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{actorName} is cornered and cowers in panic, unable to attack."));
+            // It cowers "typically using the total defense action" (PHB p.311): the shared catalog action, PC or NPC, not
+            // the Cowering condition (p.307), whose "no actions" would forbid the action the text names (delegated RAW
+            // reading 2026-10-29, D2; CMB-179). Refused, with nothing spent, when no standard action is left. "Typically":
+            // a disabled creature that the strenuous standard action would drop to dying (PHB p.145) only cowers, since the
+            // dodge bonus would be lost at once with its Dexterity bonus (delegated RAW reading 2026-10-29, D2).
+            actor.CurrentTurnStart.CorneredInPanic = true;
+            if (!actor.StrenuousActWouldLeaveDying())
+            {
+                var totalDefense = new ActionOutcome();
+                yield return gameManager.RunAIAction(ActionContext.For(ActionIds.TotalDefense, actor, ActorSource.AI), totalDefense);
+            }
         }
         else
         {

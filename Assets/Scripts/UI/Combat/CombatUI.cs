@@ -158,6 +158,7 @@ public class CombatUI : MonoBehaviour
     public Text RapidShotLabel;             // Shows "Rapid Shot: ON/OFF"
     public Button AttackDefensivelyButton;    // Single attack (standard) while fighting defensively
     public Button FullAttackDefensivelyButton; // Full attack while fighting defensively
+    public Button TotalDefenseButton;          // Total defense (Standard Action, PHB p.142; the catalog's shared action, CMB-179)
 
     [Header("Phase 1 Combat Feat Controls")]
     public GameObject StunningFistPanel;     // Panel containing Stunning Fist toggle

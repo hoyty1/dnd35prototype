@@ -59,7 +59,8 @@ public partial class GameManager
         // Aid Another expiry counters tick before actions; this keeps bonuses available for one full beneficiary turn.
         ExpireAidBonusesAtTurnStart(actor);
 
-        // The per-turn resets: actions, attacks of opportunity, fighting defensively, a readied counterspell, movement.
+        // The per-turn resets: actions, attacks of opportunity, fighting defensively and total defense (both last until
+        // the creature's next turn, PHB p.142; CMB-179, also on a skipped turn), a readied counterspell, movement.
         actor.StartNewTurn();
         // Last turn's compulsions are gone; an acting turn evaluates its own (TryRunCompulsionTurn).
         actor.CurrentTurnStart.Clear();

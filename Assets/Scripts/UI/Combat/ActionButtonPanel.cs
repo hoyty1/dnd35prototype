@@ -74,6 +74,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button DismissSeeInvisibilityButton => _combatUI != null ? _combatUI.DismissSeeInvisibilityButton : null;
     private Button AttackDefensivelyButton => _combatUI != null ? _combatUI.AttackDefensivelyButton : null;
     private Button FullAttackDefensivelyButton => _combatUI != null ? _combatUI.FullAttackDefensivelyButton : null;
+    private Button TotalDefenseButton => _combatUI != null ? _combatUI.TotalDefenseButton : null;
 
     private sealed class ActionButtonState
     {
@@ -655,6 +656,21 @@ public class ActionButtonPanel : MonoBehaviour
         else if (!context.CanAttackWithWeapon) attackDefensivelyLabel = "Fighting Defensively (Std) [Reload first]";
         else attackDefensivelyLabel = context.UsingUnarmedStrike ? $"Fighting Defensively (Std, {context.AttackSourceLabel})" : "Fighting Defensively (Std)";
         states.Set(AttackDefensivelyButton, new ActionButtonState(true, canAttackDefensively, attackDefensivelyLabel));
+
+        // Total defense (PHB p.142; CMB-179): the catalog executor's CanStart is the button's state, the rule the AI's
+        // runner checks too, its turned and other condition refusals included.
+        ActionDefinition totalDefense = ActionCatalog.Get(ActionIds.TotalDefense);
+        Legality totalDefenseStart = totalDefense != null && totalDefense.Executor != null
+            ? totalDefense.Executor.CanStart(pc)
+            : Legality.Refused(LegalityBar.Other, "no executor");
+        bool canTotalDefense = totalDefenseStart.Ok;
+        string totalDefenseLabel;
+        if (pc.IsInTotalDefense) totalDefenseLabel = $"Total Defense (active: +{pc.Stats.TotalDefenseACBonus} AC)";
+        else if (context.IsTurned) totalDefenseLabel = "Total Defense (Turned: no)";
+        else if (canTotalDefense) totalDefenseLabel = $"Total Defense (Std, +{TotalDefenseRules.DodgeBonus(pc.Stats)} AC)";
+        else if (totalDefenseStart.Bar == LegalityBar.Action && !context.Actions.HasStandardAction) totalDefenseLabel = "Total Defense (Std) [Used]";
+        else totalDefenseLabel = "Total Defense (Std) [Unavailable]";
+        states.Set(TotalDefenseButton, new ActionButtonState(true, canTotalDefense, totalDefenseLabel));
 
         // A full-round action, or a partial charge (a standard action) for a creature limited to one action (PHB p.154, D2; CMB-108).
         bool hasChargeAction = ChargeRules.HasChargeAction(pc, out bool partialCharge, out _);
@@ -1385,6 +1401,8 @@ public class ActionButtonPanel : MonoBehaviour
         if (AttackOffHandButton != null) AttackOffHandButton.gameObject.SetActive(false);
         if (AttackOffHandThrownButton != null) AttackOffHandThrownButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
+        // A grappling creature takes only the grapple actions (PHB p.156): no total defense.
+        if (TotalDefenseButton != null) TotalDefenseButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
@@ -1474,5 +1492,6 @@ public class ActionButtonPanel : MonoBehaviour
         if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
+        if (TotalDefenseButton != null) TotalDefenseButton.gameObject.SetActive(false);
     }
 }

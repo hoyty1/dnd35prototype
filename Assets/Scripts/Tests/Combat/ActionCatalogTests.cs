@@ -163,7 +163,7 @@ public static class ActionCatalogTests
         new object[] { ActionIds.AidAnother, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.WakeAlly, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.TurnUndead, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Missing, "CMB-179" },
+        new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.PcOnly, "AI-054" },
@@ -455,9 +455,9 @@ public static class ActionCatalogTests
                 baseSpeed: 6, atkRange: 1, baseHitDieHP: 10, raceName: "Human");
 
             var missing = new ActionOutcome();
-            bool drained = Drain(gm.RunAIAction(ActionContext.For(ActionIds.TotalDefense, actor, ActorSource.AI), missing));
+            bool drained = Drain(gm.RunAIAction(ActionContext.For(ActionIds.Run, actor, ActorSource.AI), missing));
             Assert(drained && !missing.Performed && missing.Refusal.Bar == LegalityBar.Other
-                   && missing.Refusal.Reason.Contains("CMB-179") && missing.Spent == ActionCostType.NotAnAction,
+                   && missing.Refusal.Reason.Contains("CMB-202") && missing.Spent == ActionCostType.NotAnAction,
                 "RunAIAction refuses a Missing entry with its issue id, before any executor runs", missing.ToString());
 
             var noActor = new ActionOutcome();

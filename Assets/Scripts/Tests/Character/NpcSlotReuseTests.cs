@@ -50,6 +50,7 @@ public static class NpcSlotReuseTests
             TestPartySlotGetsNewCharacter();
             TestAuraSaveImmunityForgottenWithSource();
             TestReusedSlotDestroysOldProfile();
+            TestTotalDefenseClearedOnRespawn();
         }
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -513,6 +514,33 @@ public static class NpcSlotReuseTests
         finally
         {
             Cleanup(pc, partner);
+        }
+    }
+
+    /// <summary>
+    /// CMB-179 (batch 13 step 4): a creature that took total defense (PHB p.142) and whose slot is respawned before its
+    /// next turn leaves the new creature neither the state nor the dodge bonus, and the new creature makes AoOs.
+    /// </summary>
+    private static void TestTotalDefenseClearedOnRespawn()
+    {
+        CharacterController slot = NewController("CRE046_TotalDefenseSlot");
+        try
+        {
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            slot.BeginTotalDefense(TotalDefenseRules.DodgeBonus(slot.Stats));
+            CharacterStats oldStats = slot.Stats;
+            Assert(slot.IsInTotalDefense && oldStats.TotalDefenseACBonus == 4 && !ThreatSystem.CanMakeAoO(slot),
+                "CRE-046 control: the old orc is in total defense (+4 dodge AC, no AoOs)");
+
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            Assert(!slot.IsInTotalDefense && slot.Stats.TotalDefenseACBonus == 0,
+                "CRE-046, CMB-179: the respawned slot is not in total defense and has no total defense bonus");
+            Assert(ThreatSystem.CanMakeAoO(slot) == slot.HasMeleeWeaponEquipped(),
+                "CMB-179: the respawned creature makes AoOs again (as its melee weapon allows)");
+        }
+        finally
+        {
+            Cleanup(slot);
         }
     }
 

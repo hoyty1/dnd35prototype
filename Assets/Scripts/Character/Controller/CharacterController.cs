@@ -461,6 +461,14 @@ public class CharacterController : MonoBehaviour
     public bool IsFightingDefensively { get; private set; }
 
     /// <summary>
+    /// The creature took the total defense action (PHB p.142; CMB-179, batch 13 step 4, D2): its dodge bonus is
+    /// CharacterStats.TotalDefenseACBonus and it makes no attacks of opportunity (ThreatSystem.CanMakeAoO), until the start
+    /// of its next turn (<see cref="StartNewTurn"/>, which GameManager.BeginCombatantTurn runs on every turn, a skipped one
+    /// included). Set only by <see cref="BeginTotalDefense"/> (the catalog's TotalDefenseActionExecutor).
+    /// </summary>
+    public bool IsInTotalDefense { get; private set; }
+
+    /// <summary>
     /// Current selected attack damage mode for this character.
     /// This value can be manually toggled by the combat UI, or auto-resolved to a rules default on reset.
     /// </summary>
@@ -802,6 +810,29 @@ public class CharacterController : MonoBehaviour
         {
             Debug.Log($"[Defensive] {Stats.CharacterName}: Fighting Defensively {(enabled ? "ON" : "OFF")}");
         }
+    }
+
+    /// <summary>
+    /// Starts total defense with <paramref name="dodgeBonus"/> (TotalDefenseRules.DodgeBonus: +4, +6 with 5 Tumble ranks;
+    /// PHB p.142, p.85). The action's cost and legality are the executor's; this is only the state. A fighting-defensively
+    /// flag set without an attack (TotalDefenseRules.Check refuses one used with an attack) ends here, so its +2 never
+    /// stacks with the +4 (PHB p.142: the two do not combine).
+    /// </summary>
+    public void BeginTotalDefense(int dodgeBonus)
+    {
+        if (IsFightingDefensively)
+            SetFightingDefensively(false);
+        IsInTotalDefense = true;
+        if (Stats != null)
+            Stats.TotalDefenseACBonus = Mathf.Max(0, dodgeBonus);
+    }
+
+    /// <summary>Ends total defense (the creature's next turn start, a new encounter, a reused slot): no dodge bonus, AoOs again.</summary>
+    public void EndTotalDefense()
+    {
+        IsInTotalDefense = false;
+        if (Stats != null)
+            Stats.TotalDefenseACBonus = 0;
     }
 
     public void SetAttackDamageMode(AttackDamageMode mode)
@@ -4985,6 +5016,7 @@ public class CharacterController : MonoBehaviour
         PowerAttackValue = 0;
         RapidShotEnabled = false;
         IsFightingDefensively = false;
+        EndTotalDefense(); // CMB-179: no total defense carries over to the slot's next creature (CRE-046)
         CurrentAttackDamageMode = AttackDamageMode.Lethal;
         _attackDamageModeManuallySetThisRound = false;
 
@@ -5975,14 +6007,29 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public void MarkStrenuousAction()
     {
-        if (_currentHPState != HPState.Disabled || Stats == null || Stats.CurrentHP > 0)
+        if (!StrenuousActIsDamaging())
             return;
 
         StrenuousDamagePending = true;
-        bool staysDisabled = Stats.TempHP > 0 || FeatManager.HasDiehard(Stats);
-        if (!staysDisabled && Actions != null)
+        if (StrenuousActWouldLeaveDying() && Actions != null)
             Actions.NoFurtherActions = true;
     }
+
+    /// <summary>
+    /// Whether a strenuous act now (a standard action, a quickened spell) costs this creature 1 damage: it is disabled at
+    /// 0 hp or below (PHB p.145). The test <see cref="MarkStrenuousAction"/> applies.
+    /// </summary>
+    public bool StrenuousActIsDamaging()
+        => _currentHPState == HPState.Disabled && Stats != null && Stats.CurrentHP <= 0;
+
+    /// <summary>
+    /// Whether a strenuous act now would leave this creature dying: it owes the 1 damage
+    /// (<see cref="StrenuousActIsDamaging"/>) and neither temporary hit points nor Diehard (PHB p.93) keep it disabled.
+    /// The same test <see cref="MarkStrenuousAction"/> uses to end its turn's actions; an automated choice that RAW makes
+    /// optional (the cornered panicked creature's total defense, D2) skips such an act.
+    /// </summary>
+    public bool StrenuousActWouldLeaveDying()
+        => StrenuousActIsDamaging() && !(Stats.TempHP > 0 || FeatManager.HasDiehard(Stats));
 
     /// <summary>
     /// A cast refunded after its cost was paid (the AoO prompt cancelled, a failed spend) never completed its act, so it
@@ -13116,6 +13163,7 @@ public class CharacterController : MonoBehaviour
         HasAttackedThisTurn = false;
         IsWithdrawing = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
+        EndTotalDefense(); // so does total defense (PHB p.142; CMB-179)
         Actions.Reset();
         RefreshActionLimits();
         StrenuousDamagePending = false;

@@ -241,7 +241,9 @@ public static class ActionCatalog
 
         // ── Defense ──
         l.Add(Def(ActionIds.TotalDefense, "Total Defense", D, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Self, ActionRoles.Defend,
-                "PHB p.142, Table 8-2", ImplStatus.Missing, "CMB-179"));
+                "PHB p.142 (+4 dodge AC until the next turn, no AoOs), p.85 (Tumble 5 ranks: +6), Table 8-2; p.311 (a cornered panicked creature)",
+                ImplStatus.New)
+            .Run(new TotalDefenseActionExecutor(), ActionUiAfter.ShowChoices));
 
         // ── Magic and items ──
         l.Add(Def(ActionIds.CastSpell, "Cast a Spell", Mg, ActionCostType.Standard, ProvokeRule.Yes, ActionTargetKind.Creature,

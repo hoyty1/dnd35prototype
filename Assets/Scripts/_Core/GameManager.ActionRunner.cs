@@ -12,8 +12,9 @@ using UnityEngine;
 ///   Debug.Log("[ActionSet] ...") (the shadow hook, which step 6 points at the legal set; never a combat-log line).
 /// - <see cref="ResolveActionProvocation"/>: the one attack-of-opportunity loop for non-movement actions; it never ends a
 ///   turn. <see cref="ConfirmActionProvocation"/> is its prompt alone, for a core that takes its own AoOs (stand up).
-/// They are internal (Assembly-CSharp: the tests, the harness, the AI); no live flow calls them yet (step 6 routes the AI
-/// through RunAIAction), and ActionCatalogTests' Play pass runs only their refusal paths.
+/// They are internal (Assembly-CSharp: the tests, the harness, the AI). Total defense (batch 13 step 4) is their first
+/// live caller: the PC's Total Defense button through RunPlayerAction, the cornered panicked creature
+/// (FrightenedBehaviorController.ExecuteDecision) through RunAIAction; step 6 routes the rest of the AI through RunAIAction.
 /// </summary>
 public partial class GameManager
 {

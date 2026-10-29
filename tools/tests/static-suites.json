@@ -253,11 +253,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 54,
+      "passed": 57,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one."
+      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one. Batch 13 step 4 (2026-10-29, CMB-179): a respawned slot keeps no total defense; 57/57 (20261029T190209Z-play)."
     },
     {
       "type": "Tests.Character.NpcProficiencyTests",
@@ -330,7 +330,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 22,
+      "passed": 34,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -616,11 +616,22 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 79,
+      "passed": 87,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "batch 13 step 3 (b13-catalog-skeleton, 2026-10-29): the action catalog as data (one entry per ActionIds constant; cost, provocation, RulesRef, status and issues; the golden PHB p.141 Table 8-2 manifest realigned; every SpecialAttackType agrees with ManeuverActionCost.For; ActionCosts.From maps every CastActionCost; ActionCosts on an action economy; Legality's bar and the ActionLegality adapters; ActionDeciders.For) and the executor source scan (no UI continuation, no IsControllable, ActivePC or IsPlayerTurn under Combat/Actions/Executors). In Play mode only (a scene GameManager), also the runner's refusal paths (RunAIAction on a Missing entry, with no actor, a stand-up for a creature that is not prone) and ResolveActionProvocation's early exit. The source-scan assertions scale with the number of files under Combat/Actions. 79/79 in Play, 75/75 in the edit pass (all=true) after the review fixes (2026-10-29)."
+      "notes": "batch 13 step 3 (b13-catalog-skeleton, 2026-10-29): the action catalog as data (one entry per ActionIds constant; cost, provocation, RulesRef, status and issues; the golden PHB p.141 Table 8-2 manifest realigned; every SpecialAttackType agrees with ManeuverActionCost.For; ActionCosts.From maps every CastActionCost; ActionCosts on an action economy; Legality's bar and the ActionLegality adapters; ActionDeciders.For) and the executor source scan (no UI continuation, no IsControllable, ActivePC or IsPlayerTurn under Combat/Actions/Executors). In Play mode only (a scene GameManager), also the runner's refusal paths (RunAIAction on a Missing entry, with no actor, a stand-up for a creature that is not prone) and ResolveActionProvocation's early exit. The source-scan assertions scale with the number of files under Combat/Actions. 79/79 in Play, 75/75 in the edit pass (all=true) after the review fixes (2026-10-29). Batch 13 step 4 (CMB-179, 2026-10-29): total defense is New with its executor (DefenseExecutors.cs joins the scan) and the Missing-entry refusal uses Run (CMB-202); 87/87 in Play (20261029T190209Z-play), 83/83 in the edit pass (all=true)."
+    },
+    {
+      "type": "Tests.Combat.TotalDefenseRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 22,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-179, batch 13 step 4 decision D2 (2026-10-29): total defense (PHB p.142) as the catalog's New entry (a standard action, no AoO, its executor, ShowChoices); +4 dodge AC in ArmorClass and TouchArmorClass and none in ArmorClassWithoutDexAndDodge, the standard action spent and the move action not; +6 with 5 Tumble ranks (PHB p.85), +4 with 4; the bonus lost while flat-footed (PHB p.136); no AoO (ThreatSystem.CanMakeAoO, CanMakeAoOAgainst); refused with nothing spent without a standard action and after an attack made fighting defensively or with Combat Expertise; a fighting-defensively stance with no attack allowed and ended (+4 only); refused while turned, cowering and panicked unless cornered (TurnStartState.CorneredInPanic); the strenuous-act test StrenuousActWouldLeaveDying (0 hp, temporary hit points, MarkStrenuousAction); ended by StartNewTurn and ResetForNewCreature (CRE-046); in Play with a scene GameManager also through GameManager.RunAIAction (Spent Standard; a second run is pre-checked and refused before the executor). Play only: CharacterController.Init needs Awake (TST-009). 22/22 in its first Play pass (20261029T190209Z-play); 34/34 after the step 4 review fixes (20261029T193037Z-play)."
     },
     {
       "type": "Tests.Combat.AttackLegalityTests",

@@ -2206,6 +2206,14 @@ public class CharacterStats
     public int HasteACBonus;
     public int HasteReflexBonus;
 
+    /// <summary>
+    /// The dodge bonus of the total defense action (PHB p.142: +4, or +6 with 5 or more ranks in Tumble, PHB p.85), from
+    /// the moment the action is taken until the start of the creature's next turn. Written only by
+    /// CharacterController.BeginTotalDefense and EndTotalDefense (CMB-179, batch 13 step 4, D2); read in
+    /// <see cref="DodgeACBonus"/>, so every AC formula sees it and it goes with the Dexterity bonus (PHB p.136).
+    /// </summary>
+    public int TotalDefenseACBonus;
+
     /// <summary>Slow spell penalties (PHB p.280). -1 attack, -1 AC, -1 Reflex.</summary>
     public int SlowAttackPenalty;
     public int SlowACPenalty;
@@ -4280,11 +4288,12 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// The dodge bonuses kept in the AC formulas: the Dodge feat and Haste's +1 (PHB p.93, p.239). A creature that loses
-    /// its Dexterity bonus to AC loses its dodge bonuses too (PHB p.93, Dodge; CMB-028). Racial dodge bonuses do the same
-    /// in RacialDodgeACBonus and RacialTraitRules; fighting defensively is added per attack and is not covered here.
+    /// The dodge bonuses kept in the AC formulas: the Dodge feat, Haste's +1 and total defense's +4 (PHB p.93, p.239,
+    /// p.142; <see cref="TotalDefenseACBonus"/>, CMB-179). A creature that loses its Dexterity bonus to AC loses its
+    /// dodge bonuses too (PHB p.136, p.93 Dodge; CMB-028). Racial dodge bonuses do the same in RacialDodgeACBonus and
+    /// RacialTraitRules; fighting defensively is added per attack and is not covered here.
     /// </summary>
-    public int DodgeACBonus => DeniedDexToAcByCondition ? 0 : FeatACBonus + HasteACBonus;
+    public int DodgeACBonus => DeniedDexToAcByCondition ? 0 : FeatACBonus + HasteACBonus + TotalDefenseACBonus;
 
     public int ArmorClass
     {

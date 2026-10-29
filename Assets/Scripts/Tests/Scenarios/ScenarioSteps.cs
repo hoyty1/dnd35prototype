@@ -15,7 +15,7 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -158,6 +158,12 @@ namespace Tests.Scenarios
         /// Scripted: TryMaintainConcentrationForAI. Ui: the Maintain button (OnMaintainConcentrationButtonPressed).
         /// </summary>
         public static Step MaintainConcentration() => new Step(StepKind.MaintainConcentration);
+
+        /// <summary>
+        /// Total defense (PHB p.142; CMB-179): the Ui path presses the Total Defense button; the AI path runs the catalog
+        /// action through GameManager.RunAIAction, as the cornered panicked creature does.
+        /// </summary>
+        public static Step TotalDefense() => new Step(StepKind.TotalDefense);
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -719,6 +725,15 @@ namespace Tests.Scenarios
                         yield return null;
                         break;
 
+                    case StepKind.TotalDefense:
+                    {
+                        var totalDefense = new ActionOutcome();
+                        yield return gm.RunAIAction(ActionContext.For(ActionIds.TotalDefense, a, global::ActorSource.AI), totalDefense);
+                        ok = totalDefense.Performed;
+                        if (!totalDefense.Performed) note = totalDefense.Refusal.Reason;
+                        break;
+                    }
+
                     case StepKind.GrappleAction:
                     {
                         // The AI grapple turn's own executor with the action given (batch 12 step 19): an escape through the
@@ -1245,6 +1260,9 @@ namespace Tests.Scenarios
                 case StepKind.MaintainConcentration:
                     if (!ConcentrationRules.CanMaintain(_actor, out string maintainRefusal)) { _awaitNote = maintainRefusal; break; }
                     gm.OnMaintainConcentrationButtonPressed();
+                    break;
+                case StepKind.TotalDefense:
+                    gm.OnTotalDefenseButtonPressed();
                     break;
                 case StepKind.BardicStop:
                     gm.OnBardicMusicButtonPressed();

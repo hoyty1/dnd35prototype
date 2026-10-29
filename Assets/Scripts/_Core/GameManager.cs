@@ -1154,10 +1154,14 @@ public partial class GameManager : MonoBehaviour
 
         // The energy damage a continuing party member took belongs to the last fight (the AI's energy choice reads it,
         // CharacterStats.LastEnergyDamageTaken; batch 11 step 22).
+        // So does a total defense taken in its last round (PHB p.142: until the creature's next turn; CMB-179).
         if (PCs != null)
             for (int i = 0; i < PCs.Count; i++)
                 if (PCs[i] != null && PCs[i].Stats != null)
+                {
                     PCs[i].Stats.LastEnergyDamageTaken = null;
+                    PCs[i].EndTotalDefense();
+                }
 
         if (Grid != null)
         {
@@ -9307,6 +9311,18 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.SetTurnIndicator("FULL ATTACK (DEF): Select target");
         CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{pc.Stats.CharacterName} declares Full Attack (Def): -4 attack, +2 AC."));
         UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// The Total Defense button (PHB p.142; CMB-179, batch 13 step 4): the catalog's shared total defense action through
+    /// <see cref="RunPlayerAction"/>, which refuses with the executor's reason or shows the action panel again after it.
+    /// </summary>
+    public void OnTotalDefenseButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null)
+            return;
+        RunPlayerAction(ActionContext.For(ActionIds.TotalDefense, pc, ActorSource.Ui));
     }
 
     public void OnDualWieldButtonPressed()

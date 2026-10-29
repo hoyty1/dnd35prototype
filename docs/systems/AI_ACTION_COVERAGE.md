@@ -34,7 +34,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Power Attack, Rapid Shot | Power Attack never; Rapid Shot used since batch 12 step 18 (2026-10-28) | `UsePowerAttack` unread; Rapid Shot is `AttackIntent.ForAI`'s choice by `AIProfile.ShouldUseRapidShot` (expected hits, "AI stopgap (batch 13 catalog)"), declared before the first shot or throw by the shared rule (D9) | Yes | AI-026 (Power Attack); AI-055 closed 2026-10-28 |
 | Combat Expertise | Never | never written | No | CHR-021, AI-031 |
 | Fight defensively | Partial | cornered Frightened only | Yes | UI-007 |
-| Total defense | Never | no code | No | gap (CMB-179; the catalog entry `total-defense` is Missing until batch 13 step 4) |
+| Total defense | Partial | the catalog entry `total-defense` is New (batch 13 step 4, 2026-10-29, CMB-179 fixed): one executor (`TotalDefenseActionExecutor`) for the PC button and `RunAIAction`; the AI takes it only as the cornered panicked creature (PHB p.311); choosing it otherwise (a caster with no usable weapon out of reach, C1) comes with step 5 and the personalities (batch 14) | Yes | |
 | Cleave | Auto | after every melee step that drops a foe, every origin (the post-attack hook, batch 12 step 15, D7); the AI picks the target by its profile's `ScoreTarget` (`ChooseCleaveTargetForAI`), foes still in the fight first | Yes | |
 | Sneak attack | Auto | damage path (flanking, or a target denied Dex, flat-footed before its first turn included since 2026-10-14); AI seeks flanks, not flat-footed or sneak-attackable targets | Auto | CMB-167 |
 | Nonlethal | Never | | Yes | |

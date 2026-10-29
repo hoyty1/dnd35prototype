@@ -758,6 +758,8 @@ public class SceneBootstrap : MonoBehaviour
             "Attack (Off-Hand Thrown)", new Color(0.72f, 0.28f, 0.34f));
         combatUI.AttackDefensivelyButton = CreateGridButton(btnGrid.transform, "AttackDefensivelyBtn",
             "Fighting Defensively (Std)", new Color(0.22f, 0.38f, 0.62f));
+        combatUI.TotalDefenseButton = CreateGridButton(btnGrid.transform, "TotalDefenseBtn",
+            "Total Defense (Std)", new Color(0.18f, 0.42f, 0.58f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
         combatUI.TurnUndeadButton = CreateGridButton(btnGrid.transform, "TurnUndeadBtn",
@@ -1133,6 +1135,8 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.AttackDefensivelyButton != null)
             ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
+        if (ui.TotalDefenseButton != null)
+            ui.TotalDefenseButton.onClick.AddListener(() => GameManager.Instance.OnTotalDefenseButtonPressed());
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
         if (ui.TurnUndeadButton != null)

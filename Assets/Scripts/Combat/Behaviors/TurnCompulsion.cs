@@ -38,8 +38,16 @@ public sealed class TurnStartState
     /// <summary>The compulsions of this turn, or null on a turn the creature does not act in (or before its first).</summary>
     public TurnCompulsion Compulsion;
 
+    /// <summary>
+    /// The creature is panicked and cornered this turn, so it cowers, typically using total defense (PHB p.311; D2): the
+    /// one case a panicked creature may take total defense (TotalDefenseRules.Check). Set only by
+    /// FrightenedBehaviorController.ExecuteDecision when the flight finds no way out.
+    /// </summary>
+    public bool CorneredInPanic;
+
     public void Clear()
     {
         Compulsion = null;
+        CorneredInPanic = false;
     }
 }

@@ -232,6 +232,13 @@ public static class CombatLogHelper
     public static string Defensive(string emoji, string message)
         => Color($"{emoji} {message}", ColorLightBlue);
 
+    /// <summary>
+    /// A creature takes the total defense action (PHB p.142; CMB-179): its dodge bonus to AC until its next turn, and no
+    /// attacks of opportunity meanwhile (light blue).
+    /// </summary>
+    public static string TotalDefense(string characterName, int dodgeBonus)
+        => Defensive("🛡", $"{characterName} takes total defense: +{dodgeBonus} dodge AC until its next turn, and makes no attacks of opportunity.");
+
     // ─────────────────────────────────────────────
     //  Dark crimson / curse / necrotic  (#8B0000)
     // ─────────────────────────────────────────────

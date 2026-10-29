@@ -334,13 +334,17 @@ public static class ThreatSystem
 
     /// <summary>
     /// Check if a character can still make an AoO this round.
-    /// D&D 3.5: Only characters with melee weapons can make AoOs.
+    /// D&D 3.5: Only characters with melee weapons can make AoOs, and none while in total defense (PHB p.142).
     /// </summary>
     public static bool CanMakeAoO(CharacterController character)
     {
         if (character == null || character.Stats == null || character.Stats.IsDead) return false;
 
         if (!character.Stats.CanMakeAttacksOfOpportunity)
+            return false;
+
+        // A creature in total defense makes no attacks of opportunity until its next turn (PHB p.142; CMB-179, D2).
+        if (character.IsInTotalDefense)
             return false;
 
         // Ranged-only characters cannot make AoOs
