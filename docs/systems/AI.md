@@ -138,7 +138,7 @@ Contents:
 
 Per-NPC AI state lives in three places:
 
-- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:981), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
+- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def, stats)` (the type from `RuntimeAIProfileTypeFor`, batch 13 step 8), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
 - `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015, CRE-006).
 - One `AIProfile` instance per creature from `GameManager.CreateRuntimeAIProfile<T>()` (`AIProfile.CreateRuntime<T>()`: `CreateInstance`, then the virtual `ApplyRuntimeDefaults`, which writes the type's tuning and its `ProfileName`), tracked so that the GameManager destroys it: a replaced profile at once, a reused slot's old one at the respawn, a summon's once it is despawned (the despawn loops and the combat reset; batch 13 step 2, AI-017). `OnEnable` writes no tuning, so a profile `.asset` would keep its Inspector values; there are no profile `.asset` files. A profile may hold per-turn state (the dragon's breath plan) because no two creatures share an instance; the scenario harness and the static suites call `AIProfile.CreateRuntime` directly.
 
@@ -213,8 +213,8 @@ The compulsion pass (`GameManager.TryRunCompulsionTurn`, called by `BeginActingT
 | 16b | | Not a summon, and in a wild shape (`WildShapeRules.IsWildShaped`) | `ExecuteAggressiveMeleeTurn` whatever the profile or behaviour: the form fights with its natural attacks (no spells without Natural Spell, gear melded) |
 | 17 | 219 | `HealerAIProfile` | Healer branch |
 | 18 | 282 | `DragonAIProfile` | `ExecuteDragonTurn` |
-| 19 | 289-300 | Other profile | DefensiveMelee; else RangedKiter if behaviour RangedKiter or `CombatStyle == Ranged`; else AggressiveMelee. `CombatStyle.Mixed` counts as melee |
-| 20 | 305-319 | No profile | switch on behaviour; `Ranged` and default go to AggressiveMelee (AI-003) |
+| 19 | 289-300 | Other profile | DefensiveMelee; else RangedKiter if behaviour RangedKiter or Ranged or `CombatStyle == Ranged` (`RoutesToRangedTurn`); else AggressiveMelee. `CombatStyle.Mixed` counts as melee |
+| 20 | 305-319 | No profile | switch on behaviour; RangedKiter and Ranged go to RangedKiter (AI-003 fixed in batch 13 step 8), DefensiveMelee to DefensiveMelee, the rest to AggressiveMelee |
 
 Side effects of the order: auras and free-action Spittle are skipped on any turn ended by gates 4-11 (AI-053); a grapple turn that continues after a pin release does reach them. Gates 4-7 never consult profile or behaviour. Target selection (gate 9) runs before the grapple, swarm and summon checks, so it rolls Sanctuary saves for creatures that then ignore the result (AI-005).
 
@@ -318,13 +318,14 @@ Other movement scorers: `EvaluateWithdrawRetreatDestination` (2143; 2× range, `
 Used by 293 of 389 effective NPC definitions.
 
 1. Standard-action ranged special in range → fire, end.
+1a. Cast first (batch 13 step 8, AI-002): when `AIProfile.ShouldTryCastBeforeMelee` (default `DefaultShouldTryCastBeforeMelee`: a castable spell that `AIProfile.IsCastFirstCandidate` accepts: not Utility or Divination by `SpellCategoryClassifier`, not `HasNoModelledCombatEffect`, and not one of the out-of-combat spells the classifier files as Buff, such as Light, Prestidigitation or Read Magic (AI-069); the same default without a profile) asks for it, `TryExecuteSpellcastAction` through the catalog's cast entry, with the same predicate as its filter and a score floor of 0, so the gate and the cast agree; a cast ends the turn (C4, AI-077), nothing cast spends nothing and the routine goes on.
 2. `SelectBestAction(preferAggression:true)`; only `Charge` is used (AI-027) → `NPCExecuteChargeForAI`, end.
 3. Out of weapon reach and `HasMoveAction` → `EvaluateMovementOptions`, move, `UseMoveAction`, `ActivateTerrainManipulation` (log only, CRE-013).
 4. Re-target among the targets the attack guard allows (`SelectGuardPassingTarget`, section 5.10; batch 13 step 5), else `SelectBestTarget` (may differ from the target moved toward).
 5. A target passes the guard: Engulf if adjacent and able; else `PerformMeleeAttackActionWithManeuvers` (`NPCPerformAttackForAI` with `ShouldUseManeuver && TryExecutePreferredManeuver` tried before each melee step, CMB-102).
 6. None passes: post-move ranged special, else `TryAIWallInteraction` (Wall of Ice); when the routine did not try to close in (step 3), the profile's out-of-reach alternatives (`AiOutOfReach.Run`, C1, section 5.10). No double move.
 
-Never casts (AI-002), never runs or double-moves, never uses Total Defense, Power Attack or Combat Expertise. Standard-action specials, Engulf and terrain manipulation exist only in this routine.
+Casts only at step 1a; never runs or double-moves, never uses Total Defense, Power Attack or Combat Expertise. Standard-action specials, Engulf and terrain manipulation exist only in this routine.
 
 ### 5.2 `ExecuteDragonTurn` (655)
 
@@ -348,8 +349,10 @@ Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread 
 ### 5.4 `ExecuteDefensiveMeleeTurn` (1170)
 
 1. Target `SelectLowestHPEnemy` (unfiltered, AI-049); fall back to the passed target.
+1a. Cast first, as in 5.1 step 1a (batch 13 step 8, AI-002), unless HP < 30% and a withdraw is legal (step 3): then the cast is tried only after a withdraw that did not start (step 3a), so the routine's withdraw keeps its place (`rules/defensive-caster-withdraws-when-hurt-ai`).
 2. Charge if chosen; the `Retreat` result of `SelectBestAction` is ignored.
 3. HP < 30% (hard-coded, AI-010) and a legal withdraw (`MovementService.CanStartMovement` with `WithdrawKindFor`: the full-round withdraw, or for a creature limited to one action a Restricted Withdraw at its speed, PHB p.144; never blinded or after a 5-ft step; batch 12 step 22) → withdraw (`EvaluateWithdrawRetreatDestination`, budget `GetWithdrawMoveRangeSquares`, + withdraw move with first-square AoO suppression), end; a withdraw the executor refuses falls through to the steps below.
+3a. If step 1a was held back by the withdraw test, cast first now.
 4. Advance if `HasMoveAction`, re-target among the guard-passing targets (section 5.10), maneuver or attack, else wall interaction, then (when it did not advance) the profile's out-of-reach alternatives.
 
 The enum docs promise Combat Expertise and holding position; neither exists (AI-031).
@@ -403,13 +406,13 @@ Owner ruling (2026-10-29): AI creatures "should never waste an attack on somethi
 | AggressiveMelee (field default) | AggressiveMelee | AggressiveMelee unless `CombatStyle == Ranged` | 357 |
 | RangedKiter | RangedKiter | RangedKiter | 22 (archers, test casters, bralani, elf_warrior, erinyes, halfling_warrior, lantern_archon, manticore, medusa, drider) |
 | DefensiveMelee | DefensiveMelee | DefensiveMelee (checked first) | 6: hobgoblin_sergeant, human_cleric, test_fighter_gust, svirfneblin, skeleton_warrior, shrieker |
-| Ranged | AggressiveMelee (AI-003) | AggressiveMelee unless `CombatStyle == Ranged` | 4: gauth, beholder, rakshasa, template skeleton_archer |
+| Ranged | RangedKiter when it has ranged means, else AggressiveMelee (batch 13 step 8, AI-003; `AIService.RunsRangedRoutine`) | the same (DefensiveMelee, Healer, Dragon and a Ranged `CombatStyle` rules unchanged) | 4: gauth, beholder, rakshasa, template skeleton_archer |
 
-Effective routine reached (389 registered IDs; behaviour and archetype counts confirmed at runtime in the editor via `NPCDatabase.AllNPCs` on 2026-10-03): AggressiveMelee 293, Dragon 61 (60 dragons + hell_hound), RangedKiter 23 (includes the lich via `CombatStyle.Ranged`), Swarm 6, DefensiveMelee 6, Healer 0.
+Effective routine reached (389 registered IDs; behaviour and archetype counts confirmed at runtime in the editor via `NPCDatabase.AllNPCs` on 2026-10-03): AggressiveMelee 293, Dragon 61 (60 dragons + hell_hound), RangedKiter 23 (includes the lich via `CombatStyle.Ranged`), Swarm 6, DefensiveMelee 6, Healer 0. Since batch 13 step 8 a Ranged-behaviour creature with ranged means (the skeleton archer, a template) moves from AggressiveMelee to RangedKiter; the gauth, beholder and rakshasa have none (no weapon, their eye rays and spells text only, CRE-017) and stay on AggressiveMelee (counts not re-verified at runtime).
 
-The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, but because `IsTargetInCurrentWeaponRange` uses its bow's maximum range it usually stands and shoots without AoO assessment, and charges when a legal charge exists.
+The skeleton archer (behaviour `Ranged`, UndeadMindless) runs RangedKiter since batch 13 step 8 (AI-003) and starts with its shortbow in hand (the spawn's wield test is `RoutesToRangedTurn`, ITM-004); `rules/ranged-behaviour-shoots-ai` and its no-profile twin. The turn adds one test (`AIService.RunsRangedRoutine`): a creature routed there only by the Ranged behaviour that has no ranged means now (`HasRangedMeans`) runs AggressiveMelee, with its charge and standard-action ranged specials, which RangedKiter lacks; so the gauth closes and fights in melee (`rules/ranged-behaviour-melee-only-approaches-ai`), and an archer with an empty quiver walks up (it still cannot draw a melee weapon, AI-073). The beholder and rakshasa take the same path; not run.
 
-### 6.2 Archetype to profile (`GameManager.BuildRuntimeAIProfile`, NPCSetup.cs:991)
+### 6.2 Archetype to profile (`GameManager.RuntimeAIProfileTypeFor`, built by `BuildRuntimeAIProfile`, NPCSetup.cs)
 
 | Archetype | Class | CombatStyle | Effective | Representatives | Key behaviour |
 |---|---|---|---|---|---|
@@ -427,14 +430,14 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 | UndeadTactical (and Undead) | UndeadTacticalAIProfile | Melee | 5 | ghoul, ghast, wight, wight_dreadwalker, vampire_spawn | helpless/low-Fort targeting; coup de grace |
 | UndeadBrute | UndeadBruteAIProfile | Melee | 2 | mummy, bodak | always charge; ignores AoOs |
 | UndeadIncorporeal | UndeadIncorporealAIProfile | Melee | 3 | allip, shadow, wraith | low touch AC targeting |
-| Vampire | VampireAIProfile | Melee | 1 | vampire | grapple when STR +2 or target helpless/paralysed; never casts (AI-002, CRE-030) |
+| Vampire | VampireAIProfile | Melee | 1 | vampire | grapple when STR +2 or target helpless/paralysed; never casts: it spawns without spellcasting (CRE-030), though its melee routine would cast first since batch 13 step 8 |
 | Lich | LichAIProfile | Ranged | 1 | lich | kiter; no prepared spells (SPL-015) |
 | Dragon | DragonAIProfile | Mixed | 61 | 60 dragons, hell_hound | Dragon routine |
 | Swarm / IndiscriminateSwarm | SwarmAI / IndiscriminateSwarmAI | Melee | 3 / 3 | bat, rat, spider / centipede, hellwasp, locust swarms | swarm routine |
-| Brute | null (AI-004) | — | 29 | ogre, giants, hydras, minotaur, purple_worm, umber_hulk, ankheg, chimera, gorgon, treant, wyvern | legacy chooser |
-| Caster | null (AI-004) | — | 2 | couatl, spirit_naga | legacy chooser |
+| Brute | BruteAIProfile (batch 13 step 8, AI-004; owner question Q4's default) | Melee | 29 | ogre, giants, hydras, minotaur, purple_worm, umber_hulk, ankheg, chimera, gorgon, treant, wyvern | plain melee: wounded first, no maneuver flags, no aggressive grapple, no forced coup de grace; the Power Attack flag and Aggression 0.9 are unread (AI-026) |
+| Caster | SpellcasterAIProfile with spells (`DefinitionGivesSpells`: a spell list and a caster class or innate casting), else BruteAIProfile (AI-004) | Melee | 2 | couatl, spirit_naga (no spells: Brute until batch 16 gives them spell-likes) | as Spellcaster or Brute |
 
-35 effective definitions have a null profile. Every profile logs under its own name (`[AI][Profile:Berserk]` and so on): `ApplyRuntimeDefaults` sets `ProfileName` unconditionally since batch 13 step 2 (AI-053).
+Only the None archetype gives a null profile (4 effective definitions; 35 before batch 13 step 8 mapped Brute and Caster). Every profile logs under its own name (`[AI][Profile:Berserk]` and so on): `ApplyRuntimeDefaults` sets `ProfileName` unconditionally since batch 13 step 2 (AI-053).
 
 ### 6.3 Profile members and hooks
 
@@ -502,7 +505,7 @@ Target scoring reads typed facts about a target, never display tags (`Assets/Scr
 
 ### 7.1 Who can cast
 
-Casting is attempted only by the Healer branch (heal/buff), `ExecuteDragonTurn` (before breath), `ExecuteRangedKiterTurn` (twice per turn) and a charmed NPC healing its charmer (direct call, no strategist). AggressiveMelee, DefensiveMelee, Swarm and summons never cast (AI-002).
+Casting is attempted by the Healer branch (heal/buff), `ExecuteDragonTurn` (before breath), `ExecuteRangedKiterTurn` (twice per turn), AggressiveMelee and DefensiveMelee first (batch 13 step 8, AI-002: `AIProfile.ShouldTryCastBeforeMelee`, sections 5.1 and 5.4) and a charmed NPC healing its charmer (direct call, no strategist). Swarm and summons never cast.
 
 An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster class) **and** its `KnownSpellIds` or `PreparedSpellSlotIds` is non-empty (NPCSetup.cs:948-950). Prepared IDs are assigned **by slot index** (`SpellcastingComponent.ApplyPreparedSpellSlotIds`), slots are ordered from cantrips up, mismatched levels are rejected, and wizard NPCs only get spell levels 0-2: 4/3/2 base slots from class level 4 up, plus one bonus 1st-level slot at Int modifier +1 and one bonus 2nd-level slot at +2 (`GetWizardSlotsForLevel`), so 4/4/3 for the lich and the Int 16+ test wizards. Result by static reading:
 
@@ -516,7 +519,7 @@ An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster cl
 | vampire | nothing: `CharacterClass = "Fighter"` (CRE-030) |
 | 60 dragons | spontaneous Sorcerer via an injected caster-level entry (the CL stored on the definition, no character level since batch 12 step 24); cantrips plus some 1st-4th level (CRE-016); castable on the NPC executor since 2026-10-14 (SPL-123: a scripted juvenile red dragon casts Shield in `rules/npc-cast-spontaneous`; AI-run, the young and juvenile red dragons breathe and cast no cantrip in `rules/dragon-ai-breath-young` and `-juvenile`, AI-037) |
 | Spellcaster/Caster-archetype monsters, DMG class-levelled casters, paladins | nothing (no lists; SLAs text only; ENC-021, CHR-024, CRE-062) |
-| human_cleric | the DMG p.114 sample cleric's prepared spells (5/5/4/3, Healing and Protection domains; CRE-062, 2026-10-14); but its AI is Humanoid on DefensiveMelee, and `AIService.ExecuteDefensiveMeleeTurn` never casts, so on its own turns it casts only when scripted (the NPC executor cast Prayer from a 3rd-level slot in `rules/prayer-cast`, 2026-10-14); when charmed (`charm_person_test`) it heals its charmer with a prepared cure spell (`CharmedBehaviorController.TryGetBestHealingSpell` through `TryNPCPerformSpellCastForAI`) |
+| human_cleric | the DMG p.114 sample cleric's prepared spells (5/5/4/3, Healing and Protection domains; CRE-062, 2026-10-14); its AI is Humanoid on DefensiveMelee, which casts first since batch 13 step 8 (AI-002, `rules/melee-caster-casts-first-ai`); before that it cast only when scripted (the NPC executor cast Prayer from a 3rd-level slot in `rules/prayer-cast`, 2026-10-14); when charmed (`charm_person_test`) it heals its charmer with a prepared cure spell (`CharmedBehaviorController.TryGetBestHealingSpell` through `TryNPCPerformSpellCastForAI`) |
 
 So the casting AI is exercised today only by three test NPCs and the dragons.
 
@@ -633,7 +636,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 ### 8.3 Undead, animals, swarms
 
 - **Lich:** kiter routing, but no prepared spells (SPL-015); paralyzing touch only; its fear aura is a `FrightfulPresenceDefinition` (DC 19, 60 ft) that fires once per combat on its first attack, not the MM's constant aura on creatures under 5 HD that look at it (AI-010, re-read 2026-10-29).
-- **Vampire:** AggressiveMelee; never casts (CRE-030, AI-002); grapple when STR mod ≥ target +2 or target helpless or paralysed, refused at execution because it has Improved Grab; `BloodDrainDefinition` unused (CRE-031); no gaseous-form escape (AI-010).
+- **Vampire:** AggressiveMelee; never casts (CRE-030: no spellcasting at spawn; the routine casts first since batch 13 step 8); grapple when STR mod ≥ target +2 or target helpless or paralysed, refused at execution because it has Improved Grab; `BloodDrainDefinition` unused (CRE-031); no gaseous-form escape (AI-010).
 - **Undead Tactical / Brute / Incorporeal / Mindless:** targeting heuristics only (6.2). Incorporeality is a flat 50% miss chance (CMB-025), which also makes an incorporeal creature "unseen" to every AI observer (CMB-078); `IsIncorporeal` has no other reader. The bodak's death gaze and the ghast's stench do nothing (CRE-031, CREATURES.md).
 - **Animals:** `DetermineSpecialty` picks Grappler (pounce + Improved Grab + rake), Tripper (`HasTripAttack`) or PackHunter. "Pack" means only +2.5 target score when an ally is adjacent to the target; there is no shared target, surround or retreat.
 - **Swarms:** see 5.5. Swarm and summon targeting ignores wards and visibility (AI-050).
@@ -692,8 +695,8 @@ The full matrix (every 3.5e combat option: AI status, where, PC availability, is
 
 From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were filed from this doc and are listed in 10.2):
 
-- **Casting:** AI-001 (fixed 2026-10-16: area spells in batch 11 step 25, the metamagic choice in step 28), AI-071 (walls, Grease on an object, swarm placement, Imbue with Spell Ability, areas with no judged value), AI-002 (melee routines never cast), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
-- **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-031 (enum docs lie).
+- **Casting:** AI-001 (fixed 2026-10-16: area spells in batch 11 step 25, the metamagic choice in step 28), AI-071 (walls, Grease on an object, swarm placement, Imbue with Spell Ability, areas with no judged value), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
+- **Routing and data:** AI-015 (index-parallel `_npcAIBehaviors`), AI-031 (enum docs lie).
 - **Targeting and perception:** CMB-183 (never-seen unseen enemies get no Listen check).
 - **Monster abilities:** AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (bull rush and overrun never chosen by a shipped profile).
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
@@ -763,9 +766,9 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 ### 11.2 Add a profile
 
 1. `AI/Profiles/<Name>AIProfile.cs`, `namespace DND35.AI.Profiles`, `: AIProfile` or `: SpellcasterAIProfile`.
-2. Set tuning in `public override void ApplyRuntimeDefaults()`: call `base.ApplyRuntimeDefaults()` first, then set `ProfileName` (unconditionally, for readable logs) and the rest. Never write tuning in `OnEnable`, which keeps only runtime-state resets, so saved `.asset` values survive (AI-017). Set `CombatStyle` explicitly; `SpellcasterAIProfile` leaves it Melee, which means no casting (AI-002). Create instances with `GameManager.CreateRuntimeAIProfile<T>()` (tracked and destroyed by the GameManager) or, outside the spawn path, `AIProfile.CreateRuntime<T>()`; a bare `ScriptableObject.CreateInstance` gives the base defaults.
+2. Set tuning in `public override void ApplyRuntimeDefaults()`: call `base.ApplyRuntimeDefaults()` first, then set `ProfileName` (unconditionally, for readable logs) and the rest. Never write tuning in `OnEnable`, which keeps only runtime-state resets, so saved `.asset` values survive (AI-017). Set `CombatStyle` explicitly; `SpellcasterAIProfile` leaves it Melee, so a creature with it runs a melee routine, which casts first when it has a combat spell (batch 13 step 8) and otherwise holds at its preferred range (AI-038). Create instances with `GameManager.CreateRuntimeAIProfile<T>()` (tracked and destroyed by the GameManager) or, outside the spawn path, `AIProfile.CreateRuntime<T>()`; a bare `ScriptableObject.CreateInstance` gives the base defaults.
 3. Override hooks from 6.3. Keep score magnitudes in mind: visibility terms are ±50-120.
-4. Add an `NPCAIProfileArchetype` value and a `case` in `BuildRuntimeAIProfile` (`return CreateRuntimeAIProfile<T>();`); set the archetype on definitions.
+4. Add an `NPCAIProfileArchetype` value and a `case` in `GameManager.RuntimeAIProfileTypeFor` (`return typeof(T);`; `BuildRuntimeAIProfile` creates and tracks it); set the archetype on definitions. `AIProfileFrameworkTests` fails when a value but None maps to no profile.
 5. Needs its own routine (like Healer or Dragon)? Add an `is` branch in `ExecuteNPCTurn` before line 266.
 6. Per-turn state on the instance is safe only because every creature gets its own instance; never share one.
 7. Unit-test it in `AIProfileFrameworkTests` (`AIProfile.CreateRuntime<T>()`, never a bare `ScriptableObject.CreateInstance<T>()`, which has no tuning; then `TestHelpers.Cleanup` or `DestroyImmediate`).
@@ -820,7 +823,7 @@ Worked playbooks for likely requests (flanking and Aid Another, area spells and 
 | `Tests.Classes.NPCTemplateSystemTests` | configurator class maps and `AIConsumableManager` (test-only paths; TST-003, TST-008) |
 | `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image by RAW (the figure pick, its distribution, image AC and destruction, PC and NPC attackers and spells; batch 11 step 26), Frightened decision, confusion d% distribution |
 
-Untested: `ExecuteNPCTurn` and every routine, `SelectBestTarget`, `EvaluateMovementOptions`, `SelectSpell` (the scenarios cover it), the strategist (beyond its SR chance, `AiMetamagicPlannerTests`), the classifier, `BuildRuntimeAIProfile`, `TryNPCPerformSpellCast`, summon and grapple AI, Dragon/Lich/Vampire/Undead/Humanoid/Necromancer profiles.
+Untested: `ExecuteNPCTurn` and every routine, `SelectBestTarget`, `EvaluateMovementOptions`, `SelectSpell` (the scenarios cover it), the strategist (beyond its SR chance, `AiMetamagicPlannerTests`), the classifier, `TryNPCPerformSpellCast` (`RuntimeAIProfileTypeFor` is covered by `AIProfileFrameworkTests` since batch 13 step 8), summon and grapple AI, Dragon/Lich/Vampire/Undead/Humanoid/Necromancer profiles.
 
 Run them with the committed runner in [TESTING.md section 3](../TESTING.md#3-running-suites), for example `Tests.Runner.StaticSuiteRunner.RunFromCommand("filter=AIProfileFrameworkTests,MirrorImageRulesTests")` in Play mode (CauseFear runs in the edit pass). Pitfalls: some tests `AddComponent<GameManager>()`, which `Awake` destroys in MainScene; one adds a `SquareGrid` that replaces `SquareGrid.Instance` (GRID-010), so restart Play mode afterwards. Pure functions you can test without a GameManager: `GetConcealmentTargetingAdjustment`, `FindClosestAliveEnemy`, `SelectSummonTarget`, `FindNearestEnemy`, and all profile hooks. In Play mode the live service is `GameManager.Instance.GetComponent<AIService>()`. Call `AISpellcastingStrategist.ResetCombatState()` between strategist tests.
 
@@ -876,7 +879,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 Ordered by how much they distort what the AI experiences:
 
 1. Rules parity on NPC paths: stand up in confused turns and crawl (CMB-074), the breath weapon's standard action (AI-040; saves and touch rolls are shared since batch 12 step 10, damage since SPL-004, recharge since batch 12 step 6).
-2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons equipped (ITM-004, done 2026-10-08) and a draw or swap action for NPCs; null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
+2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons equipped (ITM-004, done 2026-10-08) and a draw or swap action for NPCs; null profiles mapped (AI-004, done 2026-10-29); `Ranged` behaviour handled (AI-003, done 2026-10-29).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (the ward and sphere part is `AttackLegality` since batch 12 step 12; AI-049, AI-050); a decision trace log.
 
 ### 13.3 Options for a deeper decision layer

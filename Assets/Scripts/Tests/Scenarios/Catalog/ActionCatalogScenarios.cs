@@ -22,6 +22,10 @@ namespace Tests.Scenarios
     /// Step 7 (AI-078, AI-053, AI-021; tags v2): AI target scoring reads typed facts through the knowledge provider
     /// (DND35.AI.Knowledge): exact matching, the "HP State: Staggered" rows as the BadlyHurt wound band, the armor-priority
     /// switch ahead of the profile, and a flanking term that tests a flank.
+    ///
+    /// Step 8 (AI-004, AI-003, AI-002; owner question Q4's default): every archetype gets a profile (Brute the plain
+    /// BruteAIProfile, Caster without spells too), the Ranged behaviour runs the ranged routine and shoots, and a
+    /// creature with a combat spell on a melee routine tries it first.
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -49,6 +53,15 @@ namespace Tests.Scenarios
             yield return S("ai-exact-race-match", AiExactRaceMatch);
             yield return S("ai-armor-priority-reachable", AiArmorPriorityReachable);
             yield return S("ai-flanking-priority", AiFlankingPriority);
+            yield return S("brute-profile-melee-ai", BruteProfileMelee);
+            yield return S("caster-archetype-without-spells-fights-ai", CasterArchetypeWithoutSpellsFights);
+            yield return S("ranged-behaviour-shoots-ai", () => RangedBehaviourShoots(withProfile: true));
+            yield return S("ranged-behaviour-shoots-no-profile-ai", () => RangedBehaviourShoots(withProfile: false));
+            yield return S("melee-caster-casts-first-ai", MeleeCasterCastsFirst);
+            yield return S("melee-caster-casts-first-party-ai", MeleeCasterCastsFirstParty);
+            yield return S("melee-caster-skips-orisons-ai", MeleeCasterSkipsOrisons);
+            yield return S("defensive-caster-withdraws-when-hurt-ai", DefensiveCasterWithdrawsWhenHurt);
+            yield return S("ranged-behaviour-melee-only-approaches-ai", RangedBehaviourMeleeOnlyApproaches);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -816,6 +829,329 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass(first.Ev + " on flanked", first.Seq)
                         : ExpectResult.Fail(first.Ev + " on " + first.Str("target") + ", expected flanked", first.Seq);
                 })
+                .Build();
+        }
+
+        // ── batch 13 step 8: archetype profiles, the Ranged behaviour, melee casters ──
+
+        /// <summary>The spawned actor's AI profile type (the trace's actor event) is <paramref name="typeName"/>.</summary>
+        private static Func<TraceView, ExpectResult> ProfileIs(string key, string typeName)
+            => v =>
+            {
+                TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == key);
+                if (a == null)
+                    return ExpectResult.Inconclusive("no actor event for " + key);
+                string got = a.Str("profile");
+                return got == typeName
+                    ? ExpectResult.Pass(key + " profile " + got, a.Seq)
+                    : ExpectResult.Fail(key + " profile " + (got ?? "null") + ", expected " + typeName, a.Seq);
+            };
+
+        /// <summary><paramref name="by"/> attacks <paramref name="target"/> (not an AoO) by round <paramref name="round"/>.</summary>
+        private static Func<TraceView, ExpectResult> AttacksBy(string by, string target, int round)
+            => v =>
+            {
+                TraceEvent a = v.Attacks(by, target, aoo: false).FirstOrDefault(e => e.Round <= round);
+                return a != null
+                    ? ExpectResult.Pass("round-" + a.Round + " attack on " + target, a.Seq)
+                    : ExpectResult.Fail("no attack on " + target + " by round " + round);
+            };
+
+        /// <summary>
+        /// <paramref name="by"/> fights <paramref name="target"/> in melee by round <paramref name="round"/>: a melee attack
+        /// (not an AoO) or a combat maneuver of its own (not a counter), the profile-less and Humanoid trip included.
+        /// </summary>
+        private static Func<TraceView, ExpectResult> FightsInMeleeBy(string by, string target, int round)
+            => v =>
+            {
+                TraceEvent a = v.Attacks(by, target, aoo: false).FirstOrDefault(e => e.Round <= round && !e.Bool("ranged"));
+                TraceEvent m = v.Maneuvers(by).FirstOrDefault(e => e.Round <= round && !e.Bool("counter") && e.Str("target") == target);
+                TraceEvent first = a == null ? m : (m == null || a.Seq < m.Seq ? a : m);
+                return first != null
+                    ? ExpectResult.Pass("round-" + first.Round + " " + first.Ev + " on " + target, first.Seq)
+                    : ExpectResult.Fail("no melee attack or maneuver on " + target + " by round " + round);
+            };
+
+        private static Func<TraceView, ExpectResult> NoManeuver(string by)
+            => v =>
+            {
+                List<TraceEvent> m = v.Maneuvers(by).Where(e => !e.Bool("counter")).ToList();
+                return m.Count == 0
+                    ? ExpectResult.Pass("no maneuver")
+                    : ExpectResult.Fail(m.Count + " maneuver(s), first " + m[0].Get("type"), m.Select(e => e.Seq).ToArray());
+            };
+
+        /// <summary>
+        /// AI-004 (Q4's default): an ogre (a Brute definition) spawns with the plain BruteAIProfile, where it had no profile
+        /// before. It closes on the fighter and attacks in melee, and it tries no maneuver: the profile-less ogre opened with
+        /// a trip on a standing foe (AI-035), and BerserkAIProfile (Q4's alternative) trips too.
+        /// </summary>
+        private static ScenarioDef BruteProfileMelee()
+        {
+            return Rules("rules/brute-profile-melee-ai", "A Brute creature gets the plain Brute profile and fights in melee without maneuvers (AI-004; Q4)")
+                .Covers("AI-004", "Q4", "batch 13 step 8")
+                .MaxRounds(2)
+                .Npc("ogre", "ogre", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 13, 10, Control.Idle)
+                .Tweak("ogre", Sturdy)
+                .Tweak("foe", Sturdy)
+                .Initiative("ogre", "foe")
+                .Expect("The ogre has the Brute profile", ProfileIs("ogre", "BruteAIProfile"))
+                .Expect("By round 2 it attacks the fighter", AttacksBy("ogre", "foe", 2))
+                .Expect("It tries no combat maneuver", NoManeuver("ogre"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-004: the couatl is a Caster definition, but this build gives it no spells (its sorcerer casting and spell-likes
+        /// wait for batch 16), and SpellcasterAIProfile without spells would hold at its 6-square casting distance and
+        /// never fight (AI-038). It gets BruteAIProfile and closes in to attack the fighter.
+        /// </summary>
+        private static ScenarioDef CasterArchetypeWithoutSpellsFights()
+        {
+            return Rules("rules/caster-archetype-without-spells-fights-ai", "A Caster creature without spells gets the Brute profile and fights (AI-004; AI-038)")
+                .Covers("AI-004", "AI-038", "Q4", "batch 13 step 8")
+                .MaxRounds(2)
+                .Npc("couatl", "couatl", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 15, 10, Control.Idle)
+                .Tweak("couatl", Sturdy)
+                .Tweak("foe", Sturdy)
+                .Initiative("couatl", "foe")
+                .Expect("The couatl has the Brute profile", ProfileIs("couatl", "BruteAIProfile"))
+                .Expect("By round 2 it attacks the fighter", AttacksBy("couatl", "foe", 2))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-003: the skeleton archer's behaviour is Ranged ("prefer ranged attacks"), which was never routed, so it closed
+        /// to melee. It now starts with its shortbow in hand (the spawn's wield test is the routing test) and shoots the
+        /// fighter 35 ft. away in round 1, with its UndeadMindless profile and, in the twin without a profile, through the
+        /// profile-less switch.
+        /// </summary>
+        private static ScenarioDef RangedBehaviourShoots(bool withProfile)
+        {
+            string id = withProfile ? "rules/ranged-behaviour-shoots-ai" : "rules/ranged-behaviour-shoots-no-profile-ai";
+            ScenarioBuilder b = Rules(id, "A creature with the Ranged behaviour shoots" + (withProfile ? "" : " without a profile") + " (AI-003; PHB p.113)")
+                .Covers("AI-003", "PHB p.113", "batch 13 step 8")
+                .MaxRounds(1)
+                .Npc("archer", "skeleton_archer", 10, 10, Control.Ai);
+            if (!withProfile)
+                b = b.Profile("archer", () => null);
+            return b
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 17, 10, Control.Idle)
+                .Tweak("archer", Sturdy)
+                .Tweak("foe", Sturdy)
+                .Initiative("archer", "foe")
+                .Expect("The archer holds its shortbow", v =>
+                {
+                    TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == "archer");
+                    if (a == null)
+                        return ExpectResult.Inconclusive("no actor event");
+                    string w = a.Str("weapon") ?? "";
+                    return w.IndexOf("bow", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? ExpectResult.Pass("weapon " + w, a.Seq)
+                        : ExpectResult.Fail("weapon " + w, a.Seq);
+                })
+                .Expect("Round 1: it shoots the fighter", v =>
+                {
+                    TraceEvent shot = v.Attacks("archer", "foe", aoo: false, round: 1).FirstOrDefault();
+                    if (shot == null)
+                        return ExpectResult.Fail("no round-1 attack");
+                    return shot.Bool("ranged") ? ExpectResult.Pass("a ranged attack", shot.Seq) : ExpectResult.Fail("a melee attack", shot.Seq);
+                })
+                .Expect("It shoots from where it stands: no move toward the fighter before the round-1 shot (the ranged routine)", v =>
+                {
+                    TraceEvent shot = v.Attacks("archer", "foe", aoo: false, round: 1).FirstOrDefault();
+                    if (shot == null)
+                        return ExpectResult.Inconclusive("no round-1 attack");
+                    TraceEvent move = v.Moves("archer", 1).FirstOrDefault(e => e.Seq < shot.Seq);
+                    return move == null ? ExpectResult.Pass("no move before the shot", shot.Seq) : ExpectResult.Fail("moved before the shot", move.Seq, shot.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>The first round-1 action of <paramref name="by"/> is a cast, made before any attack of its own.</summary>
+        private static Func<TraceView, ExpectResult> CastsBeforeAttacking(string by)
+            => v =>
+            {
+                TraceEvent cast = v.Of("cast").FirstOrDefault(e => e.Str("by") == by && e.Round == 1);
+                if (cast == null)
+                    return ExpectResult.Fail("no round-1 cast");
+                if (!IsCombatSpell(cast.Str("spell")))
+                    return ExpectResult.Fail("round 1: casts " + cast.Str("spell") + ", a spell with no combat effect (AI-069)", cast.Seq);
+                TraceEvent attack = v.Attacks(by, null, aoo: false, round: 1).FirstOrDefault();
+                return attack == null || attack.Seq > cast.Seq
+                    ? ExpectResult.Pass("round 1: casts " + cast.Str("spell"), cast.Seq)
+                    : ExpectResult.Fail("attacked before casting", attack.Seq, cast.Seq);
+            };
+
+        /// <summary>A spell id the melee routines' cast-first step may cast (AIProfile.IsCastFirstCandidate, AI-069).</summary>
+        private static bool IsCombatSpell(string spellId)
+        {
+            SpellData spell = string.IsNullOrEmpty(spellId) ? null : SpellDatabase.GetSpell(spellId);
+            return spell != null && DND35.AI.AIProfile.IsCastFirstCandidate(spell);
+        }
+
+        /// <summary>Every cast of <paramref name="by"/> is a spell with a combat effect (no Light, Detect Magic or the like).</summary>
+        private static Func<TraceView, ExpectResult> CastsOnlyCombatSpells(string by)
+            => v =>
+            {
+                List<TraceEvent> bad = v.Of("cast").Where(e => e.Str("by") == by && !IsCombatSpell(e.Str("spell"))).ToList();
+                int all = v.Of("cast").Count(e => e.Str("by") == by);
+                return bad.Count == 0
+                    ? ExpectResult.Pass(all + " cast(s), all combat spells")
+                    : ExpectResult.Fail(bad.Count + " cast(s) without a combat effect, first " + bad[0].Str("spell"), bad.Select(e => e.Seq).ToArray());
+            };
+
+        /// <summary>
+        /// AI-002 (the defensive melee routine): the human cleric (DMG p.114's sample cleric: the Humanoid profile, the
+        /// DefensiveMelee behaviour) has its prepared spells. Before the change the melee routines never cast, so it walked
+        /// up and swung its mace; now it tries the turn's spell first and casts in round 1 before any attack. Over three
+        /// rounds, once its buffs are up, it casts only spells with a combat effect: never Light or Detect Magic, which it
+        /// has prepared (AI-069; the cast-first step and its gate share AIProfile.IsCastFirstCandidate).
+        /// </summary>
+        private static ScenarioDef MeleeCasterCastsFirst()
+        {
+            return Rules("rules/melee-caster-casts-first-ai", "An AI cleric on the defensive melee routine casts before it melees (AI-002)")
+                .Covers("AI-002", "AI-069", "batch 13 step 8")
+                .MaxRounds(3)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 13, 10, Control.Idle)
+                .Tweak("cleric", Sturdy)
+                .Tweak("foe", Sturdy)
+                .Initiative("cleric", "foe")
+                .Expect("The cleric has the Humanoid profile", ProfileIs("cleric", "HumanoidAIProfile"))
+                .Expect("Round 1: it casts before it attacks", CastsBeforeAttacking("cleric"))
+                .Expect("Rounds 1-3: it casts no spell without a combat effect (AI-069)", CastsOnlyCombatSpells("cleric"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-002 (the aggressive melee routine) for an AI-run party member, the same rule as for an NPC: a 5th-level party
+        /// wizard with its spells and a melee profile (Humanoid: the aggressive melee routine) casts in round 1 instead of
+        /// walking up to the foe with its staff.
+        /// </summary>
+        private static ScenarioDef MeleeCasterCastsFirstParty()
+        {
+            return Rules("rules/melee-caster-casts-first-party-ai", "An AI-run party wizard on the aggressive melee routine casts before it melees (AI-002)")
+                .Covers("AI-002", "PC_NPC_PARITY", "batch 13 step 8")
+                .MaxRounds(1)
+                .Pc("wiz", ActorSource.Stats(() => StaffWizard("Melee Wizard", 5)), 10, 10, Control.Ai)
+                .Profile("wiz", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>())
+                .Npc("foe", "orc_warrior", 13, 10, Control.Idle)
+#pragma warning disable CS0618 // the quarterstaff's string id
+                .Tweak("wiz", c => { Wield(c, ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF)); Sturdy(c); })
+#pragma warning restore CS0618
+                .Tweak("foe", Sturdy)
+                .Initiative("wiz", "foe")
+                .Expect("Round 1: it casts before it attacks", CastsBeforeAttacking("wiz"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-002 with AI-069: an AI-run party sorcerer 1 on the aggressive melee routine (Humanoid profile) who knows only
+        /// Light, Detect Magic, Prestidigitation and Read Magic, a foe next to it. None of these has a combat effect, so the
+        /// cast-first gate (AIProfile.IsCastFirstCandidate) stays shut: it casts nothing and fights in melee in round 1 (its staff or its profile's trip).
+        /// (With the first gate, Light, which the classifier files as Buff, opened it and the sorcerer cast it.)
+        /// </summary>
+        private static ScenarioDef MeleeCasterSkipsOrisons()
+        {
+            return Rules("rules/melee-caster-skips-orisons-ai", "A melee-routine caster with only out-of-combat cantrips fights instead of casting (AI-002, AI-069)")
+                .Covers("AI-002", "AI-069", "batch 13 step 8")
+                .MaxRounds(2)
+                .Pc("sorc", ActorSource.Stats(() => StaffSorcerer("Cantrip Sorcerer", 1)), 10, 10, Control.Ai)
+                .Profile("sorc", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>())
+                .Npc("foe", "orc_warrior", 11, 10, Control.Idle)
+#pragma warning disable CS0618 // the quarterstaff's string id
+                .Tweak("sorc", c =>
+                {
+                    KnowsOnlyCantrips(c, SpellNames.LIGHT, SpellNames.DETECT_MAGIC, SpellNames.PRESTIDIGITATION, SpellNames.READ_MAGIC);
+                    Wield(c, ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF));
+                    Sturdy(c);
+                })
+#pragma warning restore CS0618
+                .Tweak("foe", Sturdy)
+                .Initiative("sorc", "foe")
+                .Expect("It casts nothing (AI-069)", v =>
+                {
+                    List<TraceEvent> casts = v.Of("cast").Where(e => e.Str("by") == "sorc").ToList();
+                    return casts.Count == 0 ? ExpectResult.Pass("no cast") : ExpectResult.Fail("cast " + casts[0].Str("spell"), casts.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Round 1: it fights the orc in melee (an attack or its profile's trip)", FightsInMeleeBy("sorc", "foe", 1))
+                .Build();
+        }
+
+        private static CharacterStats StaffSorcerer(string name, int level)
+        {
+            var s = new CharacterStats(
+                name: name, level: level, characterClass: "Sorcerer",
+                str: 10, dex: 12, con: 12, wis: 10, intelligence: 10, cha: 16,
+                bab: level / 2, armorBonus: 0, shieldBonus: 0,
+                damageDice: 6, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 4 * level, raceName: "Human");
+            s.CharacterAlignment = Alignment.TrueNeutral;
+            s.EnsureMulticlassDataInitialized();
+            return s;
+        }
+
+        /// <summary>Clears every spell the sorcerer knows and makes <paramref name="ids"/> its known 0-level spells.</summary>
+        private static void KnowsOnlyCantrips(CharacterController c, params string[] ids)
+        {
+            SpontaneousCastingData known = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+            if (known == null || !c.Spellcasting.IsSpontaneousCaster)
+                throw new InvalidOperationException(c.Stats.CharacterName + " is not a spontaneous caster");
+            for (int l = 0; l < known.SpellsKnownByLevel.Length; l++)
+                known.SpellsKnownByLevel[l]?.Clear();
+            foreach (string id in ids)
+            {
+                if (!known.LearnSpell(id, 0))
+                    throw new InvalidOperationException(c.Stats.CharacterName + " could not learn " + id);
+            }
+        }
+
+        /// <summary>
+        /// AI-002 must not displace the defensive melee routine's withdraw (below 30% HP, PHB p.143, AI.md 5.4): the human
+        /// cleric, at a fifth of its hit points next to a fighter, withdraws in round 1 instead of casting, although it has
+        /// combat spells prepared.
+        /// </summary>
+        private static ScenarioDef DefensiveCasterWithdrawsWhenHurt()
+        {
+            return Rules("rules/defensive-caster-withdraws-when-hurt-ai", "A badly hurt defensive melee caster withdraws before it casts (AI-002; PHB p.143)")
+                .Covers("AI-002", "PHB p.143", "batch 13 step 8")
+                .MaxRounds(1)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 11, 10, Control.Idle)
+                .Tweak("cleric", c => c.Stats.CurrentHP = Math.Max(1, c.Stats.TotalMaxHP / 5))
+                .Tweak("foe", Sturdy)
+                .Initiative("cleric", "foe")
+                .Expect("Round 1: it withdraws from the fighter", v =>
+                    v.Log("withdraws from").Any(e => e.Round == 1) ? ExpectResult.Pass("withdraws") : ExpectResult.Fail("no withdraw line"))
+                .Expect("Round 1: it casts nothing", v =>
+                {
+                    TraceEvent cast = v.Of("cast").FirstOrDefault(e => e.Str("by") == "cleric" && e.Round == 1);
+                    return cast == null ? ExpectResult.Pass("no cast") : ExpectResult.Fail("cast " + cast.Str("spell"), cast.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-003 for a creature with no ranged means: the gauth's behaviour is Ranged, but its eye rays are text only
+        /// (CRE-017) and it has only its bite, so "prefers ranged attacks" gives it nothing to shoot; it keeps the aggressive
+        /// melee routine (AIService.RunsRangedRoutine), closes on the fighter two squares away and fights it in melee (its bite,
+        /// or the profile-less trip, AI-035). It takes no total defense.
+        /// </summary>
+        private static ScenarioDef RangedBehaviourMeleeOnlyApproaches()
+        {
+            return Rules("rules/ranged-behaviour-melee-only-approaches-ai", "A Ranged-behaviour creature with no ranged means closes and bites (AI-003)")
+                .Covers("AI-003", "batch 13 step 8")
+                .MaxRounds(3)
+                .Npc("gauth", "gauth", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 12, 10, Control.Idle)
+                .Tweak("gauth", Sturdy)
+                .Tweak("foe", Sturdy)
+                .Initiative("gauth", "foe")
+                .Expect("By round 2 it closes and fights the fighter in melee (an attack or the profile-less trip, AI-035)", FightsInMeleeBy("gauth", "foe", 2))
+                .Expect("It takes no total defense", NoLog("Gauth takes total defense", "total defense"))
                 .Build();
         }
     }

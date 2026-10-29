@@ -237,7 +237,8 @@ public static class NpcAlignmentGearTests
     {
         Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.RangedKiter, null), "no profile: RangedKiter runs the ranged routine");
         Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.AggressiveMelee, null), "no profile: AggressiveMelee does not");
-        Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.Ranged, null), "no profile: the unrouted Ranged behaviour does not (AI-003)");
+        Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.Ranged, null), "no profile: the Ranged behaviour runs the ranged routine (AI-003)");
+        Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.DefensiveMelee, null), "no profile: DefensiveMelee does not");
 
         var ranged = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.RangedAIProfile>();
         var humanoid = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
@@ -246,6 +247,7 @@ public static class NpcAlignmentGearTests
             Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.AggressiveMelee, ranged), "a Ranged profile runs the ranged routine with a melee behaviour");
             Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.DefensiveMelee, ranged), "DefensiveMelee keeps a Ranged profile in melee");
             Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.RangedKiter, humanoid), "RangedKiter runs the ranged routine with a Humanoid profile");
+            Assert(AIService.RoutesToRangedTurn(NPCAIBehavior.Ranged, humanoid), "Ranged runs the ranged routine with a Humanoid profile (AI-003)");
             Assert(!AIService.RoutesToRangedTurn(NPCAIBehavior.AggressiveMelee, humanoid), "AggressiveMelee with a Humanoid profile does not");
         }
         finally
@@ -684,6 +686,25 @@ public static class NpcAlignmentGearTests
         finally
         {
             Cleanup(guard);
+        }
+
+        // AI-003 (batch 13 step 8): the Ranged behaviour without a profile (archetype None) runs the ranged routine, so the
+        // spawn puts the bow in its hand too.
+        NPCDefinition rangedBehaviour = janni.Clone();
+        rangedBehaviour.AIBehavior = NPCAIBehavior.Ranged;
+        rangedBehaviour.AIProfileArchetype = NPCAIProfileArchetype.None;
+        CharacterController shooter = Spawn(rangedBehaviour, "janni_ranged_behaviour");
+        try
+        {
+            global::Inventory inv = shooter != null ? shooter.InventoryComp.CharacterInventory : null;
+            Assert(shooter != null && shooter.aiProfile == null, "a Ranged-behaviour janni of archetype None spawns without a profile",
+                shooter != null && shooter.aiProfile != null ? shooter.aiProfile.GetType().Name : "");
+            Assert(inv != null && Holds(inv.RightHandSlot, "longbow") && PackHas(inv, "scimitar"),
+                "AI-003: a Ranged-behaviour janni without a profile holds its longbow and carries its scimitar", "right " + Describe(inv?.RightHandSlot));
+        }
+        finally
+        {
+            Cleanup(shooter);
         }
     }
 

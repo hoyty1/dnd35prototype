@@ -80,6 +80,9 @@ namespace Tests.AI
             TestRuntimeProfilesGetNameAndDefaults();
             TestSavedProfileValuesSurviveLoad();
             TestOutOfReachAlternativeDefaults();
+            TestEveryArchetypeMapsToAProfile();
+            TestBruteProfileDefaults();
+            TestCastFirstCandidates();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -133,6 +136,7 @@ namespace Tests.AI
                 new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<UndeadIncorporealAIProfile>(), "Undead Incorporeal"),
                 new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<VampireAIProfile>(), "Vampire"),
                 new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<LichAIProfile>(), "Lich"),
+                new KeyValuePair<AIProfile, string>(AIProfile.CreateRuntime<BruteAIProfile>(), "Brute"),
             };
             try
             {
@@ -234,6 +238,154 @@ namespace Tests.AI
                     return;
                 }
             }
+        }
+
+        // ---- Batch 13 step 8 (AI-004, AI-002; owner question Q4's default) ----
+
+        /// <summary>
+        /// Batch 13 step 8 (AI-004; Q4's default): every archetype but None maps to a concrete profile type
+        /// (GameManager.RuntimeAIProfileTypeFor, the spawn's map), Brute to BruteAIProfile, and Caster to
+        /// SpellcasterAIProfile only when the creature has spells, else BruteAIProfile: the couatl and the spirit naga have
+        /// none and get Brute. CreateRuntime(Type) gives the same tuning as CreateRuntime of T.
+        /// </summary>
+        private static void TestEveryArchetypeMapsToAProfile()
+        {
+            var unmapped = new List<string>();
+            foreach (NPCAIProfileArchetype archetype in Enum.GetValues(typeof(NPCAIProfileArchetype)))
+            {
+                if (archetype == NPCAIProfileArchetype.None)
+                    continue;
+                Type t = GameManager.RuntimeAIProfileTypeFor(new NPCDefinition { AIProfileArchetype = archetype }, null);
+                if (t == null || t.IsAbstract || !typeof(AIProfile).IsAssignableFrom(t))
+                    unmapped.Add(archetype + "=" + (t != null ? t.Name : "null"));
+            }
+            Assert(unmapped.Count == 0, "AI-004: every NPCAIProfileArchetype but None maps to a profile type", string.Join(", ", unmapped));
+            Assert(GameManager.RuntimeAIProfileTypeFor(new NPCDefinition { AIProfileArchetype = NPCAIProfileArchetype.None, CreatureType = "Humanoid" }, null) == null,
+                "None (not an animal) maps to no profile");
+            Assert(GameManager.RuntimeAIProfileTypeFor(new NPCDefinition { AIProfileArchetype = NPCAIProfileArchetype.Brute }, null) == typeof(BruteAIProfile),
+                "AI-004 (Q4 default): Brute maps to the plain BruteAIProfile");
+            Assert(GameManager.RuntimeAIProfileTypeFor(new NPCDefinition { AIProfileArchetype = NPCAIProfileArchetype.Caster }, null) == typeof(BruteAIProfile),
+                "AI-004: a Caster without spells maps to BruteAIProfile");
+            var innateCaster = new NPCDefinition
+            {
+                AIProfileArchetype = NPCAIProfileArchetype.Caster,
+                InnateSpellcastingClass = "Sorcerer",
+                InnateCasterLevel = 3,
+                KnownSpellIds = new List<string> { "magic_missile" },
+            };
+            Assert(GameManager.RuntimeAIProfileTypeFor(innateCaster, null) == typeof(SpellcasterAIProfile),
+                "AI-004: a Caster with a spell list and innate casting maps to SpellcasterAIProfile");
+            var listNoCasting = new NPCDefinition { AIProfileArchetype = NPCAIProfileArchetype.Caster, KnownSpellIds = new List<string> { "magic_missile" } };
+            Assert(GameManager.RuntimeAIProfileTypeFor(listNoCasting, new CharacterStats()) == typeof(BruteAIProfile),
+                "AI-004: a spell list without a way to cast it gives no spells, so Brute");
+
+            NPCDatabase.Init();
+            foreach (string id in new[] { "couatl", "spirit_naga" })
+            {
+                NPCDefinition def = NPCDatabase.Get(id);
+                Type t = def != null ? GameManager.RuntimeAIProfileTypeFor(def, null) : null;
+                Assert(def != null && def.AIProfileArchetype == NPCAIProfileArchetype.Caster && t == typeof(BruteAIProfile),
+                    "AI-004: the spell-less Caster " + id + " gets BruteAIProfile", def == null ? "(missing)" : "(" + def.AIProfileArchetype + " -> " + (t != null ? t.Name : "null") + ")");
+            }
+
+            AIProfile byType = AIProfile.CreateRuntime(typeof(BerserkAIProfile));
+            try
+            {
+                Assert(byType is BerserkAIProfile && byType.ProfileName == "Berserk" && byType.Maneuvers.AttemptTrip,
+                    "AIProfile.CreateRuntime(Type) applies the type's runtime defaults");
+                Assert(AIProfile.CreateRuntime(typeof(string)) == null && AIProfile.CreateRuntime(null) == null,
+                    "AIProfile.CreateRuntime(Type) refuses a non-profile type");
+            }
+            finally
+            {
+                Destroy(byType);
+            }
+        }
+
+        /// <summary>
+        /// Q4's default (2026-10-29): BruteAIProfile is plain melee with high aggression and the Power Attack flag (unread
+        /// until AI-026), and none of BerserkAIProfile's extras: no maneuver flags, no aggressive grapple, no forced coup
+        /// de grace. A creature with no castable spell does not try a spell before melee (AI-002's default).
+        /// </summary>
+        private static void TestBruteProfileDefaults()
+        {
+            BruteAIProfile brute = AIProfile.CreateRuntime<BruteAIProfile>();
+            try
+            {
+                Assert(brute.CombatStyle == CombatStyle.Melee && brute.Aggression >= 0.8f && brute.PrioritizeWounded
+                        && brute.Maneuvers.UsePowerAttack,
+                    "Q4: BruteAIProfile is melee, aggressive, wounded first, with the Power Attack flag");
+                Assert(!brute.Maneuvers.AttemptTrip && !brute.Maneuvers.AttemptDisarm && !brute.Maneuvers.AttemptSunder
+                        && !brute.Maneuvers.AttemptBullRush && !brute.Maneuvers.AttemptOverrun,
+                    "Q4: BruteAIProfile tries no combat maneuver");
+                Assert(brute.GrappleBehavior != GrappleBehavior.Aggressive && !brute.ShouldInitiateGrapple(null, null)
+                        && !brute.ShouldUseCoupDeGrace(null) && !brute.IsCastingProfile,
+                    "Q4: BruteAIProfile does not grapple aggressively or force a coup de grace");
+                Assert(!AIProfile.DefaultShouldTryCastBeforeMelee(null) && !brute.ShouldTryCastBeforeMelee(null),
+                    "AI-002: no creature, no cast before melee");
+            }
+            finally
+            {
+                Destroy(brute);
+            }
+        }
+
+        /// <summary>
+        /// AI-002's cast-first gate and its cast use one predicate (AIProfile.IsCastFirstCandidate, AI-069): a combat spell
+        /// counts; a Utility or Divination spell, an out-of-combat orison the classifier files as Buff (Light,
+        /// Prestidigitation, Read Magic) and Alter Self (no modelled effect, SPL-135) do not. A sorcerer who knows Magic
+        /// Missile tries a spell before melee; one who knows only such cantrips does not.
+        /// </summary>
+        private static void TestCastFirstCandidates()
+        {
+            SpellDatabase.Init();
+            foreach (string id in new[] { SpellNames.MAGIC_MISSILE, SpellNames.BLESS, SpellNames.CURE_LIGHT_WOUNDS, SpellNames.SHIELD_OF_FAITH })
+            {
+                SpellData spell = SpellDatabase.GetSpell(id);
+                Assert(spell != null && AIProfile.IsCastFirstCandidate(spell), "AI-002: " + id + " is a cast-first candidate");
+            }
+            foreach (string id in new[] { SpellNames.LIGHT, SpellNames.DETECT_MAGIC, SpellNames.PRESTIDIGITATION, SpellNames.READ_MAGIC,
+                         SpellNames.MENDING, SpellNames.IDENTIFY, SpellNames.ALTER_SELF })
+            {
+                SpellData spell = SpellDatabase.GetSpell(id);
+                Assert(spell == null || !AIProfile.IsCastFirstCandidate(spell), "AI-002/AI-069: " + id + " is no cast-first candidate");
+            }
+
+            CharacterController combat = null, cantrips = null;
+            try
+            {
+                combat = CreateKnownSpellCaster("CastFirst_Combat", new List<string> { SpellNames.LIGHT, SpellNames.MAGIC_MISSILE });
+                cantrips = CreateKnownSpellCaster("CastFirst_Cantrips",
+                    new List<string> { SpellNames.LIGHT, SpellNames.DETECT_MAGIC, SpellNames.PRESTIDIGITATION, SpellNames.READ_MAGIC });
+                Assert(AIProfile.DefaultShouldTryCastBeforeMelee(combat),
+                    "AI-002: a sorcerer who knows Magic Missile tries a spell before melee");
+                Assert(!AIProfile.DefaultShouldTryCastBeforeMelee(cantrips),
+                    "AI-002/AI-069: a sorcerer who knows only Light, Detect Magic, Prestidigitation and Read Magic does not");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(combat != null ? combat.gameObject : null, cantrips != null ? cantrips.gameObject : null);
+            }
+        }
+
+        private static CharacterController CreateKnownSpellCaster(string name, List<string> known)
+        {
+            var go = new GameObject("AIProfile_" + name);
+            var controller = go.AddComponent<CharacterController>();
+            var stats = new CharacterStats(
+                name: name, level: 1, characterClass: "Sorcerer",
+                str: 10, dex: 14, con: 12, wis: 10, intelligence: 10, cha: 16,
+                bab: 0, armorBonus: 0, shieldBonus: 0,
+                damageDice: 4, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 4, raceName: "Human");
+            controller.Stats = stats;
+            var inventory = go.AddComponent<InventoryComponent>();
+            inventory.Init(stats);
+            SpellComponentKit.Give(stats, inventory.CharacterInventory);
+            var spellComp = go.AddComponent<SpellcastingComponent>();
+            spellComp.SelectedSpellIds = known;
+            spellComp.Init(stats);
+            return controller;
         }
 
         // ---- Batch 13 step 5 (AI-075, design choice C1): the out-of-reach alternatives ----

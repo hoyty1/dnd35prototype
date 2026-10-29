@@ -1055,7 +1055,7 @@ public partial class GameManager
         }
         // The AI profile is built here so the held weapon follows the same test the AI uses to pick its routine
         // (AIService.RoutesToRangedTurn); it is assigned to the creature further down, as before.
-        DND35.AI.AIProfile runtimeProfile = BuildRuntimeAIProfile(def);
+        DND35.AI.AIProfile runtimeProfile = BuildRuntimeAIProfile(def, stats);
         bool wieldsRangedWeapon = AIService.RoutesToRangedTurn(def.AIBehavior, runtimeProfile);
         inv.CharacterInventory.EquipStartingLoadout(startingGear, wieldsRangedWeapon);
 
@@ -1108,9 +1108,9 @@ public partial class GameManager
         if (SpellComponentKit.Give(stats, inv.CharacterInventory) > 0)
             inv.CharacterInventory.RecalculateStats();
 
-        bool shouldInitSpellcasting = stats.IsSpellcaster
-            && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
-                || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));
+        // The same test that picked a Caster creature's profile above (DefinitionGivesSpells, AI-004, AI-038), so the two
+        // cannot drift apart; the innate class entry is in place now, so IsSpellcaster covers innate casting.
+        bool shouldInitSpellcasting = stats.IsSpellcaster && DefinitionGivesSpells(def, stats);
 
         if (!shouldInitSpellcasting && NpcClassGrantsSpells(stats))
             Debug.LogWarning($"[GameManager] {def.Name} ({def.Id}) has a spellcasting class level that grants spells but its definition lists none, so it spawns without spellcasting (CRE-062, ENC-021).");
@@ -1191,7 +1191,43 @@ public partial class GameManager
         return partial >= 4 && stats.WISMod >= 1;
     }
 
-    private DND35.AI.AIProfile BuildRuntimeAIProfile(NPCDefinition def)
+    /// <summary>
+    /// Whether the creature this definition spawns has spells: a spell list (known spells or prepared slots) and a way
+    /// to cast them, a spellcasting class level or the innate spellcasting a true dragon has (it can be read before the
+    /// innate class entry is added). A class level that grants spells with no spell list gives none (the spawn warns,
+    /// CRE-062, ENC-021), so it does not count. Used to pick a Caster creature's profile (<see cref="BuildRuntimeAIProfile"/>,
+    /// AI-004) and, with the caster test, by the spawn to give the creature its spellcasting, so the two agree.
+    /// </summary>
+    internal static bool DefinitionGivesSpells(NPCDefinition def, CharacterStats stats)
+    {
+        if (def == null)
+            return false;
+        bool hasList = (def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
+            || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0);
+        if (!hasList)
+            return false;
+        bool innate = !string.IsNullOrEmpty(def.InnateSpellcastingClass) && def.InnateCasterLevel > 0;
+        return innate || (stats != null && stats.IsSpellcaster);
+    }
+
+    /// <summary>
+    /// The runtime AI profile of a spawned creature (<see cref="RuntimeAIProfileTypeFor"/>), created through
+    /// <see cref="CreateRuntimeAIProfile{T}"/>'s tracking (AI-017); null for an archetype of None.
+    /// </summary>
+    internal DND35.AI.AIProfile BuildRuntimeAIProfile(NPCDefinition def, CharacterStats stats)
+    {
+        Type type = RuntimeAIProfileTypeFor(def, stats);
+        return type != null ? TrackRuntimeAIProfile(DND35.AI.AIProfile.CreateRuntime(type)) : null;
+    }
+
+    /// <summary>
+    /// The AI profile type of a spawned creature, by its definition's archetype (an Animal-type definition without one is
+    /// an Animal). Batch 13 step 8 (AI-004; owner question Q4's default, 2026-10-29, a design default the owner may
+    /// overrule): Brute gets the plain <see cref="BruteAIProfile"/>; Caster gets <see cref="SpellcasterAIProfile"/>
+    /// only when the creature has spells (<see cref="DefinitionGivesSpells"/>), else BruteAIProfile, since a casting
+    /// profile without spells holds at its casting distance and never fights (AI-038). Only None gives no profile.
+    /// </summary>
+    internal static Type RuntimeAIProfileTypeFor(NPCDefinition def, CharacterStats stats)
     {
         if (def == null)
             return null;
@@ -1207,45 +1243,29 @@ public partial class GameManager
 
         switch (archetype)
         {
-            case NPCAIProfileArchetype.Animal:
-                return CreateRuntimeAIProfile<AnimalAIProfile>();
-            case NPCAIProfileArchetype.Humanoid:
-                return CreateRuntimeAIProfile<HumanoidAIProfile>();
-            case NPCAIProfileArchetype.Berserk:
-                return CreateRuntimeAIProfile<BerserkAIProfile>();
-            case NPCAIProfileArchetype.Grappler:
-                return CreateRuntimeAIProfile<GrapplerAIProfile>();
-            case NPCAIProfileArchetype.Ranged:
-                return CreateRuntimeAIProfile<RangedAIProfile>();
-            case NPCAIProfileArchetype.Healer:
-                return CreateRuntimeAIProfile<HealerAIProfile>();
-            case NPCAIProfileArchetype.Spellcaster:
-                return CreateRuntimeAIProfile<SpellcasterAIProfile>();
-            case NPCAIProfileArchetype.Evoker:
-                return CreateRuntimeAIProfile<EvokerAIProfile>();
-            case NPCAIProfileArchetype.Abjurer:
-                return CreateRuntimeAIProfile<AbjurerAIProfile>();
-            case NPCAIProfileArchetype.Necromancer:
-                return CreateRuntimeAIProfile<NecromancerAIProfile>();
-            case NPCAIProfileArchetype.UndeadMindless:
-                return CreateRuntimeAIProfile<UndeadMindlessAIProfile>();
-            case NPCAIProfileArchetype.Swarm:
-                return CreateRuntimeAIProfile<SwarmAI>();
-            case NPCAIProfileArchetype.IndiscriminateSwarm:
-                return CreateRuntimeAIProfile<IndiscriminateSwarmAI>();
-            case NPCAIProfileArchetype.Dragon:
-                return CreateRuntimeAIProfile<DragonAIProfile>();
+            case NPCAIProfileArchetype.Animal: return typeof(AnimalAIProfile);
+            case NPCAIProfileArchetype.Humanoid: return typeof(HumanoidAIProfile);
+            case NPCAIProfileArchetype.Berserk: return typeof(BerserkAIProfile);
+            case NPCAIProfileArchetype.Grappler: return typeof(GrapplerAIProfile);
+            case NPCAIProfileArchetype.Ranged: return typeof(RangedAIProfile);
+            case NPCAIProfileArchetype.Healer: return typeof(HealerAIProfile);
+            case NPCAIProfileArchetype.Spellcaster: return typeof(SpellcasterAIProfile);
+            case NPCAIProfileArchetype.Evoker: return typeof(EvokerAIProfile);
+            case NPCAIProfileArchetype.Abjurer: return typeof(AbjurerAIProfile);
+            case NPCAIProfileArchetype.Necromancer: return typeof(NecromancerAIProfile);
+            case NPCAIProfileArchetype.UndeadMindless: return typeof(UndeadMindlessAIProfile);
+            case NPCAIProfileArchetype.Swarm: return typeof(SwarmAI);
+            case NPCAIProfileArchetype.IndiscriminateSwarm: return typeof(IndiscriminateSwarmAI);
+            case NPCAIProfileArchetype.Dragon: return typeof(DragonAIProfile);
             case NPCAIProfileArchetype.Undead:
-            case NPCAIProfileArchetype.UndeadTactical:
-                return CreateRuntimeAIProfile<UndeadTacticalAIProfile>();
-            case NPCAIProfileArchetype.UndeadBrute:
-                return CreateRuntimeAIProfile<UndeadBruteAIProfile>();
-            case NPCAIProfileArchetype.UndeadIncorporeal:
-                return CreateRuntimeAIProfile<UndeadIncorporealAIProfile>();
-            case NPCAIProfileArchetype.Vampire:
-                return CreateRuntimeAIProfile<VampireAIProfile>();
-            case NPCAIProfileArchetype.Lich:
-                return CreateRuntimeAIProfile<LichAIProfile>();
+            case NPCAIProfileArchetype.UndeadTactical: return typeof(UndeadTacticalAIProfile);
+            case NPCAIProfileArchetype.UndeadBrute: return typeof(UndeadBruteAIProfile);
+            case NPCAIProfileArchetype.UndeadIncorporeal: return typeof(UndeadIncorporealAIProfile);
+            case NPCAIProfileArchetype.Vampire: return typeof(VampireAIProfile);
+            case NPCAIProfileArchetype.Lich: return typeof(LichAIProfile);
+            case NPCAIProfileArchetype.Brute: return typeof(BruteAIProfile);
+            case NPCAIProfileArchetype.Caster:
+                return DefinitionGivesSpells(def, stats) ? typeof(SpellcasterAIProfile) : typeof(BruteAIProfile);
             default:
                 return null;
         }

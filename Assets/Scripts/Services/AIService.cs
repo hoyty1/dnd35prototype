@@ -76,22 +76,48 @@ public class AIService : MonoBehaviour
     /// Whether <see cref="ExecuteNPCTurn"/> runs a non-summoned creature with this behaviour and profile through the
     /// ranged-kiter routine: with a profile, a healer (its default route; it melees only when
     /// <see cref="HealerAIProfile.DetermineCombatMode"/> picks melee for a physical attack, a stat comparison made at
-    /// run time), not a dragon (its own routine), not DefensiveMelee, otherwise RangedKiter or a Ranged
-    /// <see cref="AIProfile.CombatStyle"/>; without a profile, RangedKiter only (<c>NPCAIBehavior.Ranged</c> is not
-    /// routed, AI-003). The spawn uses the same test to decide which weapon a creature starts holding
+    /// run time), not a dragon (its own routine), not DefensiveMelee, otherwise a ranged behaviour or a Ranged
+    /// <see cref="AIProfile.CombatStyle"/>; without a profile, a ranged behaviour. The ranged behaviours are RangedKiter
+    /// and Ranged ("prefer ranged attacks"), which since batch 13 step 8 runs the same ranged routine and shoots, with or
+    /// without a profile (AI-003). The spawn uses the same test to decide which weapon a creature starts holding
     /// (<see cref="Inventory.EquipStartingLoadout"/>, ITM-004).
     /// </summary>
     internal static bool RoutesToRangedTurn(NPCAIBehavior behavior, AIProfile profile)
     {
+        // See RunsRangedRoutine for the turn's extra test on the Ranged behaviour (a creature with no ranged means).
+        bool rangedBehavior = behavior == NPCAIBehavior.RangedKiter || behavior == NPCAIBehavior.Ranged;
         if (profile == null)
-            return behavior == NPCAIBehavior.RangedKiter;
+            return rangedBehavior;
         if (profile is HealerAIProfile)
             return true;
         if (profile is DragonAIProfile)
             return false;
         if (behavior == NPCAIBehavior.DefensiveMelee)
             return false;
-        return behavior == NPCAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged;
+        return rangedBehavior || profile.CombatStyle == CombatStyle.Ranged;
+    }
+
+    /// <summary>
+    /// The turn's routing test: <see cref="RoutesToRangedTurn"/>, except that a creature routed there only by the Ranged
+    /// behaviour ("prefers ranged attacks"; AI-003, batch 13 step 8) that has no ranged means now
+    /// (<see cref="HasRangedMeans"/>: no ranged weapon that can shoot, no throwable weapon, no castable spell beyond touch)
+    /// runs the aggressive melee routine, with its charge and its standard-action ranged specials. Such creatures are the
+    /// gauth, beholder and rakshasa, whose eye rays and spells are text only (CRE-017), and an archer whose
+    /// quiver is empty (AI-073). An AI choice, not a rule: preferring ranged attacks means nothing without one.
+    /// </summary>
+    private bool RunsRangedRoutine(CharacterController npc, CharacterController target, NPCAIBehavior behavior, AIProfile profile)
+    {
+        if (!RoutesToRangedTurn(behavior, profile))
+            return false;
+        bool onlyByRangedBehavior = behavior == NPCAIBehavior.Ranged
+            && !(profile is HealerAIProfile)
+            && (profile == null || profile.CombatStyle != CombatStyle.Ranged);
+        if (onlyByRangedBehavior && !HasRangedMeans(npc, target))
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} prefers ranged attacks but has no ranged means: aggressive melee routine (AI-003)");
+            return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -482,7 +508,7 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
             }
-            else if (RoutesToRangedTurn(behavior, profile))
+            else if (RunsRangedRoutine(npc, targetPC, behavior, profile))
             {
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
             }
@@ -501,6 +527,12 @@ public class AIService : MonoBehaviour
                 break;
             case NPCAIBehavior.RangedKiter:
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+                break;
+            case NPCAIBehavior.Ranged: // prefers ranged attacks: the ranged routine when it has ranged means (AI-003; RunsRangedRoutine)
+                if (RunsRangedRoutine(npc, targetPC, behavior, null))
+                    yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+                else
+                    yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
                 break;
             case NPCAIBehavior.DefensiveMelee:
                 yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
@@ -771,6 +803,16 @@ public class AIService : MonoBehaviour
                     }
                 }
             }
+        }
+
+        // A melee caster casts first (batch 13 step 8, AI-002): the turn's spell through the catalog's cast entry, when
+        // the profile asks for it (AIProfile.ShouldTryCastBeforeMelee: a castable spell with a combat effect). The turn
+        // ends after a cast (design choice C4: the leftover move waits for batch 14, AI-077); a held touch charge is
+        // delivered by ExecuteNPCTurn. With no spell worth casting nothing is spent and the melee turn goes on.
+        if (TryCastBeforeMelee(npc, target, profile))
+        {
+            yield return new WaitForSeconds(0.8f);
+            yield break;
         }
 
         // An overrun is a move through the target's space (PHB p.157; batch 12 step 20, D11), planned before the move and
@@ -1581,13 +1623,6 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        AIActionType action = SelectBestAction(npc, target, preferAggression: false);
-        if (action == AIActionType.Charge)
-        {
-            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));
-            yield break;
-        }
-
         AIProfile profile = GetProfile(npc);
 
         float hpPercent = npc.Stats.TotalMaxHP > 0 ? (float)npc.Stats.CurrentHP / npc.Stats.TotalMaxHP : 1f;
@@ -1596,6 +1631,28 @@ public class AIService : MonoBehaviour
         Legality withdrawLegality = hpPercent < 0.30f
             ? MovementService.CanStartMovement(npc, MovementService.WithdrawKindFor(npc))
             : Legality.Refused("not hurt enough");
+
+        // A melee caster casts first, as in the aggressive melee turn (batch 13 step 8, AI-002; C4), but not when it is
+        // badly hurt and may withdraw: the routine's withdraw (below 30% HP) comes first, and the cast is tried after a
+        // withdraw that did not start.
+        bool castFirstTried = false;
+        if (!withdrawLegality.Ok)
+        {
+            castFirstTried = true;
+            if (TryCastBeforeMelee(npc, target, profile))
+            {
+                yield return new WaitForSeconds(0.8f);
+                yield break;
+            }
+        }
+
+        AIActionType action = SelectBestAction(npc, target, preferAggression: false);
+        if (action == AIActionType.Charge)
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));
+            yield break;
+        }
+
         if (hpPercent < 0.30f && !withdrawLegality.Ok)
             Debug.Log($"[AI] {npc.Stats.CharacterName} withdraw refused: {withdrawLegality.Reason}");
         if (withdrawLegality.Ok)
@@ -1623,6 +1680,13 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
             }
+        }
+
+        // No withdraw was made: the cast-first step the withdraw test held back.
+        if (!castFirstTried && TryCastBeforeMelee(npc, target, profile))
+        {
+            yield return new WaitForSeconds(0.8f);
+            yield break;
         }
 
         // Moving needs the move action (AI-034).
@@ -1945,6 +2009,26 @@ public class AIService : MonoBehaviour
     private static AIProfile GetProfile(CharacterController npc)
     {
         return npc != null ? npc.aiProfile : null;
+    }
+
+    /// <summary>
+    /// The melee routines' cast-first step (batch 13 step 8, AI-002): when <paramref name="profile"/> (or, without one,
+    /// <see cref="AIProfile.DefaultShouldTryCastBeforeMelee"/>) asks for it, the turn's spell through
+    /// <see cref="TryExecuteSpellcastAction"/> (the catalog's cast entry), aimed by default at <paramref name="target"/>.
+    /// The cast takes only the spells the gate counts (<see cref="AIProfile.IsCastFirstCandidate"/>: no Utility,
+    /// Divination or out-of-combat spell, AI-069) and only one scoring above 0, so a melee caster never trades its attack
+    /// for a spell that does nothing (an interim AI choice that batch 14's personalities and batch 22's evaluator
+    /// replace). True when a spell was cast; false spends nothing.
+    /// </summary>
+    private bool TryCastBeforeMelee(CharacterController npc, CharacterController target, AIProfile profile)
+    {
+        if (npc == null || npc.Stats == null || npc.Actions == null || !npc.Actions.HasStandardAction)
+            return false;
+        bool wants = profile != null ? profile.ShouldTryCastBeforeMelee(npc) : AIProfile.DefaultShouldTryCastBeforeMelee(npc);
+        if (!wants)
+            return false;
+        Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} tries a spell before melee (AI-002)");
+        return TryExecuteSpellcastAction(npc, target, AIProfile.IsCastFirstCandidate, minScore: 0f);
     }
 
     /// <summary>

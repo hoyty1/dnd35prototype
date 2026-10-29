@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DND35e.Identifiers;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -79,6 +80,19 @@ namespace DND35.AI
         public static T CreateRuntime<T>() where T : AIProfile
         {
             T profile = CreateInstance<T>();
+            profile.ApplyRuntimeDefaults();
+            return profile;
+        }
+
+        /// <summary>
+        /// <see cref="CreateRuntime{T}"/> for a profile type known only at run time (GameManager.RuntimeAIProfileTypeFor);
+        /// null when <paramref name="type"/> is not a concrete AIProfile type.
+        /// </summary>
+        public static AIProfile CreateRuntime(Type type)
+        {
+            if (type == null || type.IsAbstract || !typeof(AIProfile).IsAssignableFrom(type))
+                return null;
+            var profile = (AIProfile)CreateInstance(type);
             profile.ApplyRuntimeDefaults();
             return profile;
         }
@@ -198,6 +212,90 @@ namespace DND35.AI
         /// Lich, Vampire), whose out-of-reach fallback without a usable ranged weapon is total defense (C1).
         /// </summary>
         public virtual bool IsCastingProfile => false;
+
+        /// <summary>
+        /// AI choice, not a rule (batch 13 step 8, AI-002): whether a creature on a melee routine (AIService's aggressive
+        /// and defensive melee turns) tries the turn's spell (AIService.TryExecuteSpellcastAction, the catalog's cast
+        /// entry) before it fights in melee. <see cref="DefaultShouldTryCastBeforeMelee"/>. Batch 14's personalities
+        /// weigh it; batch 22's evaluator replaces it.
+        /// </summary>
+        public virtual bool ShouldTryCastBeforeMelee(CharacterController self) => DefaultShouldTryCastBeforeMelee(self);
+
+        /// <summary>
+        /// The default, also used for creatures without a profile: true when <paramref name="self"/> has a castable spell
+        /// (a prepared spell or a spontaneous slot it can spend now) that <see cref="IsCastFirstCandidate"/> accepts. The
+        /// cast itself (AIService.TryCastBeforeMelee) takes only such spells too, so the gate and the cast agree, and still
+        /// picks among the legal (spell, target) pairs and spends nothing when none is worth casting.
+        /// </summary>
+        public static bool DefaultShouldTryCastBeforeMelee(CharacterController self)
+        {
+            if (self == null || self.Stats == null || !self.Stats.IsSpellcaster)
+                return false;
+            SpellcastingComponent spellcasting = self.Spellcasting;
+            List<SpellData> castable = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
+            if (castable == null)
+                return false;
+            for (int i = 0; i < castable.Count; i++)
+            {
+                if (IsCastFirstCandidate(castable[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// AI choice, not a rule (batch 13 step 8, AI-002): whether a melee routine's cast-first step may cast
+        /// <paramref name="spell"/> instead of fighting. False for a spell with no combat effect: a Utility or Divination
+        /// spell by <see cref="SpellCategoryClassifier.ClassifySpell"/>, one whose effect is not modelled
+        /// (<see cref="AISpellcastingStrategist.HasNoModelledCombatEffect"/>, SPL-135), and the out-of-combat spells the
+        /// classifier files as Buff (<see cref="NoCombatEffectSpellIds"/>: Light, Prestidigitation, Read Magic and the
+        /// like, AI-069). This list only keeps the melee routines' cast-first step from casting them; the kiter, healer
+        /// and dragon routines still score them (AI-069 stays open for the scoring fix).
+        /// </summary>
+        public static bool IsCastFirstCandidate(SpellData spell)
+        {
+            if (spell == null)
+                return false;
+            if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell))
+                return false;
+            if (!string.IsNullOrEmpty(spell.SpellId) && NoCombatEffectSpellIds.Contains(spell.SpellId))
+                return false;
+            SpellEffectType kind = SpellCategoryClassifier.ClassifySpell(spell);
+            return kind != SpellEffectType.Utility && kind != SpellEffectType.Divination;
+        }
+
+        /// <summary>
+        /// Spells whose effect does not change a fight in this build (light, minor tricks, reading, repairs, carrying,
+        /// messages and marks, opening, water, direction, the detections the classifier does not list, translation,
+        /// erasing, a servant, an alarm, finding an object). Only <see cref="IsCastFirstCandidate"/> reads it (AI-069).
+        /// </summary>
+        private static readonly HashSet<string> NoCombatEffectSpellIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            SpellNames.LIGHT,
+            SpellNames.DANCING_LIGHTS,
+            SpellNames.PRESTIDIGITATION,
+            SpellNames.READ_MAGIC,
+            SpellNames.MENDING,
+            SpellNames.MAGE_HAND,
+            SpellNames.MESSAGE,
+            SpellNames.ARCANE_MARK,
+            SpellNames.OPEN_CLOSE,
+            SpellNames.CREATE_WATER,
+            SpellNames.KNOW_DIRECTION,
+            SpellNames.DETECT_POISON,
+            SpellNames.DETECT_CHAOS,
+            SpellNames.DETECT_GOOD,
+            SpellNames.DETECT_LAW,
+            SpellNames.DETECT_UNDEAD,
+            SpellNames.DETECT_SECRET_DOORS,
+            SpellNames.COMPREHEND_LANGUAGES,
+            SpellNames.ERASE,
+            SpellNames.UNSEEN_SERVANT,
+            SpellNames.ALARM,
+            SpellNames.CONTINUAL_FLAME,
+            SpellNames.LOCATE_OBJECT,
+            SpellNames.MAKE_WHOLE,
+        };
 
         private static readonly OutOfReachAlternative[] MeleeAlternatives =
             { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Approach };
