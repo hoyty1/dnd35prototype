@@ -109,6 +109,25 @@ public static class ImprovedShieldBashTests
         }
     }
 
+    /// <summary>
+    /// A two-weapon pair of attacks as the shared executor makes them (batch 12 step 18: GameManager.RunAttackSequence's
+    /// main-hand step at the main-hand penalty, CharacterController.ResolveAttackSequenceStep, and its off-hand step,
+    /// ResolveOffHandAttackStep; the legacy DualWieldAttack is gone).
+    /// </summary>
+    private static FullAttackResult TwoWeaponAttacks(CharacterController attacker, CharacterController target)
+    {
+        var result = new FullAttackResult { Attacker = attacker, Defender = target };
+        var (mainPenalty, _, _) = attacker.GetDualWieldPenalties();
+        CombatResult main = attacker.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 0, false, 0, null, null,
+            attacker.GetDualWieldMainWeapon(), mainPenalty, out _);
+        CombatResult off = attacker.ResolveOffHandAttackStep(target, 0, false, 0, null, null, attacker.GetDualWieldOffHandWeapon(), out _);
+        if (main != null)
+            result.Attacks.Add(main);
+        if (off != null)
+            result.Attacks.Add(off);
+        return result;
+    }
+
     private static void TestShieldBashWithoutFeatLosesShieldAcUntilNextTurn()
     {
         CharacterController attacker = null;
@@ -122,7 +141,7 @@ public static class ImprovedShieldBashTests
             Assert(attacker.CanDualWield(), "Without feat: fighter can dual-wield with weapon + shield");
             Assert(attacker.Stats.ShieldBonus == 2, "Without feat: pre-attack shield bonus is +2", $"expected 2, got {attacker.Stats.ShieldBonus}");
 
-            FullAttackResult result = attacker.DualWieldAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+            FullAttackResult result = TwoWeaponAttacks(attacker, target);
 
             Assert(result != null && result.Attacks.Count >= 2,
                 "Without feat: dual-wield attack performs off-hand shield bash",
@@ -164,7 +183,7 @@ public static class ImprovedShieldBashTests
                 "With feat: pre-attack shield bonus is +2",
                 $"expected 2, got {attacker.Stats.ShieldBonus}");
 
-            FullAttackResult result = attacker.DualWieldAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+            FullAttackResult result = TwoWeaponAttacks(attacker, target);
 
             Assert(result != null && result.Attacks.Count >= 2,
                 "With feat: dual-wield attack performs off-hand shield bash",

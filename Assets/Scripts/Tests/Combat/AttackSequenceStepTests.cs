@@ -47,6 +47,7 @@ public static class AttackSequenceStepTests
         TestRapidShotNotDeclaredWithoutAShot(gm);
         TestFullAttackAfterPrepaidStep(gm);
         TestWardLostNaturalStepStaysUsed(gm);
+        TestTwoWeaponStepsAndOffHandCap(gm);
 
         Debug.Log($"========== ATTACK SEQUENCE STEP TESTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -355,6 +356,55 @@ public static class AttackSequenceStepTests
         finally
         {
             Cleanup(beast);
+        }
+    }
+
+    /// <summary>
+    /// Batch 12 step 18 (PHB p.160, p.96): a two-weapon request (InterleaveOffHand, the Dual Wield full attack's and the
+    /// AI's) runs the off-hand steps through the executor, capped by the off-hand count: a BAB +6 wielder with Two-Weapon
+    /// Fighting only and one without the feat each make the main hand's two steps and exactly one off-hand step, in BAB
+    /// order (main +6, off +6, main +1), the off-hand one at the off-hand ladder's BAB.
+    /// </summary>
+    private static void TestTwoWeaponStepsAndOffHandCap(GameManager gm)
+    {
+        foreach (bool withFeat in new[] { true, false })
+        {
+            CharacterController npc = null, target = null;
+            try
+            {
+                npc = withFeat
+                    ? CreateCombatant("SeqTwf", 6, Vector2Int.zero, ItemID.WeaponLongsword, "Two-Weapon Fighting")
+                    : CreateCombatant("SeqTwfNoFeat", 6, Vector2Int.zero, ItemID.WeaponLongsword);
+                npc.InventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponShortsword), EquipSlot.LeftHand);
+                npc.InventoryComp.CharacterInventory.RecalculateStats();
+                target = CreateCombatant(withFeat ? "SeqTwfTarget" : "SeqTwfNoFeatTarget", 4, Vector2Int.right, null);
+                string who = withFeat ? "with Two-Weapon Fighting" : "without the feat";
+
+                AttackSequenceRequest req = AttackSequenceRequest.ForAI(gm, npc, target, null, null);
+                req.CallerCanWait = false;
+                req.InterleaveOffHand = true;
+                req.MainHandBabAdjustment = npc.GetDualWieldPenalties().mainPenalty;
+                var o = new AttackSequenceOutcome();
+                gm.RunAttackSequenceSync(req, o);
+                List<string> labels = o.Aggregate.AttackLabels;
+                int offSteps = labels.FindAll(l => l != null && l.StartsWith("Off hand")).Count;
+                Assert(npc.GetOffHandAttackCount() == 1 && o.AttacksMade == 3 && offSteps == 1
+                       && npc.ProgressiveAttackPool.OffHandStepsUsed == 1 && npc.ProgressiveAttackPool.MainHandStepsUsed == 2,
+                    "A BAB +6 two-weapon full attack " + who + ": two main-hand steps and one off-hand step (the off-hand cap, PHB p.160)",
+                    "attacks " + o.AttacksMade + " [" + string.Join(" | ", labels) + "] stop " + o.StopReason);
+                // The main-hand steps' BAB carries the two-weapon main-hand penalty (MainHandBabAdjustment); the off-hand step's
+                // is the off-hand ladder's, its penalty a separate term.
+                int mainPenalty = npc.GetDualWieldPenalties().mainPenalty;
+                Assert(labels.Count == 3 && labels[1] != null && labels[1].StartsWith("Off hand")
+                       && o.Aggregate.Attacks[0].BreakdownBAB == 6 + mainPenalty && o.Aggregate.Attacks[1].BreakdownBAB == 6
+                       && o.Aggregate.Attacks[2].BreakdownBAB == 1 + mainPenalty,
+                    "The executor orders the steps by BAB, main hand on a tie: main +6, off +6, main +1 (" + who + ")",
+                    "[" + string.Join(" | ", labels) + "]");
+            }
+            finally
+            {
+                Cleanup(npc, target);
+            }
         }
     }
 

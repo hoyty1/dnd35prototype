@@ -32,15 +32,15 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 15 | 32 | CORE-040 |
 | [Combat](issues/CMB.md) | CMB | 0 | 46 | 75 | 121 | CMB-197 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-024 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 58 | 83 | 141 | SPL-204 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 57 | 84 | 141 | SPL-205 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-088 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 35 | 63 | CRE-076 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 37 | 43 | 80 | ITM-089 |
-| [AI](issues/AI.md) | AI | 0 | 22 | 41 | 63 | AI-074 |
+| [AI](issues/AI.md) | AI | 0 | 21 | 42 | 63 | AI-075 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 40 | 52 | UI-054 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 30 | 38 | TST-045 |
-| **All** | | 1 | 279 | 438 | 718 | |
+| **All** | | 1 | 277 | 440 | 718 | |
 
 ## Top issues
 

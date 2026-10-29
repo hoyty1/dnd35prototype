@@ -10,8 +10,11 @@ using UnityEngine;
 /// stages for every attacker (<see cref="AttackSequenceStage"/>):
 /// 1. the decider names the step's target or stops (IAttackDecider.ChooseNextStep; PHB p.143: each attack may go to a
 ///    new target);
-/// 2. one more step of this kind may be committed (CharacterController.CanCommitAttack: the attack ladder, the actions);
-///    the AI's maneuver may then take this melee step's place (CMB-102);
+/// 2. one more step of this kind may be committed (CharacterController.CanCommitAttack: the attack ladder, the off-hand
+///    count, the actions); the AI's maneuver may then take this melee step's place (CMB-102). A step is a main-hand,
+///    natural or off-hand one (batch 12 step 18: an Off-Hand button's step, or the hand a two-weapon request picks, PHB
+///    p.160, TwoWeaponStepKind), or a held charge's touch after its casting round (SPL-156: a melee touch in place of a
+///    regular attack, whose ward, roll and effect are its delivery cast's; it skips stages 4, 5, 7 and 9);
 /// 3. the attacker may attack that target (AttackLegality: the Resilient Sphere, the one-body-part hold bar, a known
 ///    failed ward save) and it is in reach or range for the step's mode;
 /// 4. a ranged or thrown step: a weapon left to throw, the weapon usable (a crossbow loaded, CanAttackWithWeapon), a piece
@@ -53,12 +56,15 @@ public partial class GameManager
         }
 
         bool aoo = req.Kind == AttackSequenceKind.AoO;
+        bool heldTouch = req.Kind == AttackSequenceKind.HeldChargeTouch;
+        bool forcedOffHand = !aoo && !heldTouch && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand;
         var state = new AttackSequenceState { Request = req, Outcome = o, CurrentTarget = firstTarget };
         bool naturalSubstituteUsed = false;
 
         // Safety cap; the attack sequence itself ends the loop (CanCommitAttack). Sized so maneuvers and retargets (iterations
         // that commit no attack) cannot crowd out a many-headed creature's last steps.
-        int cap = aoo ? 1 : attacker.GetMainHandAttackBudget(AttackStepKind.NaturalSequence) + attacker.GetIterativeAttackCount() + 8;
+        int cap = aoo || heldTouch ? 1
+            : attacker.GetMainHandAttackBudget(AttackStepKind.NaturalSequence) + attacker.GetIterativeAttackCount() + attacker.GetOffHandAttackCount() + 8;
         int iteration;
         for (iteration = 0; iteration < cap; iteration++)
         {
@@ -101,17 +107,40 @@ public partial class GameManager
             state.CurrentTarget = target;
 
             // The step's intent: the request's, with the weapon in hand now (a thrown weapon is dropped after each throw and
-            // the next one drawn by the post-attack hook) and the step's hand.
+            // the next one drawn by the post-attack hook) and the step's hand: an off-hand step (an Off-Hand button, or the
+            // hand the two-weapon request picks, PHB p.160) uses the off-hand weapon; a held-charge touch is a melee touch
+            // made in place of a regular attack (SPL-156), a main-hand step.
             AttackIntent intent = req.Intent != null ? req.Intent.CloneForStep() : AttackIntent.ForMode(AttackMode.Melee);
-            intent.Weapon = aoo ? req.AoOWeapon : StepWeapon(req, attacker);
-            if (state.ThrownSequence && !intent.IsThrowOf(intent.Weapon))
+            AttackStepKind kind;
+            bool ranged;
+            if (aoo || heldTouch)
+            {
+                intent.Weapon = aoo ? req.AoOWeapon : null;
+                ranged = false;
+                kind = AttackStepKind.MainHand;
+            }
+            else
+            {
+                ItemData mainWeapon = StepWeapon(req, attacker);
+                intent.Weapon = mainWeapon;
+                bool offHandStep = forcedOffHand
+                    || (req.InterleaveOffHand && !IsAttackModeRanged(attacker, mainWeapon, intent)
+                        && TwoWeaponStepKind(attacker) == AttackStepKind.OffHand);
+                if (offHandStep)
+                {
+                    intent.Weapon = forcedOffHand && req.Intent.Weapon != null ? req.Intent.Weapon : attacker.GetOffHandAttackWeapon();
+                    if (!forcedOffHand)
+                        intent.Mode = AttackMode.Melee;
+                }
+                ranged = IsAttackModeRanged(attacker, intent.Weapon, intent);
+                kind = offHandStep ? AttackStepKind.OffHand : ranged ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind();
+            }
+            if (state.ThrownSequence && kind != AttackStepKind.OffHand && !intent.IsThrowOf(intent.Weapon))
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} has no more weapons to throw."));
                 o.StopReason = "no weapon left to throw";
                 break;
             }
-            bool ranged = !aoo && IsAttackModeRanged(attacker, intent.Weapon, intent);
-            AttackStepKind kind = ranged || aoo ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind();
             intent.Hand = kind;
 
             // 2. One more step of this kind (an AoO is not a step of the attack sequence: ThreatSystem spent the AoO).
@@ -125,7 +154,7 @@ public partial class GameManager
             // The AI's maneuver may replace this melee attack (CMB-102), at this step's bonus: the iterative BAB, or the BAB
             // of the natural attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312). In a natural sequence at most one
             // substitute (an AI limit pending AI-035). A declared smite keeps the step an attack (SmiteRules, CHR-020).
-            if (req.TryStepManeuver != null && !ranged && !aoo
+            if (req.TryStepManeuver != null && !ranged && !aoo && !heldTouch && kind != AttackStepKind.OffHand
                 && !(naturalSubstituteUsed && kind == AttackStepKind.NaturalSequence)
                 && attacker.Stats.DeclaredSmite == SmiteSource.None
                 && req.TryStepManeuver(attacker, target))
@@ -149,9 +178,14 @@ public partial class GameManager
 
             // 3. May this attacker attack that target, in reach or range for the step's mode?
             Stage(req, o, AttackSequenceStage.CanDirectlyAttack);
-            Legality legality = AttackLegality.Check(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent,
-                AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
-            if (legality.Ok && !aoo && !IsTargetInStepRange(attacker, target, intent))
+            // A held-charge touch: the sphere, the hold bar and the touch's reach (the unarmed reach, PHB p.141); the ward is
+            // the delivery's (its cast's own ward commit). Any other step: its weapon's reach or range below.
+            Legality legality = heldTouch
+                ? AttackLegality.Check(attacker, target, DirectAttackKind.Touch, intent,
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Reach)
+                : AttackLegality.Check(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent,
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+            if (legality.Ok && !aoo && !heldTouch && !IsTargetInStepRange(attacker, target, intent))
                 legality = Legality.Refused($"{target.Stats.CharacterName} is out of {attacker.Stats.CharacterName}'s reach or range");
             if (!legality.Ok)
             {
@@ -168,18 +202,20 @@ public partial class GameManager
                     o.StopReason = cannotShootReason;
                     break;
                 }
-                if (!state.RangedChecked)
+                if (!state.RangedChecked && kind != AttackStepKind.OffHand)
                 {
                     state.RangedChecked = true;
                     state.ThrownSequence = intent.IsThrowOf(intent.Weapon);
+                    // The intent's Rapid Shot: the PC toggle, or the AI's choice (AttackIntent.ForAI; AI-055).
                     if (intent.RapidShot)
-                        TryDeclareRapidShotForAttack(attacker, intent.Weapon, true);
+                        TryDeclareRapidShotForAttack(attacker, intent.Weapon, true, wanted: true);
                 }
             }
 
-            // 5. The ward's save (D6): a failure loses the step (it is still spent).
-            Stage(req, o, AttackSequenceStage.WardCommit);
-            if (AttackLegality.CommitWard(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent) == WardVerdict.Failed)
+            // 5. The ward's save (D6): a failure loses the step (it is still spent). A held-charge touch's ward is its cast's.
+            if (!heldTouch)
+                Stage(req, o, AttackSequenceStage.WardCommit);
+            if (!heldTouch && AttackLegality.CommitWard(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent) == WardVerdict.Failed)
             {
                 if (!aoo && attacker.TryCommitAttack(kind, out _, out _) && kind == AttackStepKind.NaturalSequence)
                     LoseNextNaturalAttack(attacker);
@@ -193,6 +229,14 @@ public partial class GameManager
             Stage(req, o, AttackSequenceStage.TryCommitAttack);
             int stepIndex = -1;
             int naturalIndex = -1;
+            int offHandIndex = attacker.ProgressiveAttackPool.OffHandStepsUsed;
+            // A lone attack with the off-hand weapon (the attack action, on a turn that can no longer become a full attack)
+            // is no two-weapon fighting: no extra attack, so no Table 8-10 penalty; it keeps the half Strength on damage
+            // (PHB p.160, p.134; delegated RAW reading 2026-10-28). Read before the step is recorded.
+            bool loneOffHandAttack = kind == AttackStepKind.OffHand && !aoo
+                && attacker.ProgressiveAttackPool.Mode == ProgressiveAttackMode.None
+                && attacker.ProgressiveAttackPool.OffHandStepsUsed == 0
+                && !attacker.CanStillReachFullAttack();
             bool hasteNaturalStep = false;
             if (!aoo)
             {
@@ -210,6 +254,24 @@ public partial class GameManager
                 }
             }
             state.StepsTaken++;
+
+            // 8 (a held-charge touch). The step is paid; the delivery's cast rolls the touch at this step's BAB (the full BAB
+            // for the attack action or a full attack's first step, the iterative BAB of a later one: the touch is made in
+            // place of that attack, PHB p.141, p.143), resolves the spell, its PostCast stage keeps the charge on a miss and
+            // its CombatEnd stage checks the end of combat (SPL-156).
+            if (heldTouch)
+            {
+                Stage(req, o, AttackSequenceStage.ResolveStep);
+                int stepBab = stepIndex > 0 ? attacker.GetMainHandAttackStepBAB(stepIndex) : attacker.Stats.BaseAttackBonus;
+                bool delivered = req.DeliverHeldCharge != null && req.DeliverHeldCharge(attacker, target, stepBab);
+                if (delivered)
+                    o.AttacksMade++;
+                else
+                    o.StopReason = o.StopReason ?? "the delivery was not made";
+                if (CurrentPhase == TurnPhase.CombatOver)
+                    o.CombatEnded = true;
+                break;
+            }
 
             RangeInfo rangeInfo = aoo ? null : CalculateRangeInfo(attacker, target, intent);
             bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, GetAllCharacters(), out CharacterController flankPartner);
@@ -296,8 +358,11 @@ public partial class GameManager
                         }
                     }
                 }
-                result = attacker.ResolveAttackSequenceStep(target, kind, resolveIndex, isFlanking, flankBonus, partnerName, rangeInfo,
-                    intent.Weapon, kind == AttackStepKind.MainHand ? req.MainHandBabAdjustment : 0, out label, hasteChoice);
+                result = kind == AttackStepKind.OffHand
+                    ? attacker.ResolveOffHandAttackStep(target, offHandIndex, isFlanking, flankBonus, partnerName, rangeInfo, intent.Weapon, out label,
+                        twoWeaponPenalty: !loneOffHandAttack)
+                    : attacker.ResolveAttackSequenceStep(target, kind, resolveIndex, isFlanking, flankBonus, partnerName, rangeInfo,
+                        intent.Weapon, kind == AttackStepKind.MainHand ? req.MainHandBabAdjustment : 0, out label, hasteChoice);
             }
 
             if (result == null)
@@ -307,7 +372,7 @@ public partial class GameManager
             }
 
             if (string.IsNullOrEmpty(label))
-                label = $"Attack {stepIndex + 1}";
+                label = kind == AttackStepKind.OffHand ? $"Off hand {offHandIndex + 1}" : $"Attack {stepIndex + 1}";
             step.Result = result;
             step.Label = label;
             o.AttacksMade++;
@@ -420,6 +485,66 @@ public partial class GameManager
         return uiThrow ? (_equippedWeapon ?? main) : main;
     }
 
+    /// <summary>
+    /// The hand of the next step of a two-weapon attack (batch 12 step 18, PHB p.160: the extra attacks with the off-hand
+    /// weapon come in any order with the main hand's): the hand whose next attack has the higher BAB (the ladders' BAB,
+    /// before the two-weapon penalties), the main hand on a tie, while that hand has an attack left this turn (CanCommitAttack: the main-hand ladder, the off-hand count). The
+    /// main hand when neither has one (the executor then stops at CanCommitAttack).
+    /// </summary>
+    internal static AttackStepKind TwoWeaponStepKind(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return AttackStepKind.MainHand;
+        bool offOk = attacker.CanCommitAttack(AttackStepKind.OffHand, out _);
+        if (!offOk)
+            return AttackStepKind.MainHand;
+        bool mainOk = attacker.CanCommitAttack(AttackStepKind.MainHand, out _);
+        if (!mainOk)
+            return AttackStepKind.OffHand;
+        int mainBab = attacker.GetMainHandAttackStepBAB(attacker.ProgressiveAttackPool.MainHandStepsUsed);
+        return attacker.GetNextOffHandAttackBAB() > mainBab ? AttackStepKind.OffHand : AttackStepKind.MainHand;
+    }
+
+    /// <summary>
+    /// The kind of the next step <paramref name="req"/> would make (the deciders' count of what is left): an off-hand step for
+    /// an Off-Hand button, the two-weapon request's pick (<see cref="TwoWeaponStepKind"/>), a main-hand step for a ranged
+    /// attack or a held-charge touch, else the creature's melee kind (an iterative or natural step).
+    /// </summary>
+    internal static AttackStepKind NextStepKind(AttackSequenceRequest req, CharacterController attacker, bool ranged)
+    {
+        if (req != null && req.Kind == AttackSequenceKind.HeldChargeTouch)
+            return AttackStepKind.MainHand;
+        if (req != null && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand)
+            return AttackStepKind.OffHand;
+        if (ranged)
+            return AttackStepKind.MainHand;
+        if (req != null && req.InterleaveOffHand)
+            return TwoWeaponStepKind(attacker);
+        return attacker != null ? attacker.GetMeleeAttackStepKind() : AttackStepKind.MainHand;
+    }
+
+    /// <summary>
+    /// The attack steps <paramref name="req"/> has left this turn: the main-hand (or natural) steps, plus the off-hand ones
+    /// for a two-weapon request (PHB p.160), or the off-hand ones alone for an Off-Hand button.
+    /// </summary>
+    internal static int RemainingSteps(AttackSequenceRequest req, CharacterController attacker, bool ranged)
+    {
+        if (attacker == null)
+            return 0;
+        if (req != null && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand)
+            return attacker.GetRemainingOffHandAttackSteps();
+        AttackStepKind kind = ranged ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind();
+        int left = attacker.GetRemainingMainHandAttackSteps(kind);
+        if (req != null && req.InterleaveOffHand && !ranged)
+        {
+            left += attacker.GetRemainingOffHandAttackSteps();
+            // A turn that cannot become a full attack has one attack, whichever hand makes it (PHB p.143).
+            if (!attacker.CanStillReachFullAttack())
+                left = Mathf.Min(left, 1);
+        }
+        return left;
+    }
+
     /// <summary>Reach or range for the step's mode: a throw's thrown range, else the weapon's reach or range (melee reach, a projectile's increments).</summary>
     internal static bool IsTargetInStepRange(CharacterController attacker, CharacterController target, AttackIntent intent)
     {
@@ -513,15 +638,17 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Rapid Shot declared before the first ranged attack of the turn (PHB p.99; decision D9) when the attacker's toggle is
-    /// on: it commits the turn to the full attack and adds the extra attack, and every attack of the round takes -2. When it
+    /// Rapid Shot declared before the first ranged attack of the turn (PHB p.99; decision D9) when the attacker wants it
+    /// (<paramref name="wanted"/>: the attack intent's choice, the AI's by its profile since batch 12 step 18, AI-055; null
+    /// reads the attacker's toggle, CharacterController.RapidShotEnabled): it commits the turn to the full attack and adds the extra attack, and every attack of the round takes -2. When it
     /// cannot be declared any more (an attack was made, the move action is spent, the creature is slowed) the attack is made
     /// without it, and the log says why. One rule for the Attack button (GameManager.StartAttackSequence, which pays the
     /// first step before the target click), the Full Attack button and the NPC sequence (RunAttackSequence stage 4).
     /// </summary>
-    internal bool TryDeclareRapidShotForAttack(CharacterController attacker, ItemData weapon, bool ranged)
+    internal bool TryDeclareRapidShotForAttack(CharacterController attacker, ItemData weapon, bool ranged, bool? wanted = null)
     {
-        if (attacker == null || attacker.Stats == null || !attacker.RapidShotEnabled || attacker.IsRapidShotDeclared)
+        bool want = wanted ?? (attacker != null && attacker.RapidShotEnabled);
+        if (attacker == null || attacker.Stats == null || !want || attacker.IsRapidShotDeclared)
             return attacker != null && attacker.IsRapidShotDeclared;
         if (!attacker.Stats.HasFeat("Rapid Shot") || !ranged)
             return false;

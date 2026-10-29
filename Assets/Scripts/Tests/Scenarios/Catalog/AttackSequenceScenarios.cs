@@ -27,6 +27,8 @@ namespace Tests.Scenarios
             yield return S("crossbow-full-attack-reload", CrossbowFullAttackReload);
             yield return S("rapid-shot-declared-first-ui", RapidShotDeclaredFirstUi);
             yield return S("npc-throws-dagger", NpcThrowsDagger);
+            yield return S("twf-full-attack-ai", TwfFullAttackAi);
+            yield return S("rapid-shot-ai", RapidShotAi);
         }
 
         /// <summary>
@@ -71,6 +73,106 @@ namespace Tests.Scenarios
                 .Expect("The thrown dagger lies in the hero's square and the second is in the orc's hand", Expect.All(
                     v => NoteValue(v, "ground") >= 1 ? ExpectResult.Pass("ground daggers " + NoteValue(v, "ground")) : ExpectResult.Fail("ground daggers " + NoteValue(v, "ground")),
                     Fact("hand", ItemIDs.DAGGER)))
+                .Build();
+        }
+
+        // ── AI attack modes (batch 12 step 18, AI-055) ──────────────────
+
+        /// <summary>
+        /// AI-055 (batch 12 step 18; PHB p.160, p.96; owner decision Q2, 2026-10-23): an AI-run fighter 6 with Two-Weapon
+        /// Fighting and Improved Two-Weapon Fighting, a longsword and a short sword in the off hand (light: -2/-2), beside a
+        /// sturdy dummy (its maneuvers switched off before its turn, a fixture: the profile trips any standing foe, AI-035;
+        /// the dummy acts first, and its round-2 turn reads the fighter's round-1 attack pool). The AI stopgap's expected-damage rule (AIProfile.DefaultShouldUseTwoWeaponFighting) chooses
+        /// two-weapon fighting, and the one executor makes both hands' steps in BAB order: main +6, off +6, main +1, off +1
+        /// (each at -2), so four attacks alternating the weapons, the second pair 5 lower. Before the fix no NPC made an
+        /// off-hand attack.
+        /// </summary>
+        private static ScenarioDef TwfFullAttackAi()
+        {
+            return Rules("rules/twf-full-attack-ai", "An AI fighter with two weapons full attacks with both, in BAB order (PHB p.160; AI-055)")
+                .Covers("AI-055", "PHB p.160", "PHB p.96", "batch 12 step 18")
+                .MaxRounds(2)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Twin", 6, "Two-Weapon Fighting", "Improved Two-Weapon Fighting")), 10, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak("fighter", c =>
+                {
+                    Arm(c, ItemID.WeaponLongsword, null, 0);
+                    Inv(c).LeftHandSlot = ItemDatabase.CloneItem(ItemID.WeaponShortsword);
+                    Inv(c).RecalculateStats();
+                })
+                .Tweak("dummy", Sturdy)
+                .Initiative("dummy", "fighter")
+                // Test fixture: no maneuver or grapple in place of an attack (CMB-102; AI-035 trips every standing foe), so the
+                // fighter's round-1 steps are weapon attacks.
+                .Turn("dummy", 1, Step.Assert("no maneuvers", ctx =>
+                {
+                    CharacterController f = ctx.Get("fighter");
+                    if (f.aiProfile != null && f.aiProfile.Maneuvers != null)
+                    {
+                        f.aiProfile.Maneuvers.AttemptTrip = false;
+                        f.aiProfile.Maneuvers.AttemptDisarm = false;
+                        f.aiProfile.Maneuvers.AttemptSunder = false;
+                        f.aiProfile.Maneuvers.AttemptBullRush = false;
+                        f.aiProfile.Maneuvers.AttemptOverrun = false;
+                        f.aiProfile.GrappleBehavior = DND35.AI.GrappleBehavior.Avoid;
+                    }
+                    Note(ctx, "profile", f.aiProfile != null);
+                    return true;
+                }))
+                .Turn("dummy", 2, Step.Assert("after", ctx =>
+                {
+                    CharacterController f = ctx.Get("fighter");
+                    Note(ctx, "offhand", f.ProgressiveAttackPool.OffHandStepsUsed);
+                    Note(ctx, "full", f.ProgressiveAttackPool.IsFullAttack);
+                    return true;
+                }))
+                .Expect("The fighter's turn is an AI turn", Expect.Controller("fighter", "ai"))
+                .Expect("Four attacks: main, off, main, off; each pair at one bonus, the second pair 5 lower (PHB p.160, p.96)", v =>
+                {
+                    List<TraceEvent> a = v.Attacks("fighter", "dummy", false, 1);
+                    string seq = string.Join(",", a.Select(e => e.Str("weapon") + " " + e.Int("mod")));
+                    int[] seqs = a.Select(e => e.Seq).ToArray();
+                    bool ok = a.Count == 4
+                              && a[0].Str("weapon") == a[2].Str("weapon") && a[1].Str("weapon") == a[3].Str("weapon")
+                              && a[0].Str("weapon") != a[1].Str("weapon")
+                              && a[0].Int("mod") == a[1].Int("mod") && a[0].Int("mod") - a[2].Int("mod") == 5 && a[1].Int("mod") - a[3].Int("mod") == 5;
+                    return ok ? ExpectResult.Pass(seq, seqs) : ExpectResult.Fail(seq, seqs);
+                })
+                .Expect("Two off-hand steps in a full attack", Expect.All(Fact("profile", "True"), Fact("offhand", "2"), Fact("full", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-055 (batch 12 step 18; PHB p.99; D9): an NPC-turn fighter 6 with Point Blank Shot and Rapid Shot, a longbow and
+        /// 20 arrows, its Rapid Shot toggle off, attacks a sturdy dummy 30 ft away (a scripted attack: the turn path's own
+        /// choices). The AI stopgap's expected-damage rule (AIProfile.DefaultShouldUseRapidShot) declares Rapid Shot before
+        /// the first shot, which makes the attack a full attack of three shots: +6, +6 (Rapid Shot's), +1, each at -2, three
+        /// arrows. Before the fix only the PC toggle could declare it.
+        /// </summary>
+        private static ScenarioDef RapidShotAi()
+        {
+            return Rules("rules/rapid-shot-ai", "The AI declares Rapid Shot by its expected-damage rule: three shots, a full attack (PHB p.99; AI-055)")
+                .Covers("AI-055", "D9", "PHB p.99", "PHB p.143", "batch 12 step 18")
+                .MaxRounds(1)
+                .Pc("archer", ActorSource.Stats(() => RulesScenarios.Fighter("Archer", 6, "Point Blank Shot", "Rapid Shot")), 8, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Idle)
+                .Tweak("archer", c => { Arm(c, ItemID.WeaponLongbow, ItemID.AmmoArrow, 20); c.SetRapidShot(false); })
+                .Tweak("dummy", Sturdy)
+                .Initiative("archer", "dummy")
+                .Turn("archer", 1,
+                    Step.Attack("dummy"),
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController a = ctx.Get("archer");
+                        Note(ctx, "declared", a.IsRapidShotDeclared);
+                        Note(ctx, "toggle", a.RapidShotEnabled);
+                        Note(ctx, "full", a.ProgressiveAttackPool.IsFullAttack);
+                        Note(ctx, "arrows", Inv(a).GetTotalAmmoCount(AmmunitionType.Arrow));
+                        return true;
+                    }))
+                .Expect("Three shots: +6, +6 (Rapid Shot's), then +1 (PHB p.99)", Shots("archer", 1, 3, 0, 5))
+                .Expect("The AI declared Rapid Shot with its toggle off; the turn is a full attack; three arrows spent", Expect.All(
+                    Fact("declared", "True"), Fact("toggle", "False"), Fact("full", "True"), Fact("arrows", "17")))
                 .Build();
         }
 

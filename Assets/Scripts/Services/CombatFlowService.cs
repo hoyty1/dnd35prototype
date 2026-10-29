@@ -203,7 +203,9 @@ public class CombatFlowService : MonoBehaviour
                 break;
 
             case GameManager.PendingAttackMode.DualWield:
-                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                // A two-weapon full attack through the one executor (origin D, batch 12 step 18; PHB p.160): every main-hand
+                // and off-hand step, the Full Attack button's flow and choices.
+                _gameManager.Combat_StartTwoWeaponFullAttack(attacker, target);
                 break;
         }
     }
@@ -277,7 +279,8 @@ public class CombatFlowService : MonoBehaviour
     /// <summary>
     /// The one ranged-attack AoO helper (batch 12 step 17, CMB-045; PHB p.141 Table 8-2): a ranged or thrown attack provokes
     /// from each threatening foe, before the attack. Every attacker uses it, before every shot: the attack-sequence executor
-    /// (GameManager.RunAttackSequence, PC and NPC), the single attack and the off-hand throw. Whether the attack is ranged
+    /// (GameManager.RunAttackSequence, PC and NPC: the off-hand throw is one of its steps since batch 12 step 18) and the
+    /// single attack. Whether the attack is ranged
     /// comes from <paramref name="rangeInfo"/>, else the intent's mode, else (the old NPC copy's fallback) the attacker's main
     /// weapon. Returns true when nothing was provoked or the attacker survived; false when the AoOs slew it.
     /// </summary>
@@ -362,73 +365,6 @@ public class CombatFlowService : MonoBehaviour
 
         // The shared combat-end check for both sides (CORE-011); a null target (Whirlwind Attack) still checks.
         return _gameManager.Combat_CheckCombatVictory(context, target);
-    }
-
-    public CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
-    {
-        if (_gameManager == null || attacker == null || target == null || offHandWeapon == null)
-        {
-            Debug.Log("[OffHand] ExecuteOffHandAttack aborted due to null attacker/target/weapon.");
-            return null;
-        }
-
-        if (attacker.IsTwoHanding())
-        {
-            Debug.Log($"[OffHand] ExecuteOffHandAttack blocked: {attacker.Stats?.CharacterName ?? "Unknown"} is using a two-handed weapon.");
-            string attackerName = attacker.Stats?.CharacterName ?? "Attacker";
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attackerName} cannot make an off-hand attack while wielding a two-handed weapon."));
-            return null;
-        }
-
-        bool isFlanking = false;
-        int flankBonus = 0;
-        string partnerName = string.Empty;
-        if (!useThrownRange)
-        {
-            List<CharacterController> allCombatants = _gameManager.Combat_GetAllCharacters();
-            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
-        }
-
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        RangeInfo rangeInfo = useThrownRange
-            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
-            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
-
-
-        if (!ResolveRangedAttackAoOIfProvoked(attacker, rangeInfo))
-            return null;
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            attackBab,
-            offHandWeapon,
-            0,
-            true);
-
-        string babLabel = CharacterStats.FormatMod(attackBab);
-        string offHandPenaltyInfo = _gameManager.Combat_IsDualWielding()
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetOffHandPenalty())}"
-            : string.Empty;
-
-        string modeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
-        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{modeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}"));
-
-        string log = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        _gameManager.Combat_SetLastCombatLog(log);
-        _gameManager.CombatUI?.ShowCombatLog(log);
-
-        if (GameManager.LogAttacksToConsole)
-            Debug.Log("[Combat] " + log);
-
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-        return result;
     }
 
     /// <summary>No attack weapon and a creature that fights with its natural attacks (CharacterController.UsesInnateNaturalAttackSequence).</summary>
@@ -531,17 +467,20 @@ public class CombatFlowService : MonoBehaviour
         };
 
         var outcome = new AttackSequenceOutcome();
+        int stepsBefore = attacker.ProgressiveAttackPool.MainHandStepsUsed;
         _gameManager.RunAttackSequenceSync(request, outcome,
-            () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, outcome, attackLog));
+            () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, outcome, attackLog,
+                attacker.ProgressiveAttackPool.MainHandStepsUsed > stepsBefore));
     }
 
     /// <summary>
     /// The rest of an Attack-button click after the executor: a refused step returns to the action menu; a made or lost step
     /// sets the next step's BAB or ends the sequence (a grapple that took hold, an attacker that dropped, no step left), the
-    /// slain line, and the pause before the menu.
+    /// slain line, and the pause before the menu. <paramref name="stepPaid"/>: the executor recorded a step (a throw's step
+    /// is recorded before its AoOs, so one that drops or grapples the thrower ends the attack, not the click).
     /// </summary>
     private void ContinueIterativeSequenceAfterStep(CharacterController attacker, CharacterController target, GameManager.AttackType attackType,
-        AttackSequenceOutcome outcome, string attackLog)
+        AttackSequenceOutcome outcome, string attackLog, bool stepPaid)
     {
         if (outcome.CombatEnded)
         {
@@ -549,7 +488,8 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        if (outcome.AttacksMade == 0 && outcome.StepsLostToWard == 0)
+        if (!stepPaid && outcome.AttacksMade == 0 && outcome.StepsLostToWard == 0
+            && !outcome.AttackerOutOfFight && !outcome.StartedGrapple)
         {
             // Nothing was attempted: the legality gate, the ammunition or the weapon refused this click.
             if (!string.IsNullOrEmpty(outcome.StopReason))
@@ -865,60 +805,6 @@ public class CombatFlowService : MonoBehaviour
             return;
 
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
-    }
-
-    public void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_gameManager == null || attacker == null || target == null)
-            return;
-
-        attacker.Actions.UseFullRoundAction();
-
-        // Sanctuary and Hide from Undead (D6). This legacy one-target two-weapon full attack cannot retarget, so a failed
-        // save loses the whole full-round action against the warded target (step 17's shared sequence makes it per step).
-        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
-        {
-            _gameManager.Combat_UpdateAllStatsUI();
-            _gameManager.Combat_ClearHighlights();
-            _gameManager.Combat_StartAfterAttackDelay(attacker, 1.0f);
-            return;
-        }
-
-
-        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-
-        string log = flankPrefix + result.GetFullSummary();
-        _gameManager.Combat_SetLastCombatLog(log);
-
-        if (GameManager.LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        _gameManager.CombatUI?.ShowCombatLog(log);
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-
-        // The one post-attack hook (origin D): Concentration per hit (PHB p.70), melee reactions per hit, the free trip,
-        // Improved Grab, the summon cleanup and the combat-end check (CORE-011, CORE-037).
-        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
-        intent.TwoWeapon = true;
-        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcDualWield, attacker, target, intent).With(result.Attacks);
-        resolution.FullResult = result;
-        resolution.RangeInfo = rangeInfo;
-        resolution.CombatEndContext = "PerformDualWieldAttack";
-        var outcome = new PostAttackOutcome();
-        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome, () =>
-        {
-            if (!outcome.CombatEnded)
-                _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
-        });
-        if (waitingOnDecider || outcome.CombatEnded)
-            return;
-
-        _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
     }
 
     public void LogFullAttackToConsole(FullAttackResult result)

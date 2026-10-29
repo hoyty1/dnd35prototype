@@ -1562,79 +1562,51 @@ public partial class GameManager
         bool useThrownRange = _isSelectingOffHandThrownTarget
             || (offHandWeapon.IsThrown && AttackIntent.ForUi(this, attacker).ThrownSelected);
 
-        Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name} BAB={_currentOffHandBAB}");
+        Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name}");
 
-        // The off-hand attack is one attack of the creature's sequence: the first attack of the turn
-        // pays the standard action, a later one the move action (full attack, PHB p.143).
-        if (!attacker.TryPayForNextAttack(out string offHandPayReason, out bool offHandEnteredFullAttack))
-        {
-            string modeLabel = useThrownRange ? "an off-hand thrown attack" : "an off-hand attack";
-            Debug.Log($"[OffHand] Early return: cannot pay for {modeLabel}: {offHandPayReason}");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot make {modeLabel}: {offHandPayReason}."));
-            _isSelectingOffHandTarget = false;
-            _isSelectingOffHandThrownTarget = false;
-            _currentOffHandBAB = 0;
-            _currentOffHandWeapon = null;
-            ShowActionChoices();
-            return;
-        }
-
-        if (offHandEnteredFullAttack)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
-
+        // One off-hand step of the creature's attack sequence through the one executor (batch 12 step 18; PHB p.160): the
+        // first attack of the turn pays the standard action, a later one the move action (full attack, PHB p.143); the
+        // shared gate, the ward's save (D6), a throw's AoOs, the off-hand ladder's BAB and penalty
+        // (CharacterController.ResolveOffHandAttackStep) and the post-attack hook (origin E).
         CurrentSubPhase = PlayerSubPhase.Animating;
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attempt rolls the attacker's one save; a failure loses
-        // this off-hand attack (paid above).
-        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
+        AttackSequenceRequest request = AttackSequenceRequest.ForUiOffHand(this, attacker, target, offHandWeapon, useThrownRange);
+        request.ReportStep = step =>
         {
-            attacker.RegisterAttackMade(AttackStepKind.OffHand);
-            _offHandAttackUsedThisTurn = true;
-            _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
-            _isSelectingOffHandTarget = false;
-            _isSelectingOffHandThrownTarget = false;
+            string modeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{modeLabel} with {offHandWeapon.Name}"));
+            CombatUI?.ShowCombatLog(step.Result.GetAttackBreakdown(step.Label));
+            _lastCombatLog = step.Result.GetDetailedSummary();
             UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(attacker, 1.0f));
-            return;
-        }
-
-        Debug.Log("[OffHand] Calling ExecuteOffHandAttack...");
-        CombatResult result = ExecuteOffHandAttack(attacker, target, _currentOffHandBAB, offHandWeapon, useThrownRange);
-        Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
-
-        if (result == null)
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+        };
+        var outcome = new AttackSequenceOutcome();
+        int offHandStepsBefore = attacker.ProgressiveAttackPool.OffHandStepsUsed;
+        RunAttackSequenceSync(request, outcome, () =>
         {
+            if (outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
+            {
+                _offHandAttackUsedThisTurn = true;
+                _isSelectingOffHandTarget = false;
+                _isSelectingOffHandThrownTarget = false;
+                return;
+            }
+            // Nothing attempted only when no step was paid: a throw's step is paid before its AoOs (stage 6, then 7), so an
+            // AoO that drops or grapples the thrower ends the attack through FinishOffHandAttack (AfterAttackDelay's
+            // out-of-fight and grapple checks), not the action menu.
+            bool stepPaid = attacker.ProgressiveAttackPool.OffHandStepsUsed > offHandStepsBefore;
+            if (!stepPaid && outcome.AttacksMade == 0 && outcome.StepsLostToWard == 0)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot make {(useThrownRange ? "an off-hand thrown attack" : "an off-hand attack")}: {outcome.StopReason ?? "no attack"}."));
+                _isSelectingOffHandTarget = false;
+                _isSelectingOffHandThrownTarget = false;
+                _currentOffHandBAB = 0;
+                _currentOffHandWeapon = null;
+                ShowActionChoices();
+                return;
+            }
             FinishOffHandAttack(attacker, useThrownRange);
-            return;
-        }
-
-        attacker.RegisterAttackMade(AttackStepKind.OffHand);
-
-        // The one post-attack hook (origin E): the thrown drop and the next draw into the off hand, Concentration, melee
-        // reactions, the free trip, Improved Grab (the attacker's decider), the summon cleanup and the combat-end check.
-        AttackIntent offHandIntent = AttackIntent.ForUi(this, attacker);
-        offHandIntent.Hand = AttackStepKind.OffHand;
-        offHandIntent.Weapon = offHandWeapon;
-        offHandIntent.Mode = useThrownRange ? AttackMode.Thrown : AttackMode.Melee;
-        AttackResolution offHandResolution = AttackResolution.Create(AttackOrigin.PcOffHand, attacker, target, offHandIntent).With(result);
-        offHandResolution.CombatEndContext = "ResolveOffHandAttack";
-        var offHandOutcome = new PostAttackOutcome();
-        bool waiting = RunAttackResolved(offHandResolution, offHandOutcome, () =>
-        {
-            if (!offHandOutcome.CombatEnded)
-                FinishOffHandAttack(attacker, useThrownRange);
         });
-        if (waiting)
-            return;
-        if (offHandOutcome.CombatEnded)
-        {
-            _offHandAttackUsedThisTurn = true;
-            _isSelectingOffHandTarget = false;
-            _isSelectingOffHandThrownTarget = false;
-            return;
-        }
-
-        FinishOffHandAttack(attacker, useThrownRange);
     }
 
     /// <summary>The off-hand attack's end: the UI's off-hand fields (read back from the inventory after a throw) and the after-attack delay.</summary>
@@ -1643,22 +1615,14 @@ public partial class GameManager
         if (useThrownRange)
             _currentOffHandWeapon = attacker.GetOffHandAttackWeapon();
 
-        _offHandAttackUsedThisTurn = true;
+        _offHandAttackUsedThisTurn = attacker.GetRemainingOffHandAttackSteps() <= 0;
         _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
 
-        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={attacker.ProgressiveAttackPool.MainHandStepsUsed}/{attacker.ProgressiveAttackPool.MainHandBudget} thrown={useThrownRange} offHandAvailable={_offHandAttackAvailableThisTurn}");
+        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={attacker.ProgressiveAttackPool.MainHandStepsUsed}/{attacker.ProgressiveAttackPool.MainHandBudget} offHandUsed={attacker.ProgressiveAttackPool.OffHandStepsUsed} thrown={useThrownRange} offHandAvailable={_offHandAttackAvailableThisTurn}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
-    }
-
-    private CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
-    {
-        if (_combatFlowService != null)
-            return _combatFlowService.ExecuteOffHandAttack(attacker, target, attackBab, offHandWeapon, useThrownRange);
-
-        return null;
     }
 
     private void ShowSpecialAttackTargets(CharacterController attacker, SpecialAttackType type)
@@ -2697,7 +2661,8 @@ public partial class GameManager
     /// <see cref="PromptFullAttackStep"/>; Haste's natural-attack chooser). This coroutine keeps only the UI: the optional
     /// 5-foot step after the attacks, the completion line and the end of the turn.
     /// </summary>
-    private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget)
+    private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget,
+        bool twoWeapon = false)
     {
         if (attacker == null || initialTarget == null)
         {
@@ -2705,7 +2670,10 @@ public partial class GameManager
             yield break;
         }
 
-        AttackSequenceRequest request = AttackSequenceRequest.ForUiFullAttack(this, attacker, initialTarget);
+        // The Dual Wield button's full attack (origin D, batch 12 step 18): the same flow with both weapons' steps (PHB p.160).
+        AttackSequenceRequest request = twoWeapon
+            ? AttackSequenceRequest.ForUiTwoWeaponFullAttack(this, attacker, initialTarget)
+            : AttackSequenceRequest.ForUiFullAttack(this, attacker, initialTarget);
         bool rangedMode = IsAttackModeRanged(attacker, null, request.Intent);
         string modeLabel = rangedMode ? "ranged" : "melee";
 
@@ -2719,7 +2687,7 @@ public partial class GameManager
             yield break;
         }
         if (rangedMode && request.Intent.RapidShot)
-            TryDeclareRapidShotForAttack(attacker, firstWeapon, true);
+            TryDeclareRapidShotForAttack(attacker, firstWeapon, true, wanted: true);
         if (!attacker.TryCommitFullAttackAction(out string fullAttackRefusal))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot full attack: {fullAttackRefusal}."));
@@ -2748,6 +2716,12 @@ public partial class GameManager
             ? attacker.ProgressiveAttackPool.MainHandBudget
             : attacker.GetMainHandAttackBudget(rangedMode ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind());
         int left = Mathf.Max(0, budget - attacker.ProgressiveAttackPool.MainHandStepsUsed);
+        // A Dual Wield full attack counts its off-hand attacks too (PHB p.160).
+        if (request.InterleaveOffHand)
+        {
+            budget += attacker.GetOffHandAttackCount();
+            left += Mathf.Max(0, attacker.GetOffHandAttackCount() - attacker.ProgressiveAttackPool.OffHandStepsUsed);
+        }
         if (outcome.AttacksMade == 0 && !string.IsNullOrEmpty(outcome.StopReason) && !outcome.AttackerOutOfFight && !outcome.StartedGrapple)
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} makes no attack ({outcome.StopReason})."));
         else if (outcome.StartedGrapple && left > 0)
@@ -2794,11 +2768,11 @@ public partial class GameManager
         AttackIntent intent = req.Intent;
         bool rangedMode = IsAttackModeRanged(attacker, null, intent);
         string modeLabel = rangedMode ? "ranged" : "melee";
-        AttackStepKind kind = rangedMode ? AttackStepKind.MainHand : attacker.GetMeleeAttackStepKind();
         CharacterController currentTarget = state.CurrentTarget;
 
         AttackSequenceStep previous = state.TakePreviousStep();
-        int remaining = attacker.GetRemainingMainHandAttackSteps(kind);
+        // The main-hand steps left, with the off-hand ones of the Dual Wield full attack (batch 12 step 18; PHB p.160).
+        int remaining = RemainingSteps(req, attacker, rangedMode);
         if (previous != null && previous.Result != null && previous.Result.TargetKilled && currentTarget != null && currentTarget.Stats != null)
         {
             if (remaining > 0)
@@ -2894,16 +2868,6 @@ public partial class GameManager
         }
 
         answer?.Invoke(AttackStepChoice.At(currentTarget));
-    }
-
-    private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_combatFlowService != null)
-        {
-            _combatFlowService.PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-            return;
-        }
     }
 
     private bool IsHoldingTouchCharge(CharacterController character)

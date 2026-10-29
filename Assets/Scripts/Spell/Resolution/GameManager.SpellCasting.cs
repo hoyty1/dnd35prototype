@@ -1413,7 +1413,35 @@ public partial class GameManager
         }
         req.Aim.Target = target;
 
+        // A held charge's touch on a foe after its casting round is an attack (batch 12 step 18, SPL-156; PHB p.141): one
+        // step of the attack sequence through the executor, which pays it before the delivery's cast runs, as the AI's does.
+        if (req.Source != null && req.Source.Kind == CastSourceKind.HeldChargeDelivery && !req.DeliveryStepCommitted
+            && HeldChargeDeliveryRules.CostFor(caster, target) == HeldChargeDeliveryCost.AttackStep)
+        {
+            if (!DeliverHeldChargeThroughAttackStep(caster, target, AttackDeciders.For(caster), req, () => RunHeldChargeDeliveryCast(ctx), out string refusal))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot touch {target?.Stats?.CharacterName ?? "the target"} with the held {req.Spell.Name}: {refusal}."));
+                CancelSpellTargeting();
+            }
+            return;
+        }
+
         ExecuteCast(ctx, null);
+    }
+
+    /// <summary>
+    /// Runs a PC held-charge delivery's cast (<see cref="PerformSpellCast"/>) and returns whether it passed the Legality
+    /// stage (a run that suspends at a dialog passed it). The attack-sequence executor counts the touch step by it.
+    /// </summary>
+    private bool RunHeldChargeDeliveryCast(CastContext ctx)
+    {
+        bool passedLegality = true;
+        ExecuteCast(ctx, o =>
+        {
+            if (o != null && o.Kind == CastOutcomeKind.Refused && o.At == CastStage.Legality)
+                passedLegality = false;
+        });
+        return passedLegality;
     }
 
     // ========================================================================

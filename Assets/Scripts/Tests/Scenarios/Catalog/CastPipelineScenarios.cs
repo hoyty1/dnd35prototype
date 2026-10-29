@@ -67,6 +67,9 @@ namespace Tests.Scenarios
             yield return S("npc-held-touch", NpcHeldTouch);
             yield return S("npc-hold-charge-approach", NpcHoldChargeApproach);
             yield return S("ui-touch-miss-holds-charge", UiTouchMissHoldsCharge);
+            yield return S("held-charge-costs-attack-ui", HeldChargeCostsAttackUi);
+            yield return S("held-charge-costs-attack-ai", HeldChargeCostsAttackAi);
+            yield return S("held-charge-touch-iterative-bab-ui", HeldChargeTouchIterativeBabUi);
             yield return S("held-charge-dissipates-ui", UiHeldChargeDissipates);
             yield return S("held-charge-dissipates-npc", NpcHeldChargeDissipates);
             yield return S("held-charge-wand-keeps", UiHeldChargeWandKeeps);
@@ -1253,9 +1256,9 @@ namespace Tests.Scenarios
         /// the charge is still held (PHB p.176: a missed touch keeps the charge). Round 2: it delivers again with the attack
         /// forced to 19: 5d6 with every d6 at 6 = 30, and the charge is gone. Only the touch in the round of casting comes
         /// with the spell (PHB p.140-141, Touch Spells in Combat); a later one is a touch attack made instead of a regular
-        /// attack (PHB p.141), so it takes the attack action, a standard action (delegated RAW reading 2026-10-14). Today
-        /// PerformSpellCast treats every delivery as a free action, so the round-2 delivery leaves every action (SPL-156,
-        /// pinned).
+        /// attack (PHB p.141), so it takes the attack action, a standard action (delegated RAW reading 2026-10-14): the
+        /// round-1 delivery after Discharge Later is the casting's own touch and costs nothing, the round-2 delivery spends
+        /// the standard action (SPL-156, fixed by batch 12 step 18: it runs as one step of the attack sequence).
         /// </summary>
         private static ScenarioDef HeldTouchCharge()
         {
@@ -1291,8 +1294,8 @@ namespace Tests.Scenarios
                 .Expect("A missed touch keeps the charge and deals nothing (PHB p.176)", FactsAre(("held.miss", true), ("miss.lost.dummy", 0)))
                 .Expect("A hit discharges it: 5d6 = 30 (PHB p.279)", FactsAre(("held.hit", false), ("hit.lost.dummy", 30)))
                 .Expect("The held charge's cast is in the trace once, its deliveries are not casts", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
-                .ExpectKnown("SPL-156", "Today the round-2 delivery costs no action (every action left), where a touch after the casting round takes the attack action (SPL-156)",
-                    FactIs("actions.hit", "smf"))
+                .Expect("The round-2 delivery, a touch after the casting round, takes the attack action: the standard action (PHB p.141; SPL-156)",
+                    FactIs("actions.hit", "-m-"))
                 .Build();
         }
 
@@ -2306,7 +2309,8 @@ namespace Tests.Scenarios
         /// AiCastDecider.TouchDeliveryFor), the touch misses (d20 1), and the spell is not discharged: the wizard holds the
         /// charge (delegated RAW reading 2026-10-14; before, a missed touch spent the spell). Round 2: the AI delivers the
         /// held charge at its turn's start through the PC's delivery request (the touch d20 19 hits; 5d6 = 30, PHB p.279),
-        /// which clears it. The delivery is no cast (one cast event) and costs no action today on both sides (SPL-156).
+        /// which clears it. The delivery is no cast (one cast event); since batch 12 step 18 it takes the wizard's attack
+        /// action, as the PC's does (SPL-156; rules/held-charge-costs-attack-ai).
         /// </summary>
         private static ScenarioDef NpcHeldTouch()
         {
@@ -2377,7 +2381,7 @@ namespace Tests.Scenarios
         /// Grasp with Cast Now (the Cast step's answer to the touch prompt) at an adjacent dummy; the touch misses (d20 1), so
         /// the spell is not discharged and the wizard holds the charge (the same cast-core rule as an NPC's,
         /// MissedTouchHoldsCharge; delegated RAW reading 2026-10-14). Round 2: the Discharge button delivers it (d20 19 hits,
-        /// 5d6 = 30, PHB p.279). One slot, one cast event.
+        /// 5d6 = 30, PHB p.279), taking the attack action since batch 12 step 18 (SPL-156). One slot, one cast event.
         /// </summary>
         private static ScenarioDef UiTouchMissHoldsCharge()
         {
@@ -2414,6 +2418,166 @@ namespace Tests.Scenarios
                     FactsAre(("spent.cast", "L1+1"), ("miss.lost.dummy", 0), ("held.miss", true)))
                 .Expect("Round 2: the held charge hits for 5d6 = 30 and is spent (PHB p.279)", FactsAre(("hit.lost.dummy", 30), ("held.hit", false)))
                 .Expect("One cast; the delivery is no cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-156 (batch 12 step 18; PHB p.140-141, p.176; delegated RAW reading 2026-10-14), the PC side: a Ui wizard 5
+        /// (BAB +2: one attack a round) casts Shocking Grasp with Cast Now at an adjacent dummy; the touch misses (d20 1) and
+        /// the charge is held. That touch was the casting's own, and the cast spent the standard action, so a Discharge in
+        /// the same round is refused: a later touch is a melee touch attack made instead of a regular attack (PHB p.141), and
+        /// no attack is left. Round 2: the Discharge button delivers it as the turn's attack (the standard action), the touch
+        /// misses again (d20 1) and the charge stays; a second Discharge is refused, since a BAB +2 caster has no second
+        /// attack. A d20 19 waits in the forced queue, so a touch that should not happen would hit for 30. Before the fix
+        /// every delivery was free and the PC could press Discharge again and again.
+        /// </summary>
+        private static ScenarioDef HeldChargeCostsAttackUi()
+        {
+            return Rules("rules/held-charge-costs-attack-ui", "A Ui held touch charge costs an attack after its casting: one touch a turn at BAB +2 (PHB p.141; SPL-156)")
+                .Covers("SPL-156", "PHB p.141", "PHB p.176", "batch 12 step 18")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 6, 10, Control.Idle)
+                .Tweak("wizard", c => Prepare(c, 1, SpellNames.SHOCKING_GRASP))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "dummy"); return true; }),
+                    Step.Cast(SpellNames.SHOCKING_GRASP, "dummy"),
+                    Step.DeliverHeld("dummy"),
+                    Step.Assert("round 1", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "r1.held", w.Spellcasting.HasHeldTouchCharge);
+                        Fact(ctx, "r1.actions", Actions(w));
+                        FactHpLost(ctx, "r1", "dummy");
+                        return true;
+                    }))
+                .Turn("wizard", 2,
+                    Step.DeliverHeld("dummy"),
+                    Step.Assert("round 2 first touch", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "r2a.held", w.Spellcasting.HasHeldTouchCharge);
+                        Fact(ctx, "r2a.actions", Actions(w));
+                        return true;
+                    }),
+                    Step.DeliverHeld("dummy"),
+                    Step.Assert("round 2 second touch", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "r2b.held", w.Spellcasting.HasHeldTouchCharge);
+                        Fact(ctx, "r2b.actions", Actions(w));
+                        FactHpLost(ctx, "r2b", "dummy");
+                        return true;
+                    }))
+                .Expect("The wizard's turns are Ui turns", Expect.Controller("wizard", "ui"))
+                .Expect("Round 1: the missed Cast Now touch keeps the charge; a Discharge in the same round is refused (no attack left), nothing lands",
+                    FactsAre(("r1.held", true), ("r1.actions", "-m-"), ("r1.lost.dummy", 0)))
+                .Expect("Round 2: the delivery takes the attack action (the standard action) and the missed touch keeps the charge (PHB p.141)",
+                    FactsAre(("r2a.held", true), ("r2a.actions", "-m-")))
+                .Expect("Round 2: a second Discharge is refused (BAB +2: one attack), nothing more spent, the forced 19 never rolled",
+                    FactsAre(("r2b.held", true), ("r2b.actions", "-m-"), ("r2b.lost.dummy", 0)))
+                .Expect("One cast; the deliveries are no casts", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-156 (batch 12 step 18; PHB p.141, p.176), the NPC side of rules/held-charge-costs-attack-ui: an AI-run wizard 5
+        /// whose only unspent slot holds Shocking Grasp, beside a target dummy. Round 1: it casts it now and the touch misses
+        /// (d20 1): the charge is held. Round 2: it delivers the held charge at its turn's start through the attack-sequence
+        /// executor (the same request and cost as the PC's Discharge), the touch misses again (d20 1) and its standard
+        /// action is spent; it makes no second touch that turn (BAB +2), so the forced d20 19 is never rolled. Before the
+        /// fix the delivery was free and the AI limited itself to one try a turn by an AI-only rule (_heldChargeTriedThisTurn).
+        /// </summary>
+        private static ScenarioDef HeldChargeCostsAttackAi()
+        {
+            return Rules("rules/held-charge-costs-attack-ai", "An AI wizard's held touch charge costs its attack after the casting: one touch a turn (PHB p.141; SPL-156)")
+                .Covers("SPL-156", "SPL-115", "PHB p.141", "PHB p.176", "batch 12 step 18")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("AI Wizard", 5)), 5, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 6, 10, Control.Scripted)
+                .Tweak("wizard", c => { Prepare(c, 1, SpellNames.SHOCKING_GRASP); SpendAllBut(c, SpellNames.SHOCKING_GRASP); })
+                // Fixture: the dummy makes no AoOs, so the wizard's retreat after its touch cannot cost it the charge.
+                .Tweak("dummy", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Initiative("wizard", "dummy")
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 1, SpellCaster.TouchAttackContext, 1)
+                .Force(20, 19, SpellCaster.TouchAttackContext, 1)
+                .Force(6, 6, null, -1)
+                .Turn("dummy", 1, Step.Assert("after round 1", ctx =>
+                {
+                    CharacterController d = ctx.Get("dummy");
+                    Fact(ctx, "r1.held", ctx.Get("wizard").Spellcasting.HasHeldTouchCharge);
+                    Fact(ctx, "r1.lost", d.Stats.TotalMaxHP - d.Stats.CurrentHP);
+                    return true;
+                }))
+                .Turn("dummy", 2, Step.Assert("after round 2", ctx =>
+                {
+                    CharacterController w = ctx.Get("wizard"), d = ctx.Get("dummy");
+                    Fact(ctx, "r2.held", w.Spellcasting.HasHeldTouchCharge);
+                    Fact(ctx, "r2.standard", w.Actions.HasStandardAction);
+                    Fact(ctx, "r2.lost", d.Stats.TotalMaxHP - d.Stats.CurrentHP);
+                    return true;
+                }))
+                .Expect("The AI casts Shocking Grasp once; the delivery is no cast", CastEvents("wizard", SpellNames.SHOCKING_GRASP, 1))
+                .Expect("Round 1: the missed touch keeps the charge (PHB p.141)", FactsAre(("r1.held", true), ("r1.lost", 0)))
+                .Expect("Round 2: the delivery takes the standard action, misses and keeps the charge; no second touch (the 19 never lands)",
+                    FactsAre(("r2.held", true), ("r2.standard", false), ("r2.lost", 0)))
+                .Build();
+        }
+
+        /// <summary>
+        /// SPL-156 (batch 12 step 18 review; PHB p.141, p.143): a held charge's touch made as a later attack of a full attack
+        /// rolls at that attack's iterative bonus. A Ui wizard 12 (BAB +6/+1, STR 10, Medium: touch bonus +6) holding a
+        /// Shocking Grasp charge from an earlier turn attacks an adjacent dummy with a dagger (the attack action, at +6),
+        /// then presses Discharge on it: the touch is the second step of the attack sequence, which makes the turn a full
+        /// attack (the move action spent), and its modifier is +1, not +6.
+        /// </summary>
+        private static ScenarioDef HeldChargeTouchIterativeBabUi()
+        {
+            return Rules("rules/held-charge-touch-iterative-bab-ui", "A held touch made as a full attack's second attack rolls at that attack's BAB, +1 for BAB +6 (PHB p.141, p.143; SPL-156)")
+                .Covers("SPL-156", "PHB p.141", "PHB p.143", "batch 12 step 18")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Iterative Wizard", 12)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 6, 10, Control.Idle)
+                .Tweak("wizard", c =>
+                {
+                    global::Inventory inv = c.InventoryComp.CharacterInventory;
+                    inv.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponDagger), EquipSlot.RightHand);
+                    inv.RecalculateStats();
+                    GiveHeldShockingGrasp(c);
+                })
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 10, SpellCaster.TouchAttackContext, 1)
+                .Turn("wizard", 1,
+                    Step.Attack("dummy"),
+                    Step.Assert("after the weapon attack", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "bab", w.Stats.BaseAttackBonus);
+                        Fact(ctx, "steps.before", w.ProgressiveAttackPool.MainHandStepsUsed);
+                        return true;
+                    }),
+                    Step.DeliverHeld("dummy"),
+                    Step.Assert("after the touch", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "steps.after", w.ProgressiveAttackPool.MainHandStepsUsed);
+                        Fact(ctx, "move", w.Actions.HasMoveAction);
+                        return true;
+                    }))
+                .Expect("The wizard's turn is a Ui turn", Expect.Controller("wizard", "ui"))
+                .Expect("BAB +6; the dagger attack is step 1, the touch step 2, and the second step makes it a full attack (PHB p.143)",
+                    FactsAre(("bab", 6), ("steps.before", 1), ("steps.after", 2), ("move", false)))
+                .Expect("The touch's attack modifier is the second attack's +1 (PHB p.141, p.143)",
+                    Expect.Count("log", e => (e.Str("text") ?? "").Contains("Melee Touch Attack") && (e.Str("text") ?? "").Contains("+ 1 (attack modifier)"), 1, 1))
+                .Expect("No touch rolls at the full +6", Expect.None("log", e => (e.Str("text") ?? "").Contains("Melee Touch Attack") && (e.Str("text") ?? "").Contains("+ 6 (attack modifier)")))
                 .Build();
         }
 

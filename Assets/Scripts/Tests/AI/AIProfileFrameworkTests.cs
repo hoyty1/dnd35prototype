@@ -71,6 +71,8 @@ namespace Tests.AI
             TestUseMoveActionFailsAfterFullRoundAction();
             TestUseMoveActionRespectsDisabledSingleAction();
             TestSecondMoveAfterSearchNeedsExplicitDoubleMove();
+            TestAiTwoWeaponStopgap();
+            TestAiRapidShotStopgap();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -86,6 +88,99 @@ namespace Tests.AI
             {
                 _failed++;
                 Debug.LogError($"  FAIL: {testName} {detail}");
+            }
+        }
+
+        // ---- Batch 12 step 18 (AI-055 closed; owner decision Q2, 2026-10-23): the AI attack-mode stopgaps ----
+
+        private static CharacterController CreateArmedFighter(string name, int bab, Vector2Int position, ItemID? rightHand,
+            ItemID? leftHand, params string[] feats)
+        {
+            var go = new GameObject("AIModes_" + name);
+            var controller = go.AddComponent<CharacterController>();
+            var inventoryComp = go.AddComponent<InventoryComponent>();
+            var stats = new CharacterStats(name, bab, "Fighter",
+                14, 14, 14, 10, 10, 10,
+                bab, 0, 0,
+                8, 1, 0,
+                6, 1, 200,
+                "Human");
+            if (feats != null && feats.Length > 0)
+                stats.AddFeats(new List<string>(feats));
+            controller.Init(stats, position, null, null);
+            inventoryComp.Init(stats);
+            if (rightHand.HasValue)
+                inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(rightHand.Value), EquipSlot.RightHand);
+            if (leftHand.HasValue)
+                inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(leftHand.Value), EquipSlot.LeftHand);
+            inventoryComp.CharacterInventory.RecalculateStats();
+            return controller;
+        }
+
+        /// <summary>
+        /// AIProfile.DefaultShouldUseTwoWeaponFighting (AI stopgap, batch 13 catalog): a fighter 6 with Two-Weapon Fighting,
+        /// Improved Two-Weapon Fighting and a light off-hand weapon fights with both (four attacks at -2 beat two); a fighter 6
+        /// without the feats and with a one-handed off-hand weapon (-6 and -10, PHB p.160 Table 8-10) does not; once a flurry
+        /// or an attack has started, or the turn cannot become a full attack, it does not.
+        /// </summary>
+        private static void TestAiTwoWeaponStopgap()
+        {
+            CharacterController twf = null, noFeat = null, target = null;
+            try
+            {
+                twf = CreateArmedFighter("TwfFighter", 6, Vector2Int.zero, ItemID.WeaponLongsword, ItemID.WeaponShortsword,
+                    "Two-Weapon Fighting", "Improved Two-Weapon Fighting");
+                noFeat = CreateArmedFighter("HeavyOffHand", 6, new Vector2Int(0, 2), ItemID.WeaponLongsword, ItemID.WeaponLongsword);
+                target = CreateArmedFighter("TwfTarget", 1, Vector2Int.right, null, null);
+
+                Assert(twf.GetOffHandAttackCount() == 2 && AIProfile.DefaultShouldUseTwoWeaponFighting(twf, target),
+                    "AI stopgap: a TWF + ITWF fighter with a light off-hand weapon fights with two weapons (PHB p.160, p.96)",
+                    "off-hand attacks " + twf.GetOffHandAttackCount());
+                Assert(noFeat.GetOffHandAttackCount() == 1 && !AIProfile.DefaultShouldUseTwoWeaponFighting(noFeat, target),
+                    "AI stopgap: without the feat and with a one-handed off-hand weapon (-6/-10) it attacks with the main hand only; it would still get one off-hand attack (PHB p.160)",
+                    "off-hand attacks " + noFeat.GetOffHandAttackCount());
+
+                twf.Actions.UseMoveAction();
+                Assert(!AIProfile.DefaultShouldUseTwoWeaponFighting(twf, target),
+                    "AI stopgap: no two-weapon choice when the turn can no longer become a full attack (PHB p.143)");
+                twf.Actions.Reset();
+            }
+            finally
+            {
+                TestHelpers.Cleanup(twf != null ? twf.gameObject : null, noFeat != null ? noFeat.gameObject : null,
+                    target != null ? target.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AIProfile.DefaultShouldUseRapidShot (AI stopgap, batch 13 catalog): a fighter 6 with Rapid Shot and a longbow
+        /// declares it (three shots at -2 beat two, PHB p.99); without the feat it does not; with a single dagger to throw
+        /// there is no extra throw to make, so it does not, and with a second dagger carried it does (PHB p.113).
+        /// </summary>
+        private static void TestAiRapidShotStopgap()
+        {
+            CharacterController archer = null, noFeat = null, thrower = null, target = null;
+            try
+            {
+                archer = CreateArmedFighter("RapidArcher", 6, Vector2Int.zero, ItemID.WeaponLongbow, null, "Rapid Shot");
+                noFeat = CreateArmedFighter("PlainArcher", 6, new Vector2Int(0, 2), ItemID.WeaponLongbow, null);
+                thrower = CreateArmedFighter("DaggerThrower", 6, new Vector2Int(0, 4), ItemID.WeaponDagger, null, "Rapid Shot");
+                target = CreateArmedFighter("RapidTarget", 1, new Vector2Int(4, 0), null, null);
+
+                Assert(AIProfile.DefaultShouldUseRapidShot(archer, target, archer.GetEquippedMainWeapon()),
+                    "AI stopgap: a Rapid Shot archer with a bow declares it (PHB p.99)");
+                Assert(!AIProfile.DefaultShouldUseRapidShot(noFeat, target, noFeat.GetEquippedMainWeapon()),
+                    "AI stopgap: no Rapid Shot without the feat");
+                Assert(!AIProfile.DefaultShouldUseRapidShot(thrower, target, thrower.GetEquippedMainWeapon()),
+                    "AI stopgap: one dagger to throw gives no extra throw, so no Rapid Shot");
+                thrower.GetComponent<InventoryComponent>().CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemID.WeaponDagger));
+                Assert(AIProfile.DefaultShouldUseRapidShot(thrower, target, thrower.GetEquippedMainWeapon()),
+                    "AI stopgap: with a second dagger carried the thrower declares Rapid Shot (PHB p.99, p.113)");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(archer != null ? archer.gameObject : null, noFeat != null ? noFeat.gameObject : null,
+                    thrower != null ? thrower.gameObject : null, target != null ? target.gameObject : null);
             }
         }
 

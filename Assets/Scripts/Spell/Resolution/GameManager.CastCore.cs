@@ -115,26 +115,23 @@ public sealed class CastOutcome
 /// and the AoO prompt, and the run goes on from its callback). Every run ends in <see cref="FinishCast"/>, the single
 /// exit: it shows the cast's result log once, ends the context (EndCast) and calls the decider's finish continuation,
 /// which does the UI follow-up for a PC (GameManager.CastDeciders.cs). Stage methods never touch CombatUI except to log
-/// through CombatLogHelper; they read the request and its context, and the legacy behaviours of today's paths only as
-/// <see cref="LegacyCastQuirk"/> bits of the request (Tests.Magic.CastCoreStageOrderTests checks both).
+/// through CombatLogHelper; they read the request and its context (Tests.Magic.CastCoreStageOrderTests checks it). The
+/// legacy behaviours the batch 11 steps kept as LegacyCastQuirk bits of the request are all built: batch 12 step 18
+/// removed the last (the free held-charge delivery, SPL-156; now HeldChargeDeliveryRules) and the enum with it, so
+/// every path runs one rule.
 ///
-/// Step 7 runs the PC single-target casts (PerformSpellCast) through the core with the UI decider, as a pure move of
-/// PerformSpellCast's old body: every check, roll, log line and trace mark in today's order. Step 8 runs the NPC
-/// single-target casts (TryNPCPerformSpellCast) through the same stages with the AI decider (<see cref="RunCastSync"/>),
-/// as a pure move of the old NPC executor: its differences from the PC path are the request's NPC quirk bits
-/// (LegacyCastQuirkSets.AiPath), which only the stages read. No stage asks who controls the caster; only the entry
-/// points choose the decider. Step 9 runs the PC area casts (PerformAoESpellCast) through the same stages with the area
-/// resolve variant (SpellCastRequest.ForUiArea, CastResolveKind.Area), as a pure move of PerformAoESpellCast's old
-/// body: the Legality stage filters the area by line of effect, the shared stages spend and check the cast (the area
-/// path's skips are the bits of LegacyCastQuirkSets.UiAreaPath), and after the invisibility break the area Resolve
-/// stage (<see cref="CastStageResolveArea"/>) runs the area handler registry (GameManager.SpellHandlerRegistry.cs); every
-/// area cast ends in <see cref="FinishAreaCast"/>, which shows the log once with its prefixes and runs the handler's
-/// combat-end check before FinishCast. Step 10 runs the summon, Grease and held-charge casts through the same stages with
-/// the Summon, Grease and HoldCharge resolve variants (SpellCastRequest.ForUiSummon, ForUiGrease, ForUiHoldCharge), as a
-/// pure move of TryConsumePendingSpellCast, its five callers and HoldPendingMeleeTouchCharge: their skips are the bits of
-/// LegacyCastQuirkSets.UiSummonPath, UiGreasePath and UiHoldPath, and the resolve stages
-/// (<see cref="CastStageResolveSummon"/>, <see cref="CastStageResolveGrease"/>, <see cref="CastStageResolveHoldCharge"/>)
-/// run the old resolution code.
+/// The paths: the PC single-target casts (PerformSpellCast, batch 11 step 7) with the UI decider, and the NPC ones
+/// (TryNPCPerformSpellCast, step 8) through the same stages with the AI decider (<see cref="RunCastSync"/>). No stage
+/// asks who controls the caster; only the entry points choose the decider. The area casts (PerformAoESpellCast, step 9;
+/// SpellCastRequest.ForUiArea and ForAIArea, CastResolveKind.Area): the Legality stage filters the area by line of
+/// effect, the shared stages spend and check the cast, and after the invisibility break the area Resolve stage
+/// (<see cref="CastStageResolveArea"/>) runs the area handler registry (GameManager.SpellHandlerRegistry.cs); every area
+/// cast ends in <see cref="FinishAreaCast"/>, which shows the log once with its prefixes and runs the handler's
+/// combat-end check before FinishCast. The summon, Grease and held-charge casts (step 10; ForUiSummon, ForUiGrease,
+/// ForUiHoldCharge and their AI builders) use the Summon, Grease and HoldCharge resolve variants
+/// (<see cref="CastStageResolveSummon"/>, <see cref="CastStageResolveGrease"/>, <see cref="CastStageResolveHoldCharge"/>).
+/// A held charge's delivery is a Single cast whose cost is HeldChargeDeliveryRules' (batch 12 step 18): a foe's touch
+/// after the casting round is first one attack step of RunAttackSequence (DeliveryStepCommitted, DeliveryStepBab).
 /// </summary>
 public partial class GameManager
 {
@@ -357,8 +354,9 @@ public partial class GameManager
     /// casting-action test, <see cref="CheckCastActionLegality"/>, holds to the round's one quickened spell, as it holds a
     /// full-round or swift casting to its action), a living target, a caster that can cast spells, and a slot, spell per
     /// day or convertible prepared spell for the spell with the cast's metamagic, the one the Spend stage takes
-    /// (<see cref="HasCastResource"/>). A held charge's delivery is no casting (PHB p.141): it costs no action here (free
-    /// today, SPL-156) and no slot, so only its target is tested. A scroll or wand needs the action but no slot and no
+    /// (<see cref="HasCastResource"/>). A held charge's delivery is no casting (PHB p.141): no slot, and its own cost's test
+    /// (HeldChargeDeliveryRules.Refusal, batch 12 step 18, SPL-156: an attack left for a foe after the casting round, a
+    /// standard action for a friend). A scroll or wand needs the action but no slot and no
     /// spellcasting of its user's own (the spell is in the item; DMG p.237, p.245). The F12 test panel keeps its bypass:
     /// it casts out of turn, so no action test (as CastActionRules.ActionRefusal), and it spends what it finds, so no
     /// spellcasting or slot test (SPL-036). Null when the request passes. No side effect.
@@ -377,7 +375,14 @@ public partial class GameManager
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, actionRefusal);
         if (target != null && target.Stats != null && target.Stats.IsDead)
             return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, ReasonTargetDead);
-        if (kind == CastSourceKind.HeldChargeDelivery || kind == CastSourceKind.TestPanel
+        if (kind == CastSourceKind.HeldChargeDelivery)
+        {
+            // The delivery's own cost (batch 12 step 18, SPL-156): an attack for a foe after the casting round, a standard
+            // action for a friend (HeldChargeDeliveryRules).
+            string deliveryRefusal = HeldChargeDeliveryRules.Refusal(caster, target, req.DeliveryStepCommitted);
+            return deliveryRefusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, deliveryRefusal);
+        }
+        if (kind == CastSourceKind.TestPanel
             || kind == CastSourceKind.Scroll || kind == CastSourceKind.Wand)
             return null;
         SpellcastingComponent spellComp = caster.Spellcasting;
@@ -423,6 +428,10 @@ public partial class GameManager
                 return $"{casterName} cannot cast spells.";
             case ReasonCannotCast:
                 return $"{casterName} has no prepared {spellName} or spell slot left for it.";
+            case HeldChargeDeliveryRules.RefusalNoAttack:
+                return $"{casterName} cannot deliver the held {spellName}: no attack left this turn (PHB p.141: a touch after the casting round is an attack).";
+            case CastActionRules.RefusalNoStandardAction when req.Source != null && req.Source.Kind == CastSourceKind.HeldChargeDelivery:
+                return $"{casterName} cannot deliver the held {spellName} to a friend: no standard action left this round (PHB p.141).";
             default:
                 return CastActionRules.DescribeRefusal(refusal.Reason, casterName, spellName, req.Metamagic);
         }
@@ -919,10 +928,38 @@ public partial class GameManager
         }
         else if (isDeliveringHeldCharge)
         {
-            // Discharging a held touch spell costs no action here, in any round (SPL-156).
-            RequireLegacyQuirk(ctx, LegacyCastQuirk.HeldChargeDeliveryIsFree);
-            Debug.Log($"[GameManager] {caster.Stats.CharacterName} discharging held touch spell as a free action.");
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "held-charge-delivery");
+            // The delivery's cost (batch 12 step 18, SPL-156; HeldChargeDeliveryRules): none for the casting's own touch in its
+            // casting round (PHB p.140-141); after it, a foe's touch is an attack (the attack-sequence executor paid it,
+            // AttackSequenceRequest.ForHeldChargeTouch, else it is paid here) and a friend's a standard action (PHB p.141).
+            HeldChargeDeliveryCost deliveryCost = HeldChargeDeliveryRules.CostFor(caster, target);
+            bool paid = true;
+            string costTrace;
+            switch (deliveryCost)
+            {
+                case HeldChargeDeliveryCost.None:
+                    ctx.SpellComp?.UseCastingRoundTouch();
+                    costTrace = "held-charge-delivery-casting-round";
+                    break;
+                case HeldChargeDeliveryCost.AttackStep:
+                    paid = req.DeliveryStepCommitted || caster.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+                    costTrace = "held-charge-delivery-attack";
+                    break;
+                default:
+                    paid = caster.CommitStandardAction();
+                    costTrace = "held-charge-delivery-standard";
+                    break;
+            }
+            if (!paid)
+            {
+                // A guard: the Legality stage tested the same cost (HeldChargeDeliveryRules.Refusal); nothing was spent.
+                Debug.LogWarning($"[CastCore] {DescribeCast(req)}: the delivery's {deliveryCost} could not be paid; the delivery is refused.");
+                CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, "commit-failed");
+                ClearSpellcastResourceSnapshot();
+                FinishCast(ctx, new CastOutcome(CastOutcomeKind.Refused, CastStage.Cost, "commit-failed"));
+                return;
+            }
+            Debug.Log($"[CastCore] {caster.Stats.CharacterName} delivers the held {spell.Name}: {deliveryCost}.");
+            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, costTrace);
         }
         else if (actionCost == CastActionCost.Free)
         {
@@ -1663,7 +1700,7 @@ public partial class GameManager
         SpellData spell = ctx.Request.Spell;
 
         SpellResult result = SpellCaster.Cast(spell, caster.Stats, target.Stats, ctx.Request.Metamagic, ctx.SkipFriendlyTouchAttackRoll, ctx.ForgoesSingleTargetSave, caster, target, ctx.GlobeAgainstTouch,
-            missilesSpentOnImages: ctx.MissilesSpentOnImages);
+            missilesSpentOnImages: ctx.MissilesSpentOnImages, touchStepBabAdjustment: ctx.Request.TouchStepBabAdjustment);
         ctx.Result = result;
         CastStageTrace.Mark(caster, spell, CastStageTrace.SpellCasterCast, result.Success ? "success" : "failed");
         if (result.BlockedByGlobe)
@@ -2085,7 +2122,8 @@ public partial class GameManager
         EnterCastStage(ctx, CastStage.Resolve);
         CharacterController caster = ctx.Request.Caster;
         SpellData spell = ctx.Request.Spell;
-        ctx.SpellComp.SetHeldTouchCharge(spell, ctx.Request.Metamagic, ctx.Request.Choices);
+        // The casting's own touch is still to come this turn (PHB p.140-141; SPL-156): a delivery now costs no action.
+        ctx.SpellComp.SetHeldTouchCharge(spell, ctx.Request.Metamagic, ctx.Request.Choices, caster.TurnsStartedCount);
         CastStageTrace.Mark(caster, spell, CastStageTrace.Handler, "hold-charge");
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {spell.Name}."));
         FinishEffectCast(ctx, "held");
@@ -2266,19 +2304,5 @@ public partial class GameManager
     private void RefundAfterFailedSpend(CastContext ctx)
     {
         RestoreSpellcastResourceSnapshot(ctx.Request.Caster);
-    }
-
-    /// <summary>
-    /// A stage that has only today's (legacy) behaviour for <paramref name="quirk"/>: a request without the bit raises a
-    /// cast-core violation (a builder forgot to declare it; ScenarioHooks.CastStackViolation in the harness) and gets the
-    /// legacy behaviour anyway, since the RAW one is not built yet.
-    /// </summary>
-    private static void RequireLegacyQuirk(CastContext ctx, LegacyCastQuirk quirk)
-    {
-        if (ctx.Request.HasQuirk(quirk))
-            return;
-        string detail = $"cast core: {DescribeCast(ctx.Request)} lacks the legacy quirk {quirk}, which stage {ctx.Stage} still needs";
-        Debug.LogWarning("[CastCore] " + detail);
-        ScenarioHooks.CastStackViolation?.Invoke(detail);
     }
 }

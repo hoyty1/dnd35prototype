@@ -119,26 +119,18 @@ public class CharacterCombatStats : MonoBehaviour
     }
 
     /// <summary>
-    /// Off-hand iterative count for two-weapon fighting.
+    /// Off-hand attacks of a two-weapon full attack (PHB p.160, p.102, p.96): anyone wielding a second weapon in the off hand
+    /// gets one extra attack with it (the Two-Weapon Fighting feat only lowers the penalties), Improved Two-Weapon Fighting a
+    /// second at -5 and Greater Two-Weapon Fighting a third at -10 (FeatManager.GetOffHandAttackCount). None without an
+    /// off-hand weapon or while grappling (CanDualWield). Batch 12 step 18: before it the count was 0 without the feat, and
+    /// nothing read it.
     /// </summary>
     public int GetOffHandAttackCount()
     {
-        if (_character == null || _character.Stats == null || !_character.Stats.HasFeat("Two-Weapon Fighting"))
+        if (_character == null || _character.Stats == null || !_character.CanDualWield())
             return 0;
 
-        if (!_character.CanDualWield())
-            return 0;
-
-        int count = 1;
-        int bab = _character.Stats.BaseAttackBonus;
-
-        if (_character.Stats.HasFeat("Improved Two-Weapon Fighting") && bab >= 6)
-            count++;
-
-        if (_character.Stats.HasFeat("Greater Two-Weapon Fighting") && bab >= 11)
-            count++;
-
-        return count;
+        return FeatManager.GetOffHandAttackCount(_character.Stats);
     }
 
     public int GetOffHandAttackBAB(int attackIndex)

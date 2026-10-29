@@ -54,19 +54,25 @@ public sealed class AttackIntent
     /// <summary>The attack step's hand: a main-hand (iterative) step, a natural-sequence step or an off-hand step.</summary>
     public AttackStepKind Hand = AttackStepKind.MainHand;
 
-    /// <summary>Rapid Shot declared for the round (CharacterController.RapidShotEnabled).</summary>
+    /// <summary>Rapid Shot wanted for the round: the PC toggle (CharacterController.RapidShotEnabled), or the AI's choice (ForAI); the executor declares it before the first shot (D9).</summary>
     public bool RapidShot;
 
     /// <summary>A flurry of blows declared (CharacterController.IsUsingFlurryOfBlows).</summary>
     public bool Flurry;
 
-    /// <summary>Two-weapon fighting (the PC UI's dual-wield state).</summary>
+    /// <summary>
+    /// Two-weapon fighting (PHB p.160): the PC UI's dual-wield state (ForUi), the Dual Wield full attack, or the AI's choice
+    /// (ForAI). A request whose steps interleave off-hand steps (AttackSequenceRequest.InterleaveOffHand) reads it.
+    /// </summary>
     public bool TwoWeapon;
 
     /// <summary>Fighting defensively (CharacterController.IsFightingDefensively).</summary>
     public bool FightDefensively;
 
-    /// <summary>The touch that delivers a held charge.</summary>
+    /// <summary>
+    /// The touch that delivers a held charge after its casting round (batch 12 step 18, SPL-156): a melee touch attack
+    /// made in place of a regular attack, one step of the attack sequence (AttackSequenceRequest.ForHeldChargeTouch).
+    /// </summary>
     public bool HeldChargeTouch;
 
     /// <summary>An attack of opportunity.</summary>
@@ -150,7 +156,11 @@ public sealed class AttackIntent
     /// <summary>
     /// An NPC's intent for an attack on <paramref name="target"/> with its main weapon (batch 12 step 17, CMB-096): the mode
     /// is the NPC's own (<see cref="ChooseAiMode"/>), never the PC UI's selection; <paramref name="gm"/> is not read (kept
-    /// for the builders' common shape).
+    /// for the builders' common shape). Its attack modes (batch 12 step 18, AI-055; owner decision Q2, 2026-10-23) are the
+    /// AI's choice by its profile's expected-damage rule, an AI stopgap (batch 13 catalog): Rapid Shot for a ranged attack
+    /// (AIProfile.ShouldUseRapidShot, or the creature's standing toggle), two-weapon fighting for a melee one
+    /// (AIProfile.ShouldUseTwoWeaponFighting). The rules of both are the PC's (the executor declares Rapid Shot before the
+    /// first shot, D9; the off-hand steps and penalties, PHB p.160).
     /// </summary>
     public static AttackIntent ForAI(GameManager gm, CharacterController actor, CharacterController target)
     {
@@ -161,6 +171,19 @@ public sealed class AttackIntent
             Weapon = weapon,
         };
         CopyDeclarations(intent, actor);
+        if (actor != null && actor.Stats != null && target != null)
+        {
+            DND35.AI.AIProfile profile = actor.aiProfile;
+            // Rapid Shot works with any ranged attack, a thrown weapon's too (PHB p.99, p.113).
+            if ((intent.Mode == AttackMode.Ranged || intent.Mode == AttackMode.Thrown) && !intent.RapidShot)
+                intent.RapidShot = profile != null
+                    ? profile.ShouldUseRapidShot(actor, target, weapon)
+                    : DND35.AI.AIProfile.DefaultShouldUseRapidShot(actor, target, weapon);
+            if (intent.Mode == AttackMode.Melee)
+                intent.TwoWeapon = profile != null
+                    ? profile.ShouldUseTwoWeaponFighting(actor, target)
+                    : DND35.AI.AIProfile.DefaultShouldUseTwoWeaponFighting(actor, target);
+        }
         return intent;
     }
 

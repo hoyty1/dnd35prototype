@@ -15,7 +15,7 @@ namespace Tests.Magic
 /// Batch 11 step 7 (docs/designs/cast_core_batch11.md, cast-core-single-target-pc): the staged cast core
 /// (GameManager.ExecuteCast, Spell/Resolution/GameManager.CastCore.cs).
 /// A recording fake decider (answers every choice inline, lets a threatened cast proceed or cancels it, and records the
-/// finish) casts four spells of a wizard 5 with the UI path's legacy quirks: a self buff (Shield), a melee touch spell
+/// finish) casts four spells of a wizard 5 on the UI path: a self buff (Shield), a melee touch spell
 /// on an ally (Shocking Grasp), a ray (Ray of Frost) and a buff on another creature (Bull's Strength). Each must run
 /// the stages in today's order (the Globe stage before Resolve since batch 11 step 11, on the area path before the
 /// invisibility break; ConcentrationOnCast after the provocation answer since batch 11 step 12), ask the decider for the choices after the
@@ -26,8 +26,10 @@ namespace Tests.Magic
 /// action and the slot; a run waiting for the provocation answer refuses a re-entry. No stage touches the UI: a fake-decider cast leaves CurrentSubPhase and the last
 /// combat log as they were, and the source of GameManager.CastCore.cs uses CombatUI only to log
 /// (CombatUI?.ShowCombatLog) and never calls ShowActionChoices, AfterAttackDelay, UpdateAllStatsUI or the highlights,
-/// nor reads IsControllable. The builders set LegacyCastQuirkSets.UiPath (an explicit list of today's PC-path bits),
-/// and a request lacking a bit a stage still needs raises a cast-core violation. Play mode (needs the scene GameManager); the source scan also runs in edit mode.
+/// nor reads IsControllable. Since batch 12 step 18 no request carries a legacy quirk bit (the LegacyCastQuirk enum is
+/// gone; SPL-156) and a held charge's delivery costs what HeldChargeDeliveryRules says. Play mode (needs the scene GameManager); the source scan also runs in edit mode.
+/// The quirk bits and LegacyCastQuirkSets named in the step 8 to step 15 paragraphs below are history: batch 12 step 9
+/// emptied the sets but one bit and step 18 deleted them, with the bit-list checks.
 ///
 /// Batch 11 step 8 (cast-core-npc-single-target): the NPC path (SpellCastRequest.ForAI, GameManager.RunCastSync, the
 /// AI decider) runs the same four casts through the same stages, except where an NPC quirk bit moves or skips one
@@ -78,7 +80,10 @@ namespace Tests.Magic
 /// fight here: the cast runs are skipped when a side is already out); the AI's refusals are logged as the PC's; the
 /// quickened Sleep's log carries the QUICKENED line; a PC with no standard action left, or with no slot for the spell, is
 /// refused at Legality with a log line and nothing spent, and a grappled PC cannot cast a somatic single-target spell
-/// (CheckLegality, no log); the missing-quirk case is a held-charge delivery without HeldChargeDeliveryIsFree.
+/// (CheckLegality, no log). Batch 12 step 18 (SPL-156) removed the last bit, HeldChargeDeliveryIsFree, and the enum; the
+/// missing-quirk case became the delivery's cost (TestHeldChargeDeliveryCost): the casting round's free touch, a friend's
+/// standard action and its refusal, a foe's touch refused with no attack left (RefusalNoAttack) and passing once the step
+/// is paid (DeliveryStepCommitted), the Cost stage committing one main-hand step, and the touch at a later step's BAB.
 /// </summary>
 public static class CastCoreStageOrderTests
 {
@@ -95,15 +100,6 @@ public static class CastCoreStageOrderTests
     };
 
     /// <summary>
-    /// Today's PC single-target path, bit by bit (batch 11 step 7). Step 8 adds the AI path's own set; NPC-only bits must
-    /// never join this list (PC and NPC follow identical rules; only the decider differs).
-    /// </summary>
-    private static readonly LegacyCastQuirk[] PcPathBits =
-    {
-        LegacyCastQuirk.HeldChargeDeliveryIsFree,   // SPL-156 (batch 12 step 18)
-    };
-
-    /// <summary>
     /// The stages of a resolved area cast with the area path's quirks (batch 11 step 9), with the decider's calls. The
     /// area Globe stage runs before the invisibility break (batch 11 step 11: a foe inside a globe is not in the area); the
     /// RingCounterspell stage runs after the break (batch 11 step 15) and tests no creature of an area.
@@ -116,24 +112,10 @@ public static class CastCoreStageOrderTests
     };
 
     /// <summary>
-    /// Today's PC area path, bit by bit (batch 11 step 9): none since batch 12 step 9 removed AreaCombatEndOnlyInSomeHandlers
-    /// (CORE-039) and AreaLogPrefixOnlyInSomeHandlers (SPL-161).
+    /// The quirk bits batch 11 and batch 12 step 9 removed (each a legacy behaviour a builder kept), with their issues;
+    /// batch 12 step 18 removed the last, HeldChargeDeliveryIsFree (SPL-156), and the LegacyCastQuirk enum with it.
     /// </summary>
-    private static readonly LegacyCastQuirk[] AreaPathBits = { };
-
-    /// <summary>
-    /// The bits by which the AI path's quirk set differs from the UI path's (batch 11 step 8), each naming a PC/NPC parity
-    /// issue: the PC-only bit it drops and the NPC bits it adds (batch 11 step 14 removed the two range bits, SPL-017;
-    /// step 21 removed NpcNullMetamagic: an NPC cast keeps its prepared slot's metamagic; step 25 removed NpcRefusesArea:
-    /// an NPC casts an area spell through the area resolve, SpellCastRequest.ForAIArea; step 26 removed
-    /// NpcNoMirrorImageSwap: no swap, a random figure per attack for every caster, SPL-117). None since batch 12 step 9
-    /// removed EvaluateCombatEndOnlyOnTargetDeath and NpcCombatEndCheckedByCaller (CORE-039), NpcOwnLegalityChecks and
-    /// NpcResultLogBeforeTargetDeath (SPL-160): the PC and NPC paths carry the same set.
-    /// </summary>
-    private static readonly LegacyCastQuirk[] AiPathDifferences = { };
-
-    /// <summary>The bits batch 12 step 9 (b12-cast-core-quirks) removed, with their issues.</summary>
-    private static readonly string[] Batch12Step9RemovedBits =
+    private static readonly string[] RemovedQuirkBits =
     {
         "EvaluateCombatEndOnlyOnTargetDeath",   // CORE-039
         "NpcCombatEndCheckedByCaller",          // CORE-039
@@ -142,6 +124,7 @@ public static class CastCoreStageOrderTests
         "AreaLogPrefixOnlyInSomeHandlers",      // SPL-161
         "NpcResultLogBeforeTargetDeath",        // SPL-160 d
         "NpcOwnLegalityChecks",                 // SPL-160 a
+        "HeldChargeDeliveryIsFree",             // SPL-156
     };
 
     /// <summary>
@@ -244,71 +227,40 @@ public static class CastCoreStageOrderTests
     {
         SpellData missile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
         SpellCastRequest ui = SpellCastRequest.ForUi(null, missile, null, null);
-        Assert(ui.Quirks == LegacyCastQuirkSets.UiPath, "ForUi sets the UI path's legacy quirks", "" + ui.Quirks);
         SpellCastRequest prebuilt = SpellCastRequest.ForUiPrebuilt(null, missile.Clone(), null, new CastSource { Kind = CastSourceKind.Scroll });
-        Assert(prebuilt.Quirks == LegacyCastQuirkSets.UiPath, "ForUiPrebuilt sets the UI path's legacy quirks", "" + prebuilt.Quirks);
-        Assert(ui.HasQuirk(LegacyCastQuirk.HeldChargeDeliveryIsFree) && !ui.HasQuirk(LegacyCastQuirk.HeldChargeDeliveryIsFree | (LegacyCastQuirk)(1L << 62)),
-            "HasQuirk tests every bit it is given");
+        Assert(ui.Decider is UiCastDecider && prebuilt.Decider is UiCastDecider && prebuilt.Source.Kind == CastSourceKind.Scroll,
+            "ForUi and ForUiPrebuilt make a UI request");
 
-        LegacyCastQuirk listed = LegacyCastQuirk.None;
-        foreach (LegacyCastQuirk bit in PcPathBits)
-        {
-            Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The PC-path bit " + bit + " is one named flag");
-            listed |= bit;
-        }
-        Assert(LegacyCastQuirkSets.UiPath == listed, "The UI path's quirk set is exactly today's PC-path bits (" + PcPathBits.Length + ")",
-            "UiPath " + LegacyCastQuirkSets.UiPath + " vs listed " + listed);
+        // Batch 12 step 18 (SPL-156): no legacy quirk is left, so the enum, its sets and the request's bits are gone.
+        System.Reflection.Assembly assembly = typeof(SpellCastRequest).Assembly;
+        Assert(assembly.GetType("LegacyCastQuirk") == null && assembly.GetType("LegacyCastQuirkSets") == null,
+            "Batch 12 step 18: the LegacyCastQuirk enum and LegacyCastQuirkSets are gone (every path runs one rule)");
+        Assert(typeof(SpellCastRequest).GetField("Quirks") == null && typeof(SpellCastRequest).GetMethod("HasQuirk") == null,
+            "Batch 12 step 18: a request carries no quirk bits");
+        Assert(typeof(GameManager).GetMethod("RequireLegacyQuirk", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static) == null,
+            "Batch 12 step 18: the cast core has no RequireLegacyQuirk");
+        Assert(RemovedQuirkBits.Length == 8, "The removed bits are listed with their issues");
 
-        // Batch 11 step 8: the AI path's set.
+        // Batch 11 step 8: the AI path's request.
         SpellCastRequest ai = SpellCastRequest.ForAI(null, null, missile);
-        Assert(ai.Quirks == LegacyCastQuirkSets.AiPath && ai.Decider is AiCastDecider, "ForAI sets the AI path's legacy quirks and the AI decider", "" + ai.Quirks);
-        LegacyCastQuirk differences = LegacyCastQuirk.None;
-        foreach (LegacyCastQuirk bit in AiPathDifferences)
-        {
-            Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The AI-path difference " + bit + " is one named flag");
-            differences |= bit;
-        }
-        Assert((LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath) == differences,
-            "The AI path's quirk set differs from the UI path's exactly by the listed parity bits (" + AiPathDifferences.Length + ")",
-            "AiPath ^ UiPath = " + (LegacyCastQuirkSets.AiPath ^ LegacyCastQuirkSets.UiPath));
-        Assert(LegacyCastQuirkSets.AiPath == LegacyCastQuirkSets.UiPath,
-            "Batch 12 step 9: the AI path's quirk set equals the UI path's (no NPC-only bit is left)", "" + LegacyCastQuirkSets.AiPath);
-        foreach (string name in Batch12Step9RemovedBits)
-            Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), name), "Batch 12 step 9 removed the quirk bit " + name);
-
-        // Batch 11 step 9: the area path's set.
+        Assert(ai.Decider is AiCastDecider, "ForAI sets the AI decider");
+        // Batch 11 step 9: the area path's request.
         SpellCastRequest area = SpellCastRequest.ForUiArea(SpellCastRequest.ForUi(null, missile, null, null),
             new List<CharacterController>(), new HashSet<Vector2Int>());
-        Assert(area.Quirks == LegacyCastQuirkSets.UiAreaPath && area.ResolveKind == CastResolveKind.Area && area.Aim.Target == null
+        Assert(area.ResolveKind == CastResolveKind.Area && area.Aim.Target == null
                && ui.ResolveKind == CastResolveKind.Single && ai.ResolveKind == CastResolveKind.Single,
-            "ForUiArea makes an area request with no single target and the area path's legacy quirks (the other builders stay Single)", "" + area.Quirks);
-        LegacyCastQuirk listedArea = LegacyCastQuirk.None;
-        foreach (LegacyCastQuirk bit in AreaPathBits)
-        {
-            Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The area-path bit " + bit + " is one named flag");
-            listedArea |= bit;
-        }
-        Assert(LegacyCastQuirkSets.UiAreaPath == listedArea, "The area path's quirk set is exactly today's area-path bits (" + AreaPathBits.Length + ")",
-            "UiAreaPath " + LegacyCastQuirkSets.UiAreaPath + " vs listed " + listedArea);
-        Assert(LegacyCastQuirkSets.UiAreaPath == LegacyCastQuirk.None && LegacyCastQuirkSets.AiAreaPath == LegacyCastQuirk.None,
-            "Batch 12 step 9: the PC and NPC area paths carry no quirk bit", LegacyCastQuirkSets.UiAreaPath + " / " + LegacyCastQuirkSets.AiAreaPath);
-
+            "ForUiArea makes an area request with no single target (the other builders stay Single)");
         // Batch 11 step 25: the NPC area and Grease builders (the area half of AI-001).
-        Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), "NpcRefusesArea"), "Batch 11 step 25 removed the quirk bit NpcRefusesArea (AI-001)");
         SpellData burning = SpellDatabase.GetSpell(SpellNames.BURNING_HANDS);
         var aiCells = new HashSet<Vector2Int> { new Vector2Int(1, 0) };
         SpellCastRequest aiArea = SpellCastRequest.ForAIArea(null, burning, aiCells, null, new GridIntersection(1, 1));
         Assert(aiArea.ResolveKind == CastResolveKind.Area && aiArea.Aim.Target == null && aiArea.Aim.Cells == aiCells
                && aiArea.Aim.AreaTargets != null && aiArea.Aim.AreaOrigin == new GridIntersection(1, 1) && aiArea.Decider is AiCastDecider
-               && aiArea.Quirks == LegacyCastQuirkSets.AiAreaPath && !ReferenceEquals(aiArea.Spell, burning),
-            "ForAIArea makes an area request on its own clone, aimed from its origin, with the AI decider and the NPC area path's quirks", "" + aiArea.Quirks);
-        Assert(LegacyCastQuirkSets.AiAreaPath == LegacyCastQuirkSets.UiAreaPath,
-            "The NPC area path is the PC area path (batch 12 step 9 removed the NPC caster tests' bit, SPL-160)", "" + LegacyCastQuirkSets.AiAreaPath);
+               && !ReferenceEquals(aiArea.Spell, burning),
+            "ForAIArea makes an area request on its own clone, aimed from its origin, with the AI decider");
         SpellCastRequest aiGrease = SpellCastRequest.ForAIGrease(null, SpellDatabase.GetSpell(SpellNames.GREASE), aiCells, null, new GridIntersection(2, 1));
-        Assert(aiGrease.ResolveKind == CastResolveKind.Grease && aiGrease.Choices.GreaseMode == GreaseCastMode.Area && aiGrease.Aim.ObjectHolder == null
-               && aiGrease.Quirks == LegacyCastQuirkSets.AiGreasePath
-               && LegacyCastQuirkSets.AiGreasePath == LegacyCastQuirkSets.UiGreasePath,
-            "ForAIGrease makes Grease's area form with the NPC Grease path's quirks (the PC Grease path's)", "" + aiGrease.Quirks);
+        Assert(aiGrease.ResolveKind == CastResolveKind.Grease && aiGrease.Choices.GreaseMode == GreaseCastMode.Area && aiGrease.Aim.ObjectHolder == null,
+            "ForAIGrease makes Grease's area form");
 
         // The AI decider's capability (ICastDecider.CanFill): no wall ends, no Grease on an object or armor (nor one with no
         // form), no swarm placement; the UI decider fills everything.
@@ -329,16 +281,14 @@ public static class CastCoreStageOrderTests
         SpellData summonII = SpellDatabase.GetSpell(SpellNames.SUMMON_MONSTER_2);
         SpellCastRequest aiSummon = SpellCastRequest.ForAISummon(null, summonII, new Vector2Int(4, 5));
         Assert(aiSummon.ResolveKind == CastResolveKind.Summon && aiSummon.Aim.Target == null && aiSummon.Aim.Destination == new Vector2Int(4, 5)
-               && aiSummon.Decider is AiCastDecider && aiSummon.Quirks == LegacyCastQuirkSets.AiSummonPath && !ReferenceEquals(aiSummon.Spell, summonII)
-               && LegacyCastQuirkSets.AiSummonPath == LegacyCastQuirkSets.UiSummonPath,
-            "ForAISummon makes a summon request on its own clone with the AI decider and the NPC summon path's quirks (the PC summon path's)", "" + aiSummon.Quirks);
+               && aiSummon.Decider is AiCastDecider && !ReferenceEquals(aiSummon.Spell, summonII),
+            "ForAISummon makes a summon request on its own clone with the AI decider");
         Assert(AiCastDecider.Instance.CanFill(aiSummon) && AiCastDecider.Instance.CanFill(SpellCastRequest.ForAISummon(null, SpellDatabase.GetSpell(SpellNames.SUMMON_NATURES_ALLY_1))),
             "The AI decider fills a Summon Monster's and a Summon Nature's Ally's creature and square (CanFill true; SPL-091)");
         SpellCastRequest aiHold = SpellCastRequest.ForAIHoldCharge(null, SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP));
         Assert(aiHold.ResolveKind == CastResolveKind.HoldCharge && aiHold.Aim.Target == null && aiHold.Decider is AiCastDecider
-               && aiHold.Quirks == LegacyCastQuirkSets.AiHoldPath && aiHold.Source.Kind == CastSourceKind.HeldChargeHold
-               && LegacyCastQuirkSets.AiHoldPath == LegacyCastQuirkSets.UiHoldPath,
-            "ForAIHoldCharge makes a hold as ForUiHoldCharge does, with the AI decider and the NPC hold path's quirks (SPL-115)", aiHold.Source.Kind + " " + aiHold.Quirks);
+               && aiHold.Source.Kind == CastSourceKind.HeldChargeHold,
+            "ForAIHoldCharge makes a hold as ForUiHoldCharge does, with the AI decider (SPL-115)", "" + aiHold.Source.Kind);
         Assert(SpellCastRequest.ForAIHeldChargeDelivery(null, null) == null, "There is no delivery without a held charge");
     }
 
@@ -453,7 +403,7 @@ public static class CastCoreStageOrderTests
             Assert(violations.Count == 0, "No cast-core or cast-stack violation for the step 13 cases", string.Join("; ", violations));
 
             TestReentryWhileAwaitingProvocation(gm, sc, caster, ally, violations);
-            TestMissingQuirk(gm, sc, caster, violations);
+            TestHeldChargeDeliveryCost(gm, sc, caster, ally, violations);
             TestVoluntarySave(gm, sc, caster, ally, violations);
 
             // Batch 11 step 9: area casts through the same core.
@@ -1613,94 +1563,29 @@ public static class CastCoreStageOrderTests
         "decider:before-combat-end", "decider:finished:Resolved@CombatEnd"
     };
 
-    /// <summary>
-    /// The bits every summon, Grease and hold shows (LegacyCastQuirkSets.UiEffectPathShared): none since batch 12 step 9
-    /// removed EffectResolveSkipsCombatEndCheck (CORE-039).
-    /// </summary>
-    private static readonly LegacyCastQuirk[] EffectSharedBits = { };
-
-    /// <summary>
-    /// Today's PC summon path, beyond the shared bits: none since batch 11 step 15 removed SummonSkipsCounterspell and
-    /// SummonSkipsPouch (SPL-006).
-    /// </summary>
-    private static readonly LegacyCastQuirk[] SummonPathBits = { };
-
-    /// <summary>
-    /// Today's PC Grease path, beyond the shared bits: none since batch 11 step 15 removed GreaseSkipsCounterspell,
-    /// GreaseSkipsPouch and GreaseSkipsInvisibilityBreak (SPL-006).
-    /// </summary>
-    private static readonly LegacyCastQuirk[] GreasePathBits = { };
-
-    /// <summary>
-    /// Today's PC hold path, beyond the shared bits: none since batch 11 step 15 removed HoldSkipsGrappleLegality,
-    /// HoldSkipsPouch, HoldSkipsCounterspell and HoldSkipsChoices (SPL-146).
-    /// </summary>
-    private static readonly LegacyCastQuirk[] HoldPathBits = { };
-
-    private static LegacyCastQuirk Union(params LegacyCastQuirk[][] lists)
-    {
-        LegacyCastQuirk all = LegacyCastQuirk.None;
-        foreach (LegacyCastQuirk[] list in lists)
-            foreach (LegacyCastQuirk bit in list)
-            {
-                Assert(Enum.IsDefined(typeof(LegacyCastQuirk), bit) && bit != LegacyCastQuirk.None, "The bit " + bit + " is one named flag");
-                all |= bit;
-            }
-        return all;
-    }
-
-    /// <summary>The summon, Grease and hold builders and their quirk sets (batch 11 step 10).</summary>
+    /// <summary>The summon, Grease and hold builders (batch 11 step 10).</summary>
     private static void TestEffectQuirkSets()
     {
         SpellData summon = SpellDatabase.GetSpell(SpellNames.SUMMON_MONSTER_1);
         SpellCastRequest s = SpellCastRequest.ForUiSummon(SpellCastRequest.ForUi(null, summon, null, null), new Vector2Int(3, 4));
-        Assert(s.ResolveKind == CastResolveKind.Summon && s.Aim.Target == null && s.Aim.Destination == new Vector2Int(3, 4)
-               && s.Quirks == LegacyCastQuirkSets.UiSummonPath,
-            "ForUiSummon makes a summon request aimed at its destination, with no target creature and the summon path's quirks", "" + s.Quirks);
-        Assert(LegacyCastQuirkSets.UiSummonPath == Union(EffectSharedBits, SummonPathBits),
-            "The summon path's quirk set is exactly today's summon-path bits", "" + LegacyCastQuirkSets.UiSummonPath);
+        Assert(s.ResolveKind == CastResolveKind.Summon && s.Aim.Target == null && s.Aim.Destination == new Vector2Int(3, 4),
+            "ForUiSummon makes a summon request aimed at its destination, with no target creature");
 
         SpellData grease = SpellDatabase.GetSpell(SpellNames.GREASE);
         SpellCastRequest g = SpellCastRequest.ForUi(null, grease, null, null);
         g.Choices.GreaseMode = GreaseCastMode.Armor;
         SpellCastRequest.ForUiGrease(g, null, null, null);
-        Assert(g.ResolveKind == CastResolveKind.Grease && g.Aim.Target == null && g.Choices.GreaseMode == GreaseCastMode.Armor
-               && g.Quirks == LegacyCastQuirkSets.UiGreasePath,
-            "ForUiGrease makes one Grease request that keeps its mode choice, with the Grease path's quirks", "" + g.Quirks);
-        Assert(LegacyCastQuirkSets.UiGreasePath == Union(EffectSharedBits, GreasePathBits),
-            "The Grease path's quirk set is exactly today's Grease-path bits", "" + LegacyCastQuirkSets.UiGreasePath);
+        Assert(g.ResolveKind == CastResolveKind.Grease && g.Aim.Target == null && g.Choices.GreaseMode == GreaseCastMode.Armor,
+            "ForUiGrease makes one Grease request that keeps its mode choice");
 
         SpellData grasp = SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP);
         SpellCastRequest h = SpellCastRequest.ForUiHoldCharge(SpellCastRequest.ForUi(null, grasp, null, new CastSource { Kind = CastSourceKind.SpontaneousSlot }));
         SpellCastRequest hc = SpellCastRequest.ForUiHoldCharge(SpellCastRequest.ForUi(null, grasp, null,
             new CastSource { Kind = CastSourceKind.SpontaneousConversion, ConversionLevel = 1 }));
         Assert(h.ResolveKind == CastResolveKind.HoldCharge && h.Source.Kind == CastSourceKind.HeldChargeHold && h.Aim.Target == null
-               && h.Quirks == LegacyCastQuirkSets.UiHoldPath && hc.Source.Kind == CastSourceKind.SpontaneousConversion,
-            "ForUiHoldCharge makes a hold (a slot's source becomes HeldChargeHold, a conversion keeps its kind and spends the sacrificed spell, SPL-154) with the hold path's quirks",
+               && hc.Source.Kind == CastSourceKind.SpontaneousConversion,
+            "ForUiHoldCharge makes a hold (a slot's source becomes HeldChargeHold, a conversion keeps its kind and spends the sacrificed spell, SPL-154)",
             h.Source.Kind + " / " + hc.Source.Kind);
-        Assert(LegacyCastQuirkSets.UiHoldPath == Union(EffectSharedBits, HoldPathBits),
-            "The hold path's quirk set is exactly today's hold-path bits", "" + LegacyCastQuirkSets.UiHoldPath);
-
-        foreach (string name in Enum.GetNames(typeof(LegacyCastQuirk)))
-        {
-            var bit = (LegacyCastQuirk)Enum.Parse(typeof(LegacyCastQuirk), name);
-            LegacyCastQuirk owner = name.StartsWith("Summon", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiSummonPath
-                : name.StartsWith("Grease", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiGreasePath
-                : name.StartsWith("Hold", StringComparison.Ordinal) ? LegacyCastQuirkSets.UiHoldPath
-                : LegacyCastQuirk.None;
-            if (owner == LegacyCastQuirk.None)
-                continue;
-            LegacyCastQuirk others = (LegacyCastQuirkSets.UiPath | LegacyCastQuirkSets.AiPath | LegacyCastQuirkSets.UiAreaPath
-                                      | LegacyCastQuirkSets.UiSummonPath | LegacyCastQuirkSets.UiGreasePath | LegacyCastQuirkSets.UiHoldPath) & ~owner;
-            Assert((owner & bit) == bit && (others & bit) == 0, "The bit " + name + " is set by its own builder only");
-        }
-        foreach (string name in new[] { "NpcNoConcentrationOnCastCheck", "NpcNoConcentrationTracking", "NpcInvisibilityBreakBeforeCounterspell",
-                     "AreaSkipsRing", "AreaSkipsPouch", "SummonSkipsCounterspell", "SummonSkipsPouch", "GreaseSkipsCounterspell",
-                     "GreaseSkipsPouch", "GreaseSkipsInvisibilityBreak", "HoldSkipsGrappleLegality", "HoldSkipsPouch",
-                     "HoldSkipsCounterspell", "HoldSkipsChoices", "DeliverySkipsCounterspell" })
-            Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), name), "Batch 11 step 15 removed the quirk bit " + name);
-        Assert(!Enum.IsDefined(typeof(LegacyCastQuirk), "NpcNoMirrorImageSwap"),
-            "Batch 11 step 26 removed the quirk bit NpcNoMirrorImageSwap (SPL-117: no swap, a random figure per attack for every caster)");
 
         var touch = new List<CastTouchDelivery>();
         AiCastDecider.Instance.ChooseTouchDelivery(null, null, touch.Add);
@@ -2416,34 +2301,119 @@ public static class CastCoreStageOrderTests
     }
 
     /// <summary>
-    /// A request without a quirk bit a stage still needs raises one cast-core violation and keeps the legacy behaviour:
-    /// since batch 12 step 9 the one bit left is HeldChargeDeliveryIsFree (SPL-156), which the Cost stage needs for a held
-    /// charge's delivery, so a delivery whose request lacks it still costs no action. Also batch 12 step 9 (SPL-160 a,
+    /// Batch 12 step 18 (SPL-156; PHB p.140-141; delegated RAW reading 2026-10-14): a held charge's delivery costs what
+    /// HeldChargeDeliveryRules says, through the cast core with no quirk bit and no violation: the casting round's own touch
+    /// (a Discharge Later hold this turn) costs nothing and is used up; a later touch of a friend (the caster itself) takes the
+    /// standard action, and with no standard action left it is refused at Legality with nothing spent; a foe's touch with no
+    /// attack left is refused the same way (an attack is a step of the attack sequence), and with one left and no step paid
+    /// yet (DeliveryStepCommitted false) the Cost stage commits exactly one main-hand step; a touch taken as a later step
+    /// rolls at that step's BAB (DeliveryStepBab, SpellCaster.SpellTouchAttack). Also batch 12 step 9 (SPL-160 a,
     /// CMB-101): a PC with no standard action left, or with no slot for the spell, is refused at Legality with one log
     /// line and nothing spent, and a grappled PC's somatic single-target cast is refused by CheckLegality with no log.
     /// </summary>
-    private static void TestMissingQuirk(GameManager gm, SpellcastingComponent sc, CharacterController caster, List<string> violations)
+    private static void TestHeldChargeDeliveryCost(GameManager gm, SpellcastingComponent sc, CharacterController caster, CharacterController other, List<string> violations)
     {
         // A held Cure Light Wounds delivered to the caster itself (a harmless touch, so the test caster takes no damage).
         SpellData held = SpellCastRequest.CloneForCast(SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS));
         held.HasMaterialComponent = false;
-        sc.SetHeldTouchCharge(held, null);
+        int before = violations.Count;
+
+        // The casting round's touch: free, then used.
+        sc.SetHeldTouchCharge(held, null, null, caster.TurnsStartedCount);
         caster.Actions.Reset();
+        Assert(sc.IsCastingRoundTouchAvailable(caster) && HeldChargeDeliveryRules.CostFor(caster, caster) == HeldChargeDeliveryCost.None,
+            "A Discharge Later hold this turn keeps its casting's touch: delivering it costs nothing (PHB p.140-141)");
         var events = new List<string>();
         SpellCastRequest req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
         req.Aim.Target = caster;
         req.Decider = new RecordingDecider(events);
-        req.Quirks &= ~LegacyCastQuirk.HeldChargeDeliveryIsFree;
         CastContext ctx = gm.BeginCast(req);
-        int before = violations.Count;
         gm.ExecuteCast(ctx, null);
-
-        Assert(violations.Count == before + 1 && violations[violations.Count - 1].Contains("HeldChargeDeliveryIsFree"),
-            "A request without a quirk a stage still needs raises one cast-core violation naming it", string.Join("; ", violations));
         Assert(ctx.Outcome != null && ctx.Outcome.WasCast && !caster.Actions.StandardActionUsed && !caster.Actions.FullRoundActionUsed,
-            "...and gets the legacy behaviour anyway (the delivery costs no action)", ctx.Outcome + " " + string.Join(",", events));
+            "The casting round's touch costs no action", ctx.Outcome + " " + string.Join(",", events));
+        sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+
+        // A charge from an earlier turn, to a friend (the caster): the standard action.
+        sc.SetHeldTouchCharge(held, null);
+        caster.Actions.Reset();
+        Assert(!sc.IsCastingRoundTouchAvailable(caster) && HeldChargeDeliveryRules.CostFor(caster, caster) == HeldChargeDeliveryCost.StandardAction,
+            "A later touch of a friend (or the caster) is a standard action (PHB p.141)");
+        events.Clear();
+        req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+        req.Aim.Target = caster;
+        req.Decider = new RecordingDecider(events);
+        ctx = gm.BeginCast(req);
+        gm.ExecuteCast(ctx, null);
+        Assert(ctx.Outcome != null && ctx.Outcome.WasCast && caster.Actions.StandardActionUsed,
+            "...and the delivery spends it", ctx.Outcome + " " + string.Join(",", events));
+
+        // No standard action left: refused at Legality, nothing spent, the charge still held.
+        sc.SetHeldTouchCharge(held, null);
+        caster.Actions.Reset();
+        caster.Actions.UseStandardAction();
+        events.Clear();
+        req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+        req.Aim.Target = caster;
+        req.Decider = new RecordingDecider(events);
+        ctx = gm.BeginCast(req);
+        gm.ExecuteCast(ctx, null);
+        Assert(ctx.Outcome != null && ctx.Outcome.Kind == CastOutcomeKind.Refused && ctx.Outcome.At == CastStage.Legality
+               && ctx.Outcome.Reason == CastActionRules.RefusalNoStandardAction && sc.HasHeldTouchCharge && caster.Actions.HasMoveAction,
+            "With no standard action left a friend's touch is refused at Legality; the charge stays", "" + ctx.Outcome);
+        Assert(!HeldChargeDeliveryRules.CanDeliverNow(caster),
+            "The Discharge gate (CanDeliverNow) is closed with the standard action spent and no full attack begun");
+
+        // A foe's touch after the casting round (the other creature made a foe for these checks).
+        other.SetTeam(CharacterTeam.Enemy);
+        try
+        {
+            sc.SetHeldTouchCharge(held, null);
+            caster.Actions.Reset();
+            caster.ProgressiveAttackPool.Clear();
+            Assert(HeldChargeDeliveryRules.CostFor(caster, other) == HeldChargeDeliveryCost.AttackStep,
+                "A later touch of a foe is an attack (PHB p.141)");
+            caster.Actions.UseStandardAction();
+            caster.Actions.UseMoveAction();
+            req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+            req.Aim.Target = other;
+            req.Decider = new RecordingDecider(new List<string>());
+            CastOutcome noAttack = gm.CheckLegality(req);
+            Assert(noAttack.Kind == CastOutcomeKind.Refused && noAttack.Reason == HeldChargeDeliveryRules.RefusalNoAttack,
+                "With no attack left a foe's touch is refused at Legality (RefusalNoAttack)", "" + noAttack);
+            req.DeliveryStepCommitted = true;
+            Assert(gm.CheckLegality(req).Kind != CastOutcomeKind.Refused,
+                "...and passes once the attack-sequence executor has paid the step (DeliveryStepCommitted)");
+
+            caster.Actions.Reset();
+            caster.ProgressiveAttackPool.Clear();
+            int stepsBefore = caster.ProgressiveAttackPool.MainHandStepsUsed;
+            req = GameManager.BuildHeldChargeDeliveryRequest(caster, sc);
+            req.Aim.Target = other;
+            req.Decider = new RecordingDecider(new List<string>());
+            ctx = gm.BeginCast(req);
+            gm.ExecuteCast(ctx, null);
+            Assert(ctx.Outcome != null && ctx.Outcome.WasCast && caster.ProgressiveAttackPool.MainHandStepsUsed == stepsBefore + 1
+                   && caster.Actions.StandardActionUsed && caster.Actions.HasMoveAction,
+                "With an attack left and no step paid yet, the Cost stage commits exactly one main-hand step (the attack action)",
+                ctx.Outcome + " steps " + stepsBefore + " -> " + caster.ProgressiveAttackPool.MainHandStepsUsed);
+
+            // The touch's roll at the step's BAB: a later attack of a full attack rolls at its iterative bonus (PHB p.143).
+            var stepReq = new SpellCastRequest { Caster = caster, DeliveryStepBab = caster.Stats.BaseAttackBonus - 5 };
+            SpellCaster.SpellTouchAttackTerms full = SpellCaster.SpellTouchAttack(held, caster, caster.Stats, other, other.Stats, false, false);
+            SpellCaster.SpellTouchAttackTerms later = SpellCaster.SpellTouchAttack(held, caster, caster.Stats, other, other.Stats, false, false,
+                stepReq.TouchStepBabAdjustment);
+            Assert(stepReq.TouchStepBabAdjustment == -5 && later.AttackBonus == full.AttackBonus - 5,
+                "A held touch taken as a later attack step rolls at that step's BAB (DeliveryStepBab)", full.AttackBonus + " / " + later.AttackBonus);
+        }
+        finally
+        {
+            other.SetTeam(CharacterTeam.Player);
+            caster.ProgressiveAttackPool.Clear();
+        }
+        Assert(violations.Count == before, "No cast-core violation for the deliveries", string.Join("; ", violations));
         violations.RemoveRange(before, violations.Count - before);
         sc.ClearHeldTouchCharge("CastCoreStageOrderTests");
+        caster.Actions.Reset();
 
         var logs = new List<string>();
         Action<string> oldLog = ScenarioHooks.CombatLog;

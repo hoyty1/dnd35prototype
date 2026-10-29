@@ -8,7 +8,7 @@ using UnityEngine;
 /// <summary>
 /// Every term of one weapon attack roll's modifier, built by
 /// CharacterController.BuildAttackBonus and used by Attack, FullAttack (iterative and
-/// natural; a flurry of blows is a FullAttack with the flurry steps), DualWieldAttack, and since CMB-087 PerformRakeAttacks,
+/// natural; a flurry of blows is a FullAttack with the flurry steps; an off-hand step is an Attack), and since CMB-087 PerformRakeAttacks,
 /// ResolveAttackWhileGrappling and ResolveUseOpponentWeapon, so all of them add the same terms.
 /// Terms resolved inside PerformSingleAttackWithCrit (weapon enhancement or masterwork,
 /// True Strike, invisible attacker, helpless or blinded target, bane, Destruction smite)
@@ -134,7 +134,7 @@ public struct AttackBonusBreakdown
 /// <summary>
 /// Every static term of one weapon, natural or unarmed damage roll, built by
 /// CharacterController.BuildWeaponDamageBonus and added by PerformSingleAttackWithCrit (every weapon
-/// attack path: Attack, FullAttack, DualWieldAttack, FlurryOfBlows, rake, the grapple weapon attacks),
+/// attack path: Attack (the off-hand step too), FullAttack, FlurryOfBlows, rake, the grapple weapon attacks),
 /// coup de grace, sunder and grapple damage, so they all add the same terms (CMB-003; the attack
 /// roll's counterpart is <see cref="AttackBonusBreakdown"/>, CMB-043). The weapon dice and the extra
 /// dice that are never multiplied (sneak attack, energy, alignment and bane riders, specific-item

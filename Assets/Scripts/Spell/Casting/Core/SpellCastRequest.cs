@@ -45,13 +45,23 @@ public sealed class SpellCastRequest
     public CastResolveKind ResolveKind = CastResolveKind.Single;
 
     /// <summary>
-    /// The legacy behaviours this cast keeps until a later batch 11 step fixes them (<see cref="LegacyCastQuirk"/>): set
-    /// by the builder, read only by the cast core's stage methods.
+    /// A held-charge delivery whose attack step the attack-sequence executor has paid (batch 12 step 18, SPL-156;
+    /// AttackSequenceRequest.ForHeldChargeTouch): the Legality and Cost stages charge no second attack for it.
     /// </summary>
-    public LegacyCastQuirk Quirks;
+    public bool DeliveryStepCommitted;
 
-    /// <summary>True when <paramref name="quirk"/> is set on this request.</summary>
-    public bool HasQuirk(LegacyCastQuirk quirk) => (Quirks & quirk) == quirk;
+    /// <summary>
+    /// The BAB of the attack step a held-charge touch takes the place of (set with <see cref="DeliveryStepCommitted"/>):
+    /// the full BAB for the attack action or a full attack's first step, the iterative BAB of a later step (PHB p.141,
+    /// p.143). The touch roll uses it in place of the caster's BAB (SpellCaster.SpellTouchAttack). Null: the full BAB.
+    /// </summary>
+    public int? DeliveryStepBab;
+
+    /// <summary>The touch roll's BAB change for <see cref="DeliveryStepBab"/> (0 or less; 0 when unset).</summary>
+    public int TouchStepBabAdjustment
+        => DeliveryStepBab.HasValue && Caster != null && Caster.Stats != null
+            ? Mathf.Min(0, DeliveryStepBab.Value - Caster.Stats.BaseAttackBonus)
+            : 0;
 
     /// <summary>
     /// The clone a cast works on. It keeps the template's MetamagicDataRef reference (a prepared metamagic spell's
@@ -83,8 +93,7 @@ public sealed class SpellCastRequest
             Spell = spell == null ? null : hasMetamagic ? spell.Clone() : CloneForCast(spell),
             Metamagic = metamagic,
             Source = source ?? new CastSource(),
-            Decider = UiCastDecider.Instance,
-            Quirks = LegacyCastQuirkSets.UiPath
+            Decider = UiCastDecider.Instance
         };
         if (request.Spell != null && hasMetamagic)
             SpellCaster.ApplyMetamagicToSpellData(request.Spell, metamagic);
@@ -103,8 +112,7 @@ public sealed class SpellCastRequest
             Spell = spell,
             Metamagic = metamagic,
             Source = source ?? new CastSource(),
-            Decider = UiCastDecider.Instance,
-            Quirks = LegacyCastQuirkSets.UiPath
+            Decider = UiCastDecider.Instance
         };
     }
 
@@ -112,8 +120,7 @@ public sealed class SpellCastRequest
     /// The PC area builder (batch 11 step 9): turns the open Ui cast <paramref name="request"/> (built by
     /// <see cref="ForUi"/> or <see cref="ForUiPrebuilt"/> when the spell, scroll, wand or F12 cast was chosen) into an area
     /// cast aimed at <paramref name="cells"/> with the creatures in them, <paramref name="targets"/> (the core's Legality
-    /// stage filters both by line of effect), with no single target, and gives it the PC area path's legacy quirks
-    /// (<see cref="LegacyCastQuirkSets.UiAreaPath"/>). <paramref name="origin"/> is the area's point of origin, the grid
+    /// stage filters both by line of effect), with no single target. <paramref name="origin"/> is the area's point of origin, the grid
     /// intersection the UI aimed it from (<see cref="CastAim.AreaOrigin"/>; batch 11 step 24), null for the walls. Returns
     /// the request.
     /// </summary>
@@ -129,7 +136,6 @@ public sealed class SpellCastRequest
         request.Aim.AreaTargets = targets;
         request.Aim.Cells = cells;
         request.Aim.AreaOrigin = origin;
-        request.Quirks = LegacyCastQuirkSets.UiAreaPath;
         return request;
     }
 
@@ -137,8 +143,7 @@ public sealed class SpellCastRequest
     /// The PC summon builder (batch 11 step 10): turns the open Ui cast <paramref name="request"/> of a Summon Monster,
     /// Summon Nature's Ally or Summon Swarm spell, whose creature (or swarm), list level and count rule the placement
     /// prompts already wrote into its choices, into a summon cast that places it on <paramref name="destination"/>, with
-    /// no target creature, and gives it the summon path's legacy quirks (<see cref="LegacyCastQuirkSets.UiSummonPath"/>).
-    /// Returns the request.
+    /// no target creature. Returns the request.
     /// </summary>
     public static SpellCastRequest ForUiSummon(SpellCastRequest request, Vector2Int destination)
     {
@@ -149,7 +154,6 @@ public sealed class SpellCastRequest
             request.Aim = new CastAim();
         request.Aim.Target = null;
         request.Aim.Destination = destination;
-        request.Quirks = LegacyCastQuirkSets.UiSummonPath;
         return request;
     }
 
@@ -158,7 +162,7 @@ public sealed class SpellCastRequest
     /// mode prompt wrote into its choices (CastChoices.GreaseMode, PHB p.237), into one Grease cast: an area cast records
     /// the 10-ft square's <paramref name="cells"/> and the creatures in it, <paramref name="areaTargets"/>; an object or
     /// armor cast records the creature holding or wearing the object, <paramref name="objectHolder"/> (the spell's target
-    /// is the object). No target creature; the Grease path's legacy quirks (<see cref="LegacyCastQuirkSets.UiGreasePath"/>).
+    /// is the object). No target creature.
     /// An area cast records its square's centre, <paramref name="areaOrigin"/>, as its point of origin, from which the
     /// Legality stage traces line of effect (batch 11 step 24, SPL-006). Returns the request.
     /// </summary>
@@ -175,7 +179,6 @@ public sealed class SpellCastRequest
         request.Aim.AreaTargets = areaTargets;
         request.Aim.Cells = cells;
         request.Aim.AreaOrigin = areaOrigin;
-        request.Quirks = LegacyCastQuirkSets.UiGreasePath;
         return request;
     }
 
@@ -185,7 +188,7 @@ public sealed class SpellCastRequest
     /// core's stages through Spend and Provocation and then stores the charge (PHB p.141, p.176). A prepared or
     /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>; a cleric's conversion keeps its kind,
     /// so the hold spends the sacrificed spell (PHB p.32, p.141; batch 11 step 14, SPL-154). No target creature (the charge is delivered later, by a cast of its own);
-    /// the hold path's legacy quirks (<see cref="LegacyCastQuirkSets.UiHoldPath"/>). Returns the request.
+    /// Returns the request.
     /// </summary>
     public static SpellCastRequest ForUiHoldCharge(SpellCastRequest request)
     {
@@ -202,7 +205,6 @@ public sealed class SpellCastRequest
         if (request.Aim == null)
             request.Aim = new CastAim();
         request.Aim.Target = null;
-        request.Quirks = LegacyCastQuirkSets.UiHoldPath;
         return request;
     }
 
@@ -240,8 +242,8 @@ public sealed class SpellCastRequest
     /// <paramref name="metamagic"/> when the caller gives one (a Scripted cast step's), else the prepared metamagic slot's
     /// (<see cref="AiMetamagicFor"/>; batch 11 step 21: the NPC path casts metamagic as the PC menu does, a clone with the
     /// metamagic's pre-cast changes, SpellCaster.ApplyMetamagicToSpellData, and spends the slot or spell per day the
-    /// metamagic spell takes); a prepared or spontaneous slot as the caster's spellcasting says, the NPC path's legacy
-    /// quirks (<see cref="LegacyCastQuirkSets.AiPath"/>, batch 11 step 8) and <see cref="AiCastDecider"/>, which fills the
+    /// metamagic spell takes); a prepared or spontaneous slot as the caster's spellcasting says, and
+    /// <see cref="AiCastDecider"/>, which fills the
     /// caster's choices when the cast core asks (the Legality stage).
     /// </summary>
     public static SpellCastRequest ForAI(CharacterController caster, CharacterController target, SpellData spell, MetamagicData metamagic = null)
@@ -254,8 +256,7 @@ public sealed class SpellCastRequest
             Spell = spell == null ? null : hasMetamagic ? spell.Clone() : CloneForCast(spell),
             Metamagic = hasMetamagic ? castMetamagic.Clone() : null,
             Source = AiSourceFor(caster, spell),
-            Decider = AiCastDecider.Instance,
-            Quirks = LegacyCastQuirkSets.AiPath
+            Decider = AiCastDecider.Instance
         };
         if (request.Spell != null && hasMetamagic)
             SpellCaster.ApplyMetamagicToSpellData(request.Spell, request.Metamagic);
@@ -268,8 +269,7 @@ public sealed class SpellCastRequest
     /// <see cref="ForAI"/> builds (the clone with its metamagic, the slot source, the AI decider), turned into an area cast
     /// aimed at <paramref name="cells"/> from <paramref name="origin"/> (the point of origin the AI's aim search chose,
     /// AreaAimSearch; null for a one-square effect) with the creatures in it, <paramref name="targets"/> (the core's
-    /// Legality stage filters both by line of effect, as for a PC's area), no single target, and the NPC area path's
-    /// legacy quirks (<see cref="LegacyCastQuirkSets.AiAreaPath"/>). With null cells it is the request the AI's search and
+    /// Legality stage filters both by line of effect, as for a PC's area), and no single target. With null cells it is the request the AI's search and
     /// legality filter start from (its spell clone is the one the cast will use, so a Widened area is searched widened).
     /// </summary>
     public static SpellCastRequest ForAIArea(CharacterController caster, SpellData spell, HashSet<Vector2Int> cells,
@@ -281,15 +281,13 @@ public sealed class SpellCastRequest
         request.Aim.Cells = cells;
         request.Aim.AreaTargets = targets ?? new List<CharacterController>();
         request.Aim.AreaOrigin = origin;
-        request.Quirks = LegacyCastQuirkSets.AiAreaPath;
         return request;
     }
 
     /// <summary>
     /// An NPC (AI-run) or Scripted summon cast of a Summon Monster or Summon Nature's Ally spell (PHB p.285-288; batch 11
     /// step 27, SPL-091): the <see cref="ForAI"/> request (the clone with its metamagic, the slot source, the AI decider)
-    /// turned into a summon cast with no target creature and the NPC summon path's legacy quirks
-    /// (<see cref="LegacyCastQuirkSets.AiSummonPath"/>). The creature, its list level and count rule and the square it
+    /// turned into a summon cast with no target creature. The creature, its list level and count rule and the square it
     /// appears on are the caster's choices, which the AI decider fills at the Legality stage (AiCastDecider.FillChoices,
     /// GameManager.AiFillSummonChoices), unless the caller set them (<paramref name="destination"/>). The core's Summon
     /// resolve then places the creatures exactly as for a PC.
@@ -300,22 +298,19 @@ public sealed class SpellCastRequest
         request.ResolveKind = CastResolveKind.Summon;
         request.Aim.Target = null;
         request.Aim.Destination = destination;
-        request.Quirks = LegacyCastQuirkSets.AiSummonPath;
         return request;
     }
 
     /// <summary>
     /// An NPC (AI-run) hold of a melee touch spell's charge (PHB p.141, p.176; batch 11 step 27, SPL-115): the
     /// <see cref="ForAI"/> request turned into a hold exactly as <see cref="ForUiHoldCharge"/> turns a PC's (a prepared or
-    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>), with no target creature and the
-    /// NPC hold path's legacy quirks (<see cref="LegacyCastQuirkSets.AiHoldPath"/>). The AI holds only when its target is
+    /// spontaneous slot's source becomes <see cref="CastSourceKind.HeldChargeHold"/>), with no target creature. The AI holds only when its target is
     /// out of reach and it can move into reach this turn (AiCastDecider.TouchDeliveryFor).
     /// </summary>
     public static SpellCastRequest ForAIHoldCharge(CharacterController caster, SpellData spell, MetamagicData metamagic = null)
     {
         SpellCastRequest request = ForUiHoldCharge(ForAI(caster, null, spell, metamagic));
         request.Decider = AiCastDecider.Instance;
-        request.Quirks = LegacyCastQuirkSets.AiHoldPath;
         return request;
     }
 
@@ -323,8 +318,9 @@ public sealed class SpellCastRequest
     /// The delivery of the charge <paramref name="caster"/> holds (SpellcastingComponent.HeldTouchSpell) to
     /// <paramref name="target"/> by an NPC (AI-run) caster (batch 11 step 27, SPL-115): the same request as the PC's
     /// Discharge button builds (GameManager.BuildHeldChargeDeliveryRequest: a clone of the held spell as it was cast, a
-    /// held-charge-delivery source, a copy of the choices made at the hold), with the AI decider and the NPC path's legacy
-    /// quirks (<see cref="LegacyCastQuirkSets.AiPath"/>, which keep the delivery free as the PC's is, SPL-156). A missed
+    /// held-charge-delivery source, a copy of the choices made at the hold), with the AI decider. Its cost is the PC's
+    /// (HeldChargeDeliveryRules, batch 12 step 18, SPL-156); a foe's touch after the casting round runs through the
+    /// attack-sequence executor (GameManager.TryNPCDeliverHeldCharge, AttackSequenceRequest.ForHeldChargeTouch). A missed
     /// touch keeps the charge for every caster (PHB p.141; the PostCast stage). Null with no charge held.
     /// </summary>
     public static SpellCastRequest ForAIHeldChargeDelivery(CharacterController caster, CharacterController target)
@@ -338,8 +334,7 @@ public sealed class SpellCastRequest
             Spell = CloneForCast(spellComp.HeldTouchSpell),
             Metamagic = spellComp.HeldTouchMetamagic,
             Source = new CastSource { Kind = CastSourceKind.HeldChargeDelivery },
-            Decider = AiCastDecider.Instance,
-            Quirks = LegacyCastQuirkSets.AiPath
+            Decider = AiCastDecider.Instance
         };
         if (spellComp.HeldTouchChoices != null)
             request.Choices = spellComp.HeldTouchChoices.Clone();
@@ -351,8 +346,7 @@ public sealed class SpellCastRequest
     /// An NPC (AI-run) Grease on a 10-ft. square (PHB p.237; batch 11 step 25): the <see cref="ForAI"/> request turned into
     /// a Grease cast in its area form (CastChoices.GreaseMode Area, the only form the AI decider can fill,
     /// AiCastDecider.CanFill) on <paramref name="cells"/>, whose point of origin is the square's centre,
-    /// <paramref name="origin"/>, with the creatures in it, <paramref name="targets"/>, and the NPC Grease path's legacy
-    /// quirks (<see cref="LegacyCastQuirkSets.AiGreasePath"/>).
+    /// <paramref name="origin"/>, with the creatures in it, <paramref name="targets"/>.
     /// </summary>
     public static SpellCastRequest ForAIGrease(CharacterController caster, SpellData spell, HashSet<Vector2Int> cells,
         List<CharacterController> targets, GridIntersection? origin, MetamagicData metamagic = null)
@@ -365,7 +359,6 @@ public sealed class SpellCastRequest
         request.Aim.Cells = cells;
         request.Aim.AreaTargets = targets ?? new List<CharacterController>();
         request.Aim.AreaOrigin = origin;
-        request.Quirks = LegacyCastQuirkSets.AiGreasePath;
         return request;
     }
 }

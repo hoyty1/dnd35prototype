@@ -355,7 +355,7 @@ public partial class GameManager : MonoBehaviour
     private ItemData _equippedWeapon;
     private int _currentAttackBAB;
 
-    // Flexible off-hand attack flow state (PC UI only; NPCs make no off-hand attacks, AI-055).
+    // Flexible off-hand attack flow state (the PC UI's; each click is one off-hand step of RunAttackSequence, and the AI makes its off-hand steps through its own request, batch 12 step 18).
     // Dedicated off-hand flags, intentionally independent from main-hand sequence tracking.
     private bool _offHandAttackAvailableThisTurn;
     private bool _offHandAttackUsedThisTurn;
@@ -364,7 +364,7 @@ public partial class GameManager : MonoBehaviour
     private int _currentOffHandBAB;
     private ItemData _currentOffHandWeapon;
 
-    // Turn-scoped dual-wield choice state (first main-hand attack prompt; PC UI only, AI-055)
+    // Turn-scoped dual-wield choice state (first main-hand attack prompt; the PC UI's, the AI chooses in AttackIntent.ForAI)
     private bool _dualWieldingChoiceMade;
     private bool _isDualWielding;
     private int _mainHandPenalty;
@@ -9545,6 +9545,15 @@ public partial class GameManager : MonoBehaviour
         var spellComp = pc.Spellcasting;
         if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null)
             return;
+
+        // The delivery's cost (batch 12 step 18, SPL-156; HeldChargeDeliveryRules): the casting round's own touch, else an
+        // attack for a foe or a standard action for a friend. With none of them left there is nothing to deliver now.
+        if (!HeldChargeDeliveryRules.CanDeliverNow(pc))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no attack or standard action left to deliver the held {spellComp.HeldTouchSpell.Name} (PHB p.141)."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         BeginCast(BuildHeldChargeDeliveryRequest(pc, spellComp));
 

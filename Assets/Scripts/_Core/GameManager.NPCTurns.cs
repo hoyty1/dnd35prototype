@@ -745,7 +745,8 @@ public partial class GameManager
         bool adaptive = profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc);
         ItemData weapon = npc.GetEquippedMainWeapon();
         bool ranged = IsAttackModeRanged(npc, weapon, intent);
-        AttackStepKind kind = ranged ? AttackStepKind.MainHand : npc.GetMeleeAttackStepKind();
+        // The next step's hand: a two-weapon intent's off-hand steps too (batch 12 step 18, AI-055; PHB p.160).
+        AttackStepKind kind = NextStepKind(req, npc, ranged);
         CharacterController current = state.CurrentTarget;
 
         // The lines for the step just made: a slain target, or an unconscious one the profile ignores.
@@ -754,7 +755,7 @@ public partial class GameManager
         {
             if (current.Stats.IsDead)
             {
-                int remainingAfterKill = adaptive ? npc.GetRemainingMainHandAttackSteps(kind) : 0;
+                int remainingAfterKill = adaptive ? RemainingSteps(req, npc, ranged) : 0;
                 CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", remainingAfterKill > 0
                     ? $"{current.Stats.CharacterName} is defeated! {remainingAfterKill} attack(s) remaining."
                     : $"{current.Stats.CharacterName} has fallen, but the fight continues!"));
@@ -762,7 +763,7 @@ public partial class GameManager
             }
             else if (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
             {
-                if (adaptive && npc.GetRemainingMainHandAttackSteps(kind) > 0)
+                if (adaptive && RemainingSteps(req, npc, ranged) > 0)
                     CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{current.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target."));
                 current = null;
             }
@@ -817,7 +818,7 @@ public partial class GameManager
             return AttackStepChoice.At(steppedTarget);
         }
 
-        int remainingAttacks = npc.GetRemainingMainHandAttackSteps(kind);
+        int remainingAttacks = RemainingSteps(req, npc, ranged);
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s)."));
         return AttackStepChoice.StopWith("no valid target");
     }
@@ -987,8 +988,7 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// The NPC cast executor (batch 11 step 8): an AI request (SpellCastRequest.ForAI, with the AI decider and the NPC
-    /// path's legacy quirks, LegacyCastQuirkSets.AiPath) run through the shared cast core at once (RunCastSync), in its
+    /// The NPC cast executor (batch 11 step 8): an AI request (SpellCastRequest.ForAI, with the AI decider) run through the shared cast core at once (RunCastSync), in its
     /// own context on the cast stack, so it nests cleanly over a Ui cast the player left open. Returns whether the cast
     /// counts as cast (CastOutcome.WasCast): false when it was refused (no standard action, a dead or invalid target, no
     /// slot, out of range, an area spell) or its slot could not be spent; true once the slot is spent, whatever came of
@@ -1059,8 +1059,10 @@ public partial class GameManager
     /// <summary>
     /// The NPC delivery of its held charge to <paramref name="target"/> (batch 11 step 27, SPL-115): the request the PC's
     /// Discharge button builds, with the AI decider (SpellCastRequest.ForAIHeldChargeDelivery), run through the shared
-    /// cast core at once. A missed touch keeps the charge (PHB p.141; the PostCast stage). Returns whether the delivery
-    /// was made (CastOutcome.WasCast: it passed the Legality stage; a delivery spends nothing).
+    /// cast core at once, at the PC's cost (batch 12 step 18, SPL-156; HeldChargeDeliveryRules): a foe's touch after the
+    /// casting round is one step of the attack sequence (<see cref="DeliverHeldChargeThroughAttackStep"/>), the casting
+    /// round's own touch costs nothing and a friend's touch the standard action. A missed touch keeps the charge (PHB
+    /// p.141; the PostCast stage). Returns whether the delivery was made (CastOutcome.WasCast: it passed the Legality stage).
     /// </summary>
     private bool TryNPCDeliverHeldCharge(CharacterController npc, CharacterController target)
     {
@@ -1071,7 +1073,65 @@ public partial class GameManager
         if (request == null)
             return false;
         CastStageTrace.Mark(npc, request.Spell, CastStageTrace.Begin, nameof(TryNPCDeliverHeldCharge));
+        if (HeldChargeDeliveryRules.CostFor(npc, target) == HeldChargeDeliveryCost.AttackStep)
+        {
+            bool cast = false;
+            DeliverHeldChargeThroughAttackStep(npc, target, AttackDeciders.For(npc, ActorSource.AI), request,
+                () => cast = RunCastSync(request, out _), out _);
+            // The step could not be made (no attack left, the touch's reach): nothing was spent and cast stays false.
+            return cast;
+        }
         return RunCastSync(request, out _);
+    }
+
+    /// <summary>
+    /// A held charge's touch on a foe after its casting round as one step of the attack sequence (batch 12 step 18,
+    /// SPL-156; PHB p.141: a touch attack made instead of a regular attack), PC and NPC alike: the executor
+    /// (<see cref="RunAttackSequence"/>, AttackSequenceRequest.ForHeldChargeTouch) checks the step (CanCommitAttack, the
+    /// shared gate with the touch's reach), pays it (the attack action, or one step of a full attack) and then runs
+    /// <paramref name="runDelivery"/>, the delivery's cast with <paramref name="delivery"/>.DeliveryStepCommitted set and the
+    /// step's BAB (DeliveryStepBab: the touch rolls at the iterative BAB of the attack it replaces, PHB p.143).
+    /// <paramref name="runDelivery"/> returns whether the cast passed its Legality stage.
+    /// Before any step is paid the delivery's own legality is tested (CheckLegality, no side effect: the target, the
+    /// spell's range, line of effect): a delivery the cast core would refuse is run as it is, with no step paid, so its
+    /// Legality stage refuses it with its own log line and refusal path, and nothing is spent (true is returned: the cast
+    /// core handled it). False (with <paramref name="refusal"/>) when the attack step could not be made; nothing is spent then.
+    /// </summary>
+    internal bool DeliverHeldChargeThroughAttackStep(CharacterController caster, CharacterController target, IAttackDecider decider,
+        SpellCastRequest delivery, Func<bool> runDelivery, out string refusal)
+    {
+        refusal = null;
+        if (delivery != null)
+        {
+            bool committedBefore = delivery.DeliveryStepCommitted;
+            delivery.DeliveryStepCommitted = true;
+            CastOutcome legality = CheckLegality(delivery);
+            delivery.DeliveryStepCommitted = committedBefore;
+            if (legality.Kind == CastOutcomeKind.Refused)
+            {
+                runDelivery?.Invoke();
+                return true;
+            }
+        }
+
+        AttackSequenceRequest step = AttackSequenceRequest.ForHeldChargeTouch(caster, target, decider, (c, t, stepBab) =>
+        {
+            if (delivery != null)
+            {
+                delivery.DeliveryStepCommitted = true;
+                delivery.DeliveryStepBab = stepBab;
+            }
+            return runDelivery == null || runDelivery();
+        });
+        var outcome = new AttackSequenceOutcome();
+        RunAttackSequenceSync(step, outcome);
+        if (outcome.AttacksMade > 0)
+            return true;
+        // The step was paid but the delivery's Legality refused it after all: the cast core logged it.
+        if (delivery != null && delivery.DeliveryStepCommitted)
+            return true;
+        refusal = outcome.StopReason ?? "no attack left";
+        return false;
     }
 
     /// <summary>Delegates to AIService.IsGiantBombardierBeetle for centralized AI utility.</summary>
@@ -1174,6 +1234,10 @@ public partial class GameManager
             if (npc.IsTargetInCurrentWeaponRange(target))
                 TryNPCDeclareSmite(npc, target);
             TryNPCDeclareFlurryOfBlows(npc, target);
+            // A flurry has no off-hand attacks (PHB p.40; CanCommitAttack): a two-weapon intent chosen before the flurry was
+            // declared is rebuilt, so no flurry attack takes the two-weapon main-hand penalty.
+            if (npc.IsUsingFlurryOfBlows && request.InterleaveOffHand)
+                request = AttackSequenceRequest.ForAI(this, npc, target, tryStepManeuver, npc.aiProfile);
         }
         else if (tryStepManeuver != null && tryStepManeuver(npc, target))
         {

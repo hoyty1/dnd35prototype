@@ -18,7 +18,10 @@ public enum AttackStepKind
     MainHand,
     /// <summary>The next natural attack of an innate natural-attack sequence (with Haste, one extra natural attack, CMB-106), or a maneuver or grapple natural attack that replaces one (at that natural attack's BAB; CMB-102, CMB-127).</summary>
     NaturalSequence,
-    /// <summary>An off-hand attack: counts toward commitment but does not move the main-hand cursor.</summary>
+    /// <summary>
+    /// An off-hand attack (two-weapon fighting, PHB p.160): counts toward commitment but does not move the main-hand cursor;
+    /// it moves the off-hand one (AttackPool.OffHandStepsUsed). A step of the shared executor since batch 12 step 18.
+    /// </summary>
     OffHand
 }
 
@@ -44,6 +47,13 @@ public sealed class AttackPool
 
     /// <summary>Main-hand or natural-sequence steps used this turn; the index of the next step.</summary>
     public int MainHandStepsUsed { get; private set; }
+
+    /// <summary>
+    /// Off-hand steps made (or given up for an off-hand maneuver or a ward) this turn: the index of the next off-hand
+    /// attack (CharacterCombatStats.GetOffHandAttackBAB) and its limit (CharacterController.GetOffHandAttackCount; PHB p.160:
+    /// one off-hand attack, a second with Improved Two-Weapon Fighting, a third with Greater). Batch 12 step 18.
+    /// </summary>
+    public int OffHandStepsUsed { get; private set; }
 
     /// <summary>Main-hand steps available this turn; 0 until the first main-hand or natural step fixes it.</summary>
     public int MainHandBudget { get; private set; }
@@ -127,6 +137,7 @@ public sealed class AttackPool
         Mode = ProgressiveAttackMode.None;
         AttacksCommitted = 0;
         MainHandStepsUsed = 0;
+        OffHandStepsUsed = 0;
         MainHandBudget = 0;
         PendingStepPaid = false;
         HasteExtraNaturalAttackUsed = false;
@@ -217,6 +228,7 @@ public sealed class AttackPool
         if (kind == AttackStepKind.MainHand || kind == AttackStepKind.NaturalSequence)
             return MainHandStepsUsed++;
 
+        OffHandStepsUsed++;
         return -1;
     }
 }

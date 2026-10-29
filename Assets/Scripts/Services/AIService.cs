@@ -36,12 +36,6 @@ public class AIService : MonoBehaviour
     [SerializeField] private AIDifficultyLevel _difficulty = AIDifficultyLevel.Normal;
 
     /// <summary>
-    /// The creatures whose held touch charge the AI tried to deliver this turn (batch 11 step 27, SPL-115): one delivery
-    /// a turn (the AI's own limit; RAW a later touch takes an attack, SPL-156, which the shared rule does not charge yet).
-    /// </summary>
-    private readonly HashSet<CharacterController> _heldChargeTriedThisTurn = new HashSet<CharacterController>();
-
-    /// <summary>
     /// The creatures that cast and held a touch charge this turn to move and touch (a HoldCharge candidate, batch 11 step
     /// 27), with the foe they meant to touch: the turn's end moves them into reach and delivers it.
     /// </summary>
@@ -110,7 +104,6 @@ public class AIService : MonoBehaviour
     {
         if (npc != null)
         {
-            _heldChargeTriedThisTurn.Remove(npc);
             _heldChargePlans.Remove(npc);
         }
 
@@ -361,8 +354,8 @@ public class AIService : MonoBehaviour
 
         // A touch charge held from an earlier turn (PHB p.141: the caster may keep making touch attacks round after round;
         // batch 11 step 27, SPL-115): move into reach if needed and touch the best target, through the delivery the PC's
-        // Discharge button runs. A missed touch keeps the charge. The delivery costs no action today on both sides
-        // (SPL-156), so the turn goes on.
+        // Discharge button runs. A missed touch keeps the charge. The delivery costs what the PC's does (batch 12 step 18,
+        // SPL-156): an attack (the standard action) for a foe, a standard action for a friend; the turn goes on with what is left.
         if (npc.Spellcasting != null && npc.Spellcasting.HasHeldTouchCharge && !npc.IsGrappling())
         {
             yield return _gameManager.StartCoroutine(TryDeliverHeldChargeTurn(npc, targetPC));
@@ -2957,7 +2950,8 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>
-    /// Delivers <paramref name="npc"/>'s held touch charge (batch 11 step 27, SPL-115; PHB p.141): at most one try a turn;
+    /// Delivers <paramref name="npc"/>'s held touch charge (batch 11 step 27, SPL-115; PHB p.141), at the PC's cost (batch 12
+    /// step 18, SPL-156: the delivery's legality refuses a touch the creature has no attack or standard action left for);
     /// the target is the creature the charge may touch (the delivery's legality, GameManager.CheckDeliveryLegalityForAI)
     /// within reach, <paramref name="preferred"/> first, else the one with the fewest hit points (a hostile spell's foes, a
     /// helpful spell's hurt allies); with none in reach and a move action left, the first such creature (preferred, then
@@ -2969,12 +2963,6 @@ public class AIService : MonoBehaviour
         SpellcastingComponent sc = npc != null ? npc.Spellcasting : null;
         if (_gameManager == null || sc == null || !sc.HasHeldTouchCharge || sc.HeldTouchSpell == null || CombatEnded())
             yield break;
-        // One delivery request a turn (an AI-only stand-in for SPL-156's per-delivery action cost, to go with that fix):
-        // spent only when a delivery is made (below), so a turn-start look that finds nothing to touch leaves the try for
-        // the delivery after a new hold.
-        if (_heldChargeTriedThisTurn.Contains(npc))
-            yield break;
-
         SpellData held = sc.HeldTouchSpell;
         bool hostile = !AISpellcastingStrategist.IsAllyTargetedSpell(held);
         CharacterController target = null;
@@ -3044,7 +3032,6 @@ public class AIService : MonoBehaviour
             yield break;
 
         Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} delivers the held {held.Name} to {target.Stats.CharacterName}");
-        _heldChargeTriedThisTurn.Add(npc);
         _gameManager.TryNPCDeliverHeldChargeForAI(npc, target);
         yield return new WaitForSeconds(0.5f);
     }

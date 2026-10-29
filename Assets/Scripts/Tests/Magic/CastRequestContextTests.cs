@@ -58,7 +58,6 @@ public static class CastRequestContextTests
             "AiCastDecider.FillChoices: Resist Energy with no energy attack seen gets fire", "" + r.Choices.Energy);
         Assert(r.Decider is AiCastDecider && r.Decider.IsSynchronous, "ForAI: the AI decider answers inline");
         Assert(r.Metamagic == null && r.Source.Kind == CastSourceKind.PreparedSlot, "ForAI: no metamagic; a caster without spellcasting casts from a prepared slot");
-        Assert(r.Quirks == LegacyCastQuirkSets.AiPath, "ForAI: the NPC path's legacy quirks (batch 11 step 8)", "" + r.Quirks);
 
         SpellCastRequest p = SpellCastRequest.ForAI(null, null, SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_ENERGY));
         Assert(FillAi(p) == CastChoiceFill.Filled && p.Choices.Energy == ResistEnergyType.Fire, "AiCastDecider.FillChoices: Protection from Energy gets fire", "" + p.Choices.Energy);

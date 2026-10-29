@@ -531,6 +531,127 @@ namespace DND35.AI
             return flurryHits > plainHits;
         }
 
+        /// <summary>
+        /// AI stopgap (batch 13 catalog), AI-055 (owner decision Q2, 2026-10-23): whether the creature declares Rapid Shot
+        /// for its ranged attack on <paramref name="target"/> with <paramref name="weapon"/>. The rules (CharacterController
+        /// .CanDeclareRapidShot, the declaration before the first attack, D9) are the PC toggle's.
+        /// <see cref="DefaultShouldUseRapidShot"/>.
+        /// </summary>
+        public virtual bool ShouldUseRapidShot(CharacterController self, CharacterController target, ItemData weapon)
+            => DefaultShouldUseRapidShot(self, target, weapon);
+
+        /// <summary>
+        /// The default Rapid Shot choice, also used for creatures without a profile (AI stopgap, batch 13 catalog): declare it
+        /// when it may be declared now (the feat, no attack made yet, the full-round action free) and the expected hits of the
+        /// turn's shots with it (one extra shot at the highest bonus, -2 on every shot, PHB p.99) beat those without it.
+        /// Damage per hit is taken as equal; Haste's extra shot is in both. A thrown weapon (a javelin, or a dagger the NPC
+        /// throws, PHB p.113) counts only the throws it has weapons for: the one in hand and the like ones it carries.
+        /// </summary>
+        public static bool DefaultShouldUseRapidShot(CharacterController self, CharacterController target, ItemData weapon)
+        {
+            if (self == null || self.Stats == null || target == null || target.Stats == null || weapon == null)
+                return false;
+            if (!self.CanDeclareRapidShot(weapon, true, out _))
+                return false;
+
+            int otherTerms = self.BuildAttackBonus(target, weapon, true, null, false, 0, 0,
+                CharacterController.IsWeaponTwoHanded(weapon)).Total;
+            int targetAC = target.Stats.ArmorClass;
+            System.Collections.Generic.List<int> ladder = CharacterCombatStats.GetBaseAttackLadder(self.Stats.BaseAttackBonus);
+            if (ladder.Count == 0)
+                return false;
+
+            int shots = ThrowsAvailable(self, weapon);
+            float plain = 0f;
+            float rapid = 0f;
+            var rapidLadder = new System.Collections.Generic.List<int> { ladder[0] };
+            rapidLadder.AddRange(ladder);
+            for (int i = 0; i < ladder.Count && i < shots; i++)
+                plain += HitChance(ladder[i] + otherTerms, targetAC);
+            for (int i = 0; i < rapidLadder.Count && i < shots; i++)
+                rapid += HitChance(rapidLadder[i] + otherTerms + RapidShotPenalty, targetAC);
+            return rapid > plain;
+        }
+
+        /// <summary>The throws <paramref name="weapon"/> allows this turn: unlimited for a projectile weapon; for a thrown one the weapon in hand plus the like throwable weapons carried (the post-attack draw's pick, GameManager.TryEquipNextThrowableWeapon).</summary>
+        private static int ThrowsAvailable(CharacterController self, ItemData weapon)
+        {
+            if (!GameManager.IsThrowableWeapon(weapon))
+                return int.MaxValue;
+            int count = 1;
+            Inventory inv = self.InventoryComp != null ? self.InventoryComp.CharacterInventory : null;
+            if (inv != null && inv.GeneralSlots != null)
+                foreach (ItemData item in inv.GeneralSlots)
+                    if (GameManager.IsThrowableWeapon(item) && item.WeaponCat == weapon.WeaponCat)
+                        count++;
+            return count;
+        }
+
+        private const int RapidShotPenalty = -2; // PHB p.99
+
+        /// <summary>
+        /// AI stopgap (batch 13 catalog), AI-055 (owner decision Q2, 2026-10-23): whether the creature fights with two weapons
+        /// in its melee attack on <paramref name="target"/>. The rules (the off-hand steps of GameManager.RunAttackSequence,
+        /// CharacterController.GetDualWieldPenalties, GetOffHandAttackCount) are the PC Off-Hand button's.
+        /// <see cref="DefaultShouldUseTwoWeaponFighting"/>.
+        /// </summary>
+        public virtual bool ShouldUseTwoWeaponFighting(CharacterController self, CharacterController target)
+            => DefaultShouldUseTwoWeaponFighting(self, target);
+
+        /// <summary>
+        /// The default two-weapon choice, also used for creatures without a profile (AI stopgap, batch 13 catalog): fight with
+        /// two weapons when it holds one in each hand (CanDualWield; a shield bash only with Improved Shield Bash, since the
+        /// lost shield AC is a cost it cannot weigh), the turn can still become a full attack (PHB p.143:
+        /// the off-hand attack needs the full attack action), no flurry is declared, and the expected damage of the turn's
+        /// attacks with both weapons (each main-hand step at the main-hand penalty, each off-hand step at the off-hand
+        /// penalty with half the Strength bonus, PHB p.160, p.134) beats that of the main-hand attacks alone.
+        /// </summary>
+        public static bool DefaultShouldUseTwoWeaponFighting(CharacterController self, CharacterController target)
+        {
+            if (self == null || self.Stats == null || target == null || target.Stats == null)
+                return false;
+            if (!self.CanDualWield() || self.IsUsingFlurryOfBlows || !self.CanStillReachFullAttack())
+                return false;
+            if (self.ProgressiveAttackPool.HasStartedAttacking)
+                return false;
+            // A shield bash in the off hand costs the shield's AC until the next turn (PHB p.125) unless Improved Shield Bash
+            // keeps it (PHB p.96): a defensive cost this damage-only stopgap cannot weigh, so it does not bash.
+            if (self.IsDualWieldOffHandShieldBash() && !FeatManager.HasImprovedShieldBash(self.Stats))
+                return false;
+            ItemData main = self.GetDualWieldMainWeapon();
+            ItemData off = self.GetDualWieldOffHandWeapon();
+            int offCount = self.GetOffHandAttackCount();
+            if (main == null || off == null || offCount <= 0)
+                return false;
+
+            var (mainPenalty, offPenalty, _) = self.GetDualWieldPenalties();
+            int mainTerms = self.BuildAttackBonus(target, main, false, null, false, 0, 0, false).Total;
+            int offTerms = self.BuildAttackBonus(target, off, false, null, false, 0, 0, false).Total;
+            float mainDamage = AverageWeaponDamage(self, main, offHand: false);
+            float offDamage = AverageWeaponDamage(self, off, offHand: true);
+            int targetAC = target.Stats.ArmorClass;
+            int bab = self.Stats.BaseAttackBonus;
+
+            float plain = 0f;
+            float twoWeapons = 0f;
+            foreach (int step in CharacterCombatStats.GetBaseAttackLadder(bab))
+            {
+                plain += HitChance(step + mainTerms, targetAC) * mainDamage;
+                twoWeapons += HitChance(step + mainTerms + mainPenalty, targetAC) * mainDamage;
+            }
+            for (int i = 0; i < offCount; i++)
+                twoWeapons += HitChance(self.GetOffHandAttackBAB(i) + offTerms + offPenalty, targetAC) * offDamage;
+            return twoWeapons > plain;
+        }
+
+        /// <summary>The average damage of one hit with <paramref name="weapon"/> (dice at the wielder's size, the Strength share, its flat bonus): an AI estimate.</summary>
+        private static float AverageWeaponDamage(CharacterController self, ItemData weapon, bool offHand)
+        {
+            self.GetScaledWeaponDamageDice(weapon, out int count, out int dice);
+            float average = Mathf.Max(1, count) * (dice + 1) / 2f + self.Stats.GetWeaponDamageModifier(weapon, offHand) + weapon.BonusDamage;
+            return Mathf.Max(1f, average);
+        }
+
         // d20 + modifier against AC: a natural 1 misses and a natural 20 hits (PHB p.134).
         private static float HitChance(int attackModifier, int targetAC)
             => Mathf.Clamp((21 + attackModifier - targetAC) / 20f, 0.05f, 0.95f);

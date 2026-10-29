@@ -15,9 +15,9 @@ public enum AttackOrigin
     PcSequence,
     /// <summary>C: a step of the PC's Full Attack button (GameManager.PerformFullAttackWithRetargetingAndFiveFootStep).</summary>
     PcFullAttackButton,
-    /// <summary>D: the PC's legacy one-target two-weapon full attack (CombatFlowService.PerformDualWieldAttack).</summary>
+    /// <summary>D: a step of the PC's Dual Wield full attack (AttackSequenceRequest.ForUiTwoWeaponFullAttack, batch 12 step 18).</summary>
     PcDualWield,
-    /// <summary>E: the PC's off-hand attack (GameManager.HandleOffHandTargetClick).</summary>
+    /// <summary>E: the PC's off-hand attack (GameManager.HandleOffHandTargetClick, AttackSequenceRequest.ForUiOffHand).</summary>
     PcOffHand,
     /// <summary>F: a melee step of an NPC attack sequence (GameManager.RunAttackSequence, AttackSequenceRequest.ForAI).</summary>
     NpcMelee,
@@ -32,8 +32,7 @@ public enum AttackOrigin
 }
 
 /// <summary>
-/// One resolved attack step handed to GameManager.OnAttackResolved (the legacy two-weapon full attack, D, hands its one
-/// batch of rolls): who attacked whom, the attack results, the intent, the origin, the decider for the attacker's choices,
+/// One resolved attack step handed to GameManager.OnAttackResolved: who attacked whom, the attack results, the intent, the origin, the decider for the attacker's choices,
 /// and the caller's own pieces the hook runs at their place. A Cleave attack is one more resolution of the same origin
 /// (<see cref="IsCleave"/>), run by the hook itself.
 /// </summary>

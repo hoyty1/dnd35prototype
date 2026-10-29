@@ -170,7 +170,8 @@ public partial class GameManager
 
         bool isRanged = spell.IsRangedTouchSpell();
         int imageAc = MirrorImageRules.ImageArmorClass(target.Stats);
-        SpellCaster.SpellTouchAttackTerms terms = SpellCaster.SpellTouchAttack(spell, caster, caster.Stats, target, target.Stats, isRanged, againstImage: true);
+        SpellCaster.SpellTouchAttackTerms terms = SpellCaster.SpellTouchAttack(spell, caster, caster.Stats, target, target.Stats, isRanged, againstImage: true,
+            stepBabAdjustment: ctx.Request.TouchStepBabAdjustment);
         if (terms.BeyondMaximumRange)
             return false; // SpellCaster.Cast fails the attack that cannot be made
         int modifier = terms.Total;

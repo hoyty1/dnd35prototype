@@ -11,7 +11,12 @@ public enum AttackSequenceKind
     /// <summary>An NPC's attack or full attack (origins F, G, H): every step, the AI picking each step's target.</summary>
     AI,
     /// <summary>An attack of opportunity (origin I): one step, outside the attacker's attack sequence.</summary>
-    AoO
+    AoO,
+    /// <summary>
+    /// The touch that delivers a held charge after its casting round (batch 12 step 18, SPL-156): one melee touch attack in
+    /// place of a regular attack, PC and NPC alike (<see cref="AttackSequenceRequest.ForHeldChargeTouch"/>).
+    /// </summary>
+    HeldChargeTouch
 }
 
 /// <summary>
@@ -105,8 +110,9 @@ public sealed class AttackSequenceState
 /// <summary>
 /// One attack or full attack for <c>GameManager.RunAttackSequence</c> (batch 12 step 17, docs/designs/pc_npc_parity_batch12.md;
 /// the batch 11 cast-core pattern): who attacks, the first target, the intent, the decider that picks each step's target,
-/// and the caller's own pieces. Built by <see cref="ForUiAttack"/>, <see cref="ForUiFullAttack"/>, <see cref="ForAI"/> and
-/// <see cref="ForAoO"/> (the charge's builder comes with the charge core). The executor commits costs only through the
+/// and the caller's own pieces. Built by <see cref="ForUiAttack"/>, <see cref="ForUiFullAttack"/>, <see cref="ForUiOffHand"/>,
+/// <see cref="ForUiTwoWeaponFullAttack"/>, <see cref="ForAI"/>, <see cref="ForAoO"/> and <see cref="ForHeldChargeTouch"/> (the
+/// charge's builder comes with the charge core). The executor commits costs only through the
 /// attack sequence (CharacterController.TryCommitAttack); the caller does the UI continuation.
 /// </summary>
 public sealed class AttackSequenceRequest
@@ -137,8 +143,27 @@ public sealed class AttackSequenceRequest
     /// <summary>The combat-end context of the steps' post-attack hook.</summary>
     public string CombatEndContext;
 
-    /// <summary>Added to a main-hand step's BAB: the PC's two-weapon main-hand penalty on the Attack button's sequence.</summary>
+    /// <summary>
+    /// Added to a main-hand step's BAB: the two-weapon main-hand penalty (PHB p.160) on the PC Attack button's sequence, the
+    /// Dual Wield full attack and the AI's two-weapon attack.
+    /// </summary>
     public int MainHandBabAdjustment;
+
+    /// <summary>
+    /// The executor picks off-hand steps itself (batch 12 step 18, PHB p.160): each step is the hand whose next attack has
+    /// the higher BAB, the main hand on a tie, while that hand has one left (GameManager.TwoWeaponStepKind). Set by the
+    /// Dual Wield full attack and the AI's two-weapon intent; the PC Attack button's clicks are main-hand steps and the
+    /// Off-Hand buttons are one off-hand step each (<see cref="ForUiOffHand"/>).
+    /// </summary>
+    public bool InterleaveOffHand;
+
+    /// <summary>
+    /// The held-charge touch's resolution (<see cref="ForHeldChargeTouch"/>): runs the delivery through the cast core once
+    /// the step is paid (SpellCastRequest.DeliveryStepCommitted set) at the paid step's BAB (the third argument: the full
+    /// BAB for the attack action or a full attack's first step, the iterative BAB of a later step, PHB p.143), and returns
+    /// whether the delivery passed the cast core's Legality stage.
+    /// </summary>
+    public Func<CharacterController, CharacterController, int, bool> DeliverHeldCharge;
 
     /// <summary>An AoO's weapon (null: unarmed or natural) and its attack modifier (Mobility's -4).</summary>
     public ItemData AoOWeapon;
@@ -177,6 +202,83 @@ public sealed class AttackSequenceRequest
         };
     }
 
+    /// <summary>
+    /// One click of a PC Off-Hand button (origin E, batch 12 step 18): one off-hand step (PHB p.160) at the clicked target
+    /// with <paramref name="offHandWeapon"/>, melee or thrown (<paramref name="thrown"/>, PHB p.113), at the off-hand ladder's
+    /// BAB and penalty (CharacterController.ResolveOffHandAttackStep), paid through the attack sequence like any attack.
+    /// </summary>
+    public static AttackSequenceRequest ForUiOffHand(GameManager gm, CharacterController attacker, CharacterController target,
+        ItemData offHandWeapon, bool thrown)
+    {
+        AttackIntent intent = AttackIntent.ForUi(gm, attacker);
+        intent.Mode = thrown ? AttackMode.Thrown : AttackMode.Melee;
+        intent.UiType = thrown ? GameManager.AttackType.Thrown : GameManager.AttackType.Melee;
+        intent.Hand = AttackStepKind.OffHand;
+        intent.Weapon = offHandWeapon;
+        intent.TwoWeapon = true;
+        intent.RapidShot = false;
+        return new AttackSequenceRequest
+        {
+            Kind = AttackSequenceKind.UiAttack,
+            Origin = AttackOrigin.PcOffHand,
+            Attacker = attacker,
+            InitialTarget = target,
+            Intent = intent,
+            Decider = AttackDeciders.For(attacker),
+            MaxSteps = 1,
+            CombatEndContext = "ResolveOffHandAttack",
+        };
+    }
+
+    /// <summary>
+    /// The PC's Dual Wield full attack (origin D, batch 12 step 18): the Full Attack button's flow and decider with both
+    /// weapons, every main-hand step at the main-hand penalty and every off-hand step at the off-hand one (PHB p.160;
+    /// CharacterController.GetDualWieldPenalties), the executor choosing the hand of each step (<see cref="InterleaveOffHand"/>).
+    /// </summary>
+    public static AttackSequenceRequest ForUiTwoWeaponFullAttack(GameManager gm, CharacterController attacker, CharacterController target)
+    {
+        AttackSequenceRequest request = ForUiFullAttack(gm, attacker, target);
+        request.Origin = AttackOrigin.PcDualWield;
+        request.Intent.Mode = AttackMode.Melee;
+        request.Intent.UiType = GameManager.AttackType.Melee;
+        request.Intent.TwoWeapon = true;
+        request.Intent.RapidShot = false;
+        request.InterleaveOffHand = true;
+        request.MainHandBabAdjustment = attacker != null ? attacker.GetDualWieldPenalties().mainPenalty : 0;
+        request.CombatEndContext = "PerformDualWieldAttack";
+        return request;
+    }
+
+    /// <summary>
+    /// The delivery of a held touch charge after its casting round (batch 12 step 18, SPL-156; PHB p.141: a touch attack made
+    /// instead of a regular attack; delegated RAW reading 2026-10-14): one melee touch step of the attack sequence, the
+    /// attack action or one step of a full attack, for the PC Discharge button and the AI's delivery alike.
+    /// <paramref name="deliver"/> runs the delivery's cast once the step is paid, at that step's BAB. The step is checked by the shared gate
+    /// (the Resilient Sphere, the hold bar, the touch's reach: AttackLegality, DirectAttackKind.Touch); the ward's save and
+    /// the touch's roll and effect are the cast core's (a spell's own ward commit, SpellCaster), and the post-attack hook is
+    /// not run (the delivery's PostCast and CombatEnd stages are its after-effects).
+    /// </summary>
+    public static AttackSequenceRequest ForHeldChargeTouch(CharacterController caster, CharacterController target, IAttackDecider decider,
+        Func<CharacterController, CharacterController, int, bool> deliver)
+    {
+        AttackIntent intent = AttackIntent.ForMode(AttackMode.Melee);
+        intent.HeldChargeTouch = true;
+        return new AttackSequenceRequest
+        {
+            Kind = AttackSequenceKind.HeldChargeTouch,
+            Origin = AttackOrigin.PcSequence,
+            Attacker = caster,
+            InitialTarget = target,
+            Intent = intent,
+            Decider = decider ?? AttackDeciders.For(caster),
+            MaxSteps = 1,
+            CallerCanWait = false,
+            DeliverHeldCharge = deliver,
+            CombatEndContext = "DeliverHeldCharge",
+            ReportStep = _ => { },
+        };
+    }
+
     /// <summary>The PC's Full Attack button (origin C): the PC UI's intent, read once, for every step; the attacker's decider.</summary>
     public static AttackSequenceRequest ForUiFullAttack(GameManager gm, CharacterController attacker, CharacterController target)
     {
@@ -201,6 +303,7 @@ public sealed class AttackSequenceRequest
         Func<CharacterController, CharacterController, bool> tryStepManeuver, DND35.AI.AIProfile profile)
     {
         AttackIntent intent = AttackIntent.ForAI(gm, npc, target);
+        bool twoWeapon = intent.Mode == AttackMode.Melee && intent.TwoWeapon;
         return new AttackSequenceRequest
         {
             Kind = AttackSequenceKind.AI,
@@ -212,6 +315,9 @@ public sealed class AttackSequenceRequest
             Profile = profile,
             TryStepManeuver = intent.Mode == AttackMode.Melee ? tryStepManeuver : null,
             CombatEndContext = "NPCPerformAttack.Sequence",
+            // Two-weapon fighting (AI-055 stopgap, AttackIntent.ForAI): both hands' steps, the main hand at its penalty.
+            InterleaveOffHand = twoWeapon,
+            MainHandBabAdjustment = twoWeapon && npc != null ? npc.GetDualWieldPenalties().mainPenalty : 0,
         };
     }
 

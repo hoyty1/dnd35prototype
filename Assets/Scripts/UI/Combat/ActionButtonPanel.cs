@@ -969,7 +969,10 @@ public class ActionButtonPanel : MonoBehaviour
         SpellcastingComponent touchSpellComp = pc.Spellcasting;
         bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && touchSpellComp != null && touchSpellComp.HasHeldTouchCharge && touchSpellComp.HeldTouchSpell != null;
         string heldName = hasHeldTouchCharge ? touchSpellComp.HeldTouchSpell.Name : "Touch";
-        states.Set(DischargeTouchButton, new ActionButtonState(hasHeldTouchCharge, hasHeldTouchCharge, $"Discharge {heldName}"));
+        // Shown while a charge is held; enabled while it can be delivered now (batch 12 step 18, SPL-156): the casting round's
+        // own touch, an attack left for a foe, or a standard action for a friend (HeldChargeDeliveryRules.CanDeliverNow).
+        bool canDischarge = hasHeldTouchCharge && HeldChargeDeliveryRules.CanDeliverNow(pc);
+        states.Set(DischargeTouchButton, new ActionButtonState(hasHeldTouchCharge, canDischarge, $"Discharge {heldName}"));
 
         bool hasActiveDisguiseSelf = context.Gm != null && context.Gm.HasActiveDisguiseSelf(pc);
         bool canDismissDisguiseSelf = hasActiveDisguiseSelf && context.Actions.HasStandardAction && !context.IsTurned;

@@ -98,6 +98,10 @@ public partial class GameManager
     public Coroutine Combat_StartFullAttackRetargeting(CharacterController attacker, CharacterController target)
         => StartCoroutine(PerformFullAttackWithRetargetingAndFiveFootStep(attacker, target));
 
+    /// <summary>The Dual Wield button's two-weapon full attack (origin D, batch 12 step 18): the Full Attack flow with both weapons.</summary>
+    public Coroutine Combat_StartTwoWeaponFullAttack(CharacterController attacker, CharacterController target)
+        => StartCoroutine(PerformFullAttackWithRetargetingAndFiveFootStep(attacker, target, twoWeapon: true));
+
     public string Combat_BuildFlankingIndicator(bool isFlanking, CharacterController flankPartner)
         => CombatUI != null ? CombatUI.BuildFlankingIndicator(isFlanking, flankPartner) : string.Empty;
 

@@ -55,7 +55,8 @@ public static class SpellCaster
         CharacterController targetController,
         LesserGlobeOfInvulnerabilityAreaEffect globeAgainstTouch = null,
         AreaDamageRoll areaDamageRoll = null,
-        int missilesSpentOnImages = 0)
+        int missilesSpentOnImages = 0,
+        int touchStepBabAdjustment = 0)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -147,7 +148,7 @@ public static class SpellCaster
             result.IsRangedTouch = isRanged;
 
             // The touch attack's modifier: one rule with the Mirror Image stage's roll against an image (SpellTouchAttack).
-            SpellTouchAttackTerms terms = SpellTouchAttack(spell, casterController, casterStats, targetController, targetStats, isRanged, againstImage: false);
+            SpellTouchAttackTerms terms = SpellTouchAttack(spell, casterController, casterStats, targetController, targetStats, isRanged, againstImage: false, touchStepBabAdjustment);
             int atkBonus = terms.AttackBonus;
             int situationalSpellAttackBonus = terms.SituationalBonus;
             string situationalSpellAttackSource = terms.SituationalSource;
@@ -1004,9 +1005,11 @@ public static class SpellCaster
     /// Grasp's +3 against metal, fighting defensively, and for a ray, shooting into melee and Animate Rope's range
     /// increments. <paramref name="againstImage"/>: the roll is against a figment, which wears no metal (PHB p.173), so
     /// Shocking Grasp's bonus does not apply (delegated RAW reading 2026-10-14, RULES_COVERAGE 4.1).
+    /// <paramref name="stepBabAdjustment"/>: a held charge's touch made in place of a later attack of a full attack rolls
+    /// at that attack's iterative BAB (PHB p.141, p.143; SpellCastRequest.DeliveryStepBab, batch 12 step 18), 0 or less.
     /// </summary>
     public static SpellTouchAttackTerms SpellTouchAttack(SpellData spell, CharacterController casterController, CharacterStats casterStats,
-        CharacterController targetController, CharacterStats targetStats, bool isRanged, bool againstImage)
+        CharacterController targetController, CharacterStats targetStats, bool isRanged, bool againstImage, int stepBabAdjustment = 0)
     {
         var terms = new SpellTouchAttackTerms { SituationalSource = string.Empty };
         if (casterStats == null)
@@ -1014,7 +1017,8 @@ public static class SpellCaster
 
         // A touch attack is an attack roll: the racial bonus against the target's kind applies (PHB p.15, p.17; CHR-019).
         terms.AttackBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged)
-            + RacialTraitRules.AttackBonusAgainst(casterStats, targetStats);
+            + RacialTraitRules.AttackBonusAgainst(casterStats, targetStats)
+            + Mathf.Min(0, stepBabAdjustment);
 
         if (!againstImage && ShouldApplyShockingGraspMetalBonus(spell, targetController, targetStats, out string shockingGraspBonusSource))
         {

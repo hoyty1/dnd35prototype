@@ -604,6 +604,25 @@ public static class RapidShotTests
     }
 
     /// <summary>
+    /// A two-weapon pair of attacks as the shared executor makes them (batch 12 step 18: GameManager.RunAttackSequence's
+    /// main-hand step at the main-hand penalty, CharacterController.ResolveAttackSequenceStep, and its off-hand step,
+    /// ResolveOffHandAttackStep; the legacy DualWieldAttack is gone).
+    /// </summary>
+    private static FullAttackResult TwoWeaponAttacks(CharacterController attacker, CharacterController target)
+    {
+        var result = new FullAttackResult { Attacker = attacker, Defender = target };
+        var (mainPenalty, _, _) = attacker.GetDualWieldPenalties();
+        CombatResult main = attacker.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 0, false, 0, null, null,
+            attacker.GetDualWieldMainWeapon(), mainPenalty, out _);
+        CombatResult off = attacker.ResolveOffHandAttackStep(target, 0, false, 0, null, null, attacker.GetDualWieldOffHandWeapon(), out _);
+        if (main != null)
+            result.Attacks.Add(main);
+        if (off != null)
+            result.Attacks.Add(off);
+        return result;
+    }
+
+    /// <summary>
     /// Two-weapon fighting uses each weapon's own Weapon Finesse eligibility (PHB p.102): a longsword
     /// main hand stays on STR while a dagger off hand uses DEX. The old code applied the main weapon's choice to both.
     /// </summary>
@@ -619,7 +638,7 @@ public static class RapidShotTests
             attacker.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
 
             var (mainPenalty, offPenalty, _) = attacker.GetDualWieldPenalties();
-            FullAttackResult result = attacker.DualWieldAttack(target, false, 0, null, null);
+            FullAttackResult result = TwoWeaponAttacks(attacker, target);
             int size = attacker.Stats.SizeModifier;
 
             Assert(result.Attacks.Count == 2, "Dual wield makes a main and an off-hand attack", $"got {result.Attacks.Count}");

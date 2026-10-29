@@ -448,8 +448,8 @@ public class CharacterController : MonoBehaviour
     public int PowerAttackValue { get; private set; }
 
     /// <summary>
-    /// The Rapid Shot toggle: the creature's standing choice to use Rapid Shot (the PC's button; the AI never sets it,
-    /// AI-055). It is read when the first ranged step of a turn starts, which declares Rapid Shot for that turn
+    /// The Rapid Shot toggle: the creature's standing choice to use Rapid Shot (the PC's button; the AI leaves it off and
+    /// chooses per attack instead, AttackIntent.ForAI, batch 12 step 18, AI-055). It is read when the first ranged step of a turn starts, which declares Rapid Shot for that turn
     /// (<see cref="TryDeclareRapidShot"/>, PHB p.99, D9); the declaration, not the toggle, gives the extra attack and the -2.
     /// </summary>
     public bool RapidShotEnabled { get; private set; }
@@ -484,6 +484,12 @@ public class CharacterController : MonoBehaviour
 
     private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
     private int _turnsStartedCount;
+
+    /// <summary>
+    /// The number of this creature's turns begun (StartNewTurn), cleared on slot reuse: a stamp for rules that need "this
+    /// turn" (the held touch charge's casting-round touch, SpellcastingComponent.IsCastingRoundTouchAvailable).
+    /// </summary>
+    public int TurnsStartedCount => _turnsStartedCount;
 
     // Tracks whether ability-score-zero logic applied these specific conditions,
     // so recovery can safely remove only what this system added.
@@ -1217,6 +1223,13 @@ public class CharacterController : MonoBehaviour
             reason = "a flurry of blows has no off-hand attacks (PHB p.40)";
             return false;
         }
+        else if (kind == AttackStepKind.OffHand && ProgressiveAttackPool.OffHandStepsUsed >= GetOffHandAttackCount())
+        {
+            // One off-hand attack a round, a second with Improved and a third with Greater Two-Weapon Fighting (PHB p.160,
+            // p.96; batch 12 step 18). No off-hand weapon or a grapple leaves none (CanDualWield).
+            reason = "no off-hand attack left this round (PHB p.160)";
+            return false;
+        }
 
         reason = string.Empty;
         return true;
@@ -1317,6 +1330,60 @@ public class CharacterController : MonoBehaviour
     }
 
     public int GetMainHandAttackStepBAB(int stepIndex) => GetIterativeAttackBAB(stepIndex);
+
+    /// <summary>
+    /// Off-hand steps still available this turn (two-weapon fighting, PHB p.160), given the actions left: the off-hand
+    /// count less those used, none when the next attack cannot be paid, and at most one while the turn cannot become a
+    /// full attack (as <see cref="GetRemainingMainHandAttackSteps"/>). Batch 12 step 18.
+    /// </summary>
+    public int GetRemainingOffHandAttackSteps()
+    {
+        if (!CanCommitAttack(AttackStepKind.OffHand, out _))
+            return 0;
+
+        AttackPool pool = ProgressiveAttackPool;
+        int left = Mathf.Max(0, GetOffHandAttackCount() - pool.OffHandStepsUsed);
+        if (!CanStillReachFullAttack())
+        {
+            bool nextIsPaidOrFirst = pool.Mode == ProgressiveAttackMode.None || pool.PendingStepPaid;
+            left = Mathf.Min(left, nextIsPaidOrFirst ? 1 : 0);
+        }
+
+        return left;
+    }
+
+    /// <summary>
+    /// The BAB of the next off-hand step before its penalty (<see cref="GetOffHandAttackBAB"/>: the full BAB, then -5 and
+    /// -10 for Improved and Greater Two-Weapon Fighting's attacks, PHB p.96, p.160).
+    /// </summary>
+    public int GetNextOffHandAttackBAB() => GetOffHandAttackBAB(ProgressiveAttackPool.OffHandStepsUsed);
+
+    /// <summary>
+    /// Resolve one already-committed off-hand step of this creature's attack sequence (batch 12 step 18; PHB p.160): an
+    /// Attack with <paramref name="weapon"/> (the off-hand weapon: a light weapon, a shield bash, a spiked gauntlet, or a
+    /// throwable one thrown) at the off-hand ladder's BAB for <paramref name="offHandIndex"/> with the off-hand penalty of
+    /// <see cref="GetDualWieldPenalties"/> (FeatManager.GetTWFPenalties), half the Strength bonus on damage (PHB p.134) and
+    /// the shield bash's lost shield AC (Attack). One rule for the PC Off-Hand buttons, the Dual Wield full attack and the
+    /// AI's two-weapon full attack (GameManager.RunAttackSequence). <paramref name="twoWeaponPenalty"/> false: a lone attack
+    /// with the off-hand weapon as the attack action, which is no two-weapon fighting (no Table 8-10 penalty; half Strength
+    /// on damage still; delegated RAW reading 2026-10-28, PHB p.160, p.134). Returns null when nothing was resolved.
+    /// </summary>
+    public CombatResult ResolveOffHandAttackStep(CharacterController target, int offHandIndex, bool isFlanking, int flankBonus,
+        string partnerName, RangeInfo rangeInfo, ItemData weapon, out string stepLabel, bool twoWeaponPenalty = true)
+    {
+        stepLabel = null;
+        if (target == null || target.Stats == null || Stats == null)
+            return null;
+        ItemData offWeapon = weapon ?? GetOffHandAttackWeapon();
+        if (offWeapon == null)
+            return null;
+
+        int bab = GetOffHandAttackBAB(offHandIndex);
+        int offPenalty = twoWeaponPenalty ? GetDualWieldPenalties().offPenalty : 0;
+        string source = IsDualWieldOffHandSpikedGauntlet() ? ", Hands slot" : IsShieldBashWeapon(offWeapon) ? ", shield bash" : string.Empty;
+        stepLabel = $"Off hand {offHandIndex + 1} ({offWeapon.Name}{source}, BAB {CharacterStats.FormatMod(bab)})";
+        return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, bab, offWeapon, offPenalty, isOffHandAttack: true);
+    }
 
     // ----- Maneuvers that replace an attack (trip, disarm, sunder, grapple; CMB-102) -----
     // One rule for PCs and NPCs: the maneuver takes the place of one step of this creature's own
@@ -6072,7 +6139,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The one place a weapon attack roll's modifier is assembled (CMB-043). Attack, FullAttack
-    /// (iterative, natural and flurry), DualWieldAttack, and since CMB-087 PerformRakeAttacks, ResolveAttackWhileGrappling
+    /// (iterative, natural and flurry), the off-hand step (ResolveOffHandAttackStep), and since CMB-087 PerformRakeAttacks, ResolveAttackWhileGrappling
     /// and ResolveUseOpponentWeapon all call this, then set the
     /// per-attack terms (BaseAttackBonus step, SequenceModifier, AidAnotherBonus, MagicStoneBonus). The flurry of blows
     /// penalty (FlurryPenalty) is set here for every attack while the creature flurries (PHB p.40; CHR-003).
@@ -6414,7 +6481,7 @@ public class CharacterController : MonoBehaviour
         // so all attack entry points (single, full-attack, flurry, grapple strike, etc.) follow
         // the same rules and never roll against an empty square.
 
-        // Shared per-attack modifier (CMB-043): the same terms FullAttack, DualWieldAttack and FlurryOfBlows add. A declared
+        // Shared per-attack modifier (CMB-043): the same terms FullAttack and FlurryOfBlows add (the off-hand step is an Attack too). A declared
         // Rapid Shot puts its -2 on every ranged attack of the round, each step of the shared sequence included (PHB p.99, D9).
         AttackBonusBreakdown atkBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
             isFlanking, flankingBonus, baseAttackBonusOverride ?? Stats.BaseAttackBonus,
@@ -7123,153 +7190,6 @@ public class CharacterController : MonoBehaviour
 
         result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
-        return result;
-    }
-
-    public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
-    {
-        var result = new FullAttackResult();
-        result.Type = FullAttackResult.AttackType.DualWield;
-        result.Attacker = this;
-        result.Defender = target;
-        result.DefenderHPBefore = target.Stats.CurrentHP;
-
-        if (HasCondition(CombatConditionType.Grappled))
-        {
-            Debug.LogWarning($"[DualWield] {Stats.CharacterName} cannot dual-wield while grappled.");
-            return result;
-        }
-
-        if (!CanDualWield())
-            return result;
-
-        ItemData mainWeapon = GetDualWieldMainWeapon();
-        ItemData offWeapon = GetDualWieldOffHandWeapon();
-        bool offHandFromSpikedGauntlet = IsDualWieldOffHandSpikedGauntlet();
-        if (mainWeapon == null || offWeapon == null)
-            return result;
-
-        bool canMainAttack = CanAttackWithWeapon(mainWeapon, out string mainBlockedReason);
-        bool canOffAttack = CanAttackWithWeapon(offWeapon, out string offBlockedReason);
-        DamageModeAttackProfile mainDamageModeProfile = ResolveDamageModeAttackProfile(mainWeapon);
-        DamageModeAttackProfile offDamageModeProfile = ResolveDamageModeAttackProfile(offWeapon);
-
-        result.MainWeaponName = mainWeapon.Name;
-        result.OffWeaponName = offWeapon.Name;
-
-        var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
-
-        // Main-hand attack
-        if (canMainAttack)
-        {
-            // Shared per-attack modifier (CMB-043), built for this hand's weapon. Each weapon is
-            // held in one hand, so Power Attack is never doubled while dual-wielding.
-            AttackBonusBreakdown mainBonus = BuildAttackBonus(target, mainWeapon, IsRangedWeaponAttack(mainWeapon, rangeInfo),
-                rangeInfo, isFlanking, flankingBonus, Stats.BaseAttackBonus, isTwoHanded: false);
-            mainBonus.SequenceModifier = mainPenalty; // shown as the "dual wield" entry
-            mainBonus.MagicStoneBonus = 0; // Magic Stone is resolved only by Attack and FullAttack
-            mainBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
-            int mainAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
-
-            WeaponDamageBreakdown mainDamage = BuildWeaponDamageBonus(mainWeapon, IsRangedWeaponAttack(mainWeapon, rangeInfo),
-                isOffHand: false, mainBonus.Feats, mainWeapon.BonusDamage);
-
-            GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice, IsThrownWeaponAttack(mainWeapon, rangeInfo));
-
-            int hpBeforeMain = target.Stats.CurrentHP;
-            CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                mainDamageDice, mainDamageCount, mainDamage, mainBonus.CritThreatMin, mainBonus.CritMultiplier,
-                mainWeapon, mainAidAnotherTargetAcBonus,
-                mainDamageModeProfile.DealNonlethalDamage, mainDamageModeProfile.AttackPenalty, mainDamageModeProfile.PenaltySource);
-
-            mainBonus.ApplyToResult(mainAtk, rangeInfo);
-            mainAtk.AidAnotherTargetAcBonus = mainAidAnotherTargetAcBonus;
-            mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-            mainAtk.WeaponName = mainWeapon.Name;
-            mainAtk.BaseDamageDiceStr = $"{mainDamageCount}d{mainDamageDice}";
-            mainAtk.IsDualWieldAttack = true;
-            mainAtk.IsOffHandAttack = false;
-            mainAtk.BreakdownDualWieldPenalty = mainPenalty;
-            mainAtk.DefenderHPBefore = hpBeforeMain;
-            mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
-
-            result.Attacks.Add(mainAtk);
-            result.AttackLabels.Add(mainLabel);
-
-            if (mainWeapon.RequiresReload)
-            {
-                string reloadStateMessage = OnWeaponFired(mainWeapon);
-                if (!string.IsNullOrEmpty(reloadStateMessage))
-                    Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"[DualWield] {Stats.CharacterName} main-hand attack skipped: {mainBlockedReason}");
-        }
-        // Off-hand attack
-        if (!target.Stats.IsDead && canOffAttack)
-        {
-            // Same shared modifier for the off-hand weapon: its own Weapon Finesse, Weapon Focus and crit.
-            AttackBonusBreakdown offBonus = BuildAttackBonus(target, offWeapon, IsRangedWeaponAttack(offWeapon, rangeInfo),
-                rangeInfo, isFlanking, flankingBonus, Stats.BaseAttackBonus, isTwoHanded: false);
-            offBonus.SequenceModifier = offPenalty; // shown as the "off-hand" entry
-            offBonus.MagicStoneBonus = 0;
-            offBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
-            int offAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
-            string offLabel = offHandFromSpikedGauntlet
-                ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
-                : offHandShieldBash
-                    ? $"Attack 2 - Off Hand (Shield Bash: {offWeapon.Name})"
-                    : $"Attack 2 - Off Hand ({offWeapon.Name})";
-
-            WeaponDamageBreakdown offDamage = BuildWeaponDamageBonus(offWeapon, IsRangedWeaponAttack(offWeapon, rangeInfo),
-                isOffHand: true, offBonus.Feats, offWeapon.BonusDamage);
-
-            GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice, IsThrownWeaponAttack(offWeapon, rangeInfo));
-
-            int hpBeforeOff = target.Stats.CurrentHP;
-            CombatResult offAtk = PerformSingleAttackWithCrit(target, offBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                offDamageDice, offDamageCount, offDamage, offBonus.CritThreatMin, offBonus.CritMultiplier,
-                offWeapon, offAidAnotherTargetAcBonus,
-                offDamageModeProfile.DealNonlethalDamage, offDamageModeProfile.AttackPenalty, offDamageModeProfile.PenaltySource);
-
-            offBonus.ApplyToResult(offAtk, rangeInfo);
-            offAtk.AidAnotherTargetAcBonus = offAidAnotherTargetAcBonus;
-            offAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-            offAtk.WeaponName = offWeapon.Name;
-            offAtk.BaseDamageDiceStr = $"{offDamageCount}d{offDamageDice}";
-            offAtk.IsDualWieldAttack = true;
-            offAtk.IsOffHandAttack = true;
-            offAtk.BreakdownDualWieldPenalty = offPenalty;
-            offAtk.DefenderHPBefore = hpBeforeOff;
-            offAtk.DefenderHPAfter = target.Stats.CurrentHP;
-
-            result.Attacks.Add(offAtk);
-            result.AttackLabels.Add(offLabel);
-
-            if (IsShieldBashWeapon(offWeapon))
-            {
-                SuppressShieldBonusForShieldBash(offWeapon);
-            }
-
-            if (offWeapon.RequiresReload)
-            {
-                string reloadStateMessage = OnWeaponFired(offWeapon);
-                if (!string.IsNullOrEmpty(reloadStateMessage))
-                    Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
-            }
-        }
-        else if (!canOffAttack)
-        {
-            Debug.LogWarning($"[DualWield] {Stats.CharacterName} off-hand attack skipped: {offBlockedReason}");
-        }
-
-        result.DefenderHPAfter = target.Stats.CurrentHP;
-        result.TargetKilled = target.Stats.IsDead;
-        HasAttackedThisTurn = result.Attacks.Count > 0;
         return result;
     }
 

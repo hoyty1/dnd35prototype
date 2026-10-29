@@ -104,8 +104,9 @@ namespace Tests.Scenarios
         public static Step FullAttack(string target, string hasteAttack = null)
             => new Step(StepKind.FullAttack) { Target = target, NaturalAttackName = hasteAttack };
         /// <summary>
-        /// Ui only: the PC's two-weapon full attack (the Dual Wield button, then the target; CombatFlowService
-        /// .PerformDualWieldAttack, origin D): every main-hand and off-hand attack against that one target.
+        /// Ui only: the PC's two-weapon full attack (the Dual Wield button, then the target; AttackSequenceRequest
+        /// .ForUiTwoWeaponFullAttack through the Full Attack flow and GameManager.RunAttackSequence, origin D): every
+        /// main-hand and off-hand attack against that one target.
         /// </summary>
         public static Step DualWield(string target) => new Step(StepKind.DualWield) { Target = target };
         /// <summary>

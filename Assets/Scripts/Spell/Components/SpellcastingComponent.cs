@@ -93,6 +93,24 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
     public bool HasHeldTouchCharge => HeldTouchSpell != null;
+
+    /// <summary>
+    /// The caster's turn (CharacterController.TurnsStartedCount) whose casting comes with a touch of its own, or -1: set
+    /// when the charge is held by a Discharge Later hold (its casting's touch not made yet, PHB p.140-141: in the round of
+    /// casting the caster may touch, moving first if it likes), cleared when that touch is used or the charge ends. A
+    /// charge kept by a missed touch in its casting round has used it (-1). Batch 12 step 18, SPL-156.
+    /// </summary>
+    public int HeldTouchCastingRoundTurn { get; private set; } = -1;
+
+    /// <summary>
+    /// True while the held charge's casting-round touch is unused and <paramref name="caster"/> is still in the turn it was
+    /// cast in: delivering it then costs no action (PHB p.140-141; HeldChargeDeliveryRules). Every later touch is an attack.
+    /// </summary>
+    public bool IsCastingRoundTouchAvailable(CharacterController caster)
+        => HeldTouchSpell != null && HeldTouchCastingRoundTurn >= 0 && caster != null && caster.TurnsStartedCount == HeldTouchCastingRoundTurn;
+
+    /// <summary>The casting round's touch is used (a delivery made with it, hit or miss).</summary>
+    public void UseCastingRoundTouch() => HeldTouchCastingRoundTurn = -1;
     /// <summary>Whether this character has any supported spellcasting ability.</summary>
     public bool CanCastSpells => UsesPreparedSlotSystem || IsSpontaneousCaster || IsPartialCaster;
 
@@ -3127,12 +3145,15 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Store a held melee touch spell charge on this caster, with the metamagic and a copy of the choices it was cast with.
+    /// <paramref name="castingRoundTurn"/> is the caster's turn whose casting's touch is still to come (a Discharge Later
+    /// hold), or -1 (the casting's touch was made and missed, or the charge is not from a casting this turn).
     /// </summary>
-    public void SetHeldTouchCharge(SpellData spell, MetamagicData metamagic, CastChoices choices = null)
+    public void SetHeldTouchCharge(SpellData spell, MetamagicData metamagic, CastChoices choices = null, int castingRoundTurn = -1)
     {
         HeldTouchSpell = spell;
         HeldTouchMetamagic = metamagic;
         HeldTouchChoices = spell != null && choices != null ? choices.Clone() : null;
+        HeldTouchCastingRoundTurn = spell != null ? castingRoundTurn : -1;
 
         if (HeldTouchSpell != null)
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: holding touch charge ({HeldTouchSpell.Name})");
@@ -3152,6 +3173,7 @@ public class SpellcastingComponent : MonoBehaviour
         HeldTouchSpell = null;
         HeldTouchMetamagic = null;
         HeldTouchChoices = null;
+        HeldTouchCastingRoundTurn = -1;
     }
 
     /// <summary>

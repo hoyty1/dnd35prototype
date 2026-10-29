@@ -3,8 +3,8 @@ public enum CastActionCost
 {
     /// <summary>
     /// Nothing at the cast: a scroll or wand charges the item's own action when the item is spent
-    /// (GameManager.ConsumeScrollAfterCast, ConsumeWandChargeAfterCast; ITM-005), and a held-charge delivery is free
-    /// (LegacyCastQuirk.HeldChargeDeliveryIsFree, SPL-156). For an item this is not the whole RAW cost: activating a
+    /// (GameManager.ConsumeScrollAfterCast, ConsumeWandChargeAfterCast; ITM-005), and a held-charge delivery is no casting:
+    /// its cost is <see cref="HeldChargeDeliveryRules"/>'s (batch 12 step 18, SPL-156). For an item this is not the whole RAW cost: activating a
     /// spell's power in a scroll or wand takes the spell's casting time (DMG p.213), so a 1-round spell from an item is
     /// a full-round action and a Feather Fall a free action (ITM-086).
     /// </summary>
@@ -151,8 +151,9 @@ public static class CastActionRules
     /// formerly the NPC path's own): a casting that costs a standard action, a full round or an item's activation (a
     /// scroll or wand, a standard action at least, DMG p.213) needs a standard action left this round (PHB p.140-141); a
     /// quickened or free-action spell, or a swift one, does not (PHB p.98, p.174), and <see cref="ActionRefusal"/> holds it
-    /// to its own action. A held charge's delivery is no casting (PHB p.141; free today, SPL-156) and the F12 test panel
-    /// casts out of turn, so neither is tested.
+    /// to its own action. A held charge's delivery is no casting (PHB p.141): its own action test is
+    /// <see cref="HeldChargeDeliveryRules.Refusal"/> (batch 12 step 18, SPL-156); the F12 test panel casts out of turn, so
+    /// neither is tested here.
     /// </summary>
     public static string StandardActionRefusal(CharacterController caster, SpellData spell, MetamagicData metamagic, CastSource source)
     {
@@ -187,5 +188,80 @@ public static class CastActionRules
             default:
                 return $"{casterName} cannot cast {spellName} now.";
         }
+    }
+}
+
+/// <summary>What delivering a held touch charge costs (<see cref="HeldChargeDeliveryRules.CostFor"/>).</summary>
+public enum HeldChargeDeliveryCost
+{
+    /// <summary>The touch that comes with the casting, in its casting round (PHB p.140-141).</summary>
+    None,
+    /// <summary>A melee touch attack on a foe, made in place of a regular attack: the attack action or one step of a full attack (PHB p.141).</summary>
+    AttackStep,
+    /// <summary>Touching one friend (or the caster itself): a standard action (PHB p.141, Holding the Charge).</summary>
+    StandardAction
+}
+
+/// <summary>
+/// The action cost of delivering a held touch charge (batch 12 step 18, SPL-156), one rule for every caster, PC or NPC
+/// (the cast core's Legality and Cost stages, the PC Discharge button's gate and the AI's delivery all read it). PHB
+/// p.140-141 (Touch Spells in Combat): in the round the spell is cast the caster may touch as part of the casting, moving
+/// first if it likes; holding the charge, it may make touch attacks round after round (PHB p.141, p.176), each a touch
+/// attack made instead of a regular attack. Delegated RAW reading 2026-10-14 (docs/systems/RULES_COVERAGE.md 4.1): after
+/// the casting's own touch (in its casting round, unused: SpellcastingComponent.IsCastingRoundTouchAvailable), touching a
+/// foe takes an attack, the attack action (a standard action) or one attack of a full attack (CharacterController
+/// .TryCommitAttack; run through the attack-sequence executor, AttackSequenceRequest.ForHeldChargeTouch); touching one
+/// friend, or the caster itself, is a standard action (PHB p.141). Touching up to six friends as a full-round action
+/// (PHB p.141) is not offered: a delivery touches one creature.
+/// </summary>
+public static class HeldChargeDeliveryRules
+{
+    /// <summary>The Legality refusal of a delivery to a foe with no attack left this turn.</summary>
+    public const string RefusalNoAttack = "no-attack-for-delivery";
+
+    /// <summary>The cost of delivering <paramref name="caster"/>'s held charge to <paramref name="target"/> now.</summary>
+    public static HeldChargeDeliveryCost CostFor(CharacterController caster, CharacterController target)
+    {
+        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
+        if (spellComp != null && spellComp.IsCastingRoundTouchAvailable(caster))
+            return HeldChargeDeliveryCost.None;
+        if (target == null || target == caster || TeamUtility.IsAlly(caster, target))
+            return HeldChargeDeliveryCost.StandardAction;
+        return HeldChargeDeliveryCost.AttackStep;
+    }
+
+    /// <summary>
+    /// Why <paramref name="caster"/> cannot pay for delivering its charge to <paramref name="target"/> now, or null:
+    /// a foe needs an attack it may still commit (CharacterController.CanCommitAttack: the attack ladder and the actions;
+    /// <paramref name="stepCommitted"/> when the attack-sequence executor paid it already), a friend a standard action.
+    /// </summary>
+    public static string Refusal(CharacterController caster, CharacterController target, bool stepCommitted)
+    {
+        if (caster == null)
+            return null;
+        switch (CostFor(caster, target))
+        {
+            case HeldChargeDeliveryCost.AttackStep:
+                return stepCommitted || caster.CanCommitAttack(AttackStepKind.MainHand, out _) ? null : RefusalNoAttack;
+            case HeldChargeDeliveryCost.StandardAction:
+                return caster.Actions != null && caster.Actions.HasStandardAction ? null : CastActionRules.RefusalNoStandardAction;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="caster"/> could deliver its held charge to some creature now (the PC Discharge button's
+    /// gate): the casting-round touch, an attack left for a foe, or a standard action for a friend.
+    /// </summary>
+    public static bool CanDeliverNow(CharacterController caster)
+    {
+        SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
+        if (spellComp == null || !spellComp.HasHeldTouchCharge)
+            return false;
+        if (spellComp.IsCastingRoundTouchAvailable(caster))
+            return true;
+        return caster.CanCommitAttack(AttackStepKind.MainHand, out _)
+               || (caster.Actions != null && caster.Actions.HasStandardAction);
     }
 }
