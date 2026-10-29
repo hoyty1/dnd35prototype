@@ -197,6 +197,8 @@ public interface IActionExecutor {
 }
 ```
 
+**Superseded in two places by the batch 13 design (2026-10-29, `docs/designs/action_catalog_batch13.md`):** (1) `ActorSource` stays the live two-value enum `{Ui, AI}` (`Combat/Core/IAttackDecider.cs`, design choice C7): a summon passes `Ui` or `AI` according to who controls it (a PC-cast summon is controllable, CRE-039), and a reaction (an AoO, `Combat/Core/AttackSequence.cs` ~:392) and a forced (confused, charmed, fleeing) turn pass `AI`, and the five-value enum sketched above would collide with the live one (and, in the scenario harness, with the class `Tests.Scenarios.ActorSource`, so harness code writes `global::ActorSource`). (2) The maneuver core already exists (batch 12 step 19): every maneuver a PC or an NPC starts against an opponent runs `GameManager.ExecuteManeuver` (`Combat/Maneuvers/GameManager.ManeuverCore.cs` ~:261) on a `ManeuverRequest`, so the catalog's maneuver entries wrap it rather than the `ExecuteSpecialAttack` pair named in 1.3.
+
 Contract rules. Each one fixes a coupling that exists today:
 
 1. **No UI flow inside an executor.** An executor never calls `ShowActionChoices`, `EndActivePCTurn` or `AfterAttackDelay`, never reads `_pendingSpell`/`_pendingMetamagic`/`CurrentSubPhase`, and never checks `IsPlayerTurn`/`ActivePC`. These are the AI-054 couplings, verified at `SupportActions.cs:855-904` (Aid Another ends in `ShowActionChoices`/`AfterAttackDelay`), `GameManager.cs:4336` (`TryUseConsumableFromInventory` returns early unless `IsPlayerTurn && ActivePC == actor`), `GameManager.SpellCasting.cs:36-106` (the cast reads `_pendingSpell`) and `CombatFlowService.cs:175,569,597` (`Combat_ShowActionChoices`).

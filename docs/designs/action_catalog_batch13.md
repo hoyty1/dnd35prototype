@@ -476,6 +476,7 @@ IDs: AI-018, AI-017, AI-053 (ProfileName and uncalled members), AI-027, AI-021 (
    - Narrow the entry.
 4. **AI-027.** Delete `EvaluateAttackOptions` (~:2561) and `EvaluateBestManeuver` (~:3965). `SelectBestAction`'s Retreat result stays for batch 18.
 5. **AI-021, dead members only.** Delete `ClearLastKnownPosition` (CC ~:11046) and `LastKnownPositionTracker.IsAtLastKnownPosition` (~:97).
+6. **Stale comments (C7).** Correct the three comments that say batch 13 adds or passes a forced `ActorSource` (`Combat/Core/IAttackDecider.cs` ~:5 and ~:181, `Combat/Maneuvers/ManeuverCore.cs` ~:320): the enum stays `{Ui, AI}` and a forced turn passes `AI`.
 
 Tests:
 - AIProfileFrameworkTests: runtime profiles get their name and defaults, and `.asset` values survive.
@@ -867,13 +868,14 @@ TEST BUDGET: the new scenarios, `rules/turned-undead-flees-ai`, `rules/rage-expi
 
 ### 17. Every PC single attack runs the attack sequence (`b13-single-attack-sequence`)
 
-IDs: CMB-200. Behaviour change; *broad* (every PC single attack).
+IDs: CMB-200, CMB-203. Behaviour change; *broad* (every PC single attack).
 
 1. **The buttons.** The Fighting Defensively and natural-attack buttons (`PendingAttackMode.Single`) start `RunAttackSequence`, so the attacker may go on into a full attack (PHB p.143).
 2. **Deletions.** Delete `CombatFlowService.PerformSingleAttack` (~:583), its fallback (~:377) and `GameManager.PerformSingleAttack` (CombatActions ~:2438).
    - Update `GrappleDamageRulesTests.cs` ~:5318 and the comment at `RulesScenarios.cs` ~:3723.
    - Retire `AttackOrigin.PcSingle` if nothing produces it, with its entry in the origin list (`GameManager.AttackResolved.cs` ~:267).
-3. **Docs.** Delete CMB-200, and correct CLAUDE.md's attack-math row.
+3. **CMB-203.** Drop the PC-only `BaseAttackBonus < 1` gate of `OnAttackDefensivelyButtonPressed` and `OnFullAttackDefensivelyButtonPressed` (GameManager.cs ~:9245, ~:9286); PHB p.140 and p.143 set no BAB requirement.
+4. **Docs.** Delete CMB-200 and CMB-203, and correct CLAUDE.md's attack-math row.
 
 Tests:
 - New scenarios:
