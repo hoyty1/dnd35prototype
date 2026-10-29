@@ -30,7 +30,7 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 15 | 32 | CORE-040 |
-| [Combat](issues/CMB.md) | CMB | 0 | 41 | 71 | 112 | CMB-199 |
+| [Combat](issues/CMB.md) | CMB | 0 | 42 | 71 | 113 | CMB-200 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 6 | 12 | 18 | GRID-027 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 0 | 57 | 84 | 141 | SPL-205 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-088 |
@@ -39,13 +39,14 @@ Entries per section:
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 36 | 43 | 79 | ITM-089 |
 | [AI](issues/AI.md) | AI | 0 | 21 | 42 | 63 | AI-075 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 40 | 52 | UI-054 |
-| [Tests](issues/TST.md) | TST | 0 | 8 | 30 | 38 | TST-045 |
-| **All** | | 1 | 268 | 436 | 705 | |
+| [Tests](issues/TST.md) | TST | 0 | 8 | 32 | 40 | TST-047 |
+| **All** | | 1 | 269 | 438 | 708 | |
 
 ## Top issues
 
-The most impactful entries, mainly High. Repo breakers, soft-locks and crashes come first, then rules errors that affect every fight.
+The most impactful entries, mainly High, plus any regression from the latest batch whatever its severity. Repo breakers, soft-locks and crashes come first, then rules errors that affect every fight.
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
+| [CMB-199](issues/CMB.md) | Med | CMB | A charge through an ally's square stops there and costs the turn, and the AI repeats it every round (batch 12 step 23 regression; 11 of 50 soak seeds) | Yes |
 | [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |
