@@ -219,6 +219,8 @@ public partial class GameManager
         _turnService?.ForceResetWithoutCallbacks($"ScenarioHarness.Halt:{reason}");
         ClearCounterTripPrompt(hideDialog: true);
         ClearGrappleEscapeOppositionPrompt();
+        ClearOverrunResponsePrompt();
+        ClearOverrunChoiceState();
         CurrentPhase = TurnPhase.CombatOver;
     }
 
@@ -364,6 +366,10 @@ public partial class GameManager
     {
         if (_counterTripPromptOpen)
             return "counter-trip";
+        if (_overrunResponsePromptAnswer != null)
+            return "overrun-response";
+        if (_overrunChoicePending)
+            return "overrun-choice";
         if (CombatUI != null && CombatUI.Harness_IsTouchSpellPromptOpen())
             return "touch-spell";
         if (_waitingForAoOConfirmation)
@@ -719,6 +725,38 @@ public partial class GameManager
 
         CombatUI?.HideConfirmationDialog();
         AnswerGrappleEscapeOppositionPrompt(oppose);
+        return true;
+    }
+
+    /// <summary>The defender whose overrun avoid-or-block prompt is open (PHB p.157, D11), else null.</summary>
+    internal CharacterController Harness_PendingOverrunResponseDefender
+        => _overrunResponsePromptAnswer != null ? _overrunResponsePromptDefender : null;
+
+    /// <summary>
+    /// Answers the open overrun prompt exactly as its buttons do: true = Block, false = Avoid. Returns false when no
+    /// prompt is open.
+    /// </summary>
+    internal bool Harness_AnswerOverrunResponse(bool block)
+    {
+        if (_overrunResponsePromptAnswer == null)
+            return false;
+
+        CombatUI?.HideConfirmationDialog();
+        AnswerOverrunResponsePrompt(block);
+        return true;
+    }
+
+    /// <summary>
+    /// Answers the PC's open "Overrun or Normal Move" dialog exactly as its buttons do: true = Overrun, false = Normal Move.
+    /// Returns false when it is not open.
+    /// </summary>
+    internal bool Harness_AnswerOverrunChoice(bool overrun)
+    {
+        if (!_overrunChoicePending)
+            return false;
+
+        CombatUI?.HideConfirmationDialog();
+        AnswerOverrunChoice(overrun);
         return true;
     }
 

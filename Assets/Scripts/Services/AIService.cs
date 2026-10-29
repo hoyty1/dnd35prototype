@@ -769,7 +769,22 @@ public class AIService : MonoBehaviour
             }
         }
 
-        AIActionType action = SelectBestAction(npc, target, preferAggression: true);
+        // An overrun is a move through the target's space (PHB p.157; batch 12 step 20, D11), planned before the move and
+        // made through the one overrun the PC uses; the attack follows when the standard action is left (an avoided overrun
+        // costs none). An AI stopgap (AIProfile.ShouldOverrun) until the batch 13 catalog.
+        bool overran = false;
+        if (profile != null && profile.ShouldOverrun(npc, target)
+            && _gameManager.TryPlanOverrunPathForAI(npc, target, out List<Vector2Int> overrunPath))
+        {
+            var overrun = new OverrunMoveOutcome();
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteOverrunForAI(npc, overrunPath, overrun));
+            if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
+            if (!npc.CanTakeTurnActions() || !npc.Actions.HasStandardAction)
+                yield break;
+            overran = overrun.Started;
+        }
+
+        AIActionType action = overran ? AIActionType.Attack : SelectBestAction(npc, target, preferAggression: true);
         if (action == AIActionType.Charge)
         {
             yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));

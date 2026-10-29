@@ -262,6 +262,11 @@ namespace Tests.Scenarios
         /// opposes, false lets the escaper go. An actor not listed opposes.
         /// </summary>
         public Dictionary<string, bool> EscapeOppositionAnswers = new Dictionary<string, bool>();
+        /// <summary>
+        /// How the runner answers a controllable defender's overrun prompt (PHB p.157 step 2, D11), by actor key: true
+        /// blocks, false avoids. An actor not listed blocks.
+        /// </summary>
+        public Dictionary<string, bool> OverrunResponseAnswers = new Dictionary<string, bool>();
 
         /// <summary>A copy for one job with <paramref name="extra"/> actors appended (the lists are new, the rest is shared).</summary>
         internal ScenarioDef WithExtraActors(IEnumerable<ActorSpec> extra)
@@ -383,6 +388,9 @@ namespace Tests.Scenarios
             foreach (string k in EscapeOppositionAnswers.Keys)
                 if (Find(k) == null)
                     problems.Add("escape-opposition answer for unknown actor '" + k + "'");
+            foreach (string k in OverrunResponseAnswers.Keys)
+                if (Find(k) == null)
+                    problems.Add("overrun-response answer for unknown actor '" + k + "'");
 
             foreach (string k in Scripts.Keys)
             {
@@ -557,6 +565,7 @@ namespace Tests.Scenarios
         /// </summary>
         public ScenarioBuilder CounterTripAnswer(string key, bool tripBack) { _def.CounterTripAnswers[key] = tripBack; return this; }
         public ScenarioBuilder EscapeOppositionAnswer(string key, bool oppose) { _def.EscapeOppositionAnswers[key] = oppose; return this; }
+        public ScenarioBuilder OverrunResponseAnswer(string key, bool block) { _def.OverrunResponseAnswers[key] = block; return this; }
 
         /// <summary>Forces <paramref name="count"/> d<paramref name="sides"/> rolls (whose context contains <paramref name="ctx"/>, null for any) to <paramref name="value"/>; count -1 forces every one.</summary>
         public ScenarioBuilder Force(int sides, int value, string ctx = null, int count = 1)

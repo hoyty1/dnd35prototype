@@ -277,7 +277,7 @@ public static class ManeuverActionCost
     /// - coup de grace is a full-round action (PHB p.153);
     /// - a standing bull rush is a standard action, the charge bull rush the end of a charge (PHB p.154), never one attack
     ///   of a full attack;
-    /// - overrun is a standard action made only during a move or a charge (PHB p.157; the move-through is step 20);
+    /// - overrun is a standard action made only during a move or a charge (PHB p.157; GameManager.RunOverrunMove, never this table's request);
     /// - aid another (PHB p.154), turning undead (PHB p.159) and waking a sleeping ally (shaking it awake, PHB p.280) are
     ///   standard actions.
     /// </summary>

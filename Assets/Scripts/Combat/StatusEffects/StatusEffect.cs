@@ -986,8 +986,7 @@ public class SpecialAttackResult
     public bool ProvokedAoO;
     public bool TargetKilled;
 
-    // Overrun-specific metadata.
-    public bool DefenderAvoided;
+    /// <summary>The maneuver spent the attacker's action (false for a counter-trip, a reaction).</summary>
     public bool AttackerActionConsumed = true;
 
     // Trip metadata (PHB p.158, p.96; CMB-079).

@@ -5611,20 +5611,14 @@ public static class GrappleDamageRulesTests
         Cleanup(dwarf);
     }
 
-    // The move-through overrun (OverrunSystem, the PC path; CMB-015) uses the shared PHB p.157
-    // terms: stability and Improved Overrun count, and a tie goes to the higher modifier.
+    // The one overrun's block (PHB p.157 step 3; GameManager.RunOverrunMove through CharacterController.ResolveOverrunAttempt,
+    // batch 12 step 20, CMB-015) uses the shared terms: stability and Improved Overrun count, a tie goes to the higher
+    // modifier, and a beaten defender is knocked prone until it stands (no expiry).
     private static void TestMoveThroughOverrunUsesSharedCheck()
     {
-        GameManager gm = GameManager.Instance;
-        MethodInfo check = typeof(GameManager).GetMethod("ResolveOverrunOpposedCheck", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (gm == null || check == null)
-        {
-            Assert(false, "Move-through overrun check uses the shared helpers (needs Play mode with a GameManager)");
-            return;
-        }
-
         var attacker = CreateTestCharacter("MoveThroughOverrunner", "Fighter");
         var defender = CreateTestCharacter("MoveThroughBlocker", "Fighter");
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
         try
         {
             attacker.Stats.Race = null;
@@ -5637,28 +5631,40 @@ public static class GrappleDamageRulesTests
             defender.Stats.CurrentSizeCategory = SizeCategory.Medium;
             defender.Stats.IsExceptionallyStable = false;
 
-            bool Run(params int[] rolls)
+            bool Run(int attackRoll, int defenseRoll)
             {
-                int i = 0;
-                System.Func<int> d20 = () => i < rolls.Length ? rolls[i++] : 10;
-                return (bool)check.Invoke(gm, new object[] { attacker, defender, d20 });
+                ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                    sides != 20 ? natural
+                    : ctx == "Overrun attack roll" ? attackRoll
+                    : ctx == "Overrun defense roll" ? defenseRoll
+                    : 10;
+                defender.RemoveCondition(CombatConditionType.Prone);
+                SpecialAttackResult r = attacker.ResolveOverrunAttempt(defender);
+                ScenarioHooks.RollFilter = savedFilter;
+                return r != null && r.Success;
             }
 
             int atkMod = attacker.GetOverrunAttackerCheckModifier();
             int defMod = defender.GetTripOrOverrunDefenderCheckModifier();
             Assert(Run(10, 10) == CharacterController.DoesAttackerWinOpposedCheck(10 + atkMod, atkMod, 10 + defMod, defMod, () => 10),
-                "Move-through overrun result matches the shared helpers");
-            Assert(Run(10, 10), "Move-through overrun: attacker +1 beats an unstable defender +0 on equal rolls");
-            Assert(Run(9, 10), "Move-through overrun: a tie goes to the higher modifier (the attacker), not the defender");
+                "Overrun block result matches the shared helpers");
+            Assert(Run(10, 10), "Overrun block: attacker +1 beats an unstable defender +0 on equal rolls");
+            Assert(Run(9, 10), "Overrun block: a tie goes to the higher modifier (the attacker), not the defender");
+
+            bool prone = defender.HasCondition(CombatConditionType.Prone);
+            StatusEffect proneEffect = defender.GetActiveConditions().Find(c => c != null && c.Type == CombatConditionType.Prone);
+            Assert(prone && proneEffect != null && proneEffect.RemainingRounds < 0,
+                $"Overrun block won: the defender is knocked prone until it stands (PHB p.157, p.311; remaining {(proneEffect != null ? proneEffect.RemainingRounds.ToString() : "none")})");
 
             defender.Stats.IsExceptionallyStable = true;
-            Assert(!Run(10, 10), "Move-through overrun: defender stability (+4) applies");
+            Assert(!Run(10, 10), "Overrun block: defender stability (+4) applies");
 
             attacker.Stats.Feats.Add("Improved Overrun");
-            Assert(Run(10, 10), "Move-through overrun: Improved Overrun (+4) applies to the attacker");
+            Assert(Run(10, 10), "Overrun block: Improved Overrun (+4) applies to the attacker");
         }
         finally
         {
+            ScenarioHooks.RollFilter = savedFilter;
             Cleanup(attacker, defender);
         }
     }

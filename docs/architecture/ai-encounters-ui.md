@@ -88,7 +88,7 @@ The base class is `AIProfile` (AI/AIProfile.cs, namespace `DND35.AI`). There are
 | Animal (or None with CreatureType "Animal") | AnimalAIProfile | Melee | Picks a specialty (Grappler/Tripper/PackHunter) from the creature's abilities. The GameManager grapple code in Combat/Maneuvers/GrappleSystem.cs also checks for this profile |
 | Humanoid | HumanoidAIProfile | Melee | Disciplined melee |
 | Berserk | BerserkAIProfile | Melee | Prefers wounded targets, low caution |
-| Grappler | GrapplerAIProfile | Melee | Trip and disarm also enabled; the base maneuver order is Trip > Disarm > Sunder > BullRush > Overrun > Grapple |
+| Grappler | GrapplerAIProfile | Melee | Trip and disarm also enabled; the base maneuver order is Trip > Disarm > Sunder > BullRush > Grapple (an overrun is a planned move, `ShouldOverrun`) |
 | Ranged | RangedAIProfile | Ranged | Keeps distance, prefers lightly armored targets |
 | Healer | HealerAIProfile : SpellcasterAIProfile | Ranged | Has its own routing branch |
 | Spellcaster | SpellcasterAIProfile | Melee (inherited default) | Casts only if the behavior is RangedKiter |

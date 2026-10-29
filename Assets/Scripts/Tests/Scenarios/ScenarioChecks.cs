@@ -487,14 +487,15 @@ namespace Tests.Scenarios
             if (ev.Bool("attackerDown"))
                 Violation(NoActWhenDown, _job.Trace.KeyOf(actor) + " resolved a " + what + " while down", actor);
 
-            // The bull rush follow and the overrun moves go through MoveToCell with markAsMoved, so they arrive as
-            // ordinary 'move' events before the maneuver event. They are part of the maneuver, not the actor's own
-            // movement (PHB p.154 limits the follow only by normal movement; whether it ends a 5-ft step is not
-            // settled RAW), so take back the squares moved since the actor's last action or AoO. This can also
-            // take back a move made just before an Improved Bull Rush with no AoO, so the econ squares stay a lower bound.
+            // The bull rush follow goes through MoveToCell with markAsMoved, so it arrives as ordinary 'move' events
+            // before the maneuver event. It is part of the maneuver, not the actor's own movement (PHB p.154 limits
+            // the follow only by normal movement; whether it ends a 5-ft step is not settled RAW), so take back the
+            // squares moved since the actor's last action or AoO. This can also take back a move made just before an
+            // Improved Bull Rush with no AoO, so the econ squares stay a lower bound. An overrun's squares are its move
+            // action's own (GameManager.RunOverrunMove, batch 12 step 20) and count.
             object type = ev.Get("type");
             if (actor == _openTurn && type is SpecialAttackType t
-                && (t == SpecialAttackType.BullRushAttack || t == SpecialAttackType.BullRushCharge || t == SpecialAttackType.Overrun))
+                && (t == SpecialAttackType.BullRushAttack || t == SpecialAttackType.BullRushCharge))
                 _ownMoveSquares = Math.Max(0, _ownMoveSquares - _movesSinceAction);
             _movesSinceAction = 0;
         }

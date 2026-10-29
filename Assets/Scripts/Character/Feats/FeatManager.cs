@@ -862,13 +862,15 @@ public static class FeatManager
 
     // ── IMPROVED COMBAT MANEUVERS ──
     // NOTE: Improved Bull Rush, Improved Overrun, Improved Sunder, and Improved Grapple
-    // are already fully implemented with +4 bonuses and AoO suppression in:
+    // are implemented where the maneuvers resolve:
     //   - CharacterController.RollBullRushAttackerCheck() (+4 from Improved Bull Rush)
     //   - CharacterCombatStats.GetGrappleModifier() (+4 from Improved Grapple)
     //   - CharacterController.ResolveSunder() (+4 from Improved Sunder)
-    //   - CharacterController.GetOverrunAttackerCheckModifier() (+4 from Improved Overrun;
-    //     used by ResolveOverrun and OverrunSystem.ResolveOverrunOpposedCheck)
-    //   - GameManager.CombatActions (AoO suppression via attackerIgnoresAoO flags)
+    //   - CharacterController.GetOverrunAttackerCheckModifier() (+4 from Improved Overrun, used by
+    //     ResolveOverrun); the target may not avoid (GameManager.RunOverrunMove). It does not stop the
+    //     defender's AoO (PHB p.96, p.157; CMB-086).
+    //   - ThreatSystem.DoesManeuverProvokeAoO / GetManeuverAoOProvokers (the AoOs Improved Grapple,
+    //     Sunder, Trip, Disarm and Bull Rush remove)
 
     /// <summary>Does this character have Improved Bull Rush?</summary>
     public static bool HasImprovedBullRush(CharacterStats stats) => stats != null && stats.HasFeat("Improved Bull Rush");
@@ -1072,7 +1074,7 @@ public static class FeatManager
         if (HasFarShot(stats)) lines.Add("Far Shot: Range increment ×1.5 (projectile) or ×2 (thrown)");
         if (HasAnyRapidReload(stats)) lines.Add("Rapid Reload: Reduce crossbow reload time by one step");
         if (HasImprovedBullRush(stats)) lines.Add("Improved Bull Rush: +4 bonus, no AoO from the defender on bull rush");
-        if (HasImprovedOverrun(stats)) lines.Add("Improved Overrun: +4 bonus, no AoO on overrun");
+        if (HasImprovedOverrun(stats)) lines.Add("Improved Overrun: +4 bonus, the target cannot avoid");
         if (HasImprovedSunder(stats)) lines.Add("Improved Sunder: +4 bonus, no AoO on sunder");
         if (HasImprovedGrapple(stats)) lines.Add("Improved Grapple: +4 bonus, no AoO on grapple");
         if (HasAugmentSummoning(stats)) lines.Add("Augment Summoning: Summoned creatures gain +4 STR/CON");

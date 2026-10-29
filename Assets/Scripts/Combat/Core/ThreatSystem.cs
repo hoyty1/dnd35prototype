@@ -614,14 +614,12 @@ public static class ThreatSystem
     /// movement executors call it for each opponent listed at the step they resolve, whether or not
     /// the AoO is then made (the opportunity came either way): GameManager.ResolveMovementAoOsBeforeStep
     /// (PC moves and withdraw, NPC, summon and compulsion moves, both charge paths, crawl, the overrun
-    /// continuation, the grapple moves: GrappleSystem.ExecuteGrappleMovement and ExecuteFreeAdjacentGrappleMovement,
-    /// CMB-152) and the bull rush follow and push (GameManager.ResolveBullRushStepAoOs; the push for the pushed
-    /// defender, owner interpretation 2026-10-11, CMB-150). Movement executors
-    /// that resolve no movement AoOs at all also record nothing: the PC move-through overrun and its
-    /// Normal Move branch (CMB-151) and the attacker's follow after a targeted overrun push
-    /// (TryPushTargetAway, CMB-116, CMB-151). Not called for provocations that are not movement
-    /// (casting, ranged attacks, standing up, maneuver starts, the bull rush entry into the defender's
-    /// space, CMB-113).
+    /// move, GameManager.RunOverrunMove, the grapple moves: GrappleSystem.ExecuteGrappleMovement and
+    /// ExecuteFreeAdjacentGrappleMovement, CMB-152) and the bull rush follow and push
+    /// (GameManager.ResolveBullRushStepAoOs; the push for the pushed defender, owner interpretation 2026-10-11,
+    /// CMB-150). Not called for provocations that are not movement (casting, ranged attacks, standing up,
+    /// maneuver starts, the bull rush entry into the defender's space, CMB-113, and the overrun's entry into the
+    /// defender's space, its step 1 AoO, which takes the place of the defender's movement AoO for that step).
     /// </summary>
     public static void RecordMovementOpportunity(CharacterController threatener, CharacterController mover)
     {
@@ -881,7 +879,8 @@ public static class ThreatSystem
     /// resolves as the unarmed one, CMB-188).
     /// Bull rush provokes from every enemy that threatens the attacker; Improved Bull Rush only
     /// removes the defender's AoO (see <see cref="GetManeuverAoOProvokers"/>). Coup de Grace
-    /// provokes from every threatening enemy (PHB p.153).
+    /// provokes from every threatening enemy (PHB p.153). Overrun provokes from the defender when the
+    /// attacker moves into its space, Improved Overrun or not (PHB p.157 step 1, p.96; CMB-086).
     /// </summary>
     public static bool DoesManeuverProvokeAoO(SpecialAttackType type, CharacterController attacker)
     {
@@ -899,6 +898,7 @@ public static class ThreatSystem
             case SpecialAttackType.BullRushAttack:
             case SpecialAttackType.BullRushCharge:
             case SpecialAttackType.CoupDeGrace:
+            case SpecialAttackType.Overrun:
                 return true;
             default:
                 return false;
@@ -1020,6 +1020,7 @@ public static class ThreatSystem
             case SpecialAttackType.BullRushAttack:
             case SpecialAttackType.BullRushCharge: return "Bull Rush";
             case SpecialAttackType.CoupDeGrace: return "Coup de Grace";
+            case SpecialAttackType.Overrun: return "Overrun";
             default: return type.ToString();
         }
     }

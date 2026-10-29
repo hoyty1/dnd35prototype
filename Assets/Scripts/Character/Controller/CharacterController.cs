@@ -4293,9 +4293,12 @@ public class CharacterController : MonoBehaviour
     /// The path must be ordered and should exclude the current starting square.
     /// Pass <paramref name="lastStepIsDestination"/> false when the path is one segment of a
     /// longer move (the movement AoO helper pauses mid-path), so the segment may end in an
-    /// ally's square that the full move only passes through.
+    /// ally's square that the full move only passes through. <paramref name="allowThroughEnemies"/> lets the mover pass an
+    /// opponent's space short of the destination: only the overrun sets it, for a defender that let it by or was knocked
+    /// prone (GameManager.RunOverrunMove, PHB p.157).
     /// </summary>
-    public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true)
+    public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true,
+        bool allowThroughEnemies = false)
     {
         if (path == null || path.Count == 0)
             yield break;
@@ -4337,7 +4340,7 @@ public class CharacterController : MonoBehaviour
                     this,
                     isDestinationStep,
                     allowThroughAllies: true,
-                    allowThroughEnemies: allowEnemyOverlap,
+                    allowThroughEnemies: allowEnemyOverlap || allowThroughEnemies,
                     allowDestinationEnemyOverlap: allowEnemyOverlap))
                 break;
 
@@ -9151,13 +9154,13 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Disarm:
             case SpecialAttackType.Grapple:
             case SpecialAttackType.Sunder:
-            case SpecialAttackType.Overrun:
             case SpecialAttackType.CoupDeGrace:
                 return CanPerformSpecialMeleeAttacks();
-            // Bull rush needs no weapon: it is a body push resolved by Strength (PHB p.154).
-            // Target legality is CanBullRush.
+            // Bull rush and overrun need no weapon: a body push or plowing past, resolved by Strength (PHB p.154, p.157).
+            // Target legality is CanBullRush, and the overrun path's (GameManager.RunOverrunMove).
             case SpecialAttackType.BullRushAttack:
             case SpecialAttackType.BullRushCharge:
+            case SpecialAttackType.Overrun:
                 return true;
             default:
                 return true;
@@ -13226,7 +13229,8 @@ public class CharacterController : MonoBehaviour
                 return ResolveBullRush(target, chargeBonus: 0);
             case SpecialAttackType.BullRushCharge:
                 return ResolveBullRush(target, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
-            case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
+            // The block of the one overrun (GameManager.RunOverrunMove); a standing overrun never reaches here (PHB p.157).
+            case SpecialAttackType.Overrun: return ResolveOverrun(target);
             case SpecialAttackType.Feint: return ResolveFeint(target);
             case SpecialAttackType.CoupDeGrace: return ResolveCoupDeGrace(target);
             case SpecialAttackType.TurnUndead:
@@ -15051,26 +15055,16 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    public SpecialAttackResult ResolveOverrunAttempt(CharacterController target, bool defenderBlocks, bool provokedAoO = false)
-    {
-        return ResolveOverrun(target, defenderBlocks, provokedAoO);
-    }
+    /// <summary>
+    /// The overrun block (PHB p.157 step 3): the opposed check, and a beaten defender knocked prone. Reached through
+    /// <see cref="ExecuteSpecialAttack"/> from the one overrun, the move through the defender's space
+    /// (GameManager.RunOverrunMove, batch 12 step 20), once the defender chose to block (or could not avoid, Improved
+    /// Overrun); never a standing action (the maneuver core refuses it, ManeuverActionCost.For).
+    /// </summary>
+    public SpecialAttackResult ResolveOverrunAttempt(CharacterController target) => ResolveOverrun(target);
 
-    private SpecialAttackResult ResolveOverrun(CharacterController target, bool defenderBlocks, bool provokedAoO = false)
+    private SpecialAttackResult ResolveOverrun(CharacterController target)
     {
-        if (!defenderBlocks)
-        {
-            return new SpecialAttackResult
-            {
-                ManeuverName = "Overrun",
-                Success = true,
-                DefenderAvoided = true,
-                ProvokedAoO = provokedAoO,
-                AttackerActionConsumed = false,
-                Log = $"{target.Stats.CharacterName} avoids {Stats.CharacterName}'s overrun attempt and yields space."
-            };
-        }
-
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Overrun");
 
@@ -15086,15 +15080,14 @@ public class CharacterController : MonoBehaviour
         int defTotal = defRoll + defModifier;
         bool success = DoesAttackerWinOpposedCheck(atkTotal, atkModifier, defTotal, defModifier);
 
+        // A beaten defender is knocked prone until it stands (PHB p.157, p.311), as a trip's.
         if (success)
-            target.ApplyCondition(CombatConditionType.Prone, 1, Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
 
         return new SpecialAttackResult
         {
             ManeuverName = "Overrun",
             Success = success,
-            DefenderAvoided = false,
-            ProvokedAoO = provokedAoO,
             AttackerActionConsumed = true,
             CheckRoll = atkRoll,
             CheckTotal = atkTotal,

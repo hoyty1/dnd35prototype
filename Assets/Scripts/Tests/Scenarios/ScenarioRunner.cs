@@ -792,6 +792,8 @@ namespace Tests.Scenarios
                 if (!job.Decided)
                     TryRun(job, "escape-opposition", () => HandleEscapeOppositionPrompt(job, gm), Outcome.Exception);
                 if (!job.Decided)
+                    TryRun(job, "overrun-response", () => HandleOverrunResponsePrompt(job, gm), Outcome.Exception);
+                if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
             }
@@ -1311,6 +1313,22 @@ namespace Tests.Scenarios
             bool oppose = key == null || !job.Def.EscapeOppositionAnswers.TryGetValue(key, out bool answer) || answer;
             bool answered = gm.Harness_AnswerEscapeOpposition(oppose);
             job.Ctx?.Note("escape-opposition prompt for " + (key ?? "?") + " answered " + (oppose ? "Oppose" : "Allow") + (answered ? string.Empty : " (not open)"));
+        }
+
+        /// <summary>
+        /// Answers an open overrun prompt (a controllable defender an overrunner reaches, PHB p.157 step 2, D11) as the
+        /// scenario says (<see cref="ScenarioDef.OverrunResponseAnswers"/>; block by default), and notes it.
+        /// </summary>
+        private static void HandleOverrunResponsePrompt(ScenarioJob job, GameManager gm)
+        {
+            CharacterController defender = gm.Harness_PendingOverrunResponseDefender;
+            if (defender == null)
+                return;
+
+            string key = job.Trace != null ? job.Trace.KeyOf(defender) : null;
+            bool block = key == null || !job.Def.OverrunResponseAnswers.TryGetValue(key, out bool answer) || answer;
+            bool answered = gm.Harness_AnswerOverrunResponse(block);
+            job.Ctx?.Note("overrun-response prompt for " + (key ?? "?") + " answered " + (block ? "Block" : "Avoid") + (answered ? string.Empty : " (not open)"));
         }
 
         private static void HandleUiTurn(ScenarioJob job, GameManager gm)

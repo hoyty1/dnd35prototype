@@ -1051,6 +1051,21 @@ namespace DND35.AI
         public virtual bool ShouldOpposeGrappleEscape(CharacterController self, CharacterController escaper) => true;
 
         /// <summary>
+        /// Whether this creature blocks an overrun rather than letting the overrunner by (PHB p.157 step 2; batch 12 step 20,
+        /// D11). An AI stopgap until the batch 13 catalog: the AI always blocks, as before; a profile may avoid.
+        /// </summary>
+        public virtual bool ShouldBlockOverrun(CharacterController self, CharacterController overrunner) => true;
+
+        /// <summary>
+        /// Whether this creature overruns <paramref name="target"/> this turn: a move through the target's space (PHB p.157;
+        /// batch 12 step 20), planned by GameManager.TryPlanOverrunPathForAI and made through the one overrun before the attack
+        /// (AIService.ExecuteAggressiveMeleeTurn). An AI stopgap: when the profile asks for it (ManeuverPreferences.AttemptOverrun,
+        /// which no shipped profile sets).
+        /// </summary>
+        public virtual bool ShouldOverrun(CharacterController self, CharacterController target)
+            => Maneuvers != null && Maneuvers.AttemptOverrun && IsValidOverrunTarget(target, self);
+
+        /// <summary>
         /// Whether this creature skips the grab after an Improved Grab trigger hit (the creature "can attempt" it, MM p.310;
         /// CMB-098). <see cref="DefaultShouldSkipImprovedGrab"/>.
         /// </summary>
@@ -1125,7 +1140,8 @@ namespace DND35.AI
         }
 
         /// <summary>
-        /// Placeholder for future overrun restrictions (size/path rules).
+        /// The profile's own filter on overrun targets (<see cref="ShouldOverrun"/>); the rules (size, the path, one attempt a
+        /// round) are GameManager's (TryPlanOverrunPathForAI).
         /// </summary>
         protected virtual bool IsValidOverrunTarget(CharacterController target, CharacterController self)
         {
@@ -1154,8 +1170,7 @@ namespace DND35.AI
                 if (Maneuvers.AttemptBullRush && IsValidBullRushTarget(target, self))
                     return SpecialAttackType.BullRushAttack;
 
-                if (Maneuvers.AttemptOverrun && IsValidOverrunTarget(target, self))
-                    return SpecialAttackType.Overrun;
+                // No overrun here: it is a move through the defender's space, never an attack step (PHB p.157; ShouldOverrun).
             }
 
             if (ShouldInitiateGrapple(self, target))

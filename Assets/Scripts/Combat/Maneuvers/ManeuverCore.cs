@@ -140,7 +140,7 @@ public sealed class ManeuverOutcome
 /// The choices a maneuver leaves to a creature (batch 12 step 19; CMB-098, D10, D15), PC and NPC alike: the UI decider asks
 /// the player, the AI decider answers from the creature's AIProfile (AI stopgaps until the batch 13 catalog). Each method
 /// answers through <c>answer</c> exactly once: at once (the AI, or a UI choice with one option) or when the player answers.
-/// Only <see cref="ManeuverDeciders.For"/> reads IsControllable. The overrun response is step 20's.
+/// Only <see cref="ManeuverDeciders.For"/> reads IsControllable.
 /// </summary>
 public interface IManeuverDecider
 {
@@ -175,9 +175,16 @@ public interface IManeuverDecider
     /// Not opposing counts as losing against that grappler. Asked of the grappler's decider; the AI always opposes.
     /// </summary>
     void ChooseOpposeEscape(GameManager gm, CharacterController grappler, CharacterController escaper, Action<bool> answer);
+
+    /// <summary>
+    /// Whether a defender blocks an overrun or avoids it (PHB p.157 step 2; batch 12 step 20, D11): true blocks (the opposed
+    /// check), false lets the attacker by. Asked of the defender's decider by GameManager.RunOverrunMove, never when the
+    /// attacker has Improved Overrun (PHB p.96: the target may not avoid). The AI always blocks (a stopgap).
+    /// </summary>
+    void ChooseOverrunResponse(GameManager gm, CharacterController defender, CharacterController attacker, Action<bool> answer);
 }
 
-/// <summary>The player's maneuver choices, through the prompts (GameManager.PromptManeuverItem, PromptBullRushPush, PromptCounterTrip, BeginGrappleMoveSelection, BeginFreeAdjacentGrappleMoveSelection, PromptGrappleEscapeOpposition).</summary>
+/// <summary>The player's maneuver choices, through the prompts (GameManager.PromptManeuverItem, PromptBullRushPush, PromptCounterTrip, BeginGrappleMoveSelection, BeginFreeAdjacentGrappleMoveSelection, PromptGrappleEscapeOpposition, PromptOverrunResponse).</summary>
 public sealed class UiManeuverDecider : IManeuverDecider
 {
     public static readonly UiManeuverDecider Instance = new UiManeuverDecider();
@@ -224,13 +231,19 @@ public sealed class UiManeuverDecider : IManeuverDecider
         if (gm == null || !gm.PromptGrappleEscapeOpposition(grappler, escaper, answer))
             AiManeuverDecider.Instance.ChooseOpposeEscape(gm, grappler, escaper, answer);
     }
+
+    public void ChooseOverrunResponse(GameManager gm, CharacterController defender, CharacterController attacker, Action<bool> answer)
+    {
+        if (gm == null || !gm.PromptOverrunResponse(defender, attacker, answer))
+            AiManeuverDecider.Instance.ChooseOverrunResponse(gm, defender, attacker, answer);
+    }
 }
 
 /// <summary>
 /// The AI's maneuver choices, answered at once from the creature's AIProfile (or the profile defaults without one). AI
 /// stopgaps (batch 13 catalog): the item by AIProfile.ChooseManeuverItem, the push by ChooseBullRushPush, the counter-trip
 /// by ShouldCounterTrip, the grapple move and the escape square by ChooseGrappleMoveDestination and ChooseGrappleEscapeSquare,
-/// and opposing an escape by ShouldOpposeGrappleEscape (always, D10).
+/// opposing an escape by ShouldOpposeGrappleEscape (always, D10), and blocking an overrun by ShouldBlockOverrun (always, D11).
 /// </summary>
 public sealed class AiManeuverDecider : IManeuverDecider
 {
@@ -290,6 +303,12 @@ public sealed class AiManeuverDecider : IManeuverDecider
     {
         DND35.AI.AIProfile profile = grappler != null ? grappler.aiProfile : null;
         answer?.Invoke(profile == null || profile.ShouldOpposeGrappleEscape(grappler, escaper));
+    }
+
+    public void ChooseOverrunResponse(GameManager gm, CharacterController defender, CharacterController attacker, Action<bool> answer)
+    {
+        DND35.AI.AIProfile profile = defender != null ? defender.aiProfile : null;
+        answer?.Invoke(profile == null || profile.ShouldBlockOverrun(defender, attacker));
     }
 }
 

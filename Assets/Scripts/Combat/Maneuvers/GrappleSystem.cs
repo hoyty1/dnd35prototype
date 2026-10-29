@@ -554,7 +554,7 @@ public partial class GameManager
             return;
         }
 
-        ClearOverrunContinuationState();
+        ClearOverrunChoiceState();
         ClearGrappleMoveSelectionState();
         ClearFreeAdjacentGrappleMoveSelectionState();
 
@@ -840,7 +840,7 @@ public partial class GameManager
             return false;
         }
 
-        ClearOverrunContinuationState();
+        ClearOverrunChoiceState();
         ClearFreeAdjacentGrappleMoveSelectionState();
         ClearGrappleMoveSelectionState();
         _grappleMoveActor = actor;

@@ -1107,6 +1107,7 @@ public partial class GameManager : MonoBehaviour
         ClearSpellcastResourceSnapshot();
         ClearCounterTripPrompt(hideDialog: true);
         ClearGrappleEscapeOppositionPrompt();
+        ClearOverrunResponsePrompt();
 
         _isSelectingWithdraw = false;
         _isSelectingBreakWallTarget = false;
@@ -1143,7 +1144,7 @@ public partial class GameManager : MonoBehaviour
         _activeTurnUndeadSelectionContext = null;
 
         ClearOverrunDestinationSelectionState();
-        ClearOverrunContinuationState();
+        ClearOverrunChoiceState();
         ClearFreeAdjacentGrappleMoveSelectionState();
         ClearGrappleMoveSelectionState();
 
@@ -4153,7 +4154,7 @@ public partial class GameManager : MonoBehaviour
         ClearDisarmSequenceState();
         LogMenuFlow("ShowActionChoices:HIDE_TRANSIENT_PANELS", pc);
         ClearOverrunDestinationSelectionState();
-        ClearOverrunContinuationState();
+        ClearOverrunChoiceState();
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
         CombatUI.HideSpecialStyleSelectionMenu();
@@ -9091,6 +9092,9 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            // A destination selection, not a target one (the move through the defender's space, OverrunSystem).
+            _isSelectingSpecialAttack = false;
+            CombatUI?.HideSpecialAttackMenu();
             StartOverrunDestinationSelection(pc);
             return;
         }
@@ -11337,7 +11341,7 @@ public partial class GameManager : MonoBehaviour
 
         bool wasOverrunDestinationSelection = _isSelectingOverrunDestination;
         ClearOverrunDestinationSelectionState();
-        ClearOverrunContinuationState();
+        ClearOverrunChoiceState();
 
         bool wasFreeAdjacentGrappleMoveSelection = _isFreeAdjacentGrappleMoveSelection;
         if (wasFreeAdjacentGrappleMoveSelection)

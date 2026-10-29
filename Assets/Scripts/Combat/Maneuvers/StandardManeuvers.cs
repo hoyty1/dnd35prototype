@@ -1458,9 +1458,9 @@ public partial class GameManager
         => target == null || target.Stats == null || target.IsDead || target.Stats.IsDead || !IsActiveCombatant(target);
 
     /// <summary>
-    /// Overrun's push after a successful targeted overrun: the defender 1 square away from the attacker,
-    /// then the attacker into the vacated square. No AoOs. Unchanged behaviour (CMB-116: RAW lets the
-    /// attacker move through instead).
+    /// Telekinesis's bull rush push (its only caller since the overrun became a move through the defender's space, batch 12
+    /// step 20, CMB-116): the target <paramref name="squares"/> away from the source, and, with
+    /// <paramref name="allowAttackerFollow"/>, the source into the vacated square. No AoOs.
     /// </summary>
     private void TryPushTargetAway(CharacterController attacker, CharacterController target, int squares, bool allowAttackerFollow)
     {

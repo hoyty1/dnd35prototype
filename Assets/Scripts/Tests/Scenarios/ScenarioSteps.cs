@@ -15,7 +15,7 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -280,6 +280,18 @@ namespace Tests.Scenarios
         /// </summary>
         public static Step Charge(string target, bool bullRush = false, string hasteAttack = null)
             => new Step(StepKind.Charge) { Target = target, BullRush = bullRush, NaturalAttackName = hasteAttack };
+        /// <summary>
+        /// An overrun the AI plans against <paramref name="target"/> (PHB p.157; batch 12 step 20): a move through its space,
+        /// GameManager.TryPlanOverrunPathForAI then the one overrun (NPCExecuteOverrunForAI). AI path only; a Ui overrun
+        /// names its square (<see cref="OverrunTo"/>).
+        /// </summary>
+        public static Step Overrun(string target) => new Step(StepKind.Overrun) { Target = target };
+        /// <summary>
+        /// An overrun move to (<paramref name="x"/>, <paramref name="y"/>) (PHB p.157; batch 12 step 20). Ui: the Special Attack
+        /// menu's Overrun, the square and, when the "Overrun or Normal Move" dialog asks, Overrun. AI path: the overrun path to
+        /// the square (GameManager.TryBuildOverrunPathForAI) and the one overrun.
+        /// </summary>
+        public static Step OverrunTo(int x, int y) => new Step(StepKind.Overrun) { Cell = new Vector2Int(x, y), HasCell = true };
         /// <summary>Ui: answers the pending AoO confirmation; skipped when no confirmation is open. Skipped on the AI path.</summary>
         public static Step AnswerAoO(AoOAnswer answer) => new Step(StepKind.AnswerAoO) { Answer = answer };
         /// <summary>Does nothing (an Ui turn still ends with End Turn when the steps run out).</summary>
@@ -332,6 +344,8 @@ namespace Tests.Scenarios
                     return "DeliverHeld(" + Target + ")";
                 case StepKind.UseItem:
                     return "UseItem(" + ItemId + "," + Target + ")";
+                case StepKind.Overrun:
+                    return "Overrun(" + (HasCell ? Cell.x + "," + Cell.y : Target) + ")";
                 case StepKind.Charge:
                     return "Charge(" + Target + (BullRush ? ",bullrush" : "") + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
                 case StepKind.AnswerAoO:
@@ -360,7 +374,8 @@ namespace Tests.Scenarios
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack || Kind == StepKind.Flurry
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
-                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert || Kind == StepKind.DualWield;
+                || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert || Kind == StepKind.DualWield
+                || (Kind == StepKind.Overrun && !HasCell);
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
@@ -390,6 +405,8 @@ namespace Tests.Scenarios
                 return Describe() + ": negative frames";
             if (Kind == StepKind.NaturalAttack && string.IsNullOrEmpty(NaturalAttackName))
                 return Describe() + ": no natural attack name";
+            if (control == Control.Ui && Kind == StepKind.Overrun && !HasCell)
+                return Describe() + ": a Ui overrun names its square (OverrunTo(x, y)); the AI plan is Overrun(target) on the AI path";
             if (control != Control.Ui)
             {
                 // A grapple escape or move has the AI-path executor (GameManager.RunGrappleActionForAI, batch 12 step 19).
@@ -568,7 +585,7 @@ namespace Tests.Scenarios
                 // AI executors below bypass: refuse movement and ordinary attacks instead of breaking those rules.
                 if (a.IsGrappling() && (s.Kind == StepKind.Move || s.Kind == StepKind.Withdraw || s.Kind == StepKind.FiveFootStep
                     || s.Kind == StepKind.Attack || s.Kind == StepKind.AttackAgain || s.Kind == StepKind.FullAttack || s.Kind == StepKind.Flurry
-                    || s.Kind == StepKind.Smite || s.Kind == StepKind.Charge))
+                    || s.Kind == StepKind.Smite || s.Kind == StepKind.Charge || s.Kind == StepKind.Overrun))
                 {
                     EmitStep(job, a, path, i, s, "refused", "grappling (no AI-path grapple executor; let the AI run this turn)");
                     continue;
@@ -755,6 +772,21 @@ namespace Tests.Scenarios
                         if (target == null || !gm.CanChargeTargetForAI(a, target, s.BullRush)) { ok = false; note = "charge not legal"; break; }
                         yield return gm.NPCExecuteChargeForAI(a, target, s.BullRush);
                         break;
+
+                    case StepKind.Overrun:
+                    {
+                        // The one overrun (batch 12 step 20): the AI's plan against the target, or the path to the step's square.
+                        List<Vector2Int> overrunPath;
+                        string overrunWhy = null;
+                        bool planned = s.HasCell
+                            ? gm.TryBuildOverrunPathForAI(a, s.Cell, out overrunPath, out overrunWhy)
+                            : gm.TryPlanOverrunPathForAI(a, target, out overrunPath);
+                        if (!planned) { ok = false; note = "no overrun path (" + (overrunWhy ?? "the AI plan found none") + ")"; break; }
+                        var overrun = new OverrunMoveOutcome();
+                        yield return gm.StartCoroutine(gm.NPCExecuteOverrunForAI(a, overrunPath, overrun));
+                        note = "overrun: " + overrun.Describe();
+                        break;
+                    }
 
                     default:
                         ok = false;
@@ -1309,6 +1341,15 @@ namespace Tests.Scenarios
                         ClickPendingTarget(gm);
                     break;
                 }
+                case StepKind.Overrun:
+                    if (!s.HasCell) { _awaitNote = "a Ui overrun names its square"; break; }
+                    if (!PressMenuButton(gm, SpecialAttackType.Overrun, false))
+                        break;
+                    ClickIf(gm, GameManager.PlayerSubPhase.Moving, s.Cell);
+                    // A destination a normal move also reaches asks "Overrun or Normal Move"; the step overruns.
+                    if (gm.Harness_PendingPrompt() == "overrun-choice")
+                        _awaitNote = gm.Harness_AnswerOverrunChoice(true) ? "overrun choice answered Overrun" : "the overrun choice could not be answered";
+                    break;
                 case StepKind.Charge:
                     if (target == null) { _awaitNote = "no target"; break; }
                     if (s.BullRush)
@@ -1417,8 +1458,9 @@ namespace Tests.Scenarios
 
         private void CancelIfStillSelecting(GameManager gm, params GameManager.PlayerSubPhase[] selecting)
         {
-            if (gm.Harness_PendingPrompt() == "aoo")
-                return; // the confirmation answers next frame
+            string pendingPrompt = gm.Harness_PendingPrompt();
+            if (pendingPrompt == "aoo" || pendingPrompt == "overrun-choice")
+                return; // the confirmation answers next frame; the overrun choice right after the click
             if (gm.CurrentCharacter != _actor)
                 return;
             if (Array.IndexOf(selecting, gm.CurrentSubPhase) >= 0)

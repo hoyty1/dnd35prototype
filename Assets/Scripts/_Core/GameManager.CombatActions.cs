@@ -663,12 +663,6 @@ public partial class GameManager
             return;
         }
 
-        if (_isOverrunContinuationSelection)
-        {
-            HandleOverrunContinuationMovementClick(pc, cell);
-            return;
-        }
-
         if (cell.Coords == pc.GridPosition)
         {
             CancelMovementSelection();
@@ -788,12 +782,10 @@ public partial class GameManager
     /// opponent listed at this step as having had its movement opportunity this round
     /// (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). Callers: PC moves and
     /// withdraw, NPC, summon and compulsion moves, both charge paths, crawl, the overrun
-    /// continuation, the grappler's drag (GrappleSystem.ExecuteGrappleMovement, through
-    /// ExecutePathWithMovementAoOs) and the escaper's adjacent move
-    /// (GrappleSystem.ExecuteFreeAdjacentGrappleMovement; both CMB-152). The bull rush follow
-    /// resolves and records its own steps (ResolveBullRushStepAoOs). Not yet through here, so they
-    /// resolve no movement AoOs and record nothing: the PC move-through overrun, its Normal Move
-    /// branch and the attacker's follow after a targeted overrun push (CMB-151, CMB-116).
+    /// move (GameManager.RunOverrunMove, PC and NPC alike, and its Normal Move branch; CMB-151), the grappler's drag
+    /// (GrappleSystem.ExecuteGrappleMovement, through ExecutePathWithMovementAoOs) and the escaper's adjacent move
+    /// (GrappleSystem.ExecuteFreeAdjacentGrappleMovement; both CMB-152). The bull rush follow resolves and records its own
+    /// steps (ResolveBullRushStepAoOs).
     /// </summary>
     private IEnumerator ResolveMovementAoOsBeforeStep(
         CharacterController mover,
@@ -944,7 +936,8 @@ public partial class GameManager
     /// is its own provocation (PHB p.154, owner decision 2026-10-07), so an enemy that had a movement
     /// AoO earlier this round (a charge bull rush) may still take it. Following from that decision
     /// (PHB p.138), it also does not count as the enemy's movement opportunity when the attacker
-    /// follows the pushed defender.
+    /// follows the pushed defender. An overrun's step 1 AoO (the defender's, when the attacker enters its
+    /// space; GameManager.RunOverrunMove) is made here too and is likewise its own provocation (batch 12 step 20).
     /// </summary>
     private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(
         CharacterController attacker,
@@ -1680,14 +1673,6 @@ public partial class GameManager
                         : type == SpecialAttackType.Grapple
                             ? distance <= AttackLegality.UnarmedReachSquares(attacker)
                             : AttackLegality.IsInManeuverReach(attacker, occupant, type, PcManeuverIntent(attacker, type), out _);
-
-            if (type == SpecialAttackType.Overrun)
-            {
-                if (!IsValidOverrunTarget(attacker, occupant, out _, requireAdjacency: true))
-                    continue;
-
-                inRange = distance == 1;
-            }
 
             if (!inRange)
                 continue;
