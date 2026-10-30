@@ -243,7 +243,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, real-time timing | 25+14+5 | Med | Med | CMB-007, CRE-014 |
 | 10 | Fast healing as its own field (not regeneration) | 22 | Low (AI: n/a) | Med | CRE-017 |
 | 11 | Smite (template and paladin): one executor; target alignment; the summon-AI formula (done 2026-10-14: `SmiteRules`, CHR-020, CMB-021, AI-056) | 22+8+11+4+3 | Med | Med | - |
-| 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-040, AI-008, CRE-017 |
+| 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-008, CRE-017 (AI-040 fixed in batch 13 step 18) |
 | 13 | Senses for fair sight: scent (47, partial), tremorsense 15, blindsense 6, blindsight 5, all-around vision 5 | 78 | Med (knowledge increment 2) | High | AI-051 |
 | 14 | Template defences: SR HD+5 at all HD; DR bypass combos; energy riders on natural attacks (data-only); trample | 14+53+4+2 | Low | Med | CRE-008, CRE-018, new CRE (riders) |
 | 15 | Feat modes for NPCs: Power Attack (profile flag unread); Rapid Shot and TWF (no NPC caller); Cleave; natural attacks plus weapon | many humanoids | Med | Med | AI-026, new AI (Rapid Shot/TWF), CMB-077 (Cleave works for NPCs since batch 12 step 15) |
@@ -271,7 +271,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 | 6 | Constrict | 22 | missing | no | Text only in 10 creature files; no logic (`CREATURES.md:111`). |
 | 7 | Fast healing | 22 | missing | n/a | Mephits model it as `RegenerationAmount = 2` (CRE-017), so it is partly a stand-in. A downed regenerator now counts as out of the fight (CORE-034, fixed 2026-10-08). |
 | 8 | Smite good | 22 | partial | partial | `GainsSmiteGood` becomes `HasTemplateSmiteGood` (`NPCSetup.cs:829`). Every target has its MM alignment (the spawn copies it since CRE-002 was fixed on 2026-10-08, and every definition sets one since the CRE-056 data fix of 2026-10-14); one smite rule for PCs, NPCs and summons since 2026-10-14 (`SmiteRules`, AI-056 fixed). Family total with the `*_template` ids is 31+. |
-| 9 | Breath weapon | 19 | partial | partial | Dragons and hell hounds only; no action cost (AI-040); saves through `SaveRollRules` with Evasion since batch 12 step 10; recharge per MM since batch 12 step 6. |
+| 9 | Breath weapon | 19 | partial | partial | Dragons and hell hounds on the AI side, and any controllable creature with the data (batch 13 step 18); a standard action since that step (AI-040 fixed); saves through `SaveRollRules` with Evasion since batch 12 step 10; recharge per MM since batch 12 step 6. |
 | 10 | Vermin traits | 19 | implemented | n/a | Mind-affecting immunity by type (`CharacterStats.cs:3966-4012`). |
 | 11 | Spell resistance | 17 | implemented | n/a | Applies only when a spell sets `SpellResistanceApplies` (SPL-057). |
 | 12 | Tremorsense | 15 | missing | no | No code reference outside creature data (grep). |

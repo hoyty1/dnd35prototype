@@ -75,6 +75,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button AttackDefensivelyButton => _combatUI != null ? _combatUI.AttackDefensivelyButton : null;
     private Button FullAttackDefensivelyButton => _combatUI != null ? _combatUI.FullAttackDefensivelyButton : null;
     private Button TotalDefenseButton => _combatUI != null ? _combatUI.TotalDefenseButton : null;
+    private Button MonsterAbilityButton => _combatUI != null ? _combatUI.MonsterAbilityButton : null;
 
     private sealed class ActionButtonState
     {
@@ -880,6 +881,33 @@ public class ActionButtonPanel : MonoBehaviour
         Debug.Log($"[CombatUI][Actions] Hiding main-menu Overrun button for {pc.Stats.CharacterName}; use Special Attack submenu instead.");
     }
 
+    private void ComputeMonsterAbilityState(CharacterController pc, ActionButtonStates states)
+    {
+        List<ActionDefinition> entries = GameManager.MonsterAbilityEntries(pc);
+        if (entries.Count == 0)
+        {
+            states.Set(MonsterAbilityButton, new ActionButtonState(false, false, "Monster Abilities"));
+            return;
+        }
+        var usable = new List<string>();
+        foreach (ActionDefinition d in entries)
+        {
+            Legality start = d.Executor.CanStart(pc);
+            if (start.Ok)
+                usable.Add(d.Name);
+        }
+        string label;
+        if (usable.Count == 1)
+            label = usable[0];
+        else if (usable.Count > 1)
+            label = "Monster Abilities (" + usable.Count + ")";
+        else if (pc.HasBreathWeapon && !pc.IsBreathWeaponReady && pc.BreathWeaponCooldownRemaining > 0)
+            label = "Breath Weapon (recharging: " + pc.BreathWeaponCooldownRemaining + " rd" + (pc.BreathWeaponCooldownRemaining == 1 ? "" : "s") + ")";
+        else
+            label = "Monster Abilities (none now)";
+        states.Set(MonsterAbilityButton, new ActionButtonState(true, usable.Count > 0, label));
+    }
+
     /// <summary>A short button-label form of a CharacterController.CanUseFlurryOfBlows refusal.</summary>
     private static string ShortenFlurryReason(string reason)
     {
@@ -933,6 +961,11 @@ public class ActionButtonPanel : MonoBehaviour
         else if (canRage) rageLabel = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
         else rageLabel = "Rage (Used)";
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
+
+        // ── Monster abilities (batch 13 step 18, D11): breath weapon, spittle, engulf and ranged specials, for any
+        // controllable creature with the data (ActionCatalog.AvailableTo); enabled when one of them can start now (its
+        // executor's CanStart, the gate the AI's runner checks too) ──
+        ComputeMonsterAbilityState(pc, states);
 
         // ── Bardic Music (PHB p.29-30): shown to a bard with the Perform ranks; the list it opens starts a song, keeps one
         // up, makes a suggestion or stops it (BardicMusicRules, CHR-026) ──
@@ -1413,6 +1446,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         // A grappling creature takes only the grapple actions (PHB p.156): no total defense.
         if (TotalDefenseButton != null) TotalDefenseButton.gameObject.SetActive(false);
+        if (MonsterAbilityButton != null) MonsterAbilityButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (LayOnHandsButton != null) LayOnHandsButton.gameObject.SetActive(false);
@@ -1503,5 +1537,6 @@ public class ActionButtonPanel : MonoBehaviour
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
         if (TotalDefenseButton != null) TotalDefenseButton.gameObject.SetActive(false);
+        if (MonsterAbilityButton != null) MonsterAbilityButton.gameObject.SetActive(false);
     }
 }

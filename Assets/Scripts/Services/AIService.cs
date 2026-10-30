@@ -358,7 +358,7 @@ public class AIService : MonoBehaviour
                 {
                     Debug.Log($"[AI] {npc.Stats.CharacterName} fires free-action {freeAttack.Name} at {spittleTarget.Stats.CharacterName}");
                     TryExecuteRangedSpecialAttack(npc, spittleTarget);
-                    if (_gameManager.EvaluateCombatEnd("AI.FreeRangedSpecial"))
+                    if (CombatEnded()) // the core ran the combat-end check (batch 13 step 18 review)
                         yield break;
                     // No yield break — creature continues its turn with standard/move actions
                 }
@@ -806,15 +806,14 @@ public class AIService : MonoBehaviour
             RangedSpecialAttackDefinition preMovAttack = npc.GetRangedSpecialAttackDefinition();
             if (preMovAttack != null && !preMovAttack.IsFreeAction)
             {
-                int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+                int distance = npc.GetMinimumDistanceToTarget(target, chebyshev: false);
                 int rangeSquares = preMovAttack.RangeFeet / 5;
                 
                 if (distance <= rangeSquares)
                 {
                     Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
-                    if (TryExecuteRangedSpecialAttack(npc, target))
+                    if (TryExecuteRangedSpecialAttack(npc, target)) // the core ran the combat-end check
                     {
-                        _gameManager.EvaluateCombatEnd("AI.RangedSpecial");
                         yield return new WaitForSeconds(0.8f);
                         yield break;
                     }
@@ -906,7 +905,7 @@ public class AIService : MonoBehaviour
         if (attackTarget != null && !target.Stats.IsDead)
         {
             // ── Try Engulf attack if adjacent and available ──
-            if (npc.HasEngulf && SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition) == 1)
+            if (npc.HasEngulf && EngulfActionExecutor.IsAdjacent(npc, target))
             {
                 Debug.Log($"[AI] {npc.Stats.CharacterName} attempting engulf");
                 if (TryExecuteEngulf(npc, target))
@@ -930,14 +929,13 @@ public class AIService : MonoBehaviour
                 RangedSpecialAttackDefinition postMovAttack = npc.GetRangedSpecialAttackDefinition();
                 if (postMovAttack != null && !postMovAttack.IsFreeAction)
                 {
-                    int postMoveDistance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+                    int postMoveDistance = npc.GetMinimumDistanceToTarget(target, chebyshev: false);
                     int rangeSquares = postMovAttack.RangeFeet / 5;
                     if (postMoveDistance <= rangeSquares)
                     {
                         Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
-                        if (TryExecuteRangedSpecialAttack(npc, target))
+                        if (TryExecuteRangedSpecialAttack(npc, target)) // the core ran the combat-end check
                         {
-                            _gameManager.EvaluateCombatEnd("AI.PostMoveRangedSpecial");
                             yield return new WaitForSeconds(0.8f);
                             yield break;
                         }
@@ -1076,8 +1074,12 @@ public class AIService : MonoBehaviour
 
         // ── Priority 5: Tactical Breath Weapon Positioning ──
         // When breath weapon is available, evaluate ALL reachable positions to find
-        // the optimal spot that maximizes enemy hits. Move there, then fire.
-        if (npc.HasBreathWeapon && npc.IsBreathWeaponReady)
+        // the optimal spot that maximizes enemy hits. Move there, then fire. The breath entry's start gate (ready, an
+        // actor free to act, and a standard action to spend: MM p.69, p.315; batch 13 step 18, D11, AI-040) decides
+        // whether to try at all.
+        ActionDefinition breathEntry = ActionCatalog.Get(ActionIds.BreathWeapon);
+        if (npc.HasBreathWeapon && npc.IsBreathWeaponReady
+            && (breathEntry == null || breathEntry.Executor == null || breathEntry.Executor.CanStart(npc).Ok))
         {
             Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} — breath weapon READY, initiating tactical positioning...");
 
@@ -1088,7 +1090,10 @@ public class AIService : MonoBehaviour
                 var bp = bestBreathPos.Value;
 
                 // ── Step 1: Move to optimal position if needed ──
-                if (bp.RequiresMove && npc.Actions.HasMoveAction)
+                // Only when the standard action is left after the move: a creature limited to a single action (disabled,
+                // staggered, slowed; ActionEconomy.SingleActionOnly) would spend its turn on the move and could not
+                // breathe (batch 13 step 18 review), so it weighs the breath from where it stands.
+                if (bp.RequiresMove && npc.Actions.HasMoveAction && !npc.Actions.SingleActionOnly)
                 {
                     Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} moving from {npc.GridPosition} → {bp.Position} " +
                               $"for breath weapon ({bp.EnemyHits} targets)");
@@ -1117,10 +1122,10 @@ public class AIService : MonoBehaviour
                         yield return new WaitForSeconds(0.4f);
                     }
                 }
-                else if (bp.RequiresMove && !npc.Actions.HasMoveAction)
+                else if (bp.RequiresMove)
                 {
-                    // Can't move — fall back to evaluating breath from current position only
-                    Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} wants to reposition but has no move action — using current position");
+                    // Can't move and still breathe — fall back to evaluating breath from current position only
+                    Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} wants to reposition but has no move action to spare — using current position");
                 }
 
                 // ── Step 2: Fire breath weapon ──
@@ -1132,12 +1137,17 @@ public class AIService : MonoBehaviour
                               $"aimed at {dragonProfile.BreathWeaponAimTarget.Stats.CharacterName} " +
                               $"(hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
 
+                    var breathOutcome = new ActionOutcome();
                     yield return _gameManager.StartCoroutine(
-                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget, breathOutcome));
                     if (CombatEnded()) yield break; // the breath ran the combat-end check
+                    // A refused breath spends nothing: the turn goes on to the melee priorities (batch 13 step 18 review).
+                    bool breathed = breathOutcome.Performed;
+                    if (!breathed)
+                        Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName}'s breath was refused ({breathOutcome.Refusal.Reason}) — proceeding to melee");
 
                     // After breath weapon, dragon may still have move action for repositioning
-                    if (npc.CanTakeTurnActions() && npc.Actions.HasMoveAction)
+                    if (breathed && npc.CanTakeTurnActions() && npc.Actions.HasMoveAction)
                     {
                         CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
                         if (closestEnemy != null)
@@ -1163,7 +1173,8 @@ public class AIService : MonoBehaviour
                         }
                     }
 
-                    yield break;
+                    if (breathed)
+                        yield break;
                 }
                 else
                 {
@@ -1180,11 +1191,15 @@ public class AIService : MonoBehaviour
                 {
                     Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} uses breath weapon from current position " +
                               $"(hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
+                    var fallbackBreathOutcome = new ActionOutcome();
                     yield return _gameManager.StartCoroutine(
-                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget, fallbackBreathOutcome));
                     if (CombatEnded()) yield break; // the breath ran the combat-end check
+                    bool fallbackBreathed = fallbackBreathOutcome.Performed;
+                    if (!fallbackBreathed)
+                        Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName}'s breath was refused ({fallbackBreathOutcome.Refusal.Reason}) — proceeding to melee");
 
-                    if (npc.CanTakeTurnActions() && npc.Actions.HasMoveAction)
+                    if (fallbackBreathed && npc.CanTakeTurnActions() && npc.Actions.HasMoveAction)
                     {
                         CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
                         if (closestEnemy != null)
@@ -1210,7 +1225,8 @@ public class AIService : MonoBehaviour
                         }
                     }
 
-                    yield break;
+                    if (fallbackBreathed)
+                        yield break;
                 }
             }
 
@@ -4150,6 +4166,22 @@ public class AIService : MonoBehaviour
         if (attack == null)
             return false;
 
+        // The spittle is a free action every round (MM p.126): once per round (batch 13 step 18, D11).
+        if (attack.IsFreeAction && npc.FreeRangedSpecialUsedThisRound)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName}'s {attack.Name} was already used this round.");
+            return false;
+        }
+
+        // A creature that cannot attack (nauseated, PHB p.311), has no further action, or is grappling makes no ranged
+        // touch attack, free or not: the executors' shared bar, repeated so the core cannot be reached around them.
+        Legality? actorBar = MonsterAbilityRules.ActorRefusal(npc, attack.Name);
+        if (actorBar.HasValue)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot use {attack.Name}: {actorBar.Value.Reason}");
+            return false;
+        }
+
         // A ranged touch attack is an attack, so a holder may not make it against the creature it holds with one body
         // part (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
         if (npc.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
@@ -4158,10 +4190,10 @@ public class AIService : MonoBehaviour
             return false;
         }
 
-        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
-        if (distance > attack.RangeFeet / 5)  // Convert feet to squares (5 ft = 1 square)
+        // Space to space, the PHB p.147 count (a Large creature measures from its nearest square; batch 13 step 18 review).
+        if (!RangedSpecialActionExecutor.IsInRange(npc, target, attack))
         {
-            Debug.Log($"[AI] {npc.Stats.CharacterName}'s target is too far ({distance} squares) for {attack.Name} (range {attack.RangeFeet} ft).");
+            Debug.Log($"[AI] {npc.Stats.CharacterName}'s target is too far ({npc.GetMinimumDistanceToTarget(target, chebyshev: false)} squares) for {attack.Name} (range {attack.RangeFeet} ft).");
             return false;
         }
 
@@ -4173,6 +4205,10 @@ public class AIService : MonoBehaviour
             Debug.Log($"[AI] {npc.Stats.CharacterName} cannot use {attack.Name} on {target.Stats.CharacterName}: {specialLegality.Reason}");
             return false;
         }
+
+        // The spittle's round is spent once it is fired, a ward's failure included (it loses the attack, as below).
+        if (attack.IsFreeAction)
+            npc.SetFreeRangedSpecialUsedThisRound(true);
 
         // A ranged touch attack is a direct attack: its attempt rolls the attacker's one Sanctuary save (PHB p.274; D6); a
         // failure loses the attack and its action but not the ability's use, which never happened, as a spell keeps its
@@ -4236,6 +4272,12 @@ public class AIService : MonoBehaviour
             _gameManager.ResumeAttackedReactions();
         }
 
+        // An attack on a creature charmed by the attacker or its apparent allies ends the charm (PHB p.209; batch 12 D15),
+        // as the weapon attacks do; then the one combat-end check for both sides, so a spittle that drops the last foe
+        // ends the fight on the PC's turn as on the AI's (batch 13 step 18 review).
+        _gameManager.BreakCharmOnHostileAction(npc, target);
+        _gameManager.EvaluateCombatEnd("RangedSpecial");
+
         return true;
     }
 
@@ -4260,11 +4302,13 @@ public class AIService : MonoBehaviour
         if (engulf == null)
             return false;
 
-        // Must be adjacent
-        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
-        if (distance != 1)
+        // A Large or smaller creature adjacent to the engulfer's space (MM p.202; EngulfActionExecutor.TargetRefusal), and an
+        // engulfer free to act (the executors' shared bar).
+        Legality? engulfBar = MonsterAbilityRules.ActorRefusal(npc, "Engulf");
+        Legality engulfTarget = EngulfActionExecutor.TargetRefusal(npc, target);
+        if (engulfBar.HasValue || !engulfTarget.Ok)
         {
-            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot engulf — target is {distance} squares away (must be adjacent).");
+            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot engulf {target.Stats.CharacterName}: {(engulfBar.HasValue ? engulfBar.Value.Reason : engulfTarget.Reason)}");
             return false;
         }
 
@@ -4282,6 +4326,9 @@ public class AIService : MonoBehaviour
         var saveResult = SavingThrowResolver.ResolveReflexSave(target.Stats, engulf.ReflexSaveDC, "Engulf",
             SaveContext.CreatureAbility("Engulf", npc));
         
+        // A threatening act: it ends a charm the engulfer or its apparent allies hold on the target (PHB p.209; D15).
+        _gameManager.BreakCharmOnHostileAction(npc, target);
+
         if (saveResult.Succeeded)
         {
             _gameManager.CombatUI?.ShowCombatLog(

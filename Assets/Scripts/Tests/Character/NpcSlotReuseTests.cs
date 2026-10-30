@@ -233,6 +233,7 @@ public static class NpcSlotReuseTests
         if (cc.HasRegeneration) t.Add("regeneration");
         if (!cc.HasBombardierAcidSprayReady) t.Add("acid spray used this round");
         if (cc.CleaveUsedThisRound) t.Add("cleave used this round");
+        if (cc.FreeRangedSpecialUsedThisRound) t.Add("spittle used this round");
         return t;
     }
 
@@ -246,7 +247,7 @@ public static class NpcSlotReuseTests
 
     /// <summary>
     /// Kitchen sink creature, dirtied at runtime (grapple, spell effect, condition, haste, Power Attack, spent move,
-    /// tag, AI tracker component, sprite tint, acid spray and Cleave used this round, target priority), then an orc warrior in the same
+    /// tag, AI tracker component, sprite tint, acid spray, Cleave and spittle used this round, target priority), then an orc warrior in the same
     /// controller: none of it may remain, and the controller must match an orc warrior spawned into a fresh one.
     /// </summary>
     private static void TestTraitCreatureThenPlainCreature()
@@ -300,6 +301,7 @@ public static class NpcSlotReuseTests
                 "CMB-094 control: the old creature tracks its partner's square, has pinpointed it and counts an auto-miss");
             slot.SetAcidSprayUsedThisRound(true);
             slot.SetCleaveUsedThisRound(true);
+            slot.SetFreeRangedSpecialUsedThisRound(true);
             slot.MarkFrightfulPresenceTriggered();
             slot.PriorityTargetName = "Someone";
             SpriteRenderer sr = slot.GetComponent<SpriteRenderer>();

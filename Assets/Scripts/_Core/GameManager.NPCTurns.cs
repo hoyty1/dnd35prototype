@@ -1368,10 +1368,34 @@ public partial class GameManager
     /// weapon was successfully used.
     /// </summary>
     public IEnumerator NPCExecuteBreathWeaponForAI(CharacterController npc, CharacterController aimTarget)
+        => NPCExecuteBreathWeaponForAI(npc, aimTarget, new ActionOutcome());
+
+    /// <summary>
+    /// <see cref="NPCExecuteBreathWeaponForAI(CharacterController, CharacterController)"/> with the entry's outcome in
+    /// <paramref name="outcome"/>: Performed when a use of the breath was spent, else the refusal (nothing spent), so the
+    /// Dragon routine goes on to its melee priorities (batch 13 step 18 review).
+    /// </summary>
+    public IEnumerator NPCExecuteBreathWeaponForAI(CharacterController npc, CharacterController aimTarget, ActionOutcome outcome)
     {
         // Through the catalog's breath entry (batch 13 step 6), which runs the core overload below.
         ActionContext ctx = ActionContext.For(ActionIds.BreathWeapon, npc, ActorSource.AI, aimTarget);
-        return RunAIActionInline(ctx, new ActionOutcome());
+        return RunAIActionInline(ctx, outcome ?? new ActionOutcome());
+    }
+
+    /// <summary>
+    /// The cone or line <paramref name="npc"/>'s breath weapon would fill aimed at <paramref name="aimTarget"/> from where it
+    /// stands: the best directed aim for its side that covers the target (AoESystem.BestDirectedAimAt; MM p.69, PHB p.175;
+    /// batch 11 step 24, D5), or null when no cone or line of its breath reaches the target. Pure: the breath executor's
+    /// CanExecute, the PC's target list and the breath core read it.
+    /// </summary>
+    internal AreaAim AimBreathWeapon(CharacterController npc, CharacterController aimTarget)
+    {
+        BreathWeaponDefinition bw = npc != null ? npc.GetBreathWeaponDefinition() : null;
+        if (bw == null || aimTarget == null || aimTarget == npc || Grid == null)
+            return null;
+        int rangeSquares = Mathf.Max(1, bw.RangeFeet / 5);
+        return AoESystem.BestDirectedAimAt(npc, npc.GridPosition,
+            bw.Shape == BreathWeaponShape.Cone ? AoEShape.Cone : AoEShape.Line, rangeSquares, aimTarget, Grid);
     }
 
     /// <summary>
@@ -1389,6 +1413,27 @@ public partial class GameManager
         if (npc.GetBreathWeaponDefinition().OncePerRound)
             yield break;
 
+        // The affected cells first (pure), so a breath that cannot reach its aim target spends nothing: the cone or line
+        // starts at an intersection on the edge of the creature's space (MM p.69, PHB p.175) and covers the aim target,
+        // the best such aim for its side, the one DragonAIProfile scored (AimBreathWeapon; batch 11 step 24, decision D5).
+        AreaAim breathAim = AimBreathWeapon(npc, aimTarget);
+        HashSet<Vector2Int> cells = breathAim != null ? breathAim.Cells : null;
+
+        if (cells == null || cells.Count == 0)
+        {
+            Debug.LogWarning($"[AI][BreathWeapon] {npc.Stats.CharacterName} breath weapon produced no cells!");
+            yield break;
+        }
+
+        // A breath weapon is a standard action (MM p.69 for dragons; MM p.315, supernatural abilities) that provokes no
+        // attack of opportunity (PHB p.141); it is paid first, through CommitStandardAction, so a disabled creature takes
+        // its strenuous 1 hp (PHB p.145). Batch 13 step 18, D11, AI-040: before, it cost no action.
+        if (!npc.CommitStandardAction())
+        {
+            Debug.Log($"[AI][BreathWeapon] {npc.Stats.CharacterName} has no standard action left for its breath weapon.");
+            yield break;
+        }
+
         // --- Frightful Presence (dragons) triggers on first attack/breath ---
         if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
         {
@@ -1399,21 +1444,7 @@ public partial class GameManager
         if (bw == null)
             yield break;
 
-        int rangeSquares = Mathf.Max(1, bw.RangeFeet / 5);
         string shapeName = bw.Shape == BreathWeaponShape.Cone ? "cone" : "line";
-
-        // Compute affected cells: the cone or line starts at an intersection on the edge of the creature's space (MM p.69,
-        // PHB p.175) and covers the aim target, the best such aim for its side, the one DragonAIProfile scored
-        // (AoESystem.BestDirectedAimAt; batch 11 step 24, decision D5).
-        AreaAim breathAim = AoESystem.BestDirectedAimAt(npc, npc.GridPosition,
-            bw.Shape == BreathWeaponShape.Cone ? AoEShape.Cone : AoEShape.Line, rangeSquares, aimTarget, Grid);
-        HashSet<Vector2Int> cells = breathAim != null ? breathAim.Cells : null;
-
-        if (cells == null || cells.Count == 0)
-        {
-            Debug.LogWarning($"[AI][BreathWeapon] {npc.Stats.CharacterName} breath weapon produced no cells!");
-            yield break;
-        }
 
         // Roll damage: DamageCount × d(DamageDice), once for the whole breath; every creature in the area takes this one
         // total before its own save (decision D6 of the batch 11 design, batch 11 step 20, SPL-180).
@@ -1490,6 +1521,10 @@ public partial class GameManager
                     log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved && !bw.SaveNegates ? " (half)" : "")}{DescribeMitigation(dealt)}");
                     log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
                 }
+
+                // A threatening act on every creature in the area: it ends a charm the breather or its apparent allies
+                // hold on it (PHB p.209; batch 12 D15; batch 13 step 18 review).
+                BreakCharmOnHostileAction(npc, target);
 
                 if (target.Stats.IsDead)
                     log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");

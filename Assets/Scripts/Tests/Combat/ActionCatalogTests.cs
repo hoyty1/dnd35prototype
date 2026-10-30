@@ -28,6 +28,10 @@ namespace Tests.Combat
 ///   Extracted over their shared executors with the PC's attack follow-up (AttackDelay: 0.9 s, 0.9 s, 1.0 s); the aid's
 ///   variants map to its two aids, and each pre-check refuses a context with no actor, no aid, no ally or no wall square;
 ///   all three refuse a grappling or pinned actor on the Condition bar (PHB p.156; the step's review);
+/// - the monster-ability entries (batch 13 step 18, D11, AI-040, CRE-039): breath weapon, spittle, engulf and ranged
+///   special are Extracted (no AiOnly entry is left), the breath a standard action that does not provoke (MM p.69,
+///   p.306, p.315; PHB p.141), the spittle a free action; their start gates refuse a breath with no standard action
+///   left and a recharging breath, and a second spittle in the round (MM p.126); their pre-checks refuse a missing context;
 /// - a source scan: the executor files (Combat/Actions/Executors) never continue the UI (ShowActionChoices,
 ///   AfterAttackDelay, EndActivePCTurn, DelayedEndActivePCTurn) nor read IsControllable, ActivePC or IsPlayerTurn, and
 ///   ActionDeciders.cs is the only catalog file that reads IsControllable (its assertion count grows with the files);
@@ -46,7 +50,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-16) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-18) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -67,6 +71,7 @@ public static class ActionCatalogTests
         Run(TestItemEntries);
         Run(TestEquipmentEntries);
         Run(TestClassAbilityEntries);
+        Run(TestMonsterAbilityEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -365,11 +370,166 @@ public static class ActionCatalogTests
     }
 
     /// <summary>
+    /// The monster-ability entries (batch 13 step 18, D11): status, costs, UiAfter, the AoO rule and their start gates on
+    /// a bare controller (the once-per-round spittle, the standard-action breath, the shared actor bars: nauseated,
+    /// no further action, grappling; review), engulf's target gate (Large or smaller, adjacent space to space) and the
+    /// breath's availability (not a once-per-round reaction).
+    /// </summary>
+    private static void TestMonsterAbilityEntries()
+    {
+        ActionDefinition breath = ActionCatalog.Get(ActionIds.BreathWeapon);
+        ActionDefinition spittle = ActionCatalog.Get(ActionIds.Spittle);
+        ActionDefinition engulf = ActionCatalog.Get(ActionIds.Engulf);
+        ActionDefinition ranged = ActionCatalog.Get(ActionIds.RangedSpecial);
+        Assert(breath != null && breath.Status == ImplStatus.Extracted && breath.Executor is BreathWeaponActionExecutor
+               && breath.Cost == ActionCostType.Standard && breath.Provokes == ProvokeRule.No
+               && breath.UiAfter == ActionUiAfter.AttackDelay && breath.Target == ActionTargetKind.Creature,
+            "The breath weapon is Extracted: a standard action that does not provoke (MM p.69, p.306, p.315; PHB p.141; D11)",
+            breath != null ? breath.ToString() : "null");
+        Assert(spittle != null && spittle.Status == ImplStatus.Extracted && spittle.Executor is RangedSpecialActionExecutor
+               && spittle.Cost == ActionCostType.Free && spittle.UiAfter == ActionUiAfter.ShowChoices && spittle.Provokes == ProvokeRule.No,
+            "The spittle is Extracted: a free action that does not provoke (MM p.126; PHB p.141 Table 8-2, Ex; D11)", spittle != null ? spittle.ToString() : "null");
+        Assert(engulf != null && engulf.Status == ImplStatus.Extracted && engulf.Executor is EngulfActionExecutor && engulf.Cost == ActionCostType.Standard,
+            "Engulf is Extracted: a standard action (MM p.202; D11)", engulf != null ? engulf.ToString() : "null");
+        Assert(ranged != null && ranged.Status == ImplStatus.Extracted && ranged.Executor is RangedSpecialActionExecutor && ranged.Cost == ActionCostType.Standard
+               && ranged.Provokes == ProvokeRule.No,
+            "The ranged special is Extracted: a standard action that does not provoke (MM p.315; PHB p.141; D11)", ranged != null ? ranged.ToString() : "null");
+        foreach (ActionDefinition d in ActionCatalog.All)
+            Assert(d.Status != ImplStatus.AiOnly, d.Id + " is not AI-only (batch 13 step 18 shared the last ones)");
+
+        foreach (ActionDefinition d in new[] { breath, spittle, engulf, ranged })
+        {
+            if (d == null || d.Executor == null)
+                continue;
+            Assert(!d.Executor.CanExecute(null).Ok, d.Id + ": the pre-check refuses a missing context");
+            Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, d.Id + ": the pre-check refuses a context with no actor");
+        }
+        if (breath == null || spittle == null || engulf == null || ranged == null)
+            return;
+
+        var go = new GameObject("ActionCatalogTest_Breather");
+        try
+        {
+            var c = go.AddComponent<CharacterController>();
+            c.Stats = new CharacterStats(
+                name: "ACT_Breather", level: 1, characterClass: "Warrior",
+                str: 12, dex: 12, con: 12, wis: 10, intelligence: 10, cha: 10,
+                bab: 1, armorBonus: 0, shieldBonus: 0,
+                damageDice: 6, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 8, raceName: "Human");
+            c.Stats.EnsureMulticlassDataInitialized();
+            c.Stats.CurrentHP = c.Stats.TotalMaxHP;
+            c.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageCount = 2, DamageDice = 6, RechargeDice = "1d4", RangeFeet = 15 });
+            c.ConfigureRangedSpecialAttack(new RangedSpecialAttackDefinition { Name = "Spittle", RangeFeet = 30, IsFreeAction = true });
+            c.Actions.Reset();
+
+            Assert(breath.IsAvailableTo(c) && spittle.IsAvailableTo(c) && !ranged.IsAvailableTo(c) && !engulf.IsAvailableTo(c),
+                "AvailableTo lists the breath and the spittle for a creature with their data, not engulf or a standard-action ranged special");
+            Assert(breath.Executor.CanStart(c).Ok, "A ready breath with a standard action left can start");
+            Assert(spittle.Executor.CanStart(c).Ok, "The spittle can start while unused this round");
+
+            c.Actions.UseStandardAction();
+            Legality noStandard = breath.Executor.CanStart(c);
+            Assert(!noStandard.Ok && noStandard.Bar == LegalityBar.Action, "With the standard action spent the breath is refused on the Action bar (MM p.69; AI-040)",
+                noStandard.Bar + " " + noStandard.Reason);
+            Assert(spittle.Executor.CanStart(c).Ok, "The spittle, a free action, still starts with the standard action spent (MM p.126)");
+
+            c.SetFreeRangedSpecialUsedThisRound(true);
+            Legality second = spittle.Executor.CanStart(c);
+            Assert(!second.Ok && second.Bar == LegalityBar.Resource, "A second spittle in the round is refused on the Resource bar (MM p.126; D11)",
+                second.Bar + " " + second.Reason);
+            c.ClearOncePerRoundFlags();
+            Assert(spittle.Executor.CanStart(c).Ok && !c.FreeRangedSpecialUsedThisRound, "The turn start's once-per-round reset makes the spittle available again");
+
+            // The shared actor bars (review): a nauseated creature (a move action only, PHB p.311: unable to attack) and one
+            // with no further action this turn take no monster ability, the free spittle included.
+            c.Actions.Reset();
+            c.Actions.MoveActionOnly = true;
+            Legality nauseatedSpit = spittle.Executor.CanStart(c);
+            Legality nauseatedBreath = breath.Executor.CanStart(c);
+            Assert(!nauseatedSpit.Ok && nauseatedSpit.Bar == LegalityBar.Condition && !nauseatedBreath.Ok && nauseatedBreath.Bar == LegalityBar.Condition,
+                "A nauseated creature (a move action only) can neither spit nor breathe: the Condition bar (PHB p.311)",
+                nauseatedSpit.Bar + " " + nauseatedSpit.Reason + " / " + nauseatedBreath.Bar + " " + nauseatedBreath.Reason);
+            c.Actions.Reset();
+            c.Actions.NoFurtherActions = true;
+            Legality spentSpit = spittle.Executor.CanStart(c);
+            Assert(!spentSpit.Ok && spentSpit.Bar == LegalityBar.Condition, "With no further action this turn the spittle is refused (PHB p.145)",
+                spentSpit.Bar + " " + spentSpit.Reason);
+            c.Actions.Reset();
+            Assert(spittle.Executor.CanStart(c).Ok && breath.Executor.CanStart(c).Ok, "A fresh turn's economy lets both start again");
+
+            Assert(c.UseBreathWeapon() != null && c.BreathWeaponCooldownRemaining >= 1, "A breath starts its 1d4-round recharge (MM p.69)");
+            Legality recharging = breath.Executor.CanStart(c);
+            Assert(!recharging.Ok && recharging.Bar == LegalityBar.Resource, "A recharging breath is refused on the Resource bar", recharging.Bar + " " + recharging.Reason);
+
+            // A once-per-round breath (the bombardier beetle's acid spray, a reaction: batch 12 D1) is not an action entry.
+            c.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageCount = 1, DamageDice = 4, RangeFeet = 10, OncePerRound = true });
+            Assert(!breath.IsAvailableTo(c), "A once-per-round breath (the acid spray reaction) is not listed as the breath entry");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(go);
+        }
+
+        // Engulf's target gate (MM p.202; review): a Large engulfer reaches a creature next to any square of its space, and
+        // a creature larger than Large is refused on the Target bar.
+        var cubeGo = new GameObject("ActionCatalogTest_Cube");
+        var preyGo = new GameObject("ActionCatalogTest_Prey");
+        try
+        {
+            CharacterController cube = BareController(cubeGo, "ACT_Cube");
+            CharacterController prey = BareController(preyGo, "ACT_Prey");
+            cube.Stats.CurrentSizeCategory = SizeCategory.Large;
+            cube.GridPosition = new Vector2Int(0, 0);           // the space (0..1, 0..1)
+            prey.GridPosition = new Vector2Int(2, 1);           // next to (1, 1), two squares from the anchor
+            Assert(EngulfActionExecutor.TargetRefusal(cube, prey).Ok && EngulfActionExecutor.IsAdjacent(cube, prey),
+                "A creature next to a Large engulfer's far square is adjacent (space to space)", EngulfActionExecutor.TargetRefusal(cube, prey).Reason);
+            prey.GridPosition = new Vector2Int(3, 1);
+            Legality far = EngulfActionExecutor.TargetRefusal(cube, prey);
+            Assert(!far.Ok && far.Bar == LegalityBar.Reach, "A creature two squares from the engulfer's space is not adjacent", far.Bar + " " + far.Reason);
+            prey.GridPosition = new Vector2Int(2, 1);
+            prey.Stats.CurrentSizeCategory = SizeCategory.Huge;
+            Legality huge = EngulfActionExecutor.TargetRefusal(cube, prey);
+            Assert(!huge.Ok && huge.Bar == LegalityBar.Target, "A Huge creature cannot be engulfed (MM p.202: Large or smaller)", huge.Bar + " " + huge.Reason);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(cubeGo);
+            UnityEngine.Object.DestroyImmediate(preyGo);
+        }
+
+        // Each executor's start gate takes the shared actor bars, whose grapple bar is the support entries' (PHB p.156).
+        string monsterSrc = StripComments(Path.Combine(Application.dataPath, "Scripts/Combat/Actions/Executors/MonsterAbilityExecutors.cs"));
+        int bars = 0;
+        for (int at = monsterSrc.IndexOf("MonsterAbilityRules.ActorRefusal(actor", StringComparison.Ordinal); at >= 0;
+             at = monsterSrc.IndexOf("MonsterAbilityRules.ActorRefusal(actor", at + 1, StringComparison.Ordinal))
+            bars++;
+        Assert(bars == 3 && monsterSrc.Contains("GameManager.GetSupportActionGrappleRefusal(actor)"),
+            "The breath, ranged special and engulf start gates refuse a grappling or pinned actor (GetSupportActionGrappleRefusal; PHB p.156)", bars + " start gates");
+    }
+
+    /// <summary>A bare living controller for the monster-ability target tests.</summary>
+    private static CharacterController BareController(GameObject go, string name)
+    {
+        var c = go.AddComponent<CharacterController>();
+        c.Stats = new CharacterStats(
+            name: name, level: 1, characterClass: "Warrior",
+            str: 12, dex: 12, con: 12, wis: 10, intelligence: 10, cha: 10,
+            bab: 1, armorBonus: 0, shieldBonus: 0,
+            damageDice: 6, damageCount: 1, bonusDamage: 0,
+            baseSpeed: 6, atkRange: 1, baseHitDieHP: 8, raceName: "Human");
+        c.Stats.EnsureMulticlassDataInitialized();
+        c.Stats.CurrentHP = c.Stats.TotalMaxHP;
+        return c;
+    }
+
+    /// <summary>
     /// The class-ability entries (batch 13 step 16, D9, D10, AI-054): turn undead, rage and the domain powers are Extracted
     /// over their executors (no PC-only entry is left), with the PC follow-ups the buttons had; rage takes no action and
     /// only on the barbarian's own turn; a domain power's action is its own (a standard action for the touch and the
     /// turnings); Table 8-9's turning limits; the turning refusals' bars; each pre-check refuses an empty context.
     /// </summary>
+
     private static void TestClassAbilityEntries()
     {
         ActionDefinition turn = ActionCatalog.Get(ActionIds.TurnUndead);
@@ -520,7 +680,7 @@ public static class ActionCatalogTests
         {
             bool built = d.Status == ImplStatus.Delegating || d.Status == ImplStatus.Extracted || d.Status == ImplStatus.New;
             if (built && d.Executor == null) bad.Add(d.Id + ": " + d.Status + " without an executor");
-            // An AiOnly entry may wrap the AI's own core (breath, spittle, engulf, ranged special; batch 13 step 6).
+            // An AiOnly entry may wrap the AI's own core (none is left since batch 13 step 18 shared the monster specials).
             if (!built && d.Executor != null && d.Status != ImplStatus.AiOnly) bad.Add(d.Id + ": " + d.Status + " with an executor");
             if (!built && (d.IssueIds == null || d.IssueIds.Length == 0)) bad.Add(d.Id + ": " + d.Status + " with no issue");
             if (d.IssueIds != null)
@@ -577,10 +737,10 @@ public static class ActionCatalogTests
         new object[] { ActionIds.DonArmor, ActionCostType.FullRound, ProvokeRule.No, ImplStatus.OutOfScope, "ITM-095" },
         new object[] { ActionIds.PickUpItem, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
         new object[] { ActionIds.DropItem, ActionCostType.Free, ProvokeRule.No, ImplStatus.Extracted, "" },
-        new object[] { ActionIds.BreathWeapon, ActionCostType.Standard, ProvokeRule.No, ImplStatus.AiOnly, "CRE-039,AI-040" },
-        new object[] { ActionIds.Spittle, ActionCostType.Free, ProvokeRule.Varies, ImplStatus.AiOnly, "CRE-039" },
-        new object[] { ActionIds.Engulf, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.AiOnly, "CRE-039" },
-        new object[] { ActionIds.RangedSpecial, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.AiOnly, "CRE-039" },
+        new object[] { ActionIds.BreathWeapon, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.Spittle, ActionCostType.Free, ProvokeRule.No, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.Engulf, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.RangedSpecial, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Gaze, ActionCostType.Free, ProvokeRule.No, ImplStatus.OutOfScope, "CRE-076" },
         new object[] { ActionIds.Ready, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Missing, "CMB-029" },
         new object[] { ActionIds.Delay, ActionCostType.NotAnAction, ProvokeRule.No, ImplStatus.Missing, "CMB-029" },

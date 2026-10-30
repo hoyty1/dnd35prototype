@@ -76,8 +76,9 @@ public enum ImplStatus
     /// <summary>Only the PC UI can take the action; no shared executor yet.</summary>
     PcOnly,
     /// <summary>
-    /// Only the AI takes the action. Its executor (from batch 13 step 6) wraps the AI's own core, so the AI's calls run
-    /// through the catalog; no PC path reaches it until it becomes shared (breath, spittle, engulf: step 18).
+    /// Only the AI takes the action. Its executor wraps the AI's own core, so the AI's calls run through the catalog; no
+    /// PC path reaches it. None is left since batch 13 step 18 made the monster specials (breath, spittle, engulf, the
+    /// ranged specials; batch 13 step 6's AiOnly entries) shared.
     /// </summary>
     AiOnly,
     /// <summary>No one can take the action yet.</summary>

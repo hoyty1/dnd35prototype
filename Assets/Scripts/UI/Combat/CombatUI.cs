@@ -159,6 +159,7 @@ public class CombatUI : MonoBehaviour
     public Button AttackDefensivelyButton;    // Single attack (standard) while fighting defensively
     public Button FullAttackDefensivelyButton; // Full attack while fighting defensively
     public Button TotalDefenseButton;          // Total defense (Standard Action, PHB p.142; the catalog's shared action, CMB-179)
+    public Button MonsterAbilityButton;        // Breath weapon, spittle, engulf, ranged specials (the catalog's shared monster entries; batch 13 step 18, D11)
 
     [Header("Phase 1 Combat Feat Controls")]
     public GameObject StunningFistPanel;     // Panel containing Stunning Fist toggle

@@ -16,7 +16,7 @@ namespace Tests.Scenarios
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
         UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action,
-        AidAnother, WakeAlly, AttackWall, TurnUndead, Rage, FightDefensively
+        AidAnother, WakeAlly, AttackWall, TurnUndead, Rage, FightDefensively, MonsterAbility
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -237,6 +237,15 @@ namespace Tests.Scenarios
         /// Enter a rage (PHB p.25, D10; batch 13 step 16). Scripted: the rage entry through RunAIAction. Ui: the Rage button.
         /// </summary>
         public static Step Rage() => new Step(StepKind.Rage);
+
+        /// <summary>
+        /// A monster ability (batch 13 step 18, D11): <paramref name="actionId"/> is ActionIds.BreathWeapon, Spittle, Engulf or
+        /// RangedSpecial, aimed at <paramref name="target"/>. Scripted: the entry through RunAIAction, as the Dragon profile
+        /// and the AI routines run it. Ui: the Monster Abilities button, the ability in its list ("Name ("), then the target
+        /// in the second list (its name).
+        /// </summary>
+        public static Step MonsterAbility(string actionId, string target)
+            => new Step(StepKind.MonsterAbility) { ActionId = actionId, Target = target };
 
         /// <summary>
         /// Attack the Wall of Ice square (<paramref name="x"/>, <paramref name="y"/>) (PHB p.165-166, p.299; batch 13 step 13
@@ -460,6 +469,8 @@ namespace Tests.Scenarios
                     return "WakeAlly(" + Target + ")";
                 case StepKind.TurnUndead:
                     return "TurnUndead(" + Variant + ")";
+                case StepKind.MonsterAbility:
+                    return "MonsterAbility(" + ActionId + "," + Target + ")";
                 case StepKind.AttackWall:
                     return "AttackWall(" + Cell.x + "," + Cell.y + "," + Variant + ")";
                 case StepKind.Action:
@@ -504,6 +515,14 @@ namespace Tests.Scenarios
                     return Describe() + ": target '" + Target + "' is not an actor";
                 if (ItemId != null && !ItemDatabase.HasItem(ItemId))
                     return Describe() + ": no item '" + ItemId + "' in ItemDatabase";
+            }
+            if (Kind == StepKind.MonsterAbility)
+            {
+                ActionDefinition monsterEntry = ActionCatalog.Get(ActionId);
+                if (monsterEntry == null || monsterEntry.Category != ActionCategory.MonsterAbility)
+                    return Describe() + ": '" + ActionId + "' is not a monster-ability entry";
+                if (string.IsNullOrEmpty(Target) || def.Find(Target) == null)
+                    return Describe() + ": target '" + Target + "' is not an actor";
             }
             if (Kind == StepKind.WildShape && (string.IsNullOrEmpty(FormId) || NPCDatabase.Get(FormId) == null))
                 return Describe() + ": no bestiary entry '" + FormId + "'";
@@ -601,6 +620,8 @@ namespace Tests.Scenarios
                 sb.Append('|').Append(string.Join(",", ScenarioTrace.ConditionNames(a)));
                 // A bardic music stop costs no action: the song under way and the uses left show the change.
                 sb.Append('|').Append(BardicMusicRules.ActiveAbility(a.Stats)).Append(BardicMusicRules.UsesLeft(a.Stats));
+                // A spittle costs no action (MM p.126; batch 13 step 18): its once-per-round mark shows the change.
+                sb.Append('|').Append(a.FreeRangedSpecialUsedThisRound);
                 // A free draw or drop costs no action either (Quick Draw, a draw with a move, a drop; batch 13 step 15): the
                 // items in hand show the change.
                 global::Inventory held = a.InventoryComp != null ? a.InventoryComp.CharacterInventory : null;
@@ -885,6 +906,16 @@ namespace Tests.Scenarios
                         yield return gm.RunAIAction(supportCtx, supportOutcome);
                         ok = supportOutcome.Performed;
                         if (!supportOutcome.Performed) note = supportOutcome.Refusal.Reason;
+                        break;
+                    }
+
+                    case StepKind.MonsterAbility:
+                    {
+                        // The catalog's monster-ability entries (batch 13 step 18, D11), as the AI runs them.
+                        var monsterOutcome = new ActionOutcome();
+                        yield return gm.RunAIAction(ActionContext.For(s.ActionId, a, global::ActorSource.AI, target), monsterOutcome);
+                        ok = monsterOutcome.Performed;
+                        if (!monsterOutcome.Performed) note = monsterOutcome.Refusal.Reason;
                         break;
                     }
 
@@ -1549,6 +1580,25 @@ namespace Tests.Scenarios
                 case StepKind.Rage:
                     gm.OnRageButtonPressed();
                     break;
+                case StepKind.MonsterAbility:
+                {
+                    // The Monster Abilities button, the ability, then the target (batch 13 step 18).
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    ActionDefinition monsterEntry = ActionCatalog.Get(s.ActionId);
+                    gm.OnMonsterAbilityButtonPressed();
+                    if (!gm.Harness_ChooseSelectionOption(monsterEntry.Name + " ("))
+                    {
+                        _awaitNote = "the Monster Abilities list did not offer " + monsterEntry.Name;
+                        gm.CombatUI?.HidePickUpItemSelection();
+                        break;
+                    }
+                    if (!gm.Harness_ChooseSelectionOption(target.Stats.CharacterName))
+                    {
+                        _awaitNote = "the target list did not offer " + target.Stats.CharacterName;
+                        gm.CombatUI?.HidePickUpItemSelection();
+                    }
+                    break;
+                }
                 case StepKind.TurnUndead:
                 {
                     // The button's range preview, any click to invoke, then the skip question when it opens (D9).

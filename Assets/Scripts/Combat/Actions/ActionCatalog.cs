@@ -382,22 +382,25 @@ public static class ActionCatalog
                 "PHB p.141 Table 8-2 (free action), p.143 (a readied shield is loosed), p.311 (a panicked creature drops what it holds); D8", ImplStatus.Extracted)
             .Run(new DropItemActionExecutor(), ActionUiAfter.ShowChoices));
 
-        // ── Monster abilities (per creature) ──
-        l.Add(Def(ActionIds.BreathWeapon, "Breath Weapon", Mo, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Cell, ActionRoles.Attack,
-                "MM p.69 (a dragon's breath is a standard action), p.306, p.315 (Su: standard action, no AoO)", ImplStatus.AiOnly, "CRE-039", "AI-040")
-            .Run(new BreathWeaponActionExecutor())
-            .For(c => c.HasBreathWeapon || c.HasSecondaryBreathWeapon));
-        l.Add(Def(ActionIds.Spittle, "Spittle", Mo, ActionCostType.Free, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
-                "MM p.315 (special attacks; the creature's entry gives a free action)", ImplStatus.AiOnly, "CRE-039")
-            .Run(new RangedSpecialActionExecutor(true))
+        // ── Monster abilities (per creature; shared since batch 13 step 18, D11) ──
+        l.Add(Def(ActionIds.BreathWeapon, "Breath Weapon", Mo, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Attack,
+                "MM p.69 (a dragon's breath is a standard action, recharge 1d4 rounds), p.306 (Breath Weapon), p.315 (Su: a standard action); PHB p.141 (Su: no AoO); D11",
+                ImplStatus.Extracted)
+            .Run(new BreathWeaponActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
+            // A breath taken as an action: not a once-per-round reaction (the bombardier beetle's acid spray, D1 of batch
+            // 12), nor a secondary breath, which no executor uses yet (AI-008).
+            .For(c => c.HasBreathWeapon && c.GetBreathWeaponDefinition() != null && !c.GetBreathWeaponDefinition().OncePerRound));
+        l.Add(Def(ActionIds.Spittle, "Spittle", Mo, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Attack,
+                "MM p.126 (Ex: a free action every round at one opponent within 30 ft: a ranged touch attack); PHB p.141 Table 8-2 (using an extraordinary ability: no AoO); D11", ImplStatus.Extracted)
+            .Run(new RangedSpecialActionExecutor(true), ActionUiAfter.ShowChoices)
             .For(c => c.HasRangedSpecialAttack && c.GetRangedSpecialAttackDefinition() != null && c.GetRangedSpecialAttackDefinition().IsFreeAction));
-        l.Add(Def(ActionIds.Engulf, "Engulf", Mo, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Cell, ActionRoles.Attack,
-                "MM p.201 (gelatinous cube: AoO or a Reflex save), p.315", ImplStatus.AiOnly, "CRE-039")
-            .Run(new EngulfActionExecutor())
+        l.Add(Def(ActionIds.Engulf, "Engulf", Mo, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
+                "MM p.202 (gelatinous cube: a standard action; AoO or a Reflex save), p.315; D11", ImplStatus.Extracted)
+            .Run(new EngulfActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
             .For(c => c.HasEngulf));
-        l.Add(Def(ActionIds.RangedSpecial, "Ranged Special Attack", Mo, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
-                "MM p.315 (special attacks: a standard action unless noted)", ImplStatus.AiOnly, "CRE-039")
-            .Run(new RangedSpecialActionExecutor(false))
+        l.Add(Def(ActionIds.RangedSpecial, "Ranged Special Attack", Mo, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Attack,
+                "MM p.315 (Su: a standard action unless noted; Ex: per the entry); PHB p.141 Table 8-2 (using a supernatural or extraordinary ability: no AoO); D11", ImplStatus.Extracted)
+            .Run(new RangedSpecialActionExecutor(false), ActionUiAfter.AttackDelay, 0.9f)
             .For(c => c.HasRangedSpecialAttack && c.GetRangedSpecialAttackDefinition() != null && !c.GetRangedSpecialAttackDefinition().IsFreeAction));
         l.Add(Def(ActionIds.Gaze, "Gaze", Mo, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Attack,
                 "MM p.309 (Gaze: automatic each turn; an active gaze is a standard action)", ImplStatus.OutOfScope, "CRE-076"));

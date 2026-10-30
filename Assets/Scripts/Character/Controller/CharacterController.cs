@@ -563,6 +563,14 @@ public class CharacterController : MonoBehaviour
     /// the next. Cleared by <see cref="ClearOncePerRoundFlags"/> at its turn start and on slot reuse.
     /// </summary>
     [SerializeField] private bool _cleaveUsedThisRound;
+
+    /// <summary>
+    /// True once this creature fired its free-action ranged special (the gibbering mouther's spittle) this round: MM p.126
+    /// allows it as a free action every round, at one opponent (decision D11 of batch 13). Read as the acid spray's round:
+    /// between the start of one of its turns and the start of the next. Cleared by <see cref="ClearOncePerRoundFlags"/> at
+    /// its turn start and on slot reuse (CRE-046).
+    /// </summary>
+    [SerializeField] private bool _freeRangedSpecialUsedThisRound;
     [SerializeField] private int _regenerationAmountPerRound;
     [SerializeField] private DamageBypassTag _regenerationSuppressedBy = DamageBypassTag.None;
     [SerializeField] private int _regenerationSuppressedRoundsRemaining;
@@ -650,6 +658,12 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>Marks the once-per-round Cleave attack as made (true) or available (false) this round.</summary>
     public void SetCleaveUsedThisRound(bool used) => _cleaveUsedThisRound = used;
+
+    /// <summary>True when this creature already fired its free-action ranged special (spittle) this round (MM p.126, D11).</summary>
+    public bool FreeRangedSpecialUsedThisRound => _freeRangedSpecialUsedThisRound;
+
+    /// <summary>Marks the once-per-round free-action ranged special (spittle) as fired (true) or available (false) this round.</summary>
+    public void SetFreeRangedSpecialUsedThisRound(bool used) => _freeRangedSpecialUsedThisRound = used;
     public bool HasRegeneration => _regenerationAmountPerRound > 0;
 
     // Tracks attackers that currently have an active feint window against this defender.
@@ -4800,13 +4814,14 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The creature's turn start (GameManager.BeginCombatantTurn, every creature, acting or not): a new round of its own
-    /// begins, so its once-per-round acid spray (MM p.285, D1) and its once-per-round Cleave attack (PHB p.92, D7) are
-    /// available again.
+    /// begins, so its once-per-round acid spray (MM p.285, D1), its once-per-round Cleave attack (PHB p.92, D7) and its
+    /// free-action spittle (MM p.126, batch 13 D11) are available again.
     /// </summary>
     public void ClearOncePerRoundFlags()
     {
         _acidSprayUsedThisRound = false;
         _cleaveUsedThisRound = false;
+        _freeRangedSpecialUsedThisRound = false;
     }
 
     /// <summary>
@@ -5062,6 +5077,7 @@ public class CharacterController : MonoBehaviour
         // Innate monster abilities: every one back to "none" (the spawn configures the new creature's own).
         SetAcidSprayUsedThisRound(false);
         SetCleaveUsedThisRound(false);
+        SetFreeRangedSpecialUsedThisRound(false);
         ConfigureRegeneration(0, DamageBypassTag.None);
         ConfigureIncorporeal(false);
         ConfigureBreathWeapon(null);

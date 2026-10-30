@@ -9349,6 +9349,117 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
+    /// The catalog's monster-ability entries <paramref name="actor"/> has (breath weapon, spittle, engulf, ranged special;
+    /// ActionCatalog.AvailableTo, batch 13 step 18, D11), whether or not it can take them now.
+    /// </summary>
+    public static List<ActionDefinition> MonsterAbilityEntries(CharacterController actor)
+    {
+        var result = new List<ActionDefinition>();
+        if (actor == null || actor.Stats == null)
+            return result;
+        foreach (ActionDefinition d in ActionCatalog.AvailableTo(actor))
+            if (d.Category == ActionCategory.MonsterAbility && d.Executor != null)
+                result.Add(d);
+        return result;
+    }
+
+    /// <summary>
+    /// The PC's Monster Abilities button (batch 13 step 18, D11; CRE-039, AI-040): a controllable creature with a breath
+    /// weapon, spittle, engulf or a ranged special (a summoned hell hound's breath; a bombardier beetle's acid spray is a
+    /// once-per-round reaction, batch 12 D1, and is not offered here) takes it through
+    /// the same catalog executor the AI runs. The list offers the abilities that can start now (the executor's CanStart),
+    /// then the creatures the chosen one can be aimed at (its CanExecute: a breath's cone or line that reaches it, the
+    /// spittle's opponent within 30 ft, an adjacent creature to engulf), then RunPlayerAction (its UiAfter follows).
+    /// </summary>
+    public void OnMonsterAbilityButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null)
+            return;
+
+        var usable = new List<ActionDefinition>();
+        string refusals = null;
+        foreach (ActionDefinition d in MonsterAbilityEntries(pc))
+        {
+            Legality start = d.Executor.CanStart(pc);
+            if (start.Ok)
+                usable.Add(d);
+            else
+                refusals = (refusals == null ? "" : refusals + "; ") + d.Name + ": " + start.Reason;
+        }
+        if (usable.Count == 0)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no monster ability to use now ({refusals ?? "none"})."));
+            ShowActionChoices();
+            return;
+        }
+
+        var labels = new List<string>(usable.Count);
+        foreach (ActionDefinition d in usable)
+            labels.Add(d.Name + " (" + MonsterAbilityCostLabel(d.Cost) + ")");
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: pc.Stats.CharacterName,
+            itemOptions: labels,
+            onSelect: index =>
+            {
+                if (index < 0 || index >= usable.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+                ChooseMonsterAbilityTarget(pc, usable[index]);
+            },
+            onCancel: ShowActionChoices,
+            titleOverride: "Monster Abilities",
+            bodyOverride: "Choose an ability:");
+    }
+
+    private static string MonsterAbilityCostLabel(ActionCostType cost)
+    {
+        switch (cost)
+        {
+            case ActionCostType.Free: return "Free";
+            case ActionCostType.Standard: return "Std";
+            case ActionCostType.Move: return "Move";
+            case ActionCostType.FullRound: return "Full";
+            default: return cost.ToString();
+        }
+    }
+
+    /// <summary>The creatures <paramref name="def"/> can be aimed at by <paramref name="pc"/> now (its executor's CanExecute), then the chosen one's RunPlayerAction.</summary>
+    private void ChooseMonsterAbilityTarget(CharacterController pc, ActionDefinition def)
+    {
+        var targets = new List<CharacterController>();
+        var allies = new List<CharacterController>();
+        foreach (CharacterController c in GetAllCharacters())
+        {
+            if (c == null || c == pc || c.Stats == null || c.Stats.IsDead)
+                continue;
+            if (!def.Executor.CanExecute(ActionContext.For(def.Id, pc, ActorSource.Ui, c)).Ok)
+                continue;
+            // Foes first, then the rest (an aim through an ally is the player's call).
+            if (TeamUtility.IsEnemy(pc, c))
+                targets.Add(c);
+            else
+                allies.Add(c);
+        }
+        targets.AddRange(allies);
+        if (targets.Count == 0)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no creature in range for {def.Name}."));
+            ShowActionChoices();
+            return;
+        }
+
+        CombatUI?.ShowCharacterSelectionUI(
+            title: def.Name,
+            body: def.Id == ActionIds.BreathWeapon ? "Aim the breath at (the cone or line that takes the most foes):" : "Choose a target:",
+            characters: targets,
+            onSelect: target => RunPlayerAction(ActionContext.For(def.Id, pc, ActorSource.Ui, target)),
+            onCancel: ShowActionChoices);
+    }
+
+    /// <summary>
     /// The AI's rage at the start of its turn (design choice C6, AI-079): when its profile chooses to rage
     /// (AIProfile.ShouldRage, by default a foe within reach or charge range), through the catalog's rage entry, the
     /// executor the PC's Rage button runs. Rage takes no time, so the turn goes on. True when it raged.

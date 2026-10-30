@@ -16,7 +16,9 @@ using UnityEngine;
 /// live caller: the PC's Total Defense button through RunPlayerAction, the cornered panicked creature
 /// (FrightenedBehaviorController.ExecuteDecision) through RunAIAction. Since step 6 every AI action call runs through
 /// RunAIAction: the GameManager *ForAI wrappers (attack, charge, move, withdraw, 5-foot step, stand up, overrun, breath),
-/// the NPC cast and maneuver cores, AIService's ranged specials and engulf, lay on hands and bardic music.
+/// the NPC cast and maneuver cores, AIService's ranged specials and engulf, lay on hands and bardic music. Since step 18
+/// the breath, spittle, ranged specials and engulf are shared too: a controllable creature takes them through its Monster
+/// Abilities button (RunPlayerAction).
 /// </summary>
 public partial class GameManager
 {
@@ -34,10 +36,10 @@ public partial class GameManager
     {
         CharacterController actor = ctx != null ? ctx.Actor : null;
         Legality refusal = CheckRunnable(ctx);
-        // An AiOnly entry (the monster specials) has an executor for the AI's routing only; no PC path reaches it until it
-        // becomes shared (ImplStatus.AiOnly; batch 13 step 18).
+        // An AiOnly entry has an executor for the AI's routing only (ImplStatus.AiOnly); none is left since batch 13 step 18
+        // made the monster specials shared, but the gate stays for any later one.
         if (refusal.Ok && ctx.Definition.Status == ImplStatus.AiOnly)
-            refusal = Legality.Refused(LegalityBar.Other, ctx.Definition.Name + " is AI-only until batch 13 step 18");
+            refusal = Legality.Refused(LegalityBar.Other, ctx.Definition.Name + " has no PC path yet (AI-only)");
         if (refusal.Ok && IsPreChecked(ctx.Definition))
             refusal = ctx.Definition.Executor.CanExecute(ctx);
         if (!refusal.Ok)

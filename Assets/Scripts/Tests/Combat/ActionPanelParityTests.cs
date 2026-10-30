@@ -15,7 +15,9 @@ namespace Tests.Combat
 /// stands for one catalog entry (ActionButtonPanel.ComputeButtonStatesForParity: visible and enabled) is compared with
 /// ActorActionSet.Allows for that entry. Every disagreement must be in <see cref="KnownMismatches"/>, tagged with the
 /// batch 13 step that resolves it or the issue that tracks it; a known mismatch that no longer occurs fails too, so the
-/// step that fixes it removes its row. Play only: it needs the scene's CombatUI and its buttons, and
+/// step that fixes it removes its row. The Monster Abilities button (batch 13 step 18, D11) stands for the four
+/// monster entries at once, so it is compared with the set by <see cref="TestMonsterAbilityButton"/>: on exactly when
+/// one of them is allowed. Play only: it needs the scene's CombatUI and its buttons, and
 /// CharacterController.Init needs Awake for its conditions (TST-009).
 /// </summary>
 public static class ActionPanelParityTests
@@ -111,6 +113,7 @@ public static class ActionPanelParityTests
         Run(() => Compare("frightened", Frightened("APP_Frightened"), null, seen));
         Run(CompareCharmed(seen));
         Run(TestTurnedFilter);
+        Run(TestMonsterAbilityButton);
 
         var notRun = new HashSet<string>(StringComparer.Ordinal);
         foreach (KeyValuePair<string, string> known in KnownMismatches)
@@ -276,6 +279,71 @@ public static class ActionPanelParityTests
             c.CurrentTurnStart.Clear();
             Assert(ActorActionSet.Build(GameManager.Instance, c, ActorSource.AI).Allows(ActionIds.Attack), "With no compulsion the attack is legal again");
         }
+    }
+
+    /// <summary>
+    /// The Monster Abilities button against the set's monster entries (batch 13 step 18, D11): hidden for a creature with
+    /// none; for a fighter given a breath weapon and spittle, on while either is allowed, and its label names the one
+    /// usable; with the standard action spent and the spittle used this round, off, as the set refuses both.
+    /// </summary>
+    private static void TestMonsterAbilityButton()
+    {
+        ActionButtonPanel panel = Panel();
+        CombatUI ui = GameManager.Instance.CombatUI;
+        Assert(panel != null && ui.MonsterAbilityButton != null, "monster: the panel and the Monster Abilities button exist");
+        if (panel == null || ui.MonsterAbilityButton == null)
+            return;
+
+        ActionButtonPanel.ButtonStateView View(CharacterController c)
+        {
+            foreach (ActionButtonPanel.ButtonStateView v in panel.ComputeButtonStatesForParity(c))
+                if (v.Button == ui.MonsterAbilityButton)
+                    return v;
+            return default;
+        }
+        bool SetAllowsAny(CharacterController c)
+        {
+            ActorActionSet set = ActorActionSet.Build(GameManager.Instance, c, ActorSource.Ui);
+            return set.Allows(ActionIds.BreathWeapon) || set.Allows(ActionIds.Spittle) || set.Allows(ActionIds.Engulf) || set.Allows(ActionIds.RangedSpecial);
+        }
+
+        CharacterController plain = Fighter("APP_PlainFighter");
+        ActionButtonPanel.ButtonStateView plainView = View(plain);
+        Assert(plainView.Button != null && !plainView.Visible && !SetAllowsAny(plain), "monster: a creature with no monster ability has the button hidden");
+
+        CharacterController breather = Fighter("APP_Breather", new Vector2Int(-70, -200));
+        breather.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageCount = 2, DamageDice = 6, RechargeDice = "1d4", RangeFeet = 15 });
+        breather.ConfigureRangedSpecialAttack(new RangedSpecialAttackDefinition { Name = "Spittle", RangeFeet = 30, IsFreeAction = true });
+        breather.StartNewTurn();
+        ActionButtonPanel.ButtonStateView on = View(breather);
+        Assert(on.Visible && on.Enabled && SetAllowsAny(breather), "monster: with a ready breath and the spittle the button is on, as the set allows them",
+            on.Label);
+
+        breather.Actions.UseStandardAction();
+        ActionButtonPanel.ButtonStateView spittleOnly = View(breather);
+        Assert(spittleOnly.Visible && spittleOnly.Enabled && spittleOnly.Label == "Spittle" && SetAllowsAny(breather),
+            "monster: with the standard action spent only the spittle is usable, and the button names it", spittleOnly.Label);
+
+        breather.SetFreeRangedSpecialUsedThisRound(true);
+        ActionButtonPanel.ButtonStateView off = View(breather);
+        Assert(off.Visible && !off.Enabled && !SetAllowsAny(breather),
+            "monster: with the standard action spent and the spittle used this round the button is off, as the set refuses both", off.Label);
+
+        // A nauseated creature (a move action only, PHB p.311: unable to attack) gets no usable monster ability, the free
+        // spittle included (batch 13 step 18 review).
+        breather.StartNewTurn();
+        breather.Actions.MoveActionOnly = true;
+        ActionButtonPanel.ButtonStateView sick = View(breather);
+        Assert(sick.Visible && !sick.Enabled && !SetAllowsAny(breather),
+            "monster: a nauseated creature's button is off and the set allows no monster ability (PHB p.311)", sick.Label);
+
+        // A once-per-round breath (the bombardier beetle's acid spray, a reaction: batch 12 D1) gives no button.
+        CharacterController beetle = Fighter("APP_Beetle", new Vector2Int(-60, -200));
+        beetle.ConfigureBreathWeapon(new BreathWeaponDefinition { DamageCount = 1, DamageDice = 4, RangeFeet = 10, OncePerRound = true });
+        beetle.StartNewTurn();
+        ActionButtonPanel.ButtonStateView beetleView = View(beetle);
+        Assert(beetleView.Button != null && !beetleView.Visible && !SetAllowsAny(beetle),
+            "monster: a creature whose only breath is a once-per-round reaction has the button hidden", beetleView.Label);
     }
 
     // ── Fixtures ────────────────────────────────────────────────────────────────────────────────────────────────────
