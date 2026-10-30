@@ -5627,29 +5627,43 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// Defeat counts the whole party team (CORE-037): the hero at 1 HP and a Player-team goblin ally at 0 HP
-        /// (disabled, still in: PHB p.145) away from it, both idle, against an AI orc berserker next to the hero. The
-        /// first of them going down (the orc picks) does not end the fight while the other is still in; the defeat comes
-        /// when the orc drops the second too, and the game opens its defeat screen (CORE-001), whose combat log line the
-        /// trace shows. The orc acts first, so the hero is flat-footed and makes no AoO as the orc leaves it in round 1
-        /// (PHB p.137, CMB-028); since that change the orc spends more rounds on the disabled goblin (trip, grapple,
-        /// coup de grace) before it turns to the hero, so the fight has 12 rounds (seed 1 ran out of 8, 2026-10-14).
+        /// (disabled, still in: PHB p.145), both idle, against a Scripted orc berserker next to the hero and two squares
+        /// from the goblin. The orc's turns are typed steps (TST-047, TST-041), so the check does not depend on the AI's
+        /// target or maneuver choice: in round 1 it attacks the hero, which drops while the disabled goblin is still in,
+        /// so the fight goes on; from round 2 on it takes a 5-foot step to the goblin (no AoO, PHB p.144) and attacks it,
+        /// and the defeat comes when the goblin drops, with the defeat screen (CORE-001), whose combat log line the trace
+        /// shows. Every d20 of the fight is the orc's attack roll (the idle hero and goblin roll none; a dying creature's
+        /// stabilization is a d%), forced to 19, so no attack misses and every seed ends in round 2; the seed still varies
+        /// the damage. The goblin stands out of the orc's reach in round 1, so the orc's Cleave (PHB p.92) has no second
+        /// target when the hero drops.
         /// </summary>
         private static ScenarioDef CombatEndDefeatAlly()
         {
             return Rules("rules/combat-end-defeat-ally", "Defeat waits until every party-team member is out, a disabled ally included, then opens the defeat screen (CORE-037, CORE-001)")
                 .Covers("CORE-037", "CORE-001", "CORE-011", "PHB p.145", "PC_NPC_PARITY")
-                .MaxRounds(12)
+                .MaxRounds(4)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 1)), 10, 10, Control.Idle)
-                .Npc("ally", "goblin", 4, 10, Control.Idle, CharacterTeam.Player)
-                .Npc("orc", "orc_berserker", 11, 10, Control.Ai)
+                .Npc("ally", "goblin", 13, 10, Control.Idle, CharacterTeam.Player)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .Hp("hero", 1)
                 .Hp("ally", 0)
                 .Initiative("orc", "hero", "ally")
-                .Expect("The game declares the defeat itself (a stalemate, the orc never dropping both, is inconclusive)", v =>
+                .Force(20, 19, null, -1)
+                .Turn("orc", 1, Step.Attack("hero"))
+                .Turn("orc", 0, Step.FiveFootStep(12, 10), Step.Attack("ally"))
+                .Expect("The game declares the defeat itself", Expect.Outcome(Outcome.Defeat))
+                .Expect("The orc's turns are scripted turns", Expect.Controller("orc", "scripted"))
+                .Expect("Round 1: the orc attacks the hero", Expect.StepStatus("orc", 1, "Attack", 0, "done"))
+                // The round 2 attack ends the fight inside it, so the trace closes before that step's own event.
+                .Expect("The orc hits the hero in round 1 and the goblin in round 2, with no attack of opportunity", v =>
                 {
-                    if (v.Outcome == Outcome.Defeat) return ExpectResult.Pass("outcome Defeat");
-                    if (v.Outcome == Outcome.Stalemate) return ExpectResult.Inconclusive("stalemate: the orc did not drop both in time");
-                    return ExpectResult.Fail("outcome " + v.Outcome + " (" + v.OutcomeReason + ")");
+                    List<TraceEvent> attacks = v.Of("attack").ToList();
+                    string seen = string.Join(", ", attacks.Select(e => e.Str("attacker") + ">" + e.Str("target") + " r" + e.Round + (e.Bool("hit") ? " hit" : " miss") + (e.Bool("aoo") ? " aoo" : "")));
+                    bool ok = attacks.Count == 2
+                        && attacks[0].Str("attacker") == "orc" && attacks[0].Str("target") == "hero" && attacks[0].Round == 1 && attacks[0].Bool("hit")
+                        && attacks[1].Str("attacker") == "orc" && attacks[1].Str("target") == "ally" && attacks[1].Round == 2 && attacks[1].Bool("hit")
+                        && !attacks.Any(e => e.Bool("aoo"));
+                    return ok ? ExpectResult.Pass(seen) : ExpectResult.Fail(seen.Length > 0 ? seen : "no attack");
                 })
                 .Expect("Both party-team members are out when the fight ends", v =>
                 {
@@ -5658,7 +5672,7 @@ namespace Tests.Scenarios
                     bool ally = ScenarioChecks.IsDownSnapshot(v.Final("ally"));
                     return hero && ally ? ExpectResult.Pass("hero and ally down") : ExpectResult.Fail("hero down " + hero + ", ally down " + ally);
                 })
-                .Expect("The first party-team member down does not end the fight: a turn starts with one of them down and the other still in", v =>
+                .Expect("The hero down first does not end the fight: a turn starts with the hero down and the disabled ally still in", v =>
                 {
                     if (v.Outcome != Outcome.Defeat) return ExpectResult.Inconclusive("no defeat");
                     foreach (TraceEvent ts in v.Of("turn_start"))
@@ -5667,12 +5681,10 @@ namespace Tests.Scenarios
                         JsonObj hero = snaps.FirstOrDefault(o => o.Get("k") as string == "hero");
                         JsonObj ally = snaps.FirstOrDefault(o => o.Get("k") as string == "ally");
                         if (hero == null || ally == null) continue;
-                        bool heroDown = ScenarioChecks.IsDownSnapshot(hero);
-                        bool allyDown = ScenarioChecks.IsDownSnapshot(ally);
-                        if (heroDown != allyDown)
-                            return ExpectResult.Pass("turn #" + ts.Seq + " (" + ts.Str("actor") + ") starts with " + (heroDown ? "the hero" : "the ally") + " down and the other in", ts.Seq);
+                        if (ScenarioChecks.IsDownSnapshot(hero) && !ScenarioChecks.IsDownSnapshot(ally))
+                            return ExpectResult.Pass("turn #" + ts.Seq + " (" + ts.Str("actor") + ") starts with the hero down and the ally in", ts.Seq);
                     }
-                    return ExpectResult.Fail("no turn started with exactly one of them down");
+                    return ExpectResult.Fail("no turn started with the hero down and the ally in");
                 })
                 .Expect("The defeat screen opened (its combat log line, CORE-001)", v =>
                 {

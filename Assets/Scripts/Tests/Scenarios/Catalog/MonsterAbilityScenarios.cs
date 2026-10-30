@@ -71,6 +71,19 @@ namespace Tests.Scenarios
             };
 
         /// <summary>
+        /// <see cref="SturdyNamed"/> (no rename) plus immunity to mind-affecting effects (CreatureImmunities, as a creature
+        /// under a mind blank or a mindless one has, PHB p.309), so a gibbering mouther's gibbering skips the creature
+        /// (GameManager.ProcessTurnStartAura). A fixture for a spittle check that must not depend on the gibbering (TST-049).
+        /// </summary>
+        private static void SturdyMindImmune(CharacterController c)
+        {
+            SturdyNamed(null)(c);
+            if (c.Stats.Immunities == null)
+                c.Stats.Immunities = new CreatureImmunities();
+            c.Stats.Immunities.immuneToMindAffecting = true;
+        }
+
+        /// <summary>
         /// A controllable creature with a bestiary entry's monster abilities: a party-slot fighter (the harness gives Ui
         /// control to party slots only) given <paramref name="npcId"/>'s breath weapon, ranged special and engulf (each
         /// Configure* clones the definition), as a controllable summoned creature carries them (PHB p.285). The catalog
@@ -214,6 +227,9 @@ namespace Tests.Scenarios
         /// A Scripted gibbering mouther takes the spittle entry through the AI runner: at Hero in round 1 (done), at Hero2
         /// the same round (refused: once per round, MM p.126), and at Hero in round 2 (done: its turn start reset it). The
         /// spittle is a free action, so its standard action is left. An AI-run mouther beside it spits at most once a round.
+        /// The heroes are immune to mind-affecting effects (<see cref="SturdyMindImmune"/>; TST-049), so the mouthers'
+        /// gibbering (MM p.126: a mind-affecting compulsion, which fires at each mouther's turn start since batch 13 step
+        /// 19) asks them no save and no confused hero flees out of the spittle's 30 ft before round 2.
         /// </summary>
         private static ScenarioDef SpittleOncePerRoundAi()
         {
@@ -225,11 +241,11 @@ namespace Tests.Scenarios
                 .Npc("aimouther", "gibbering_mouther", 12, 17, Control.Ai)
                 .Tweak("aimouther", SturdyNamed("AI Mouther"))
                 .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 5)), 9, 10, Control.Idle)
-                .Tweak("hero", SturdyNamed(null))
+                .Tweak("hero", SturdyMindImmune)
                 .Pc("hero2", ActorSource.Stats(() => RulesScenarios.Fighter("Hero2", 5)), 9, 12, Control.Idle)
-                .Tweak("hero2", SturdyNamed(null))
+                .Tweak("hero2", SturdyMindImmune)
                 .Pc("hero3", ActorSource.Stats(() => RulesScenarios.Fighter("Hero3", 5)), 9, 17, Control.Idle)
-                .Tweak("hero3", SturdyNamed(null))
+                .Tweak("hero3", SturdyMindImmune)
                 .Initiative("mouther", "aimouther", "hero", "hero2", "hero3")
                 .Turn("mouther", 1,
                     Step.MonsterAbility(ActionIds.Spittle, "hero"),
@@ -244,6 +260,16 @@ namespace Tests.Scenarios
                 .Expect("Round 1: a second spittle is refused (once per round, MM p.126)", Expect.StepStatus("mouther", 1, "MonsterAbility", 1, "refused"))
                 .Expect("Round 2: the spittle is available again", Expect.StepStatus("mouther", 2, "MonsterAbility", 0, "done"))
                 .Expect("The spittle is a free action: the standard and move actions are left", Expect.All(Fact("r1.std", "True"), Fact("r1.move", "True")))
+                .Expect("The fixture holds: the gibbering fires, and no hero saves against it (immune to mind-affecting effects, TST-049)", v =>
+                {
+                    // Positive control: the Scripted mouther's gibbering fires in round 1, so the empty save count below
+                    // shows the immunity at work, not a silent aura or a reworded log line.
+                    TraceEvent echo = v.Log("Scripted Mouther's Gibbering echoes").FirstOrDefault(e => e.Round == 1);
+                    if (echo == null)
+                        return ExpectResult.Fail("no gibbering echo from the Scripted mouther in round 1");
+                    int n = v.Log(@"Hero[23]? (succumbs to|resists) Gibbering").Count;
+                    return n == 0 ? ExpectResult.Pass("echo, no hero asked", echo.Seq) : ExpectResult.Fail(n + " gibbering save line(s) for the heroes", echo.Seq);
+                })
                 .Expect("The Scripted mouther spits once in each round",
                     Expect.All(LogCount("Scripted Mouther uses Spittle against", 1, 1), LogCount("Scripted Mouther uses Spittle against", 2, 1)))
                 .Expect("The AI-run mouther spits at most once a round, and at least once", v =>
