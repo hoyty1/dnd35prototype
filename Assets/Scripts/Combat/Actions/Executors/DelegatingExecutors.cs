@@ -460,8 +460,8 @@ public sealed class OverrunActionExecutor : IActionExecutor
 /// the PC's MoveRequest.ForUi, the AI wrappers' MoveRequest.ForAI and ForAIWithdraw). With no request it builds one for
 /// the context's side: for <see cref="ActorSource.Ui"/> (the harness's Ui Step.Action) the PC's own (<see cref="UiRequestFor"/>:
 /// the click path's search, MoveRequest.ForUi, paid before the walk, the standard action converted); for an AI pick through
-/// the catalog (AiOutOfReach) the AI's: a move paid after the walk once it started (AI-076; step 10 pays it first), a
-/// withdraw that pays its own action. <see cref="CanExecute"/> asks only for a destination: the movement legality is the
+/// the catalog (AiOutOfReach) the AI's: a move paid before its first step (D3, batch 13 step 10), a withdraw that pays its
+/// own action. <see cref="CanExecute"/> asks only for a destination: the movement legality is the
 /// executor's first step, which logs its refusal as the AI cores always did (CanStart asks it for the legal set).
 /// </summary>
 public sealed class MoveActionExecutor : IActionExecutor
@@ -490,12 +490,12 @@ public sealed class MoveActionExecutor : IActionExecutor
         return hasWhere ? Legality.Allowed() : Legality.Refused(LegalityBar.Terrain, "no destination");
     }
 
-    /// <summary>The request the catalog's own AI pick runs (no MoveRequest on the context): a move spent after the walk
-    /// once it started, whatever became of the mover, as this executor paid it before step 9; or the AI withdraw.</summary>
+    /// <summary>The request the catalog's own AI pick runs (no MoveRequest on the context): a move spent before its first
+    /// step, as every move is (D3); or the AI withdraw.</summary>
     internal static MoveRequest DefaultAiRequest(bool withdraw, CharacterController mover, Vector2Int destination, float secondsPerStep)
         => withdraw
             ? MoveRequest.ForAIWithdraw(mover, destination, secondsPerStep)
-            : MoveRequest.ForAI(mover, destination, secondsPerStep, MoveSpend.MoveAction).SpendingEvenIfDropped().SpendingOnlyIfStarted();
+            : MoveRequest.ForAI(mover, destination, secondsPerStep, MoveSpend.MoveAction);
 
     /// <summary>
     /// The request a PC's catalog move with no MoveRequest runs (a Ui context: the harness's Step.Action), the PC's own
@@ -535,7 +535,7 @@ public sealed class MoveActionExecutor : IActionExecutor
         }
 
         // The context's side picks only the rule's builder: a Ui context with no request gets the PC's own request (the
-        // PC/NPC parity rule; the harness's Ui Step.Action), never the AI's after-walk spend.
+        // PC/NPC parity rule; the harness's Ui Step.Action), never the AI's segment walker.
         if (req == null)
             req = ctx.Source == ActorSource.Ui
                 ? UiRequestFor(gm, _withdraw, ctx.Actor, ctx.Cell.Value)
@@ -548,13 +548,14 @@ public sealed class MoveActionExecutor : IActionExecutor
         o.CoreOutcome = attempt;
         if (attempt.Incapacitated)
             o.ActorDown = true;
-        if (attempt.Refused)
+        if (attempt.Refused && !attempt.NoPath)
         {
             // The executor logs its refusal.
             o.Refuse(Legality.Refused(LegalityBar.Other, attempt.Reason));
             o.RefusalLogged = true;
             yield break;
         }
+        // No path (a Debug.Log line only, nothing spent, D3): the runner shows a PC's refusal.
         if (!attempt.Started)
         {
             o.Refuse(Legality.Refused(LegalityBar.Terrain, _withdraw ? "the withdrawal did not start" : "the move did not start"));

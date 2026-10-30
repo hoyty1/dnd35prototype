@@ -111,10 +111,9 @@ public partial class GameManager
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 var retreatMove = new MoveAttempt();
-                // The executor spends the move after the walk unless the summon was dropped (the summon routine pays after a
-                // combat end too: SpendingAfterCombatEnd; AI-076's quirk until batch 13 step 10).
+                // The executor spends the move before the first step (D3); a refused move spends nothing.
                 yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
-                    MoveRequest.ForAI(summon, retreat.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, retreatMove).SpendingAfterCombatEnd()));
+                    MoveRequest.ForAI(summon, retreat.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, retreatMove)));
 
                 // ── Death/disable check after retreat movement ──
                 if (!summon.CanTakeTurnActions())
@@ -123,7 +122,7 @@ public partial class GameManager
                     yield break;
                 }
 
-                if (!retreatMove.Refused) // a refused move (logged) spends nothing
+                if (!retreatMove.Refused) // a refused move spends nothing (D3)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
                     yield return new WaitForSeconds(0.45f);
@@ -138,7 +137,7 @@ public partial class GameManager
             {
                 var advanceMove = new MoveAttempt();
                 yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
-                    MoveRequest.ForAI(summon, bestCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, advanceMove).SpendingAfterCombatEnd()));
+                    MoveRequest.ForAI(summon, bestCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, advanceMove)));
 
                 // ── Death/disable check after advance movement ──
                 if (!summon.CanTakeTurnActions())
@@ -147,7 +146,7 @@ public partial class GameManager
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing (the executor spent it)
+                if (!advanceMove.Refused) // a refused move spends nothing and the summon goes on to its attack (D3)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.4f);
@@ -1258,15 +1257,15 @@ public partial class GameManager
         string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
-
+        // The line shows once the move starts (spent before the first step, D3); a refused move shows nothing.
         var searchMove = new MoveAttempt();
         yield return StartCoroutine(MoveCharacterAlongComputedPathForAI(
-            MoveRequest.ForAI(npc, searchCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, searchMove).SpendingAfterCombatEnd()));
+            MoveRequest.ForAI(npc, searchCell.Coords, PlayerMoveSecondsPerStep, MoveSpend.MoveAction, searchMove)
+                .LoggingOnStart(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."))));
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO while moving (CMB-073)
         if (searchMove.Refused)
-            yield break; // refused (logged): nothing spent; the executor spent the move after the walk
+            yield break; // refused before the first step: nothing spent
 
         bool canSeeAfterMove = npc.CanSee(target, npc.IsEquippedWeaponRanged());
         CombatUI?.ShowCombatLog(canSeeAfterMove

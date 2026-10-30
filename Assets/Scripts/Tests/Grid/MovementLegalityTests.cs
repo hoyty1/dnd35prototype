@@ -26,9 +26,9 @@ namespace Tests.Grid
 /// - the per-mover square question (MovementTerrain; owner interpretation 2026-10-29): difficult terrain slows every mover
 ///   but an incorporeal one, for a plain move's path cost as for a charge line; Freedom of Movement ignores only a Web's;
 /// - the one move executor's requests (batch 13 step 9, GameManager.ExecuteMoveAction): MoveRequest.ForUi sets no quirk bit
-///   and converts the standard action; MoveRequest.ForAI sets every AI bit; the builders' modifiers; the after-walk spend
-///   rule of the quirk bits; a refused move spends nothing; and the classification of the AI's move sites (the plan's 20
-///   spend sites, 24 move calls at HEAD) as a source scan.
+///   and converts the standard action; MoveRequest.ForAI sets only AiSegmentLoop; the builders' modifiers (LoggingOnStart
+///   included); a pathless move is refused with MoveAttempt.NoPath and spends nothing, and the spend precedes the first step
+///   (D3, batch 13 step 10); and the classification of the AI's move sites (24 move calls) as a source scan.
 /// Play mode only: CharacterController.Init needs Awake (TST-009).
 /// </summary>
 public static class MovementLegalityTests
@@ -68,7 +68,6 @@ public static class MovementLegalityTests
             TestChargePassesOnlyHelplessCreatures();
             TestMovementTerrainExemptions();
             TestMoveRequestBuilders();
-            TestAfterWalkSpendRule();
             TestExecuteMoveActionSpends();
             TestMoveSiteClassification();
         }
@@ -433,9 +432,10 @@ public static class MovementLegalityTests
             "A square off the grid blocks every mover");
     }
 
-    // ── The one move executor (batch 13 step 9) ──────────────────────────────────────────────────────────────────────
+    // ── The one move executor (batch 13 steps 9-10) ──────────────────────────────────────────────────────────────────
 
-    /// <summary>The builders' bits: the PC's request has no quirk, the AI's has them all, and the modifiers clear only theirs.</summary>
+    /// <summary>The builders' bits: the PC's request has no quirk, the AI's only the segment walker (batch 13 step 10
+    /// deleted the spend bits, D3), and the modifiers set only theirs.</summary>
     private static void TestMoveRequestBuilders()
     {
         var path = new List<Vector2Int> { new Vector2Int(1, 0), new Vector2Int(2, 0) };
@@ -448,77 +448,53 @@ public static class MovementLegalityTests
             "ForUi withdraw: the withdraw pays its own action, no quirk bit, the PC's AoO label");
 
         MoveRequest ai = MoveRequest.ForAI(null, new Vector2Int(5, 5), 0.08f, MoveSpend.MoveAction);
-        Assert(ai.Has(MoveQuirk.AiSpendsAfterWalk) && ai.Has(MoveQuirk.AiSpendsWithoutPath) && ai.Has(MoveQuirk.AiSegmentLoop)
-               && ai.Has(MoveQuirk.AiNoSpendIfDropped) && ai.Has(MoveQuirk.AiNoSpendIfCombatOver) && ai.Quirks == MoveQuirk.AiDefault,
-            $"ForAI sets every AI quirk bit ({ai.Quirks})");
-        Assert(!ai.AllowConvertStandard && ai.Path == null && ai.Destination == new Vector2Int(5, 5) && ai.Label == "AoO" && ai.CombatEndContext == null,
-            "ForAI: no conversion, the executor finds the path, no combat-end check of its own");
+        Assert(ai.Quirks == MoveQuirk.AiSegmentLoop && ai.Spend == MoveSpend.MoveAction,
+            $"ForAI: only the segment walker bit, the move action spent by the executor before the first step (D3) ({ai.Quirks})");
+        Assert(!ai.AllowConvertStandard && ai.Path == null && ai.Destination == new Vector2Int(5, 5) && ai.Label == "AoO"
+               && ai.CombatEndContext == null && ai.StartLogLine == null,
+            "ForAI: no conversion, the executor finds the path, no combat-end check of its own, no start line");
         MoveRequest aiWithdraw = MoveRequest.ForAIWithdraw(null, new Vector2Int(5, 5), 0.08f);
         Assert(aiWithdraw.IsWithdraw && aiWithdraw.Spend == MoveSpend.ExecutorOwned && aiWithdraw.Label == "AoO (Withdraw)" && aiWithdraw.Has(MoveQuirk.AiSegmentLoop),
             "ForAIWithdraw: its own action, the segment walker, the withdraw AoO label");
 
-        MoveRequest charmed = MoveRequest.ForAI(null, Vector2Int.zero, 0.08f, MoveSpend.MoveAction).ConvertingStandard().SpendingEvenIfDropped();
-        Assert(charmed.AllowConvertStandard && charmed.Quirks == (MoveQuirk.AiSpendsAfterWalk | MoveQuirk.AiSpendsWithoutPath | MoveQuirk.AiSegmentLoop),
-            $"ConvertingStandard and SpendingEvenIfDropped: the compulsion moves keep the walk and spend bits only ({charmed.Quirks})");
-        MoveRequest summon = MoveRequest.ForAI(null, Vector2Int.zero, 0.08f, MoveSpend.MoveAction).SpendingAfterCombatEnd();
-        Assert(summon.Quirks == (MoveQuirk.AiDefault & ~MoveQuirk.AiNoSpendIfCombatOver),
-            $"SpendingAfterCombatEnd clears only the combat-over bit ({summon.Quirks})");
-        MoveRequest started = MoveRequest.ForAI(null, Vector2Int.zero, 0.08f, MoveSpend.MoveAction).SpendingOnlyIfStarted();
-        Assert(started.Quirks == (MoveQuirk.AiDefault & ~MoveQuirk.AiSpendsWithoutPath),
-            $"SpendingOnlyIfStarted clears only the no-path bit ({started.Quirks})");
+        MoveRequest charmed = MoveRequest.ForAI(null, Vector2Int.zero, 0.08f, MoveSpend.MoveAction).ConvertingStandard();
+        Assert(charmed.AllowConvertStandard && charmed.Quirks == MoveQuirk.AiSegmentLoop,
+            $"ConvertingStandard: the compulsion moves convert the standard action and keep only the walker bit ({charmed.Quirks})");
+        MoveRequest logged = MoveRequest.ForAI(null, Vector2Int.zero, 0.08f, MoveSpend.MoveAction).LoggingOnStart("X moves to touch Y.");
+        Assert(logged.StartLogLine == "X moves to touch Y." && logged.Quirks == MoveQuirk.AiSegmentLoop,
+            "LoggingOnStart sets only the line shown once the move starts");
     }
 
-    /// <summary>The after-walk spend under the quirk bits (AI-076's quirk, deleted by batch 13 step 10): never after a
-    /// refusal; a move that found no path only with AiSpendsWithoutPath; a move that started; and, each bit on its own, no
-    /// spend once the combat is over (AiNoSpendIfCombatOver) or for a mover that can no longer act (AiNoSpendIfDropped).
-    /// The phase and mover tests are cleared where a case is not about them, so the live session's phase cannot decide it.</summary>
-    private static void TestAfterWalkSpendRule()
+    /// <summary>A probe step hook (batch 13 step 10): for its one mover it records whether the move action was already
+    /// spent when the first step was asked, and refuses the step, so the per-step walk ends before any coroutine.</summary>
+    private sealed class SpendOrderProbe : IMovementStepHook
     {
-        GameManager gm = GameManager.Instance;
-        if (gm == null)
+        public CharacterController Mover;
+        public bool Asked;
+        public bool SpentWhenAsked;
+
+        public void BeforeStep(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind, ref bool stop)
         {
-            Debug.Log("  [SKIP] TestAfterWalkSpendRule (needs a scene GameManager)");
-            return;
+            if (actor == null || actor != Mover)
+                return;
+            if (!Asked)
+                SpentWhenAsked = actor.Actions != null && actor.Actions.MoveActionUsed;
+            Asked = true;
+            stop = true;
         }
-        var c = Create("ML_AfterWalk");
-        Assert(c.CanTakeTurnActions(), "Precondition: the after-walk fixture can act (CanTakeTurnActions)");
 
-        // The no-path and started cases with the phase and mover tests cleared (SpendingEvenIfDropped).
-        MoveRequest req = MoveRequest.ForAI(c, c.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped();
-        Assert(!gm.ShouldSpendAfterWalk(req, new MoveAttempt { Refused = true }), "A refused move is not spent after the walk");
-        Assert(gm.ShouldSpendAfterWalk(req, new MoveAttempt()), "With AiSpendsWithoutPath a move that found no path is spent (AI-076's quirk until batch 13 step 10)");
-        Assert(!gm.ShouldSpendAfterWalk(MoveRequest.ForAI(c, c.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped().SpendingOnlyIfStarted(), new MoveAttempt()),
-            "Without it a move that found no path is not spent");
-        Assert(gm.ShouldSpendAfterWalk(req, new MoveAttempt { Started = true }), "A move that started is spent after the walk");
-
-        // AiNoSpendIfCombatOver on its own: the expectation follows the session's phase, which the message names.
-        MoveRequest combatOverOnly = MoveRequest.ForAI(c, c.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped();
-        combatOverOnly.Quirks |= MoveQuirk.AiNoSpendIfCombatOver;
-        bool over = gm.CurrentPhase == GameManager.TurnPhase.CombatOver;
-        Assert(gm.ShouldSpendAfterWalk(combatOverOnly, new MoveAttempt { Started = true }) == !over,
-            $"AiNoSpendIfCombatOver: no spend only once the combat is over (phase {gm.CurrentPhase})");
-
-        // AiNoSpendIfDropped on its own: a mover that can act is charged, one that can no longer act is not.
-        MoveRequest droppedOnly = MoveRequest.ForAI(c, c.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped();
-        droppedOnly.Quirks |= MoveQuirk.AiNoSpendIfDropped;
-        Assert(gm.ShouldSpendAfterWalk(droppedOnly, new MoveAttempt { Started = true }), "AiNoSpendIfDropped: a mover that can act is spent");
-        var dropped = Create("ML_AfterWalkDropped");
-        dropped.Stats.CurrentHP = -3;
-        dropped.SyncHPStateFromCurrentHP();
-        MoveRequest droppedReq = MoveRequest.ForAI(dropped, dropped.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped();
-        droppedReq.Quirks |= MoveQuirk.AiNoSpendIfDropped;
-        if (dropped.CanTakeTurnActions())
-            Debug.Log("  [SKIP] AiNoSpendIfDropped for a mover that cannot act (a dying fixture still reports CanTakeTurnActions)");
-        else
-            Assert(!gm.ShouldSpendAfterWalk(droppedReq, new MoveAttempt { Started = true }),
-                "AiNoSpendIfDropped: a mover that can no longer act (dying, -3 hp) is not spent");
+        public void OnStep(CharacterController actor, Vector2Int from, Vector2Int to, MoveKind kind, ref bool stop) { }
     }
 
-    /// <summary>GameManager.ExecuteMoveAction runs to its end without a walk here (no coroutine may start; RunToEnd stops
-    /// and fails one that does): an AI move to its own square is spent under AiSpendsWithoutPath, and not without it; a
+    /// <summary>
+    /// GameManager.ExecuteMoveAction runs to its end without a walk here (no coroutine may start; RunToEnd stops and fails
+    /// one that does). D3 (batch 13 step 10, delegated RAW reading of PHB p.138): an AI move with no path (its own square,
+    /// a destination it cannot reach) is refused with <see cref="MoveAttempt.NoPath"/> and spends nothing; the move action
+    /// is spent before the first step (a probe step hook sees it spent) and stays spent when the walk stops at that step; a
     /// prone PC's move or withdraw is refused by the shared legality with nothing spent. Each case first checks its
-    /// precondition and is skipped without it, so a later rule change (crawling as a move) cannot start a real walk for a
-    /// fixture the suite destroys.</summary>
+    /// precondition and is skipped without it, so a later rule change cannot start a real walk for a fixture the suite
+    /// destroys.
+    /// </summary>
     private static void TestExecuteMoveActionSpends()
     {
         GameManager gm = GameManager.Instance;
@@ -528,16 +504,29 @@ public static class MovementLegalityTests
             return;
         }
 
-        // The no-path cases clear the phase and mover tests (SpendingEvenIfDropped): only the no-path bit is under test.
+        // A pathless AI move: its own square.
         var nowhere = Create("ML_MoveNowhere");
-        MoveRequest req = MoveRequest.ForAI(nowhere, nowhere.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped();
+        MoveRequest req = MoveRequest.ForAI(nowhere, nowhere.GridPosition, 0.01f, MoveSpend.MoveAction);
         bool waited = RunToEnd(gm.ExecuteMoveAction(req));
-        Assert(!waited && req.Attempt != null && !req.Attempt.Started && !req.Attempt.Refused && nowhere.Actions.MoveActionUsed,
-            "An AI move to its own square moves nothing and is spent (AiSpendsWithoutPath, AI-076's quirk until batch 13 step 10)");
+        Assert(!waited && req.Attempt != null && !req.Attempt.Started && req.Attempt.Refused && req.Attempt.NoPath
+               && !nowhere.Actions.MoveActionUsed && !nowhere.Actions.StandardConvertedToMove,
+            $"A pathless AI move (its own square) is refused and spends nothing (D3, AI-076) ({req.Attempt?.Reason})");
 
-        var onlyStarted = Create("ML_MoveNowhereStarted");
-        RunToEnd(gm.ExecuteMoveAction(MoveRequest.ForAI(onlyStarted, onlyStarted.GridPosition, 0.01f, MoveSpend.MoveAction).SpendingEvenIfDropped().SpendingOnlyIfStarted()));
-        Assert(!onlyStarted.Actions.MoveActionUsed, "Without AiSpendsWithoutPath it is not spent");
+        // A pathless AI move: a destination no path reaches (off the grid).
+        if (gm.Grid != null)
+        {
+            var unreachable = Create("ML_MoveUnreachable");
+            Vector2Int offGrid = new Vector2Int(-500, -500);
+            MoveRequest far = MoveRequest.ForAI(unreachable, offGrid, 0.01f, MoveSpend.MoveAction).ConvertingStandard();
+            waited = RunToEnd(gm.ExecuteMoveAction(far));
+            Assert(!waited && far.Attempt.Refused && far.Attempt.NoPath && !far.Attempt.Started
+                   && !unreachable.Actions.MoveActionUsed && !unreachable.Actions.StandardConvertedToMove,
+                $"An AI move no path reaches is refused and spends nothing, the standard action not converted either (D3) ({far.Attempt.Reason}, {Why(unreachable, MoveKind.Move)})");
+        }
+        else
+        {
+            Debug.Log("  [SKIP] An unreachable AI move (needs the scene grid)");
+        }
 
         var callerPays = Create("ML_MoveNowhereCallerPays");
         var given = new MoveAttempt();
@@ -545,6 +534,35 @@ public static class MovementLegalityTests
         RunToEnd(gm.ExecuteMoveAction(callerReq));
         Assert(!callerPays.Actions.MoveActionUsed, "MoveSpend.None spends nothing (the caller pays)");
         Assert(ReferenceEquals(callerReq.Attempt, given), "The request's attempt is the one record the executor fills");
+
+        // The spend precedes the first step, and a walk stopped at that step stays spent (D3). An AI-built request on the
+        // per-step walk (its walker bit cleared: the spend does not depend on the walker), the probe refusing the step.
+        var payer = Create("ML_MovePaysFirst");
+        if (!Ok(payer, MoveKind.Move))
+        {
+            Debug.Log($"  [SKIP] The spend-before-the-first-step case (the fixture may not move: {Why(payer, MoveKind.Move)})");
+        }
+        else
+        {
+            var probe = new SpendOrderProbe { Mover = payer };
+            MovementService.RegisterStepHook(probe);
+            try
+            {
+                Vector2Int start = payer.GridPosition;
+                MoveRequest first = MoveRequest.ForAI(payer, start + Vector2Int.right, 0.01f, MoveSpend.MoveAction);
+                first.Path = new List<Vector2Int> { start + Vector2Int.right };
+                first.Quirks = MoveQuirk.None;
+                waited = RunToEnd(gm.ExecuteMoveAction(first));
+                Assert(probe.Asked && probe.SpentWhenAsked,
+                    $"The AI move action is spent before the first step (D3): the step hook saw it spent (asked {probe.Asked}, spent {probe.SpentWhenAsked})");
+                Assert(first.Attempt.Started && !first.Attempt.Refused && payer.Actions.MoveActionUsed && payer.GridPosition == start,
+                    "A move stopped at its first step (a step hook) stays spent, and the mover stays in its square");
+            }
+            finally
+            {
+                MovementService.UnregisterStepHook(probe);
+            }
+        }
 
         var pronePc = Create("ML_PronePcMove");
         pronePc.ApplyCondition(CombatConditionType.Prone, -1, "Test");
@@ -557,7 +575,7 @@ public static class MovementLegalityTests
             var path = new List<Vector2Int> { pronePc.GridPosition + Vector2Int.right };
             MoveRequest prone = MoveRequest.ForUi(pronePc, path, null, false, 0.01f);
             waited = RunToEnd(gm.ExecuteMoveAction(prone));
-            Assert(!waited && prone.Attempt.Refused && !prone.Attempt.Started && !pronePc.Actions.MoveActionUsed && !pronePc.Actions.StandardConvertedToMove,
+            Assert(!waited && prone.Attempt.Refused && !prone.Attempt.NoPath && !prone.Attempt.Started && !pronePc.Actions.MoveActionUsed && !pronePc.Actions.StandardConvertedToMove,
                 $"A prone PC's move is refused by the shared legality with nothing spent ({prone.Attempt.Reason})");
         }
 
@@ -607,22 +625,21 @@ public static class MovementLegalityTests
     }
 
     /// <summary>
-    /// The AI's move sites (batch 13 step 9; the plan's 20 spend sites, 24 move calls at HEAD; batch 13 step 10, AI-076,
-    /// rewrites this pin when every move pays first) are classified as their source reads: every move call builds a
-    /// MoveRequest (no caller-pays form is left in these files), each file has its expected number of executor-paid
-    /// (MoveSpend.MoveAction) and caller-paid (MoveSpend.None) moves, and inside the methods that make a move call the
-    /// routines' own move spends are gone but for the held charge's touch move (TryDeliverHeldChargeTurn: its after-walk
-    /// test is the incapacitation test). A move action spent for something other than movement, outside those methods, is
-    /// not counted. The frightened run pays its full-round action (MoveSpend.None); AiOutOfReach's catalog pick runs the
-    /// entry's own request.
+    /// The AI's move sites (batch 13 step 9's 24 move calls; batch 13 step 10, AI-076: every move pays before its first
+    /// step, D3) are classified as their source reads: every move call builds a MoveRequest (no caller-pays form is left),
+    /// each file has its expected number of executor-paid (MoveSpend.MoveAction) and caller-paid (MoveSpend.None) moves,
+    /// inside the methods that make a move call no routine spends a move action of its own (the held charge's touch move
+    /// and the harness's typed Move step pass MoveSpend.MoveAction since step 10), and no after-walk spend modifier is
+    /// left. A move action spent for something other than movement, outside those methods, is not counted. The frightened
+    /// run pays its full-round action (MoveSpend.None); AiOutOfReach's catalog pick runs the entry's own request.
     /// </summary>
     private static void TestMoveSiteClassification()
     {
-        const string owner = " (pinned by batch 13 step 9; AI-076, batch 13 step 10 rewrites it)";
+        const string owner = " (pinned by batch 13 step 10, AI-076, D3)";
         // file, executor-paid moves, caller-paid moves, the move routines' own move spends left
         var expected = new (string File, int Paid, int CallerPays, int OwnSpends)[]
         {
-            ("Services/AIService.cs", 11, 1, 1),
+            ("Services/AIService.cs", 12, 0, 0),
             ("_Core/GameManager.NPCTurns.cs", 3, 0, 0),
             ("Combat/Behaviors/CharmedBehaviorController.cs", 1, 0, 0),
             ("Combat/Behaviors/ConfusedBehaviorController.cs", 1, 0, 0),
@@ -652,27 +669,49 @@ public static class MovementLegalityTests
             Assert(calls > 0 && calls == requestCalls, $"{e.File}: every AI move call builds a MoveRequest ({requestCalls} of {calls}){owner}");
             Assert(paid == e.Paid && callerPays == e.CallerPays && own == e.OwnSpends,
                 $"{e.File}: {e.Paid} executor-paid, {e.CallerPays} caller-paid moves, {e.OwnSpends} own move spends in the move routines (found {paid}, {callerPays}, {own}: {string.Join(", ", ownIn)}){owner}");
-            if (e.OwnSpends > 0)
-                Assert(ownIn.Count == 1 && ownIn[0] == "TryDeliverHeldChargeTurn",
-                    $"{e.File}: the one own move spend left is the held charge's touch move ({string.Join(", ", ownIn)}){owner}");
+            Assert(!Regex.IsMatch(src, @"\.Spending(EvenIfDropped|AfterCombatEnd|OnlyIfStarted)\(") && !src.Contains("ShouldSpendAfterWalk"),
+                $"{e.File}: no after-walk spend modifier is left{owner}");
         }
+
+        // The harness's typed Move step pays through the executor too (no caller-pays overload is left).
+        string steps = ReadCode(root, "Tests/Scenarios/ScenarioSteps.cs");
+        string gmCore = ReadCode(root, "_Core/GameManager.cs");
+        if (steps != null)
+        {
+            // The step's runner case is the "case StepKind.Move:" that builds the attempt (the first one is the step's ToString).
+            string moveCase = string.Empty;
+            for (int from = steps.IndexOf("case StepKind.Move:", System.StringComparison.Ordinal); from >= 0 && moveCase.Length == 0;
+                 from = steps.IndexOf("case StepKind.Move:", from + 1, System.StringComparison.Ordinal))
+            {
+                int to = steps.IndexOf("case StepKind.Withdraw:", from, System.StringComparison.Ordinal);
+                string body = to > from ? steps.Substring(from, to - from) : string.Empty;
+                if (body.Contains("MoveCharacterAlongComputedPathForAI("))
+                    moveCase = body;
+            }
+            Assert(moveCase.Contains("MoveSpend.MoveAction") && !moveCase.Contains("UseMoveAction") && !moveCase.Contains("ConvertStandardToMove()"),
+                "The harness's typed Move step passes MoveSpend.MoveAction and spends nothing itself" + owner);
+        }
+        if (gmCore != null)
+            Assert(!Regex.IsMatch(gmCore, @"MoveCharacterAlongComputedPathForAI\(\s*CharacterController"),
+                "The caller-pays MoveCharacterAlongComputedPathForAI overload is gone" + owner);
 
         string charmed = ReadCode(root, "Combat/Behaviors/CharmedBehaviorController.cs");
         string confused = ReadCode(root, "Combat/Behaviors/ConfusedBehaviorController.cs");
         string npcTurns = ReadCode(root, "_Core/GameManager.NPCTurns.cs");
         string outOfReach = ReadCode(root, "AI/AiOutOfReach.cs");
         if (charmed != null)
-            Assert(Regex.Matches(charmed, @"ForAI\(\s*CharmedMove\(").Count == 3 && charmed.Contains(".SpendingEvenIfDropped()") && charmed.Contains(".ConvertingStandard()"),
-                "The charmed creature's three moves convert the standard action and are spent whatever became of it" + owner);
+            Assert(Regex.Matches(charmed, @"ForAI\(\s*CharmedMove\(").Count == 3 && charmed.Contains(".ConvertingStandard()"),
+                "The charmed creature's three moves convert the standard action" + owner);
         if (confused != null)
-            Assert(Regex.Matches(confused, @"ForAI\(\s*ConfusedMove\(").Count == 2 && confused.Contains(".SpendingEvenIfDropped()") && confused.Contains(".ConvertingStandard()"),
-                "The confused creature's two moves convert the standard action and are spent whatever became of it" + owner);
+            Assert(Regex.Matches(confused, @"ForAI\(\s*ConfusedMove\(").Count == 2 && confused.Contains(".ConvertingStandard()")
+                   && confused.Contains(".LoggingOnStart("),
+                "The confused creature's two moves convert the standard action; its flight line shows only once it starts" + owner);
         if (npcTurns != null)
-            Assert(Regex.Matches(npcTurns, @"\.SpendingAfterCombatEnd\(\)").Count == 3,
-                "The summon and search moves are spent after a combat end too (their routines check only the mover)" + owner);
+            Assert(npcTurns.Contains(".LoggingOnStart("),
+                "The search rush's line shows only once its move starts (no line for a refused move)" + owner);
         if (outOfReach != null)
             Assert(outOfReach.Contains("ActionIds.Move") && !outOfReach.Contains("MoveRequest"),
-                "AiOutOfReach's move is the catalog pick with no request (the executor's DefaultAiRequest pays it once it started)" + owner);
+                "AiOutOfReach's move is the catalog pick with no request (the executor's DefaultAiRequest pays it before the first step)" + owner);
     }
 
     /// <summary>The file's code with comments removed, or null (and a failed assertion) when it is missing.</summary>

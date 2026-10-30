@@ -11215,18 +11215,9 @@ public partial class GameManager : MonoBehaviour
         => NPCExecuteCharge(npc, target, bullRush);
 
     /// <summary>
-    /// An NPC, summon or compulsion move (one move action's budget) that the caller pays for itself
-    /// (<see cref="MoveSpend.None"/>: the frightened run, the held charge's touch move, the harness's typed move). Refused by
-    /// the shared movement legality (MovementService.CanStartMovement: prone, grappling, a 5-foot step taken, no move
-    /// action) with a log; <paramref name="attempt"/>, when given, says whether it started and why not.
-    /// </summary>
-    public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveAttempt attempt = null)
-        => MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(mover, destination, secondsPerStep, MoveSpend.None, attempt));
-
-    /// <summary>
     /// An NPC, summon or compulsion move through the one move executor (ExecuteMoveAction, batch 13 step 9) with the
-    /// caller's <see cref="MoveRequest"/> (MoveRequest.ForAI: who pays, and the AI quirk bits); its Attempt says whether it
-    /// started and why not.
+    /// caller's <see cref="MoveRequest"/> (MoveRequest.ForAI: who pays; spent before the first step, D3); its Attempt says
+    /// whether it started and why not (no path, or the shared movement legality: refused, nothing spent).
     /// </summary>
     public IEnumerator MoveCharacterAlongComputedPathForAI(MoveRequest request)
         => RunAIActionInline(AiMoveContext(ActionIds.Move, request), new ActionOutcome());

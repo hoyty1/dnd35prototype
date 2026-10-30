@@ -647,18 +647,14 @@ namespace Tests.Scenarios
                     case StepKind.Move:
                     {
                         // The executor asks the shared movement legality (MovementService.CanStartMovement, batch 12 step 22):
-                        // a 5-ft step taken, no move action, prone or grappling refuse the move there, as for the AI.
+                        // a 5-ft step taken, no move action, prone or grappling refuse the move there, as for the AI. It
+                        // spends the move action (or converts the standard action) before the first step, as every move
+                        // (D3, batch 13 step 10); no path refuses the move with nothing spent.
                         var moveAttempt = new MoveAttempt();
-                        yield return gm.MoveCharacterAlongComputedPathForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI(), moveAttempt);
-                        if (moveAttempt.Refused) { ok = false; note = moveAttempt.Reason; break; }
+                        yield return gm.MoveCharacterAlongComputedPathForAI(
+                            MoveRequest.ForAI(a, s.Cell, gm.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, moveAttempt).ConvertingStandard());
+                        if (moveAttempt.Refused) { ok = false; note = moveAttempt.NoPath ? "no path" : moveAttempt.Reason; break; }
                         if (!moveAttempt.Started) { ok = false; note = "no path"; break; }
-                        // AIService spends the move after the path, unless the mover was dropped (CMB-073; a disabled
-                        // mover is not dropped, PHB p.145, batch 12 D5).
-                        if (Fingerprint(job, a) != before && a.Stats != null && !ThreatSystem.IsMoverIncapacitated(a))
-                        {
-                            if (act.HasMoveAction) act.UseMoveAction();
-                            else if (act.CanConvertStandardToMove) act.ConvertStandardToMove();
-                        }
                         break;
                     }
 

@@ -11,7 +11,8 @@ namespace Tests.Scenarios
     /// legality (MovementService.CanStartMovement). The NPC executors refuse a move after a 5-foot step and a 5-foot step
     /// after a move (PHB p.144); a creature limited to a single action withdraws as a standard action at its speed
     /// (Restricted Withdraw, PHB p.144), through the PC button and on its own as an AI; a blinded AI creature does not
-    /// withdraw (PHB p.143).
+    /// withdraw (PHB p.143). Batch 13 step 10 (AI-076, D3): an AI move action is spent when the movement starts, so a
+    /// move with no path keeps it and a move an attack of opportunity stops is spent.
     /// </summary>
     public static class MovementLegalityScenarios
     {
@@ -23,6 +24,8 @@ namespace Tests.Scenarios
             yield return S("restricted-withdraw-disabled-ai", RestrictedWithdrawDisabledAi);
             yield return S("blinded-no-withdraw-ai", BlindedNoWithdrawAi);
             yield return S("movement-step-action-converts-standard-ui", StepActionMoveConvertsStandardUi);
+            yield return S("ai-move-no-path-keeps-action-ai", NoPathKeepsMoveActionAi);
+            yield return S("ai-move-spent-when-aoo-stops-it-ai", MoveSpentWhenAoOStopsItAi);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("MovementLegalityScenarios rules/" + name, build);
@@ -324,6 +327,133 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass(attacks + " attack(s), " + maneuvers + " maneuver(s), " + provoked + " provoked AoO(s)")
                         : ExpectResult.Fail("no attack or maneuver by the hobgoblin on the hero");
                 })
+                .Build();
+        }
+
+        // ── Batch 13 step 10 (AI-076, D3): a move action is spent when the movement starts ──
+
+        /// <summary>
+        /// AI-076, D3 (delegated RAW reading, PHB p.138: an action is taken, then resolved; a move refused before its first
+        /// step spends nothing): an AI orc (AggressiveMelee) stands in a ring of Wall of Force (PHB p.298), placed in the
+        /// Scripted hero's turn, with the hero out of reach. Its movement choice (AIService.EvaluateMovementOptions) still
+        /// rates the squares past the wall, which no path reaches (AI-052), so its approach finds no path: the move executor
+        /// refuses it (MoveAttempt.Refused and NoPath; a Debug.Log line only), and the orc keeps its move action, shows no
+        /// "advances toward" line and goes on to its next choice. Before the fix the AI paid that move after a walk that
+        /// never started (MoveQuirk.AiSpendsWithoutPath) and logged the advance. Its backpack is emptied so it throws
+        /// nothing through the wall (weapon attacks test no line of effect, GRID-009).
+        /// </summary>
+        private static ScenarioDef NoPathKeepsMoveActionAi()
+        {
+            Vector2Int orcAt = new Vector2Int(10, 10);
+            Vector2Int[] ring = Enumerable.Range(-1, 3)
+                .SelectMany(dx => Enumerable.Range(-1, 3).Select(dy => new Vector2Int(orcAt.x + dx, orcAt.y + dy)))
+                .Where(c => c != orcAt).ToArray();
+            return Rules("rules/ai-move-no-path-keeps-action-ai", "An AI move with no path is refused and spends nothing; the creature keeps its move action (PHB p.138; AI-076, D3)")
+                .Covers("AI-076", "D3", "PHB p.138", "PHB p.298", "batch 13 step 10")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", orcAt.x, orcAt.y, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 2)), 16, 10, Control.Scripted)
+                .Tweak("orc", EmptyBackpack)
+                .Tweak("hero", Sturdy)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("the Wall of Force ring around the orc stands", ctx => MovementStepHookScenarios.PlaceWallOfForce(ring)),
+                    Step.Assert("no path leaves the ring, yet a square past it is in the orc's move range", ctx =>
+                    {
+                        CharacterController o = ctx.Get("orc");
+                        int range = ctx.Gm.GetCurrentMoveRangeSquares(o);
+                        AoOPathResult r = ctx.Gm.FindPath(o, new Vector2Int(13, 10), avoidThreats: false, maxRangeOverride: range);
+                        return (r == null || r.Path == null || r.Path.Count == 0) && range >= 3;
+                    }),
+                    Step.Assert("the orc's own movement choice is a square off its own that no path reaches (so its move is the refused one)", ctx =>
+                    {
+                        CharacterController o = ctx.Get("orc");
+                        CharacterController h = ctx.Get("hero");
+                        AIService ai = ctx.Gm.GetComponent<AIService>();
+                        SquareCell pick = ai != null ? ai.EvaluateMovementOptions(o, h.GridPosition, retreat: false, h, o.aiProfile) : null;
+                        if (pick == null || pick.Coords == o.GridPosition) return false;
+                        AoOPathResult r = ctx.Gm.FindPath(o, pick.Coords, avoidThreats: false, maxRangeOverride: ctx.Gm.GetCurrentMoveRangeSquares(o));
+                        return r == null || r.Path == null || r.Path.Count == 0;
+                    }),
+                    Step.Pass())
+                .Expect("The orc's turn is an AI turn", Expect.Controller("orc", "ai"))
+                .Expect("The orc makes no movement of its own and ends in its square", v =>
+                {
+                    List<TraceEvent> own = OwnMoves(v, "orc", 1);
+                    Vector2Int? p = Pos(v.Final("orc"));
+                    return own.Count == 0 && p == orcAt
+                        ? ExpectResult.Pass("no own move, at (10,10)")
+                        : ExpectResult.Fail(own.Count + " own move(s), at " + p);
+                })
+                .Expect("No advance is logged for the refused move", v =>
+                {
+                    int lines = v.Log("advances").Count + v.Log("moves toward").Count;
+                    return lines == 0 ? ExpectResult.Pass("no advance line") : ExpectResult.Fail(lines + " advance line(s)");
+                })
+                .Expect("The orc keeps its move action: the refused move spent nothing (D3)", v =>
+                {
+                    JsonObj econ = Econ(v, "orc", 1);
+                    if (econ == null) return ExpectResult.Fail("no turn end");
+                    return !Flag(econ, "move") && !Flag(econ, "conv")
+                        ? ExpectResult.Pass("move action unspent")
+                        : ExpectResult.Fail("move " + Flag(econ, "move") + ", conv " + Flag(econ, "conv"));
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-076, D3 (delegated RAW reading, PHB p.138: a move stopped midway is spent; PHB p.137: leaving a threatened
+        /// square provokes): a Scripted orc at 1 hp (the NPC turn path's move, MoveRequest.ForAI) moves away from the hero
+        /// next to it. The hero has acted first, so it is not flat-footed (PHB p.137), and its attack of opportunity (every d20 forced to 19) drops it before its first step, so the walk
+        /// stops where it began, and the move action is spent: it was paid when the movement started. Before the fix the
+        /// AI paid after the walk and not at all for a mover dropped on the way (MoveQuirk.AiNoSpendIfDropped; the harness's
+        /// typed Move step paid only a mover still up). An idle dummy far off keeps the enemy side in the fight once the orc
+        /// is dying, so its turn end is traced.
+        /// </summary>
+        private static ScenarioDef MoveSpentWhenAoOStopsItAi()
+        {
+            Vector2Int orcAt = new Vector2Int(10, 10);
+            return Rules("rules/ai-move-spent-when-aoo-stops-it-ai", "An AI move stopped by an attack of opportunity stays spent (PHB p.137-138; AI-076, D3)")
+                .Covers("AI-076", "D3", "PHB p.137", "PHB p.138", "batch 13 step 10")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", orcAt.x, orcAt.y, Control.Scripted)
+                .Npc("far", "target_dummy", 18, 2, Control.Idle)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 11, 10, Control.Scripted)
+                .Hp("orc", 1)
+                .Tweak("orc", EmptyBackpack)
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); Sturdy(c); })
+                .Force(20, 19, null, -1)
+                .Initiative("hero", "orc", "far")
+                .Turn("hero", 1, Step.Pass())
+                .Turn("orc", 1,
+                    Step.Assert("the orc may move and has its move action", ctx =>
+                    {
+                        CharacterController o = ctx.Get("orc");
+                        return MovementService.CanStartMovement(o, MoveKind.Move).Ok && o.Actions.HasMoveAction;
+                    }),
+                    Step.Move(6, 10))
+                .Expect("The hero's attack of opportunity hits the orc as it leaves its square", v =>
+                {
+                    int hits = v.Of("aoo").Count(e => e.Round == 1 && e.Str("by") == "hero" && e.Str("target") == "orc" && e.Get("hit") is bool h && h);
+                    return hits >= 1 ? ExpectResult.Pass(hits + " AoO hit(s)") : ExpectResult.Fail("no AoO hit by the hero on the orc");
+                })
+                .Expect("The orc is dropped (dying) and its walk stopped where it began", v =>
+                {
+                    JsonObj fin = v.Final("orc");
+                    int hp = fin != null && fin.Get("hp") is int h ? h : 999;
+                    Vector2Int? p = Pos(fin);
+                    return hp < 0 && p == orcAt ? ExpectResult.Pass("hp " + hp + ", at (10,10)") : ExpectResult.Fail("hp " + hp + ", at " + p);
+                })
+                .Expect("The stopped move is spent: paid when the movement started (D3)", v =>
+                {
+                    JsonObj econ = Econ(v, "orc", 1);
+                    if (econ == null) return ExpectResult.Fail("no turn end");
+                    return Flag(econ, "move") || Flag(econ, "conv")
+                        ? ExpectResult.Pass("move spent")
+                        : ExpectResult.Fail("move " + Flag(econ, "move") + ", conv " + Flag(econ, "conv"));
+                })
+                .Expect("The checks pass", Expect.AssertsPass())
                 .Build();
         }
     }

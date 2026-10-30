@@ -92,7 +92,7 @@ public static class ActionCatalogTests
     /// the PC's tail (the action panel; the runner ends the turn of a PC dropped on the way); CanExecute asks only for a
     /// destination (the movement legality is the executor's first step, which logs its refusal); CanStart asks the shared
     /// movement legality for the legal set; a catalog AI pick with no MoveRequest (AiOutOfReach) gets the AI request that
-    /// pays the move after the walk once it started, whatever became of the mover, as the executor paid it before; and a
+    /// pays the move before its first step and spends nothing for a move refused before it (D3, batch 13 step 10); and a
     /// Ui context with no MoveRequest (the harness's Ui Step.Action) gets the PC's own (MoveRequest.ForUi, no quirk bit).
     /// </summary>
     private static void TestMoveEntries()
@@ -111,14 +111,14 @@ public static class ActionCatalogTests
         }
 
         MoveRequest ai = MoveActionExecutor.DefaultAiRequest(false, null, new Vector2Int(3, 4), 0.1f);
-        Assert(ai.Spend == MoveSpend.MoveAction && ai.Quirks == (MoveQuirk.AiSpendsAfterWalk | MoveQuirk.AiSegmentLoop) && !ai.AllowConvertStandard
+        Assert(ai.Spend == MoveSpend.MoveAction && ai.Quirks == MoveQuirk.AiSegmentLoop && !ai.AllowConvertStandard
                && ai.Destination == new Vector2Int(3, 4) && ai.Path == null,
-            "A catalog AI move with no request pays its move after the walk once it started (AiSpendsAfterWalk, AiSegmentLoop)", ai.Quirks.ToString());
+            "A catalog AI move with no request pays its move before the first step (D3; only the AiSegmentLoop walker bit)", ai.Quirks.ToString());
         MoveRequest aiWithdraw = MoveActionExecutor.DefaultAiRequest(true, null, new Vector2Int(3, 4), 0.1f);
         Assert(aiWithdraw.Spend == MoveSpend.ExecutorOwned && aiWithdraw.IsWithdraw && aiWithdraw.Label == "AoO (Withdraw)",
             "A catalog AI withdraw pays its own action (ExecutorOwned)", aiWithdraw.Spend.ToString());
 
-        // A Ui context with no request (the harness's Ui Step.Action) gets the PC's own rule, never the AI's after-walk spend.
+        // A Ui context with no request (the harness's Ui Step.Action) gets the PC's own rule, never the AI's segment walker.
         MoveRequest ui = MoveActionExecutor.UiRequestFor(null, false, null, new Vector2Int(3, 4));
         Assert(ui.Quirks == MoveQuirk.None && ui.Spend == MoveSpend.MoveAction && ui.AllowConvertStandard && ui.PcRefusalText && ui.Path != null,
             "A Ui catalog move with no request runs MoveRequest.ForUi: paid before the walk, the standard action converted, no quirk bit", ui.Quirks.ToString());
@@ -238,7 +238,7 @@ public static class ActionCatalogTests
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Extracted, "AI-076" },
+        new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Withdraw, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.FiveFootStep, ActionCostType.NotAnAction, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Run, ActionCostType.FullRound, ProvokeRule.Yes, ImplStatus.Missing, "CMB-202" },

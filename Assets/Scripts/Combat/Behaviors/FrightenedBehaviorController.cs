@@ -212,17 +212,20 @@ public sealed class FrightenedBehaviorController
                 yield return gameManager.StartCoroutine(
                     gameManager.MoveCharacterAlongComputedPathForAI(
                         MoveRequest.ForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.None, runAttempt)));
+                // A run that started is spent, even when an attack of opportunity stops it on the way (D3, PHB p.138);
+                // one refused before its first step spends nothing.
+                if (runAttempt.Started)
+                    actor.Actions.UseFullRoundAction();
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
 
                 if (!runAttempt.Refused)
                 {
-                    actor.Actions.UseFullRoundAction();
                     gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🏃", $"{actorName} runs from {sourceName}, provoking attacks of opportunity!{logSuffix}"));
                     yield return new WaitForSeconds(0.35f);
                     yield break;
                 }
-                result.Outcome = FlightOutcome.Cornered; // refused before moving (logged): nothing spent, try the move below
+                result.Outcome = FlightOutcome.Cornered; // refused before the first step (no path, or the shared legality): nothing spent, try the move below
             }
         }
 
@@ -242,12 +245,12 @@ public sealed class FrightenedBehaviorController
 
                 if (fleeAttempt.Refused)
                 {
-                    result.Outcome = FlightOutcome.Cornered; // the shared legality refused it (logged): nothing spent
+                    result.Outcome = FlightOutcome.Cornered; // refused before the first step (no path, or the shared legality): nothing spent
                     yield break;
                 }
 
-                // The executor spent the move action (or converted the standard action) after the walk, unless the mover
-                // was dropped or the combat ended (AI-076's quirk until batch 13 step 10).
+                // The executor spent the move action (or converted the standard action) before the first step (D3); a
+                // flight stopped on the way stays spent.
                 gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{actorName} runs from {sourceName} in terror!{logSuffix}"));
                 yield return new WaitForSeconds(0.35f);
                 yield break;

@@ -11,7 +11,7 @@ public enum MoveSpend
     /// <see cref="MoveRequest.AllowConvertStandard"/> is set and the move action is gone).</summary>
     MoveAction,
     /// <summary>The executor spends nothing: the caller pays otherwise (a frightened creature's run pays its full-round
-    /// action; a forced move; a routine whose after-walk test the quirk bits do not express).</summary>
+    /// action; a forced move).</summary>
     None,
     /// <summary>The movement pays its own action in the executor: the withdraw's full-round action, or a Restricted
     /// Withdraw's standard action (PHB p.143-144; GameManager.TrySpendWithdrawAction).</summary>
@@ -19,33 +19,19 @@ public enum MoveSpend
 }
 
 /// <summary>
-/// The kept differences of the AI's move sites from the one move rule (batch 13 step 9; the migration rule's named quirk
-/// bits, alive from step 9 to step 10 only). <see cref="MoveRequest.ForAI"/> sets them all, <see cref="MoveRequest.ForUi"/>
-/// none. Step 10 (AI-076, D3: a move action is spent when the movement starts) deletes the spend bits.
+/// The kept difference of the AI's move sites from the PC's walk (batch 13 step 9; the migration rule's named quirk bit).
+/// <see cref="MoveRequest.ForAI"/> sets it, <see cref="MoveRequest.ForUi"/> does not. It is presentation only: step 10
+/// (AI-076, D3: a move action is spent when the movement starts, for both sides) deleted the spend bits, and folding the
+/// two walkers waits for a later named step (docs/architecture/combat-and-grid.md, "The two walkers").
 /// </summary>
 [Flags]
 public enum MoveQuirk
 {
     None = 0,
-    /// <summary>The move action is spent after the walk, not before it (AI-076): today's AI routines pay once the walk is over.</summary>
-    AiSpendsAfterWalk = 1,
-    /// <summary>With <see cref="AiSpendsAfterWalk"/>: a move that found no path (or nowhere to go) is spent too, as the AI
-    /// routines pay whenever the movement legality did not refuse the move.</summary>
-    AiSpendsWithoutPath = 2,
     /// <summary>The walk is the AI's segment walker (GameManager.ExecutePathWithMovementAoOs) rather than the PC's per-step
     /// loop. The two apply the same rules (docs/architecture/combat-and-grid.md); they differ in their log lines, their
     /// waits after an attack of opportunity and the trace type of the steps, which the hashes pin.</summary>
-    AiSegmentLoop = 4,
-    /// <summary>With <see cref="AiSpendsAfterWalk"/>: no spend when the mover can no longer act after the walk
-    /// (CharacterController.CanTakeTurnActions false: dropped by an attack of opportunity or area damage, CMB-073), as the
-    /// NPC, summon and frightened routines check before they pay.</summary>
-    AiNoSpendIfDropped = 8,
-    /// <summary>With <see cref="AiSpendsAfterWalk"/>: no spend once the combat is over (CORE-011), as the NPC and
-    /// frightened routines check before they pay.</summary>
-    AiNoSpendIfCombatOver = 16,
-
-    /// <summary>Every AI bit: the rule of the AIService routines.</summary>
-    AiDefault = AiSpendsAfterWalk | AiSpendsWithoutPath | AiSegmentLoop | AiNoSpendIfDropped | AiNoSpendIfCombatOver
+    AiSegmentLoop = 4
 }
 
 /// <summary>
@@ -74,6 +60,9 @@ public sealed class MoveRequest
     public MoveQuirk Quirks;
     /// <summary>When set, a mover dropped on the way runs the combat-end check with this context (the PC's move).</summary>
     public string CombatEndContext;
+    /// <summary>A combat-log line the executor shows once the move starts (spent, before the first step), never for a
+    /// refused move (batch 13 step 10): the line a routine used to show before it moved ("X moves to touch Y").</summary>
+    public string StartLogLine;
     /// <summary>The one attempt record, which the executor fills (null: the executor makes one and sets it here); callers
     /// read it after the run.</summary>
     public MoveAttempt Attempt;
@@ -87,7 +76,8 @@ public sealed class MoveRequest
     public bool Has(MoveQuirk quirk) => (Quirks & quirk) == quirk;
 
     /// <summary>The PC's move or withdraw along the clicked <paramref name="path"/>: spent before the first step (the move
-    /// action, or the standard action converted; a withdraw's own action), walked by the per-step loop. No quirk bit.</summary>
+    /// action, or the standard action converted; a withdraw's own action), as every move is (D3), walked by the per-step
+    /// loop. No quirk bit.</summary>
     public static MoveRequest ForUi(CharacterController pc, List<Vector2Int> path, List<AoOThreatInfo> provokedAoOs, bool withdraw, float secondsPerStep, MoveAttempt attempt = null)
     {
         return new MoveRequest
@@ -108,8 +98,10 @@ public sealed class MoveRequest
         };
     }
 
-    /// <summary>An NPC, summon or compulsion move (one move action's budget) to <paramref name="destination"/>, with every AI
-    /// quirk bit (<see cref="MoveQuirk.AiDefault"/>). <paramref name="spend"/> None: the caller pays.</summary>
+    /// <summary>An NPC, summon or compulsion move (one move action's budget) to <paramref name="destination"/>: spent before
+    /// the first step as the PC's is (D3, PHB p.138; no path or a legality refusal spends nothing and sets
+    /// <see cref="MoveAttempt.Refused"/>), walked by the segment walker (<see cref="MoveQuirk.AiSegmentLoop"/>).
+    /// <paramref name="spend"/> None: the caller pays (the frightened run's full-round action).</summary>
     public static MoveRequest ForAI(CharacterController mover, Vector2Int destination, float secondsPerStep, MoveSpend spend, MoveAttempt attempt = null)
     {
         return new MoveRequest
@@ -121,7 +113,7 @@ public sealed class MoveRequest
             Label = "AoO",
             AllowConvertStandard = false,
             Spend = spend,
-            Quirks = MoveQuirk.AiDefault,
+            Quirks = MoveQuirk.AiSegmentLoop,
             Attempt = attempt
         };
     }
@@ -142,25 +134,10 @@ public sealed class MoveRequest
         return this;
     }
 
-    /// <summary>The after-walk spend is made whatever became of the mover or the combat (the charmed, confused and
-    /// suggested moves, and the catalog's own AI move: they pay whenever the move was not refused).</summary>
-    public MoveRequest SpendingEvenIfDropped()
+    /// <summary>The combat-log line shown once the move starts, never for a refused move (<see cref="StartLogLine"/>).</summary>
+    public MoveRequest LoggingOnStart(string combatLogLine)
     {
-        Quirks &= ~(MoveQuirk.AiNoSpendIfDropped | MoveQuirk.AiNoSpendIfCombatOver);
-        return this;
-    }
-
-    /// <summary>The after-walk spend is made after the combat ended too (the summon routines check only the mover).</summary>
-    public MoveRequest SpendingAfterCombatEnd()
-    {
-        Quirks &= ~MoveQuirk.AiNoSpendIfCombatOver;
-        return this;
-    }
-
-    /// <summary>A move that found no path is not spent (the catalog's own AI move pays only a move that started).</summary>
-    public MoveRequest SpendingOnlyIfStarted()
-    {
-        Quirks &= ~MoveQuirk.AiSpendsWithoutPath;
+        StartLogLine = combatLogLine;
         return this;
     }
 }

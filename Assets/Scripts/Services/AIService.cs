@@ -573,8 +573,8 @@ public class AIService : MonoBehaviour
         if (!npc.CanTakeTurnActions())
             yield break; // dropped by an AoO or area damage while moving (CMB-073)
         if (searchMove.Refused)
-            yield break; // refused by the shared movement legality (logged): nothing spent
-        // The move executor spent the move action after the walk (MoveSpend.MoveAction, AI-076's quirk until step 10).
+            yield break; // refused before the first step (no path, or the shared legality): nothing spent (D3)
+        // The move executor spent the move action before the first step (D3).
 
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} moves to search for enemies."));
         yield return new WaitForSeconds(0.35f);
@@ -750,7 +750,7 @@ public class AIService : MonoBehaviour
         yield return _gameManager.StartCoroutine(
             _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, advanceMove)));
         if (CombatEnded() || !npc.CanTakeTurnActions() || advanceMove.Refused)
-            yield break; // a refused move (logged) spends nothing; the executor spent the move after the walk
+            yield break; // a refused move spends nothing (D3); the executor spent this one before the first step
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
         yield return new WaitForSeconds(0.5f);
     }
@@ -855,7 +855,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
+                if (!advanceMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     // Activate terrain manipulation after moving closer
                     if (npc.HasTerrainManipulation)
@@ -1084,11 +1084,18 @@ public class AIService : MonoBehaviour
                         yield break;
                     }
                     if (breathMove.Refused)
-                        yield break; // refused by the shared movement legality (logged): not in the breath position
-                    // The executor spent the move action after the walk.
-                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
-                        $"{npc.Stats.CharacterName} maneuvers into optimal breath weapon position!"));
-                    yield return new WaitForSeconds(0.4f);
+                    {
+                        // Refused before the first step (no path, or the shared legality): nothing spent (D3); the breath
+                        // is weighed again from where it stands, as with no move action.
+                        Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} cannot reach the breath position ({breathMove.Reason}) — using current position");
+                    }
+                    else
+                    {
+                        // The executor spent the move action before the first step.
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
+                            $"{npc.Stats.CharacterName} maneuvers into optimal breath weapon position!"));
+                        yield return new WaitForSeconds(0.4f);
+                    }
                 }
                 else if (bp.RequiresMove && !npc.Actions.HasMoveAction)
                 {
@@ -1126,8 +1133,8 @@ public class AIService : MonoBehaviour
                                         _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, repositionMove)));
                                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (!npc.CanTakeTurnActions() || repositionMove.Refused)
-                                        yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                                    // The executor spent the move action after the walk.
+                                        yield break; // dropped while moving (CMB-073), or refused before the first step: nothing spent (D3)
+                                    // The executor spent the move action before the first step.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
                                     yield return new WaitForSeconds(0.3f);
@@ -1173,8 +1180,8 @@ public class AIService : MonoBehaviour
                                         _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, repositionMove)));
                                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (!npc.CanTakeTurnActions() || repositionMove.Refused)
-                                        yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                                    // The executor spent the move action after the walk.
+                                        yield break; // dropped while moving (CMB-073), or refused before the first step: nothing spent (D3)
+                                    // The executor spent the move action before the first step.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
                                     yield return new WaitForSeconds(0.3f);
@@ -1217,7 +1224,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
+                if (!advanceMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                     yield return new WaitForSeconds(0.5f);
@@ -1303,8 +1310,8 @@ public class AIService : MonoBehaviour
                         _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, blindMove)));
                     if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                     if (!npc.CanTakeTurnActions() || blindMove.Refused)
-                        yield break; // dropped while moving (CMB-073), or refused (logged): nothing spent
-                    // The executor spent the move action after the walk.
+                        yield break; // dropped while moving (CMB-073), or refused before the first step: nothing spent (D3)
+                    // The executor spent the move action before the first step.
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment."));
                     yield return new WaitForSeconds(0.4f);
                 }
@@ -1380,7 +1387,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!retreatMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
+                if (!retreatMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     if (shouldRetreatForRisk)
                         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity."));
@@ -1700,7 +1707,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                if (!advanceMove.Refused) // a refused move (logged) spends nothing; the routine goes on (the executor spent it)
+                if (!advanceMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
                     yield return new WaitForSeconds(0.5f);
@@ -1780,7 +1787,7 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
-            if (!swarmMove.Refused) // a refused move (logged) spends nothing (the executor spent it)
+            if (!swarmMove.Refused) // a refused move spends nothing (D3; the executor spent this one first)
                 yield return new WaitForSeconds(0.35f);
         }
 
@@ -3229,19 +3236,23 @@ public class AIService : MonoBehaviour
                 Vector2Int? approach = _gameManager.FindTouchApproachSquareForAI(npc, reachable[i]);
                 if (!approach.HasValue)
                     continue;
-                target = reachable[i];
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("✋", $"{npc.Stats.CharacterName} moves to touch {target.Stats.CharacterName} with the held {held.Name}."));
-                // MoveSpend.None (batch 13 step 9): this routine's after-walk test is the incapacitation test
-                // (ThreatSystem.IsMoverIncapacitated, which also counts the Unconscious condition), not the quirk bits' one,
-                // so it keeps its own spend until step 10 pays every move first.
+                CharacterController candidate = reachable[i];
+                // The executor spends the move before the first step (D3, batch 13 step 10) and shows the line only then.
                 var touchMove = new MoveAttempt();
                 yield return _gameManager.StartCoroutine(
-                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, approach.Value, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.None, touchMove)));
+                    _gameManager.MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, approach.Value, _gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, touchMove)
+                        .LoggingOnStart(CombatLogHelper.Info("✋", $"{npc.Stats.CharacterName} moves to touch {candidate.Stats.CharacterName} with the held {held.Name}."))));
                 if (CombatEnded() || ThreatSystem.IsMoverIncapacitated(npc))
                     yield break; // dropped by an attack of opportunity on the way (CMB-073)
                 if (touchMove.Refused)
-                    yield break; // refused by the shared movement legality (logged): nothing spent, no touch
-                npc.Actions.UseMoveAction();
+                {
+                    // Refused before the first step, nothing spent (D3): with no path the next creature in reach is tried;
+                    // a legality refusal (logged) refuses every move this turn.
+                    if (touchMove.NoPath)
+                        continue;
+                    yield break;
+                }
+                target = candidate;
             }
         }
 

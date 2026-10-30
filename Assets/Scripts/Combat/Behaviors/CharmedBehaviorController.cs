@@ -446,12 +446,11 @@ public sealed class CharmedBehaviorController
     }
 
     /// <summary>
-    /// A charmed creature's move (batch 13 step 9): the move executor spends the move action after the walk, or converts
-    /// the standard action, whenever the move was not refused, whatever became of the mover (as this controller paid it;
-    /// AI-076's quirk until step 10). A refused move (logged) spends nothing.
+    /// A charmed creature's move (batch 13 step 9): the move executor spends the move action, or converts the standard
+    /// action, before the first step (D3, batch 13 step 10). A refused move (no path, or the shared legality) spends
+    /// nothing, and the controller goes on to its next choice.
     /// </summary>
     private static MoveRequest CharmedMove(GameManager gameManager, CharacterController actor, Vector2Int destination, MoveAttempt attempt)
         => MoveRequest.ForAI(actor, destination, gameManager.GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, attempt)
-            .ConvertingStandard()
-            .SpendingEvenIfDropped();
+            .ConvertingStandard();
 }

@@ -28,15 +28,19 @@ public enum MoveKind
 }
 
 /// <summary>
-/// What the move executor did with a movement request (GameManager.ExecuteMoveAction, batch 13 step 9): refused by
-/// <see cref="MovementService.CanStartMovement"/> or its action spend, with its reason, or started; and whether the mover
-/// was dropped on the way. An AI routine reads it and goes on.
+/// What the move executor did with a movement request (GameManager.ExecuteMoveAction, batch 13 step 9): refused before its
+/// first step (no path, <see cref="MovementService.CanStartMovement"/> or its action spend), with its reason and nothing
+/// spent, or started and spent (D3, batch 13 step 10: a move stopped on the way stays spent); and whether the mover was
+/// dropped on the way. An AI routine reads it and goes on to its next choice after a refusal.
 /// </summary>
 public sealed class MoveAttempt
 {
     public bool Started;
     public bool Refused;
     public string Reason = string.Empty;
+    /// <summary>With <see cref="Refused"/>: refused because no path was found (or the mover had nowhere to go), which is
+    /// only a Debug.Log line; the other refusals are on the combat log.</summary>
+    public bool NoPath;
     /// <summary>The mover was dropped (dead, dying or unconscious) on the way (ThreatSystem.IsMoverIncapacitated).</summary>
     public bool Incapacitated;
 }
@@ -380,6 +384,13 @@ public class MovementService : MonoBehaviour
     {
         if (hook != null && !StepHooks.Contains(hook))
             StepHooks.Add(hook);
+    }
+
+    /// <summary>Removes a per-step movement rule added by <see cref="RegisterStepHook"/> (a static test's probe).</summary>
+    public static void UnregisterStepHook(IMovementStepHook hook)
+    {
+        if (hook != null)
+            StepHooks.Remove(hook);
     }
 
     /// <summary>Runs every hook's <see cref="IMovementStepHook.BeforeStep"/>; true when one refuses the step.</summary>

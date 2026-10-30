@@ -139,7 +139,7 @@ namespace Tests.Scenarios
         /// A Wall of Force on <paramref name="cells"/> (PHB p.298), as the spell's handler builds it, in force at once (Start
         /// recomputes the same squares on the next frame).
         /// </summary>
-        private static bool PlaceWallOfForce(params Vector2Int[] cells)
+        internal static bool PlaceWallOfForce(params Vector2Int[] cells)
         {
             var go = new GameObject("WallOfForce_Line_Area");
             go.transform.position = SquareGridUtils.GridToWorld(cells[0]);

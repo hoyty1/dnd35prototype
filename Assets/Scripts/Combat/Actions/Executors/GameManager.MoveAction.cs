@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// GameManager partial class: the one move executor of both sides (batch 13 step 9, AI-076's preparation). The PC's move
+/// GameManager partial class: the one move executor of both sides (batch 13 step 9; since step 10 every move is spent before its first step, D3). The PC's move
 /// and withdraw (GameManager.ExecuteMovement, through the catalog's move and withdraw entries and RunPlayerAction) and the
 /// AI's (the *ForAI move wrappers, through RunAIAction) all run <see cref="ExecuteMoveAction"/>. No UI follow-up here: the
 /// entries' UiAfter (ShowChoices) and the runner continue the PC's turn; ActionCatalogTests scans this file.
@@ -11,19 +11,18 @@ using UnityEngine;
 public partial class GameManager
 {
     /// <summary>
-    /// Runs one movement request, in order:
+    /// Runs one movement request, in order (D3, batch 13 step 10: a move action is spent when the movement starts, for both
+    /// sides; delegated RAW reading of PHB p.138, an action is taken and then resolved):
     /// <list type="number">
     /// <item>the shared movement legality (<see cref="MovementService.CanStartMovement"/>; a refusal is logged, sets
     /// <see cref="MoveAttempt.Refused"/> and spends nothing);</item>
-    /// <item>the path: the request's own (the PC's click), or one found to its destination within the move's budget (none:
-    /// nothing moves, and no refusal);</item>
-    /// <item>the spend before the walk (the withdraw's own action; a move action unless
-    /// <see cref="MoveQuirk.AiSpendsAfterWalk"/>);</item>
-    /// <item>the walk: the PC's per-step loop, or the AI's segment walker under <see cref="MoveQuirk.AiSegmentLoop"/>; both
-    /// resolve each attack of opportunity before the step that provokes it (PHB p.137);</item>
-    /// <item>the after-walk spend under <see cref="MoveQuirk.AiSpendsAfterWalk"/>, also with no path under
-    /// <see cref="MoveQuirk.AiSpendsWithoutPath"/>, unless the mover was dropped or the combat ended where the request's
-    /// bits say so.</item>
+    /// <item>the path: the request's own (the PC's click), or one found to its destination within the move's budget (none,
+    /// or nowhere to go: refused with <see cref="MoveAttempt.NoPath"/>, a Debug.Log line only, nothing spent);</item>
+    /// <item>the spend before the first step (the move action, or the standard action converted; the withdraw's own
+    /// action; nothing for <see cref="MoveSpend.None"/>); a spend that fails refuses the move;</item>
+    /// <item>the request's <see cref="MoveRequest.StartLogLine"/>, then the walk: the PC's per-step loop, or the AI's
+    /// segment walker under <see cref="MoveQuirk.AiSegmentLoop"/>; both resolve each attack of opportunity before the step
+    /// that provokes it (PHB p.137). A walk stopped on the way (an AoO, a zone, a step hook) stays spent.</item>
     /// </list>
     /// It never continues the UI and reads no controller flag: the same request walks the same way for any mover. The
     /// attempt record is <see cref="MoveRequest.Attempt"/> (made here when null).
@@ -44,118 +43,122 @@ public partial class GameManager
         string what = withdraw ? "withdraw" : "move";
         bool searchPath = req.Path == null;
 
-        // An AI move to nowhere (no grid, its own square) moves nothing and is not refused, as the AI cores did.
-        bool go = !searchPath || (Grid != null && req.Destination.HasValue && req.Destination.Value != mover.GridPosition);
-        if (go)
+        // An AI move to nowhere (no grid, no destination, its own square) moves nothing: refused, nothing spent (D3).
+        if (searchPath && (Grid == null || !req.Destination.HasValue || req.Destination.Value == mover.GridPosition))
         {
-            // 1. The shared movement legality (batch 12 step 22, GRID-019, GRID-022): no ordinary movement after a 5-foot
-            // step (PHB p.144), while prone or grappling, or with no action left; a withdraw is a full-round action or a
-            // Restricted Withdraw, never blinded (PHB p.143-144).
-            MoveKind legalityKind = withdraw ? MovementService.WithdrawKindFor(mover) : MoveKind.Move;
-            Legality legal = MovementService.CanStartMovement(mover, legalityKind);
-            if (!legal.Ok)
+            RecordNoPath(mover, what, "nowhere to go", attempt);
+            yield break;
+        }
+
+        // 1. The shared movement legality (batch 12 step 22, GRID-019, GRID-022): no ordinary movement after a 5-foot
+        // step (PHB p.144), while prone or grappling, or with no action left; a withdraw is a full-round action or a
+        // Restricted Withdraw, never blinded (PHB p.143-144).
+        MoveKind legalityKind = withdraw ? MovementService.WithdrawKindFor(mover) : MoveKind.Move;
+        Legality legal = MovementService.CanStartMovement(mover, legalityKind);
+        if (!legal.Ok)
+        {
+            RecordRefusedMovement(mover, what, legal.Reason, attempt);
+            yield break;
+        }
+
+        // 2. The path. The budget is read before anything is spent: a Restricted Withdraw spends the single action.
+        int budget = withdraw ? GetWithdrawMoveRangeSquares(mover) : GetCurrentMoveRangeSquares(mover);
+        List<Vector2Int> path = req.Path;
+        List<AoOThreatInfo> provokedAoOs = req.ProvokedAoOs;
+        if (searchPath)
+        {
+            path = null;
+            provokedAoOs = null;
+            // Prone, entangled in a web or otherwise unable to move (CMB-074): nowhere to go.
+            if (budget > 0)
             {
-                RecordRefusedMovement(mover, what, legal.Reason, attempt);
-                yield break;
-            }
-
-            // 2. The path. The budget is read before anything is spent: a Restricted Withdraw spends the single action.
-            int budget = withdraw ? GetWithdrawMoveRangeSquares(mover) : GetCurrentMoveRangeSquares(mover);
-            List<Vector2Int> path = req.Path;
-            List<AoOThreatInfo> provokedAoOs = req.ProvokedAoOs;
-            if (searchPath)
-            {
-                path = null;
-                provokedAoOs = null;
-                // Prone, entangled in a web or otherwise unable to move (CMB-074): nowhere to go.
-                if (budget > 0)
+                // A withdraw's start square provokes from no enemy the mover can see (suppressFirstSquareAoO, the startSpace
+                // rule in ThreatSystem.AnalyzePathForAoOs, CharacterController.CanVisuallyPerceive, PHB p.143, DMG p.29,
+                // GRID-021); the rest provoke as any movement does (PHB p.137, CMB-073).
+                AoOPathResult pathResult = _movementService != null
+                    ? (withdraw
+                        ? _movementService.FindPath(mover, req.Destination.Value, avoidThreats: false, maxRangeOverride: budget,
+                            allowThroughAllies: true, allowThroughEnemies: false, suppressFirstSquareAoO: true)
+                        : _movementService.FindPath(mover, req.Destination.Value, avoidThreats: false, maxRangeOverride: budget))
+                    : Grid.FindPathAoOAware(mover.GridPosition, req.Destination.Value, null, budget, mover.GetVisualSquaresOccupied(), mover);
+                if (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
                 {
-                    // A withdraw's start square provokes from no enemy the mover can see (suppressFirstSquareAoO, the startSpace
-                    // rule in ThreatSystem.AnalyzePathForAoOs, CharacterController.CanVisuallyPerceive, PHB p.143, DMG p.29,
-                    // GRID-021); the rest provoke as any movement does (PHB p.137, CMB-073).
-                    AoOPathResult pathResult = _movementService != null
-                        ? (withdraw
-                            ? _movementService.FindPath(mover, req.Destination.Value, avoidThreats: false, maxRangeOverride: budget,
-                                allowThroughAllies: true, allowThroughEnemies: false, suppressFirstSquareAoO: true)
-                            : _movementService.FindPath(mover, req.Destination.Value, avoidThreats: false, maxRangeOverride: budget))
-                        : Grid.FindPathAoOAware(mover.GridPosition, req.Destination.Value, null, budget, mover.GetVisualSquaresOccupied(), mover);
-                    if (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
-                    {
-                        path = pathResult.Path;
-                        provokedAoOs = pathResult.ProvokedAoOs;
-                    }
-                    else if (!withdraw)
-                    {
-                        // No valid path (a Wall of Ice or another obstacle): nothing moves.
-                        Debug.Log($"[Movement] ExecuteMoveAction: no valid path to {req.Destination.Value} for {mover.Stats.CharacterName}. Movement blocked.");
-                    }
+                    path = pathResult.Path;
+                    provokedAoOs = pathResult.ProvokedAoOs;
                 }
-            }
-
-            if (path != null && path.Count > 0)
-            {
-                // 3. The spend before the walk.
-                if (req.Spend == MoveSpend.ExecutorOwned)
+                else if (!withdraw)
                 {
-                    // The full-round action, or a Restricted Withdraw's standard action (the shared legality, GRID-022).
-                    if (!TrySpendWithdrawAction(mover, out string withdrawRefusal))
-                    {
-                        RecordRefusedMovement(mover, what, withdrawRefusal, attempt,
-                            req.PcRefusalText ? $"{mover.Stats.CharacterName} cannot complete Withdraw: {withdrawRefusal}." : null);
-                        yield break;
-                    }
-                }
-                else if (req.Spend == MoveSpend.MoveAction && !req.Has(MoveQuirk.AiSpendsAfterWalk))
-                {
-                    if (!SpendMoveForMovement(mover, req.AllowConvertStandard))
-                    {
-                        RecordRefusedMovement(mover, what, "no action available for movement", attempt,
-                            req.PcRefusalText ? $"{mover.Stats.CharacterName} has no action available for movement." : null);
-                        yield break;
-                    }
-                }
-
-                attempt.Started = true;
-                if (withdraw)
-                    mover.IsWithdrawing = true;
-
-                // 4. The walk.
-                if (req.Has(MoveQuirk.AiSegmentLoop))
-                {
-                    var moveOutcome = new MovementAoOStepOutcome();
-                    yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, req.SecondsPerStep, req.Label, moveOutcome,
-                        withdraw ? MovementService.WithdrawKindFor(mover) : MoveKind.Move));
-                    attempt.Incapacitated = moveOutcome.Incapacitated;
-
-                    CheckTurnUndeadProximityBreakingForMover(mover);
-                    PruneTurnUndeadTrackers();
-                }
-                else
-                {
-                    IEnumerator walk = ExecuteMovement(req, path, provokedAoOs, budget, attempt);
-                    while (walk.MoveNext())
-                        yield return walk.Current;
+                    // No valid path (a Wall of Ice or another obstacle): nothing moves.
+                    Debug.Log($"[Movement] ExecuteMoveAction: no valid path to {req.Destination.Value} for {mover.Stats.CharacterName}. Movement blocked.");
                 }
             }
         }
 
-        // 5. The after-walk spend (AI-076's quirk until step 10).
-        if (req.Spend == MoveSpend.MoveAction && req.Has(MoveQuirk.AiSpendsAfterWalk) && ShouldSpendAfterWalk(req, attempt))
-            SpendMoveForMovement(mover, req.AllowConvertStandard);
+        if (path == null || path.Count == 0)
+        {
+            // Refused before the first step (D3): nothing spent; the caller goes on to its next choice.
+            RecordNoPath(mover, what, budget > 0 ? "no valid path" : "no movement left this action", attempt);
+            yield break;
+        }
+
+        // 3. The spend before the first step (D3, for both sides).
+        if (req.Spend == MoveSpend.ExecutorOwned)
+        {
+            // The full-round action, or a Restricted Withdraw's standard action (the shared legality, GRID-022).
+            if (!TrySpendWithdrawAction(mover, out string withdrawRefusal))
+            {
+                RecordRefusedMovement(mover, what, withdrawRefusal, attempt,
+                    req.PcRefusalText ? $"{mover.Stats.CharacterName} cannot complete Withdraw: {withdrawRefusal}." : null);
+                yield break;
+            }
+        }
+        else if (req.Spend == MoveSpend.MoveAction)
+        {
+            if (!SpendMoveForMovement(mover, req.AllowConvertStandard))
+            {
+                RecordRefusedMovement(mover, what, "no action available for movement", attempt,
+                    req.PcRefusalText ? $"{mover.Stats.CharacterName} has no action available for movement." : null);
+                yield break;
+            }
+        }
+
+        attempt.Started = true;
+        if (withdraw)
+            mover.IsWithdrawing = true;
+        if (!string.IsNullOrEmpty(req.StartLogLine))
+            CombatUI?.ShowCombatLog(req.StartLogLine);
+
+        // 4. The walk.
+        if (req.Has(MoveQuirk.AiSegmentLoop))
+        {
+            var moveOutcome = new MovementAoOStepOutcome();
+            yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, req.SecondsPerStep, req.Label, moveOutcome,
+                withdraw ? MovementService.WithdrawKindFor(mover) : MoveKind.Move));
+            attempt.Incapacitated = moveOutcome.Incapacitated;
+
+            CheckTurnUndeadProximityBreakingForMover(mover);
+            PruneTurnUndeadTrackers();
+        }
+        else
+        {
+            IEnumerator walk = ExecuteMovement(req, path, provokedAoOs, budget, attempt);
+            while (walk.MoveNext())
+                yield return walk.Current;
+        }
     }
 
-    /// <summary>Whether the after-walk spend of an AI move is made (the quirk bits of <paramref name="req"/>; never after a refusal).</summary>
-    internal bool ShouldSpendAfterWalk(MoveRequest req, MoveAttempt attempt)
+    /// <summary>A move refused before its first step for want of a path (or of anywhere to go): recorded on
+    /// <paramref name="attempt"/> (<see cref="MoveAttempt.NoPath"/>), a Debug.Log line only, nothing spent (D3).</summary>
+    private static void RecordNoPath(CharacterController mover, string what, string reason, MoveAttempt attempt)
     {
-        if (req == null || attempt == null || attempt.Refused)
-            return false;
-        if (!attempt.Started && !req.Has(MoveQuirk.AiSpendsWithoutPath))
-            return false;
-        if (req.Has(MoveQuirk.AiNoSpendIfCombatOver) && CurrentPhase == TurnPhase.CombatOver)
-            return false;
-        if (req.Has(MoveQuirk.AiNoSpendIfDropped) && req.Mover != null && !req.Mover.CanTakeTurnActions())
-            return false;
-        return true;
+        if (attempt != null)
+        {
+            attempt.Refused = true;
+            attempt.NoPath = true;
+            attempt.Reason = reason ?? string.Empty;
+        }
+        string name = mover != null && mover.Stats != null ? mover.Stats.CharacterName : "?";
+        Debug.Log($"[Movement] {name} does not {what}: {reason} (nothing spent)");
     }
 
     /// <summary>Spends one move action, or converts the standard action when <paramref name="allowConvertStandard"/>

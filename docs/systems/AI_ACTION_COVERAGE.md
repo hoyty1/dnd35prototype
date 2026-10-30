@@ -11,7 +11,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 | Option | AI | Where / conditions | PC | Notes |
 |---|---|---|---|---|
-| Move | Used | every routine, `EvaluateMovementOptions`, one move action, only while `HasMoveAction` | Yes | provokes AoOs like PC movement; the move action is spent after the walk (AI-076); AI-052, AI-019 |
+| Move | Used | every routine, `EvaluateMovementOptions`, one move action, only while `HasMoveAction` | Yes | provokes AoOs like PC movement; the move action is spent when the movement starts and a refused move (no path included) spends nothing (batch 13 step 10, D3); AI-052, AI-019 |
 | Double move | Never | AggressiveMelee wastes the standard action when still out of reach | Yes | gap |
 | Run (×4) | Never | Frightened "run" is 1× (it provokes like any move) | No | game-wide gap (PHB p.144; CMB-202, batch 18) |
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |

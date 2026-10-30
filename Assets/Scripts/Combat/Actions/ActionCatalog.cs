@@ -281,7 +281,7 @@ public static class ActionCatalog
 
         // ── Movement and posture ──
         l.Add(Def(ActionIds.Move, "Move", Mv, ActionCostType.Move, ProvokeRule.ByMovement, ActionTargetKind.Cell, ActionRoles.Approach | ActionRoles.Retreat,
-                "PHB p.143-144, p.137, Table 8-2 and note 1", ImplStatus.Extracted, "AI-076")
+                "PHB p.143-144, p.137, p.138 (spent when the movement starts, D3), Table 8-2 and note 1", ImplStatus.Extracted)
             .Run(new MoveActionExecutor(false), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.Withdraw, "Withdraw", Mv, ActionCostType.FullRound, ProvokeRule.ByMovement, ActionTargetKind.Cell, ActionRoles.Retreat | ActionRoles.Escape,
                 "PHB p.143-144 (the first square provokes from no seen foe), Table 8-2 (No) and note 5", ImplStatus.Extracted)
