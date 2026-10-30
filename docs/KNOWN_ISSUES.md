@@ -37,10 +37,10 @@ Entries per section:
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 36 | 64 | CRE-078 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 16 | 23 | ENC-025 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 36 | 43 | 79 | ITM-089 |
-| [AI](issues/AI.md) | AI | 0 | 20 | 37 | 57 | AI-080 |
+| [AI](issues/AI.md) | AI | 0 | 20 | 38 | 58 | AI-081 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 42 | 54 | UI-056 |
-| [Tests](issues/TST.md) | TST | 0 | 8 | 28 | 36 | TST-047 |
-| **All** | | 1 | 271 | 441 | 713 | |
+| [Tests](issues/TST.md) | TST | 0 | 9 | 29 | 38 | TST-049 |
+| **All** | | 1 | 272 | 443 | 716 | |
 
 ## Top issues
 
@@ -49,3 +49,4 @@ The most impactful entries, mainly High, plus any regression from the latest bat
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
 | [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |
+| [TST-047](issues/TST.md) | Med | TST | `rules/combat-end-defeat-ally` fails on seeds 2 and 3 since batch 13 step 7: the orc berserker goes for the 1-HP hero first, and the hero's attacks of opportunity kill it (Victory, not the expected defeat); the rules run's verdict is FAIL | No |
