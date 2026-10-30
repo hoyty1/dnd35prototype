@@ -7234,6 +7234,10 @@ public partial class GameManager : MonoBehaviour
         return string.Empty;
     }
 
+    /// <summary>
+    /// The PC's Drop Prone button: the catalog's drop-prone entry through RunPlayerAction (batch 13 step 12, D5; the
+    /// shared executor, DropProneActionExecutor, refuses and logs as the button did, and the runner shows the panel).
+    /// </summary>
     public void OnDropProneButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -7242,21 +7246,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "dropping prone"))
             return;
 
-        string reason = GetDropProneDisabledReason(pc);
-        if (!string.IsNullOrEmpty(reason))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot drop prone: {reason}."));
-            return;
-        }
-
-        pc.ApplyCondition(CombatConditionType.Prone, -1, pc.Stats.CharacterName);
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} drops prone."));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(Free action - no attacks of opportunity provoked)"));
-
-        RefreshFlankedConditions();
-        UpdateAllStatsUI();
-        InvalidatePreviewThreats();
-        ShowActionChoices();
+        RunPlayerAction(ActionContext.For(ActionIds.DropProne, pc, ActorSource.Ui));
     }
 
     public void OnStandUpButtonPressed()
@@ -7488,6 +7478,11 @@ public partial class GameManager : MonoBehaviour
         return _movementService.IsValidAdjacentStepDestination(pc, destination, disallowDifficultTerrain: true);
     }
 
+    /// <summary>
+    /// The PC's crawl square: the catalog's crawl entry through RunPlayerAction (batch 13 step 12, D5): the shared
+    /// executor (CrawlActionExecutor, GameManager.ActionCore_Crawl) pays the move action, takes the movement attacks of
+    /// opportunity and crawls; the runner shows the panel, or ends the turn of a PC an attack dropped.
+    /// </summary>
     private void HandleCrawlClick(CharacterController pc, SquareCell cell)
     {
         if (pc == null || cell == null) return;
@@ -7501,72 +7496,9 @@ public partial class GameManager : MonoBehaviour
         if (!_highlightedCells.Contains(cell))
             return;
 
-        StartCoroutine(ExecuteCrawl(pc, cell));
-    }
-
-    private IEnumerator ExecuteCrawl(CharacterController pc, SquareCell destination)
-    {
-        if (pc == null || destination == null)
-            yield break;
-
-        if (!IsValidCrawlDestination(pc, destination.Coords))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid crawl destination."));
-            yield break;
-        }
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-
-        var crawlPath = new List<Vector2Int> { destination.Coords };
-        var provokedAoOs = _movementService != null
-            ? _movementService.CheckForAoO(pc, crawlPath)
-            : ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
-
-        Vector2Int oldPos = pc.GridPosition;
-        ConsumeMoveAction(pc);
-
-        // Crawling provokes like any movement; the AoOs resolve before the creature leaves
-        // its square (shared helper, PHB p.137, CMB-005).
-        if (provokedAoOs.Count > 0)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Crawling provokes attacks of opportunity!"));
-
-        var aooOutcome = new MovementAoOStepOutcome();
-        // A crawl the step rules refuse (a barrier, a hold, Grease's failed Balance check) provokes nothing (PHB p.137).
-        bool crawlRefused = MovementService.IsStepRefused(pc, pc.GridPosition, destination.Coords, MoveKind.Crawl);
-        if (!crawlRefused)
-            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, 0, "AoO (crawling)", 0.8f, aooOutcome));
-        bool interruptedByIncapacitation = aooOutcome.Incapacitated;
-
-        if (!aooOutcome.StopMovement && !crawlRefused)
-        {
-            if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true, kind: MoveKind.Crawl));
-            else
-                yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true, kind: MoveKind.Crawl));
-        }
-
-        RefreshFlankedConditions();
-        UpdateAllStatsUI();
-        InvalidatePreviewThreats();
-
-        if (interruptedByIncapacitation)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s crawl is interrupted by incapacitation."));
-            EndActivePCTurn();
-            yield break;
-        }
-
-        if (aooOutcome.StopMovement)
-        {
-            // Stopped but still able to act (e.g. an AoO left it unable to move).
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s crawl stops ({aooOutcome.Reason}) after an attack of opportunity."));
-            ShowActionChoices();
-            yield break;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} crawls ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y})."));
-
-        ShowActionChoices();
+        ActionContext crawl = ActionContext.For(ActionIds.Crawl, pc, ActorSource.Ui);
+        crawl.Cell = cell.Coords;
+        RunPlayerAction(crawl);
     }
 
     private void CancelCrawlSelection()
@@ -7592,128 +7524,32 @@ public partial class GameManager : MonoBehaviour
             character.Actions.ConvertStandardToMove();
     }
 
+    /// <summary>
+    /// Whether <paramref name="character"/> may reload its main weapon now, and the load's action type: the shared reload
+    /// rule (ReloadRules.Check, batch 13 step 12, D4) that the reload executor, the PC panel and the AI attack guard read.
+    /// </summary>
     public bool CanReloadEquippedWeapon(CharacterController character, out string reason, out ReloadActionType reloadAction)
-    {
-        reason = string.Empty;
-        reloadAction = ReloadActionType.None;
-
-        if (character == null)
-        {
-            reason = "No active character";
-            return false;
-        }
-
-        ItemData weapon = character.GetEquippedMainWeapon();
-        if (weapon == null || !weapon.RequiresReload)
-        {
-            reason = "No reloadable weapon equipped";
-            return false;
-        }
-
-        if (weapon.IsLoaded)
-        {
-            reason = "Weapon already loaded";
-            return false;
-        }
-
-        if (character.HasCondition(CombatConditionType.Pinned))
-        {
-            reason = "Pinned creatures cannot reload";
-            return false;
-        }
-
-        reloadAction = character.GetEffectiveReloadAction(weapon);
-
-        // Loading a crossbow places a bolt in it (PHB p.113-114): no bolt, no reload. One rule for the PC's Reload button,
-        // the AI's reload and the NPC attack prelude (batch 13 step 5).
-        global::Inventory ammoInventory = character.InventoryComp != null ? character.InventoryComp.CharacterInventory : null;
-        if (weapon.RequiresAmmoType != AmmunitionType.None && ammoInventory != null && !ammoInventory.HasAmmo(weapon.RequiresAmmoType))
-        {
-            reason = $"No {weapon.RequiresAmmoType} ammunition to load";
-            return false;
-        }
-
-        switch (reloadAction)
-        {
-            case ReloadActionType.FreeAction:
-                return true;
-
-            case ReloadActionType.MoveAction:
-                if (character.Actions.HasMoveAction || character.Actions.CanConvertStandardToMove)
-                    return true;
-                reason = "Need move action";
-                return false;
-
-            case ReloadActionType.FullRound:
-                if (character.Actions.HasFullRoundAction)
-                    return true;
-                reason = "Need full-round action";
-                return false;
-
-            default:
-                reason = "Cannot reload";
-                return false;
-        }
-    }
-
-    private bool ExecuteReload(CharacterController character, out string reloadLog)
-    {
-        reloadLog = string.Empty;
-        if (character == null) return false;
-
-        ItemData weapon = character.GetEquippedMainWeapon();
-        if (weapon == null || !weapon.RequiresReload) return false;
-        if (weapon.IsLoaded) return false;
-
-        if (!CanReloadEquippedWeapon(character, out string reason, out ReloadActionType reloadAction))
-        {
-            reloadLog = string.IsNullOrEmpty(reason) ? $"Cannot reload {weapon.Name}." : $"Cannot reload {weapon.Name}: {reason}.";
-            return false;
-        }
-
-        switch (reloadAction)
-        {
-            case ReloadActionType.FreeAction:
-                break;
-            case ReloadActionType.MoveAction:
-                ConsumeMoveAction(character);
-                break;
-            case ReloadActionType.FullRound:
-                character.Actions.UseFullRoundAction();
-                break;
-        }
-
-        bool reloaded = character.ReloadWeapon(weapon);
-        if (!reloaded)
-        {
-            reloadLog = $"{weapon.Name} could not be reloaded.";
-            return false;
-        }
-
-        string actionLabel = CharacterController.GetReloadActionLabel(reloadAction);
-        reloadLog = $"🔄 {character.Stats.CharacterName} reloads {weapon.Name} ({actionLabel} action).";
-        return true;
-    }
+        => ReloadRules.Check(character, out reason, out reloadAction);
 
     /// <summary>
-    /// The AI's reload of an unloaded crossbow (batch 13 step 5, AiOutOfReach: an unloaded crossbow the attack guard
-    /// refuses, a heavy one whose full-round reload leaves no shot this turn included, is reloaded, as NPCPerformAttack's
-    /// prelude does): the rule of the PC's Reload button (CanReloadEquippedWeapon, ExecuteReload; PHB p.113-114: it needs a
-    /// bolt to load), logged. False when the main weapon needs no reload or cannot be reloaded now, without a bolt
-    /// included (nothing spent). Batch 13 step 12 makes reloading a shared executor (D4).
+    /// The AI's reload of an unloaded crossbow (AiOutOfReach: an unloaded crossbow the attack guard refuses, a heavy one
+    /// whose full-round reload leaves no shot this turn included): the catalog's reload entry through RunAIAction (batch 13
+    /// step 12, D4: the load's action by the weapon and Rapid Reload, the attacks of opportunity it provokes). Nothing is
+    /// run, and <paramref name="outcome"/> stays not performed, when the main weapon needs no reload.
     /// </summary>
-    internal bool TryReloadEquippedWeaponForAI(CharacterController npc)
+    internal IEnumerator TryReloadEquippedWeaponForAI(CharacterController npc, ActionOutcome outcome)
     {
         ItemData weapon = npc != null ? npc.GetEquippedMainWeapon() : null;
         if (weapon == null || !weapon.RequiresReload || weapon.IsLoaded)
-            return false;
-        if (!ExecuteReload(npc, out string reloadLog))
-            return false;
-        CombatUI?.ShowCombatLog(reloadLog);
-        UpdateAllStatsUI();
-        return true;
+            yield break;
+        yield return RunAIAction(ActionContext.For(ActionIds.Reload, npc, ActorSource.AI), outcome ?? new ActionOutcome());
     }
 
+    /// <summary>
+    /// The PC's Reload button: the catalog's reload entry through RunPlayerAction (batch 13 step 12, D4): the shared
+    /// executor (ReloadActionExecutor) asks the attack-of-opportunity prompt when foes threaten, pays the load and takes
+    /// the attacks; the runner shows its refusal or the panel.
+    /// </summary>
     public void OnReloadButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -7722,16 +7558,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "reloading"))
             return;
 
-        if (ExecuteReload(pc, out string reloadLog))
-        {
-            CombatUI?.ShowCombatLog(reloadLog);
-            UpdateAllStatsUI();
-            ShowActionChoices();
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(reloadLog))
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{reloadLog}"));
+        RunPlayerAction(ActionContext.For(ActionIds.Reload, pc, ActorSource.Ui));
     }
 
 

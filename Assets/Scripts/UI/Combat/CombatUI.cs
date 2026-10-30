@@ -1969,6 +1969,16 @@ public class CombatUI : MonoBehaviour
                 proceedText.AppendLine();
                 proceedText.AppendLine("Manipulate item (move action, or standard)");
             }
+            else if (actionInfo.ActionType == AoOProvokingAction.LoadCrossbow && actionInfo.Actor != null)
+            {
+                // The load's own action (D4, ReloadRules: free, move or full-round by the weapon and Rapid Reload).
+                ReloadRules.Check(actionInfo.Actor, out _, out ReloadActionType reloadAction);
+                if (reloadAction != ReloadActionType.None)
+                {
+                    proceedText.AppendLine();
+                    proceedText.AppendLine($"Load crossbow ({CharacterController.GetReloadActionLabel(reloadAction).ToLowerInvariant()} action)");
+                }
+            }
 
             _aooProceedButtonText.text = proceedText.ToString();
         }

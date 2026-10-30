@@ -12,7 +12,7 @@ public sealed class AiOutOfReachOutcome
     /// <summary>An attack was made (another target, or the attack after a move, AI-045).</summary>
     public bool Attacked;
 
-    /// <summary>The weapon was reloaded instead (today's NPC reload, GameManager.ExecuteReload).</summary>
+    /// <summary>The weapon was reloaded first (the catalog's reload entry, ReloadActionExecutor; D4).</summary>
     public bool Reloaded;
 }
 
@@ -34,9 +34,10 @@ public sealed class AiOutOfReachOutcome
 /// - Withdraw: the withdraw away from the focus target (AIService.EvaluateWithdrawRetreatDestination; PHB p.143);
 /// - TotalDefense: total defense (PHB p.142, D2).
 /// A move to the creature's own square is no move. Before the list, a crossbow that is not loaded and can be reloaded
-/// at all this turn (with a bolt to load: GameManager.CanReloadEquippedWeapon, PHB p.113-114) is reloaded (today's NPC
-/// reload, GameManager.ExecuteReload, the rule of the PC's Reload button; batch 13 step 12 makes it a shared executor,
-/// D4). <paramref name="allowThrow"/> is the calling routine's guard: false for the melee routines, whose "another
+/// at all this turn (with a bolt to load: ReloadRules, PHB p.113-114) is reloaded through the catalog's reload entry
+/// (batch 13 step 12, D4: the PC Reload button's executor, provoking as loading does, PHB p.115, p.99); the list then
+/// runs with what the load left (AI-057: a free Rapid Reload load leaves the whole turn, a move-action load the
+/// standard action), and ends at once when the load left no standard action. <paramref name="allowThrow"/> is the calling routine's guard: false for the melee routines, whose "another
 /// target" and attack after a move count a throwable weapon's melee reach only (AiAttackGuard.IntentFor). An AI choice,
 /// not a rule: batch 14 re-weights the list, batch 22 replaces it with the evaluator.
 /// </summary>
@@ -51,11 +52,18 @@ public static class AiOutOfReach
             yield break;
 
         string name = npc.Stats.CharacterName;
-        if (gm.TryReloadEquippedWeaponForAI(npc))
+        var reload = new ActionOutcome();
+        yield return gm.TryReloadEquippedWeaponForAI(npc, reload);
+        if (reload.Performed)
         {
             result.Reloaded = true;
             yield return new WaitForSeconds(0.8f);
-            yield break;
+            if (Over(gm, npc) || !ActionCosts.CanAfford(npc, ActionCostType.Standard))
+                yield break;
+        }
+        else if (reload.Spent != ActionCostType.NotAnAction && reload.Spent != ActionCostType.Free)
+        {
+            yield break; // the load was paid and an attack of opportunity stopped it
         }
 
         AIProfile profile = npc.aiProfile;

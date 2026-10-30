@@ -144,10 +144,12 @@ public partial class GameManager
     /// (PHB p.137, Table 8-2): <paramref name="decider"/> confirms the action first (the UI's prompt; the AI always goes
     /// on), then each foe that can still make an AoO takes it, until the actor drops. A cancel refuses the action
     /// (<see cref="ActionOutcome.Cancelled"/>), with nothing spent here. It never ends a turn: the caller reads
-    /// <see cref="ActionOutcome.ActorDown"/> and <see cref="ActionOutcome.CombatEnded"/>.
+    /// <see cref="ActionOutcome.ActorDown"/> and <see cref="ActionOutcome.CombatEnded"/>. <paramref name="payOnProceed"/>, when
+    /// given, pays the action once the actor goes on (with nobody threatening, at once; after the prompt otherwise) and
+    /// before any attack is taken (an action is paid when it is taken, D3, D6); false refuses it with no attack taken.
     /// </summary>
     internal IEnumerator ResolveActionProvocation(CharacterController actor, AoOProvokingAction action, IActionDecider decider, ActionOutcome outcome,
-        string actionName = null)
+        string actionName = null, System.Func<bool> payOnProceed = null)
     {
         if (outcome == null)
             outcome = new ActionOutcome();
@@ -156,11 +158,20 @@ public partial class GameManager
 
         List<CharacterController> provokers = ThreatSystem.GetActionAoOProvokers(actor, GetAllCharacters());
         if (provokers.Count == 0)
+        {
+            if (payOnProceed != null && !payOnProceed())
+                outcome.Refuse(Legality.Refused(LegalityBar.Action, "the action could not be paid"));
             yield break;
+        }
 
         yield return ConfirmActionProvocation(actor, action, actionName, provokers, decider, outcome);
         if (outcome.Cancelled || outcome.CombatEnded || !outcome.Refusal.Ok)
             yield break;
+        if (payOnProceed != null && !payOnProceed())
+        {
+            outcome.Refuse(Legality.Refused(LegalityBar.Action, "the action could not be paid"));
+            yield break;
+        }
 
         string label = string.IsNullOrEmpty(actionName) ? action.ToString() : actionName;
         foreach (CharacterController enemy in provokers)

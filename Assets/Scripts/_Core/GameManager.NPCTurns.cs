@@ -1107,7 +1107,46 @@ public partial class GameManager
             yield break;
         }
 
-        // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks
+        if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            // An unloaded crossbow is reloaded through the catalog's reload entry (batch 13 step 12, D4: a move action for a
+            // hand or light crossbow, full-round for a heavy one, free or a move with Rapid Reload, provoking every time; PHB
+            // p.115, p.99), and the standard action left then makes the attack (AI-057: a light crossbow reloads with the move
+            // action and fires in the same turn, as a PC does).
+            ItemData unloaded = npc.GetEquippedMainWeapon();
+            bool reloaded = false;
+            if (unloaded != null && unloaded.RequiresReload && !unloaded.IsLoaded)
+            {
+                var reload = new ActionOutcome();
+                yield return RunAIAction(ActionContext.For(ActionIds.Reload, npc, ActorSource.AI), reload);
+                reloaded = reload.Performed;
+                if (reloaded || (reload.Spent != ActionCostType.NotAnAction && reload.Spent != ActionCostType.Free))
+                    yield return new WaitForSeconds(0.8f);
+                if (CurrentPhase == TurnPhase.CombatOver || !npc.CanTakeTurnActions())
+                    yield break;
+                if (reloaded && !ActionCosts.CanAfford(npc, ActionCostType.Standard))
+                    yield break; // a full-round load, or a move-action load with the standard action converted: no shot this turn
+            }
+
+            if (!reloaded || !npc.CanAttackWithEquippedWeapon(out cannotAttackReason))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
+                yield return new WaitForSeconds(0.6f);
+                yield break;
+            }
+        }
+
+        // An attack action must be left (PHB p.139, p.143): a caller that spent it (a compulsion that stood up and closed in, a
+        // load that took the standard action) declares no attack, so no ward breaks and no frightful presence fires.
+        if (!ActionCosts.CanAfford(npc, ActionCostType.Standard) && !npc.ProgressiveAttackPool.HasStartedAttacking)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} makes no attack: no attack action left this turn."));
+            yield return new WaitForSeconds(0.4f);
+            yield break;
+        }
+
+        // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks (PHB p.274, p.241): only once an attack
+        // follows, after the reload above (reloading is not an attack).
         CombatFlowService.BreakProtectiveWardsOnAttack(npc);
 
         // --- Frightful Presence (dragons, Young Adult+) ---
@@ -1115,21 +1154,6 @@ public partial class GameManager
         if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
         {
             yield return StartCoroutine(ResolveFrightfulPresence(npc));
-        }
-
-        if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
-        {
-            if (ExecuteReload(npc, out string reloadLog))
-            {
-                CombatUI?.ShowCombatLog(reloadLog);
-                UpdateAllStatsUI();
-                yield return new WaitForSeconds(0.8f);
-                yield break;
-            }
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
-            yield return new WaitForSeconds(0.6f);
-            yield break;
         }
 
         // The NPC's own intent (AttackIntent.ForAI; CMB-096): melee, ranged, or a throw of a melee throwable at a target beyond

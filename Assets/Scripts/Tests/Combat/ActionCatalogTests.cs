@@ -20,6 +20,10 @@ namespace Tests.Combat
 /// - the move and withdraw entries (batch 13 step 9): Extracted over the one move executor (GameManager.ExecuteMoveAction,
 ///   whose file the source scan covers), the PC's tail as their UiAfter (ShowChoices), a pre-check that asks only for a
 ///   destination, and the AI request the executor builds when the caller gave none;
+/// - the posture and reload entries (batch 13 step 12, D4, D5): crawl, drop prone and reload are Extracted over their
+///   shared executors with the PC's tail (ShowChoices); a load's cost by the weapon and Rapid Reload (ReloadRules: hand
+///   and light a move action, heavy full-round; Rapid Reload free and a move action; PHB p.115, p.99) and the crawl's
+///   destination pre-check;
 /// - a source scan: the executor files (Combat/Actions/Executors) never continue the UI (ShowActionChoices,
 ///   AfterAttackDelay, EndActivePCTurn, DelayedEndActivePCTurn) nor read IsControllable, ActivePC or IsPlayerTurn, and
 ///   ActionDeciders.cs is the only catalog file that reads IsControllable (its assertion count grows with the files);
@@ -38,7 +42,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-9) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-12) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -54,6 +58,7 @@ public static class ActionCatalogTests
         Run(TestExecutorSourceScan);
         Run(TestInlineAction);
         Run(TestMoveEntries);
+        Run(TestPostureAndReloadEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -125,6 +130,55 @@ public static class ActionCatalogTests
         MoveRequest uiWithdraw = MoveActionExecutor.UiRequestFor(null, true, null, new Vector2Int(3, 4));
         Assert(uiWithdraw.Quirks == MoveQuirk.None && uiWithdraw.Spend == MoveSpend.ExecutorOwned && uiWithdraw.IsWithdraw,
             "A Ui catalog withdraw with no request runs MoveRequest.ForUi's withdraw (its own action, no quirk bit)", uiWithdraw.Quirks.ToString());
+    }
+
+    /// <summary>
+    /// The posture and reload entries (batch 13 step 12, D4, D5): Extracted over their executors, the PC's tail
+    /// (ShowChoices), crawl provoking as movement; the load's action type by the crossbow and Rapid Reload (ReloadRules,
+    /// ItemData.GetEffectiveReloadAction; PHB p.115, p.99), read from the item templates through clones.
+    /// </summary>
+    private static void TestPostureAndReloadEntries()
+    {
+        ActionDefinition crawl = ActionCatalog.Get(ActionIds.Crawl);
+        ActionDefinition drop = ActionCatalog.Get(ActionIds.DropProne);
+        ActionDefinition reload = ActionCatalog.Get(ActionIds.Reload);
+        Assert(crawl != null && crawl.Status == ImplStatus.Extracted && crawl.Executor is CrawlActionExecutor && crawl.UiAfter == ActionUiAfter.ShowChoices
+               && crawl.Provokes == ProvokeRule.Yes && crawl.Cost == ActionCostType.Move,
+            "Crawl is Extracted over CrawlActionExecutor: a move action that provokes from every foe threatening any point of it (PHB p.143, D5), the PC's tail",
+            crawl != null ? crawl.ToString() : "null");
+        Assert(drop != null && drop.Status == ImplStatus.Extracted && drop.Executor is DropProneActionExecutor && drop.UiAfter == ActionUiAfter.ShowChoices
+               && drop.Provokes == ProvokeRule.No && drop.Cost == ActionCostType.Free,
+            "Drop prone is Extracted over DropProneActionExecutor: a free action that does not provoke (Table 8-2, D5)",
+            drop != null ? drop.ToString() : "null");
+        Assert(reload != null && reload.Status == ImplStatus.Extracted && reload.Executor is ReloadActionExecutor && reload.UiAfter == ActionUiAfter.ShowChoices
+               && reload.Provokes == ProvokeRule.Yes && reload.CostRule != null,
+            "Reload is Extracted over ReloadActionExecutor: it provokes (PHB p.115, p.99, D4) and its cost is per weapon",
+            reload != null ? reload.ToString() : "null");
+
+        Assert(ReloadRules.CostOf(ReloadActionType.FreeAction) == ActionCostType.Free
+               && ReloadRules.CostOf(ReloadActionType.MoveAction) == ActionCostType.Move
+               && ReloadRules.CostOf(ReloadActionType.FullRound) == ActionCostType.FullRound,
+            "ReloadRules.CostOf maps a free, move and full-round load to the catalog's action types");
+        Assert(ReloadRules.CostFor(null) == ActionCostType.Move, "With no actor the reload entry's cost is its table cost (a move action)");
+
+        ItemData light = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponCrossbowLight);
+        ItemData heavy = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponCrossbowHeavy);
+        Assert(light != null && light.RequiresReload
+               && ReloadRules.CostOf(light.GetEffectiveReloadAction(false)) == ActionCostType.Move
+               && ReloadRules.CostOf(light.GetEffectiveReloadAction(true)) == ActionCostType.Free,
+            "A light crossbow loads as a move action, free with Rapid Reload (PHB p.115, p.99)",
+            light != null ? light.ReloadAction.ToString() : "no item");
+        Assert(heavy != null && heavy.RequiresReload
+               && ReloadRules.CostOf(heavy.GetEffectiveReloadAction(false)) == ActionCostType.FullRound
+               && ReloadRules.CostOf(heavy.GetEffectiveReloadAction(true)) == ActionCostType.Move,
+            "A heavy crossbow loads as a full-round action, a move action with Rapid Reload (PHB p.115, p.99)",
+            heavy != null ? heavy.ReloadAction.ToString() : "no item");
+
+        if (crawl != null && crawl.Executor != null)
+            Assert(!crawl.Executor.CanExecute(new ActionContext { Definition = crawl }).Ok,
+                "The crawl pre-check refuses a context with no actor and no destination");
+        Assert(!ReloadRules.Check(null, out string noActor, out _) && !string.IsNullOrEmpty(noActor),
+            "ReloadRules refuses with no actor, with a reason", noActor);
     }
 
     private static void Run(Action test)
@@ -242,16 +296,16 @@ public static class ActionCatalogTests
         new object[] { ActionIds.Withdraw, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.FiveFootStep, ActionCostType.NotAnAction, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Run, ActionCostType.FullRound, ProvokeRule.Yes, ImplStatus.Missing, "CMB-202" },
-        new object[] { ActionIds.Crawl, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.Crawl, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
         new object[] { ActionIds.StandUp, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Delegating, "" },
-        new object[] { ActionIds.DropProne, ActionCostType.Free, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.DropProne, ActionCostType.Free, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Smite, ActionCostType.Free, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.LayOnHands, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.WildShape, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.BardicMusic, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Rage, ActionCostType.Free, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.DomainPower, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.Reload, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.PcOnly, "AI-057" },
+        new object[] { ActionIds.Reload, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
         new object[] { ActionIds.DrawWeapon, ActionCostType.Move, ProvokeRule.No, ImplStatus.Missing, "ITM-069" },
         new object[] { ActionIds.SheatheWeapon, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Missing, "ITM-069" },
         new object[] { ActionIds.ReadyShield, ActionCostType.Move, ProvokeRule.No, ImplStatus.Missing, "ITM-069" },

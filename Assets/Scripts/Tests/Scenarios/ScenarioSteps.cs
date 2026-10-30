@@ -11,7 +11,7 @@ namespace Tests.Scenarios
     /// <summary>What a scripted step does (docs/TESTING.md 3.4, step vocabulary).</summary>
     public enum StepKind
     {
-        Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
+        Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne, Reload,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
@@ -78,10 +78,12 @@ namespace Tests.Scenarios
         public static Step Withdraw(int x, int y) => new Step(StepKind.Withdraw) { Cell = new Vector2Int(x, y) };
         public static Step FiveFootStep(int x, int y) => new Step(StepKind.FiveFootStep) { Cell = new Vector2Int(x, y) };
         public static Step StandUp() => new Step(StepKind.StandUp);
-        /// <summary>Crawl 5 ft while prone (Ui only: the NPC path has no crawl).</summary>
+        /// <summary>Crawl 5 ft while prone. Scripted: the catalog's crawl entry through RunAIAction. Ui: the Crawl button, then the square (batch 13 step 12).</summary>
         public static Step Crawl(int x, int y) => new Step(StepKind.Crawl) { Cell = new Vector2Int(x, y) };
-        /// <summary>Drop prone (Ui only: the NPC path has no drop-prone executor).</summary>
+        /// <summary>Drop prone. Scripted: the catalog's drop-prone entry through RunAIAction. Ui: the Drop Prone button (batch 13 step 12).</summary>
         public static Step DropProne() => new Step(StepKind.DropProne);
+        /// <summary>Reload the main weapon. Scripted: the catalog's reload entry through RunAIAction. Ui: the Reload button (batch 13 step 12, D4).</summary>
+        public static Step Reload() => new Step(StepKind.Reload);
         /// <summary>
         /// An attack on <paramref name="target"/>. Scripted: NPCPerformAttackForAI, which runs the creature's whole
         /// attack sequence (a full attack when the full round is still free; one attack after a move). Ui: one click of
@@ -454,7 +456,7 @@ namespace Tests.Scenarios
                 bool aiGrapple = Kind == StepKind.GrappleAction && (GrappleKind == "Escape" || GrappleKind == "Move" || GrappleKind == "EscapeArtist") && !HasCell;
                 // Holding a touch charge and delivering it have shared executors since batch 13 step 6 (the cast entry with
                 // the AI hold request, TryNPCHoldTouchChargeForAI; the deliver-held-charge entry), so they run on both paths.
-                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || (Kind == StepKind.GrappleAction && !aiGrapple) || Kind == StepKind.NaturalAttack
+                if ((Kind == StepKind.GrappleAction && !aiGrapple) || Kind == StepKind.NaturalAttack
                     || Kind == StepKind.UseItem || Kind == StepKind.Convert
                     || Kind == StepKind.DualWield)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
@@ -678,6 +680,22 @@ namespace Tests.Scenarios
                         if (!a.HasCondition(CombatConditionType.Prone)) { ok = false; note = "not prone"; break; }
                         yield return gm.TryStandUpFromProneForAI(a);
                         break;
+
+                    case StepKind.Crawl:
+                    case StepKind.DropProne:
+                    case StepKind.Reload:
+                    {
+                        // The catalog's shared executors (batch 13 step 12, D4, D5), the PC buttons' own.
+                        string postureId = s.Kind == StepKind.Crawl ? ActionIds.Crawl : s.Kind == StepKind.DropProne ? ActionIds.DropProne : ActionIds.Reload;
+                        ActionContext postureCtx = ActionContext.For(postureId, a, global::ActorSource.AI);
+                        if (s.Kind == StepKind.Crawl)
+                            postureCtx.Cell = s.Cell;
+                        var postureOutcome = new ActionOutcome();
+                        yield return gm.RunAIAction(postureCtx, postureOutcome);
+                        ok = postureOutcome.Performed;
+                        if (!postureOutcome.Performed) note = postureOutcome.Refusal.Reason;
+                        break;
+                    }
 
                     case StepKind.Attack:
                     case StepKind.AttackAgain:
@@ -1299,6 +1317,9 @@ namespace Tests.Scenarios
                     break;
                 case StepKind.DropProne:
                     gm.OnDropProneButtonPressed();
+                    break;
+                case StepKind.Reload:
+                    gm.OnReloadButtonPressed();
                     break;
                 case StepKind.Attack:
                 case StepKind.AttackAgain:

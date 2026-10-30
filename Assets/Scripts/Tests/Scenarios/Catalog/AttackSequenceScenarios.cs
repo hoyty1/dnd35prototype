@@ -325,10 +325,12 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// CMB-091 (crossbow loading, PHB p.116, p.99): two NPC crossbowmen (orcs with BAB +6, a light crossbow and 20 bolts)
+        /// CMB-091 (crossbow loading, PHB p.115, p.99): two NPC crossbowmen (orcs with BAB +6, a light crossbow and 20 bolts)
         /// full attack a sturdy hero. The one with Rapid Reload (Light Crossbow) reloads as a free action after each shot and
         /// makes both iterative shots; the other's crossbow is unloaded after its first shot, so the executor's weapon check
-        /// stops its sequence there (reloading a light crossbow is a move action) and its move action is left.
+        /// stops its sequence there (reloading a light crossbow is a move action) and its move action is left. Since batch 13
+        /// step 12 (D4) it then reloads with that move action through the catalog's reload entry (the shared executor of the
+        /// PC's Reload button; nobody threatens it, so nothing provokes), which leaves its crossbow loaded and no move action.
         /// </summary>
         private static ScenarioDef CrossbowFullAttackReload()
         {
@@ -364,11 +366,22 @@ namespace Tests.Scenarios
                         Note(ctx, "plain.loaded", bow != null && bow.IsLoaded);
                         Note(ctx, "plain.move", plain.Actions.HasMoveAction);
                         return true;
+                    }),
+                    Step.Reload(),
+                    Step.Assert("after the reload", ctx =>
+                    {
+                        CharacterController plain = ctx.Get("plain");
+                        ItemData bow = plain.GetEquippedMainWeapon();
+                        Note(ctx, "plain.reloaded", bow != null && bow.IsLoaded);
+                        Note(ctx, "plain.moveAfterReload", plain.Actions.HasMoveAction);
+                        return true;
                     }))
                 .Expect("With Rapid Reload: both iterative shots (+6/+1)", Shots("rapid", 1, 2, 5))
                 .Expect("Without it: one shot, then the unloaded crossbow stops the full attack", Shots("plain", 1, 1))
-                .Expect("The plain crossbow is unloaded and its move action is left for the reload (PHB p.116)", Expect.All(
+                .Expect("The plain crossbow is unloaded and its move action is left for the reload (PHB p.115)", Expect.All(
                     Fact("plain.loaded", "False"), Fact("plain.move", "True")))
+                .Expect("That move action reloads it (PHB p.115, D4)", Expect.All(
+                    Fact("plain.reloaded", "True"), Fact("plain.moveAfterReload", "False")))
                 .Build();
         }
 

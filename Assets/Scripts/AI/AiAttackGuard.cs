@@ -107,7 +107,8 @@ public static class AiAttackGuard
     /// <summary>
     /// <see cref="CheckWeapon(CharacterController, AttackIntent)"/>; with <paramref name="anyReload"/> an unloaded
     /// crossbow also passes when it can be reloaded at all this turn (a full-round reload too): the NPC attack
-    /// prelude's own reload branch (GameManager.NPCPerformAttack, ExecuteReload) then spends the turn reloading.
+    /// prelude's own reload branch (GameManager.NPCPerformAttack, the catalog's reload entry) reloads, and the standard action
+    /// left, if any, makes the attack (AI-057, D4).
     /// </summary>
     public static Legality CheckWeapon(CharacterController attacker, AttackIntent intent, bool anyReload)
     {

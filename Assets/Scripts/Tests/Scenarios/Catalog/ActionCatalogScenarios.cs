@@ -26,6 +26,11 @@ namespace Tests.Scenarios
     /// Step 8 (AI-004, AI-003, AI-002; owner question Q4's default): every archetype gets a profile (Brute the plain
     /// BruteAIProfile, Caster without spells too), the Ranged behaviour runs the ranged routine and shoots, and a
     /// creature with a combat spell on a melee routine tries it first.
+    ///
+    /// Step 12 (AI-057, CMB-074; CMB-032 and AI-054 narrowed; decisions D4, D5): the reload, crawl and drop-prone shared
+    /// executors (PHB p.115, p.99, p.141-143): a load provokes, Rapid Reload's free load too, an NPC reloads with its move
+    /// action and fires with its standard action; a crawl provokes from every foe threatening a square of it, dropping prone is free; a prone confused
+    /// creature that must attack the nearest creature stands first unless it already threatens it (delegated RAW reading).
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -62,6 +67,21 @@ namespace Tests.Scenarios
             yield return S("melee-caster-skips-orisons-ai", MeleeCasterSkipsOrisons);
             yield return S("defensive-caster-withdraws-when-hurt-ai", DefensiveCasterWithdrawsWhenHurt);
             yield return S("ranged-behaviour-melee-only-approaches-ai", RangedBehaviourMeleeOnlyApproaches);
+            yield return S("reload-provokes-ui", () => ReloadProvokes(ui: true));
+            yield return S("reload-provokes-ai", () => ReloadProvokes(ui: false));
+            yield return S("npc-reload-then-fire-ai", NpcReloadThenFire);
+            yield return S("rapid-reload-free-ai", RapidReloadFree);
+            yield return S("confused-prone-stands-ai", ConfusedProneStandsAi);
+            yield return S("confused-prone-stands-ui", ConfusedProneStandsUi);
+            yield return S("crawl-ui", () => Crawl(ui: true));
+            yield return S("crawl-ai", () => Crawl(ui: false));
+            yield return S("drop-prone-ui", DropProneUi);
+            yield return S("reload-cancel-ui", ReloadCancelUi);
+            yield return S("npc-heavy-reload-no-shot-ai", NpcHeavyReloadNoShot);
+            yield return S("crawl-into-threat-ui", () => CrawlIntoThreat(ui: true));
+            yield return S("crawl-into-threat-ai", () => CrawlIntoThreat(ui: false));
+            yield return S("confused-prone-flee-stands-ai", ConfusedProneFleeStands);
+            yield return S("confused-prone-crossbow-ai", ConfusedProneCrossbow);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -1152,6 +1172,479 @@ namespace Tests.Scenarios
                 .Initiative("gauth", "foe")
                 .Expect("By round 2 it closes and fights the fighter in melee (an attack or the profile-less trip, AI-035)", FightsInMeleeBy("gauth", "foe", 2))
                 .Expect("It takes no total defense", NoLog("Gauth takes total defense", "total defense"))
+                .Build();
+        }
+
+        // ── Step 12: posture and reload (D4, D5; AI-057, CMB-074, CMB-032, AI-054) ──────────
+
+        /// <summary>
+        /// Puts <paramref name="crossbow"/> in <paramref name="c"/>'s hands (both: the off-hand kit is stripped), loaded or
+        /// not, with <paramref name="bolts"/> bolts in the pack and, when named, the Rapid Reload feat for it (PHB p.99).
+        /// </summary>
+        private static void ArmCrossbow(CharacterController c, ItemID crossbow, bool loaded, int bolts, string rapidReload = null)
+        {
+            RulesScenarios.StripOffHand(c);
+            ItemData bow = ItemDatabase.CloneItem(crossbow);
+            bow.IsLoaded = loaded;
+            Wield(c, bow);
+            global::Inventory inv = Inv(c);
+            if (bolts > 0)
+            {
+                ItemData pieces = ItemDatabase.CloneItem(ItemID.AmmoBolt);
+                pieces.Quantity = bolts;
+                inv.AddItem(pieces);
+            }
+            inv.RecalculateStats();
+            if (rapidReload != null && !c.Stats.HasFeat(rapidReload))
+                c.Stats.Feats.Add(rapidReload);
+        }
+
+        private static void Note12(ScenarioContext ctx, string key, object value) => ctx.Note(NotePrefix + key + "=" + value);
+
+        /// <summary>The last note of <paramref name="key"/> is <paramref name="want"/>.</summary>
+        private static Func<TraceView, ExpectResult> Fact12(string key, string want)
+            => v =>
+            {
+                string got = NoteValue(v, key, out int seq);
+                if (got == null)
+                    return ExpectResult.Inconclusive("no note " + key);
+                return got == want ? ExpectResult.Pass(key + "=" + got, seq) : ExpectResult.Fail(key + "=" + got + ", expected " + want, seq);
+            };
+
+        /// <summary>Notes <paramref name="key"/>'s main weapon load and the actions it has left, under "<paramref name="tag"/>.*".</summary>
+        private static bool NoteLoadAndActions(ScenarioContext ctx, string key, string tag)
+        {
+            CharacterController c = ctx.Get(key);
+            ItemData w = c.GetEquippedMainWeapon();
+            Note12(ctx, tag + ".loaded", w != null && w.IsLoaded);
+            Note12(ctx, tag + ".move", c.Actions.HasMoveAction);
+            Note12(ctx, tag + ".standard", c.Actions.HasStandardAction);
+            return true;
+        }
+
+        private static bool HasProne(JsonObj snap) => snap != null && snap.Get("conds") is List<string> l && l.Contains("Prone");
+
+        /// <summary>
+        /// <paramref name="by"/>'s attack of opportunity on <paramref name="target"/> for the reload (trigger "reload",
+        /// GameManager.ResolveActionProvocation) comes before the reload's log line (D4: the load provokes, PHB p.115, p.99).
+        /// </summary>
+        private static Func<TraceView, ExpectResult> ReloadAoOBeforeLoad(string by, string target)
+            => v =>
+            {
+                TraceEvent aoo = v.AoOs(by, target, "reload").FirstOrDefault();
+                TraceEvent load = v.Log(" reloads .*Crossbow").FirstOrDefault();
+                if (aoo == null)
+                    return ExpectResult.Fail("no reload AoO by " + by + " on " + target);
+                if (load == null)
+                    return ExpectResult.Fail("no reload line", aoo.Seq);
+                return aoo.Seq < load.Seq ? ExpectResult.Pass("AoO #" + aoo.Seq + " before the load #" + load.Seq, aoo.Seq, load.Seq)
+                    : ExpectResult.Fail("AoO after the load", aoo.Seq, load.Seq);
+            };
+
+        /// <summary>
+        /// D4 (PHB p.115, Table 8-2 p.141, CMB-032): a fighter with an unloaded light crossbow and bolts, next to an orc,
+        /// reloads: a move action that provokes, so the orc's attack of opportunity comes first, then the crossbow is loaded
+        /// and the standard action is left. The Ui twin presses the Reload button (its attack-of-opportunity prompt answered
+        /// Proceed), the AI twin runs the same executor through RunAIAction (Step.Reload, Scripted).
+        /// </summary>
+        private static ScenarioDef ReloadProvokes(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/reload-provokes-ui" : "rules/reload-provokes-ai",
+                    "Loading a light crossbow is a move action that provokes (PHB p.115, p.141; D4, CMB-032)")
+                .Covers("CMB-032", "D4", "PHB p.115", "PHB p.141", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); ArmCrossbow(c, ItemID.WeaponCrossbowLight, false, 10); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero") // the orc acts first, so it is not flat-footed (PHB p.137)
+                .Turn("orc", 1, Step.Pass());
+            Step after = Step.Assert("after the reload", ctx => NoteLoadAndActions(ctx, "hero", "hero"));
+            b = ui
+                ? b.Turn("hero", 1, Step.Reload(), Step.AnswerAoO(AoOAnswer.Proceed), after)
+                : b.Turn("hero", 1, Step.Reload(), after);
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The reload step is done", Expect.StepStatus("hero", 1, "Reload", 0, "done"))
+                .Expect("The orc's attack of opportunity for the reload comes before the load (PHB p.115, p.141)", ReloadAoOBeforeLoad("orc", "hero"))
+                .Expect("The crossbow is loaded, the move action spent and the standard action left (PHB p.115)", Expect.All(
+                    Fact12("hero.loaded", "True"), Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-057 (PHB p.115, D4): an orc with an unloaded light crossbow and bolts attacks the fighter next to it. Its attack
+        /// prelude reloads through the catalog's reload entry (a move action; the fighter's attack of opportunity comes
+        /// first), then the standard action left makes the shot. Before the fix the NPC reloaded and ended its turn.
+        /// </summary>
+        private static ScenarioDef NpcReloadThenFire()
+        {
+            return Rules("rules/npc-reload-then-fire-ai", "An NPC reloads a light crossbow with its move action and fires with its standard action (PHB p.115; AI-057, D4)")
+                .Covers("AI-057", "CMB-032", "D4", "PHB p.115", "PHB p.141", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); ArmCrossbow(c, ItemID.WeaponCrossbowLight, false, 10); })
+                .Initiative("hero", "orc") // the hero acts first, so it is not flat-footed when the orc reloads (PHB p.137)
+                .Turn("hero", 1, Step.Pass())
+                .Turn("orc", 1, Step.Attack("hero"), Step.Assert("after the attack", ctx => NoteLoadAndActions(ctx, "orc", "orc")))
+                .Expect("The hero's attack of opportunity for the reload comes before the load (PHB p.115, p.141)", ReloadAoOBeforeLoad("hero", "orc"))
+                .Expect("Then one shot at the hero, after the load (AI-057)", v =>
+                {
+                    List<TraceEvent> shots = v.Attacks("orc", "hero", false, 1);
+                    TraceEvent load = v.Log(" reloads .*Crossbow").FirstOrDefault();
+                    if (shots.Count != 1)
+                        return ExpectResult.Fail(shots.Count + " shots, expected 1", shots.Select(e => e.Seq).ToArray());
+                    if (load == null)
+                        return ExpectResult.Fail("no reload line", shots[0].Seq);
+                    return load.Seq < shots[0].Seq ? ExpectResult.Pass("load #" + load.Seq + ", then the shot #" + shots[0].Seq, load.Seq, shots[0].Seq)
+                        : ExpectResult.Fail("the shot came before the load", shots[0].Seq, load.Seq);
+                })
+                .Expect("The move action reloaded and the standard action shot: neither is left, the crossbow is empty again", Expect.All(
+                    Fact12("orc.move", "False"), Fact12("orc.standard", "False"), Fact12("orc.loaded", "False")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D4 (PHB p.99, p.115): an orc with Rapid Reload (Light Crossbow), BAB +6 and an unloaded light crossbow full
+        /// attacks the fighter next to it. Its load is a free action that still provokes (the fighter's attack of
+        /// opportunity comes first), so the full-round action is whole: two shots (+6/+1), Rapid Reload reloading between
+        /// them.
+        /// </summary>
+        private static ScenarioDef RapidReloadFree()
+        {
+            return Rules("rules/rapid-reload-free-ai", "Rapid Reload makes a light crossbow's load free, and it still provokes (PHB p.99, p.115; D4)")
+                .Covers("CMB-032", "D4", "PHB p.99", "PHB p.115", "PHB p.141")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c =>
+                {
+                    Sturdy(c);
+                    c.Stats.BaseAttackBonusOverride = 6;
+                    ArmCrossbow(c, ItemID.WeaponCrossbowLight, false, 20, "Rapid Reload (Light Crossbow)");
+                })
+                .Initiative("hero", "orc")
+                .Turn("hero", 1, Step.Pass())
+                .Turn("orc", 1, Step.FullAttack("hero"))
+                .Expect("The hero's attack of opportunity for the free load comes before it (PHB p.99: it still provokes)", ReloadAoOBeforeLoad("hero", "orc"))
+                .Expect("The load was a free action: the line says so", v =>
+                    v.Log(" reloads Crossbow, Light \\(Free action\\)").Any() ? ExpectResult.Pass("free load") : ExpectResult.Fail("no free load line"))
+                .Expect("Both iterative shots follow (+6/+1)", v =>
+                {
+                    List<TraceEvent> shots = v.Attacks("orc", "hero", false, 1);
+                    int[] mods = shots.Select(e => e.Int("mod")).ToArray();
+                    if (shots.Count != 2)
+                        return ExpectResult.Fail(shots.Count + " shots, mods [" + string.Join(",", mods) + "]", shots.Select(e => e.Seq).ToArray());
+                    return mods[0] - mods[1] == 5 ? ExpectResult.Pass("mods [" + string.Join(",", mods) + "]", shots[0].Seq, shots[1].Seq)
+                        : ExpectResult.Fail("mods [" + string.Join(",", mods) + "]", shots[0].Seq, shots[1].Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>The first removal of <paramref name="key"/>'s Prone comes before its first move in round 1.</summary>
+        private static Func<TraceView, ExpectResult> StandsThenMoves(string key)
+            => v =>
+            {
+                TraceEvent stand = v.Conds(key, CombatConditionType.Prone).FirstOrDefault(e => !e.Bool("added"));
+                TraceEvent move = v.Moves(key, 1).FirstOrDefault();
+                if (stand == null)
+                    return ExpectResult.Fail(key + " never stood up");
+                if (move == null)
+                    return ExpectResult.Fail(key + " did not close in", stand.Seq);
+                return stand.Seq < move.Seq ? ExpectResult.Pass("stand #" + stand.Seq + ", move #" + move.Seq, stand.Seq, move.Seq)
+                    : ExpectResult.Fail("moved before standing", move.Seq, stand.Seq);
+            };
+
+        /// <summary>
+        /// CMB-074, D5 (delegated RAW reading of PHB p.212, silent on prone): two prone, confused orcs both roll "attack the
+        /// nearest creature" (d% 90, forced). The far one does not threaten the fighter, so it stands up first (its move
+        /// action) and closes in with its standard action, which leaves it no attack; the near one already threatens the
+        /// fighter, so it stays prone and attacks it at once (-4 prone, PHB p.311). Before the fix neither ever stood up.
+        /// </summary>
+        private static ScenarioDef ConfusedProneStandsAi()
+        {
+            return Rules("rules/confused-prone-stands-ai", "A prone confused creature told to attack the nearest creature stands first unless it threatens it (CMB-074, D5)")
+                .Covers("CMB-074", "D5", "PHB p.212", "PHB p.143", "PHB p.311")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("near", "orc_warrior", 11, 10, Control.Ai)
+                .Npc("far", "orc_warrior", 8, 10, Control.Ai)
+                .StartCondition("near", CombatConditionType.Prone, -1)
+                .StartCondition("far", CombatConditionType.Prone, -1)
+                .StartCondition("near", CombatConditionType.Confused, 3)
+                .StartCondition("far", CombatConditionType.Confused, 3)
+                .Tweak("hero", Sturdy)
+                .Tweak("near", Sturdy)
+                .Tweak("far", Sturdy)
+                .Force(100, 90, null, 2) // both confusion rolls: attack the nearest creature (PHB p.212)
+                .Initiative("near", "far", "hero")
+                .Expect("Both orcs' turns are AI turns", Expect.All(Expect.Controller("near", "ai"), Expect.Controller("far", "ai")))
+                .Expect("Both rolled 'attack the nearest creature' (d% 90)", v =>
+                {
+                    int rolls = v.Log("is confused \\(d% 90\\)").Count;
+                    return rolls >= 2 ? ExpectResult.Pass(rolls + " rolls of 90") : ExpectResult.Fail(rolls + " rolls of 90");
+                })
+                .Expect("The far orc stands up, then closes in (PHB p.143)", StandsThenMoves("far"))
+                .Expect("The near orc, which threatens the fighter, stays prone and attacks it", Expect.All(
+                    Expect.None("cond", e => e.Str("actor") == "near" && e.Get("type") is CombatConditionType t && t == CombatConditionType.Prone && !e.Bool("added")),
+                    v => v.Attacks("near", "hero", false, 1).Count >= 1 ? ExpectResult.Pass("attacked") : ExpectResult.Fail("no attack by the near orc")))
+                .Expect("The far orc's standard action went to the approach: no attack", Expect.None("attack", e => e.Str("attacker") == "far" && !e.Bool("aoo")))
+                .Expect("Only the near orc declares an attack; the far one stumbles toward the fighter (no attack action left)", v =>
+                {
+                    int declared = v.Log("attacks the nearest creature").Count;
+                    int stumbles = v.Log("stumbles toward .* but cannot attack this turn").Count;
+                    return declared == 1 && stumbles == 1 ? ExpectResult.Pass("1 declaration, 1 stumble")
+                        : ExpectResult.Fail(declared + " declarations, " + stumbles + " stumbles");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The PC twin of rules/confused-prone-stands-ai (CMB-074, D5): a prone, confused Ui fighter rolls "attack the
+        /// nearest creature" (d% 90, forced). Its forced turn runs the same controller: it does not threaten the orc two
+        /// squares away, so it stands up first, then closes in.
+        /// </summary>
+        private static ScenarioDef ConfusedProneStandsUi()
+        {
+            return Rules("rules/confused-prone-stands-ui", "A prone confused PC told to attack the nearest creature stands first (CMB-074, D5)")
+                .Covers("CMB-074", "D5", "PHB p.212", "PHB p.143", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 8, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Idle)
+                .StartCondition("hero", CombatConditionType.Prone, -1)
+                .StartCondition("hero", CombatConditionType.Confused, 3)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Force(100, 90, null, 1)
+                .Initiative("hero", "orc")
+                .Expect("The hero rolled 'attack the nearest creature' (d% 90)", v =>
+                    v.Log("Hero is confused \\(d% 90\\)").Count > 0 ? ExpectResult.Pass("rolled 90") : ExpectResult.Fail("no roll of 90"))
+                .Expect("The hero stands up, then closes in (PHB p.143)", StandsThenMoves("hero"))
+                .Expect("With no attack action left it declares no attack (PHB p.139)", v =>
+                    !v.Log("attacks the nearest creature").Any() && v.Log("stumbles toward .* but cannot attack this turn").Any()
+                        ? ExpectResult.Pass("stumbles, no declaration") : ExpectResult.Fail("an attack declared, or no stumble line"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (PHB p.142-143, p.137): a prone fighter next to an orc crawls 5 ft away: a move action that provokes as
+        /// movement, so the orc's movement attack of opportunity comes before the crawl, the fighter ends 1 square away,
+        /// still prone, its move action spent. The Ui twin presses Crawl and clicks the square; the AI twin runs the same
+        /// executor through RunAIAction (Step.Crawl, Scripted).
+        /// </summary>
+        private static ScenarioDef Crawl(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/crawl-ui" : "rules/crawl-ai", "Crawling 5 ft is a move action that provokes from a foe threatening the square left (PHB p.142-143; D5, AI-054)")
+                .Covers("AI-054", "D5", "PHB p.142", "PHB p.143", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .StartCondition("hero", CombatConditionType.Prone, -1)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.Crawl(9, 10), Step.Assert("after the crawl", ctx => NoteLoadAndActions(ctx, "hero", "hero")));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The crawl step is done", Expect.StepStatus("hero", 1, "Crawl", 0, "done"))
+                .Expect("Exactly one move of 1 square by the hero", Expect.Count("move", e => e.Str("actor") == "hero" && e.Int("sq") == 1, 1, 1))
+                .Expect("The orc's movement attack of opportunity comes before the crawl (PHB p.137, p.143)", v =>
+                {
+                    TraceEvent aoo = v.AoOs("orc", "hero", "movement").FirstOrDefault();
+                    TraceEvent mv = v.Moves("hero").FirstOrDefault();
+                    if (aoo == null) return ExpectResult.Fail("no movement AoO by the orc");
+                    if (mv == null) return ExpectResult.Inconclusive("no crawl move");
+                    return aoo.Seq < mv.Seq ? ExpectResult.Pass("AoO before the crawl", aoo.Seq, mv.Seq) : ExpectResult.Fail("AoO after the crawl", aoo.Seq, mv.Seq);
+                })
+                .Expect("The hero is still prone, its move action spent and its standard action left", Expect.All(
+                    v => HasProne(v.Final("hero")) ? ExpectResult.Pass("prone") : ExpectResult.Fail("not prone"),
+                    Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (PHB p.141 Table 8-2, p.311): a Ui fighter next to an orc presses Drop Prone: a free action that provokes
+        /// nothing, so it is prone with its move and standard actions left, and the orc took no attack of opportunity.
+        /// </summary>
+        private static ScenarioDef DropProneUi()
+        {
+            return Rules("rules/drop-prone-ui", "Dropping prone is a free action that provokes nothing (PHB p.141; D5, AI-054)")
+                .Covers("AI-054", "D5", "PHB p.141", "PHB p.311", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.DropProne(), Step.Assert("after dropping prone", ctx => NoteLoadAndActions(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The drop step is done", Expect.StepStatus("hero", 1, "DropProne", 0, "done"))
+                .Expect("The hero becomes prone in round 1", v =>
+                    v.Conds("hero", CombatConditionType.Prone).Any(e => e.Bool("added") && e.Round == 1) ? ExpectResult.Pass("prone") : ExpectResult.Fail("no Prone added"))
+                .Expect("No attack of opportunity on the hero (Table 8-2: a free action)", Expect.None("aoo", e => e.Str("target") == "hero"))
+                .Expect("Its move and standard actions are left", Expect.All(Fact12("hero.move", "True"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D4 with the payOnProceed hook (GameManager.ResolveActionProvocation): a Ui fighter with an unloaded light crossbow
+        /// next to an orc presses Reload and cancels at the attack-of-opportunity prompt. Nothing is spent and nothing
+        /// provoked: the crossbow stays empty, the move and standard actions are left, and the orc makes no attack.
+        /// </summary>
+        private static ScenarioDef ReloadCancelUi()
+        {
+            return Rules("rules/reload-cancel-ui", "A reload cancelled at its attack-of-opportunity prompt spends nothing (D4, D3)")
+                .Covers("CMB-032", "D4", "D3", "PHB p.115")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); ArmCrossbow(c, ItemID.WeaponCrossbowLight, false, 10); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.Reload(), Step.AnswerAoO(AoOAnswer.Cancel),
+                    Step.Assert("after the cancel", ctx => NoteLoadAndActions(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("No attack of opportunity on the hero", Expect.None("aoo", e => e.Str("target") == "hero"))
+                .Expect("No reload line", v => v.Log(" reloads .*Crossbow").Any() ? ExpectResult.Fail("reloaded") : ExpectResult.Pass("no reload"))
+                .Expect("The crossbow is still empty and both actions are left", Expect.All(
+                    Fact12("hero.loaded", "False"), Fact12("hero.move", "True"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D4 (PHB p.115): an orc with an unloaded heavy crossbow attacks the fighter next to it. Its attack prelude loads
+        /// with the full-round action (the fighter's attack of opportunity first), which leaves no attack this turn: no shot,
+        /// and no "cannot attack" or "makes no attack" line.
+        /// </summary>
+        private static ScenarioDef NpcHeavyReloadNoShot()
+        {
+            return Rules("rules/npc-heavy-reload-no-shot-ai", "An NPC loading a heavy crossbow spends its full round and does not shoot (PHB p.115; D4)")
+                .Covers("AI-057", "CMB-032", "D4", "PHB p.115")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); ArmCrossbow(c, ItemID.WeaponCrossbowHeavy, false, 10); })
+                .Initiative("hero", "orc")
+                .Turn("hero", 1, Step.Pass())
+                .Turn("orc", 1, Step.Attack("hero"), Step.Assert("after the attack", ctx => NoteLoadAndActions(ctx, "orc", "orc")))
+                .Expect("The hero's attack of opportunity for the load comes before it (PHB p.115, p.141)", ReloadAoOBeforeLoad("hero", "orc"))
+                .Expect("The load is a full-round action", v =>
+                    v.Log(" reloads Crossbow, Heavy \\(Full-round action\\)").Any() ? ExpectResult.Pass("full-round load") : ExpectResult.Fail("no full-round load line"))
+                .Expect("No shot, and no 'cannot attack' or 'makes no attack' line", Expect.All(
+                    v => v.Attacks("orc", "hero", false, 1).Count == 0 ? ExpectResult.Pass("no shot") : ExpectResult.Fail("the orc shot"),
+                    v => v.Log("cannot attack|makes no attack").Any() ? ExpectResult.Fail("a no-attack line") : ExpectResult.Pass("no such line")))
+                .Expect("Loaded, with no action left", Expect.All(Fact12("orc.loaded", "True"), Fact12("orc.move", "False"), Fact12("orc.standard", "False")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (PHB p.143: crawling provokes from any attacker that threatens the creature at any point of the crawl): a prone
+        /// fighter crawls from (10,10) to (9,10), into the reach of an orc at (8,10) that does not threaten the square it
+        /// left. The orc's attack of opportunity comes on arrival, after the one-square move; the fighter stays prone with its
+        /// move action spent. The Ui twin presses Crawl and clicks the square; the AI twin runs the executor (Step.Crawl).
+        /// </summary>
+        private static ScenarioDef CrawlIntoThreat(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/crawl-into-threat-ui" : "rules/crawl-into-threat-ai",
+                    "A crawl into a foe's reach provokes from that foe on arrival (PHB p.143; D5)")
+                .Covers("AI-054", "D5", "PHB p.143", "PHB p.138", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 8, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .StartCondition("hero", CombatConditionType.Prone, -1)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.Crawl(9, 10), Step.Assert("after the crawl", ctx => NoteLoadAndActions(ctx, "hero", "hero")));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("Exactly one move of 1 square by the hero", Expect.Count("move", e => e.Str("actor") == "hero" && e.Int("sq") == 1, 1, 1))
+                .Expect("One attack of opportunity by the orc, after the crawl's move (PHB p.143)", v =>
+                {
+                    List<TraceEvent> aoos = v.AoOs("orc", "hero");
+                    TraceEvent mv = v.Moves("hero").FirstOrDefault();
+                    if (aoos.Count != 1) return ExpectResult.Fail(aoos.Count + " AoOs by the orc, expected 1", aoos.Select(e => e.Seq).ToArray());
+                    if (mv == null) return ExpectResult.Inconclusive("no crawl move");
+                    return aoos[0].Seq > mv.Seq ? ExpectResult.Pass("move #" + mv.Seq + ", then the AoO #" + aoos[0].Seq, mv.Seq, aoos[0].Seq)
+                        : ExpectResult.Fail("the AoO came before the move", aoos[0].Seq, mv.Seq);
+                })
+                .Expect("The hero is still prone, its move action spent and its standard action left", Expect.All(
+                    v => HasProne(v.Final("hero")) ? ExpectResult.Pass("prone") : ExpectResult.Fail("not prone"),
+                    Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 as revised 2026-10-29 (delegated RAW reading of PHB p.212, silent on prone): a prone, confused orc next to the
+        /// fighter rolls "flee" (d% 60, forced): it flees at its top speed, so it stands up first (a move action that
+        /// provokes, PHB p.143), then flees with its converted standard action. A second prone, confused orc far away rolls
+        /// "babble" (d% 30, forced) and stays prone.
+        /// </summary>
+        private static ScenarioDef ConfusedProneFleeStands()
+        {
+            return Rules("rules/confused-prone-flee-stands-ai", "A prone confused creature that rolls flee stands up, then flees; one that babbles stays prone (D5)")
+                .Covers("CMB-074", "D5", "PHB p.212", "PHB p.143")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("fleer", "orc_warrior", 11, 10, Control.Ai)
+                .Npc("babbler", "orc_warrior", 15, 15, Control.Ai)
+                .StartCondition("fleer", CombatConditionType.Prone, -1)
+                .StartCondition("babbler", CombatConditionType.Prone, -1)
+                .StartCondition("fleer", CombatConditionType.Confused, 3)
+                .StartCondition("babbler", CombatConditionType.Confused, 3)
+                .Tweak("hero", Sturdy)
+                .Tweak("fleer", Sturdy)
+                .Tweak("babbler", Sturdy)
+                .Force(100, 60, null, 1) // the fleer's confusion roll: flee from the caster (PHB p.212)
+                .Force(100, 30, null, 1) // the babbler's: babble
+                .Initiative("fleer", "babbler", "hero")
+                .Expect("The rolls were 60 and 30", v =>
+                    v.Log("is confused \\(d% 60\\)").Count >= 1 && v.Log("is confused \\(d% 30\\)").Count >= 1
+                        ? ExpectResult.Pass("60 and 30") : ExpectResult.Fail("rolls not forced"))
+                .Expect("The fleer stands up, then flees (PHB p.212, p.143)", StandsThenMoves("fleer"))
+                .Expect("No 'cannot move' line for the fleer", v =>
+                    v.Log("tries to flee .* but cannot move").Any() ? ExpectResult.Fail("it could not move") : ExpectResult.Pass("it moved"))
+                .Expect("The babbler stays prone and does not move", Expect.All(
+                    Expect.None("cond", e => e.Str("actor") == "babbler" && e.Get("type") is CombatConditionType t && t == CombatConditionType.Prone && !e.Bool("added")),
+                    Expect.None("move", e => e.Str("actor") == "babbler")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (review 2026-10-29): a prone, confused orc with a loaded light crossbow, 3 squares from the fighter, rolls
+        /// "attack the nearest creature" (d% 90, forced). It can already shoot as it lies (a prone attacker may use a
+        /// crossbow, PHB p.311), so it does not stand up: it stays prone and shoots.
+        /// </summary>
+        private static ScenarioDef ConfusedProneCrossbow()
+        {
+            return Rules("rules/confused-prone-crossbow-ai", "A prone confused crossbowman told to attack the nearest creature shoots without standing (D5, PHB p.311)")
+                .Covers("CMB-074", "D5", "PHB p.212", "PHB p.311")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 13, 10, Control.Ai)
+                .StartCondition("orc", CombatConditionType.Prone, -1)
+                .StartCondition("orc", CombatConditionType.Confused, 3)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); ArmCrossbow(c, ItemID.WeaponCrossbowLight, true, 10); })
+                .Force(100, 90, null, 1)
+                .Initiative("orc", "hero")
+                .Expect("The orc rolled 'attack the nearest creature' (d% 90)", v =>
+                    v.Log("is confused \\(d% 90\\)").Count > 0 ? ExpectResult.Pass("rolled 90") : ExpectResult.Fail("no roll of 90"))
+                .Expect("The orc stays prone and does not move", Expect.All(
+                    Expect.None("cond", e => e.Str("actor") == "orc" && e.Get("type") is CombatConditionType t && t == CombatConditionType.Prone && !e.Bool("added")),
+                    Expect.None("move", e => e.Str("actor") == "orc")))
+                .Expect("It shoots the hero", v => v.Attacks("orc", "hero", false, 1).Count >= 1 ? ExpectResult.Pass("shot") : ExpectResult.Fail("no shot"))
                 .Build();
         }
     }

@@ -25,8 +25,8 @@ public sealed class ActionOption
 /// C8, shadow mode): one <see cref="ActionOption"/> per catalog entry the actor has (ActionCatalog.AvailableTo), its
 /// legality read from today's rules and nothing else:
 /// - an entry with an executor: the executor's CanStart (its action, its conditions, its resources);
-/// - a PC-only entry: the rule the PC panel reads today, through the ActionLegality adapters (crawl, drop prone, pick up,
-///   drop, reload, turn undead, domain power, rage); one with no shared rule yet (use item, aid another, wake, attack a
+/// - a PC-only entry: the rule the PC panel reads today, through the ActionLegality adapters (pick up, drop, turn
+///   undead, domain power, rage; crawl, drop prone and reload have executors since batch 13 step 12); one with no shared rule yet (use item, aid another, wake, attack a
 ///   wall) is refused with its status and issue, as a Missing or OutOfScope entry is;
 /// then the compulsion filter of the turn (CharacterController.CurrentTurnStart, decided once at its start): a frightened,
 /// panicked or turned creature flees (PHB p.309-311, p.159; D15), so only Retreat and Escape entries, standing up,
@@ -156,16 +156,10 @@ public sealed class ActorActionSet
             return Legality.Refused(LegalityBar.Other, "no game");
         switch (d.Id)
         {
-            case ActionIds.Crawl:
-                return ActionLegality.FromDisabledReason(gm.GetCrawlDisabledReason(actor), LegalityBar.Condition);
-            case ActionIds.DropProne:
-                return ActionLegality.FromDisabledReason(gm.GetDropProneDisabledReason(actor), LegalityBar.Condition);
             case ActionIds.PickUpItem:
                 return ActionLegality.FromDisabledReason(gm.GetPickUpItemDisabledReason(actor), LegalityBar.Equipment);
             case ActionIds.DropItem:
                 return ActionLegality.FromDisabledReason(gm.GetDropEquippedItemDisabledReason(actor), LegalityBar.Equipment);
-            case ActionIds.Reload:
-                return ActionLegality.FromCheck(gm.CanReloadEquippedWeapon(actor, out string reloadReason, out _), reloadReason, LegalityBar.Ammunition);
             case ActionIds.TurnUndead:
                 return ActionLegality.FromCheck(gm.CanUseTurnUndead(actor, out string turnReason), turnReason, LegalityBar.Resource);
             case ActionIds.DomainPower:

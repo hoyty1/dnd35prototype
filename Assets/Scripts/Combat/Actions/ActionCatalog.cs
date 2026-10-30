@@ -152,19 +152,9 @@ public static class ActionCatalog
         }
     }
 
+    /// <summary>The load's action by the weapon and Rapid Reload (D4; PHB p.115, p.99): ReloadRules.CostFor.</summary>
     private static ActionCostType ReloadCostFor(CharacterController actor, ActionContext ctx)
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm == null || actor == null)
-            return ActionCostType.Move;
-        gm.CanReloadEquippedWeapon(actor, out _, out ReloadActionType reload);
-        switch (reload)
-        {
-            case ReloadActionType.FreeAction: return ActionCostType.Free;
-            case ReloadActionType.FullRound: return ActionCostType.FullRound;
-            default: return ActionCostType.Move;
-        }
-    }
+        => ReloadRules.CostFor(actor);
 
     /// <summary>
     /// The attack entries' AI mode chooser (design choice C2, inherited Q2): the AI stopgap's expected-hits Rapid Shot rule
@@ -293,12 +283,15 @@ public static class ActionCatalog
         l.Add(Def(ActionIds.Run, "Run", Mv, ActionCostType.FullRound, ProvokeRule.Yes, ActionTargetKind.Cell, ActionRoles.Retreat | ActionRoles.Approach,
                 "PHB p.144, Table 8-2", ImplStatus.Missing, "CMB-202"));
         l.Add(Def(ActionIds.Crawl, "Crawl", P, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Cell, ActionRoles.Posture | ActionRoles.Retreat,
-                "PHB p.142 (crawling: 5 ft, provokes from every threatener on the way), p.311 (prone)", ImplStatus.PcOnly, "AI-054"));
+                "PHB p.142-143 (crawling: 5 ft as a move action, provokes from every attacker that threatens it at any point of the crawl, D5), p.311 (prone)",
+                ImplStatus.Extracted)
+            .Run(new CrawlActionExecutor(), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.StandUp, "Stand Up", P, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Self, ActionRoles.Posture,
                 "PHB p.143-144, Table 8-2", ImplStatus.Delegating)
             .Run(new StandUpActionExecutor(), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.DropProne, "Drop Prone", P, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Self, ActionRoles.Posture | ActionRoles.Defend,
-                "PHB p.141 Table 8-2 (drop to the floor), p.311 (prone)", ImplStatus.PcOnly, "AI-054"));
+                "PHB p.141 Table 8-2 (drop to the floor: free, D5), p.311 (prone)", ImplStatus.Extracted)
+            .Run(new DropProneActionExecutor(), ActionUiAfter.ShowChoices));
 
         // ── Class abilities ──
         l.Add(Def(ActionIds.Smite, "Smite", C, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Self, ActionRoles.Attack,
@@ -327,8 +320,9 @@ public static class ActionCatalog
 
         // ── Equipment ──
         l.Add(Def(ActionIds.Reload, "Reload", E, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Self, ActionRoles.Equip,
-                "PHB p.115 (hand and light crossbows: a move action; heavy: full-round), p.99 (Rapid Reload, still provokes), Table 8-2 (Yes)",
-                ImplStatus.PcOnly, "AI-057")
+                "PHB p.115 (hand and light crossbows: a move action; heavy: full-round), p.99 (Rapid Reload, still provokes), Table 8-2 (Yes); D4",
+                ImplStatus.Extracted)
+            .Run(new ReloadActionExecutor(), ActionUiAfter.ShowChoices)
             .Costs(ReloadCostFor));
         l.Add(Def(ActionIds.DrawWeapon, "Draw a Weapon", E, ActionCostType.Move, ProvokeRule.No, ActionTargetKind.Item, ActionRoles.Equip,
                 "PHB p.142, Table 8-2 (No) and note 4 (with a move at BAB +1)", ImplStatus.Missing, "ITM-069"));

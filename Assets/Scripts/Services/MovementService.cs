@@ -22,8 +22,8 @@ public enum MoveKind
     FiveFootStep,
     /// <summary>A charge's movement (PHB p.154; the charge core's own rules decide its lane and target).</summary>
     Charge,
-    /// <summary>A prone creature's crawl, 5 ft as a move action (PHB p.142-143; GameManager.ExecuteCrawl). The step hooks
-    /// read it; the crawl has its own legality (GameManager.IsValidCrawlDestination), not <see cref="MovementService.CanStartMovement"/>.</summary>
+    /// <summary>A prone creature's crawl, 5 ft as a move action (PHB p.142-143; GameManager.ActionCore_Crawl, the crawl entry's executor). The step hooks
+    /// read it; the crawl has its own legality (GameManager.IsValidCrawlDestination, CrawlActionExecutor.CanExecute), not <see cref="MovementService.CanStartMovement"/>.</summary>
     Crawl
 }
 

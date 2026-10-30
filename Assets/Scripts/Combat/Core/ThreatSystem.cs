@@ -593,6 +593,43 @@ public static class ThreatSystem
         return provokedAoOs;
     }
 
+    /// <summary>
+    /// The foes that threaten the square a crawling creature has just entered and are not yet listed against it (batch 13
+    /// step 12, D5; PHB p.143: a crawl provokes from every attacker that threatens the creature at any point of the crawl,
+    /// the destination included). Each foe once (one movement opportunity per foe per round, PHB p.138, so the origin's
+    /// threateners, recorded when the crawl left the square, are not listed again), with the same filters as
+    /// <see cref="AnalyzePathForAoOs"/>: not an ally, not dead, not holding the mover with one body part (MM p.310), no
+    /// Resilient Sphere between them, an attack of opportunity left. Every entry has PathIndex 0. Pure.
+    /// </summary>
+    public static List<AoOThreatInfo> CrawlArrivalThreateners(CharacterController mover, List<CharacterController> allCharacters)
+    {
+        var result = new List<AoOThreatInfo>();
+        if (mover == null || mover.Stats == null || allCharacters == null || mover.Stats.IsSwarm)
+            return result;
+
+        List<Vector2Int> occupied = mover.GetOccupiedSquaresAt(mover.GridPosition);
+        foreach (CharacterController enemy in allCharacters)
+        {
+            if (enemy == null || enemy == mover || enemy.Stats == null || enemy.Stats.IsDead) continue;
+            if (enemy.Team == mover.Team) continue;
+            if (HasHadMovementOpportunity(enemy, mover)) continue;
+            if (enemy.IsBarredFromOrdinaryAttackOn(mover, out _)) continue;
+            if (enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed <= 0) continue;
+            if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(enemy, mover)) continue;
+
+            HashSet<Vector2Int> threatened = GetThreatenedSquares(enemy);
+            for (int s = 0; s < occupied.Count; s++)
+            {
+                if (threatened.Contains(occupied[s]))
+                {
+                    result.Add(new AoOThreatInfo(enemy, occupied[s], 0));
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     // ========================================================================
     // MOVEMENT OPPORTUNITIES PER ROUND (PHB p.138, CMB-128)
     // ========================================================================

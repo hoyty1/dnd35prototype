@@ -4,7 +4,13 @@ using UnityEngine;
 
 /// <summary>
 /// D&D 3.5e Confused turn controller.
-/// Rolls d% once at turn start and executes the corresponding forced behavior.
+/// Rolls d% once at turn start and executes the corresponding forced behavior. A prone creature stands up first when
+/// its roll lets it act or move (D5, delegated RAW reading, batch 13 step 12, revised 2026-10-29 in its review; CMB-074):
+/// on "attack the nearest creature" when it cannot already attack that creature as it lies, and on "flee" (its top speed
+/// starts with standing up, as a frightened creature's flight does, D15), here for NPCs and the PC's forced turn alike;
+/// and on "act normally" in the turn it then takes (the AI turn's own stand-up; a PC chooses for itself). It stays prone
+/// on "babble". On "attack the caster" it does not stand yet: a caster out of reach still makes it attack itself (AI-043,
+/// not RAW); when AI-043's close-with-the-caster fix lands, a prone creature stands first there too.
 /// </summary>
 public sealed class ConfusedBehaviorController
 {
@@ -111,6 +117,16 @@ public sealed class ConfusedBehaviorController
                 {
                     Vector2Int fleeAnchor = decision.CasterSource != null ? decision.CasterSource.GridPosition : actor.GridPosition;
                     bool moved = false;
+
+                    // A prone creature flees at its top possible speed (PHB p.212): it stands up first (a move action that
+                    // provokes, PHB p.143), then flees with the action left (D5 as revised 2026-10-29; D15 reads a
+                    // frightened creature's flight the same way). The catalog's stand-up entry, the PC button's rule.
+                    if (actor.HasCondition(CombatConditionType.Prone) && !actor.IsGrappling() && HasAnyMoveAction(actor))
+                    {
+                        yield return gameManager.StartCoroutine(gameManager.TryStandUpFromProneForAI(actor));
+                        if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
+                            yield break; // dropped by an attack of opportunity while standing up
+                    }
                     if (HasAnyMoveAction(actor))
                     {
                         SquareCell fleeCell = FindBestMovementCell(gameManager, actor, fleeAnchor, maximizeDistance: true);
@@ -142,6 +158,20 @@ public sealed class ConfusedBehaviorController
                         yield break;
                     }
 
+                    // A prone creature that must attack the nearest creature and cannot already attack it as it lies stands up
+                    // first, with its move action and the attacks of opportunity standing provokes (CMB-074; D5, a delegated RAW
+                    // reading of PHB p.212, which is silent on prone: the roll lets it act, and a prone creature takes no
+                    // ordinary movement, PHB p.142-143). "Cannot attack as it lies": the AI attack guard refuses the target, or
+                    // the weapon is a ranged one other than a crossbow, which a prone attacker cannot use (PHB p.311; not yet
+                    // enforced on the attack itself, CMB-196). The catalog's stand-up entry, the PC button's rule.
+                    if (actor.HasCondition(CombatConditionType.Prone) && !actor.IsGrappling()
+                        && (!AiAttackGuard.Passes(actor, target, allowThrow: false) || ProneBarsMainWeapon(actor)))
+                    {
+                        yield return gameManager.StartCoroutine(gameManager.TryStandUpFromProneForAI(actor));
+                        if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
+                            yield break; // dropped by an attack of opportunity while standing up
+                    }
+
                     bool approachRefused = false;
                     if (!actor.IsTargetInCurrentWeaponRange(target) && HasAnyMoveAction(actor))
                     {
@@ -156,7 +186,10 @@ public sealed class ConfusedBehaviorController
                         }
                     }
 
-                    if (AiAttackGuard.Passes(actor, target, allowThrow: false)) // the AI attack guard (batch 13 step 5, D1; C1: melee reach)
+                    // The AI attack guard (batch 13 step 5, D1; C1: melee reach), and an attack action left: a creature that
+                    // stood up and then closed in with its converted standard action declares no attack (PHB p.139, p.143).
+                    if (AiAttackGuard.Passes(actor, target, allowThrow: false)
+                        && (ActionCosts.CanAfford(actor, ActionCostType.Standard) || actor.ProgressiveAttackPool.HasStartedAttacking))
                     {
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} attacks the nearest creature ({target.Stats.CharacterName})!"));
                         yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, target));
@@ -299,6 +332,13 @@ public sealed class ConfusedBehaviorController
         }
 
         return best;
+    }
+
+    /// <summary>Whether <paramref name="actor"/>'s main weapon is a ranged one a prone attacker cannot use (PHB p.311: every ranged weapon but a crossbow).</summary>
+    private static bool ProneBarsMainWeapon(CharacterController actor)
+    {
+        ItemData weapon = actor != null ? actor.GetEquippedMainWeapon() : null;
+        return weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && !weapon.IsCrossbowWeapon;
     }
 
     private static bool HasAnyMoveAction(CharacterController actor)
