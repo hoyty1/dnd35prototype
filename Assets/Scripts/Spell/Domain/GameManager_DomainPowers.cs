@@ -202,13 +202,13 @@ public partial class GameManager
     /// enhancement bonus to Strength equal to your cleric level. Activating the power is a free
     /// action, the power lasts 1 round, and it is usable once per day."
     /// </summary>
-    public void ActivateStrengthDomain(CharacterController cleric)
+    public bool ActivateStrengthDomain(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Strength", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Feat of Strength: {reason}."));
-            return;
+            return false;
         }
 
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
@@ -226,6 +226,7 @@ public partial class GameManager
         sb.AppendLine($"   Enhancement bonus to STR: +{enhBonus} for 1 round");
         sb.AppendLine($"   STR: {cleric.Stats.STR} (effective {cleric.Stats.STR + enhBonus})");
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+        return true;
     }
 
     /// <summary>
@@ -234,13 +235,13 @@ public partial class GameManager
     /// and a bonus on damage rolls equal to your cleric level (if you hit). You must declare the
     /// smite before making the attack."
     /// </summary>
-    public void ActivateDestructionSmite(CharacterController cleric)
+    public bool ActivateDestructionSmite(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Destruction", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Smite: {reason}."));
-            return;
+            return false;
         }
 
         cleric.Stats.DestructionDomainUsesToday++;
@@ -248,6 +249,7 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⚔️", $"{cleric.Stats.CharacterName} invokes Destruction Smite!"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Next melee attack: +4 attack, +{cleric.Stats.GetClassLevel("Cleric")} damage"));
+        return true;
     }
 
     /// <summary>
@@ -260,19 +262,19 @@ public partial class GameManager
     /// Key rules: 1d6 per cleric level (no cap), no damage on failure, no save,
     /// death effect (does not affect undead, constructs, or creatures immune to death effects).
     /// </summary>
-    public void ActivateDeathTouch(CharacterController cleric, CharacterController target)
+    public bool ActivateDeathTouch(CharacterController cleric, CharacterController target)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Death", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch: {reason}."));
-            return;
+            return false;
         }
 
         if (target == null || target.Stats == null || target.Stats.CurrentHP <= 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Invalid target for Death Touch."));
-            return;
+            return false;
         }
 
         // Death effect: does not affect undead, constructs, or creatures immune to death effects
@@ -282,7 +284,7 @@ public partial class GameManager
         {
             string creatureType = isUndead ? "Undead" : "Construct";
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects)."));
-            return;
+            return false;
         }
 
         // Consume the ability
@@ -292,7 +294,7 @@ public partial class GameManager
         if (!cleric.CommitStandardAction())
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch: standard action unavailable."));
-            return;
+            return false;
         }
 
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
@@ -312,7 +314,7 @@ public partial class GameManager
         if (!hit)
         {
             CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
-            return;
+            return true; // the touch was made (the use and the action are spent)
         }
 
         // Roll 1d6 per cleric level
@@ -342,6 +344,7 @@ public partial class GameManager
         }
 
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+        return true;
     }
 
     /// <summary>
@@ -349,16 +352,16 @@ public partial class GameManager
     /// D&D 3.5e: "Once per day, you can perform a greater turning against undead in place of
     /// a regular turning (or rebuking) attempt. Undead that would be turned are destroyed instead."
     /// 
-    /// Implementation: Sets a flag that TurnUndeadSystem checks. The next turn undead attempt
-    /// destroys turned undead instead of just turning them.
+    /// Implementation: spends the day's use and sets GreaterTurningActive; ActionCore_DomainPower then runs the turning
+    /// core (ActionCore_TurnUndead) at once in the same action, which destroys every undead it would turn and clears the flag.
     /// </summary>
-    public void ActivateGreaterTurning(CharacterController cleric)
+    public bool ActivateGreaterTurning(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Sun", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Greater Turning: {reason}."));
-            return;
+            return false;
         }
 
         cleric.Stats.SunDomainUsesToday++;
@@ -367,7 +370,8 @@ public partial class GameManager
         cleric.Stats.GreaterTurningActive = true;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Special("☀️", $"{cleric.Stats.CharacterName} channels the power of the Sun for Greater Turning!"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Next Turn Undead will DESTROY affected undead instead of turning them."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   This turning destroys the undead it would turn (PHB p.188)."));
+        return true;
     }
 
     /// <summary>
@@ -376,13 +380,13 @@ public partial class GameManager
     /// you were affected by the spell freedom of movement. This is a supernatural ability that
     /// lasts a number of rounds equal to your cleric level. It is usable once per day."
     /// </summary>
-    public void ActivateTravelFreedom(CharacterController cleric)
+    public bool ActivateTravelFreedom(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Travel", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Freedom of Movement: {reason}."));
-            return;
+            return false;
         }
 
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
@@ -395,6 +399,7 @@ public partial class GameManager
         // This is checked in grapple, web, entangle, hold person, etc.
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🗺️ {cleric.Stats.CharacterName} activates Freedom of Movement!"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Duration: {durationRounds} rounds. Immune to movement-impairing effects."));
+        return true;
     }
 
     // ==================== ROUND TICK ====================
@@ -470,18 +475,19 @@ public partial class GameManager
     /// Luck Domain: Arm the reroll — the next d20 roll (attack, save, skill check, ability check)
     /// will be rolled twice, taking the better result. Once per day.
     /// </summary>
-    public void ActivateLuckReroll(CharacterController cleric)
+    public bool ActivateLuckReroll(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Luck", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Luck Reroll: {reason}."));
-            return;
+            return false;
         }
 
         cleric.Stats.LuckRerollPending = true;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🍀 {cleric.Stats.CharacterName} invokes the Luck domain — next d20 roll will be rerolled!"));
+        return true;
     }
 
     /// <summary>
@@ -516,13 +522,10 @@ public partial class GameManager
     // ==================== UI BUTTON HANDLER ====================
 
     /// <summary>
-    /// Called when the Domain Power button is pressed in combat.
-    /// Shows available domain powers and activates the chosen one.
-    /// For targeted abilities (Death Touch), enters targeting mode.
-    /// For self-buffs (Strength, Travel), activates immediately.
-    /// For Destruction Smite, sets the flag for the next melee attack.
-    /// For Greater Turning, sets the flag and then invokes Turn Undead.
-    /// For Luck, arms the reroll toggle for the next d20 roll.
+    /// The PC's Domain Power button. It disarms an armed Luck reroll (not consumed); otherwise it takes the first
+    /// available power (a power chooser is CHR-060's fix) through the catalog's domain-power entry, the executor the AI
+    /// can run too (DomainPowerActionExecutor, RunPlayerAction; batch 13 step 16, AI-054). Death Touch still only waits
+    /// for a target no click delivers (CHR-060); Sun opens the turning preview, whose click runs the greater turning.
     /// </summary>
     public void OnDomainPowerButtonPressed()
     {
@@ -544,67 +547,40 @@ public partial class GameManager
             return;
         }
 
-        // If only one power available, activate it directly
-        if (powers.Count == 1)
+        if (powers.Count > 1)
         {
-            ActivateDomainPowerByName(activePC, powers[0].domain);
-            return;
+            // Multiple powers: list them in the combat log and use the first available (CHR-060: no chooser yet).
+            var sb = new StringBuilder();
+            sb.AppendLine($"<color=#CC99FF>Domain Powers available for {activePC.Stats.CharacterName}:</color>");
+            for (int i = 0; i < powers.Count; i++)
+                sb.AppendLine($"  {i + 1}. {powers[i].label} ({powers[i].domain} domain)");
+            sb.AppendLine("<color=#CC99FF>Activating: " + powers[0].label + "</color>");
+            CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
         }
 
-        // Multiple powers: show selection in combat log and use the first available
-        // (In a full UI implementation, this would show a popup menu)
-        var sb = new StringBuilder();
-        sb.AppendLine($"<color=#CC99FF>Domain Powers available for {activePC.Stats.CharacterName}:</color>");
-        for (int i = 0; i < powers.Count; i++)
-        {
-            sb.AppendLine($"  {i + 1}. {powers[i].label} ({powers[i].domain} domain)");
-        }
-        sb.AppendLine("<color=#CC99FF>Activating: " + powers[0].label + "</color>");
-        CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
-
-        ActivateDomainPowerByName(activePC, powers[0].domain);
-    }
-
-    private void ActivateDomainPowerByName(CharacterController cleric, string domain)
-    {
+        string domain = powers[0].domain;
         switch (domain)
         {
-            case "Strength":
-                ActivateStrengthDomain(cleric);
-                break;
-            case "Destruction":
-                ActivateDestructionSmite(cleric);
-                break;
-            case "Death":
-                // Death Touch needs a target — store pending and let player click an adjacent enemy
+            case DomainPowerActionExecutor.DeathVariant:
+                // Death Touch needs a target: stored pending (CHR-060: no click resolves it yet).
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"Select an adjacent target for Death Touch (click an enemy)."));
                 _pendingDomainPower = "Death";
-                _pendingDomainPowerCleric = cleric;
-                // Target selection handled by existing click-on-character system
-                break;
-            case "Sun":
-                ActivateGreaterTurning(cleric);
-                // After activating, immediately trigger Turn Undead
-                OnTurnUndeadButtonPressed();
-                break;
-            case "Travel":
-                ActivateTravelFreedom(cleric);
-                break;
-            case "Plant":
-                // Plant domain: rebuke/command plants uses Turn Undead system
-                ActivatePlantRebuke(cleric);
-                break;
-            case "Luck":
-                ActivateLuckReroll(cleric);
-                break;
-            case "Air":
-            case "Earth":
-            case "Fire":
-            case "Water":
-                // Elemental domains: turn or rebuke elementals of matching subtype
-                ActivateElementalTurning(cleric, domain);
-                break;
+                _pendingDomainPowerCleric = activePC;
+                return;
+            case DomainPowerActionExecutor.SunVariant:
+                // A greater turning replaces a turning attempt (PHB p.188): the turning preview, then the click.
+                if (!CanUseTurnUndead(activePC, out string turnReason))
+                {
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{activePC.Stats.CharacterName} cannot use Greater Turning: {turnReason}."));
+                    return;
+                }
+                EnterTurnUndeadTargeting(activePC, greaterTurning: true);
+                return;
         }
+
+        ActionContext ctx = ActionContext.For(ActionIds.DomainPower, activePC, ActorSource.Ui);
+        ctx.Variant = domain;
+        RunPlayerAction(ctx);
     }
 
     // Pending domain power state for targeted abilities
@@ -618,7 +594,10 @@ public partial class GameManager
     {
         if (_pendingDomainPower == "Death" && _pendingDomainPowerCleric != null)
         {
-            ActivateDeathTouch(_pendingDomainPowerCleric, target);
+            // Through the catalog's domain-power entry (batch 13 step 16); still uncalled (CHR-060).
+            ActionContext ctx = ActionContext.For(ActionIds.DomainPower, _pendingDomainPowerCleric, ActorSource.Ui, target);
+            ctx.Variant = DomainPowerActionExecutor.DeathVariant;
+            RunPlayerAction(ctx);
         }
 
         _pendingDomainPower = null;
@@ -632,20 +611,20 @@ public partial class GameManager
     /// D&D 3.5e: "Rebuke or command plant creatures as an evil cleric rebukes or commands undead."
     /// Uses Turn Undead attempts pool. Checks for plant creatures in range.
     /// </summary>
-    public void ActivatePlantRebuke(CharacterController cleric)
+    public bool ActivatePlantRebuke(CharacterController cleric)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, "Plant", out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Rebuke Plants: {reason}."));
-            return;
+            return false;
         }
 
         // Consume standard action
         if (!cleric.CommitStandardAction())
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Rebuke Plants: standard action unavailable."));
-            return;
+            return false;
         }
 
         cleric.Stats.TurnUndeadAttemptsUsedToday++;
@@ -657,7 +636,7 @@ public partial class GameManager
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌿", $"{cleric.Stats.CharacterName} channels energy to rebuke plants, but none are in range."));
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining attempts today: {attemptsRemaining}"));
-            return;
+            return true; // the attempt and the action are spent
         }
 
         // Turning check (like evil cleric rebuke)
@@ -707,6 +686,7 @@ public partial class GameManager
 
         sb.AppendLine($"   Remaining attempts today: {attemptsRemaining}");
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+        return true;
     }
 
     /// <summary>
@@ -781,20 +761,20 @@ public partial class GameManager
     /// Uses the Turn Undead attempts pool. Good clerics turn (destroy on 2x HD or less);
     /// evil clerics rebuke (command on 2x HD or less). Neutral clerics default to turning.
     /// </summary>
-    public void ActivateElementalTurning(CharacterController cleric, string domain)
+    public bool ActivateElementalTurning(CharacterController cleric, string domain)
     {
         string reason;
         if (!CanActivateDomainPower(cleric, domain, out reason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use {domain} domain power: {reason}."));
-            return;
+            return false;
         }
 
         // Consume standard action
         if (!cleric.CommitStandardAction())
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use {domain} domain power: standard action unavailable."));
-            return;
+            return false;
         }
 
         bool isEvil = AlignmentHelper.IsEvil(cleric.Stats.CharacterAlignment);
@@ -812,7 +792,7 @@ public partial class GameManager
             string emoji = GetElementalEmoji(domain);
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{emoji} {cleric.Stats.CharacterName} channels energy to {actionVerb} {domain.ToLower()} creatures, but none are in range."));
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining attempts today: {attemptsRemaining}"));
-            return;
+            return true; // the attempt and the action are spent
         }
 
         // Turning check: d20 + CHA mod
@@ -896,6 +876,7 @@ public partial class GameManager
 
         sb.AppendLine($"   Remaining attempts today: {attemptsRemaining}");
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+        return true;
     }
 
     /// <summary>

@@ -141,7 +141,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 71 files (since batch 13 step 9 added `Combat/Actions/Executors/GameManager.MoveAction.cs`; step 3 added `_Core/GameManager.ActionRunner.cs` and `Combat/Actions/Executors/GameManager.ActionCores.cs`; batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 74 files (since batch 13 step 16 added `Combat/Actions/Executors/GameManager.ClassAbilityActions.cs`, step 15 `GameManager.EquipmentActions.cs` and step 14 `GameManager.ItemActions.cs` in the same folder; step 9 added `Combat/Actions/Executors/GameManager.MoveAction.cs`; step 3 added `_Core/GameManager.ActionRunner.cs` and `Combat/Actions/Executors/GameManager.ActionCores.cs`; batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -198,14 +198,17 @@ There are 71 files (since batch 13 step 9 added `Combat/Actions/Executors/GameMa
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and `TryPushTargetAway` (Gust of Wind's push); some trip/feint helpers. |
 | SupportActions.cs | 1,621 | Aid Another; the charge mode (button, targeting, path, `CanChargeTarget` over `CanCharge`), the thin PC and NPC charge wrappers and the charge bull rush (`ResolveChargeBullRush`). |
 | **Combat/Special/** (5) | | |
-| TurnUndeadSystem.cs | 997 | Turn/rebuke undead and turned-state trackers. |
+| TurnUndeadSystem.cs | 640 | Turn undead: the legality (`CanUseTurnUndead`), the candidates (`GetTurnUndeadCandidates`), the PC targeting preview and skip question, the AI step `TryNPCTurnUndeadTurnForAI`, and the turned-state trackers; the rule is `ActionCore_TurnUndead` (batch 13 step 16). |
 | TemplateSmiteSystem.cs | 118 | The PC Smite button and the AI smite declaration over `SmiteRules` (paladin and template smites; CHR-020). |
 | LayOnHandsSystem.cs | 182 | The PC Lay on Hands button and the AI wrapper over `LayOnHandsRules` (CHR-020). |
 | WildShapeSystem.cs | 186 | The PC Wild Shape button (form list or change back) and the AI wrappers over `WildShapeRules` (CHR-020). |
 | BardicMusicSystem.cs | 404 | The PC Bardic Music button and its lists, the shared executors and AI wrappers over `BardicMusicRules`, the per-count and end-of-turn hooks of a performance, the record of hostile actions (fascinate's nearby combat), and the suggested creature's turn (CHR-026). |
-| **Combat/Actions/Executors/** (2) | | |
+| **Combat/Actions/Executors/** (5) | | |
 | GameManager.ActionCores.cs | 100 | The forwarders from the catalog's executors to private cores, so an executor never calls a routed `*ForAI` wrapper: `ActionCore_StandUp` (the callers' gate, the player's StandFromProne prompt, then `ResolveStandUpFromProne`; batch 13 step 3) and, since step 6, `ActionCore_NpcAttack`, `ActionCore_FiveFootStep`, `ActionCore_BreathWeapon`, `ActionCore_RangedSpecial`, `ActionCore_Engulf` and `ActionCore_IsCharmedBy` (the move and withdraw forwarders went with step 9). |
 | GameManager.MoveAction.cs | 318 | The one move executor of both sides (batch 13 step 9): `ExecuteMoveAction(MoveRequest)` (the shared movement legality, the path (none: refused, nothing spent), the spend before the first step for every mover (step 10, D3), the PC's per-step walk (a private `ExecuteMovement(MoveRequest, ...)` overload) or the segment walker under `MoveQuirk.AiSegmentLoop`), `RecordNoPath`, `RecordRefusedMovement`. No UI continuation ([Combat actions](architecture/combat-actions.md)). |
+| GameManager.ItemActions.cs | 623 | The use-item and retrieve-item cores of both sides (batch 13 step 14, D7): `ActionCore_UseItem`, `ActionCore_RetrieveItem`, at the costs of `ItemUseRules`. |
+| GameManager.EquipmentActions.cs | 512 | The equipment cores of both sides (batch 13 step 15, D8): `ActionCore_DrawWeapon`, `ActionCore_SheatheWeapon`, `ActionCore_ReadyShield`, `ActionCore_PickUpItem`, `ActionCore_DropItem`, at the costs of `EquipmentActionRules`. |
+| GameManager.ClassAbilityActions.cs | 254 | The class-ability cores of both sides (batch 13 step 16, D9, D10): `ActionCore_TurnUndead` (pay first, closest first with line of effect, the pool stops at the first misfit), `ActionCore_Rage` (no action, own turn only), `ActionCore_DomainPower` (the activated domain powers; Sun's greater turning through the turning core). |
 | **Encounters/** (1) | | |
 | GameManager.DungeonEncounters.cs | 237 | Bridge from DMG dungeon tables to combat. No external callers: `EncounterSelectionUI.OnDMGTablesPressed` uses its own path. |
 

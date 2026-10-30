@@ -46,7 +46,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-15) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-16) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -66,6 +66,7 @@ public static class ActionCatalogTests
         Run(TestSupportAndWallEntries);
         Run(TestItemEntries);
         Run(TestEquipmentEntries);
+        Run(TestClassAbilityEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -363,6 +364,87 @@ public static class ActionCatalogTests
         }
     }
 
+    /// <summary>
+    /// The class-ability entries (batch 13 step 16, D9, D10, AI-054): turn undead, rage and the domain powers are Extracted
+    /// over their executors (no PC-only entry is left), with the PC follow-ups the buttons had; rage takes no action and
+    /// only on the barbarian's own turn; a domain power's action is its own (a standard action for the touch and the
+    /// turnings); Table 8-9's turning limits; the turning refusals' bars; each pre-check refuses an empty context.
+    /// </summary>
+    private static void TestClassAbilityEntries()
+    {
+        ActionDefinition turn = ActionCatalog.Get(ActionIds.TurnUndead);
+        ActionDefinition rage = ActionCatalog.Get(ActionIds.Rage);
+        ActionDefinition domain = ActionCatalog.Get(ActionIds.DomainPower);
+        Assert(turn != null && turn.Status == ImplStatus.Extracted && turn.Executor is TurnUndeadActionExecutor
+               && turn.UiAfter == ActionUiAfter.AttackDelay && Mathf.Approximately(turn.UiAfterSeconds, 0.9f)
+               && turn.Cost == ActionCostType.Standard && turn.Provokes == ProvokeRule.No && (turn.IssueIds == null || turn.IssueIds.Length == 0),
+            "Turn undead is Extracted over TurnUndeadActionExecutor: a standard action that does not provoke (PHB p.159, D9)",
+            turn != null ? turn.ToString() : "null");
+        Assert(rage != null && rage.Status == ImplStatus.Extracted && rage.Executor is RageActionExecutor
+               && rage.UiAfter == ActionUiAfter.ShowChoices && rage.Cost == ActionCostType.Free && rage.Provokes == ProvokeRule.No,
+            "Rage is Extracted over RageActionExecutor and takes no action (PHB p.25, D10)", rage != null ? rage.ToString() : "null");
+        Assert(domain != null && domain.Status == ImplStatus.Extracted && domain.Executor is DomainPowerActionExecutor
+               && domain.UiAfter == ActionUiAfter.AttackDelay && Mathf.Approximately(domain.UiAfterSeconds, 0.6f),
+            "The domain powers are Extracted over DomainPowerActionExecutor", domain != null ? domain.ToString() : "null");
+
+        foreach (ActionDefinition d in ActionCatalog.All)
+            Assert(d.Status != ImplStatus.PcOnly, d.Id + " is not PC-only (batch 13 step 16 extracted the last ones)");
+
+        Assert(DomainPowerActionExecutor.CostOf("Death") == ActionCostType.Standard && DomainPowerActionExecutor.CostOf("Sun") == ActionCostType.Standard
+               && DomainPowerActionExecutor.CostOf("Plant") == ActionCostType.Standard && DomainPowerActionExecutor.CostOf("Fire") == ActionCostType.Standard
+               && DomainPowerActionExecutor.CostOf("Strength") == ActionCostType.Free && DomainPowerActionExecutor.CostOf("Luck") == ActionCostType.Free,
+            "A domain power costs the action it takes: the touch and the turnings a standard action, the others none");
+        var sunCtx = new ActionContext { Definition = domain, Variant = DomainPowerActionExecutor.SunVariant };
+        var strengthCtx = new ActionContext { Definition = domain, Variant = "Strength" };
+        Assert(domain != null && domain.CostFor(null, sunCtx) == ActionCostType.Standard && domain.CostFor(null, strengthCtx) == ActionCostType.Free,
+            "The domain-power entry's cost follows the context's domain");
+
+        // Table 8-9 (PHB p.159): a check of 0 or less affects level - 4, 13-15 level + 1, 22 or more level + 4.
+        Assert(GameManager.ComputeTurnUndeadMaxHitDice(0, 5) == 1 && GameManager.ComputeTurnUndeadMaxHitDice(10, 5) == 5
+               && GameManager.ComputeTurnUndeadMaxHitDice(13, 5) == 6 && GameManager.ComputeTurnUndeadMaxHitDice(22, 5) == 9
+               && GameManager.ComputeTurnUndeadMaxHitDice(19, 1) == 4,
+            "Table 8-9 gives the most Hit Dice a turning check affects (PHB p.159; the 1st-level cleric's 19 turns 4 HD)");
+
+        Assert(GameManager.TurnUndeadRefusalBar("Standard action used") == LegalityBar.Action
+               && GameManager.TurnUndeadRefusalBar("Grappling (not a grapple action, PHB p.156)") == LegalityBar.Condition
+               && GameManager.TurnUndeadRefusalBar("No attempts left") == LegalityBar.Resource
+               && GameManager.TurnUndeadRefusalBar("Paladin level 4 required") == LegalityBar.Other,
+            "The turning refusals map to the Action, Condition, Resource and Other bars");
+
+        foreach (ActionDefinition d in new[] { turn, rage, domain })
+        {
+            if (d == null || d.Executor == null)
+                continue;
+            Assert(!d.Executor.CanExecute(null).Ok, d.Id + ": the pre-check refuses a missing context");
+            Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, d.Id + ": the pre-check refuses a context with no actor");
+        }
+
+        // Rage only on the barbarian's own turn (PHB p.25): a barbarian who is not the current turn's creature is refused.
+        var go = new GameObject("ActionCatalogTest_Barbarian");
+        try
+        {
+            var barb = go.AddComponent<CharacterController>();
+            barb.Stats = new CharacterStats(
+                name: "ACT_Barbarian", level: 1, characterClass: "Barbarian",
+                str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+                bab: 1, armorBonus: 0, shieldBonus: 0,
+                damageDice: 12, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 12, raceName: "Human");
+            barb.Stats.EnsureMulticlassDataInitialized();
+            string refusal = RageActionExecutor.RefusalOf(barb, out LegalityBar bar);
+            Assert(refusal != null && refusal.Contains("own turn") && bar == LegalityBar.Action,
+                "A barbarian may not rage outside its own turn (PHB p.25)", refusal ?? "allowed");
+            barb.Stats.RagesUsedToday = barb.Stats.MaxRagesPerDay;
+            Assert(RageActionExecutor.RefusalOf(barb, out LegalityBar usedBar) == "no rages left today" && usedBar == LegalityBar.Resource,
+                "A barbarian with no rage left today is refused on the Resource bar");
+            Assert(!barb.Stats.IsRaging, "The legality checks rage nothing");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(go);
+        }
+    }
+
     private static void Run(Action test)
     {
         try
@@ -469,7 +551,7 @@ public static class ActionCatalogTests
         new object[] { ActionIds.CoupDeGrace, ActionCostType.FullRound, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.AidAnother, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.Extracted, "" },
         new object[] { ActionIds.WakeAlly, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
-        new object[] { ActionIds.TurnUndead, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.TurnUndead, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
@@ -486,8 +568,8 @@ public static class ActionCatalogTests
         new object[] { ActionIds.LayOnHands, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.WildShape, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.BardicMusic, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Delegating, "" },
-        new object[] { ActionIds.Rage, ActionCostType.Free, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.DomainPower, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.Rage, ActionCostType.Free, ProvokeRule.No, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.DomainPower, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Reload, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
         new object[] { ActionIds.DrawWeapon, ActionCostType.Move, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.SheatheWeapon, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.New, "" },

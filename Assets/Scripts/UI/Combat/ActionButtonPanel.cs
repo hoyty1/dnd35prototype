@@ -927,11 +927,11 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(FlurryOfBlowsButton, new ActionButtonState(isMonk, canFlurry, flurryLabel));
 
         bool isBarbarian = pc.Stats.IsBarbarian;
-        bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatiguedOrExhausted && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
+        // The shared rage legality (RageActionExecutor.RefusalOf, D10): once per encounter, fatigue no bar (PHB p.25).
+        bool canRage = isBarbarian && RageActionExecutor.RefusalOf(pc, out _) == null;
         string rageLabel;
         if (pc.Stats.IsRaging) rageLabel = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
-        else if (pc.Stats.IsExhaustedState) rageLabel = "Rage (Exhausted)";
-        else if (pc.Stats.IsFatiguedState) rageLabel = "Rage (Fatigued)";
+        else if (pc.Stats.RagedThisEncounter) rageLabel = "Rage (Raged this encounter)";
         else if (canRage) rageLabel = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
         else rageLabel = "Rage (Used)";
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));

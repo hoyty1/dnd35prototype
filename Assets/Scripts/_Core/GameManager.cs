@@ -951,6 +951,7 @@ public partial class GameManager : MonoBehaviour
             // Paladin smites and Lay on Hands pool, and any declared smite (CHR-020).
             stats.RefreshPaladinDailyUses();
             stats.RagesUsedToday = 0;
+            stats.RagedThisEncounter = false;
             stats.TurnUndeadAttemptsUsedToday = 0;
             // Bardic music: the day's uses return and every song ends; after an ordinary victory OnCombatEnded does not
             // run (CORE-002), so this is where the party's songs end (BardicMusicRules, CHR-026).
@@ -1145,8 +1146,7 @@ public partial class GameManager : MonoBehaviour
 
         _isSelectingTurnUndead = false;
         _turnUndeadPendingInvoker = null;
-        CloseTurnUndeadSelectionPanel(clearHighlights: true);
-        _activeTurnUndeadSelectionContext = null;
+        _turnUndeadPendingGreater = false;
 
         ClearOverrunDestinationSelectionState();
         ClearOverrunChoiceState();
@@ -3653,6 +3653,10 @@ public partial class GameManager : MonoBehaviour
         var combatants = new List<CharacterController>(activePCs);
         combatants.AddRange(activeNPCs);
         _conditionService?.ApplyCombatStartFlatFooted(combatants);
+        // A new encounter: each barbarian may rage once in it (PHB p.25; D10).
+        foreach (CharacterController c in combatants)
+            if (c != null && c.Stats != null && !c.Stats.IsRaging)
+                c.Stats.RagedThisEncounter = false;
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Every combatant is flat-footed until its first turn (no Dexterity bonus to AC, no attacks of opportunity)."));
 
         List<CharacterController> forcedFirst = GetForcedFirstInitiativeActors();
@@ -4158,8 +4162,7 @@ public partial class GameManager : MonoBehaviour
         _isSelectingBreakWallTarget = false;
         _isSelectingTurnUndead = false;
         _turnUndeadPendingInvoker = null;
-        CloseTurnUndeadSelectionPanel(clearHighlights: true);
-        _activeTurnUndeadSelectionContext = null;
+        _turnUndeadPendingGreater = false;
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
         ClearDisarmSequenceState();
@@ -9293,27 +9296,32 @@ public partial class GameManager : MonoBehaviour
         StartAttackSequence(pc, AttackType.Melee);
     }
 
+    /// <summary>
+    /// The PC's Rage button: the catalog's rage entry through RunPlayerAction (batch 13 step 16, D10), the executor the AI
+    /// runs at its turn start too (RageActionExecutor: no action, only on the barbarian's own turn, PHB p.25).
+    /// </summary>
     public void OnRageButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Stats.IsBarbarian) return;
+        if (pc == null || pc.Stats == null || !pc.Stats.IsBarbarian) return;
 
-        bool success = pc.ActivateRage();
-        if (success)
-        {
-            CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{pc.Stats.CharacterName} enters a BARBARIAN RAGE! +4 STR, +4 CON, +2 Will, -2 AC for {pc.Stats.RageRoundsRemaining} rounds!"));
-            UpdateAllStatsUI();
-            CombatUI.UpdateActionButtons(pc);
-            Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Rage via button");
-        }
-        else
-        {
-            string reason = pc.Stats.IsRaging ? "already raging" :
-                           (pc.Stats.IsExhaustedState ? "exhausted" :
-                               (pc.Stats.IsFatiguedState ? "fatigued" : "no rages left today"));
-            CombatUI.ShowCombatLog(CombatLogHelper.Failure("", $"{pc.Stats.CharacterName} cannot rage: {reason}"));
-            Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
-        }
+        RunPlayerAction(ActionContext.For(ActionIds.Rage, pc, ActorSource.Ui));
+    }
+
+    /// <summary>
+    /// The AI's rage at the start of its turn (design choice C6, AI-079): when its profile chooses to rage
+    /// (AIProfile.ShouldRage, by default a foe within reach or charge range), through the catalog's rage entry, the
+    /// executor the PC's Rage button runs. Rage takes no time, so the turn goes on. True when it raged.
+    /// </summary>
+    public bool TryNPCRageForAI(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.Stats.IsBarbarian)
+            return false;
+        List<CharacterController> all = GetAllCharacters();
+        bool wants = npc.aiProfile != null ? npc.aiProfile.ShouldRage(npc, all) : DND35.AI.AIProfile.DefaultShouldRage(npc, all);
+        if (!wants)
+            return false;
+        return RunAIActionNow(ActionContext.For(ActionIds.Rage, npc, ActorSource.AI)).Performed;
     }
 
     // ========== BARDIC MUSIC ==========

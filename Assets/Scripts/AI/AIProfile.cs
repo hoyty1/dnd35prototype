@@ -568,6 +568,72 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// AI choice, not a rule: whether a cleric or paladin turns undead this turn (design choice C6, batch 13 step 16).
+        /// The rules (the turn-undead executor, D9) are the PC Turn Undead button's. <see cref="DefaultShouldTurnUndead"/>.
+        /// </summary>
+        public virtual bool ShouldTurnUndead(CharacterController self) => DefaultShouldTurnUndead(self);
+
+        /// <summary>
+        /// The default turn undead choice (C6): turn when the creature may turn now, the nearest undead within 60 ft with
+        /// line of effect that the turning would take first (already turned undead skipped, as the AI skips them, D9) is
+        /// hostile, and its best turning check (a natural 20 + Cha, +2 with 5 ranks in Knowledge (religion), PHB p.159
+        /// Table 8-9) could affect it. An evil cleric does not turn: under RAW it rebukes (PHB p.159-160), which is not
+        /// built yet (CMB-026), so the AI leaves its positive-energy turning alone (an AI choice; the rule is unchanged).
+        /// </summary>
+        public static bool DefaultShouldTurnUndead(CharacterController self)
+        {
+            GameManager gm = GameManager.Instance;
+            if (self == null || self.Stats == null || gm == null || !gm.CanUseTurnUndead(self, out _))
+                return false;
+            if (self.Stats.GetClassLevel("Cleric") > 0 && AlignmentHelper.IsEvil(self.Stats.CharacterAlignment))
+                return false;
+            CharacterController nearest = null;
+            foreach (CharacterController undead in gm.GetTurnUndeadCandidates(self, out _))
+            {
+                if (gm.IsTurnedUndead(undead))
+                    continue;
+                nearest = undead;
+                break;
+            }
+            // The turning takes the nearest first, whatever its side (PHB p.159): no turning that would start on an ally.
+            if (nearest == null || !TeamUtility.IsEnemy(self, nearest))
+                return false;
+            int bestCheck = 20 + self.Stats.CHAMod + GameManager.TurningCheckBonusAgainstUndead(self);
+            int best = GameManager.ComputeTurnUndeadMaxHitDice(bestCheck, GameManager.GetTurnUndeadEffectiveLevel(self));
+            return nearest.Stats.GetHitDice() <= best;
+        }
+
+        /// <summary>
+        /// AI choice, not a rule: whether a barbarian rages at the start of its turn (design choice C6, AI-079). The rules
+        /// (RageActionExecutor, D10: no action, only on its own turn) are the PC Rage button's. <see cref="DefaultShouldRage"/>.
+        /// </summary>
+        public virtual bool ShouldRage(CharacterController self, IList<CharacterController> combatants) => DefaultShouldRage(self, combatants);
+
+        /// <summary>
+        /// The default rage choice (C6): rage when it may and an able foe is within its melee reach (the melee weapon in
+        /// hand, else natural reach; a ranged weapon's range does not count), or within charge range (twice its speed,
+        /// PHB p.154), measured as every distance on the grid is (PHB p.147).
+        /// </summary>
+        public static bool DefaultShouldRage(CharacterController self, IList<CharacterController> combatants)
+        {
+            if (self == null || self.Stats == null || combatants == null)
+                return false;
+            ActionDefinition rage = ActionCatalog.Get(ActionIds.Rage);
+            if (rage == null || rage.Executor == null || !rage.Executor.CanStart(self).Ok)
+                return false;
+            int chargeSquares = 2 * Mathf.Max(0, self.Stats.MoveRange);
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CharacterController foe = combatants[i];
+                if (foe == null || foe == self || foe.Stats == null || foe.Stats.IsDead || foe.IsUnconscious || !TeamUtility.IsEnemy(self, foe))
+                    continue;
+                if (AttackLegality.IsInReachOrRange(self, foe, DirectAttackKind.Charge, null, out _) || self.GetMinimumDistanceToTarget(foe, chebyshev: false) <= chargeSquares)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// AI choice, not a rule: whether a druid takes a wild shape this turn, and which form (CHR-020). The rules
         /// (WildShapeRules) are shared with the PC Wild Shape button. Null for no wild shape. <see cref="DefaultWildShapeForm"/>.
         /// </summary>

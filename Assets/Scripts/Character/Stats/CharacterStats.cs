@@ -1391,6 +1391,14 @@ public class CharacterStats
     public int RagesUsedToday;
 
     /// <summary>
+    /// Whether this barbarian has raged in the current encounter: a barbarian can fly into a rage only once per encounter
+    /// (PHB p.25; D10). Set by <see cref="ActivateRage"/>; cleared at each combat start (GameManager.StartCombat's combatants)
+    /// and by the between-encounter rest. A fatigued barbarian that has not raged yet may rage (PHB p.25 bars
+    /// only the second rage, not fatigue; explicit RAW, 2026-10-30).
+    /// </summary>
+    public bool RagedThisEncounter;
+
+    /// <summary>
     /// Maximum rages per day (D&D 3.5e PHB p.25).
     /// 1/day at level 1, +1 per 4 levels: 1 at L1, 2 at L4, 3 at L8, 4 at L12, 5 at L16, 6 at L20.
     /// </summary>
@@ -1807,19 +1815,21 @@ public class CharacterStats
     /// Greater Rage (L11-19): +6 STR/CON, +3 Will, -2 AC
     /// Mighty Rage (L20): +8 STR/CON, +4 Will, -2 AC
     /// Fatigued after rage ends (unless Tireless Rage at L17+).
+    /// Only once per encounter (PHB p.25, <see cref="RagedThisEncounter"/>); fatigue does not bar it (PHB p.25 has no such
+    /// bar). The duration is 3 + the newly improved Constitution modifier (PHB p.25).
     /// </summary>
     public bool ActivateRage()
     {
-        if (!IsBarbarian || IsRaging || IsFatiguedOrExhausted || RagesUsedToday >= MaxRagesPerDay)
+        if (!IsBarbarian || IsRaging || RagedThisEncounter || RagesUsedToday >= MaxRagesPerDay)
         {
             Debug.Log($"[Barbarian] {CharacterName}: Cannot rage - " +
-                      $"IsBarbarian={IsBarbarian}, IsRaging={IsRaging}, IsFatiguedOrExhausted={IsFatiguedOrExhausted}, " +
+                      $"IsBarbarian={IsBarbarian}, IsRaging={IsRaging}, RagedThisEncounter={RagedThisEncounter}, " +
                       $"RagesUsed={RagesUsedToday}/{MaxRagesPerDay}");
             return false;
         }
 
         IsRaging = true;
-        RageRoundsRemaining = 3 + Mathf.Max(0, CONMod); // Use current CON mod before rage
+        RagedThisEncounter = true;
         RagesUsedToday++;
 
         int bonus = RageAbilityBonus; // 4/6/8 based on rage tier
@@ -1827,6 +1837,9 @@ public class CharacterStats
         // Apply rage bonuses
         STR += bonus;
         CON += bonus;
+
+        // A fit of rage lasts 3 + the character's newly improved Constitution modifier rounds (PHB p.25), at least 1.
+        RageRoundsRemaining = Mathf.Max(1, 3 + CONMod);
 
         // HP gain from CON increase: bonus/2 = CON mod increase, per Hit Die (PHB p.9; CHR-071)
         int conModIncrease = bonus / 2;

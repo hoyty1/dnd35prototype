@@ -226,7 +226,6 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 | Use Item | UI/Combat/QuickItemUsePanel.cs | Eager | `GameManager.OnUseItemButtonPressed` (4610) |
 | Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6381 |
 | Wish | UI/Wish/WishUI.cs | Eager | Spell/Resolution/GameManager_Spells_W.cs:1087, 1144 |
-| Turn Undead targets | UI/Combat/TurnUndeadTargetSelectionPanel.cs | Static `Create(canvas)` | Combat/Special/TurnUndeadSystem.cs:629 |
 | Character sheet with embedded inventory | UI/CharacterSheet/CharacterSheetUI.cs + UI/Inventory/InventoryUI.cs | Eager | C key |
 | Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:1372; GameManager.cs:632 |
 | Loot, XP, level-up | UI/Inventory/LootCollectionUI.cs, UI/Combat/CombatEndXPUI.cs, UI/CharacterSheet/LevelUpUI.cs | Eager / lazy / lazy | _Core/GameManager.LootCollection.cs: `BeginPostCombatLootCollection` (25), `ShowPostCombatXPFlow` (175), `ShowLevelUpUISequence` (344) |

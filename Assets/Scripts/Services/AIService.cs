@@ -258,6 +258,11 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // Rage (PHB p.25, D10): entering a rage takes no time but only on the barbarian's own turn, so a barbarian decides it
+        // at the start of its turn (design choice C6, AI-079: a foe within reach or charge range), through the executor the
+        // PC's Rage button runs; the turn goes on.
+        _gameManager.TryNPCRageForAI(npc);
+
         // An Improved Grab hold with one body part (MM p.310; CMB-148, CMB-149): the AI keeps holding while another foe is
         // within reach to fight; otherwise it lets go (a free action on its turn, delegated RAW reading 2026-10-14, CMB-163)
         // and acts normally. When to let go is an AI design item (AI-064).
@@ -381,6 +386,15 @@ public class AIService : MonoBehaviour
         // finish, with the standard action, through the rules the PC button calls (LayOnHandsRules, CHR-020). The AI
         // ends its turn after it (a simplification: it does not move afterwards).
         if (!isSummon && _gameManager.TryNPCLayOnHandsTurnForAI(npc))
+        {
+            yield return new WaitForSeconds(0.5f);
+            yield break;
+        }
+
+        // Turn undead (Su, PHB p.159): a cleric or paladin turns when a hostile turnable undead is within 60 ft with line of
+        // effect and its best check could affect the nearest (design choice C6, AI-054), through the executor the PC's Turn
+        // Undead button runs (D9). The AI ends its turn after it (a simplification, as for lay on hands; AI-077).
+        if (!isSummon && _gameManager.TryNPCTurnUndeadTurnForAI(npc))
         {
             yield return new WaitForSeconds(0.5f);
             yield break;

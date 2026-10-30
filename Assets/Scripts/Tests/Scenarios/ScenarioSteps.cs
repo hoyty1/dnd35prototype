@@ -16,7 +16,7 @@ namespace Tests.Scenarios
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
         UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action,
-        AidAnother, WakeAlly, AttackWall
+        AidAnother, WakeAlly, AttackWall, TurnUndead, Rage
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -218,6 +218,20 @@ namespace Tests.Scenarios
         /// Another button, "Wake Sleeping Ally" when both kinds are offered, then the ally (batch 13 step 13).
         /// </summary>
         public static Step WakeAlly(string ally) => new Step(StepKind.WakeAlly) { Target = ally };
+
+        /// <summary>
+        /// Turn undead (PHB p.159, D9; batch 13 step 16). Scripted: the turn-undead entry through RunAIAction (already
+        /// turned undead skipped unless <paramref name="includeTurned"/>). Ui: the Turn Undead button, a click on the
+        /// actor's square (the range preview's invoke), and, when undead in range are already turned, the skip question
+        /// answered "skip" or, with <paramref name="includeTurned"/>, "include".
+        /// </summary>
+        public static Step TurnUndead(bool includeTurned = false)
+            => new Step(StepKind.TurnUndead) { Variant = includeTurned ? "include" : "skip" };
+
+        /// <summary>
+        /// Enter a rage (PHB p.25, D10; batch 13 step 16). Scripted: the rage entry through RunAIAction. Ui: the Rage button.
+        /// </summary>
+        public static Step Rage() => new Step(StepKind.Rage);
 
         /// <summary>
         /// Attack the Wall of Ice square (<paramref name="x"/>, <paramref name="y"/>) (PHB p.165-166, p.299; batch 13 step 13
@@ -438,6 +452,8 @@ namespace Tests.Scenarios
                     return "AidAnother(" + Target + ",vs=" + Opponent + "," + Variant + ")";
                 case StepKind.WakeAlly:
                     return "WakeAlly(" + Target + ")";
+                case StepKind.TurnUndead:
+                    return "TurnUndead(" + Variant + ")";
                 case StepKind.AttackWall:
                     return "AttackWall(" + Cell.x + "," + Cell.y + "," + Variant + ")";
                 case StepKind.Action:
@@ -862,6 +878,20 @@ namespace Tests.Scenarios
                         yield return gm.RunAIAction(supportCtx, supportOutcome);
                         ok = supportOutcome.Performed;
                         if (!supportOutcome.Performed) note = supportOutcome.Refusal.Reason;
+                        break;
+                    }
+
+                    case StepKind.TurnUndead:
+                    case StepKind.Rage:
+                    {
+                        // The catalog's class-ability entries (batch 13 step 16, D9, D10), as the AI runs them.
+                        ActionContext classCtx = ActionContext.For(s.Kind == StepKind.TurnUndead ? ActionIds.TurnUndead : ActionIds.Rage, a, global::ActorSource.AI);
+                        if (s.Kind == StepKind.TurnUndead)
+                            classCtx.CoreRequest = new TurnUndeadRequest { IncludeTurned = s.Variant == "include" };
+                        var classOutcome = new ActionOutcome();
+                        yield return gm.RunAIAction(classCtx, classOutcome);
+                        ok = classOutcome.Performed;
+                        if (!classOutcome.Performed) note = classOutcome.Refusal.Reason;
                         break;
                     }
 
@@ -1504,6 +1534,19 @@ namespace Tests.Scenarios
                 case StepKind.TotalDefense:
                     gm.OnTotalDefenseButtonPressed();
                     break;
+                case StepKind.Rage:
+                    gm.OnRageButtonPressed();
+                    break;
+                case StepKind.TurnUndead:
+                {
+                    // The button's range preview, any click to invoke, then the skip question when it opens (D9).
+                    gm.OnTurnUndeadButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.ConfirmingTurnUndead, _actor.GridPosition);
+                    string answer = s.Variant == "include" ? GameManager.TurnUndeadIncludeOption : GameManager.TurnUndeadSkipOption;
+                    if (gm.Harness_ChooseSelectionOption(answer))
+                        _awaitNote = "answered '" + answer + "'";
+                    break;
+                }
                 case StepKind.Action:
                 {
                     // The PC runner: the executor, then the entry's UI follow-up (batch 13 step 6). Its outcome is read

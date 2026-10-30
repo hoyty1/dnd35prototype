@@ -270,7 +270,9 @@ public static class ActionCatalog
             .Run(new WakeAllyActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
             .AsManeuver(SpecialAttackType.WakeSleepingAlly));
         l.Add(Def(ActionIds.TurnUndead, "Turn Undead", C, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.None, ActionRoles.Attack | ActionRoles.Defend,
-                "PHB p.159-160, Table 8-2", ImplStatus.PcOnly, "AI-054")
+                "PHB p.159-160 (a standard action, no AoO; 60 ft with line of effect, closest first, the pool of HD stops at the first misfit; destroyed at half the turning level), Table 8-2; D9",
+                ImplStatus.Extracted)
+            .Run(new TurnUndeadActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
             .AsManeuver(SpecialAttackType.TurnUndead)
             .For(c => c.Stats.CanEverTurnUndead));
 
@@ -344,10 +346,13 @@ public static class ActionCatalog
             .For(c => BardicMusicRules.HasBardicMusic(c.Stats))
             .Costs(BardicCostFor));
         l.Add(Def(ActionIds.Rage, "Rage", C, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Self, ActionRoles.Attack | ActionRoles.Support,
-                "PHB p.25-26 (entering a rage takes no time, on the barbarian's turn)", ImplStatus.PcOnly, "AI-054")
+                "PHB p.25-26 (entering a rage takes no time, only on the barbarian's own turn); D10", ImplStatus.Extracted)
+            .Run(new RageActionExecutor(), ActionUiAfter.ShowChoices)
             .For(c => c.Stats.MaxRagesPerDay > 0));
         l.Add(Def(ActionIds.DomainPower, "Domain Power", C, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Support | ActionRoles.Attack,
-                "PHB p.32, p.185-189 (granted powers), Table 8-2 (use supernatural ability: No)", ImplStatus.PcOnly, "AI-054")
+                "PHB p.32, p.185-189 (granted powers), Table 8-2 (use supernatural ability: No)", ImplStatus.Extracted)
+            .Run(new DomainPowerActionExecutor(), ActionUiAfter.AttackDelay, 0.6f)
+            .Costs((c, ctx) => ctx != null && !string.IsNullOrEmpty(ctx.Variant) ? DomainPowerActionExecutor.CostOf(ctx.Variant) : ActionCostType.Standard)
             .For(c => c.Stats.ChosenDomains != null && c.Stats.ChosenDomains.Count > 0));
 
         // ── Equipment ──
