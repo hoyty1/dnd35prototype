@@ -6406,6 +6406,46 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// The damage of one weapon attack on an unattended object that needs no attack roll, a Wall of Ice square
+    /// (GameManager.ActionCore_AttackWall, batch 13 step 13): the dice of <paramref name="weapon"/> (scaled for size), else
+    /// of the primary natural attack (MM p.312: its own Strength share), else of the unarmed strike, plus the shared damage
+    /// terms of <see cref="BuildWeaponDamageBonus"/> (Weapon Specialization; no Power Attack, as there is no attack roll),
+    /// at least 1 (PHB p.134). Ranged halving and hardness are the caller's (PHB p.165). <paramref name="label"/> names
+    /// what struck; <paramref name="breakdown"/> is the roll for the log.
+    /// </summary>
+    internal int RollObjectAttackDamage(ItemData weapon, bool isRanged, out string label, out string breakdown)
+    {
+        int count, sides;
+        WeaponDamageBreakdown terms;
+        NaturalAttackDefinition natural = weapon == null && Stats != null ? Stats.GetPrimaryNaturalAttack() : null;
+        if (weapon != null)
+        {
+            GetScaledWeaponDamageDice(weapon, out count, out sides);
+            terms = BuildWeaponDamageBonus(weapon, isRanged, false, DamageOnlyFeatModifiers(weapon), weapon.BonusDamage);
+            label = weapon.Name;
+        }
+        else if (natural != null)
+        {
+            Stats.GetScaledNaturalAttackDamage(natural, out count, out sides);
+            // NaturalAttackDefinition.BonusDamage is not a damage term on any attack path (CRE-061).
+            terms = BuildWeaponDamageBonus(null, false, false, default(AttackCalculator.FeatModifiers), naturalAttack: natural);
+            label = natural.Name;
+        }
+        else
+        {
+            (count, sides, _) = GetUnarmedDamage();
+            terms = BuildWeaponDamageBonus(null, false, false, DamageOnlyFeatModifiers(null));
+            label = "Unarmed strike";
+        }
+        count = Mathf.Max(1, count);
+        sides = Mathf.Max(1, sides);
+        int roll = Stats.RollBaseDamage(sides, count);
+        int total = Mathf.Max(1, roll + terms.Total);
+        breakdown = $"{count}d{sides} ({roll}) + [{terms.Describe()}] = {total}";
+        return total;
+    }
+
+    /// <summary>
     /// <paramref name="feats"/> with no Power Attack damage when <paramref name="weapon"/> is a light weapon: PHB p.98
     /// gives a light weapon the Power Attack penalty but no damage bonus (an unarmed strike, null here, and natural weapons
     /// keep it). Used by the grapple weapon attacks, which are always made with a light weapon (PHB p.156). The shared

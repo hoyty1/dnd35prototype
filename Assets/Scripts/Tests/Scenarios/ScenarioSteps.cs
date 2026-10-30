@@ -15,7 +15,8 @@ namespace Tests.Scenarios
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
-        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action
+        UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action,
+        AidAnother, WakeAlly, AttackWall
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -67,6 +68,8 @@ namespace Tests.Scenarios
         public string ActionId { get; private set; }
         /// <summary>An <see cref="Action"/> step's sub-choice (ActionContext.Variant: a wild shape form, a bardic music variant).</summary>
         public string Variant { get; private set; }
+        /// <summary>The opponent an aid another aids against (<see cref="AidAnother"/>, <see cref="ActionAgainst"/>; ActionContext.Opponent).</summary>
+        public string Opponent { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move", "EscapeArtist" };
@@ -189,6 +192,45 @@ namespace Tests.Scenarios
         /// <summary><see cref="Action(string, string, string)"/> with an item of the actor's (its ItemDatabase id) and an optional target.</summary>
         public static Step ActionItem(string actionId, string itemId, string target = null)
             => new Step(StepKind.Action) { ActionId = actionId, ItemId = itemId, Target = target };
+
+        /// <summary>
+        /// <see cref="Action(string, string, string)"/> with an opponent (ActionContext.Opponent): the aid-another entry aids
+        /// <paramref name="target"/>, the ally, against <paramref name="opponent"/>, <paramref name="variant"/> "offense" or
+        /// "defense" (AidAnotherActionExecutor; batch 13 step 13, D6).
+        /// </summary>
+        public static Step ActionAgainst(string actionId, string target, string opponent, string variant = null)
+            => new Step(StepKind.Action) { ActionId = actionId, Target = target, Opponent = opponent, Variant = variant };
+
+        /// <summary>
+        /// Aid another (PHB p.154, D6): aid <paramref name="ally"/>'s next attack roll (or, with <paramref name="defense"/>, its
+        /// AC) against <paramref name="opponent"/>. Scripted: the aid-another entry through RunAIAction. Ui: the Aid Another
+        /// button and its lists (the kind when both are offered, the opponent, the aid, the ally; batch 13 step 13).
+        /// </summary>
+        public static Step AidAnother(string ally, string opponent, bool defense = false)
+            => new Step(StepKind.AidAnother)
+            {
+                Target = ally, Opponent = opponent,
+                Variant = defense ? AidAnotherActionExecutor.DefenseVariant : AidAnotherActionExecutor.OffenseVariant,
+            };
+
+        /// <summary>
+        /// Shake <paramref name="ally"/> awake (PHB p.280, D6). Scripted: the wake-ally entry through RunAIAction. Ui: the Aid
+        /// Another button, "Wake Sleeping Ally" when both kinds are offered, then the ally (batch 13 step 13).
+        /// </summary>
+        public static Step WakeAlly(string ally) => new Step(StepKind.WakeAlly) { Target = ally };
+
+        /// <summary>
+        /// Attack the Wall of Ice square (<paramref name="x"/>, <paramref name="y"/>) (PHB p.165-166, p.299; batch 13 step 13
+        /// review): with the weapon, or with <paramref name="strength"/> a Strength check to break through. Scripted: the
+        /// attack-wall entry through RunAIAction (Variant weapon or strength). Ui: the Attack button, then the square (the
+        /// attack step the button pays, AttackWallRequest.ActionPaid), or the Break Wall button, then the square.
+        /// </summary>
+        public static Step AttackWall(int x, int y, bool strength = false)
+            => new Step(StepKind.AttackWall)
+            {
+                Cell = new Vector2Int(x, y), HasCell = true,
+                Variant = strength ? AttackWallActionExecutor.StrengthVariant : AttackWallActionExecutor.WeaponVariant,
+            };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
@@ -392,8 +434,14 @@ namespace Tests.Scenarios
                     return "BardicSuggestion(" + Target + ")";
                 case StepKind.Wait:
                     return "Wait(" + Frames + ")";
+                case StepKind.AidAnother:
+                    return "AidAnother(" + Target + ",vs=" + Opponent + "," + Variant + ")";
+                case StepKind.WakeAlly:
+                    return "WakeAlly(" + Target + ")";
+                case StepKind.AttackWall:
+                    return "AttackWall(" + Cell.x + "," + Cell.y + "," + Variant + ")";
                 case StepKind.Action:
-                    return "Action(" + ActionId + (Target != null ? "," + Target : "") + (HasCell ? "," + Cell.x + "," + Cell.y : "")
+                    return "Action(" + ActionId + (Target != null ? "," + Target : "") + (Opponent != null ? ",vs=" + Opponent : "") + (HasCell ? "," + Cell.x + "," + Cell.y : "")
                         + (ItemId != null ? ",item=" + ItemId : "") + (Variant != null ? ",variant=" + Variant : "") + ")";
                 default:
                     return Kind.ToString();
@@ -409,7 +457,11 @@ namespace Tests.Scenarios
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
                 || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert || Kind == StepKind.DualWield
-                || (Kind == StepKind.Overrun && !HasCell);
+                || (Kind == StepKind.Overrun && !HasCell) || Kind == StepKind.AidAnother || Kind == StepKind.WakeAlly;
+            if (Opponent != null && def.Find(Opponent) == null)
+                return Describe() + ": opponent '" + Opponent + "' is not an actor";
+            if (Kind == StepKind.AidAnother && string.IsNullOrEmpty(Opponent))
+                return Describe() + ": no opponent";
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl || HasCell;
@@ -780,11 +832,43 @@ namespace Tests.Scenarios
                     case StepKind.Action:
                     {
                         var actionOutcome = new ActionOutcome();
-                        ActionContext actionCtx = BuildActionContext(a, s, target, global::ActorSource.AI, out string itemNote);
+                        ActionContext actionCtx = BuildActionContext(a, s, target, global::ActorSource.AI, out string itemNote,
+                            s.Opponent != null ? job.Ctx.Get(s.Opponent) : null);
                         yield return gm.RunAIAction(actionCtx, actionOutcome);
                         ok = actionOutcome.Performed;
                         if (!actionOutcome.Performed) note = actionOutcome.Refusal.Reason;
                         if (itemNote != null) note = note == null ? itemNote : itemNote + "; " + note;
+                        break;
+                    }
+
+                    case StepKind.AidAnother:
+                    case StepKind.WakeAlly:
+                    {
+                        // The catalog's shared executors (batch 13 step 13, D6), as the PC menu runs them.
+                        ActionContext supportCtx = ActionContext.For(s.Kind == StepKind.AidAnother ? ActionIds.AidAnother : ActionIds.WakeAlly,
+                            a, global::ActorSource.AI, target);
+                        if (s.Kind == StepKind.AidAnother)
+                        {
+                            supportCtx.Opponent = s.Opponent != null ? job.Ctx.Get(s.Opponent) : null;
+                            supportCtx.Variant = s.Variant;
+                        }
+                        var supportOutcome = new ActionOutcome();
+                        yield return gm.RunAIAction(supportCtx, supportOutcome);
+                        ok = supportOutcome.Performed;
+                        if (!supportOutcome.Performed) note = supportOutcome.Refusal.Reason;
+                        break;
+                    }
+
+                    case StepKind.AttackWall:
+                    {
+                        // The catalog's attack-wall entry (batch 13 step 13), as the NPC's wall branch runs it.
+                        ActionContext wallCtx = ActionContext.For(ActionIds.AttackWall, a, global::ActorSource.AI);
+                        wallCtx.Cell = s.Cell;
+                        wallCtx.Variant = s.Variant;
+                        var wallOutcome = new ActionOutcome();
+                        yield return gm.RunAIAction(wallCtx, wallOutcome);
+                        ok = wallOutcome.Performed;
+                        if (!wallOutcome.Performed) note = wallOutcome.Refusal.Reason;
                         break;
                     }
 
@@ -937,10 +1021,11 @@ namespace Tests.Scenarios
         /// <paramref name="itemNote"/> says "item ID not carried" when the step names an item the actor does not have.
         /// </summary>
         internal static ActionContext BuildActionContext(CharacterController a, Step s, CharacterController target, global::ActorSource source,
-            out string itemNote)
+            out string itemNote, CharacterController opponent = null)
         {
             itemNote = null;
             ActionContext ctx = ActionContext.For(s.ActionId, a, source, target);
+            ctx.Opponent = opponent;
             if (s.HasCell)
                 ctx.Cell = s.Cell;
             ctx.Variant = s.Variant;
@@ -1417,13 +1502,41 @@ namespace Tests.Scenarios
                 {
                     // The PC runner: the executor, then the entry's UI follow-up (batch 13 step 6). Its outcome is read
                     // when the step's wait ends (FinishCurrent), so a refused or cancelled step says why.
-                    ActionContext uiCtx = ScriptedSteps.BuildActionContext(_actor, s, target, global::ActorSource.Ui, out string uiItemNote);
+                    ActionContext uiCtx = ScriptedSteps.BuildActionContext(_actor, s, target, global::ActorSource.Ui, out string uiItemNote,
+                        s.Opponent != null ? _job.Ctx.Get(s.Opponent) : null);
                     if (uiItemNote != null)
                         _awaitNote = uiItemNote;
                     _actionOutcome = new ActionOutcome();
                     gm.RunPlayerAction(uiCtx, _actionOutcome);
                     break;
                 }
+                case StepKind.AidAnother:
+                {
+                    // The PC aid menu (batch 13 step 13): the kind (only when waking is offered too), the opponent, the aid, the ally.
+                    CharacterController opponent = s.Opponent != null ? _job.Ctx.Get(s.Opponent) : null;
+                    if (target == null || opponent == null) { _awaitNote = "no ally or opponent"; break; }
+                    gm.OnAidAnotherButtonPressed();
+                    gm.Harness_ChooseSelectionOption("Aid Attack/Defense");
+                    string aidOption = s.Variant == AidAnotherActionExecutor.DefenseVariant ? "Aid Defense" : "Aid Offense";
+                    if (!gm.Harness_ChooseSelectionOption(opponent.Stats.CharacterName)) { _awaitNote = "no opponent option " + opponent.Stats.CharacterName; gm.CombatUI?.HidePickUpItemSelection(); break; }
+                    if (!gm.Harness_ChooseSelectionOption(aidOption)) { _awaitNote = "no option " + aidOption; gm.CombatUI?.HidePickUpItemSelection(); break; }
+                    if (!gm.Harness_ChooseSelectionOption(target.Stats.CharacterName)) { _awaitNote = "no ally option " + target.Stats.CharacterName; gm.CombatUI?.HidePickUpItemSelection(); break; }
+                    break;
+                }
+                case StepKind.AttackWall:
+                    // The Attack button (its attack step paid before the click) or the Break Wall button, then the square.
+                    if (s.Variant == AttackWallActionExecutor.StrengthVariant)
+                        gm.OnBreakWallButtonPressed();
+                    else
+                        gm.OnAttackButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, s.Cell);
+                    break;
+                case StepKind.WakeAlly:
+                    if (target == null) { _awaitNote = "no ally"; break; }
+                    gm.OnAidAnotherButtonPressed();
+                    gm.Harness_ChooseSelectionOption("Wake Sleeping Ally");
+                    if (!gm.Harness_ChooseSelectionOption(target.Stats.CharacterName)) { _awaitNote = "no sleeping-ally option " + target.Stats.CharacterName; gm.CombatUI?.HidePickUpItemSelection(); }
+                    break;
                 case StepKind.BardicStop:
                     gm.OnBardicMusicButtonPressed();
                     if (!gm.Harness_ChooseSelectionOption("Stop ")) { _awaitNote = "no Stop option"; gm.CombatUI?.HidePickUpItemSelection(); }

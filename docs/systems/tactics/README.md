@@ -249,11 +249,11 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 15 | Feat modes for NPCs: Power Attack (profile flag unread); Rapid Shot and TWF (no NPC caller); Cleave; natural attacks plus weapon | many humanoids | Med | Med | AI-026, new AI (Rapid Shot/TWF), CMB-077 (Cleave works for NPCs since batch 12 step 15) |
 | 16 | NPC class features: rage, turn/rebuke, sneak-attack positioning (flurry done 2026-10-14, CHR-003; smite and lay on hands done 2026-10-14, CHR-020; turning level by class level, CMB-016 fixed) | DMG class NPCs | Med | Med | CMB-026, CMB-028 |
 | 17 | Consumables for the AI (potions first) | DMG NPC gear | Med | Med | AI-009, AI-054 |
-| 18 | Remaining PHB actions: double move, run, total defense, aid another (AI path + expiry fix), withdraw, cover | all | Med | Low to Med | AI-010, GRID-009, new CMB (aid another) |
+| 18 | Remaining PHB actions: double move, run, total defense, aid another (AI path; the expiry and the roll's modifier were fixed in batch 13 step 13's review), withdraw, cover | all | Med | Low to Med | AI-010, GRID-009, new CMB (aid another) |
 
 **Issues filed from this run** (2026-10-07, after checking each against the code and the books): SPL-110 (Hold Person/Monster have no per-round save), SPL-111 (Mage Armor is Self-only), CRE-034 (Summon Monster list deviations, including the SM II scorpion size), CRE-035 (eight creatures with no CR), CRE-036 (blue slaad pounce), CRE-037 (natural-attack energy riders are data only), AI-055 (no NPC Rapid Shot or two-weapon fighting), AI-056 (summon smite formula), CMB-080 (pinned casters cannot cast verbal spells).
 
-**Proposed but not filed** (not verified yet; check before filing): Enervation's missing undead branch and 15-hour cap (no Enervation handler was found by grep, so it may resolve generically); adding Inflict Serious Wounds to SPL-057 (Sound Burst was named there and flagged in batch 11 step 11); the Aid Another expiry and roll-bonus problems; extending CMB-022 with the Manyshot re-roll. The hydra `"MagicalBeast"` spelling is already CRE-033.
+**Proposed but not filed** (not verified yet; check before filing): Enervation's missing undead branch and 15-hour cap (no Enervation handler was found by grep, so it may resolve generically); adding Inflict Serious Wounds to SPL-057 (Sound Burst was named there and flagged in batch 11 step 11); extending CMB-022 with the Manyshot re-roll. The hydra `"MagicalBeast"` spelling is already CRE-033.
 
 ---
 

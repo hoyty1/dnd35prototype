@@ -24,6 +24,10 @@ namespace Tests.Combat
 ///   shared executors with the PC's tail (ShowChoices); a load's cost by the weapon and Rapid Reload (ReloadRules: hand
 ///   and light a move action, heavy full-round; Rapid Reload free and a move action; PHB p.115, p.99) and the crawl's
 ///   destination pre-check;
+/// - the support and wall entries (batch 13 step 13, D6, CORE-040): aid another, wake an ally and attack a wall are
+///   Extracted over their shared executors with the PC's attack follow-up (AttackDelay: 0.9 s, 0.9 s, 1.0 s); the aid's
+///   variants map to its two aids, and each pre-check refuses a context with no actor, no aid, no ally or no wall square;
+///   all three refuse a grappling or pinned actor on the Condition bar (PHB p.156; the step's review);
 /// - a source scan: the executor files (Combat/Actions/Executors) never continue the UI (ShowActionChoices,
 ///   AfterAttackDelay, EndActivePCTurn, DelayedEndActivePCTurn) nor read IsControllable, ActivePC or IsPlayerTurn, and
 ///   ActionDeciders.cs is the only catalog file that reads IsControllable (its assertion count grows with the files);
@@ -42,7 +46,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-12) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-13) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -59,6 +63,7 @@ public static class ActionCatalogTests
         Run(TestInlineAction);
         Run(TestMoveEntries);
         Run(TestPostureAndReloadEntries);
+        Run(TestSupportAndWallEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -181,6 +186,65 @@ public static class ActionCatalogTests
             "ReloadRules refuses with no actor, with a reason", noActor);
     }
 
+    /// <summary>
+    /// The support and wall entries (batch 13 step 13, D6, CORE-040): aid another (a standard action whose provocation is
+    /// the aided action's, Table 8-2 note 2), waking an ally (a standard action, no provocation, PHB p.280) and attacking a
+    /// wall (a standard action) are Extracted over their executors, with the PC's attack follow-up as their UiAfter; the
+    /// aid's two variants map to its two aids and back; each pre-check refuses an empty context with nothing to act on.
+    /// </summary>
+    private static void TestSupportAndWallEntries()
+    {
+        ActionDefinition aid = ActionCatalog.Get(ActionIds.AidAnother);
+        ActionDefinition wake = ActionCatalog.Get(ActionIds.WakeAlly);
+        ActionDefinition wall = ActionCatalog.Get(ActionIds.AttackWall);
+        Assert(aid != null && aid.Status == ImplStatus.Extracted && aid.Executor is AidAnotherActionExecutor
+               && aid.UiAfter == ActionUiAfter.AttackDelay && Mathf.Approximately(aid.UiAfterSeconds, 0.9f)
+               && aid.Cost == ActionCostType.Standard && aid.Provokes == ProvokeRule.Maybe && aid.Maneuver == SpecialAttackType.AidAnother,
+            "Aid another is Extracted over AidAnotherActionExecutor: a standard action that provokes only when the aided action would (D6), the PC's 0.9 s attack follow-up",
+            aid != null ? aid.ToString() : "null");
+        Assert(wake != null && wake.Status == ImplStatus.Extracted && wake.Executor is WakeAllyActionExecutor
+               && wake.UiAfter == ActionUiAfter.AttackDelay && Mathf.Approximately(wake.UiAfterSeconds, 0.9f)
+               && wake.Cost == ActionCostType.Standard && wake.Provokes == ProvokeRule.No && wake.Maneuver == SpecialAttackType.WakeSleepingAlly,
+            "Waking an ally is Extracted over WakeAllyActionExecutor: a standard action that does not provoke (PHB p.280, D6)",
+            wake != null ? wake.ToString() : "null");
+        Assert(wall != null && wall.Status == ImplStatus.Extracted && wall.Executor is AttackWallActionExecutor
+               && wall.UiAfter == ActionUiAfter.AttackDelay && Mathf.Approximately(wall.UiAfterSeconds, 1.0f)
+               && wall.Cost == ActionCostType.Standard && (wall.IssueIds == null || wall.IssueIds.Length == 0),
+            "Attacking a wall is Extracted over AttackWallActionExecutor with the PC's 1.0 s attack follow-up and no open issue (CORE-040)",
+            wall != null ? wall.ToString() : "null");
+
+        Assert(AidAnotherActionExecutor.AidTypeOf(AidAnotherActionExecutor.OffenseVariant) == GameManager.AidType.Offense
+               && AidAnotherActionExecutor.AidTypeOf(AidAnotherActionExecutor.DefenseVariant) == GameManager.AidType.Defense
+               && !AidAnotherActionExecutor.AidTypeOf(null).HasValue && !AidAnotherActionExecutor.AidTypeOf("attack").HasValue
+               && AidAnotherActionExecutor.VariantOf(GameManager.AidType.Offense) == AidAnotherActionExecutor.OffenseVariant
+               && AidAnotherActionExecutor.VariantOf(GameManager.AidType.Defense) == AidAnotherActionExecutor.DefenseVariant,
+            "The aid-another variants map to its two aids (+2 attack, +2 AC) and back");
+
+        foreach (ActionDefinition d in new[] { aid, wake, wall })
+        {
+            if (d == null || d.Executor == null)
+                continue;
+            Assert(!d.Executor.CanExecute(null).Ok, d.Id + ": the pre-check refuses a missing context");
+            Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, d.Id + ": the pre-check refuses a context with no actor");
+        }
+
+        // The grapple bar (PHB p.156: a grappler takes only the grapple actions, a pinned creature none of these): one
+        // shared refusal that all three disabled reasons read, mapped to the Condition bar (batch 13 step 13 review).
+        Assert(SupportLegality.FromReason("grappling").Bar == LegalityBar.Condition && SupportLegality.FromReason("pinned").Bar == LegalityBar.Condition
+               && SupportLegality.FromReason("no standard action left").Bar == LegalityBar.Action && SupportLegality.FromReason(null).Ok
+               && GameManager.IsGrappleBarReason("grappling") && GameManager.IsGrappleBarReason("pinned") && !GameManager.IsGrappleBarReason("no ally")
+               && GameManager.GetSupportActionGrappleRefusal(null) == null,
+            "The support and wall entries map grappling and pinned to the Condition bar and the spent action to the Action bar (PHB p.156)");
+        string cores = StripComments(Path.Combine(Application.dataPath, "Scripts/Combat/Actions/Executors/GameManager.ActionCores.cs"));
+        foreach (string method in new[] { "GetAidAnotherDisabledReason", "GetWakeAllyDisabledReason", "GetAttackWallDisabledReason" })
+        {
+            int at = cores.IndexOf("internal string " + method + "(", StringComparison.Ordinal);
+            int next = at >= 0 ? cores.IndexOf("internal ", at + 20, StringComparison.Ordinal) : -1;
+            string body = at >= 0 ? cores.Substring(at, (next > at ? next : cores.Length) - at) : "";
+            Assert(body.Contains("GetSupportActionGrappleRefusal(actor)"), method + " refuses a grappling or pinned actor (GetSupportActionGrappleRefusal; PHB p.156)");
+        }
+    }
+
     private static void Run(Action test)
     {
         try
@@ -275,7 +339,7 @@ public static class ActionCatalogTests
         new object[] { ActionIds.FlurryOfBlows, ActionCostType.FullRound, ProvokeRule.Varies, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Charge, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Delegating, "" },
         new object[] { ActionIds.DeliverHeldCharge, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
-        new object[] { ActionIds.AttackWall, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.AttackWall, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Trip, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Disarm, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Grapple, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
@@ -285,8 +349,8 @@ public static class ActionCatalogTests
         new object[] { ActionIds.Overrun, ActionCostType.Standard, ProvokeRule.ByMovement, ImplStatus.Delegating, "" },
         new object[] { ActionIds.Feint, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
         new object[] { ActionIds.CoupDeGrace, ActionCostType.FullRound, ProvokeRule.Yes, ImplStatus.Delegating, "" },
-        new object[] { ActionIds.AidAnother, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.WakeAlly, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.AidAnother, ActionCostType.Standard, ProvokeRule.Maybe, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.WakeAlly, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.TurnUndead, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },

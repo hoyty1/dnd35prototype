@@ -20,6 +20,10 @@ public sealed class ActionContext
     public IActionDecider Decider;
 
     public CharacterController Target;
+
+    /// <summary>The opponent an aid another aids against (batch 13 step 13; <see cref="Target"/> is then the ally aided).</summary>
+    public CharacterController Opponent;
+
     public Vector2Int? Cell;
     public ItemData Item;
     public int InventoryIndex = -1;

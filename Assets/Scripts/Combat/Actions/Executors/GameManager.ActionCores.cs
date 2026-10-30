@@ -261,6 +261,447 @@ public partial class GameManager
         return true;
     }
 
+    // ── Aid another, waking an ally and attacking a wall (batch 13 step 13, D6, CORE-040): the Extracted executors'
+    // cores, moved from the PC-bound ExecuteAidAnother, ExecuteAidAnotherWakeSleepingAlly, PerformPlayerAttackOnWall and
+    // PerformStrengthCheckOnWall. Each pays its standard action first, then rolls. No UI follow-up here: the PC runner's
+    // UiAfter does it. ──
+
+    /// <summary>
+    /// Why <paramref name="actor"/> cannot aid another's attack or AC now, or null (the aid-another entry's CanStart): a
+    /// standard action left (PHB p.154), not grappling or pinned (a grappler takes only the grapple actions, PHB p.156), an
+    /// ally on the field and a foe it threatens with its weapon (the "in position to make a melee attack" reading of
+    /// CanAttemptAidAnotherTouch, delegated RAW reading 2026-10-29). Pure, unlogged.
+    /// </summary>
+    internal string GetAidAnotherDisabledReason(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null || actor.Actions == null)
+            return "no actor";
+        if (!actor.Actions.HasStandardAction)
+            return "no standard action left";
+        string grappled = GetSupportActionGrappleRefusal(actor);
+        if (grappled != null)
+            return grappled;
+        if (GetAllAllies(actor).Count == 0)
+            return "no ally";
+        ItemData weapon = actor.GetEquippedWeapon();
+        foreach (CharacterController enemy in GetAllEnemies(actor))
+            if (actor.ThreatensWith(enemy, weapon))
+                return null;
+        return "threatens no foe";
+    }
+
+    /// <summary>
+    /// The grapple bar of the support and wall entries (aid another, waking an ally, attacking a wall), or null: a pinned
+    /// creature can take no action but the grapple's escape, and a grappling one only the grapple actions (PHB p.156), none
+    /// of which these are. Its reasons map to <see cref="LegalityBar.Condition"/> (<see cref="IsGrappleBarReason"/>).
+    /// </summary>
+    internal static string GetSupportActionGrappleRefusal(CharacterController actor)
+    {
+        if (actor == null)
+            return null;
+        if (actor.HasCondition(CombatConditionType.Pinned))
+            return "pinned";
+        if (actor.IsGrappling())
+            return "grappling";
+        return null;
+    }
+
+    /// <summary>Whether <paramref name="reason"/> is the grapple bar's (<see cref="GetSupportActionGrappleRefusal"/>).</summary>
+    internal static bool IsGrappleBarReason(string reason) => reason == "pinned" || reason == "grappling";
+
+    /// <summary>
+    /// Why <paramref name="aider"/> cannot aid <paramref name="ally"/> against <paramref name="opponent"/>, or null (the
+    /// aid-another entry's CanExecute after CanStart): the aider can make a melee attack on the opponent (it threatens it
+    /// with its weapon) and the ally, another living creature of its side, is in melee with it (threatens it; PHB p.154).
+    /// Delegated RAW reading (2026-10-29, RULES_COVERAGE 4.1): PHB p.154's "in position to make a melee attack" on the
+    /// opponent is read as threatening it, since PHB p.137 defines the threatened squares as those into which a creature
+    /// can make a melee attack and says an unarmed creature does not normally threaten; so an aider holding only a bow, or
+    /// unarmed without Improved Unarmed Strike, cannot aid.
+    /// </summary>
+    internal string GetAidAnotherTargetRefusal(CharacterController aider, CharacterController ally, CharacterController opponent)
+    {
+        if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+            return "no opponent to aid against";
+        if (!CanAttemptAidAnotherTouch(aider, opponent))
+            return GetCombatantName(opponent) + " is not in melee reach for Aid Another";
+        if (ally == null || ally.Stats == null || ally.Stats.IsDead || ally == aider || !TeamUtility.IsAlly(aider, ally))
+            return "no ally to aid";
+        if (!ally.ThreatensWith(opponent, ally.GetEquippedWeapon()))
+            return GetCombatantName(ally) + " is not in melee range of " + GetCombatantName(opponent);
+        return null;
+    }
+
+    /// <summary>
+    /// <paramref name="aider"/> aids <paramref name="ally"/>'s next attack roll or AC against <paramref name="opponent"/>
+    /// (D6; PHB p.154): the standard action is paid first, then an attack roll against AC 10 with the aider's melee attack
+    /// modifier (GetAidAnotherAttackModifier: the shared BuildAttackBonus terms of its melee weapon, or unarmed, plus the
+    /// weapon's enhancement or masterwork bonus); a hit gives the ally +2 (AddAidBonus, until it is used or the start of
+    /// the aider's next turn). Neither aid provokes (Table 8-2 "Maybe", note 2: it provokes only when the aided action would, and
+    /// an attack roll or AC aids no action that provokes now). The caller checked the targets (GetAidAnotherTargetRefusal).
+    /// Performed when the action was paid, hit or miss; <see cref="ActionOutcome.CoreOutcome"/> is whether it hit.
+    /// </summary>
+    internal bool ActionCore_AidAnother(CharacterController aider, CharacterController ally, CharacterController opponent, AidType aidType,
+        ActorSource source, ActionOutcome o)
+    {
+        if (aider == null || aider.Stats == null || ally == null || ally.Stats == null || opponent == null || opponent.Stats == null)
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Target, "no aider, ally or opponent"));
+            return false;
+        }
+        // D6: the action is paid when it is taken, before its roll.
+        if (!aider.CommitStandardAction())
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Action, "no standard action left"));
+            return false;
+        }
+        o.Performed = true;
+        if (source == ActorSource.Ui)
+            CurrentSubPhase = PlayerSubPhase.Animating;
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{aider.Stats.CharacterName} aids {ally.Stats.CharacterName}'s {GetAidTypeLabel(aidType)} vs {opponent.Stats.CharacterName}."));
+
+        int aidAtkMod = GetAidAnotherAttackModifier(aider);
+        (bool hit, int roll, int total) = aider.Stats.RollToHitWithMod(aidAtkMod, 10);
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Attack roll vs AC 10:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Roll: 1d20 = {roll}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Modifier: {CharacterStats.FormatMod(aidAtkMod)}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Total: {total}"));
+        o.CoreOutcome = hit;
+
+        if (!hit)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "Aid Another failed (needed 10)."));
+            UpdateAllStatsUI();
+            return true;
+        }
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", "Aid Another success!"));
+        AddAidBonus(aider, ally, opponent, aidType);
+        DisplayActiveAidBonuses(ally);
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    /// <summary>
+    /// Why <paramref name="actor"/> cannot shake a sleeping ally awake now, or null (the wake-ally entry's CanStart): a
+    /// standard action left (PHB p.280: waking a sleeper is a standard action, an application of aid another, D6), not
+    /// grappling or pinned (PHB p.156), and a sleeping ally adjacent to it. Pure, unlogged.
+    /// </summary>
+    internal string GetWakeAllyDisabledReason(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null || actor.Actions == null)
+            return "no actor";
+        if (!actor.Actions.HasStandardAction)
+            return "no standard action left";
+        string grappled = GetSupportActionGrappleRefusal(actor);
+        if (grappled != null)
+            return grappled;
+        if (GetAdjacentSleepingAllies(actor).Count == 0)
+            return "no sleeping ally adjacent";
+        return null;
+    }
+
+    /// <summary>Why <paramref name="actor"/> cannot wake <paramref name="ally"/>, or null: an ally, adjacent, asleep.</summary>
+    internal string GetWakeAllyTargetRefusal(CharacterController actor, CharacterController ally)
+    {
+        if (ally == null || ally.Stats == null || ally.Stats.IsDead || ally == actor || !TeamUtility.IsAlly(actor, ally))
+            return "no ally to wake";
+        if (!IsAdjacent(actor, ally))
+            return ally.Stats.CharacterName + " is not adjacent to " + actor.Stats.CharacterName;
+        if (!IsCharacterAsleep(ally))
+            return ally.Stats.CharacterName + " is not asleep";
+        return null;
+    }
+
+    /// <summary>
+    /// <paramref name="actor"/> shakes <paramref name="ally"/> awake (D6; PHB p.280, p.154): the standard action is paid,
+    /// then the ally wakes (TryWakeSleepingCharacter). It provokes nothing. Performed when the action was paid;
+    /// <see cref="ActionOutcome.CoreOutcome"/> is whether the ally woke.
+    /// </summary>
+    internal bool ActionCore_WakeAlly(CharacterController actor, CharacterController ally, ActorSource source, ActionOutcome o)
+    {
+        if (actor == null || actor.Stats == null || ally == null || ally.Stats == null)
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Target, "no actor or ally"));
+            return false;
+        }
+        if (!actor.CommitStandardAction())
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Action, "no standard action left"));
+            return false;
+        }
+        o.Performed = true;
+        if (source == ActorSource.Ui)
+            CurrentSubPhase = PlayerSubPhase.Animating;
+
+        bool woke = TryWakeSleepingCharacter(ally, "shaken awake", actor, suppressLog: true);
+        if (woke)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{actor.Stats.CharacterName} shakes {ally.Stats.CharacterName} awake."));
+        else
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot wake {ally.Stats.CharacterName} right now."));
+        o.CoreOutcome = woke;
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    /// <summary>
+    /// The attack intent of a wall attack by <paramref name="actor"/> (batch 13 step 13 review): the PC UI's attack selection
+    /// for a Ui run (AttackIntent.ForUi: a throw only when the player chose it), else the AI's mode with no creature target
+    /// (AttackIntent.ForAI: a ranged weapon shoots, any other weapon strikes in melee).
+    /// </summary>
+    internal AttackIntent WallAttackIntent(CharacterController actor, ActorSource source)
+        => source == ActorSource.Ui ? AttackIntent.ForUi(this, actor) : AttackIntent.ForAI(this, actor, null);
+
+    /// <summary>The distance in squares (Chebyshev) from the nearest square of <paramref name="actor"/>'s space to <paramref name="cell"/>, so a Large creature measures from its whole footprint.</summary>
+    internal static int WallCellDistance(CharacterController actor, Vector2Int cell)
+    {
+        int best = int.MaxValue;
+        List<Vector2Int> squares = actor.GetOccupiedSquares();
+        if (squares != null)
+            foreach (Vector2Int sq in squares)
+                best = Mathf.Min(best, SquareGridUtils.ChebyshevDistance(sq, cell));
+        return best == int.MaxValue ? SquareGridUtils.ChebyshevDistance(actor.GridPosition, cell) : best;
+    }
+
+    /// <summary>
+    /// Whether a weapon attack by <paramref name="actor"/> with <paramref name="weapon"/> (null: unarmed or natural) and
+    /// <paramref name="intent"/> reaches the wall square <paramref name="cell"/>: a ranged attack (a ranged weapon, or a
+    /// declared throw) within the weapon's maximum range (RangeCalculator.GetMaxRangeSquares: ten increments, five thrown;
+    /// PHB p.113-114), a melee one within the weapon's reach band (GetMeleeMinAttackDistance to GetMeleeMaxAttackDistance:
+    /// a reach weapon cannot strike an adjacent square, PHB p.113). Any attack can target an object (PHB p.165-166), so this
+    /// is the one square test of the Attack button's wall highlights (ShowAttackTargets) and of the attack-wall executor's
+    /// weapon variant. Measured from the actor's whole space (<see cref="WallCellDistance"/>).
+    /// </summary>
+    internal bool IsWallCellInWeaponAttackReach(CharacterController actor, Vector2Int cell, ItemData weapon, AttackIntent intent)
+    {
+        if (actor == null || actor.Stats == null)
+            return false;
+        int dist = WallCellDistance(actor, cell);
+        if (IsAttackModeRanged(actor, weapon, intent))
+        {
+            bool thrown = IsUsingThrownAttackMode(actor, weapon, intent)
+                || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
+            int maxSquares = weapon != null && weapon.RangeIncrement > 0
+                ? RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, thrown)
+                : actor.Stats.AttackRange;
+            return dist <= maxSquares;
+        }
+        return dist >= actor.GetMeleeMinAttackDistance(weapon) && dist <= actor.GetMeleeMaxAttackDistance(weapon);
+    }
+
+    /// <summary>
+    /// Why <paramref name="actor"/> cannot shoot <paramref name="weapon"/> at a wall now, or null (pure, unlogged): the
+    /// weapon is usable (CharacterController.CanAttackWithWeapon: a loaded crossbow) and a projectile weapon has a piece of
+    /// ammunition (PHB p.113). The same rule as the attack sequence's stage 4 (CanShootWithWeapon), without its log line.
+    /// </summary>
+    internal string GetWallShotRefusal(CharacterController actor, ItemData weapon)
+    {
+        if (!actor.CanAttackWithWeapon(weapon, out string reason))
+            return reason;
+        if (weapon != null && weapon.IsProjectileWeapon)
+        {
+            Inventory inv = Combat_GetCharacterInventory(actor);
+            if (inv != null && !inv.HasAmmo(weapon.RequiresAmmoType))
+                return "no ammunition for " + weapon.Name;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Why <paramref name="actor"/> cannot attack or break a wall now, or null (the attack-wall entry's CanStart): not
+    /// grappling or pinned (a grappler takes only the grapple actions, PHB p.156), a standard action left unless
+    /// <paramref name="actionPaid"/> (both are a standard action: attacking an object, PHB p.165-166; the Strength check
+    /// to break the wall, PHB p.299), and, with <paramref name="requireWall"/>, an intact Wall of Ice square it can break
+    /// (adjacent) or strike with its weapon (<see cref="IsWallCellInWeaponAttackReach"/>, with the AI's attack intent).
+    /// </summary>
+    internal string GetAttackWallDisabledReason(CharacterController actor, bool actionPaid = false, bool requireWall = true)
+    {
+        if (actor == null || actor.Stats == null || actor.Actions == null)
+            return "no actor";
+        string grappled = GetSupportActionGrappleRefusal(actor);
+        if (grappled != null)
+            return grappled;
+        if (!actionPaid && !actor.Actions.HasStandardAction)
+            return "no standard action left";
+        if (!requireWall)
+            return null;
+        ItemData weapon = actor.GetEquippedMainWeapon();
+        AttackIntent intent = WallAttackIntent(actor, ActorSource.AI);
+        foreach (Vector2Int cell in WallOfIceAreaEffect.GetAllIntactWallOfIceCells())
+            if (WallCellDistance(actor, cell) <= 1 || IsWallCellInWeaponAttackReach(actor, cell, weapon, intent))
+                return null;
+        return "no intact Wall of Ice in reach";
+    }
+
+    /// <summary>
+    /// Why <paramref name="actor"/> cannot attack the wall square <paramref name="cell"/> this way, or null: an intact Wall
+    /// of Ice square; for the Strength check (<paramref name="byStrength"/>, PHB p.299) adjacent to the actor's space; for a
+    /// weapon attack within the reach or range of the attack <paramref name="intent"/> describes
+    /// (<see cref="IsWallCellInWeaponAttackReach"/>), and a ranged shot that can be made (<see cref="GetWallShotRefusal"/>).
+    /// </summary>
+    internal string GetAttackWallCellRefusal(CharacterController actor, Vector2Int cell, bool byStrength, AttackIntent intent)
+    {
+        WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
+        if (wall == null)
+            return "no Wall of Ice there";
+        if (wall.IsBreached(cell))
+            return "that wall square is already breached";
+        if (byStrength)
+            return WallCellDistance(actor, cell) <= 1 ? null : actor.Stats.CharacterName + " must be adjacent to the wall to break through it";
+
+        ItemData weapon = actor.GetEquippedMainWeapon();
+        bool ranged = IsAttackModeRanged(actor, weapon, intent);
+        if (!IsWallCellInWeaponAttackReach(actor, cell, weapon, intent))
+            return "that wall square is out of " + actor.Stats.CharacterName + "'s " + (ranged ? "range" : "reach");
+        return ranged ? GetWallShotRefusal(actor, weapon) : null;
+    }
+
+    /// <summary>
+    /// <paramref name="actor"/> attacks the Wall of Ice square <paramref name="cell"/> (CORE-040). The standard action is
+    /// paid first unless <paramref name="actionPaid"/> (the PC's Attack button paid the attack step before the square was
+    /// clicked, as it pays any attack). <paramref name="byStrength"/>: a Strength check to break through (DC 15 + caster
+    /// level, PHB p.299; WallOfIceAreaEffect.AttemptStrengthCheck); else one weapon, natural or unarmed attack, which hits
+    /// the stationary wall automatically (PHB p.165-166, p.299) and deals its damage
+    /// (CharacterController.RollObjectAttackDamage; fire as the wall takes it) to that square. A ranged attack (a shot or a
+    /// declared throw, by the attack intent) provokes from every foe that threatens the shooter (Table 8-2: Attack
+    /// (ranged), PHB p.141; CombatFlowService.ResolveRangedAttackAoOIfProvoked, as every shot does), deals half damage to
+    /// the object (PHB p.165, Ranged Weapon Damage), spends its piece of ammunition and leaves a crossbow unloaded. A thrown
+    /// weapon stays in hand (CMB-208). For the player (<paramref name="source"/> Ui) the PC's attack flow is closed (the
+    /// highlights, the break-wall selection, the attack sequence); the PC runner's UiAfter then does the follow-up. Nothing
+    /// here ends a turn, so the NPC's turn coroutine stays the only one that ends its turn (CORE-012). Performed when the
+    /// action was spent on the wall.
+    /// </summary>
+    internal bool ActionCore_AttackWall(CharacterController actor, Vector2Int cell, bool byStrength, bool actionPaid, ActorSource source, ActionOutcome o)
+    {
+        AttackIntent intent = actor != null && actor.Stats != null ? WallAttackIntent(actor, source) : null;
+        string refusal = actor == null || actor.Stats == null ? "no actor" : GetAttackWallCellRefusal(actor, cell, byStrength, intent);
+        if (refusal != null)
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Target, refusal));
+            return false;
+        }
+        WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
+        if (!actionPaid && !actor.CommitStandardAction())
+        {
+            o.Refuse(Legality.Refused(LegalityBar.Action, "no standard action left"));
+            return false;
+        }
+        o.Performed = true;
+        if (source == ActorSource.Ui)
+            CurrentSubPhase = PlayerSubPhase.Animating;
+
+        var sb = new System.Text.StringBuilder();
+        if (byStrength)
+        {
+            bool success = wall.AttemptStrengthCheck(actor, cell);
+            int strMod = CharacterStats.GetModifier(actor.Stats.STR);
+            int dc = 15 + wall.CasterLevel;
+            sb.AppendLine("═══════════════════════════════════");
+            sb.AppendLine($"💪 {actor.Stats.CharacterName} attempts to break through Wall of Ice at ({cell.x},{cell.y})!");
+            sb.AppendLine($"  Strength Check DC {dc} (15 + CL {wall.CasterLevel})");
+            sb.AppendLine($"  STR modifier: {(strMod >= 0 ? "+" : "")}{strMod}");
+            sb.AppendLine(success ? "  ✅ Success! The ice cracks open — cell breached!" : "  ❌ Failed! The wall holds firm.");
+            sb.Append("═══════════════════════════════════");
+            o.CoreOutcome = success;
+        }
+        else
+        {
+            ItemData weapon = actor.GetEquippedMainWeapon();
+            bool isRanged = IsAttackModeRanged(actor, weapon, intent);
+
+            // A ranged attack provokes from every foe threatening the shooter (PHB p.141 Table 8-2), before it is made.
+            if (isRanged && _combatFlowService != null && !_combatFlowService.ResolveRangedAttackAoOIfProvoked(actor, null, intent))
+            {
+                o.ActorDown = CombatEndRules.IsOutOfFight(actor);
+                o.CombatEnded = CurrentPhase == TurnPhase.CombatOver;
+                UpdateAllStatsUI();
+                FinishWallAttackUi(source);
+                return true;
+            }
+
+            // The wall is a stationary object: the attack hits automatically.
+            int damage = actor.RollObjectAttackDamage(weapon, isRanged, out string weaponName, out string damageRoll);
+
+            // Fire damage from a weapon's spell effect (fire is especially effective against ice).
+            bool isFire = false;
+            if (weapon != null && weapon.ActiveSpellEffects != null)
+            {
+                foreach (var eff in weapon.ActiveSpellEffects)
+                {
+                    if (eff != null && !string.IsNullOrEmpty(eff.BonusDamageType) &&
+                        eff.BonusDamageType.IndexOf("fire", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isFire = true;
+                        if (!string.IsNullOrEmpty(eff.BonusDamageDice))
+                        {
+                            string[] parts = eff.BonusDamageDice.Split('d');
+                            if (parts.Length == 2 && int.TryParse(parts[0], out int bCount) && int.TryParse(parts[1], out int bDice))
+                            {
+                                for (int i = 0; i < bCount; i++)
+                                    damage += UnityEngine.Random.Range(1, bDice + 1);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Objects take half damage from ranged weapons, before hardness (PHB p.165), rounded down (PHB p.304).
+            int dealt = isRanged ? damage / 2 : damage;
+
+            sb.AppendLine("═══════════════════════════════════");
+            sb.AppendLine($"🧊 {actor.Stats.CharacterName} attacks Wall of Ice at ({cell.x},{cell.y}) with {weaponName}{(isRanged ? " (ranged)" : "")}!");
+            sb.AppendLine("  Auto-hit (stationary object)");
+            sb.AppendLine($"  Damage: {damageRoll}{(isFire ? " (includes fire)" : "")}");
+            if (isRanged)
+                sb.AppendLine($"  Ranged weapon damage to an object is halved: {dealt}");
+
+            wall.OnCellAttacked(actor, cell, dealt, isFire);
+
+            if (wall.IsBreached(cell))
+            {
+                sb.AppendLine($"  💥 Wall cell ({cell.x},{cell.y}) breached!");
+            }
+            else
+            {
+                int maxHP = wall.CasterLevel * 3;
+                sb.AppendLine($"  Cell HP: {wall.GetCellHP(cell)}/{maxHP}");
+            }
+            sb.Append("═══════════════════════════════════");
+            o.CoreOutcome = wall.IsBreached(cell);
+
+            // The shot spends its piece of ammunition and leaves a crossbow unloaded (PHB p.113, p.115), as every shot does.
+            if (isRanged && weapon != null)
+            {
+                if (weapon.IsProjectileWeapon && _combatFlowService != null)
+                    _combatFlowService.ConsumeAmmoForAttack(actor, weapon);
+                if (weapon.RequiresReload)
+                {
+                    string reloadState = actor.OnWeaponFired(weapon);
+                    if (!string.IsNullOrEmpty(reloadState))
+                        Debug.Log($"[Reload] {actor.Stats.CharacterName}: {reloadState}");
+                }
+            }
+        }
+
+        CombatUI?.ShowCombatLog(sb.ToString());
+        UpdateAllStatsUI();
+        FinishWallAttackUi(source);
+        return true;
+    }
+
+    /// <summary>For the player, closes the PC's attack flow after a wall attack: one standard action, no iterative attacks on the wall.</summary>
+    private void FinishWallAttackUi(ActorSource source)
+    {
+        if (source != ActorSource.Ui)
+            return;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _isSelectingBreakWallTarget = false;
+        EndAttackSequence();
+    }
+
     // ── The AI cores the Delegating executors wrap (batch 13 step 6). The public *ForAI wrappers route through
     // RunAIAction, so the executors reach the cores through these forwarders, never through the wrappers. ──
 

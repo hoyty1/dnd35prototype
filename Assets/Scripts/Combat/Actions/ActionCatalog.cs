@@ -205,7 +205,9 @@ public static class ActionCatalog
             .For(c => c.Spellcasting != null)
             .Costs(HeldChargeCostFor));
         l.Add(Def(ActionIds.AttackWall, "Attack a Wall", A, ActionCostType.Standard, ProvokeRule.Maybe, ActionTargetKind.Cell, ActionRoles.Attack | ActionRoles.Escape,
-                "PHB p.165-166 (attacking an object), Table 8-2 note 3 (an unattended object: No)", ImplStatus.PcOnly, "AI-054"));
+                "PHB p.165-166 (attacking an object: ranged damage halved), Table 8-2 p.141 (Attack (melee): No; Attack (ranged): Yes), p.156 (not while grappling); p.299 (Wall of Ice: Strength check DC 15 + CL); CORE-040",
+                ImplStatus.Extracted)
+            .Run(new AttackWallActionExecutor(), ActionUiAfter.AttackDelay, 1.0f));
 
         // ── Maneuvers (one per SpecialAttackType; costs from ManeuverActionCost.For) ──
         l.Add(Def(ActionIds.Trip, "Trip", M, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Creature, ActionRoles.Attack,
@@ -238,10 +240,13 @@ public static class ActionCatalog
                 "PHB p.153, Table 8-2", ImplStatus.Delegating)
             .Run(new ManeuverActionExecutor(SpecialAttackType.CoupDeGrace), ActionUiAfter.AttackDelay, 1.0f).AsManeuver(SpecialAttackType.CoupDeGrace));
         l.Add(Def(ActionIds.AidAnother, "Aid Another", M, ActionCostType.Standard, ProvokeRule.Maybe, ActionTargetKind.Creature, ActionRoles.Support | ActionRoles.Defend,
-                "PHB p.154, Table 8-2 (Maybe) and note 2", ImplStatus.PcOnly, "AI-054")
+                "PHB p.154 (a standard action, an attack roll against AC 10; the +2 lasts until the aider's next turn), Table 8-2 (Maybe) and note 2 (provokes only when the aided action would); D6",
+                ImplStatus.Extracted)
+            .Run(new AidAnotherActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
             .AsManeuver(SpecialAttackType.AidAnother));
         l.Add(Def(ActionIds.WakeAlly, "Wake an Ally", M, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Support,
-                "PHB p.280 (Sleep: shaking a sleeper awake is a standard action)", ImplStatus.PcOnly, "AI-054")
+                "PHB p.280 (Sleep: shaking a sleeper awake is a standard action), p.154 (an application of aid another); D6", ImplStatus.Extracted)
+            .Run(new WakeAllyActionExecutor(), ActionUiAfter.AttackDelay, 0.9f)
             .AsManeuver(SpecialAttackType.WakeSleepingAlly));
         l.Add(Def(ActionIds.TurnUndead, "Turn Undead", C, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.None, ActionRoles.Attack | ActionRoles.Defend,
                 "PHB p.159-160, Table 8-2", ImplStatus.PcOnly, "AI-054")

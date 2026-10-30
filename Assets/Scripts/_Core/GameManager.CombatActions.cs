@@ -119,33 +119,19 @@ public partial class GameManager
         }
 
         // ── WALL OF ICE TARGETING ──
-        // Also highlight Wall of Ice cells within attack range as valid targets.
-        // Walls can be attacked with melee or ranged weapons (Hardness 0).
+        // Also highlight the Wall of Ice squares the attack reaches: the weapon's reach band, or its maximum range for a shot
+        // or a throw (IsWallCellInWeaponAttackReach, the attack-wall executor's own square test). A grappler takes no wall
+        // attack (PHB p.156; GetSupportActionGrappleRefusal).
         bool hasWallTarget = false;
-        if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.LayOnHands)
+        if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.LayOnHands
+            && GetSupportActionGrappleRefusal(pc) == null)
         {
             HashSet<Vector2Int> wallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
             if (wallCells.Count > 0)
             {
                 foreach (Vector2Int wallCoord in wallCells)
                 {
-                    // Check if wall cell is within weapon range
-                    int dist = SquareGridUtils.ChebyshevDistance(pc.GridPosition, wallCoord);
-
-                    bool inRange;
-                    if (isRangedWeapon)
-                    {
-                        int maxRangeSq = rangeIncrement > 0
-                            ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
-                            : pc.Stats.AttackRange;
-                        inRange = dist <= maxRangeSq;
-                    }
-                    else
-                    {
-                        inRange = dist >= meleeMinDistance && dist <= meleeMaxDistance;
-                    }
-
-                    if (!inRange)
+                    if (!IsWallCellInWeaponAttackReach(pc, wallCoord, weapon, uiIntent))
                         continue;
 
                     SquareCell wallCell = Grid.GetCell(wallCoord);
@@ -1897,124 +1883,27 @@ public partial class GameManager
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Performs a weapon attack against a Wall of Ice cell.
-    /// Wall of Ice: Hardness 0, so all damage applies. No attack roll needed
-    /// (wall is stationary and has no AC — auto-hit, PHB p.166 "Attacking Objects").
-    /// D&D 3.5e: Stationary objects have AC 5 effectively, but walls are large
-    /// stationary objects — attacks auto-hit in practice.
+    /// The PC's attack on a Wall of Ice square after the Attack button (which paid the attack step before the click, as it
+    /// pays any attack): runs the catalog's attack-wall entry (AttackWallActionExecutor, batch 13 step 13, CORE-040) through
+    /// RunPlayerAction with the action marked paid. The executor (GameManager.ActionCore_AttackWall) hits the stationary
+    /// wall automatically (Hardness 0; PHB p.165-166 "Attacking Objects", p.299) and ends the PC's attack flow; the entry's
+    /// UiAfter does the attack follow-up (1.0 s).
     /// </summary>
     private void PerformPlayerAttackOnWall(CharacterController attacker, WallOfIceAreaEffect wall, Vector2Int wallCell)
     {
         if (attacker == null || wall == null)
             return;
 
-        CurrentSubPhase = PlayerSubPhase.Animating;
-
-        // NOTE: Do NOT check or commit standard action here.
-        // The Attack button already committed the standard action before
-        // the player clicks the wall cell. Same pattern as regular attacks.
-
-        // Get weapon and calculate damage
-        ItemData weapon = attacker.GetEquippedMainWeapon();
-        string weaponName = weapon != null ? weapon.Name : "Unarmed strike";
-
-        // Roll weapon damage (auto-hit against stationary wall)
-        int damageCount, damageDice;
-        if (weapon != null)
-        {
-            weapon.GetScaledDamageDice(attacker.Stats.CurrentSizeCategory, out damageCount, out damageDice);
-        }
-        else
-        {
-            var unarmed = attacker.GetUnarmedDamage();
-            damageCount = unarmed.damageCount;
-            damageDice = unarmed.damageDice;
-        }
-
-        int damage = 0;
-        for (int i = 0; i < damageCount; i++)
-            damage += UnityEngine.Random.Range(1, damageDice + 1);
-
-        // Add STR modifier to damage (melee and thrown)
-        bool isRanged = weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && !weapon.IsThrown;
-        if (!isRanged)
-        {
-            int strMod = CharacterStats.GetModifier(attacker.Stats.STR);
-            // Two-handed weapons get 1-1/2 times a STR bonus; a penalty applies in full (PHB p.113-114; CMB-161)
-            bool isTwoHanded = weapon != null && weapon.IsTwoHanded;
-            if (isTwoHanded)
-                damage += CombatCalculationService.TwoHandedStrDamage(strMod);
-            else
-                damage += strMod;
-        }
-
-        // Add enhancement bonus damage
-        if (weapon != null)
-        {
-            damage += weapon.GetEnhancementDamageBonus();
-        }
-
-        // Minimum 1 damage on a hit
-        damage = Mathf.Max(1, damage);
-
-        // Check if this is fire damage (fire weapons are especially effective)
-        bool isFire = false;
-        if (weapon != null && weapon.ActiveSpellEffects != null)
-        {
-            foreach (var eff in weapon.ActiveSpellEffects)
-            {
-                if (eff != null && !string.IsNullOrEmpty(eff.BonusDamageType) &&
-                    eff.BonusDamageType.IndexOf("fire", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    isFire = true;
-                    // Add bonus fire damage dice
-                    if (!string.IsNullOrEmpty(eff.BonusDamageDice))
-                    {
-                        // Parse "1d6" style bonus damage
-                        string[] parts = eff.BonusDamageDice.Split('d');
-                        if (parts.Length == 2 && int.TryParse(parts[0], out int bCount) && int.TryParse(parts[1], out int bDice))
-                        {
-                            for (int i = 0; i < bCount; i++)
-                                damage += UnityEngine.Random.Range(1, bDice + 1);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Build combat log — per-cell damage
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("═══════════════════════════════════");
-        sb.AppendLine($"🧊 {attacker.Stats.CharacterName} attacks Wall of Ice at ({wallCell.x},{wallCell.y}) with {weaponName}!");
-        sb.AppendLine($"  Auto-hit (stationary object, Hardness 0)");
-        sb.AppendLine($"  Damage: {damage}{(isFire ? " (includes fire)" : "")}");
-
-        // Apply damage to specific cell
-        wall.OnCellAttacked(attacker, wallCell, damage, isFire);
-
-        int remainingHP = wall.GetCellHP(wallCell);
-        if (wall.IsBreached(wallCell))
-        {
-            sb.AppendLine($"  💥 Wall cell ({wallCell.x},{wallCell.y}) breached!");
-        }
-        else
-        {
-            int maxHP = wall.CasterLevel * 3;
-            sb.AppendLine($"  Cell HP: {remainingHP}/{maxHP}");
-        }
-        sb.Append("═══════════════════════════════════");
-
-        CombatUI?.ShowCombatLog(sb.ToString());
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        // End the attack sequence so the character can't keep attacking the wall.
-        // Wall attacks are a single standard action — no iterative attacks apply.
-        EndAttackSequence();
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+        ActionContext ctx = ActionContext.For(ActionIds.AttackWall, attacker, ActorSource.Ui);
+        ctx.Cell = wallCell;
+        ctx.Variant = AttackWallActionExecutor.WeaponVariant;
+        ctx.CoreRequest = new AttackWallRequest { ActionPaid = true };
+        var outcome = new ActionOutcome();
+        RunPlayerAction(ctx, outcome);
+        // A refusal before the core ran (the runner's pre-check runs inside the call above) leaves open the attack sequence
+        // the Attack button started: close it, so no stale sequence state outlives the refused click (the panel is back).
+        if (!outcome.Performed && !outcome.Refusal.Ok)
+            EndAttackSequence();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2030,7 +1919,8 @@ public partial class GameManager
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
-        // Collect adjacent intact Wall of Ice cells (Chebyshev distance 1)
+        // Collect the intact Wall of Ice cells adjacent to the PC's space (the Strength check's square test,
+        // GetAttackWallCellRefusal; WallCellDistance measures from a Large PC's whole footprint).
         HashSet<Vector2Int> allIntactWalls = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -2039,8 +1929,7 @@ public partial class GameManager
         bool hasAdjacentWall = false;
         foreach (Vector2Int wallCoord in allIntactWalls)
         {
-            int dist = SquareGridUtils.ChebyshevDistance(pc.GridPosition, wallCoord);
-            if (dist > 1) continue;
+            if (WallCellDistance(pc, wallCoord) > 1) continue;
 
             SquareCell wallCell = Grid.GetCell(wallCoord);
             if (wallCell == null) continue;
@@ -2067,72 +1956,21 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Attempts a Strength check to breach an intact Wall of Ice cell.
-    /// D&D 3.5e: DC 15 + caster level. Consumes a standard action.
-    /// Can be called from UI when a player selects "Break Wall" on an adjacent intact wall cell.
+    /// The PC's Break Wall pick: a Strength check to breach an adjacent intact Wall of Ice square (DC 15 + caster level, PHB
+    /// p.299), a standard action. Runs the catalog's attack-wall entry (AttackWallActionExecutor, the Strength variant;
+    /// batch 13 step 13, CORE-040) through RunPlayerAction: the standard action is paid, then the check; the entry's
+    /// UiAfter does the attack follow-up (1.0 s). A refusal (not adjacent, already breached, no standard action) shows its
+    /// reason and the action panel.
     /// </summary>
     public void PerformStrengthCheckOnWall(CharacterController attacker, WallOfIceAreaEffect wall, Vector2Int wallCell)
     {
         if (attacker == null || wall == null)
             return;
 
-        // Must be adjacent (Chebyshev distance 1)
-        int dist = SquareGridUtils.ChebyshevDistance(attacker.GridPosition, wallCell);
-        if (dist > 1)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} must be adjacent to attempt a Strength check."));
-            return;
-        }
-
-        // Cell must be intact
-        if (wall.IsBreached(wallCell))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"That wall cell is already breached."));
-            return;
-        }
-
-        // Consume standard action
-        if (!attacker.CommitStandardAction())
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
-            ShowActionChoices();
-            return;
-        }
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-
-        bool success = wall.AttemptStrengthCheck(attacker, wallCell);
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("═══════════════════════════════════");
-        int strMod = CharacterStats.GetModifier(attacker.Stats.STR);
-        int dc = 15 + wall.CasterLevel;
-        sb.AppendLine($"💪 {attacker.Stats.CharacterName} attempts to break through Wall of Ice at ({wallCell.x},{wallCell.y})!");
-        sb.AppendLine($"  Strength Check DC {dc} (15 + CL {wall.CasterLevel})");
-        sb.AppendLine($"  STR modifier: {(strMod >= 0 ? "+" : "")}{strMod}");
-
-        if (success)
-        {
-            sb.AppendLine($"  ✅ Success! The ice cracks open — cell breached!");
-        }
-        else
-        {
-            sb.AppendLine($"  ❌ Failed! The wall holds firm.");
-        }
-        sb.Append("═══════════════════════════════════");
-
-        CombatUI?.ShowCombatLog(sb.ToString());
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        // Clear break-wall targeting state
-        _isSelectingBreakWallTarget = false;
-
-        // End any attack sequence that may be active
-        EndAttackSequence();
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+        ActionContext ctx = ActionContext.For(ActionIds.AttackWall, attacker, ActorSource.Ui);
+        ctx.Cell = wallCell;
+        ctx.Variant = AttackWallActionExecutor.StrengthVariant;
+        RunPlayerAction(ctx);
     }
 
     /// <summary>The attack's range for the mode of <paramref name="intent"/> (AttackIntent.ForUi for a PC flow, ForAI for an NPC).</summary>
@@ -2536,35 +2374,50 @@ public partial class GameManager
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// AI helper: Attack an adjacent intact Wall of Ice cell with equipped weapon.
-    /// Returns an IEnumerator so the AI can yield on it.
+    /// AI helper: attacks an adjacent intact Wall of Ice square with the equipped weapon (or unarmed). Runs the catalog's
+    /// attack-wall entry through RunAIAction (batch 13 step 13, CORE-040): the executor pays the standard action and attacks,
+    /// and continues no PC UI, so nothing but the NPC's own turn coroutine ends its turn (CORE-012). Then the NPC's 1.0 s wait.
     /// </summary>
     public IEnumerator NPCAttackWallForAI(CharacterController npc, WallOfIceAreaEffect wall, Vector2Int wallCell)
     {
         if (npc == null || wall == null || wall.IsBreached(wallCell))
             yield break;
 
-        // AI must commit its own standard action (player path commits via Attack button)
-        if (!npc.CommitStandardAction())
+        ActionContext ctx = ActionContext.For(ActionIds.AttackWall, npc, ActorSource.AI);
+        ctx.Cell = wallCell;
+        ctx.Variant = AttackWallActionExecutor.WeaponVariant;
+        var outcome = new ActionOutcome();
+        yield return RunAIAction(ctx, outcome);
+        if (!outcome.Performed)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
+            if (outcome.Refusal.Bar == LegalityBar.Action)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
             yield break;
         }
-
-        PerformPlayerAttackOnWall(npc, wall, wallCell);
         yield return new WaitForSeconds(1.0f);
     }
 
     /// <summary>
-    /// AI helper: Attempt a Strength check to break an adjacent intact Wall of Ice cell.
-    /// Returns an IEnumerator so the AI can yield on it.
+    /// AI helper: a Strength check to break an adjacent intact Wall of Ice square (DC 15 + caster level, PHB p.299). Runs
+    /// the catalog's attack-wall entry (the Strength variant) through RunAIAction (batch 13 step 13, CORE-040): the executor
+    /// pays the standard action, then checks, and continues no PC UI. Then the NPC's 1.0 s wait.
     /// </summary>
     public IEnumerator NPCBreakWallForAI(CharacterController npc, WallOfIceAreaEffect wall, Vector2Int wallCell)
     {
         if (npc == null || wall == null || wall.IsBreached(wallCell))
             yield break;
 
-        PerformStrengthCheckOnWall(npc, wall, wallCell);
+        ActionContext ctx = ActionContext.For(ActionIds.AttackWall, npc, ActorSource.AI);
+        ctx.Cell = wallCell;
+        ctx.Variant = AttackWallActionExecutor.StrengthVariant;
+        var outcome = new ActionOutcome();
+        yield return RunAIAction(ctx, outcome);
+        if (!outcome.Performed)
+        {
+            if (outcome.Refusal.Bar == LegalityBar.Action)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
+            yield break;
+        }
         yield return new WaitForSeconds(1.0f);
     }
 
@@ -2583,8 +2436,8 @@ public partial class GameManager
 
         foreach (Vector2Int wc in intactWalls)
         {
-            int dist = SquareGridUtils.ChebyshevDistance(npc.GridPosition, wc);
-            if (dist > 1) continue;
+            // Adjacent to the NPC's whole space (a Large creature's footprint too), the square test of both wall variants.
+            if (WallCellDistance(npc, wc) > 1) continue;
 
             // Score: prefer wall cells closer to the target (blocks path)
             float distToTarget = SquareGridUtils.ChebyshevDistance(wc, targetPos);

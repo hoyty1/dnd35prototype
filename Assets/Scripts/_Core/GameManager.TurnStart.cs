@@ -56,7 +56,7 @@ public partial class GameManager
             ResumeAttackedReactions();
         }
 
-        // Aid Another expiry counters tick before actions; this keeps bonuses available for one full beneficiary turn.
+        // The aid bonuses this creature granted end unused at the start of its next turn (PHB p.154), also on a skipped turn.
         ExpireAidBonusesAtTurnStart(actor);
 
         // The per-turn resets: actions, attacks of opportunity, fighting defensively and total defense (both last until

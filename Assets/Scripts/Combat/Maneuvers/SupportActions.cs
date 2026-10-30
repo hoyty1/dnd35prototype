@@ -34,8 +34,6 @@ public partial class GameManager
         public AidType Type;
         public int Bonus;
         public int RoundGranted;
-        // 2 turn-starts means: usable during the beneficiary's next turn, then expires on the following turn start if unused.
-        public int BeneficiaryTurnStartsRemainingBeforeExpiry = 2;
 
         public bool IsInvalid()
         {
@@ -196,12 +194,26 @@ public partial class GameManager
         return alliesInRange;
     }
 
-    private static int GetAidAnotherTouchAttackModifier(CharacterController actor)
+    /// <summary>
+    /// The modifier of the aid-another attack roll against AC 10 (D6, PHB p.154): the aider's melee attack terms from the
+    /// shared builder (CharacterController.BuildAttackBonus, CMB-043: BAB, Strength or Weapon Finesse's Dexterity, size, feats
+    /// such as Weapon Focus and Power Attack, typed effect bonuses such as Bless, conditions, nonproficiency, fighting
+    /// defensively) with its melee weapon, or unarmed when it holds none or only a ranged weapon, and no target terms (the AC
+    /// is a flat 10, not a creature's); plus the weapon's enhancement or masterwork bonus, which PerformSingleAttackWithCrit
+    /// adds to every weapon attack roll (PHB p.126, DMG p.222).
+    /// </summary>
+    private static int GetAidAnotherAttackModifier(CharacterController actor)
     {
         if (actor == null || actor.Stats == null)
             return 0;
 
-        return actor.Stats.BaseAttackBonus + actor.Stats.STRMod + actor.Stats.SizeModifier + actor.Stats.ConditionAttackPenalty;
+        ItemData weapon = actor.GetEquippedWeapon();
+        if (weapon != null && weapon.WeaponCat != WeaponCategory.Melee)
+            weapon = null;
+        AttackBonusBreakdown terms = actor.BuildAttackBonus(null, weapon, false, null, false, 0, actor.Stats.BaseAttackBonus,
+            CharacterController.IsWeaponTwoHanded(weapon));
+        int weaponBonus = weapon != null ? weapon.GetEnhancementAttackBonus() + weapon.MasterworkAttackBonus : 0;
+        return terms.Total + weaponBonus;
     }
 
     private static string GetCombatantName(CharacterController c)
@@ -219,7 +231,7 @@ public partial class GameManager
         if (bonus == null)
             return "<null>";
 
-        return $"type={bonus.Type}, aider={GetCombatantName(bonus.Aider)}, beneficiary={GetCombatantName(bonus.Beneficiary)}, target={GetCombatantName(bonus.Target)}, amount=+{bonus.Bonus}, roundGranted={bonus.RoundGranted}, startsRemaining={bonus.BeneficiaryTurnStartsRemainingBeforeExpiry}";
+        return $"type={bonus.Type}, aider={GetCombatantName(bonus.Aider)}, beneficiary={GetCombatantName(bonus.Beneficiary)}, target={GetCombatantName(bonus.Target)}, amount=+{bonus.Bonus}, roundGranted={bonus.RoundGranted}";
     }
 
     private void LogAidBonusSnapshot(string context)
@@ -349,6 +361,13 @@ public partial class GameManager
             return false;
         }
 
+        // A grappler takes only the grapple actions (PHB p.156), as the shared executors refuse (GetSupportActionGrappleRefusal).
+        if (actor.IsGrappling())
+        {
+            reason = "Grappling";
+            return false;
+        }
+
         if (GetAllAllies(actor).Count == 0)
         {
             reason = "No ally";
@@ -377,8 +396,7 @@ public partial class GameManager
             Target = target,
             Type = aidType,
             Bonus = 2,
-            RoundGranted = CurrentRound,
-            BeneficiaryTurnStartsRemainingBeforeExpiry = 2
+            RoundGranted = CurrentRound
         };
 
         ActiveAidBonuses.Add(aidBonus);
@@ -404,7 +422,9 @@ public partial class GameManager
         }
 
         string sourceList = names.Count > 0 ? string.Join(", ", names) : "unknown";
-        string expiryHint = $"expires if unused by the start of {beneficiaryName}'s following turn";
+        string expiryHint = names.Count > 1
+            ? "each expires if unused by the start of its aider's next turn"
+            : $"expires if unused by the start of {aiderName}'s next turn";
         if (aidType == AidType.Defense)
             CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{beneficiaryName} gains +{totalForPair} AC vs {targetName} (from {sourceList}; {expiryHint})."));
         else
@@ -494,25 +514,30 @@ public partial class GameManager
         return totalBonus;
     }
 
-    private void ExpireAidBonusesAtTurnStart(CharacterController beneficiary)
+    /// <summary>
+    /// Ends, at the start of <paramref name="actor"/>'s turn, every unused aid bonus <paramref name="actor"/> granted: PHB
+    /// p.154 gives the +2 only to an attack that comes before the beginning of the aider's next turn (batch 13 step 13
+    /// review; before, the bonus lasted until the start of the beneficiary's second turn after the grant).
+    /// </summary>
+    private void ExpireAidBonusesAtTurnStart(CharacterController actor)
     {
-        if (beneficiary == null)
+        if (actor == null)
             return;
 
-        Debug.Log($"[AidBonus][Expire] Turn start for {GetCombatantName(beneficiary)} - evaluating expirations");
+        Debug.Log($"[AidBonus][Expire] Turn start for {GetCombatantName(actor)} - ending the aid bonuses it granted");
         PruneInvalidAidBonuses();
 
         var expiring = new List<AidBonus>();
+        var beneficiaries = new List<CharacterController>();
         for (int i = 0; i < ActiveAidBonuses.Count; i++)
         {
             AidBonus bonus = ActiveAidBonuses[i];
-            if (bonus == null || bonus.Beneficiary != beneficiary)
+            if (bonus == null || bonus.Aider != actor)
                 continue;
 
-            bonus.BeneficiaryTurnStartsRemainingBeforeExpiry = Mathf.Max(0, bonus.BeneficiaryTurnStartsRemainingBeforeExpiry - 1);
-            Debug.Log($"[AidBonus][Expire] Decremented Bonus[{i}] -> {DescribeAidBonus(bonus)}");
-            if (bonus.BeneficiaryTurnStartsRemainingBeforeExpiry <= 0)
-                expiring.Add(bonus);
+            expiring.Add(bonus);
+            if (!beneficiaries.Contains(bonus.Beneficiary))
+                beneficiaries.Add(bonus.Beneficiary);
         }
 
         for (int i = 0; i < expiring.Count; i++)
@@ -524,7 +549,7 @@ public partial class GameManager
         }
 
         if (expiring.Count > 0)
-            NotifyAidBonusStateChanged(beneficiary);
+            NotifyAidBonusStateChanged(beneficiaries.ToArray());
 
         LogAidBonusSnapshot("Expire-PostTurnStart");
     }
@@ -814,6 +839,11 @@ public partial class GameManager
             optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
     }
 
+    /// <summary>
+    /// The PC's wake-ally pick: runs the catalog's wake-ally entry (WakeAllyActionExecutor, batch 13 step 13, D6) through
+    /// RunPlayerAction: the standard action is paid, the ally woken, then the entry's UiAfter (the attack follow-up,
+    /// 0.9 s). A refusal shows its reason and the action panel.
+    /// </summary>
     private void ExecuteAidAnotherWakeSleepingAlly(CharacterController aider, CharacterController ally)
     {
         if (aider == null || ally == null || aider.Stats == null || ally.Stats == null)
@@ -822,39 +852,15 @@ public partial class GameManager
             return;
         }
 
-        if (!aider.Actions.HasStandardAction)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{aider.Stats.CharacterName} has no standard action remaining to wake an ally."));
-            ShowActionChoices();
-            return;
-        }
-
-        if (!IsAdjacent(aider, ally))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{ally.Stats.CharacterName} is not adjacent to {aider.Stats.CharacterName}."));
-            ShowActionChoices();
-            return;
-        }
-
-        if (!IsCharacterAsleep(ally))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{ally.Stats.CharacterName} is not asleep."));
-            ShowActionChoices();
-            return;
-        }
-
-        aider.CommitStandardAction();
-
-        bool woke = TryWakeSleepingCharacter(ally, "shaken awake", aider, suppressLog: true);
-        if (woke)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{aider.Stats.CharacterName} shakes {ally.Stats.CharacterName} awake."));
-        else
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{aider.Stats.CharacterName} cannot wake {ally.Stats.CharacterName} right now."));
-
-        UpdateAllStatsUI();
-        StartCoroutine(AfterAttackDelay(aider, 0.9f));
+        RunPlayerAction(ActionContext.For(ActionIds.WakeAlly, aider, ActorSource.Ui, ally));
     }
 
+    /// <summary>
+    /// The PC's aid-another pick: runs the catalog's aid-another entry (AidAnotherActionExecutor, batch 13 step 13, D6)
+    /// through RunPlayerAction: the standard action is paid, then the attack roll against AC 10 and, on a hit, the +2 for
+    /// <paramref name="ally"/> against <paramref name="enemy"/>; then the entry's UiAfter (the attack follow-up, 0.9 s).
+    /// A refusal (the enemy out of reach, the ally no longer in melee) shows its reason and the action panel.
+    /// </summary>
     public void ExecuteAidAnother(CharacterController aider, CharacterController ally, CharacterController enemy, AidType aidType)
     {
         if (aider == null || ally == null || enemy == null)
@@ -863,46 +869,10 @@ public partial class GameManager
             return;
         }
 
-        if (!CanAttemptAidAnotherTouch(aider, enemy))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{GetCombatantName(enemy)} is not in melee reach for Aid Another."));
-            ShowActionChoices();
-            return;
-        }
-
-        if (!ally.ThreatensWith(enemy, ally.GetEquippedWeapon()))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{GetCombatantName(ally)} is no longer in melee range of {GetCombatantName(enemy)}."));
-            ShowActionChoices();
-            return;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{aider.Stats.CharacterName} aids {ally.Stats.CharacterName}'s {GetAidTypeLabel(aidType)} vs {enemy.Stats.CharacterName}."));
-
-        int touchAtkMod = GetAidAnotherTouchAttackModifier(aider);
-        (bool hit, int roll, int total) = aider.Stats.RollToHitWithMod(touchAtkMod, 10);
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Melee touch attack vs AC 10:"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Roll: 1d20 = {roll}"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Modifier: {CharacterStats.FormatMod(touchAtkMod)}"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Total: {total}"));
-
-        aider.CommitStandardAction();
-
-        if (!hit)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "Aid Another failed (needed 10)."));
-            UpdateAllStatsUI();
-            StartCoroutine(AfterAttackDelay(aider, 0.9f));
-            return;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", "Aid Another success!"));
-        AddAidBonus(aider, ally, enemy, aidType);
-        DisplayActiveAidBonuses(ally);
-
-        UpdateAllStatsUI();
-        StartCoroutine(AfterAttackDelay(aider, 0.9f));
+        ActionContext ctx = ActionContext.For(ActionIds.AidAnother, aider, ActorSource.Ui, ally);
+        ctx.Opponent = enemy;
+        ctx.Variant = AidAnotherActionExecutor.VariantOf(aidType);
+        RunPlayerAction(ctx);
     }
 
     public void OnChargeButtonPressed()

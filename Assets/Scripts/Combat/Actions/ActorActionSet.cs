@@ -26,8 +26,9 @@ public sealed class ActionOption
 /// legality read from today's rules and nothing else:
 /// - an entry with an executor: the executor's CanStart (its action, its conditions, its resources);
 /// - a PC-only entry: the rule the PC panel reads today, through the ActionLegality adapters (pick up, drop, turn
-///   undead, domain power, rage; crawl, drop prone and reload have executors since batch 13 step 12); one with no shared rule yet (use item, aid another, wake, attack a
-///   wall) is refused with its status and issue, as a Missing or OutOfScope entry is;
+///   undead, domain power, rage; crawl, drop prone and reload have executors since batch 13 step 12, aid another, waking
+///   an ally and attacking a wall since step 13); one with no shared rule yet (use item) is refused with its status and
+///   issue, as a Missing or OutOfScope entry is;
 /// then the compulsion filter of the turn (CharacterController.CurrentTurnStart, decided once at its start): a frightened,
 /// panicked or turned creature flees (PHB p.309-311, p.159; D15), so only Retreat and Escape entries, standing up,
 /// dropping an item and total defense stay legal unless it is cornered in panic, plus (in <see cref="Check"/>) a cast of

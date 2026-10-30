@@ -9,7 +9,7 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 
 ## 11.8.1 "Make goblins flank and use Aid Another"
 
-- **Start here.** `AIService.EvaluateMovementOptions` (2059; flank term near 2100) and `CombatUtils.IsAttackerFlankingFromPosition` (Combat/Utilities/CombatUtils.cs:106); `AIService.ExecuteAggressiveMeleeTurn` step 3, the only place a goblin moves (5.1). For Aid Another: `GameManager.CanUseAidAnother` (Combat/Maneuvers/SupportActions.cs:326), `ExecuteAidAnother` (855), `ExecuteAidAnotherWakeSleepingAlly` (814).
+- **Start here.** `AIService.EvaluateMovementOptions` (2059; flank term near 2100) and `CombatUtils.IsAttackerFlankingFromPosition` (Combat/Utilities/CombatUtils.cs:106); `AIService.ExecuteAggressiveMeleeTurn` step 3, the only place a goblin moves (5.1). For Aid Another: `GameManager.CanUseAidAnother` (Combat/Maneuvers/SupportActions.cs), the catalog executors `AidAnotherActionExecutor` and `WakeAllyActionExecutor` (Combat/Actions/Executors/SupportExecutors.cs) and their cores `ActionCore_AidAnother` and `ActionCore_WakeAlly` (batch 13 step 13).
 - **What exists.**
   - `goblin` (NPCDatabase_G.cs) is archetype Humanoid → `HumanoidAIProfile` (`SeekFlanking = true`) on AggressiveMelee. The melee approach calls (AIService.cs:531, 794, 1188) pass the target, so a moving goblin scores +3 for a cell that flanks it, but only when an ally already stands on the opposite side.
   - Flanking is applied when NPCs attack: `NPCPerformAttack` (NPCTurns.cs:584-587) and the charge core (`ExecuteCharge(ChargeRequest, ChargeOutcome)`, ChargeCore.cs, PC and NPC alike since batch 12 step 21, through its attack sequence) compute `IsAttackerFlanking` and pass the +2; sneak attack follows from that flag.
@@ -20,9 +20,9 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - `HumanoidAIProfile` sets `AttemptTrip` and `AttemptDisarm`, so goblins in reach of a standing PC trip instead of attacking (AI-035). Fix or gate this first, or flanking goblins will not swing.
   - NPC movement provokes AoOs like PC movement, so walking around a PC to its far side costs AoOs. The flank term must be weighed against them; the path scorer today applies only -1000 (profiles that avoid AoOs) or -2 per provoked AoO.
   - Flanking is worth the RAW +2 on melee attacks (plus sneak attack for rogues); the Flanked condition is a display tag with no AC effect.
-  - `ExecuteAidAnother` cannot be called by an NPC (AI-054) and `AddAidBonus` is private. Split out a rules core that takes (aider, ally, enemy, type) and returns the result, keep the PC wrapper for the menus, and add a `*ForAI` wrapper (11.3).
+  - Since batch 13 step 13 (2026-10-29, D6) aid another and waking an ally are catalog executors for both sides: run `ActionContext.For(ActionIds.AidAnother, aider, ActorSource.AI, ally)` with `Opponent` the enemy and `Variant` `AidAnotherActionExecutor.OffenseVariant` or `DefenseVariant` (or `ActionIds.WakeAlly` with the sleeper) through `GameManager.RunAIAction`; the core is `ActionCore_AidAnother`, which pays the standard action before the roll. What is left is the choice (AI-026, batch 14).
 - **Decision to build.** Aid Another pays when the aider's own expected damage against the enemy is lower than the ally's gain from +2 attack (or the expected damage prevented by +2 AC), and both threaten the same enemy. Waking an adjacent sleeping ally is a simpler first rule and matters against PC Sleep spells.
-- **Fix first.** AI-035; then AI-054 for Aid Another.
+- **Fix first.** AI-035 (AI-054's aid another part was done in batch 13 step 13).
 - **Rules.** PHB ch.8, Combat Modifiers (Flanking) and Special Attacks (Aid Another).
 - **Test with.** `test_2_goblins`, `goblin_raiders`, `sleep_spell_test` (includes the wake-ally flow), or the Custom Encounter Builder with three or more goblins against one PC.
 

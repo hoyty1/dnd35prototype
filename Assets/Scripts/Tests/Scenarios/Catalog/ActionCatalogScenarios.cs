@@ -31,6 +31,11 @@ namespace Tests.Scenarios
     /// executors (PHB p.115, p.99, p.141-143): a load provokes, Rapid Reload's free load too, an NPC reloads with its move
     /// action and fires with its standard action; a crawl provokes from every foe threatening a square of it, dropping prone is free; a prone confused
     /// creature that must attack the nearest creature stands first unless it already threatens it (delegated RAW reading).
+    ///
+    /// Step 13 (AI-054 narrowed, CORE-040; decision D6): aid another and waking an ally are shared executors (PHB p.154,
+    /// p.280): a standard action paid first, then an attack roll against AC 10 that gives the ally +2; waking a sleeper
+    /// is a standard action; neither provokes. The attack-wall executor serves the PC's wall buttons and the NPC's wall
+    /// branch alike, and continues no UI, so an NPC's Wall of Ice attack advances the turn once.
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -82,6 +87,17 @@ namespace Tests.Scenarios
             yield return S("crawl-into-threat-ai", () => CrawlIntoThreat(ui: false));
             yield return S("confused-prone-flee-stands-ai", ConfusedProneFleeStands);
             yield return S("confused-prone-crossbow-ai", ConfusedProneCrossbow);
+            yield return S("aid-another-ui", () => AidAnother(ui: true));
+            yield return S("aid-another-ai", () => AidAnother(ui: false));
+            yield return S("wake-sleeping-ally-ui", () => WakeSleepingAlly(ui: true));
+            yield return S("wake-sleeping-ally-ai", () => WakeSleepingAlly(ui: false));
+            yield return S("npc-wall-of-ice-attack-ai", NpcWallOfIceAttack);
+            yield return S("aid-another-defense-ai", AidAnotherDefense);
+            yield return S("aid-another-expires-ai", AidAnotherExpires);
+            yield return S("npc-wall-of-ice-break-ai", NpcWallOfIceBreak);
+            yield return S("pc-wall-of-ice-attack-ui", () => PcWallAttack(ranged: true));
+            yield return S("pc-wall-of-ice-reach-ui", () => PcWallAttack(ranged: false));
+            yield return S("pc-break-wall-ui", PcBreakWall);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -1645,6 +1661,382 @@ namespace Tests.Scenarios
                     Expect.None("cond", e => e.Str("actor") == "orc" && e.Get("type") is CombatConditionType t && t == CombatConditionType.Prone && !e.Bool("added")),
                     Expect.None("move", e => e.Str("actor") == "orc")))
                 .Expect("It shoots the hero", v => v.Attacks("orc", "hero", false, 1).Count >= 1 ? ExpectResult.Pass("shot") : ExpectResult.Fail("no shot"))
+                .Build();
+        }
+
+        // ── Step 13: aid another, waking an ally, the NPC wall attack (D6, AI-054, CORE-040) ──────────────────────
+
+        /// <summary>Notes the +2 aid bonuses <paramref name="allyKey"/> holds on its attacks against <paramref name="foeKey"/> (GameManager.GetAidAnotherAttackBonuses).</summary>
+        private static bool NoteAidBonus(ScenarioContext ctx, string tag, string allyKey, string foeKey)
+        {
+            int total = 0;
+            foreach (GameManager.AidBonus b in ctx.Gm.GetAidAnotherAttackBonuses(ctx.Get(allyKey), ctx.Get(foeKey)))
+                total += b.Bonus;
+            Note12(ctx, tag, total);
+            return true;
+        }
+
+        /// <summary>
+        /// D6 (PHB p.154, Table 8-2 p.141 note 2): a fighter beside an orc aids its ally's attack on that orc: a standard
+        /// action (its move action is left), an attack roll against AC 10 (every d20 forced to 15, so it hits), and the
+        /// ally gains +2 on its next attack roll against the orc, which its attack uses up. Nothing provokes. The Ui twin
+        /// walks the PC aid menu (the opponent, Aid Offense, the ally); the AI twin runs the same executor through
+        /// RunAIAction (Step.ActionAgainst, Scripted).
+        /// </summary>
+        private static ScenarioDef AidAnother(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/aid-another-ui" : "rules/aid-another-ai",
+                    "Aid another is a standard action, an attack roll against AC 10 giving an ally +2 on its next attack (PHB p.154; D6, AI-054)")
+                .Covers("AI-054", "D6", "PHB p.154", "PHB p.141", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 12, 10, Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("ally", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Force(20, 15, null, -1)
+                .Initiative("orc", "hero", "ally")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1,
+                    ui ? Step.AidAnother("ally", "orc") : Step.ActionAgainst(ActionIds.AidAnother, "ally", "orc", AidAnotherActionExecutor.OffenseVariant),
+                    Step.Assert("after the aid", ctx => NoteLoadAndActions(ctx, "hero", "hero") && NoteAidBonus(ctx, "aid.before", "ally", "orc")))
+                .Turn("ally", 1, Step.Attack("orc"), Step.Assert("after the ally's attack", ctx => NoteAidBonus(ctx, "aid.after", "ally", "orc")));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The aid step is done", Expect.StepStatus("hero", 1, ui ? "AidAnother" : "Action", 0, "done"))
+                .Expect("The attack roll against AC 10 hits (PHB p.154)", v =>
+                    v.Log("Aid Another success!").Count == 1 ? ExpectResult.Pass("success") : ExpectResult.Fail(v.Log("Aid Another").Count + " aid lines"))
+                .Expect("The ally holds +2 on its next attack against the orc, and its attack uses it up", Expect.All(Fact12("aid.before", "2"), Fact12("aid.after", "0")))
+                .Expect("Aid another is a standard action: the move action is left", Expect.All(Fact12("hero.standard", "False"), Fact12("hero.move", "True")))
+                .Expect("Nothing provokes (Table 8-2 note 2)", Expect.None("aoo", e => e.Str("target") == "hero"))
+                .Expect("The ally attacks the orc in round 1", v => v.Attacks("ally", "orc", false, 1).Count >= 1 ? ExpectResult.Pass("attacked") : ExpectResult.Fail("no attack"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D6 (PHB p.280, p.154): a fighter shakes the sleeping ally beside it awake: a standard action (its move action is
+        /// left) that provokes nothing, and the ally is no longer asleep. The Ui twin walks the PC aid menu (the sleeping
+        /// ally); the AI twin runs the same executor through RunAIAction (Step.Action, Scripted).
+        /// </summary>
+        private static ScenarioDef WakeSleepingAlly(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/wake-sleeping-ally-ui" : "rules/wake-sleeping-ally-ai",
+                    "Shaking a sleeping ally awake is a standard action that provokes nothing (PHB p.280; D6, AI-054)")
+                .Covers("AI-054", "D6", "PHB p.280", "PHB p.154", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Pc("sleeper", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 10, 11, Control.Scripted)
+                .Npc("orc", "orc_warrior", 16, 10, Control.Scripted)
+                .StartCondition("sleeper", CombatConditionType.Asleep, 10)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("sleeper", Sturdy)
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero", "sleeper")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1,
+                    ui ? Step.WakeAlly("sleeper") : Step.Action(ActionIds.WakeAlly, "sleeper"),
+                    Step.Assert("after the wake", ctx =>
+                    {
+                        Note12(ctx, "sleeper.asleep", ctx.Get("sleeper").HasCondition(CombatConditionType.Asleep));
+                        return NoteLoadAndActions(ctx, "hero", "hero");
+                    }));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The wake step is done", Expect.StepStatus("hero", 1, ui ? "WakeAlly" : "Action", 0, "done"))
+                .Expect("The ally is awake (PHB p.280)", Expect.All(Fact12("sleeper.asleep", "False"),
+                    v => v.Log("shakes Brena awake").Count == 1 ? ExpectResult.Pass("woken") : ExpectResult.Fail("no wake line")))
+                .Expect("Waking is a standard action: the move action is left", Expect.All(Fact12("hero.standard", "False"), Fact12("hero.move", "True")))
+                .Expect("Nothing provokes", Expect.None("aoo", e => e.Str("target") == "hero"))
+                .Build();
+        }
+
+        /// <summary>A Wall of Ice on <paramref name="cells"/> (PHB p.299), caster level 9, intact; in force once its Start has run (a frame later).</summary>
+        private static void PlaceWallOfIce(params UnityEngine.Vector2Int[] cells) => PlaceWallOfIce(9, cells);
+
+        /// <summary>A Wall of Ice of caster level <paramref name="casterLevel"/> on <paramref name="cells"/> (PHB p.299; break DC 15 + CL).</summary>
+        private static void PlaceWallOfIce(int casterLevel, params UnityEngine.Vector2Int[] cells)
+        {
+            var go = new UnityEngine.GameObject("WallOfIce_Test_Area");
+            go.transform.position = SquareGridUtils.GridToWorld(cells[0]);
+            WallOfIceAreaEffect wall = go.AddComponent<WallOfIceAreaEffect>();
+            wall.CenterPosition = go.transform.position;
+            wall.CenterCell = cells[0];
+            wall.LengthSquares = System.Math.Max(2, cells.Length);
+            wall.RoundsRemaining = 10;
+            wall.CasterLevel = casterLevel;
+            wall.SetExplicitCells(new HashSet<UnityEngine.Vector2Int>(cells));
+        }
+
+        /// <summary>
+        /// CORE-040 (CORE-012): an AI-run orc boxed in by a Wall of Ice cannot reach the heroes, so its wall branch attacks an
+        /// adjacent wall square with its weapon (NPCAttackWallForAI, the attack-wall executor through RunAIAction). The
+        /// executor continues no PC UI, so the turn advances exactly once: round 1 is the hero, the orc, then the Ui ally,
+        /// each once, and the ally's End Turn ends the round. Before the fix the PC attack follow-up (AfterAttackDelay) ran
+        /// inside the NPC coroutine and could end or redraw the next turn.
+        /// </summary>
+        private static ScenarioDef NpcWallOfIceAttack()
+        {
+            var ring = new[]
+            {
+                new UnityEngine.Vector2Int(9, 9), new UnityEngine.Vector2Int(10, 9), new UnityEngine.Vector2Int(11, 9),
+                new UnityEngine.Vector2Int(9, 10), new UnityEngine.Vector2Int(11, 10),
+                new UnityEngine.Vector2Int(9, 11), new UnityEngine.Vector2Int(10, 11), new UnityEngine.Vector2Int(11, 11),
+            };
+            return Rules("rules/npc-wall-of-ice-attack-ai", "An NPC's Wall of Ice attack advances the turn exactly once (CORE-040, CORE-012; PHB p.299)")
+                .Covers("CORE-040", "CORE-012", "AI-054", "PHB p.299", "PHB p.165")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 15, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 15, 12, Control.Ui)
+                .Tweak("hero", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Tweak("orc", Sturdy)
+                .Initiative("hero", "orc", "ally")
+                .Turn("hero", 1, Step.Assert("a Wall of Ice boxes the orc in (fixture)", ctx => { PlaceWallOfIce(ring); return true; }), Step.Pass())
+                .Turn("ally", 1, Step.Pass())
+                .Expect("The orc attacks the wall in round 1 (its wall branch)", v =>
+                    v.Log("attacks Wall of Ice").Count >= 1 ? ExpectResult.Pass("wall attacked") : ExpectResult.Fail("no wall attack"))
+                .Expect("Round 1 is the hero, the orc, then the ally, each once: the turn advanced once after the orc (CORE-040)", v =>
+                {
+                    List<string> order = v.Of("turn_start").Where(e => e.Round == 1).Select(e => e.Str("actor")).ToList();
+                    string got = string.Join(",", order);
+                    return got == "hero,orc,ally" ? ExpectResult.Pass(got) : ExpectResult.Fail(got + ", expected hero,orc,ally");
+                })
+                .Expect("The ally's Ui turn ran its step (no stray turn end took it)", Expect.StepStatus("ally", 1, "Pass", 0, "done"))
+                .Build();
+        }
+
+        // ── Step 13 review: the defensive aid, the aid's expiry, the NPC Strength check and the PC wall buttons ──────
+
+        /// <summary>Notes the +2 AC aid bonuses <paramref name="allyKey"/> holds against <paramref name="foeKey"/>'s attacks (GameManager.GetAidAnotherDefenseBonuses).</summary>
+        private static bool NoteAidDefense(ScenarioContext ctx, string tag, string allyKey, string foeKey)
+        {
+            int total = 0;
+            foreach (GameManager.AidBonus b in ctx.Gm.GetAidAnotherDefenseBonuses(ctx.Get(allyKey), ctx.Get(foeKey)))
+                total += b.Bonus;
+            Note12(ctx, tag, total);
+            return true;
+        }
+
+        /// <summary>
+        /// D6 (PHB p.154): the defensive aid. A fighter beside an orc aids its ally's AC against that orc (every d20 forced to
+        /// 15, so the attack roll against AC 10 hits); the ally holds +2 AC against the orc, and the orc's attack on the ally
+        /// uses it up. The aid-another executor through RunAIAction (Step.AidAnother, Scripted).
+        /// </summary>
+        private static ScenarioDef AidAnotherDefense()
+        {
+            return Rules("rules/aid-another-defense-ai", "Aid another's defense gives the ally +2 AC against the opponent's next attack (PHB p.154; D6)")
+                .Covers("AI-054", "D6", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 12, 10, Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("ally", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Force(20, 15, null, -1)
+                .Initiative("hero", "orc", "ally")
+                .Turn("hero", 1, Step.AidAnother("ally", "orc", defense: true),
+                    Step.Assert("after the aid", ctx => NoteAidDefense(ctx, "aidac.before", "ally", "orc")))
+                .Turn("orc", 1, Step.Attack("ally"), Step.Assert("after the orc's attack", ctx => NoteAidDefense(ctx, "aidac.after", "ally", "orc")))
+                .Turn("ally", 1, Step.Pass())
+                .Expect("The aid step is done", Expect.StepStatus("hero", 1, "AidAnother", 0, "done"))
+                .Expect("The attack roll against AC 10 hits (PHB p.154)", v =>
+                    v.Log("Aid Another success!").Count == 1 ? ExpectResult.Pass("success") : ExpectResult.Fail(v.Log("Aid Another").Count + " aid lines"))
+                .Expect("The ally holds +2 AC against the orc, and the orc's attack uses it up", Expect.All(Fact12("aidac.before", "2"), Fact12("aidac.after", "0"),
+                    v => v.Log("Aid defense consumed").Count == 1 ? ExpectResult.Pass("consumed") : ExpectResult.Fail(v.Log("Aid defense consumed").Count + " consumed lines")))
+                .Build();
+        }
+
+        /// <summary>
+        /// PHB p.154: the aid's +2 lasts only until the beginning of the aider's next turn. The fighter aids its ally's attack
+        /// on the orc in round 1; the ally does not attack; the bonus is still there on the ally's round-1 turn and gone when
+        /// the aider's round-2 turn starts (before the batch 13 step 13 review it lasted until the start of the ally's second
+        /// turn after the grant, so it was still there).
+        /// </summary>
+        private static ScenarioDef AidAnotherExpires()
+        {
+            return Rules("rules/aid-another-expires-ai", "An unused aid bonus ends at the start of the aider's next turn (PHB p.154; D6)")
+                .Covers("AI-054", "D6", "PHB p.154")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 12, 10, Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("ally", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Force(20, 15, null, -1)
+                .Initiative("hero", "ally", "orc")
+                .Turn("hero", 1, Step.AidAnother("ally", "orc"))
+                .Turn("ally", 1, Step.Assert("the ally's turn after the aid", ctx => NoteAidBonus(ctx, "aid.r1", "ally", "orc")), Step.Pass())
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 2, Step.Assert("the aider's next turn", ctx => NoteAidBonus(ctx, "aid.r2", "ally", "orc")), Step.Pass())
+                .Turn("ally", 2, Step.Pass())
+                .Turn("orc", 2, Step.Pass())
+                .Expect("The aid hits (PHB p.154)", v =>
+                    v.Log("Aid Another success!").Count == 1 ? ExpectResult.Pass("success") : ExpectResult.Fail(v.Log("Aid Another").Count + " aid lines"))
+                .Expect("The +2 holds through the ally's round-1 turn and ends at the start of the aider's next turn",
+                    Expect.All(Fact12("aid.r1", "2"), Fact12("aid.r2", "0"),
+                        v => v.Log("Aid offense bonus expired").Count == 1 ? ExpectResult.Pass("expired") : ExpectResult.Fail(v.Log("Aid offense bonus expired").Count + " expiry lines")))
+                .Build();
+        }
+
+        /// <summary>The ring of eight Wall of Ice squares around (10, 10).</summary>
+        private static UnityEngine.Vector2Int[] RingAround10x10() => new[]
+        {
+            new UnityEngine.Vector2Int(9, 9), new UnityEngine.Vector2Int(10, 9), new UnityEngine.Vector2Int(11, 9),
+            new UnityEngine.Vector2Int(9, 10), new UnityEngine.Vector2Int(11, 10),
+            new UnityEngine.Vector2Int(9, 11), new UnityEngine.Vector2Int(10, 11), new UnityEngine.Vector2Int(11, 11),
+        };
+
+        /// <summary>
+        /// CORE-040, the Strength variant (PHB p.299): an AI-run orc with no weapon and Strength 22, boxed in by a caster level
+        /// 1 Wall of Ice (DC 16), takes its wall branch's Strength check (NPCBreakWallForAI, the attack-wall executor's strength
+        /// variant through RunAIAction) on an adjacent square. The turn advances exactly once: hero, orc, then the Ui ally.
+        /// </summary>
+        private static ScenarioDef NpcWallOfIceBreak()
+        {
+            UnityEngine.Vector2Int[] ring = RingAround10x10();
+            return Rules("rules/npc-wall-of-ice-break-ai", "An unarmed NPC's Strength check on a Wall of Ice advances the turn exactly once (CORE-040; PHB p.299)")
+                .Covers("CORE-040", "CORE-012", "AI-054", "PHB p.299")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 15, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Ai)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Brena", 4)), 15, 12, Control.Ui)
+                .Tweak("hero", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Tweak("orc", c =>
+                {
+                    Sturdy(c);
+                    c.Stats.STR = 22;
+                    global::Inventory inv = Inv(c);
+                    if (inv != null)
+                    {
+                        inv.RightHandSlot = null;
+                        inv.LeftHandSlot = null;
+                        inv.RecalculateStats();
+                    }
+                })
+                .Initiative("hero", "orc", "ally")
+                .Turn("hero", 1, Step.Assert("a Wall of Ice (CL 1) boxes the orc in (fixture)", ctx => { PlaceWallOfIce(1, ring); return true; }), Step.Pass())
+                .Turn("ally", 1, Step.Pass())
+                .Expect("The unarmed orc tries to break the wall in round 1 (its wall branch's Strength check)", v =>
+                    v.Log("attempts to break through Wall of Ice").Count >= 1 ? ExpectResult.Pass("strength check") : ExpectResult.Fail("no Strength check"))
+                .Expect("Round 1 is the hero, the orc, then the ally, each once: the turn advanced once after the orc (CORE-040)", v =>
+                {
+                    List<string> order = v.Of("turn_start").Where(e => e.Round == 1).Select(e => e.Str("actor")).ToList();
+                    string got = string.Join(",", order);
+                    return got == "hero,orc,ally" ? ExpectResult.Pass(got) : ExpectResult.Fail(got + ", expected hero,orc,ally");
+                })
+                .Expect("The ally's Ui turn ran its step (no stray turn end took it)", Expect.StepStatus("ally", 1, "Pass", 0, "done"))
+                .Build();
+        }
+
+        /// <summary>The number of arrows <paramref name="key"/> carries, noted under "<paramref name="tag"/>".</summary>
+        private static bool NoteArrows(ScenarioContext ctx, string key, string tag)
+        {
+            global::Inventory inv = Inv(ctx.Get(key));
+            Note12(ctx, tag, inv != null ? inv.GetTotalAmmoCount(AmmunitionType.Arrow) : -1);
+            return true;
+        }
+
+        /// <summary>
+        /// The PC's Attack button on a Wall of Ice square out of plain adjacency (batch 13 step 13 review; PHB p.165-166: any
+        /// attack can target an object). <paramref name="ranged"/>: a Ui fighter with a longbow and 20 more arrows shoots the wall
+        /// 15 ft away: the shot is made (the attack step the button paid), deals half damage to the object (PHB p.165),
+        /// spends one arrow. Else a Ui fighter with a longspear strikes the wall 10 ft away (its reach band; it could not
+        /// strike an adjacent square). Both squares are the Attack button's own highlights (IsWallCellInWeaponAttackReach),
+        /// which the executor's pre-check now accepts; before the review it refused every square that was not adjacent.
+        /// </summary>
+        private static ScenarioDef PcWallAttack(bool ranged)
+        {
+            int wallX = ranged ? 13 : 12;
+            var wall = new[] { new UnityEngine.Vector2Int(wallX, 9), new UnityEngine.Vector2Int(wallX, 10), new UnityEngine.Vector2Int(wallX, 11) };
+            ScenarioBuilder b = Rules(ranged ? "rules/pc-wall-of-ice-attack-ui" : "rules/pc-wall-of-ice-reach-ui",
+                    ranged ? "The PC's Attack button shoots a Wall of Ice square at range: half damage, one arrow (PHB p.165-166; CORE-040)"
+                           : "The PC's Attack button strikes a Wall of Ice square at a reach weapon's 10 ft (PHB p.113, p.165-166; CORE-040)")
+                .Covers("CORE-040", "AI-054", "PHB p.165", "PHB p.299", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 18, 10, Control.Scripted)
+                .Tweak("hero", c =>
+                {
+                    Sturdy(c);
+                    RulesScenarios.StripOffHand(c);
+                    if (ranged)
+                    {
+                        Wield(c, ItemDatabase.CloneItem(ItemID.WeaponLongbow));
+                        ItemData arrows = ItemDatabase.CloneItem(ItemID.AmmoArrow);
+                        arrows.Quantity = 20;
+                        Inv(c).AddItem(arrows);
+                        Inv(c).RecalculateStats();
+                    }
+                    else
+                    {
+#pragma warning disable CS0618 // no ItemID enum value for the longspear; the string id is the only one
+                        Wield(c, ItemDatabase.CloneItem(ItemIDs.LONGSPEAR));
+#pragma warning restore CS0618
+                    }
+                })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Assert("a Wall of Ice stands between them (fixture)", ctx => { PlaceWallOfIce(wall); return true; }), Step.Pass())
+                .Turn("hero", 1,
+                    Step.Assert("before the wall attack", ctx => NoteArrows(ctx, "hero", "arrows.before")),
+                    Step.AttackWall(wallX, 10),
+                    Step.Assert("after the wall attack", ctx => NoteArrows(ctx, "hero", "arrows.after") && NoteLoadAndActions(ctx, "hero", "hero")));
+            b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The wall step is done", Expect.StepStatus("hero", 1, "AttackWall", 0, "done"))
+                .Expect("The hero attacks the wall square at " + (ranged ? "15 ft" : "10 ft"), v =>
+                    v.Log("attacks Wall of Ice at \\(" + wallX + ",10\\)").Count == 1 ? ExpectResult.Pass("wall attacked") : ExpectResult.Fail(v.Log("attacks Wall of Ice").Count + " wall attack lines"))
+                .Expect("The attack was the Attack button's paid step: the standard action is spent", Fact12("hero.standard", "False"))
+                .Expect("No refusal line", v => v.Log("out of .*(reach|range)|must be adjacent").Count == 0 ? ExpectResult.Pass("none") : ExpectResult.Fail("refused"));
+            if (ranged)
+                b = b.Expect("A ranged attack deals half damage to an object (PHB p.165)", v =>
+                        v.Log("Ranged weapon damage to an object is halved").Count == 1 ? ExpectResult.Pass("halved") : ExpectResult.Fail("no halving line"))
+                    .Expect("The shot spends one arrow", v =>
+                    {
+                        // Relative: the Fighter preset carries its own arrows beside the fixture's 20.
+                        string before = NoteValue(v, "arrows.before", out int seqBefore);
+                        string after = NoteValue(v, "arrows.after", out int seqAfter);
+                        if (!int.TryParse(before, out int nBefore) || !int.TryParse(after, out int nAfter))
+                            return ExpectResult.Inconclusive("no arrow notes");
+                        string detail = "arrows " + nBefore + " -> " + nAfter;
+                        return nBefore >= 20 && nAfter == nBefore - 1 ? ExpectResult.Pass(detail, seqAfter) : ExpectResult.Fail(detail + ", expected one spent", seqAfter);
+                    });
+            else
+                b = b.Expect("A melee attack's damage is not halved", v =>
+                    v.Log("Ranged weapon damage to an object is halved").Count == 0 ? ExpectResult.Pass("not halved") : ExpectResult.Fail("halved"));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// The PC's Break Wall button (PHB p.299: a Strength check, DC 15 + caster level, a standard action): a Ui fighter next
+        /// to a Wall of Ice presses Break Wall and picks the adjacent square; the attack-wall executor's strength variant
+        /// pays the standard action and rolls the check. The move action is left.
+        /// </summary>
+        private static ScenarioDef PcBreakWall()
+        {
+            var wall = new[] { new UnityEngine.Vector2Int(11, 9), new UnityEngine.Vector2Int(11, 10), new UnityEngine.Vector2Int(11, 11) };
+            return Rules("rules/pc-break-wall-ui", "The PC's Break Wall button makes the Strength check against an adjacent Wall of Ice square (PHB p.299; CORE-040)")
+                .Covers("CORE-040", "AI-054", "PHB p.299", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Aldric", 4)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 16, 10, Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); RulesScenarios.StripOffHand(c); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Assert("a Wall of Ice beside the hero (fixture)", ctx => { PlaceWallOfIce(wall); return true; }), Step.Pass())
+                .Turn("hero", 1, Step.AttackWall(11, 10, strength: true),
+                    Step.Assert("after the Strength check", ctx => NoteLoadAndActions(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The Break Wall step is done", Expect.StepStatus("hero", 1, "AttackWall", 0, "done"))
+                .Expect("The hero makes the Strength check on the adjacent square", v =>
+                    v.Log("attempts to break through Wall of Ice at \\(11,10\\)").Count == 1 ? ExpectResult.Pass("checked") : ExpectResult.Fail("no Strength check line"))
+                .Expect("The check is a standard action: the move action is left", Expect.All(Fact12("hero.standard", "False"), Fact12("hero.move", "True")))
                 .Build();
         }
     }
