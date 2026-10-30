@@ -16,7 +16,7 @@ namespace Tests.Scenarios
         AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack, AnswerImprovedGrab, AnswerCleave, Flurry, Smite, LayOnHands,
         WildShape, RevertWildShape, BardicMusic, BardicConcentrate, BardicSuggestion, BardicStop,
         UseItem, CastHeld, DeliverHeld, MaintainConcentration, Convert, DualWield, Overrun, TotalDefense, Action,
-        AidAnother, WakeAlly, AttackWall, TurnUndead, Rage
+        AidAnother, WakeAlly, AttackWall, TurnUndead, Rage, FightDefensively
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -95,6 +95,11 @@ namespace Tests.Scenarios
         public static Step Attack(string target) => new Step(StepKind.Attack) { Target = target };
         /// <summary>Ui: the next Attack click of the iterative sequence. Scripted: as Attack (the sequence continues).</summary>
         public static Step AttackAgain(string target) => new Step(StepKind.AttackAgain) { Target = target };
+        /// <summary>
+        /// Ui only: the Fighting Defensively (Std) button, then the target square (PHB p.140): one step of the PC's attack
+        /// sequence since batch 13 step 17 (CMB-200), so an <see cref="AttackAgain"/> after it goes on into a full attack.
+        /// </summary>
+        public static Step FightDefensively(string target) => new Step(StepKind.FightDefensively) { Target = target };
         /// <summary>
         /// Ui only: one natural-attack button press for the natural attack named <paramref name="attackName"/>, then the
         /// target square. Like the button (ActionButtonPanel.BuildNaturalAttackButtonOptions), it presses the first
@@ -404,6 +409,7 @@ namespace Tests.Scenarios
                 case StepKind.Flurry:
                 case StepKind.Smite:
                 case StepKind.LayOnHands:
+                case StepKind.FightDefensively:
                     return Kind + "(" + Target + ")";
                 case StepKind.FullAttack:
                     return "FullAttack(" + Target + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
@@ -473,7 +479,8 @@ namespace Tests.Scenarios
                 || Kind == StepKind.Smite || Kind == StepKind.LayOnHands
                 || Kind == StepKind.Maneuver || (Kind == StepKind.Cast && !HasCell) || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack
                 || Kind == StepKind.UseItem || Kind == StepKind.DeliverHeld || Kind == StepKind.Convert || Kind == StepKind.DualWield
-                || (Kind == StepKind.Overrun && !HasCell) || Kind == StepKind.AidAnother || Kind == StepKind.WakeAlly;
+                || (Kind == StepKind.Overrun && !HasCell) || Kind == StepKind.AidAnother || Kind == StepKind.WakeAlly
+                || Kind == StepKind.FightDefensively;
             if (Opponent != null && def.Find(Opponent) == null)
                 return Describe() + ": opponent '" + Opponent + "' is not an actor";
             if (Kind == StepKind.AidAnother && string.IsNullOrEmpty(Opponent))
@@ -526,7 +533,7 @@ namespace Tests.Scenarios
                 // the AI hold request, TryNPCHoldTouchChargeForAI; the deliver-held-charge entry), so they run on both paths.
                 if ((Kind == StepKind.GrappleAction && !aiGrapple) || Kind == StepKind.NaturalAttack
                     || Kind == StepKind.UseItem || Kind == StepKind.Convert
-                    || Kind == StepKind.DualWield)
+                    || Kind == StepKind.DualWield || Kind == StepKind.FightDefensively)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 // A summon aimed at a square is the one square cast the NPC path has (batch 11 step 27, SPL-091).
                 bool summonAtSquare = Kind == StepKind.Cast && SummoningService.IsSummonMonsterSpell(SpellDatabase.GetSpell(SpellId));
@@ -1451,6 +1458,11 @@ namespace Tests.Scenarios
                 case StepKind.FullAttack:
                     if (target == null) { _awaitNote = "no target"; break; }
                     gm.OnFullAttackButtonPressed();
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                case StepKind.FightDefensively:
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    gm.OnAttackDefensivelyButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
                     break;
                 case StepKind.DualWield:

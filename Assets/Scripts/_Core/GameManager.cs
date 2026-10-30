@@ -318,7 +318,6 @@ public partial class GameManager : MonoBehaviour
     // The per-cast state (_pendingSpell, _pendingMetamagic, _pendingSpellFromHeldCharge, the caster's choices, the summon
     // picks) is the current cast's request: read-only views in Spell/Resolution/GameManager.CastContext.cs (batch 11 steps 4, 29).
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
-    private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
     private bool _pendingNaturalAttackIsHasteExtra; // The selected natural attack is Haste's extra attack (CMB-106)
 
     // Scroll and wand casting state (the item, its pack slot, whether the current cast uses one) is the cast's CastSource
@@ -370,8 +369,6 @@ public partial class GameManager : MonoBehaviour
     private int _mainHandPenalty;
     private int _offHandPenalty;
     private AttackType _pendingAttackType = AttackType.Melee;
-
-    private bool _skipNextSingleAttackStandardActionCommit;
 
     // PC UI state: which natural-attack buttons were used this turn.
     private readonly HashSet<int> _usedNaturalAttackSequenceIndices = new HashSet<int>();
@@ -1124,7 +1121,6 @@ public partial class GameManager : MonoBehaviour
         // Every open cast ends with its own state (spell, metamagic, choices, scroll, wand and F12 source; batch 11 step 4).
         EndAllCasts("combat reset (" + safeContext + ")");
         _pendingNaturalAttackSequenceIndex = -1;
-        _pendingNaturalAttackLabel = null;
         _pendingNaturalAttackIsHasteExtra = false;
 
         _isConfirmingSelfAoE = false;
@@ -4150,7 +4146,6 @@ public partial class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         _currentAttackType = GetDefaultAttackType(pc);
-        _skipNextSingleAttackStandardActionCommit = false;
         ClearPendingNaturalAttackSelection();
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
@@ -4231,7 +4226,8 @@ public partial class GameManager : MonoBehaviour
         {
             if (_isInAttackSequence && _attackingCharacter == pc)
             {
-                if (HasMoreAttacksAvailable())
+                // Only a step the PC can still pay for (a lone attack after a move leaves none, PHB p.143).
+                if (IsIterativeAttackSequenceActiveFor(pc))
                 {
                     AttackType uiAttackType = AttackIntent.ForUi(this, pc).UiAttackType;
                     int attacksRemaining = pc.GetRemainingMainHandAttackSteps(
@@ -7565,7 +7561,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
 
         if (!_isInAttackSequence)
         {
@@ -7579,17 +7575,15 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private void SetPendingNaturalAttackSelection(int naturalAttackSequenceIndex, string naturalAttackLabel, bool isHasteExtraAttack = false)
+    private void SetPendingNaturalAttackSelection(int naturalAttackSequenceIndex, bool isHasteExtraAttack = false)
     {
         _pendingNaturalAttackSequenceIndex = Mathf.Max(0, naturalAttackSequenceIndex);
-        _pendingNaturalAttackLabel = naturalAttackLabel;
         _pendingNaturalAttackIsHasteExtra = isHasteExtraAttack;
     }
 
     private void ClearPendingNaturalAttackSelection()
     {
         _pendingNaturalAttackSequenceIndex = -1;
-        _pendingNaturalAttackLabel = null;
         _pendingNaturalAttackIsHasteExtra = false;
     }
 
@@ -7653,11 +7647,11 @@ public partial class GameManager : MonoBehaviour
         }
 
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
         EndAttackSequence();
         if (isHasteExtraAttack)
             resolvedLabel += " (Haste)";
-        SetPendingNaturalAttackSelection(resolvedSequenceIndex, resolvedLabel, isHasteExtraAttack);
+        SetPendingNaturalAttackSelection(resolvedSequenceIndex, isHasteExtraAttack);
 
         _pendingAttackMode = PendingAttackMode.Single;
         _currentAttackType = AttackType.Melee;
@@ -7862,7 +7856,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
 
         if (!_isInAttackSequence)
         {
@@ -8053,7 +8047,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
 
         // If off-hand is the first attack this turn, auto-enable dual wielding.
         if (!_dualWieldingChoiceMade)
@@ -8125,7 +8119,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
 
         if (!_dualWieldingChoiceMade)
         {
@@ -8640,8 +8634,59 @@ public partial class GameManager : MonoBehaviour
 
     private void StartAttackSequence(CharacterController attacker, AttackType attackType)
     {
-        if (attacker == null)
+        if (!BeginAttackSequenceState(attacker, attackType))
+        {
+            if (attacker != null)
+                CombatUI?.UpdateActionButtons(attacker);
             return;
+        }
+
+        // Pays the standard action for the first attack of the turn, or the move action when an
+        // earlier attack (main-hand, off-hand or maneuver) was made this turn (PHB p.143).
+        if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
+        {
+            Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} cannot start an attack: {payReason}; aborting sequence.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {payReason}."));
+            EndAttackSequence();
+            CombatUI?.UpdateActionButtons(attacker);
+            return;
+        }
+
+        if (enteredFullAttack)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+
+        PerformAttackByType(attacker, attackType);
+    }
+
+    /// <summary>
+    /// The PC attack sequence's UI state begun at a target click (batch 13 step 17, CMB-200): the Fighting Defensively (Std)
+    /// and natural-attack buttons pick their target before anything is paid, so their click begins the sequence here
+    /// (<see cref="BeginAttackSequenceState"/>) and CombatFlowService.PerformIterativeSequenceAttack runs the step, the
+    /// executor paying it at its stage 6 after its legality checks, as for an AI attack. These buttons are the attack action
+    /// (a standard action), so their click never declares Rapid Shot: the toggle is read by the Attack button's first click
+    /// and the Full Attack buttons only (PHB p.99: Rapid Shot needs a full attack; D9). False (the sequence ended, the
+    /// refusal logged) when a shot cannot be made.
+    /// </summary>
+    internal bool BeginAttackSequenceAtClick(CharacterController attacker)
+    {
+        AttackType attackType = _currentAttackType;
+        if (!BeginAttackSequenceState(attacker, attackType, declareRapidShot: false))
+            return false;
+        int baseBab = GetAttackSequenceBaseAttackBonus(attacker, attackType, attacker.ProgressiveAttackPool.MainHandStepsUsed);
+        _currentAttackBAB = baseBab + (_isDualWielding && (attackType == AttackType.Melee || attackType == AttackType.Thrown) ? _mainHandPenalty : 0);
+        return true;
+    }
+
+    /// <summary>
+    /// The UI state of a PC attack sequence (the attacker, its weapon, the attack budget) before its first step is paid:
+    /// a ranged attack first runs the executor's weapon checks and, when <paramref name="declareRapidShot"/> (the Attack
+    /// button's first click, not a Fighting Defensively (Std) click), declares Rapid Shot (see below). False when the shot
+    /// cannot be made (the sequence is ended and nothing is spent).
+    /// </summary>
+    private bool BeginAttackSequenceState(CharacterController attacker, AttackType attackType, bool declareRapidShot = true)
+    {
+        if (attacker == null)
+            return false;
 
         _attackingCharacter = attacker;
         _equippedWeapon = attacker.GetEquippedMainWeapon();
@@ -8660,10 +8705,10 @@ public partial class GameManager : MonoBehaviour
         if (startRanged && !CanShootWithWeapon(attacker, _equippedWeapon, out _))
         {
             EndAttackSequence();
-            CombatUI?.UpdateActionButtons(attacker);
-            return;
+            return false;
         }
-        TryDeclareRapidShotForAttack(attacker, _equippedWeapon, startRanged);
+        if (declareRapidShot)
+            TryDeclareRapidShotForAttack(attacker, _equippedWeapon, startRanged);
 
         pool.EnsureMainHandBudget(attacker.GetMainHandAttackBudget(usingInnateNaturalAttacks ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand));
 
@@ -8671,22 +8716,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[Attack][Sequence] Attacks: {pool.MainHandStepsUsed}/{pool.MainHandBudget} used, mode={pool.Mode}");
         Debug.Log($"[Attack][Sequence] First attack type: {attackType}");
         Debug.Log($"[Attack][Sequence] Off-hand already used this turn: {_offHandAttackUsedThisTurn}");
-
-        // Pays the standard action for the first attack of the turn, or the move action when an
-        // earlier attack (main-hand, off-hand or maneuver) was made this turn (PHB p.143).
-        if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
-        {
-            Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} cannot start an attack: {payReason}; aborting sequence.");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {payReason}."));
-            EndAttackSequence();
-            CombatUI?.UpdateActionButtons(attacker);
-            return;
-        }
-
-        if (enteredFullAttack)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
-
-        PerformAttackByType(attacker, attackType);
+        return true;
     }
 
     private void ContinueAttackSequence(CharacterController attacker)
@@ -9030,7 +9060,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
         EndAttackSequence();
         _currentAttackType = GetDefaultAttackType(pc);
 
@@ -9039,6 +9069,28 @@ public partial class GameManager : MonoBehaviour
         ShowAttackTargets(pc);
     }
 
+    /// <summary>
+    /// An attack button other than the defensive ones drops a fighting-defensively declaration no attack has used yet. A
+    /// round already fought defensively stays defensive: the -4 applies to every attack of that round and the +2 dodge AC
+    /// lasts until the creature's next turn (PHB p.140, p.143), so a PC that attacked defensively and goes on into a full
+    /// attack (batch 13 step 17, CMB-200) makes its remaining attacks defensively. A step lost to a failed Sanctuary or Hide
+    /// from Undead save was still attempted (PHB p.274), so it counts (the pool's committed steps, not only a rolled swing).
+    /// Also called when a defensive click is refused before any step (the declaration is dropped, no +2 AC without an attack).
+    /// </summary>
+    internal static void EndUnusedFightingDefensively(CharacterController pc)
+    {
+        if (pc == null || (pc.IsFightingDefensively && (pc.HasAttackedThisTurn || pc.ProgressiveAttackPool.AttacksCommitted > 0)))
+            return;
+        pc.SetFightingDefensively(false);
+    }
+
+    /// <summary>
+    /// Fighting Defensively (Std) (PHB p.140): the declaration (-4 on the round's attacks, +2 dodge AC), then the target.
+    /// The click is one step of the PC's attack sequence (batch 13 step 17, CMB-200: CombatFlowService
+    /// .PerformIterativeSequenceAttack begins it at the click), so after it the PC may go on into a full attack with the
+    /// Attack button, still fighting defensively (PHB p.143). Any creature that attacks may fight defensively: no base
+    /// attack bonus is needed (PHB p.140, p.143; CMB-203).
+    /// </summary>
     public void OnAttackDefensivelyButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -9057,12 +9109,6 @@ public partial class GameManager : MonoBehaviour
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
-
-        if (pc.Stats.BaseAttackBonus < 1)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} needs BAB +1 to fight defensively."));
             return;
         }
 
@@ -9098,12 +9144,6 @@ public partial class GameManager : MonoBehaviour
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
-
-        if (pc.Stats.BaseAttackBonus < 1)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} needs BAB +1 to fight defensively."));
             return;
         }
 
@@ -9292,7 +9332,7 @@ public partial class GameManager : MonoBehaviour
 
         ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
-        pc.SetFightingDefensively(false);
+        EndUnusedFightingDefensively(pc);
         StartAttackSequence(pc, AttackType.Melee);
     }
 

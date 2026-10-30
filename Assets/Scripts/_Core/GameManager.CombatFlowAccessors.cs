@@ -30,22 +30,19 @@ public partial class GameManager
     public string Combat_GetLastCombatLog() => _lastCombatLog;
     public void Combat_SetLastCombatLog(string value) => _lastCombatLog = value;
 
-    public bool Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag()
-    {
-        bool value = _skipNextSingleAttackStandardActionCommit;
-        _skipNextSingleAttackStandardActionCommit = false;
-        return value;
-    }
-
     public bool Combat_HasPendingNaturalAttackSelection() => HasPendingNaturalAttackSelection();
     public int Combat_GetPendingNaturalAttackSequenceIndex() => _pendingNaturalAttackSequenceIndex;
-    public string Combat_GetPendingNaturalAttackLabel() => _pendingNaturalAttackLabel;
     public bool Combat_IsPendingNaturalAttackHasteExtra() => _pendingNaturalAttackIsHasteExtra;
     public void Combat_ClearPendingNaturalAttackSelection() => ClearPendingNaturalAttackSelection();
+    /// <summary>Drops a fighting-defensively declaration no attack step has used (<see cref="EndUnusedFightingDefensively"/>); true when it was dropped.</summary>
+    public bool Combat_EndUnusedFightingDefensively(CharacterController actor)
+    {
+        bool wasDefensive = actor != null && actor.IsFightingDefensively;
+        EndUnusedFightingDefensively(actor);
+        return wasDefensive && !actor.IsFightingDefensively;
+    }
     public bool Combat_HasStartedAttackingThisTurn(CharacterController actor)
         => actor != null && actor.ProgressiveAttackPool.HasStartedAttacking;
-    public int Combat_ResolveNextUnusedNaturalAttackIndex(CharacterController attacker, int preferredSequenceIndex)
-        => ResolveNextAvailableNaturalAttackSequenceIndex(attacker, preferredSequenceIndex, null);
     public void Combat_MarkNaturalAttackSequenceIndexUsed(int sequenceIndex)
     {
         if (sequenceIndex >= 0)

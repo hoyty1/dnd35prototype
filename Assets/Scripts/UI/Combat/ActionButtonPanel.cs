@@ -141,7 +141,6 @@ public class ActionButtonPanel : MonoBehaviour
         public bool HasThrowableMeleeWeapon;
         public bool IterativeThrownSequenceActive;
         public bool IterativeThrownFullRoundStage;
-        public bool CanFightDefensively;
         public bool CanStartMainAfterOffHand;
         public bool HasStandardAttack;
         public bool CanContinueIterativeAttack;
@@ -261,7 +260,6 @@ public class ActionButtonPanel : MonoBehaviour
         context.IterativeThrownSequenceActive = context.Gm != null && context.Gm.IsIterativeThrownAttackSequenceActiveFor(pc);
         context.IterativeThrownFullRoundStage = context.Gm != null && context.Gm.IsIterativeThrownAttackInFullRoundStage(pc);
 
-        context.CanFightDefensively = pc.Stats.BaseAttackBonus >= 1;
         context.CanStartMainAfterOffHand = context.Gm != null && context.Gm.IsOffHandAttackUsedThisTurn(pc) && context.Actions.HasMoveAction && !context.IterativeWeaponSequenceActive;
         context.HasStandardAttack = context.Actions.HasStandardAction || context.CanStartMainAfterOffHand;
         context.CanContinueIterativeAttack = context.IterativeWeaponSequenceActive;
@@ -672,11 +670,11 @@ public class ActionButtonPanel : MonoBehaviour
 
     private void ComputeDefensiveAndChargeStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
     {
-        bool canAttackDefensively = context.Actions.HasStandardAction && context.CanFightDefensively && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned;
+        // Any creature that attacks may fight defensively: no base attack bonus is needed (PHB p.140, p.143; CMB-203).
+        bool canAttackDefensively = context.Actions.HasStandardAction && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned;
         string attackDefensivelyLabel;
         if (context.IsPinned) attackDefensivelyLabel = "Fighting Defensively (Pinned: no)";
         else if (context.IsTurned) attackDefensivelyLabel = "Fighting Defensively (Turned: no)";
-        else if (!context.CanFightDefensively) attackDefensivelyLabel = "Fighting Defensively (Std) [BAB +1]";
         else if (!context.Actions.HasStandardAction) attackDefensivelyLabel = "Fighting Defensively (Std) [Used]";
         else if (!context.CanAttackWithWeapon) attackDefensivelyLabel = "Fighting Defensively (Std) [Reload first]";
         else attackDefensivelyLabel = context.UsingUnarmedStrike ? $"Fighting Defensively (Std, {context.AttackSourceLabel})" : "Fighting Defensively (Std)";

@@ -24,7 +24,8 @@ using UnityEngine;
 /// 6. the step is paid and recorded (CharacterController.TryCommitAttack: the standard action, then the move action for
 ///    the second step, PHB p.143);
 /// 7. a ranged step provokes from each threatening foe (PHB p.141 Table 8-2), before every shot;
-/// 8. the roll (CharacterController.ResolveAttackSequenceStep; Haste's extra natural attack by the decider's choice);
+/// 8. the roll (CharacterController.ResolveAttackSequenceStep; Haste's extra natural attack by the decider's choice, or
+///    the natural attack a PC's natural-attack button picked, AttackSequenceRequest.ChosenNaturalAttackIndex, CMB-200);
 /// 9. the post-attack hook (OnAttackResolved).
 /// The ranged weapon checks come before the ward's commit, so a shot that cannot be made rolls no ward save and spends
 /// nothing (batch 12 step 14's rule for an empty quiver). It stops when the combat ends, the attacker drops or starts
@@ -158,6 +159,19 @@ public partial class GameManager
                 o.StopReason = cannotCommitReason;
                 break;
             }
+            // The natural attack the attacker picked for this step (a natural-attack button, batch 13 step 17, CMB-200): it must
+            // still be unused, or, picked as Haste's extra attack, Haste's attack must still be unused (PHB p.239; CMB-106).
+            // Refused before the step is rolled, paid or recorded (stage 6 pays; a natural-attack button's click is paid there
+            // too, CMB-200), so a used natural attack is never made twice.
+            bool chosenNatural = !aoo && !heldTouch && !charge && kind == AttackStepKind.NaturalSequence
+                && req.ChosenNaturalAttackIndex >= 0 && state.StepsTaken == 0;
+            if (chosenNatural && (req.ChosenNaturalAttackIsHasteExtra
+                    ? !attacker.CanUseHasteExtraNaturalAttack()
+                    : attacker.ProgressiveAttackPool.IsNaturalAttackUsed(req.ChosenNaturalAttackIndex)))
+            {
+                o.StopReason = req.ChosenNaturalAttackIsHasteExtra ? "no Haste attack left this turn" : "that natural attack is already used this turn";
+                break;
+            }
 
             // The AI's maneuver may replace this melee attack (CMB-102), at this step's bonus: the iterative BAB, or the BAB
             // of the natural attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312). In a natural sequence at most one
@@ -235,7 +249,15 @@ public partial class GameManager
             if (!heldTouch && !charge && AttackLegality.CommitWard(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent) == WardVerdict.Failed)
             {
                 if (!aoo && attacker.TryCommitAttack(kind, out _, out _) && kind == AttackStepKind.NaturalSequence)
-                    LoseNextNaturalAttack(attacker);
+                {
+                    // The picked natural attack is the one lost (CMB-200); else the next one in the executor's order.
+                    if (chosenNatural && req.ChosenNaturalAttackIsHasteExtra)
+                        attacker.MarkHasteExtraNaturalAttackUsed();
+                    else if (chosenNatural)
+                        attacker.ProgressiveAttackPool.MarkNaturalAttackUsed(req.ChosenNaturalAttackIndex);
+                    else
+                        LoseNextNaturalAttack(attacker);
+                }
                 state.StepsTaken++;
                 o.StepsLostToWard++;
                 UpdateAllStatsUI();
@@ -262,9 +284,15 @@ public partial class GameManager
             }
             else if (!aoo)
             {
-                // The natural attack this step makes: the step's own when unused, else the first unused one, else Haste's
-                // extra natural attack (CMB-106); read before the step is recorded.
-                if (kind == AttackStepKind.NaturalSequence && !ResolveNextNaturalAttack(attacker, out naturalIndex, out hasteNaturalStep))
+                // The natural attack this step makes: the attacker's pick (checked at stage 2), else the step's own when
+                // unused, else the first unused one, else Haste's extra natural attack (CMB-106); read before the step is
+                // recorded.
+                if (chosenNatural)
+                {
+                    hasteNaturalStep = req.ChosenNaturalAttackIsHasteExtra;
+                    naturalIndex = hasteNaturalStep ? -1 : req.ChosenNaturalAttackIndex;
+                }
+                else if (kind == AttackStepKind.NaturalSequence && !ResolveNextNaturalAttack(attacker, out naturalIndex, out hasteNaturalStep))
                 {
                     o.StopReason = "no natural attack left";
                     break;
@@ -375,11 +403,15 @@ public partial class GameManager
                     resolveIndex = hasteNaturalStep ? attacker.GetHasteExtraNaturalStepIndex() : naturalIndex;
                     if (hasteNaturalStep)
                     {
-                        // Haste's extra natural attack: the attacker picks the natural weapon (PHB p.239; CMB-106, CMB-124).
-                        int picked = -1;
-                        Coroutine hastePrompt = req.Decider.ChooseHasteNaturalAttack(this, attacker, target, req.Profile, 0, c => picked = c);
-                        if (hastePrompt != null)
-                            yield return hastePrompt;
+                        // Haste's extra natural attack: the attacker picks the natural weapon (PHB p.239; CMB-106, CMB-124),
+                        // already picked by a natural-attack button (CMB-200).
+                        int picked = chosenNatural ? req.ChosenNaturalAttackIndex : -1;
+                        if (!chosenNatural)
+                        {
+                            Coroutine hastePrompt = req.Decider.ChooseHasteNaturalAttack(this, attacker, target, req.Profile, 0, c => picked = c);
+                            if (hastePrompt != null)
+                                yield return hastePrompt;
+                        }
                         hasteChoice = picked >= 0 ? picked : attacker.GetDefaultHasteNaturalAttackIndex();
                         step.NaturalAttackIndex = hasteChoice;
                         if (target.Stats == null || target.Stats.IsDead || CombatEndRules.IsOutOfFight(attacker))
@@ -678,7 +710,9 @@ public partial class GameManager
     /// reads the attacker's toggle, CharacterController.RapidShotEnabled): it commits the turn to the full attack and adds the extra attack, and every attack of the round takes -2. When it
     /// cannot be declared any more (an attack was made, the move action is spent, the creature is slowed) the attack is made
     /// without it, and the log says why. One rule for the Attack button (GameManager.StartAttackSequence, which pays the
-    /// first step before the target click), the Full Attack button and the NPC sequence (RunAttackSequence stage 4).
+    /// first step before the target click), the Full Attack button and the NPC sequence (RunAttackSequence stage 4). The
+    /// Fighting Defensively (Std) and natural-attack buttons are the attack action and never declare it (their click's
+    /// request clears intent.RapidShot; GameManager.BeginAttackSequenceAtClick; batch 13 step 17).
     /// </summary>
     internal bool TryDeclareRapidShotForAttack(CharacterController attacker, ItemData weapon, bool ranged, bool? wanted = null)
     {

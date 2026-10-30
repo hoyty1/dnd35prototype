@@ -172,6 +172,15 @@ public sealed class AttackSequenceRequest
     /// </summary>
     public Func<CharacterController, CharacterController, int, bool> DeliverHeldCharge;
 
+    /// <summary>
+    /// The natural attack the first natural step makes, picked by the attacker (a PC natural-attack button, batch 13 step 17,
+    /// CMB-200): its natural-sequence index, or -1 for the executor's own order (the step's own when unused, else the first
+    /// unused, else Haste's extra one). With <see cref="ChosenNaturalAttackIsHasteExtra"/> the step is Haste's extra natural
+    /// attack made with that weapon (PHB p.239; CMB-106).
+    /// </summary>
+    public int ChosenNaturalAttackIndex = -1;
+    public bool ChosenNaturalAttackIsHasteExtra;
+
     /// <summary>A charge's pounce (MM p.313): every natural attack is a step, then the rakes (<see cref="ForCharge"/>).</summary>
     public bool ChargePounce;
 
@@ -198,8 +207,11 @@ public sealed class AttackSequenceRequest
     public Action<AttackSequenceStage> StageObserver;
 
     /// <summary>
-    /// One click of the PC's Attack button sequence (origin B): the clicked target, the PC UI's intent (AttackIntent.ForUi)
-    /// and the attacker's decider; the two-weapon main-hand penalty when the PC fights with two weapons.
+    /// One click of the PC's attack sequence (origin B): the Attack button's click, and since batch 13 step 17 (CMB-200) the
+    /// Fighting Defensively (Std) and natural-attack buttons' clicks too, so every PC single attack is a step of the
+    /// sequence the PC may go on with (PHB p.143). The clicked target, the PC UI's intent (AttackIntent.ForUi), the
+    /// attacker's decider, the two-weapon main-hand penalty when the PC fights with two weapons, and the natural attack a
+    /// natural-attack button picked (<see cref="ChosenNaturalAttackIndex"/>).
     /// </summary>
     public static AttackSequenceRequest ForUiAttack(GameManager gm, CharacterController attacker, CharacterController target)
     {
@@ -207,6 +219,7 @@ public sealed class AttackSequenceRequest
         GameManager.AttackType type = intent.UiAttackType;
         bool twoWeaponMainHand = gm != null && gm.Combat_IsDualWielding()
             && (type == GameManager.AttackType.Melee || type == GameManager.AttackType.Thrown);
+        bool naturalPick = gm != null && gm.Combat_HasPendingNaturalAttackSelection();
         return new AttackSequenceRequest
         {
             Kind = AttackSequenceKind.UiAttack,
@@ -218,6 +231,8 @@ public sealed class AttackSequenceRequest
             MaxSteps = 1,
             CombatEndContext = "PerformIterativeSequenceAttack",
             MainHandBabAdjustment = twoWeaponMainHand ? gm.Combat_GetMainHandPenalty() : 0,
+            ChosenNaturalAttackIndex = naturalPick ? Math.Max(0, gm.Combat_GetPendingNaturalAttackSequenceIndex()) : -1,
+            ChosenNaturalAttackIsHasteExtra = naturalPick && gm.Combat_IsPendingNaturalAttackHasteExtra(),
         };
     }
 

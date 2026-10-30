@@ -155,10 +155,9 @@ public class CombatFlowService : MonoBehaviour
         switch (_gameManager.Combat_GetPendingAttackMode())
         {
             case GameManager.PendingAttackMode.Single:
-                if (_gameManager.Combat_IsInAttackSequence() && _gameManager.Combat_GetAttackingCharacter() == attacker)
-                    PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                else
-                    PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                // Every PC single attack is a step of the attack sequence (batch 13 step 17, CMB-200): the Attack button's
+                // click, and the Fighting Defensively (Std) and natural-attack buttons' clicks, which begin the sequence here.
+                PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
 
             case GameManager.PendingAttackMode.FullAttack:
@@ -359,39 +358,77 @@ public class CombatFlowService : MonoBehaviour
     }
 
     /// <summary>
-    /// One click of the Attack button's sequence (origin B, batch 12 step 17): the clicked target as the next step of the
-    /// one attack-sequence executor (GameManager.RunAttackSequence, AttackSequenceRequest.ForUiAttack), the stages every
+    /// One click of the PC's attack sequence (origin B, batch 12 step 17): the clicked target as the next step of the one
+    /// attack-sequence executor (GameManager.RunAttackSequence, AttackSequenceRequest.ForUiAttack), the stages every
     /// attacker runs: the step's legality, a ranged step's weapon, reload and ammunition checks, the ward save, the AoOs a
     /// shot provokes, the roll at the step's bonus (with Rapid Shot when declared, PHB p.99, D9) and the post-attack hook.
-    /// Then this flow's UI: the slain line, the next step's BAB, the end of the sequence, the pause.
+    /// Then this flow's UI: the slain line, the next step's BAB, the end of the sequence, the pause. The Attack button
+    /// begins the sequence and pays before the target click; the Fighting Defensively (Std) and natural-attack buttons'
+    /// clicks begin it here (batch 13 step 17, CMB-200) and the executor pays their step at its stage 6, after its
+    /// legality checks (as for an AI attack), so a refused click spends nothing; the PC may go on into a full attack after
+    /// them too (PHB p.143). Those clicks are the attack action and never declare Rapid Shot (D9). A natural-attack
+    /// button's pick goes with the request (ChosenNaturalAttackIndex).
     /// </summary>
     public void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        if (_gameManager == null)
+        if (_gameManager == null || attacker == null || target == null)
             return;
 
-        if (!_gameManager.Combat_IsInAttackSequence() || _gameManager.Combat_GetAttackingCharacter() != attacker)
+        // A natural-attack button that re-offered a used attack for Haste's extra attack (CMB-106): when that attack can no
+        // longer be made (Haste ended, or it was used meanwhile), refuse before anything is paid, rather than make the used
+        // natural attack a second time (the executor's stage 2 refuses it again for any caller).
+        if (_gameManager.Combat_HasPendingNaturalAttackSelection()
+            && _gameManager.Combat_IsPendingNaturalAttackHasteExtra()
+            && !attacker.CanUseHasteExtraNaturalAttack())
         {
-            Debug.LogWarning("[Attack][Sequence] Iterative attack requested without active sequence; falling back to single attack.");
-            PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-            return;
-        }
-
-        // The step is normally paid by StartAttackSequence/ContinueAttackSequence; paying again is a
-        // no-op then, and pays the move action if a maneuver or off-hand attack used that payment.
-        if (!attacker.TryPayForNextAttack(out string sequencePayReason, out bool sequenceEnteredFullAttack))
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {sequencePayReason}."));
-            _gameManager.Combat_EndAttackSequence();
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠",
+                $"{attacker.Stats.CharacterName} has no Haste attack left this turn."));
+            _gameManager.Combat_ClearPendingNaturalAttackSelection();
             _gameManager.Combat_ShowActionChoices();
             return;
         }
 
-        if (sequenceEnteredFullAttack)
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+        bool begunAtClick = false;
+        if (!_gameManager.Combat_IsInAttackSequence() || _gameManager.Combat_GetAttackingCharacter() != attacker)
+        {
+            // A shot that cannot be made (an unloaded crossbow, no ammunition) spends nothing (RunAttackSequence stage 4).
+            if (!_gameManager.BeginAttackSequenceAtClick(attacker))
+            {
+                _gameManager.Combat_ClearPendingNaturalAttackSelection();
+                DropUnusedDefensiveDeclaration(attacker);
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+            begunAtClick = true;
+        }
+
+        // A click begun here is paid by the executor (stage 6, TryCommitAttack) once the step is legal; a second attack of
+        // the turn makes it a full attack and spends the move action (PHB p.143), logged after the run.
+        bool clickEntersFullAttack = begunAtClick && attacker.ProgressiveAttackPool.NextAttackNeedsMoveAction;
+        if (!begunAtClick)
+        {
+            // The step is normally paid by StartAttackSequence/ContinueAttackSequence; paying again is a
+            // no-op then, and pays the move action if a maneuver or off-hand attack used that payment.
+            if (!attacker.TryPayForNextAttack(out string sequencePayReason, out bool sequenceEnteredFullAttack))
+            {
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {sequencePayReason}."));
+                _gameManager.Combat_ClearPendingNaturalAttackSelection();
+                _gameManager.Combat_EndAttackSequence();
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+
+            if (sequenceEnteredFullAttack)
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+        }
 
         AttackSequenceRequest request = AttackSequenceRequest.ForUiAttack(_gameManager, attacker, target);
+        // The natural-attack button's pick is the request's now (ChosenNaturalAttackIndex), used by this one click.
+        _gameManager.Combat_ClearPendingNaturalAttackSelection();
+        // A Fighting Defensively (Std) or natural-attack click is the attack action: no Rapid Shot (PHB p.99; D9).
+        if (begunAtClick && request.Intent != null)
+            request.Intent.RapidShot = false;
         GameManager.AttackType attackType = request.Intent.UiAttackType;
         string strengthPenaltySuffix = GetEnfeeblementStrengthPenaltyLabel(attacker);
         string attackLog = null;
@@ -431,9 +468,24 @@ public class CombatFlowService : MonoBehaviour
 
         var outcome = new AttackSequenceOutcome();
         int stepsBefore = attacker.ProgressiveAttackPool.MainHandStepsUsed;
-        _gameManager.RunAttackSequenceSync(request, outcome,
-            () => ContinueIterativeSequenceAfterStep(attacker, target, attackType, outcome, attackLog,
-                attacker.ProgressiveAttackPool.MainHandStepsUsed > stepsBefore));
+        _gameManager.RunAttackSequenceSync(request, outcome, () =>
+        {
+            if (clickEntersFullAttack && attacker.ProgressiveAttackPool.IsFullAttack)
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+            ContinueIterativeSequenceAfterStep(attacker, target, attackType, outcome, attackLog,
+                attacker.ProgressiveAttackPool.MainHandStepsUsed > stepsBefore);
+        });
+    }
+
+    /// <summary>
+    /// A Fighting Defensively (Std) click refused before any step (a shot that cannot be made, the executor's legality): the
+    /// declaration no attack used is dropped, so the PC gets no +2 dodge AC without attacking (PHB p.140). A round already
+    /// fought defensively keeps it (GameManager.EndUnusedFightingDefensively).
+    /// </summary>
+    private void DropUnusedDefensiveDeclaration(CharacterController attacker)
+    {
+        if (_gameManager.Combat_EndUnusedFightingDefensively(attacker))
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} cancels defensive attack declaration."));
     }
 
     /// <summary>
@@ -457,6 +509,7 @@ public class CombatFlowService : MonoBehaviour
             // Nothing was attempted: the legality gate, the ammunition or the weapon refused this click.
             if (!string.IsNullOrEmpty(outcome.StopReason))
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {outcome.StopReason}."));
+            DropUnusedDefensiveDeclaration(attacker);
             _gameManager.Combat_EndAttackSequence();
             _gameManager.Combat_ShowActionChoices();
             return;
@@ -496,278 +549,6 @@ public class CombatFlowService : MonoBehaviour
         _gameManager.Combat_ClearHighlights();
         Debug.Log("[AttackFlow] Scheduling AfterAttackDelay from PerformIterativeSequenceAttack.");
         _gameManager.Combat_StartAfterAttackDelay(attacker, outcome.AttacksMade > 0 ? 1.5f : 1.0f);
-    }
-
-    private static void PreserveSingleNaturalAttackActionEconomy(
-        CharacterController attacker,
-        bool moveActionWasAvailableBeforeAttack,
-        bool moveActionUsedBeforeAttack,
-        bool fullRoundActionUsedBeforeAttack,
-        bool standardConvertedToMoveBeforeAttack)
-    {
-        if (attacker == null || attacker.Actions == null)
-            return;
-
-        // Guardrail: selecting a single natural-weapon attack (e.g., Bite) should consume only
-        // a standard action. If any internal path accidentally toggles full-round/move state,
-        // restore the pre-attack movement economy for this turn.
-        if (!fullRoundActionUsedBeforeAttack && attacker.Actions.FullRoundActionUsed)
-        {
-            Debug.LogWarning($"[Attack][NaturalSingle] Restoring action economy for {attacker.Stats?.CharacterName}: clearing unintended FullRoundActionUsed flag.");
-            attacker.Actions.FullRoundActionUsed = false;
-        }
-
-        if (!attacker.Actions.SingleActionOnly
-            && moveActionWasAvailableBeforeAttack
-            && !moveActionUsedBeforeAttack
-            && attacker.Actions.MoveActionUsed)
-        {
-            Debug.LogWarning($"[Attack][NaturalSingle] Restoring move action for {attacker.Stats?.CharacterName} after single natural attack.");
-            attacker.Actions.MoveActionUsed = false;
-        }
-
-        if (!standardConvertedToMoveBeforeAttack && attacker.Actions.StandardConvertedToMove)
-        {
-            Debug.LogWarning($"[Attack][NaturalSingle] Clearing unintended StandardConvertedToMove flag for {attacker.Stats?.CharacterName}.");
-            attacker.Actions.StandardConvertedToMove = false;
-        }
-    }
-
-    /// <summary>
-    /// A PC attack step lost to a failed Sanctuary or Hide from Undead save (WardSaveLedger, D6; logged by the commit): the
-    /// step was paid, so it is recorded as made (a natural attack picked from its button is used up), the attack sequence
-    /// moves on to its next step or ends, and the turn returns to the action menu after the usual pause.
-    /// </summary>
-    private void LoseAttackStepToWard(CharacterController attacker, bool endSequence)
-    {
-        // The lost step is the one the normal path would have made, so the natural-attack bookkeeping matches it: a
-        // natural-button pick (or its Haste extra attack) is used up; the sequence's auto natural step uses the next
-        // unused natural attack, or Haste's extra one when all are used (as PerformIterativeSequenceAttack does).
-        GameManager.AttackType attackType = AttackIntent.ForUi(_gameManager, attacker).UiAttackType;
-        bool naturalStep = _gameManager.Combat_HasPendingNaturalAttackSelection()
-            && attacker.GetEquippedMainWeapon() == null && attacker.Stats != null && attacker.Stats.HasNaturalAttacks;
-        if (naturalStep)
-        {
-            if (_gameManager.Combat_IsPendingNaturalAttackHasteExtra())
-                attacker.MarkHasteExtraNaturalAttackUsed();
-            else
-                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex()));
-            _gameManager.Combat_ClearPendingNaturalAttackSelection();
-        }
-        else if (!endSequence && attackType == GameManager.AttackType.Melee
-            && ShouldUseNaturalAttackStep(attacker, attacker.GetEquippedMainWeapon()))
-        {
-            naturalStep = true;
-            int naturalAttackIndex = _gameManager.Combat_ResolveNextUnusedNaturalAttackIndex(attacker, _gameManager.Combat_GetTotalAttacksUsed());
-            if (naturalAttackIndex >= 0)
-                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
-            else if (attacker.CanUseHasteExtraNaturalAttack())
-                attacker.MarkHasteExtraNaturalAttackUsed();
-        }
-
-        attacker.RegisterAttackMade(naturalStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
-
-        if (endSequence || !_gameManager.Combat_HasMoreAttacksAvailable())
-            _gameManager.Combat_EndAttackSequence();
-        else
-            _gameManager.Combat_SetCurrentAttackBAB(GetSequenceAttackBaseBonus(attacker, attackType, _gameManager.Combat_GetTotalAttacksUsed())
-                + (_gameManager.Combat_IsDualWielding()
-                   && (attackType == GameManager.AttackType.Melee || attackType == GameManager.AttackType.Thrown)
-                    ? _gameManager.Combat_GetMainHandPenalty() : 0));
-
-        _gameManager.Combat_UpdateAllStatsUI();
-        _gameManager.Combat_ClearHighlights();
-        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.0f);
-    }
-
-    public void PerformSingleAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_gameManager == null || attacker == null || target == null)
-            return;
-
-        // A natural-attack button that re-offered a used attack for Haste's extra attack (CMB-106):
-        // when that attack can no longer be made (Haste ended, or it was used meanwhile), refuse before
-        // anything is paid, rather than make the used natural attack a second time.
-        if (_gameManager.Combat_HasPendingNaturalAttackSelection()
-            && _gameManager.Combat_IsPendingNaturalAttackHasteExtra()
-            && !attacker.CanUseHasteExtraNaturalAttack())
-        {
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠",
-                $"{attacker.Stats.CharacterName} has no Haste attack left this turn."));
-            _gameManager.Combat_ClearPendingNaturalAttackSelection();
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
-
-        bool moveActionWasAvailableBeforeAttack = attacker.Actions != null && attacker.Actions.HasMoveAction;
-        bool moveActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.MoveActionUsed;
-        bool fullRoundActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.FullRoundActionUsed;
-        bool standardConvertedToMoveBeforeAttack = attacker.Actions != null && attacker.Actions.StandardConvertedToMove;
-        bool wasFirstWeaponAttackBeforeThis = !_gameManager.Combat_HasStartedAttackingThisTurn(attacker);
-
-        // The PC UI's attack selection, read once for this attack (AttackIntent.ForUi): the mode and the weapon (the thrown
-        // weapon in hand for a throw).
-        AttackIntent intent = AttackIntent.ForUi(_gameManager, attacker);
-        GameManager.AttackType attackType = intent.UiAttackType;
-        ItemData attackWeapon = intent.Weapon;
-
-        // A shot that cannot be made (an unloaded crossbow, no ammunition) spends nothing, rolls no ward save and provokes
-        // nothing: the executor's stage-4 checks, run before anything is paid (RunAttackSequence, CanShootWithWeapon).
-        bool rangedShot = attackWeapon != null && (attackWeapon.IsProjectileWeapon || attackType == GameManager.AttackType.Thrown);
-        if (rangedShot && !_gameManager.CanShootWithWeapon(attacker, attackWeapon, out _))
-        {
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
-
-        bool skipStandardCommit = _gameManager.Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag();
-
-        // First attack of the turn pays the standard action, a later one the move action (PHB p.143).
-        if (skipStandardCommit)
-        {
-            Debug.Log("[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
-        }
-        else
-        {
-            if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
-            {
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {payReason}."));
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
-
-            if (enteredFullAttack)
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
-        }
-
-        // Sanctuary and Hide from Undead (PHB p.274, p.241; D6): the attempt rolls the attacker's one save against the
-        // target's casting; a failure loses this attack step (paid above), as on the NPC side.
-        if (AttackLegality.CommitWard(attacker, target, DirectAttackKind.Weapon) == WardVerdict.Failed)
-        {
-            LoseAttackStepToWard(attacker, endSequence: true);
-            return;
-        }
-
-        if (!ResolveRangedAttackAoOIfProvoked(attacker, rangeInfo, intent))
-            return;
-
-        CombatResult result;
-        string naturalAttackModeLog = null;
-        int selectedNaturalAttackIndex = -1;
-
-        bool useSelectedNaturalAttack = _gameManager.Combat_HasPendingNaturalAttackSelection()
-            && attackType == GameManager.AttackType.Melee
-            && attackWeapon == null
-            && attacker.Stats != null
-            && attacker.Stats.HasNaturalAttacks;
-
-        if (useSelectedNaturalAttack)
-        {
-            int naturalAttackIndex = Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex());
-            selectedNaturalAttackIndex = naturalAttackIndex;
-
-            // Haste's extra natural attack (CMB-106): the step after the natural attacks, made with the
-            // natural attack the player picked; the shared step resolver marks it used. An unusable
-            // Haste selection was refused at the top of this method.
-            bool hasteExtraStep = _gameManager.Combat_IsPendingNaturalAttackHasteExtra();
-            CombatResult naturalResult = attacker.ResolveAttackSequenceStep(
-                target,
-                AttackStepKind.NaturalSequence,
-                hasteExtraStep ? attacker.GetHasteExtraNaturalStepIndex() : naturalAttackIndex,
-                isFlanking,
-                flankBonus,
-                partnerName,
-                rangeInfo,
-                attackWeapon,
-                0,
-                out string naturalStepLabel,
-                hasteExtraStep ? naturalAttackIndex : -1);
-
-            if (naturalResult != null)
-            {
-                result = naturalResult;
-                string naturalLabel = _gameManager.Combat_GetPendingNaturalAttackLabel();
-                if (string.IsNullOrWhiteSpace(naturalLabel))
-                    naturalLabel = !string.IsNullOrEmpty(naturalStepLabel) ? naturalStepLabel : "Natural attack";
-
-                naturalAttackModeLog = $"↻ Natural Attack ({naturalLabel})";
-            }
-            else
-            {
-                result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
-            }
-
-            _gameManager.Combat_ClearPendingNaturalAttackSelection();
-        }
-        else
-        {
-            result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
-        }
-
-        intent.Hand = useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
-
-        // The one post-attack hook (origin A): the log, the thrown drop and the ammunition, Concentration, melee reactions,
-        // the target's reaction (the acid spray, D1), the free trip, Improved Grab (the choice by the attacker's decider:
-        // the PC's prompt, MM p.310), Cleave and Great Cleave (PHB p.92, D7), the summon cleanup and the combat-end check
-        // (CORE-011, CORE-037); then the slain line and the end of the sequence.
-        string log = null;
-        AttackResolution resolution = AttackResolution.Create(AttackOrigin.PcSingle, attacker, target, intent).With(result);
-        resolution.RangeInfo = rangeInfo;
-        resolution.CombatEndContext = "PerformSingleAttack";
-        resolution.ReportStep = () =>
-        {
-            // Every attack uses one step of the creature's attack ladder: a natural-button attack one
-            // natural attack, anything else (e.g. Fighting Defensively (Std)) a main-hand step, so a later
-            // Attack or maneuver cannot add attacks past the creature's iteratives or natural attacks
-            // (PHB p.141 Table 8-2 note 7, p.143).
-            attacker.RegisterAttackMade(useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
-
-            if (useSelectedNaturalAttack)
-                _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(selectedNaturalAttackIndex);
-
-            if (!string.IsNullOrEmpty(naturalAttackModeLog))
-                _gameManager.CombatUI?.ShowCombatLog(naturalAttackModeLog);
-
-            log = BuildAttackLog(attacker, isFlanking, partnerName, result);
-            _gameManager.Combat_SetLastCombatLog(log);
-
-            if (GameManager.LogAttacksToConsole)
-                Debug.Log("[Combat] " + log);
-
-            _gameManager.CombatUI?.ShowCombatLog(log);
-            _gameManager.Combat_UpdateAllStatsUI();
-            _gameManager.Combat_ClearHighlights();
-        };
-        resolution.OnFightContinues = () =>
-        {
-            if (result.TargetKilled && target.Team == CharacterTeam.Enemy)
-                _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
-        };
-        resolution.OnStepEnd = () =>
-        {
-            if (useSelectedNaturalAttack && wasFirstWeaponAttackBeforeThis)
-            {
-                PreserveSingleNaturalAttackActionEconomy(
-                    attacker,
-                    moveActionWasAvailableBeforeAttack,
-                    moveActionUsedBeforeAttack,
-                    fullRoundActionUsedBeforeAttack,
-                    standardConvertedToMoveBeforeAttack);
-            }
-
-            // Single-attack natural weapon actions should always return to main action choices
-            // (move + 5-foot-step may remain available). Clear any stale attack-sequence state.
-            _gameManager.Combat_EndAttackSequence();
-        };
-
-        var outcome = new PostAttackOutcome();
-        bool waitingOnDecider = _gameManager.RunAttackResolved(resolution, outcome,
-            onResumedDone: () => _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f));
-        if (waitingOnDecider || outcome.CombatEnded)
-            return;
-
-        _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
     }
 
     public void LogFullAttackToConsole(FullAttackResult result)

@@ -2007,16 +2007,6 @@ public partial class GameManager
         Debug.LogWarning("[AttackFlow] PerformIterativeSequenceAttack skipped because _combatFlowService is null.");
     }
 
-    private void PerformSingleAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
-    {
-        if (_combatFlowService != null)
-        {
-            _combatFlowService.PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-            return;
-        }
-    }
-
     /// <summary>
     /// The Full Attack button (origin C, batch 12 step 17; CMB-173): declares the full attack (the full-round action, PHB
     /// p.143; Rapid Shot first when its toggle is on, PHB p.99, D9) and runs the one attack-sequence executor

@@ -47,6 +47,7 @@ public static class AttackSequenceStepTests
         TestRapidShotNotDeclaredWithoutAShot(gm);
         TestFullAttackAfterPrepaidStep(gm);
         TestWardLostNaturalStepStaysUsed(gm);
+        TestDefensiveRoundKeptAfterWardLostStep(gm);
         TestTwoWeaponStepsAndOffHandCap(gm);
 
         Debug.Log($"========== ATTACK SEQUENCE STEP TESTS: {_passed} passed, {_failed} failed ==========");
@@ -356,6 +357,34 @@ public static class AttackSequenceStepTests
         finally
         {
             Cleanup(beast);
+        }
+    }
+
+    /// <summary>
+    /// Batch 13 step 17 (CMB-200; PHB p.140, p.274): a fighting-defensively declaration that no step used is dropped by the
+    /// next attack button (GameManager.EndUnusedFightingDefensively), but a step paid and lost to a failed ward save was
+    /// still attempted, so the round stays defensive though no swing was rolled (HasAttackedThisTurn stays false).
+    /// </summary>
+    private static void TestDefensiveRoundKeptAfterWardLostStep(GameManager gm)
+    {
+        CharacterController pc = null;
+        try
+        {
+            pc = CreateCombatant("SeqDefWard", 6, Vector2Int.zero, ItemID.WeaponLongsword);
+            pc.SetFightingDefensively(true);
+            GameManager.EndUnusedFightingDefensively(pc);
+            Assert(!pc.IsFightingDefensively, "A declaration no step used is dropped");
+
+            pc.SetFightingDefensively(true);
+            // The executor's ward branch: the step is paid and recorded, never rolled.
+            Assert(pc.TryCommitAttack(AttackStepKind.MainHand, out _, out _) && !pc.HasAttackedThisTurn,
+                "The ward-lost step is committed without a rolled attack");
+            GameManager.EndUnusedFightingDefensively(pc);
+            Assert(pc.IsFightingDefensively, "After a step lost to the ward the round stays defensive (PHB p.140, p.274)");
+        }
+        finally
+        {
+            Cleanup(pc);
         }
     }
 

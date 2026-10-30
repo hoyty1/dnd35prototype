@@ -195,6 +195,8 @@ namespace Tests.Scenarios
             yield return S("freetrip-trigger-aoo", FreeTripTriggerAoO);
             yield return S("single-vs-full-attack", () => SingleVsFull(false));
             yield return S("single-vs-full-attack-ui", () => SingleVsFull(true));
+            yield return S("fight-defensively-then-full-attack-ui", FightDefensivelyThenFullAttackUi);
+            yield return S("natural-attack-button-sequence-ui", NaturalAttackButtonSequenceUi);
             yield return S("slowed-no-full-attack-ui", () => SlowedNoFullAttack(true));
             yield return S("slowed-no-full-attack-ai", () => SlowedNoFullAttack(false));
             yield return S("disabled-npc-acts", DisabledNpcActs);
@@ -2417,6 +2419,115 @@ namespace Tests.Scenarios
             return b.Build();
         }
 
+        // ── Every PC single attack runs the attack sequence (batch 13 step 17, CMB-200, CMB-203) ──
+
+        /// <summary>
+        /// The Fighting Defensively (Std) button's click is a step of the PC's attack sequence (CMB-200), so after it the PC
+        /// may go on into a full attack (PHB p.143, Deciding between an Attack or a Full Attack), and the round stays fought
+        /// defensively: -4 on every attack of the round and +2 dodge AC (PHB p.140). The hero (BAB +6, STR 16, Weapon Focus:
+        /// +10/+5) fights defensively at +6, then the Attack button makes the second iterative at +1 and spends the move
+        /// action. Before step 17 the second attack dropped the stance (+5). A BAB +0 novice fights defensively too (PHB
+        /// p.140 sets no base attack bonus requirement; CMB-203: the button used to refuse below BAB +1): +0 + STR 3 - 4.
+        /// </summary>
+        private static ScenarioDef FightDefensivelyThenFullAttackUi()
+        {
+            const string key = "hero";
+            return Rules("rules/fight-defensively-then-full-attack-ui",
+                    "A PC that fights defensively may go on into a full attack, every attack at -4 (PHB p.140, p.143; CMB-200), and needs no BAB +1 (CMB-203)")
+                .Covers("CMB-200", "CMB-203", "PHB p.140", "PHB p.143", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() =>
+                {
+                    CharacterStats s = Fighter("Hero", 6, "Weapon Focus");
+                    s.WeaponFocusChoice = "Longsword";
+                    return s;
+                }), 10, 10, Control.Ui)
+                .Pc("novice", ActorSource.Stats(() =>
+                {
+                    CharacterStats s = Fighter("Novice", 1);
+                    s.BaseAttackBonusOverride = 0;
+                    return s;
+                }), 13, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Npc("dummy2", "target_dummy", 14, 10, Control.Scripted)
+                .Tweak(key, StripOffHand)
+                .Tweak("novice", StripOffHand)
+                .Tweak("dummy", SturdyDummy)
+                .Tweak("dummy2", SturdyDummy)
+                .Initiative(key, "novice", "dummy", "dummy2")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn("dummy2", 0, Step.Pass())
+                .Turn(key, 1,
+                    Step.FightDefensively("dummy"),
+                    Step.Assert("after the defensive attack the hero fights defensively and keeps its move action", ctx =>
+                        ctx.Get(key).IsFightingDefensively && ctx.Get(key).Actions.HasMoveAction),
+                    Step.AttackAgain("dummy"),
+                    Step.Assert("the second attack made it a full attack (the move action is spent), still fighting defensively", ctx =>
+                        ctx.Get(key).IsFightingDefensively && !ctx.Get(key).Actions.HasMoveAction))
+                .Turn("novice", 1,
+                    Step.FightDefensively("dummy2"),
+                    Step.Assert("the BAB +0 novice fights defensively", ctx => ctx.Get("novice").IsFightingDefensively))
+                .Expect("The PCs' turns are Ui turns", Expect.All(Expect.Controller(key, "ui"), Expect.Controller("novice", "ui")))
+                .Expect("Both attack steps and the novice's defensive attack are done", Expect.All(
+                    Expect.StepStatus(key, 1, "FightDefensively", 0, "done"),
+                    Expect.StepStatus(key, 1, "AttackAgain", 0, "done"),
+                    Expect.StepStatus("novice", 1, "FightDefensively", 0, "done"),
+                    Expect.AssertsPass()))
+                .Expect("Round 1: +10 - 4 = +6, then the second iterative +5 - 4 = +1 (PHB p.140, p.143)", Expect.ModSequence(key, 1, 6, 1))
+                .Expect("The BAB +0 novice attacks defensively at +0 + 3 - 4 = -1 (PHB p.140; CMB-203)", Expect.ModSequence("novice", 1, -1))
+                .Build();
+        }
+
+        /// <summary>
+        /// A natural-attack button's click is a step of the PC's attack sequence (CMB-200) with the attack the button picked:
+        /// the claw button makes a lone claw first (a secondary natural weapon used alone as the attack action keeps its -5,
+        /// MM p.312), the move action unused; the Attack button then goes on into the full attack (PHB p.143) with the
+        /// natural attacks left, the bite and the other claw, and finds none after them. The bite/claw/claw hero is a
+        /// fighter 4 (STR 16): bite +7, claws +2. The click's log line is the sequence's ("Attack #1/3"), not the old lone
+        /// attack's.
+        /// </summary>
+        private static ScenarioDef NaturalAttackButtonSequenceUi()
+        {
+            const string key = "hero";
+            return Rules("rules/natural-attack-button-sequence-ui",
+                    "A natural-attack button's attack is the first step of the attack sequence: claw, then the Attack button's bite and claw (PHB p.143, MM p.312; CMB-200)")
+                .Covers("CMB-200", "PHB p.143", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() => NaturalBeast("Hero", false)), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak(key, StripAllWeapons)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn(key, 1,
+                    Step.NaturalAttack("dummy", "Claw"),
+                    Step.Assert("the lone claw is the attack action: the move action is unused, the bite unused", ctx =>
+                        ctx.Get(key).Actions.HasMoveAction && ctx.Get(key).ProgressiveAttackPool.MainHandStepsUsed == 1
+                        && !ctx.Gm.IsNaturalAttackSequenceIndexUsed(ctx.Get(key), 0)),
+                    Step.AttackAgain("dummy"),
+                    Step.Assert("the Attack button went on into the full attack (the move action is spent) with the bite", ctx =>
+                        !ctx.Get(key).Actions.HasMoveAction && ctx.Get(key).ProgressiveAttackPool.MainHandStepsUsed == 2
+                        && ctx.Gm.IsNaturalAttackSequenceIndexUsed(ctx.Get(key), 0)),
+                    Step.AttackAgain("dummy"),
+                    Step.AttackAgain("dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller(key, "ui"))
+                .Expect("The claw button and two Attack clicks are done; a third click finds no attack left", Expect.All(
+                    Expect.StepStatus(key, 1, "NaturalAttack", 0, "done"),
+                    Expect.StepStatus(key, 1, "AttackAgain", 0, "done"),
+                    Expect.StepStatus(key, 1, "AttackAgain", 1, "done"),
+                    Expect.StepStatus(key, 1, "AttackAgain", 2, "refused", "dropped"),
+                    Expect.AssertsPass()))
+                .Expect("Claw +2, bite +7, claw +2 (MM p.312: a secondary attack is -5 even alone)", Expect.ModSequence(key, 1, 2, 7, 2))
+                .Expect("The claw button's click logs as step 1 of the attack sequence (CMB-200)", v =>
+                {
+                    List<TraceEvent> first = v.Log(@"Attack #1/3 \(Melee\)");
+                    return first.Count == 1
+                        ? ExpectResult.Pass(first[0].Str("text"), first[0].Seq)
+                        : ExpectResult.Fail(first.Count + " 'Attack #1/3 (Melee)' log lines, expected 1");
+                })
+                .Build();
+        }
+
         // ── Action limits: Slow and disabled (CMB-095, AI-053, batch 12 D5) ──
 
         /// <summary>
@@ -3720,7 +3831,8 @@ namespace Tests.Scenarios
         private static ScenarioDef HasteNaturalButtonsUi()
         {
             // The natural-attack buttons a PC with natural attacks actually has (ActionButtonPanel ->
-            // OnNaturalAttackButtonPressed -> CombatFlowService.PerformSingleAttack). After the bite, pressing the
+            // OnNaturalAttackButtonPressed -> CombatFlowService.PerformIterativeSequenceAttack, a step of the attack
+            // sequence since batch 13 step 17, CMB-200, with the button's pick). After the bite, pressing the
             // bite again makes the Haste bite while both claws are still unused: the attacker picks the weapon and
             // the moment. A third claw press finds nothing left.
             const string key = "hero";
@@ -4287,7 +4399,8 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// The PC path (CombatFlowService single attack -> GameManager.OnAttackResolved, origin A, Improved Grab through the UI decider): a Medium hero with
+        /// The PC path (the claw button's click, a step of the attack sequence since batch 13 step 17: CombatFlowService
+        /// .PerformIterativeSequenceAttack -> GameManager.RunAttackSequence -> OnAttackResolved, origin B, Improved Grab through the UI decider): a Medium hero with
         /// Improved Grab on its claw hits a Medium orc with the claw button. The orc is too large, so no Improved Grab
         /// prompt opens (the harness answers none, so a prompt would stall the turn) and no grapple check is rolled.
         /// </summary>

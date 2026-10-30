@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// The one post-attack hook (batch 12 steps 13-15, docs/designs/pc_npc_parity_batch12.md): every attack path (A-J,
-/// <see cref="AttackOrigin"/>) hands each resolved attack step to <see cref="OnAttackResolved"/>, which runs the same work
+/// The one post-attack hook (batch 12 steps 13-15, docs/designs/pc_npc_parity_batch12.md): every attack path (B-J,
+/// <see cref="AttackOrigin"/>; A was retired in batch 13 step 17) hands each resolved attack step to <see cref="OnAttackResolved"/>, which runs the same work
 /// after the roll for PCs and NPCs alike, whatever the origin, in this order:
 /// 1. the caller's bookkeeping and log lines (<see cref="AttackResolution.ReportStep"/>);
 /// 2. the thrown drop (every thrown weapon, by the intent: ResolveThrownWeaponAfterAttack; PHB p.113) and one piece of
@@ -23,8 +23,9 @@ using UnityEngine;
 ///    trip and, with Great Cleave, cleave again;
 /// 9. the summon cleanup of a slain target or attacker, late so that nothing earlier sees a despawned creature;
 /// 10. the combat-end check for the target and the attacker (a Fire Shield can drop the attacker; CORE-011);
-/// 11. path A's tail: its slain line and the end of its step;
-/// 12. AttackResolvedEvent, one per result (tactics README 1.4 rule 6; no subscribers yet).
+/// 11. AttackResolvedEvent, one per result (tactics README 1.4 rule 6; no subscribers yet).
+/// (Path A's tail, its slain line and the end of its step, went with path A in batch 13 step 17, CMB-200: every PC single
+/// attack is a step of the attack sequence, whose caller does its own continuation.)
 /// The charm, command undead, fascination and turned-undead fear breaks run on the swing itself (the fear break before
 /// its roll, BreakTurningBeforeSwing; the others after it, NotifyWeaponAttackAgainst; both from
 /// CharacterController.PerformSingleAttackWithCrit) and on every maneuver
@@ -143,11 +144,7 @@ public partial class GameManager
             }
         }
 
-        // 11. Path A's tail: its slain line, the end of its step.
-        res.OnFightContinues?.Invoke();
-        res.OnStepEnd?.Invoke();
-
-        // 12. The event.
+        // 11. The event.
         FinishAttackResolved(res, outcome);
     }
 
@@ -262,9 +259,9 @@ public partial class GameManager
             }
     }
 
-    /// <summary>The PC attack paths (A-E), whose UI keeps its own field for the weapon in hand.</summary>
+    /// <summary>The PC attack paths (B-E; A was retired in batch 13 step 17), whose UI keeps its own field for the weapon in hand.</summary>
     private static bool IsPcAttackOrigin(AttackOrigin origin)
-        => origin == AttackOrigin.PcSingle || origin == AttackOrigin.PcSequence || origin == AttackOrigin.PcFullAttackButton
+        => origin == AttackOrigin.PcSequence || origin == AttackOrigin.PcFullAttackButton
         || origin == AttackOrigin.PcDualWield || origin == AttackOrigin.PcOffHand;
 
     /// <summary>The PC UI's field for the weapon in hand, read back from <paramref name="pc"/>'s inventory after a throw.</summary>

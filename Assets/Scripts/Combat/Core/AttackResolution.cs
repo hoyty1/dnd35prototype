@@ -9,9 +9,9 @@ using System.Collections.Generic;
 /// </summary>
 public enum AttackOrigin
 {
-    /// <summary>A: the PC's single attack (CombatFlowService.PerformSingleAttack).</summary>
-    PcSingle,
-    /// <summary>B: a step of the PC's iterative attack sequence (CombatFlowService.PerformIterativeSequenceAttack).</summary>
+    // A, the PC's lone single attack (CombatFlowService.PerformSingleAttack), was retired in batch 13 step 17 (CMB-200):
+    // every PC single attack is a step of the attack sequence (B).
+    /// <summary>B: a step of the PC's attack sequence (CombatFlowService.PerformIterativeSequenceAttack): the Attack, Fighting Defensively (Std) and natural-attack buttons' clicks.</summary>
     PcSequence,
     /// <summary>C: a step of the PC's Full Attack button (GameManager.PerformFullAttackWithRetargetingAndFiveFootStep).</summary>
     PcFullAttackButton,
@@ -75,12 +75,6 @@ public sealed class AttackResolution
 
     /// <summary>The caller's bookkeeping and log lines for the step, run first.</summary>
     public Action ReportStep;
-
-    /// <summary>The caller's line when the attack dropped the target and the fight goes on (A), after the combat-end check.</summary>
-    public Action OnFightContinues;
-
-    /// <summary>The caller's end of its step (A: the end of its sequence), after <see cref="OnFightContinues"/>.</summary>
-    public Action OnStepEnd;
 
     /// <summary>True when one of the results killed the target (the full attack's flag for D and G).</summary>
     public bool TargetKilled

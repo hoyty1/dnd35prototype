@@ -5272,8 +5272,9 @@ public static class GrappleDamageRulesTests
     {
         // The natural-attack button path (ActionButtonPanel -> GameManager.OnNaturalAttackButtonPressed):
         // pressing a used natural attack while the Haste attack is unused selects Haste's extra attack with
-        // that weapon. If the Haste attack is gone by the time the target is clicked, PerformSingleAttack
-        // refuses before paying, instead of making the used natural attack again. The resolving click
+        // that weapon. If the Haste attack is gone by the time the target is clicked, the click
+        // (CombatFlowService.PerformIterativeSequenceAttack, the attack-sequence step every PC single attack is
+        // since batch 13 step 17, CMB-200) refuses before paying, instead of making the used natural attack again. The resolving click
         // itself is covered by the rules/haste-natural-buttons-ui scenario (it starts the after-attack
         // turn-flow coroutine, which a static test must not leave running).
         GameManager gm = GameManager.Instance;
@@ -5315,7 +5316,7 @@ public static class GrappleDamageRulesTests
             gm.OnNaturalAttackButtonPressed(0, "Bite");
             pc.ClearHasteEffect();
             int hpBefore = target.Stats.CurrentHP;
-            flow.PerformSingleAttack(pc, target, false, 0, null, null);
+            flow.PerformIterativeSequenceAttack(pc, target, false, 0, null, null);
             Assert(pc.ProgressiveAttackPool.MainHandStepsUsed == 1 && target.Stats.CurrentHP == hpBefore
                 && !gm.Combat_HasPendingNaturalAttackSelection() && !gm.IsNaturalAttackSequenceIndexUsed(pc, 1),
                 "A Haste selection that can no longer be made (Haste ended) is refused before paying; the bite is not made twice");

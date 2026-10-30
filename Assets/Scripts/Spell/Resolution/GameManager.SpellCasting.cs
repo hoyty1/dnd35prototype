@@ -2587,7 +2587,6 @@ public partial class GameManager
 
         _pendingDefensiveAttackSelection = false;
         _pendingAttackMode = PendingAttackMode.Single;
-        _skipNextSingleAttackStandardActionCommit = false;
         ClearPendingNaturalAttackSelection();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
