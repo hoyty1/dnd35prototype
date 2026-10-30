@@ -372,6 +372,10 @@ public partial class GameManager
             ? $"🏇 {charger.Stats.CharacterName} {charges} and attempts a bull rush on {target.Stats.CharacterName}!"
             : $"🏇 {charger.Stats.CharacterName} {charges}{(req.Partial ? " at" : string.Empty)} {target.Stats.CharacterName}!"));
 
+        // A charge fires the charger's frightful presence at its declaration (MM p.69, p.309: the bearer attacks or
+        // charges; batch 13 step 19, D12); its attack or pounce does not fire it again (RunAttackSequence).
+        TriggerFrightfulPresence(charger, "charges");
+
         // Resolve AoOs before each step (shared helper, PHB p.137) so the charge stops in place if an AoO drops, trips or
         // otherwise stops the charger.
         Vector2Int chargeStart = charger.GridPosition;

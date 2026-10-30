@@ -10,8 +10,9 @@ using UnityEngine;
 ///   gate (<c>ShouldSkipTurnDueToHPState</c>), whether or not the creature can act: the ongoing effects, the cooldowns,
 ///   the per-turn resets and the turn-start combat-end check (decision D3).
 /// - <see cref="BeginActingTurn"/> runs after the gate, only for a creature that acts: the perception check
-///   (<see cref="PerceptionRules.ProcessTurnStart"/>, batch 12 step 8), the Turn Undead proximity check and the
-///   compulsion pass (<see cref="TryRunCompulsionTurn"/>, batch 12 step 7), which stores the turn's compulsions on
+///   (<see cref="PerceptionRules.ProcessTurnStart"/>, batch 12 step 8), the Turn Undead proximity check, the bearer's
+///   aura (<see cref="ProcessTurnStartAura"/>, batch 13 step 19, D13) and the compulsion pass
+///   (<see cref="TryRunCompulsionTurn"/>, batch 12 step 7), which stores the turn's compulsions on
 ///   <c>CurrentTurnStart</c> for both sides and starts a PC's forced turn.
 ///
 /// The gate itself is <see cref="ConditionRules.DeniesAllActions(CharacterController)"/> (decision D4): only a creature
@@ -77,10 +78,12 @@ public partial class GameManager
     /// The turn-start rules work that runs after the turn-skip gate, only for a creature that acts this turn, PC or NPC:
     /// the perception check (<see cref="PerceptionRules.ProcessTurnStart"/>: the squares of the enemies it sees, then one
     /// Listen check to pinpoint the unseen ones it tracks, DMG p.295; CMB-094, batch 12 step 8), the Turn Undead tracker
-    /// prune and proximity check, then the compulsion pass (<see cref="TryRunCompulsionTurn"/>).
-    /// Returns true when a compulsion took a PC's turn over as a forced turn. The PC path calls it once the turn's phase
-    /// and sub-phase are set; its UI resets (off-hand and dual-wield fields, the attack sequence, the logs) stay in
-    /// <c>StartPCTurn</c>.
+    /// prune and proximity check, the bearer's supernatural aura (<see cref="ProcessTurnStartAura"/>: once per round, for
+    /// every bearer, AI-run, controllable or compelled; batch 13 step 19, delegated RAW reading 2026-10-29, decision D13;
+    /// AI-053, CRE-039), then the compulsion pass (<see cref="TryRunCompulsionTurn"/>).
+    /// Returns true when a compulsion took a PC's turn over as a forced turn, or when the aura ended the combat (the caller
+    /// then starts nothing). The PC path calls it once the turn's phase and sub-phase are set; its UI resets (off-hand and
+    /// dual-wield fields, the attack sequence, the logs) stay in <c>StartPCTurn</c>.
     /// </summary>
     private bool BeginActingTurn(CharacterController actor)
     {
@@ -90,6 +93,11 @@ public partial class GameManager
         PerceptionRules.ProcessTurnStart(actor, GetAllCharacters(), msg => CombatUI?.ShowCombatLog(msg), this);
         PruneTurnUndeadTrackers();
         CheckTurnUndeadProximityBreakingForCleric(actor);
+
+        // An aura that takes the last creature of a side out of the fight (a petrifying gaze) ends the combat here.
+        if (actor.HasAuraAbility && ProcessTurnStartAura(actor) && EvaluateCombatEnd("TurnStart.Aura"))
+            return true;
+
         return TryRunCompulsionTurn(actor);
     }
 

@@ -401,6 +401,13 @@ public class AuraAbilityDefinition
     /// <summary>An enchantment effect (a charm or compulsion): the elf's +2, Still Mind (SaveRules, CHR-018).</summary>
     public bool IsEnchantment = false;
 
+    /// <summary>
+    /// The aura affects every creature in range, allies included, except creatures bearing an aura of the same name (MM
+    /// p.126: gibbering affects all creatures other than mouthers). False: opponents only. Read by
+    /// GameManager.ProcessTurnStartAura (batch 13 step 19, D13).
+    /// </summary>
+    public bool AffectsAllCreatures = false;
+
     /// <summary>A charm effect (the harpy's song): Inspire Courage's morale bonus applies (PHB p.29).</summary>
     public bool IsCharm = false;
 

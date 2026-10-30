@@ -283,6 +283,14 @@ public partial class GameManager
         CharacterController target = req.Target;
         SpecialAttackType type = req.Type;
 
+        // The bearer's frightful presence (MM p.69, p.309; batch 13 step 19, D12): a maneuver that is an attack (trip, the
+        // grapple's touch attack, disarm, sunder, coup de grace) fires it when it is the first attack of the bearer's attack
+        // action, read before the step is paid, so a full attack mixing maneuvers and weapon attacks fires it once, whichever
+        // comes first and whichever path runs it (the Special Attack menu, the catalog's maneuver entry, the AI's step
+        // substitute in RunAttackSequence). A charge's bull rush is no attack and fires nothing here (ExecuteCharge did).
+        bool firesPresence = attacker.HasFrightfulPresence && IsAttackManeuver(type)
+            && attacker.ProgressiveAttackPool.AttacksCommitted == 0;
+
         // 2. The cost, before the ward and the AoOs, on both sides (CMB-102).
         var pay = new ManeuverPayment();
         if (!TryPayManeuver(req, pay, out string payReason))
@@ -294,6 +302,19 @@ public partial class GameManager
         }
         outcome.Payment = pay;
         req.OnPaid?.Invoke(pay);
+
+        // The presence fires as the attack is made, before the ward's save and the roll, as for a weapon step.
+        if (firesPresence)
+        {
+            TriggerFrightfulPresence(attacker, "attacks");
+            if (CurrentPhase == TurnPhase.CombatOver)
+            {
+                outcome.Kind = ManeuverOutcomeKind.Foiled;
+                UpdateAllStatsUI();
+                Settle();
+                return outcome;
+            }
+        }
 
         // 3. Sanctuary and Hide from Undead (PHB p.274, p.241; D6): one save, after the cost; a failure loses the paid step
         //    or action and the maneuver is never made (so it provokes nothing).

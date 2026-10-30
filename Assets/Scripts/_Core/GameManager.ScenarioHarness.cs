@@ -257,6 +257,7 @@ public partial class GameManager
         Step("LootCollectionUI.Close", () => LootCollectionUI?.Close(invokeClosedCallback: false));
         Step("ResetPostCombatLootCollectionState", () => ResetPostCombatLootCollectionState(context));
         Step("AIService.ClearAuraSaveImmunities", AIService.ClearAuraSaveImmunities);
+        Step("FrightfulPresenceLedger.Clear", FrightfulPresenceLedger.Clear);
         Step("AISpellcastingStrategist.ResetCombatState", AISpellcastingStrategist.ResetCombatState);
         Step("ClearAllMirrorImageEffects", () => ClearAllMirrorImageEffects(context));
         Step("ClearAllActiveGreaseEffects", ClearAllActiveGreaseEffects);

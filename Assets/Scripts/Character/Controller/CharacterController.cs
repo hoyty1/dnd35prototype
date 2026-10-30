@@ -608,13 +608,12 @@ public class CharacterController : MonoBehaviour
     public bool IsSecondaryBreathWeaponReady => _secondaryBreathWeapon != null && _breathWeaponCooldownRemaining <= 0;
     public SecondaryBreathWeaponDefinition GetSecondaryBreathWeaponDefinition() => _secondaryBreathWeapon;
 
-    // Frightful Presence (Young Adult+ dragons)
+    // Frightful Presence (young adult and older dragons, MM p.69; any bearer, MM p.309). It fires on each attack sequence,
+    // charge and breath through GameManager.TriggerFrightfulPresence (batch 13 step 19, D12); the per-bearer immunities
+    // are in FrightfulPresenceLedger.
     [SerializeField] private FrightfulPresenceDefinition _frightfulPresence;
-    [SerializeField] private bool _hasFrightfulPresenceTriggered; // Triggers once per combat
     public bool HasFrightfulPresence => _frightfulPresence != null;
     public FrightfulPresenceDefinition GetFrightfulPresenceDefinition() => _frightfulPresence;
-    public bool HasFrightfulPresenceTriggered => _hasFrightfulPresenceTriggered;
-    public void MarkFrightfulPresenceTriggered() { _hasFrightfulPresenceTriggered = true; }
 
     // Engulf tracking
     [SerializeField] private EngulfDefinition _engulf;
@@ -4883,7 +4882,6 @@ public class CharacterController : MonoBehaviour
     public void ConfigureFrightfulPresence(FrightfulPresenceDefinition fp)
     {
         _frightfulPresence = fp?.Clone();
-        _hasFrightfulPresenceTriggered = false;
     }
 
     /// <summary>

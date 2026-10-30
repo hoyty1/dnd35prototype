@@ -216,7 +216,7 @@ public class AIService : MonoBehaviour
         // ── Scenario harness scripted turn (test instrumentation; null in normal play) ──
         // Runs after the turn-start rules and the HP, confused, charmed, fascinated and suggested gates. A
         // script replaces everything below: the automatic stand-up, the frightened, panicked and turned
-        // flight, the Animate Rope escape, the no-target search, the grapple turn, free auras and spittle
+        // flight, the Animate Rope escape, the no-target search, the grapple turn, the free spittle
         // and the Resilient Sphere restriction. The harness returns null for Frightened, Panicked or Turned
         // actors, so the forced kinds stay with the AI, and for any actor it wants the AI to run
         // (ScenarioHooks.ScriptedTurn).
@@ -334,20 +334,13 @@ public class AIService : MonoBehaviour
             if (CombatEnded() || !CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
         }
 
-        // ── Supernatural Aura (free action): Gibbering, Frightful Presence, etc. ──
-        // Per D&D 3.5e, supernatural auras activate automatically each round.
-        // Process before other actions since it's a free action.
-        if (npc.HasAuraAbility)
-        {
-            ProcessAuraAbility(npc);
-            if (_gameManager.EvaluateCombatEnd("AI.Aura"))
-                yield break;
-        }
+        // The supernatural aura (gibbering, babble, moan) fired at the start of this acting turn, for every bearer and every
+        // turn, compelled ones included (GameManager.ProcessTurnStartAura from BeginActingTurn; batch 13 step 19, D13, AI-053).
 
         // ── Free-Action Ranged Special Attack (Spittle, etc.) ──
-        // Per MM p.126, Gibbering Mouther's Spittle is a free action each round.
-        // Fire at start of turn (after Gibbering aura) if any enemy is within range.
-        // This does NOT consume a standard or move action — the creature still acts normally.
+        // Per MM p.126, Gibbering Mouther's Spittle is a free action each round, at one opponent within its range.
+        // This does NOT consume a standard or move action — the creature still acts normally. The spittle is a choice, so a
+        // compelled turn (the branches above) never reaches it (delegated RAW reading 2026-10-29, D13).
         if (npc.HasRangedSpecialAttack)
         {
             RangedSpecialAttackDefinition freeAttack = npc.GetRangedSpecialAttackDefinition();
@@ -4367,114 +4360,9 @@ public class AIService : MonoBehaviour
         Debug.Log($"[AI] {npc.Stats.CharacterName} activates {terrain.Name} around {npc.GridPosition} (radius {terrain.RadiusFeet} ft)");
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    //  Aura Ability Processing (Gibbering, Frightful Presence, etc.)
-    // ══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Process a creature's supernatural aura ability at the start of its turn.
-    /// Per D&D 3.5e, abilities like Gibbering (Su) affect all creatures within range
-    /// each round as a free action. Targets must make a saving throw or be affected.
-    /// Supports: random duration (1d2, 1d4, etc.), 24-hour save immunity, mind-affecting immunity.
-    /// </summary>
-    private void ProcessAuraAbility(CharacterController npc)
-    {
-        if (npc == null || npc.Stats == null || !npc.HasAuraAbility)
-            return;
-
-        AuraAbilityDefinition aura = npc.GetAuraAbilityDefinition();
-        if (aura == null) return;
-
-        string npcName = npc.Stats.CharacterName;
-        int rangeSquares = aura.RangeFeet / 5;
-        SaveType saveType = aura.IsWillSave ? SaveType.Will : SaveType.Fortitude;
-        string saveTypeName = aura.IsWillSave ? "Will" : "Fort";
-
-        Debug.Log($"[AI][Aura] {npcName} activating {aura.Name} (DC {aura.SaveDC}, {saveTypeName}, range {aura.RangeFeet} ft, effect {aura.Effect}, mind-affecting={aura.IsMindAffecting})");
-
-        _gameManager.CombatUI?.ShowCombatLog(
-            CombatLogHelper.Special("🔊", $"{npcName}'s {aura.Name} echoes across the battlefield!"));
-
-        List<CharacterController> allChars = _gameManager.GetAllCharactersForAI();
-        int affected = 0;
-
-        foreach (CharacterController candidate in allChars)
-        {
-            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-
-            // Only affect enemies
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
-                continue;
-
-            // Mind-affecting immunity check (D&D 3.5e: Gibbering is sonic mind-affecting compulsion)
-            if (aura.IsMindAffecting && candidate.Stats.Immunities != null
-                && candidate.Stats.Immunities.immuneToMindAffecting)
-            {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} is immune to mind-affecting effects — skipping {aura.Name}");
-                continue;
-            }
-
-            int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
-            if (distance > rangeSquares)
-            {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} out of range ({distance} > {rangeSquares} squares)");
-                continue;
-            }
-
-            // Already affected by this condition? Skip re-application
-            CombatConditionType conditionType = AuraEffectToCondition(aura.Effect);
-            if (candidate.HasCondition(conditionType))
-            {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} already has {conditionType}, skipping");
-                continue;
-            }
-
-            // 24-hour save immunity check (per MM: successful save = immune for 24 hours)
-            if (aura.GrantsImmunityOnSave && HasAuraSaveImmunity(candidate, npc, aura.Name))
-            {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} has 24-hour immunity to {npc.Stats.CharacterName}'s {aura.Name} — skipping");
-                continue;
-            }
-
-            // Roll saving throw
-            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC, AuraSaveContext(aura, conditionType));
-
-            if (saveResult.Saved)
-            {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} saves vs {aura.Name} ({saveTypeName} {saveResult.Total} >= DC {aura.SaveDC})");
-                _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Success("💪", $"{candidate.Stats.CharacterName} resists {aura.Name} ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC})."));
-                
-                // Grant 24-hour save immunity if applicable
-                if (aura.GrantsImmunityOnSave)
-                {
-                    GrantAuraSaveImmunity(candidate, npc, aura.Name);
-                    _gameManager.CombatUI?.ShowCombatLog(
-                        CombatLogHelper.Info("🛡", $"{candidate.Stats.CharacterName} is now immune to {npcName}'s {aura.Name} for 24 hours."));
-                }
-            }
-            else
-            {
-                // Roll random duration if DurationDice is set, otherwise use fixed DurationRounds
-                int duration = aura.DurationDice > 0
-                    ? Random.Range(1, aura.DurationDice + 1)  // 1d(DurationDice)
-                    : aura.DurationRounds;
-
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} fails vs {aura.Name} ({saveTypeName} {saveResult.Total} < DC {aura.SaveDC}) — applying {aura.Effect} for {duration} round(s)");
-                candidate.ApplyCondition(conditionType, duration, npcName);
-                _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Debuff("🌀", $"{candidate.Stats.CharacterName} succumbs to {aura.Name}! ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC}) — {aura.Effect} for {duration} round(s)!"));
-                affected++;
-            }
-        }
-
-        if (affected > 0)
-            Debug.Log($"[AI][Aura] {npcName}'s {aura.Name} affected {affected} creature(s)");
-    }
-
     // ── Aura Save Immunity Tracking ──
-    // Per MM rules (e.g., Gibbering, Frightful Presence): successful save = 24-hour immunity.
+    // Per MM rules (e.g., Gibbering, MM p.126): successful save = 24-hour immunity (GameManager.ProcessTurnStartAura).
+    // Frightful presence keeps its own ledger (FrightfulPresenceLedger, batch 13 step 19).
     // Key format: "AuraImmunity_{targetInstanceId}_{sourceInstanceId}_{auraName}"
     // We track this as a simple HashSet since combat encounters don't last 24 hours;
     // immunity persists for the remainder of the encounter.
@@ -4486,12 +4374,12 @@ public class AIService : MonoBehaviour
         return $"AuraImmunity_{target.GetInstanceID()}_{source.GetInstanceID()}_{auraName}";
     }
 
-    private static bool HasAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
+    internal static bool HasAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
     {
         return _auraSaveImmunities.Contains(GetAuraImmunityKey(target, source, auraName));
     }
 
-    private static void GrantAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
+    internal static void GrantAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
     {
         _auraSaveImmunities.Add(GetAuraImmunityKey(target, source, auraName));
         Debug.Log($"[AI][Aura] Granted 24-hr immunity: {target.Stats.CharacterName} vs {source.Stats.CharacterName}'s {auraName}");
@@ -4527,7 +4415,7 @@ public class AIService : MonoBehaviour
     /// <summary>
     /// Map an AuraEffectType to the corresponding CombatConditionType.
     /// </summary>
-    private static CombatConditionType AuraEffectToCondition(AuraEffectType effect)
+    internal static CombatConditionType AuraEffectToCondition(AuraEffectType effect)
     {
         return effect switch
         {

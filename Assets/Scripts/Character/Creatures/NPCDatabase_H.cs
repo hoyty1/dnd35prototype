@@ -308,7 +308,11 @@ public static partial class NPCDatabase
                 IsMindAffecting = true,
                 IsSonic = true,
                 IsEnchantment = true,
-                IsCharm = true
+                IsCharm = true,
+                // MM p.150: all creatures other than harpies (allies included), and a creature that saves cannot be
+                // affected again by the same harpy's song for 24 hours (batch 13 step 19, D13).
+                AffectsAllCreatures = true,
+                GrantsImmunityOnSave = true
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

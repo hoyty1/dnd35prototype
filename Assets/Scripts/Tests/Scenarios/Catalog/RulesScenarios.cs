@@ -8140,7 +8140,8 @@ namespace Tests.Scenarios
                 .Npc("dLow", "target_dummy", 17, 3, Control.Idle)
                 .Npc("dCold", "target_dummy", 13, 5, Control.Idle)
                 .Npc("dIceDr", "target_dummy", 14, 5, Control.Idle)
-                .Npc("dAcid", "target_dummy", 15, 5, Control.Idle)
+                // On the party's side: the spittle is fired at an opponent only (MM p.126; batch 13 step 18).
+                .Npc("dAcid", "target_dummy", 15, 5, Control.Idle, CharacterTeam.Player)
                 .Npc("dSwarm", "target_dummy", 16, 5, Control.Idle)
                 .Npc("dSwarmDr", "target_dummy", 17, 5, Control.Idle)
                 .Npc("dEmp", "target_dummy", 13, 9, Control.Idle)

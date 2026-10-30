@@ -63,10 +63,12 @@ public partial class GameManager
             yield break;
         }
 
-        // The perception check, the Turn Undead proximity check and the compulsion pass of a creature that acts
-        // (GameManager.TurnStart.cs), as for a PC (CMB-094, batch 12 step 8): an NPC's compulsions are stored on
-        // CurrentTurnStart and run in its AI turn (batch 12 step 7).
+        // The perception check, the Turn Undead proximity check, the bearer's aura and the compulsion pass of a creature
+        // that acts (GameManager.TurnStart.cs), as for a PC (CMB-094, batch 12 step 8; the aura since batch 13 step 19, D13):
+        // an NPC's compulsions are stored on CurrentTurnStart and run in its AI turn (batch 12 step 7).
         BeginActingTurn(npc);
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
 
         // Determine AI behavior for this NPC
         NPCAIBehavior behavior = GetNPCBehaviorForAI(npc);
@@ -1149,12 +1151,8 @@ public partial class GameManager
         // follows, after the reload above (reloading is not an attack).
         CombatFlowService.BreakProtectiveWardsOnAttack(npc);
 
-        // --- Frightful Presence (dragons, Young Adult+) ---
-        // Triggers once per combat when the dragon first attacks or uses breath weapon.
-        if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
-        {
-            yield return StartCoroutine(ResolveFrightfulPresence(npc));
-        }
+        // A bearer's frightful presence fires in the attack-sequence executor, once per attack sequence (RunAttackSequence;
+        // batch 13 step 19, D12).
 
         // The NPC's own intent (AttackIntent.ForAI; CMB-096): melee, ranged, or a throw of a melee throwable at a target beyond
         // its reach; never the PC UI's selection.
@@ -1358,7 +1356,7 @@ public partial class GameManager
     /// <summary>The dice context of each creature's save against a breath weapon (SaveRollRules; the scenario harness forces it by this label).</summary>
     public const string BreathWeaponSaveContext = "Breath weapon save";
 
-    /// <summary>The dice context of each creature's Will save against a frightful presence (SaveRollRules; a test can force it by this label).</summary>
+    /// <summary>The dice context of each creature's Will save against a frightful presence (SaveRollRules; a test can force it by this label; GameManager.TriggerFrightfulPresence).</summary>
     public const string FrightfulPresenceSaveContext = "Frightful presence save";
 
     /// <summary>
@@ -1434,11 +1432,9 @@ public partial class GameManager
             yield break;
         }
 
-        // --- Frightful Presence (dragons) triggers on first attack/breath ---
-        if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
-        {
-            yield return StartCoroutine(ResolveFrightfulPresence(npc));
-        }
+        // A breath is a breath weapon attack (MM p.306), so the bearer's frightful presence fires (delegated RAW reading
+        // 2026-10-29, D12; batch 13 step 19).
+        TriggerFrightfulPresence(npc, "breathes");
 
         BreathWeaponDefinition bw = npc.UseBreathWeapon(); // consumes use, starts cooldown
         if (bw == null)
@@ -1550,96 +1546,6 @@ public partial class GameManager
         EvaluateCombatEnd("NPCBreathWeapon");
 
         yield return new WaitForSeconds(1.0f);
-    }
-
-    // ================================================================
-    // Frightful Presence — D&D 3.5e Dragon Special Attack
-    // ================================================================
-
-    /// <summary>
-    /// Resolves Frightful Presence for a dragon (Young Adult+).
-    /// All enemies within range must make a Will save or become:
-    ///   - Panicked (if HD &lt;= threshold, typically 4)
-    ///   - Shaken (if HD &gt; threshold)
-    /// Duration: 4d6 rounds. On success: immune for 24 hours (rest of combat).
-    /// Dragons are immune to other dragons' Frightful Presence.
-    /// </summary>
-    private IEnumerator ResolveFrightfulPresence(CharacterController dragon)
-    {
-        if (dragon == null || !dragon.HasFrightfulPresence)
-            yield break;
-
-        dragon.MarkFrightfulPresenceTriggered();
-
-        FrightfulPresenceDefinition fp = dragon.GetFrightfulPresenceDefinition();
-        if (fp == null) yield break;
-
-        int rangeSquares = Mathf.Max(1, fp.RangeFeet / 5);
-        string dragonName = dragon.Stats != null ? dragon.Stats.CharacterName : "Dragon";
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🐉 <b>{dragonName}</b> radiates Frightful Presence! (DC {fp.SaveDC}, {fp.RangeFeet} ft.)"));
-        yield return new WaitForSeconds(0.6f);
-
-        // Gather all player characters in range
-        List<CharacterController> allChars = GetAllCharacters();
-        for (int i = 0; i < allChars.Count; i++)
-        {
-            CharacterController target = allChars[i];
-            if (target == null || target.Stats == null || target.Stats.IsDead)
-                continue;
-            if (target == dragon)
-                continue;
-            // Dragons are immune to frightful presence
-            if (target.Stats.CreatureType == "Dragon")
-                continue;
-            // Only affects enemies
-            if (target.Team == dragon.Team)
-                continue;
-
-            int distance = Mathf.Abs(target.GridPosition.x - dragon.GridPosition.x)
-                         + Mathf.Abs(target.GridPosition.y - dragon.GridPosition.y);
-            if (distance > rangeSquares)
-                continue;
-
-            string targetName = target.Stats.CharacterName;
-            int targetHD = target.Stats.GetHitDice();
-
-            // Will save against a fear effect (SaveRules: morale against fear, CHR-018), through the one save roll
-            // (SaveRollRules, D13).
-            // The context names the dragon, so the bonuses that depend on the creature causing the fear apply (an
-            // alignment ward, PHB p.266).
-            SaveRoll fearSave = SaveRollRules.Roll(target.Stats, SavingThrowType.Will, fp.SaveDC,
-                SaveContext.FearFrom(dragonName + "'s frightful presence", dragon), FrightfulPresenceSaveContext);
-            int roll = fearSave.Roll;
-            int willMod = fearSave.Modifier;
-            int total = fearSave.Total;
-
-            if (fearSave.Succeeded)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix}) — immune for remainder of combat"));
-                continue;
-            }
-
-            // Failed save — determine Panicked vs Shaken
-            int durationRounds = 0;
-            for (int d = 0; d < fp.DurationDice; d++)
-                durationRounds += UnityEngine.Random.Range(1, fp.DurationDieSides + 1);
-
-            if (targetHD <= fp.HDThresholdForPanic)
-            {
-                // Panicked
-                target.ApplyCondition(CombatConditionType.Panicked, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix}, {targetHD} HD ≤ {fp.HDThresholdForPanic})"));
-            }
-            else
-            {
-                // Shaken
-                target.ApplyCondition(CombatConditionType.Shaken, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}{fearSave.NaturalSuffix})"));
-            }
-        }
-
-        yield return new WaitForSeconds(0.5f);
     }
 
     /// <summary>

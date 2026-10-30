@@ -20,7 +20,9 @@ using UnityEngine;
 /// 4. a ranged or thrown step: a weapon left to throw, the weapon usable (a crossbow loaded, CanAttackWithWeapon), a piece
 ///    of ammunition for a projectile (PHB p.113), and Rapid Shot declared before the first attack (PHB p.99, D9);
 /// 5. the attempt rolls the attacker's one save against the target's Sanctuary or Hide from Undead (WardSaveLedger, D6):
-///    a failure loses the step;
+///    a failure loses the step; before the sequence's first attempt, a bearer's frightful presence fires (batch 13 step 19,
+///    D12; once per attack action, not for a charge, whose declaration fires it; a maneuver step fires it in the maneuver
+///    core, ExecuteManeuver, when it is the action's first attack);
 /// 6. the step is paid and recorded (CharacterController.TryCommitAttack: the standard action, then the move action for
 ///    the second step, PHB p.143);
 /// 7. a ranged step provokes from each threatening foe (PHB p.141 Table 8-2), before every shot;
@@ -63,6 +65,12 @@ public partial class GameManager
         bool forcedOffHand = !aoo && !heldTouch && !charge && req.Intent != null && req.Intent.Hand == AttackStepKind.OffHand;
         var state = new AttackSequenceState { Request = req, Outcome = o, CurrentTarget = firstTarget };
         bool naturalSubstituteUsed = false;
+        // The attacker's frightful presence fires once per attack sequence (D12; FirePresenceOnce): not for a charge (its
+        // declaration fired it, ExecuteCharge), nor for a later sequence of an attack action that has made an attack this
+        // turn (the Attack button's next click, the AI's next call), so a full attack fires it once. The test is the attacks
+        // made, not the pool's mode: the PC path pays the step (MarkPaid) before the sequence runs.
+        bool presencePending = attacker.HasFrightfulPresence && !charge
+            && (aoo || attacker.ProgressiveAttackPool.AttacksCommitted == 0);
 
         // Safety cap; the attack sequence itself ends the loop (CanCommitAttack). Sized so maneuvers and retargets (iterations
         // that commit no attack) cannot crowd out a many-headed creature's last steps.
@@ -188,6 +196,9 @@ public partial class GameManager
             }
             if (stepManeuvered)
             {
+                // A maneuver made in place of the attack is an attack (a trip attack, PHB p.158): the maneuver core fired the
+                // presence before its roll when it was the action's first attack (ExecuteManeuver), so no later step does.
+                presencePending = false;
                 o.ManeuversUsed++;
                 if (kind == AttackStepKind.NaturalSequence)
                     naturalSubstituteUsed = true;
@@ -240,6 +251,15 @@ public partial class GameManager
                     if (intent.RapidShot)
                         TryDeclareRapidShotForAttack(attacker, intent.Weapon, true, wanted: true);
                 }
+            }
+
+            // The bearer's frightful presence (MM p.69, p.309; batch 13 step 19, D12): once per attack sequence, as its first
+            // attack is made, before the ward's save and the roll, for every attacker, PC or NPC; an attack of opportunity
+            // is an attack (delegated RAW reading).
+            if (presencePending && FirePresenceOnce(attacker, aoo, ref presencePending))
+            {
+                o.CombatEnded = true;
+                break;
             }
 
             // 5. The ward's save (D6): a failure loses the step (it is still spent). A held-charge touch's ward is its cast's;
@@ -510,6 +530,17 @@ public partial class GameManager
         o.Aggregate.TargetKilled = defender != null && defender.Stats != null && defender.Stats.IsDead;
         o.RapidShotDeclared = attacker.IsRapidShotDeclared;
         o.Finished = true;
+    }
+
+    /// <summary>
+    /// Fires <paramref name="attacker"/>'s frightful presence for this attack sequence (<see cref="TriggerFrightfulPresence"/>,
+    /// D12) and clears <paramref name="pending"/>. Returns true when the combat is over afterwards.
+    /// </summary>
+    private bool FirePresenceOnce(CharacterController attacker, bool aoo, ref bool pending)
+    {
+        pending = false;
+        TriggerFrightfulPresence(attacker, aoo ? "makes an attack of opportunity" : "attacks");
+        return CurrentPhase == TurnPhase.CombatOver;
     }
 
     /// <summary>

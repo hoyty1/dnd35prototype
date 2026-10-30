@@ -94,7 +94,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 70 files (about 53,300 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 75 files (about 63,500 lines, re-counted 2026-10-30; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -141,7 +141,7 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 74 files (since batch 13 step 16 added `Combat/Actions/Executors/GameManager.ClassAbilityActions.cs`, step 15 `GameManager.EquipmentActions.cs` and step 14 `GameManager.ItemActions.cs` in the same folder; step 9 added `Combat/Actions/Executors/GameManager.MoveAction.cs`; step 3 added `_Core/GameManager.ActionRunner.cs` and `Combat/Actions/Executors/GameManager.ActionCores.cs`; batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
+There are 75 files (since batch 13 step 19 added `Combat/Special/GameManager.MonsterTriggers.cs`, step 16 added `Combat/Actions/Executors/GameManager.ClassAbilityActions.cs`, step 15 `GameManager.EquipmentActions.cs` and step 14 `GameManager.ItemActions.cs` in the same folder; step 9 added `Combat/Actions/Executors/GameManager.MoveAction.cs`; step 3 added `_Core/GameManager.ActionRunner.cs` and `Combat/Actions/Executors/GameManager.ActionCores.cs`; batch 12 step 21 added `Combat/Maneuvers/ChargeCore.cs`, step 19 `Combat/Maneuvers/GameManager.ManeuverCore.cs`, step 17 `GameManager.AttackCore.cs`, steps 13 and 15 `GameManager.AttackResolved.cs` and `GameManager.AttackedReactions.cs`, step 5 `GameManager.TurnStart.cs`; batch 11 step 7 added `GameManager.CastCore.cs` and `GameManager.CastDeciders.cs`), found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Nine files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
@@ -197,7 +197,8 @@ There are 74 files (since batch 13 step 16 added `Combat/Actions/Executors/GameM
 | OverrunSystem.cs | 897 | The one overrun for PCs and NPCs (`RunOverrunMove`): the PC destination selection, the AI plan, the defender's avoid-or-block prompt and the block. |
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and `TryPushTargetAway` (Gust of Wind's push); some trip/feint helpers. |
 | SupportActions.cs | 1,621 | Aid Another; the charge mode (button, targeting, path, `CanChargeTarget` over `CanCharge`), the thin PC and NPC charge wrappers and the charge bull rush (`ResolveChargeBullRush`). |
-| **Combat/Special/** (5) | | |
+| **Combat/Special/** (6) | | |
+| GameManager.MonsterTriggers.cs | 299 | The monster triggers every bearer fires, PC or NPC (batch 13 step 19, D12, D13): `TriggerFrightfulPresence` (from `RunAttackSequence`, `ExecuteCharge` and the breath core; the HD, dragon, sight and immunity tests in `IsFrightfulPresenceWitness`; the per-bearer immunities in the static `FrightfulPresenceLedger`) and `ProcessTurnStartAura` (from `BeginActingTurn`, every acting turn, compelled ones included). |
 | TurnUndeadSystem.cs | 640 | Turn undead: the legality (`CanUseTurnUndead`), the candidates (`GetTurnUndeadCandidates`), the PC targeting preview and skip question, the AI step `TryNPCTurnUndeadTurnForAI`, and the turned-state trackers; the rule is `ActionCore_TurnUndead` (batch 13 step 16). |
 | TemplateSmiteSystem.cs | 118 | The PC Smite button and the AI smite declaration over `SmiteRules` (paladin and template smites; CHR-020). |
 | LayOnHandsSystem.cs | 182 | The PC Lay on Hands button and the AI wrapper over `LayOnHandsRules` (CHR-020). |

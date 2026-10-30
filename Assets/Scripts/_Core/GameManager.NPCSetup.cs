@@ -773,6 +773,7 @@ public partial class GameManager
         _activeTurnUndeadTrackers.Remove(npc);
         _conditionService?.ForgetCharacter(npc);
         AIService.ForgetAuraSaveImmunities(npc);
+        FrightfulPresenceLedger.Forget(npc); // the frightful-presence twin (batch 13 step 19, D12)
 #pragma warning disable CS0618 // the strategist keys its memory by GetInstanceID
         AISpellcastingStrategist.ForgetCharacter(npc.GetInstanceID());
 #pragma warning restore CS0618

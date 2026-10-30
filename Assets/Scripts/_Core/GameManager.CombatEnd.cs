@@ -336,6 +336,7 @@ public partial class GameManager
         LootCollectionUI?.Close(invokeClosedCallback: false);
         ResetPostCombatLootCollectionState(context);
         AIService.ClearAuraSaveImmunities();
+        FrightfulPresenceLedger.Clear();
         AISpellcastingStrategist.ResetCombatState();
         ClearAllMirrorImageEffects(context);
         MeleeReactionService.ClearAll();

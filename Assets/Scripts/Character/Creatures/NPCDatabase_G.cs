@@ -746,7 +746,8 @@ public static partial class NPCDatabase
                 GrantsImmunityOnSave = true, // 24-hour immunity on successful save
                 IsMindAffecting = true,      // Sonic mind-affecting compulsion
                 IsSonic = true,
-                IsEnchantment = true
+                IsEnchantment = true,
+                AffectsAllCreatures = true   // MM p.126: all creatures other than mouthers, allies included (D13)
             },
             
             // ── Ranged Special: Spittle (Ex) — MM p.126 ──

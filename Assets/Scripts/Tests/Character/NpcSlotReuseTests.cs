@@ -49,6 +49,7 @@ public static class NpcSlotReuseTests
             TestRespawnClearsOthersMemoryOfSlot();
             TestPartySlotGetsNewCharacter();
             TestAuraSaveImmunityForgottenWithSource();
+            TestFrightfulPresenceImmunityForgottenWithSource();
             TestReusedSlotDestroysOldProfile();
             TestTotalDefenseClearedOnRespawn();
             TestRetrievedItemClearedOnRespawn();
@@ -155,6 +156,7 @@ public static class NpcSlotReuseTests
             if (gm != null && gm.Grid != null)
                 gm.Grid.ClearCreatureOccupancy(cc);
             AIService.ForgetAuraSaveImmunities(cc);
+            FrightfulPresenceLedger.Forget(cc);
             DestroyTrackedProfile(gm, cc);
             Object.DestroyImmediate(cc.gameObject);
         }
@@ -302,7 +304,8 @@ public static class NpcSlotReuseTests
             slot.SetAcidSprayUsedThisRound(true);
             slot.SetCleaveUsedThisRound(true);
             slot.SetFreeRangedSpecialUsedThisRound(true);
-            slot.MarkFrightfulPresenceTriggered();
+            FrightfulPresenceLedger.GrantImmunity(partner, slot);
+            FrightfulPresenceLedger.GrantImmunity(slot, partner);
             slot.PriorityTargetName = "Someone";
             SpriteRenderer sr = slot.GetComponent<SpriteRenderer>();
             if (sr != null) sr.color = Color.red;
@@ -333,7 +336,8 @@ public static class NpcSlotReuseTests
             Assert(sr == null || sr.color == Color.white, "CRE-046: the old creature's sprite tint is gone");
             Assert(slot.Stats.STR == fresh.Stats.STR && slot.Stats.BaseAttackBonus == fresh.Stats.BaseAttackBonus,
                 "CRE-046: STR and BAB equal a fresh orc warrior's (no Bull's Strength, no BAB override)");
-            Assert(!slot.HasFrightfulPresenceTriggered, "CRE-046: the frightful-presence trigger flag is clear");
+            Assert(!FrightfulPresenceLedger.IsImmune(partner, slot) && !FrightfulPresenceLedger.IsImmune(slot, partner),
+                "CRE-046, D12: no frightful-presence immunity of or against the old creature remains (FrightfulPresenceLedger.Forget)");
             Assert(!slot.IsDead && slot.CurrentHPState == fresh.CurrentHPState, "CRE-046: the HP state is the new creature's");
         }
         finally
@@ -599,6 +603,38 @@ public static class NpcSlotReuseTests
             Spawn(slot, Def("allip"), SlotPos);
             Assert(!(bool)has.Invoke(null, new object[] { target, slot, "Babble" }),
                 "CRE-046: a new allip in the same slot is a new creature, so the old immunity does not apply");
+        }
+        finally
+        {
+            Cleanup(target, slot);
+        }
+    }
+
+    /// <summary>
+    /// The frightful-presence twin (batch 13 step 19, D12): a creature that saved against a slot's frightful presence is
+    /// immune to that creature's presence only (MM p.309: 24 hours against the same creature); a new lich in the slot is a
+    /// new creature, so the immunity is gone, and so is the one the slot's old creature held against the target's presence.
+    /// The GameManager's spawn reset forgets it (ResetCharacterSlotForSpawn, FrightfulPresenceLedger.Forget).
+    /// </summary>
+    private static void TestFrightfulPresenceImmunityForgottenWithSource()
+    {
+        CharacterController target = NewController("CRE046_FearTarget");
+        CharacterController slot = NewController("CRE046_FearSource");
+        try
+        {
+            Spawn(target, Def("orc_warrior"), PartnerPos);
+            Spawn(slot, Def("lich"), SlotPos);
+            Assert(slot.HasFrightfulPresence, "D12 control: the lich carries a frightful presence");
+            FrightfulPresenceLedger.GrantImmunity(target, slot);
+            FrightfulPresenceLedger.GrantImmunity(slot, target);
+            Assert(FrightfulPresenceLedger.IsImmune(target, slot) && FrightfulPresenceLedger.IsImmune(slot, target),
+                "CRE-046 control: the orc is immune to this lich's frightful presence (and the reverse is recorded)");
+
+            Spawn(slot, Def("lich"), SlotPos);
+            Assert(!FrightfulPresenceLedger.IsImmune(target, slot),
+                "CRE-046: a new lich in the same slot is a new creature, so the old frightful-presence immunity does not apply");
+            Assert(!FrightfulPresenceLedger.IsImmune(slot, target),
+                "CRE-046: the slot's old creature's immunity against another bearer is gone too");
         }
         finally
         {
