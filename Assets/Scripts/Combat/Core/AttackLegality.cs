@@ -39,7 +39,12 @@ public enum AttackLegalityChecks
     Reach = 4,
     /// <summary>Sanctuary and Hide from Undead, read only (WardSaveLedger.Predict).</summary>
     Ward = 8,
-    All = Sphere | HoldBar | Reach | Ward
+    /// <summary>
+    /// The charm link (PHB p.209; batch 13 step 20, D14): a charmed creature makes no attack, maneuver or hostile spell on
+    /// its charmer (<see cref="CharmRules.IsCharmedBy"/>, <see cref="AttackLegality.IsCharmBarredAttempt"/>).
+    /// </summary>
+    Charm = 16,
+    All = Sphere | HoldBar | Reach | Ward | Charm
 }
 
 /// <summary>
@@ -52,7 +57,10 @@ public enum AttackLegalityChecks
 ///    legality, <see cref="IsInManeuverReach"/>; a spell's range is the cast core's);
 /// 4. the ward ledger, read only (WardSaveLedger.Predict): a known failed save refuses, an unrolled ward gives ok with
 ///    <see cref="LegalityRisk.WardSaveUnrolled"/>. A spell meets a ward only when aimed at an opponent, and a maneuver only
-///    when it is an attack (<see cref="IsWardedAttempt"/>).
+///    when it is an attack (<see cref="IsWardedAttempt"/>);
+/// and, between 1 and 2, the charm link (batch 13 step 20, D14, PHB p.209): a charmed creature makes no attack, maneuver
+/// or hostile spell on its charmer (<see cref="CharmRules.IsCharmedBy"/>, <see cref="IsCharmBarredAttempt"/>), refused
+/// with <see cref="LegalityBar.Charm"/>.
 /// The executors call it before any cost and then <see cref="CommitWard"/> when the attack is attempted; the PC highlight
 /// lists and the AI's target choice call it (or <see cref="Check"/> without the tests they run themselves) and never roll.
 /// </summary>
@@ -77,6 +85,10 @@ public static class AttackLegality
                 ? $"{attacker.Stats.CharacterName} is inside a Resilient Sphere: nothing passes its boundary (PHB p.258)"
                 : $"{target.Stats.CharacterName} is inside a Resilient Sphere: nothing passes its boundary (PHB p.258)");
         }
+
+        if ((checks & AttackLegalityChecks.Charm) != 0 && IsCharmBarredAttempt(attacker, target, kind, intent)
+            && CharmRules.IsCharmedBy(attacker, target))
+            return Legality.Refused(LegalityBar.Charm, CharmRules.Refusal(attacker, target));
 
         if ((checks & AttackLegalityChecks.HoldBar) != 0 && kind != DirectAttackKind.Spell)
         {
@@ -123,6 +135,28 @@ public static class AttackLegality
                 if (intent == null || !intent.Maneuver.HasValue)
                     return true;
                 return CharacterController.IsSpecialAttackAnAttack(intent.Maneuver.Value) || intent.Maneuver.Value == SpecialAttackType.Grapple;
+            default:
+                return true;
+        }
+    }
+
+    /// <summary>
+    /// True when the attempt is one the charm link bars on the charmer (PHB p.209: the charmer is a trusted friend and
+    /// ally; batch 13 step 20, D14): every weapon, natural, AoO and charge attack and every maneuver (a feint and an overrun
+    /// are hostile acts too; aid another and waking an ally never come here); a touch or a spell only when it is hostile
+    /// to the creature (<see cref="IsHostileSpellAt"/>: a cure on a living charmer is no attack); without the spell in the
+    /// intent, a touch is an attack and a spell is hostile when aimed at an opponent.
+    /// </summary>
+    public static bool IsCharmBarredAttempt(CharacterController attacker, CharacterController target, DirectAttackKind kind, AttackIntent intent)
+    {
+        switch (kind)
+        {
+            case DirectAttackKind.Spell:
+                return intent != null && intent.Spell != null
+                    ? IsHostileSpellAt(intent.Spell, attacker, target)
+                    : TeamUtility.IsEnemy(attacker, target);
+            case DirectAttackKind.Touch:
+                return intent == null || intent.Spell == null || IsHostileSpellAt(intent.Spell, attacker, target);
             default:
                 return true;
         }

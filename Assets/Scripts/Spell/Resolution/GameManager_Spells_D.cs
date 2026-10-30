@@ -519,12 +519,20 @@ public partial class GameManager
     /// (AISpellcastingStrategist.GetEscapeScore). Null when no square is free.
     /// </summary>
     internal Vector2Int? ChooseDimensionDoorDestination(CharacterController caster, SpellData spell)
+        => ChooseDimensionDoorDestination(caster, spell, FlightRules.IsOnChosenFlight(caster, out TurnCompulsion flight) ? flight.FlightSources : null);
+
+    /// <summary>
+    /// <see cref="ChooseDimensionDoorDestination(CharacterController, SpellData)"/> that keeps only squares farther from
+    /// every creature in <paramref name="fleeFrom"/> than the caster stands (a chosen flight's Escape spell, D15, batch 13
+    /// step 20: FlightRules.EndsFartherFromAll); null keeps every square.
+    /// </summary>
+    internal Vector2Int? ChooseDimensionDoorDestination(CharacterController caster, SpellData spell, System.Collections.Generic.IList<CharacterController> fleeFrom)
     {
         if (caster == null || caster.Stats == null || spell == null || Grid == null)
             return null;
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         return FindDimensionDoorEscapeDestination(caster, caster.GridPosition, DimensionDoorRangeSquares(spell, casterLevel),
-            caster.GetVisualSquaresOccupied(), Grid);
+            caster.GetVisualSquaresOccupied(), Grid, fleeFrom);
     }
 
     /// <summary>
@@ -533,7 +541,7 @@ public partial class GameManager
     /// </summary>
     private Vector2Int? FindDimensionDoorEscapeDestination(
         CharacterController caster, Vector2Int casterPos, int maxRange,
-        int casterSize, SquareGrid grid)
+        int casterSize, SquareGrid grid, System.Collections.Generic.IList<CharacterController> fleeFrom = null)
     {
         // Find nearest enemy
         Vector2Int? nearestEnemyPos = null;
@@ -570,6 +578,7 @@ public partial class GameManager
 
                 if (distFromCaster > maxRange || distFromCaster < 2) continue; // at least 2 squares away
                 if (!grid.CanPlaceCreature(candidate, casterSize, caster)) continue;
+                if (fleeFrom != null && !FlightRules.EndsFartherFromAll(casterPos, candidate, fleeFrom)) continue;
 
                 // Score: maximize distance from nearest enemy
                 int score = 0;

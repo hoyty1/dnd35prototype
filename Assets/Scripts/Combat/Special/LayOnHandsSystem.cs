@@ -47,7 +47,7 @@ public partial class GameManager
         if (RedirectPinnedCharacterToGrappleMenu(pc, "lay on hands"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "lay on hands"))
+        if (IsActionBlockedByFlight(pc, ActionIds.LayOnHands, "lay on hands"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;

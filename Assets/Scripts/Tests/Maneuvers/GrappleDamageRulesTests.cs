@@ -1247,7 +1247,7 @@ public static class GrappleDamageRulesTests
             {
                 foreach (bool withdraw in new[] { true, false })
                 {
-                    object cell = flee.Invoke(null, new object[] { gm, defender, attacker.GridPosition, withdraw, false, -1 });
+                    object cell = flee.Invoke(null, new object[] { gm, defender, attacker.GridPosition, withdraw, false, -1, -1, null });
                     Assert(cell == null, "PHB p.156: a frightened grappler finds no " + (withdraw ? "withdraw" : "flee") + " square");
                 }
             }

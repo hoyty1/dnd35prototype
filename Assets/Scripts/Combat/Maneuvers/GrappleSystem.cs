@@ -304,7 +304,7 @@ public partial class GameManager
         if (RedirectPinnedCharacterToGrappleMenu(pc, "overrun"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "overrun"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Overrun, "overrun"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;

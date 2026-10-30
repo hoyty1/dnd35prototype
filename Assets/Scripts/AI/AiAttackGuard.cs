@@ -91,7 +91,12 @@ public static class AiAttackGuard
         Legality withoutReach = AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, intent,
             AttackLegalityChecks.All & ~AttackLegalityChecks.Reach);
         if (!withoutReach.Ok)
+        {
+            // The charm link keeps its own bar (PHB p.209, D14).
+            if (withoutReach.Bar == LegalityBar.Charm)
+                return withoutReach;
             return Legality.Refused(IsWardOrBarrier(attacker, target) ? LegalityBar.Ward : LegalityBar.Other, withoutReach.Reason);
+        }
         bool melee = IsMeleeIntent(attacker, intent);
         return Legality.Refused(melee ? LegalityBar.Reach : LegalityBar.Range, legality.Reason);
     }

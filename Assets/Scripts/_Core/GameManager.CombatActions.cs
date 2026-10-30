@@ -284,7 +284,7 @@ public partial class GameManager
     /// Resilient Sphere and a known failed ward save (AttackLegality.Check; batch 12 step 12). Never rolls.
     /// </summary>
     private static bool IsDirectlyAttackableNoReach(CharacterController attacker, CharacterController target)
-        => AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok;
+        => AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok;
 
     /// <summary>The targets of the attack mode of <paramref name="intent"/> (null: the PC UI's, AttackIntent.ForUi).</summary>
     private List<CharacterController> GetValidTargetsForCurrentWeapon(CharacterController attacker, AttackIntent intent = null)
@@ -1200,7 +1200,7 @@ public partial class GameManager
         {
             CharacterController retarget = GetAttackTargetInCell(pc, cell); // as highlighted (CMB-131)
             Legality retargetLegality = retarget != null
-                ? AttackLegality.Check(pc, retarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward)
+                ? AttackLegality.Check(pc, retarget, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm)
                 : Legality.Allowed();
             if (!retargetLegality.Ok)
             {
@@ -1278,7 +1278,7 @@ public partial class GameManager
         {
             // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149), nothing passes a
             // Resilient Sphere (CMB-092), and a known failed ward save bars the target (D6): the shared gate.
-            Legality clickLegality = AttackLegality.Check(pc, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+            Legality clickLegality = AttackLegality.Check(pc, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
             if (!clickLegality.Ok)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", clickLegality.Reason));
@@ -1318,7 +1318,7 @@ public partial class GameManager
         // RAW reading 2026-10-14, CMB-163); the selection stays open for another target.
         // The same gate also refuses a target across a Resilient Sphere (CMB-092) or behind a ward this attacker failed
         // to overcome (D6), before any cost.
-        Legality offHandLegality = AttackLegality.Check(attacker, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+        Legality offHandLegality = AttackLegality.Check(attacker, clicked, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!offHandLegality.Ok)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", offHandLegality.Reason));
@@ -1479,7 +1479,7 @@ public partial class GameManager
             // attacked (D6): not a target (read only; an unrolled ward stays a target and the click rolls its save).
             if (IsDirectAttackManeuverForGate(type)
                 && !AttackLegality.Check(attacker, occupant, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(type),
-                    AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward).Ok)
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok)
                 continue;
 
             if (type == SpecialAttackType.Disarm)
@@ -2170,7 +2170,7 @@ public partial class GameManager
             if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
             {
                 Legality sequenceLegality = AttackLegality.Check(attacker, currentTarget, DirectAttackKind.Weapon, null,
-                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", !sequenceLegality.Ok
                     ? sequenceLegality.Reason
                     : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));

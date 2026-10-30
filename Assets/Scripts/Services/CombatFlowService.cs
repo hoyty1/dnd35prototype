@@ -115,7 +115,7 @@ public class CombatFlowService : MonoBehaviour
         // Sanctuary or Hide from Undead save (PHB p.274, p.241; D6). The target clicks and highlights check it first (reach
         // and range too); this keeps every caller of the PC attack entry on the same rule. Nothing is spent.
         Legality legality = AttackLegality.Check(attacker, target, DirectAttackKind.Weapon, null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!legality.Ok)
         {
             _gameManager.CombatUI?.ShowCombatLog(ResilientSphereAreaEffect.DoesSphereBlockInteraction(attacker, target)
@@ -732,7 +732,7 @@ public class CombatFlowService : MonoBehaviour
         // The same gate also leaves out a foe across a Resilient Sphere and one whose ward this attacker failed to overcome
         // (AttackLegality, batch 12 step 12).
         int barredCount = adjacentEnemies.RemoveAll(enemy => enemy != null && !AttackLegality.Check(attacker, enemy, DirectAttackKind.Weapon, null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok);
         if (adjacentEnemies.Count == 0 && barredCount > 0)
         {
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use Whirlwind Attack: its only adjacent foe is the creature it holds (MM p.310)."));

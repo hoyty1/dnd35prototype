@@ -2079,7 +2079,8 @@ public class AIService : MonoBehaviour
             if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
-            if (ShouldExcludeTargetBecauseOfCharm(npc, candidate))
+            // The charm link (PHB p.209; batch 13 step 20, D14): the shared predicate the attack gate's Charm bit reads.
+            if (CharmRules.IsCharmedBy(npc, candidate))
                 continue;
 
             if (ShouldExcludeTargetBecauseOfFrightenedSource(npc, candidate))
@@ -2212,47 +2213,6 @@ public class AIService : MonoBehaviour
 
         bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
         return npc.CanSee(target, incomingIsRangedAttack);
-    }
-
-    /// <summary>The charm link the legal set reads (ActorActionSet's charm filter, batch 13 step 6): <see cref="ShouldExcludeTargetBecauseOfCharm"/>.</summary>
-    internal bool IsCharmedByForActions(CharacterController npc, CharacterController candidate)
-        => ShouldExcludeTargetBecauseOfCharm(npc, candidate);
-
-    private bool ShouldExcludeTargetBecauseOfCharm(CharacterController npc, CharacterController candidate)
-    {
-        if (_gameManager == null || npc == null || candidate == null)
-            return false;
-
-        if (!npc.HasCondition(CombatConditionType.Charmed))
-            return false;
-
-        List<ConditionService.ActiveCondition> active = _gameManager.GetActiveConditions(npc);
-        if (active == null || active.Count == 0)
-            return false;
-
-        for (int i = 0; i < active.Count; i++)
-        {
-            ConditionService.ActiveCondition condition = active[i];
-            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Charmed)
-                continue;
-
-            CharacterController source = condition.Source;
-            if (source == null && condition.Data is CharmedConditionData charmData)
-                source = charmData.Caster;
-
-            if (source != null && source == candidate)
-                return true;
-
-            if (source == null
-                && !string.IsNullOrWhiteSpace(condition.SourceName)
-                && candidate.Stats != null
-                && string.Equals(condition.SourceName, candidate.Stats.CharacterName, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private bool ShouldExcludeTargetBecauseOfFrightenedSource(CharacterController npc, CharacterController candidate)
@@ -3864,7 +3824,7 @@ public class AIService : MonoBehaviour
             // A creature holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
             // 2026-10-14, CMB-163), so a free Spittle goes to another foe in range; nor across a Resilient Sphere or at a
             // foe whose ward it failed to overcome (AttackLegality, read only; CMB-092, D6).
-            if (!AttackLegality.Check(source, candidate, DirectAttackKind.Touch, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
+            if (!AttackLegality.Check(source, candidate, DirectAttackKind.Touch, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok)
                 continue;
 
             int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
@@ -3906,7 +3866,7 @@ public class AIService : MonoBehaviour
             // A summon holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
             // 2026-10-14, CMB-163); nor across a Resilient Sphere or at a foe whose ward it failed to overcome
             // (AttackLegality, read only; CMB-092, D6).
-            if (!AttackLegality.Check(summon, candidate, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
+            if (!AttackLegality.Check(summon, candidate, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok)
                 continue;
             enemies.Add(candidate);
         }
@@ -4062,7 +4022,7 @@ public class AIService : MonoBehaviour
             // A creature holding with one body part attacks only other opponents (MM p.310, CMB-149); the sphere and a
             // known failed ward save (CMB-092, AI-005), read only.
             if (!AttackLegality.Check(attacker, candidate, DirectAttackKind.Weapon, null,
-                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward).Ok)
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm).Ok)
                 continue;
 
             enemies.Add(candidate);
@@ -4192,7 +4152,7 @@ public class AIService : MonoBehaviour
 
         // Nothing passes a Resilient Sphere (CMB-092), and a known failed ward save bars the target (D6); read only.
         Legality specialLegality = AttackLegality.Check(npc, target, DirectAttackKind.Touch, null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!specialLegality.Ok)
         {
             Debug.Log($"[AI] {npc.Stats.CharacterName} cannot use {attack.Name} on {target.Stats.CharacterName}: {specialLegality.Reason}");

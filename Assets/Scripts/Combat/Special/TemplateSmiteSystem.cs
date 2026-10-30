@@ -57,7 +57,7 @@ public partial class GameManager
         if (RedirectPinnedCharacterToGrappleMenu(pc, "smite"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "smite"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Smite, "smite"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;

@@ -259,7 +259,7 @@ public partial class GameManager
         // attack after the move rolls its save.
         Legality chargeLegality = AttackLegality.Check(charger, target, DirectAttackKind.Charge,
             req.BullRush ? AttackIntent.ForManeuver(SpecialAttackType.BullRushCharge) : null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!chargeLegality.Ok)
             return Legality.Refused($"Cannot charge {target.Stats.CharacterName}: {chargeLegality.Reason}.");
 

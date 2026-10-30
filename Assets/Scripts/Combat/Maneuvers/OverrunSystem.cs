@@ -955,6 +955,16 @@ public partial class GameManager
             return false;
         }
 
+        // The charm link (PHB p.209, D14; batch 13 step 20): no overrun on the charmer, the shared gate's Charm bit. The
+        // path's opponent loop reads this too, so an overrunner stops before a charmer in its way.
+        Legality charm = AttackLegality.Check(attacker, target, DirectAttackKind.Maneuver,
+            AttackIntent.ForManeuver(SpecialAttackType.Overrun), AttackLegalityChecks.Charm);
+        if (!charm.Ok)
+        {
+            reason = charm.Reason;
+            return false;
+        }
+
         if (!IsOverrunTargetSizeLegal(attacker, target, out reason))
             return false;
 

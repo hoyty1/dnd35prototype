@@ -10,8 +10,9 @@ namespace Tests.Combat
 {
 /// <summary>
 /// The PC action panel against the legal set (batch 13 step 6, design choice C8: the set runs in shadow mode, the panel
-/// keeps its own states until batch 22 makes it read the set). For each fixture actor (a fighter, a wizard, prone,
-/// grappled, pinned, nauseated, disabled, a wild-shaped druid, frightened, charmed) the panel's state of each button that
+/// keeps its own states until batch 22 makes it read the set; since batch 13 step 20 it reads the set's compulsion filter
+/// on a flight turn, D15). For each fixture actor (a fighter, a wizard, prone, grappled, pinned, nauseated, disabled, a
+/// wild-shaped druid, frightened, frightened and cornered, charmed) the panel's state of each button that
 /// stands for one catalog entry (ActionButtonPanel.ComputeButtonStatesForParity: visible and enabled) is compared with
 /// ActorActionSet.Allows for that entry. Every disagreement must be in <see cref="KnownMismatches"/>, tagged with the
 /// batch 13 step that resolves it or the issue that tracks it; a known mismatch that no longer occurs fails too, so the
@@ -72,6 +73,7 @@ public static class ActionPanelParityTests
         { "wizard:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
         { "disabled:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
         { "grappled:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
+        { "frightened-cornered:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
         { "charmed:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
         { "wildshaped-druid:charge", "UI-055: the panel folds a valid charge target into the button (no foe stands in the fixture); the set's Allows is actor-level and a charge's targets are its LegalTargets (batch 22 makes the panel read the set)" },
         // The set's start gates are coarser than the panel's (the cores refuse these at the request, so no AI pick runs them).
@@ -82,9 +84,7 @@ public static class ActionPanelParityTests
         { "wildshaped-druid:attack", "UI-055: the panel's natural attack option (GameManager.CanUseNaturalAttackOption) requires the actor to be ActivePC, which a fixture is not; the set does not read ActivePC" },
         { "wildshaped-druid:cast-spell", "UI-055: the cast entry's start gate only asks for a SpellcastingComponent; the panel also needs a slot left (the fixture druid prepared none), and the wild shape bar (WildShapeRules, PHB p.37, p.98) is the cast core's" },
         // Use an Item has no shared legality yet.
-        // A frightened PC's panel is not restricted yet (CMB-100).
-        { "frightened:attack", "batch 13 step 20 (the restricted PC menu for flight; the set's compulsion filter, D15, already bars it)" },
-        { "frightened:drop-prone", "batch 13 step 20 (the restricted PC menu for flight; the set's compulsion filter, D15, already bars it)" },
+        // A frightened PC's panel reads the set's compulsion filter since batch 13 step 20 (D15, C8): no row left.
     };
 
     public static void RunAll()
@@ -111,6 +111,8 @@ public static class ActionPanelParityTests
         Run(() => Compare("disabled", With(Fighter("APP_Disabled"), c => c.Stats.CurrentHP = 0), null, seen));
         Run(() => Compare("wildshaped-druid", WildShapedDruid("APP_Druid"), null, seen));
         Run(() => Compare("frightened", Frightened("APP_Frightened"), null, seen));
+        Run(() => Compare("frightened-cornered", FrightenedCornered("APP_FrightenedCornered"), null, seen));
+        Run(TestFlightFilterOnPanel);
         Run(CompareCharmed(seen));
         Run(TestTurnedFilter);
         Run(TestMonsterAbilityButton);
@@ -401,6 +403,61 @@ public static class ActionPanelParityTests
         c.ApplyCondition(CombatConditionType.Frightened, 10, "ActionPanelParityTests");
         c.CurrentTurnStart.Compulsion = new TurnCompulsion { Fear = new FrightenedBehaviorController.FrightenedTurnDecision() };
         return c;
+    }
+
+    /// <summary>A frightened fighter cornered at its turn start (TurnCompulsion.Cornered): it may fight (PHB p.309, D15), so nothing is filtered.</summary>
+    private static CharacterController FrightenedCornered(string name)
+    {
+        CharacterController c = Frightened(name);
+        c.CurrentTurnStart.Compulsion.Cornered = true;
+        return c;
+    }
+
+    /// <summary>
+    /// Batch 13 step 20 (D15, C8): on a flight turn the panel turns the attack and total defense off and the move on, as
+    /// the set's filter does; a cornered frightened PC gets its attack back; a chosen flight whose every source has died
+    /// is unfiltered; a turn with no compulsion is unfiltered.
+    /// </summary>
+    private static void TestFlightFilterOnPanel()
+    {
+        ActionButtonPanel panel = Panel();
+        CombatUI ui = GameManager.Instance.CombatUI;
+        Assert(panel != null && ui.AttackButton != null && ui.MoveButton != null, "flight: the panel and its Attack and Move buttons exist");
+        if (panel == null || ui.AttackButton == null || ui.MoveButton == null)
+            return;
+        ActionButtonPanel.ButtonStateView View(CharacterController c, Button b)
+        {
+            foreach (ActionButtonPanel.ButtonStateView v in panel.ComputeButtonStatesForParity(c))
+                if (v.Button == b)
+                    return v;
+            return default;
+        }
+
+        CharacterController c = Fighter("APP_Flight");
+        CharacterController source = Fighter("APP_FlightSource", new Vector2Int(-78, -200));
+        ActionButtonPanel.ButtonStateView free = View(c, ui.AttackButton);
+        ActionButtonPanel.ButtonStateView freeDefense = ui.TotalDefenseButton != null ? View(c, ui.TotalDefenseButton) : default;
+        c.CurrentTurnStart.Compulsion = new TurnCompulsion
+        {
+            Fear = new FrightenedBehaviorController.FrightenedTurnDecision(),
+            ChoosesFlight = true,
+            FlightSources = new List<CharacterController> { source },
+        };
+        ActionButtonPanel.ButtonStateView afraid = View(c, ui.AttackButton);
+        ActionButtonPanel.ButtonStateView move = View(c, ui.MoveButton);
+        Assert(free.Enabled && !afraid.Enabled && afraid.Label != null && afraid.Label.Contains("must flee") && move.Enabled,
+            "D15: on a chosen flight the Attack button is off with its reason and Move stays on", afraid.Label);
+        if (ui.TotalDefenseButton != null)
+            Assert(freeDefense.Enabled && !View(c, ui.TotalDefenseButton).Enabled,
+                "D15: total defense is no flight (only a panicked creature cornered in its flight cowers with it, PHB p.311)");
+        c.CurrentTurnStart.Compulsion.Cornered = true;
+        Assert(View(c, ui.AttackButton).Enabled, "PHB p.309: a cornered frightened PC may fight (Attack on)");
+        c.CurrentTurnStart.Compulsion = new TurnCompulsion { Turned = true, ChoosesFlight = true, FlightSources = new List<CharacterController> { source } };
+        Assert(!View(c, ui.AttackButton).Enabled && View(c, ui.MoveButton).Enabled, "PHB p.159: a turned PC on its flight: Attack off, Move on");
+        source.Stats.CurrentHP = -20;
+        Assert(View(c, ui.AttackButton).Enabled, "D15: a chosen flight whose every source has died is unfiltered (nothing left to flee from)");
+        c.CurrentTurnStart.Clear();
+        Assert(View(c, ui.AttackButton).Enabled, "With no compulsion the panel is unfiltered");
     }
 
     // ── Asserts ─────────────────────────────────────────────────────────────────────────────────────────────────────

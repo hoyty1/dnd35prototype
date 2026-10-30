@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using DND35e.Identifiers;
 using UnityEngine;
 
@@ -58,6 +59,7 @@ public static class AttackLegalityTests
             Run(TestAiGuardAmmunition);
             Run(TestAiGuardCrossbowLoad);
             Run(TestAiGuardWardAndSphere);
+            Run(TestCharmLink);
         }
         finally
         {
@@ -193,6 +195,9 @@ public static class AttackLegalityTests
         var at10 = Create("AL_Range10", new Vector2Int(10, 5), CharacterTeam.Enemy);
         var at11 = Create("AL_Range11", new Vector2Int(11, 5), CharacterTeam.Enemy);
         Equip(a, ItemDatabase.CloneItem(ItemID.WeaponDagger));
+        // A second dagger in the pack: the interim chooser throws only when a weapon is left to fight with (AI-074,
+        // AttackIntent.KeepsAWeaponAfterThrowing, batch 13 step 15).
+        a.GetComponent<InventoryComponent>().CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemID.WeaponDagger));
         // A thrown dagger: range increment 10 ft, five increments (PHB p.134): 50 ft, 10 squares.
         Assert(AiAttackGuard.Check(a, at10).Ok && AttackIntent.ForAI(null, a, at10).Mode == AttackMode.Thrown,
             "Guard: the AI throws a dagger at 50 ft, its fifth increment (PHB p.134; AttackIntent.ChooseAiMode)");
@@ -339,6 +344,95 @@ public static class AttackLegalityTests
         finally
         {
             RemoveSphere(sphere);
+        }
+    }
+
+    // ── The charm link (batch 13 step 20, D14) ─────────────────────────
+
+    /// <summary>
+    /// PHB p.209 (D14): a charmed creature makes no attack, maneuver, AoO or hostile spell on its charmer, both sides; a
+    /// beneficial spell on it and attacks on anyone else stay legal; the AoO gate (ThreatSystem.CanMakeAoOAgainst) and the
+    /// AI's attack guard agree; a mask without the Charm bit does not test it.
+    /// </summary>
+    private static void TestCharmLink()
+    {
+        var charmer = Create("AL_Charmer", new Vector2Int(20, 2), CharacterTeam.Player);
+        var charmed = Create("AL_Charmed", new Vector2Int(21, 2), CharacterTeam.Enemy);
+        var other = Create("AL_CharmOther", new Vector2Int(21, 3), CharacterTeam.Player);
+        charmed.ApplyCondition(CombatConditionType.Charmed, 10, charmer.Stats.CharacterName);
+        try
+        {
+            Assert(CharmRules.IsCharmedBy(charmed, charmer) && !CharmRules.IsCharmedBy(charmed, other) && !CharmRules.IsCharmedBy(charmer, charmed),
+                "The charm link names the charmer only, one way");
+
+            bool allBarred = true;
+            foreach (DirectAttackKind kind in new[] { DirectAttackKind.Weapon, DirectAttackKind.Natural, DirectAttackKind.Touch,
+                         DirectAttackKind.AoO, DirectAttackKind.Charge })
+            {
+                Legality l = AttackLegality.CanDirectlyAttack(charmed, charmer, kind);
+                allBarred &= !l.Ok && l.Bar == LegalityBar.Charm;
+            }
+            Legality trip = AttackLegality.CanDirectlyAttack(charmed, charmer, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(SpecialAttackType.Trip));
+            Legality feint = AttackLegality.CanDirectlyAttack(charmed, charmer, DirectAttackKind.Maneuver, AttackIntent.ForManeuver(SpecialAttackType.Feint));
+            allBarred &= !trip.Ok && trip.Bar == LegalityBar.Charm && !feint.Ok && feint.Bar == LegalityBar.Charm;
+            Assert(allBarred, "PHB p.209: no weapon, natural, touch, AoO, charge attack or maneuver on the charmer (Charm bar)");
+
+            SpellData hold = SpellDatabase.GetSpell(SpellNames.HOLD_PERSON);
+            SpellData cure = SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS);
+            Legality holdOn = AttackLegality.CanDirectlyAttack(charmed, charmer, DirectAttackKind.Spell, AttackIntent.ForSpell(hold));
+            Assert(hold != null && !holdOn.Ok && holdOn.Bar == LegalityBar.Charm, "PHB p.209: no hostile spell (Hold Person) on the charmer");
+            Assert(cure != null && AttackLegality.CanDirectlyAttack(charmed, charmer, DirectAttackKind.Spell, AttackIntent.ForSpell(cure)).Ok,
+                "A cure on the living charmer is no attack: legal");
+            Assert(AttackLegality.CanDirectlyAttack(charmed, other, DirectAttackKind.Weapon).Ok, "The charmed creature may still attack someone else");
+            Assert(AttackLegality.CanDirectlyAttack(charmer, charmed, DirectAttackKind.Weapon).Ok, "The charmer may attack the charmed creature (the link binds the charmed one)");
+            Assert(AttackLegality.Check(charmed, charmer, DirectAttackKind.Weapon, null, AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward).Ok,
+                "A mask without the Charm bit does not test the link");
+            Assert(!ThreatSystem.CanMakeAoOAgainst(charmed, charmer) && ThreatSystem.CanMakeAoOAgainst(charmed, other),
+                "D14 (delegated RAW reading): no attack of opportunity on the charmer; one on anyone else");
+            Legality guard = AiAttackGuard.CheckTarget(charmed, charmer, AttackIntent.ForMode(AttackMode.Melee));
+            Assert(!guard.Ok && guard.Bar == LegalityBar.Charm,
+                "The AI attack guard refuses an attack on the charmer (the shared gate)");
+
+            // Batch 13 step 20 review: a dispel on an opposing charmer is hostile (IsHostileSpellAt), the one test the
+            // legal set's charm check reads too (ActorActionSet.IsCharmBarred delegates to IsCharmBarredAttempt).
+            SpellData dispel = SpellDatabase.GetSpell(SpellNames.DISPEL_MAGIC);
+            Assert(dispel != null && AttackLegality.IsCharmBarredAttempt(charmed, charmer, DirectAttackKind.Spell, AttackIntent.ForSpell(dispel))
+                && !AttackLegality.CanDirectlyAttack(charmed, charmer, DirectAttackKind.Spell, AttackIntent.ForSpell(dispel)).Ok,
+                "PHB p.209: a targeted Dispel Magic on the opposing charmer is a hostile spell (charm-barred)");
+
+            // Lay on hands that would harm an undead charmer is an attack on it (LayOnHandsRules.IsValidTarget, the Charm bit).
+            string savedType = charmer.Stats.CreatureType;
+            charmer.Stats.CreatureType = "Undead";
+            try
+            {
+                bool legal = LayOnHandsRules.IsValidTarget(charmed, charmer, out bool harms, out string reason);
+                Assert(!legal && harms && reason != null && reason.Contains("charmed"),
+                    "PHB p.209: no lay on hands to harm an undead charmer (" + reason + ")");
+            }
+            finally
+            {
+                charmer.Stats.CreatureType = savedType;
+            }
+
+            // The overrun's per-opponent test (GameManager.IsLegalOverrunOpponent, which the path's opponent loop and the AI
+            // plan read): the charmer is no legal overrun opponent.
+            GameManager gm = GameManager.Instance;
+            MethodInfo overrun = typeof(GameManager).GetMethod("IsLegalOverrunOpponent", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (gm != null && overrun != null)
+            {
+                object[] args = { charmed, charmer, null };
+                bool legal = (bool)overrun.Invoke(gm, args);
+                string reason = args[2] as string;
+                Assert(!legal && reason != null && reason.Contains("charmed"), "PHB p.209: no overrun on the charmer (" + reason + ")");
+            }
+            else
+            {
+                Assert(overrun != null, "GameManager.IsLegalOverrunOpponent exists for the overrun charm test (TST-006)");
+            }
+        }
+        finally
+        {
+            charmed.Stats.RemoveCondition(CombatConditionType.Charmed);
         }
     }
 

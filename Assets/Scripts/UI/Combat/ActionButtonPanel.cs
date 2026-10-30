@@ -518,8 +518,132 @@ public class ActionButtonPanel : MonoBehaviour
         ComputeBreakWallState(pc, context, states);
         ComputeUseImbuedSpellState(pc, context, states);
         ComputeAlwaysAvailableStates(states);
+        ApplyFlightFilter(pc, context, states);
 
         return states;
+    }
+
+    /// <summary>
+    /// The restricted menu of a turn a fear or a turning compels flight (batch 13 step 20, D15, inherited owner decision Q1;
+    /// C8: the panel reads the legal set's compulsion filter for this PC only, batch 22 makes it read the whole set): each
+    /// button whose catalog entry the filter refuses (ActorActionSet.CompulsionFilter: anything but moving away, standing
+    /// up, a crawl, dropping an item, attacking a wall to escape) is turned off with the reason, a button with no entry of
+    /// its own (dismissing a spell, the grapple actions) too; the Cast Spell button stays on when the PC can cast an Escape
+    /// spell (FlightRules.HasEscapeSpell, the cast core's caster tests included; PHB p.309: spells may be used to flee; the
+    /// cast core refuses any other spell, FlightRules.CastRefusal), Cast Imbued Spell only when an imbued spell is an
+    /// Escape spell, and End Turn is off while a flight option is left (FlightRules.EndTurnRefusal: "as best it can") and
+    /// a flight control is still on. Nothing changes on any other turn, and a cornered frightened PC's filter refuses
+    /// nothing (PHB p.309: it may fight).
+    /// </summary>
+    private void ApplyFlightFilter(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
+    {
+        TurnCompulsion compulsion = pc != null && pc.CurrentTurnStart != null ? pc.CurrentTurnStart.Compulsion : null;
+        if (compulsion == null || !compulsion.CompelsFlight)
+            return;
+
+        var changes = new List<KeyValuePair<Button, ActionButtonState>>();
+        Button endTurn = null;
+        ActionButtonState endTurnState = null;
+        bool flightControlLeft = false;
+        foreach (KeyValuePair<Button, ActionButtonState> kv in states.Enumerate())
+        {
+            Button button = kv.Key;
+            ActionButtonState state = kv.Value;
+            if (button == null || state == null || !state.Enabled)
+                continue;
+
+            if (button == EndTurnButton)
+            {
+                endTurn = button;
+                endTurnState = state;
+                continue;
+            }
+
+            string actionId = FlightMenuActionId(button);
+            Legality filter = actionId != null
+                ? ActorActionSet.CompulsionFilter(ActionCatalog.Get(actionId), pc)
+                : ActorActionSet.CompulsionFilter(ActionCatalog.Get(ActionIds.Attack), pc);
+            bool allowed = filter.Ok;
+            if (!allowed && button == CastSpellButton)
+                allowed = FlightRules.HasEscapeSpell(context.Gm, pc);
+            if (!allowed && button == UseImbuedSpellButton)
+                allowed = HasImbuedEscapeSpell(pc);
+            if (allowed)
+            {
+                if (IsFlightControl(button, actionId))
+                    flightControlLeft = true;
+                continue;
+            }
+            string label = string.IsNullOrEmpty(state.Label) ? "Unavailable" : state.Label;
+            changes.Add(new KeyValuePair<Button, ActionButtonState>(button,
+                new ActionButtonState(state.Visible, false, label + (compulsion.Turned && compulsion.Fear == null ? " (Turned: must flee)" : " (Afraid: must flee)"))));
+        }
+
+        // End Turn waits while a flight option is left (FlightRules.EndTurnRefusal), but never with no control left to
+        // flee by: the panel always leaves the PC a way to finish its turn.
+        if (endTurn != null && flightControlLeft && FlightRules.EndTurnRefusal(context.Gm, pc) != null)
+            changes.Add(new KeyValuePair<Button, ActionButtonState>(endTurn, new ActionButtonState(endTurnState.Visible, false, "End Turn (must flee first)")));
+
+        foreach (KeyValuePair<Button, ActionButtonState> change in changes)
+            states.Set(change.Key, change.Value);
+    }
+
+    /// <summary>A button through which a chosen flight goes on: a move, a withdraw, standing up, a crawl, an Escape cast, breaking a wall.</summary>
+    private bool IsFlightControl(Button button, string actionId)
+        => button == CastSpellButton || button == UseImbuedSpellButton
+           || actionId == ActionIds.Move || actionId == ActionIds.Withdraw || actionId == ActionIds.StandUp
+           || actionId == ActionIds.Crawl || actionId == ActionIds.AttackWall;
+
+    /// <summary>Whether one of the PC's imbued spells is an Escape spell (D15: the only imbued cast a chosen flight allows).</summary>
+    internal static bool HasImbuedEscapeSpell(CharacterController pc)
+    {
+        if (pc == null || pc.Stats == null || pc.Stats.ImbuedSpells == null)
+            return false;
+        foreach (ImbueSpellEntry entry in pc.Stats.ImbuedSpells)
+            if (entry != null && entry.Spell != null && entry.Spell.EffectType == SpellEffectType.Escape)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The catalog entry a button stands for, for the flight filter (<see cref="ApplyFlightFilter"/>); null for a button
+    /// with no entry of its own, which the filter treats as an action that does not flee.
+    /// </summary>
+    private string FlightMenuActionId(Button button)
+    {
+        if (button == null) return null;
+        if (button == MoveButton) return ActionIds.Move;
+        if (button == WithdrawButton) return ActionIds.Withdraw;
+        if (button == FiveFootStepButton) return ActionIds.FiveFootStep;
+        if (button == DropProneButton) return ActionIds.DropProne;
+        if (button == StandUpButton) return ActionIds.StandUp;
+        if (button == CrawlButton) return ActionIds.Crawl;
+        if (button == AttackButton || button == AttackThrownButton || button == AttackOffHandButton
+            || button == AttackOffHandThrownButton || button == AttackDefensivelyButton) return ActionIds.Attack;
+        if (button == FullAttackButton || button == FullAttackDefensivelyButton || button == DualWieldButton) return ActionIds.FullAttack;
+        if (button == ChargeButton) return ActionIds.Charge;
+        if (button == SpecialAttackButton) return ActionIds.Trip;
+        if (button == OverrunButton) return ActionIds.Overrun;
+        if (button == AidAnotherButton) return ActionIds.AidAnother;
+        if (button == TotalDefenseButton) return ActionIds.TotalDefense;
+        if (button == TurnUndeadButton) return ActionIds.TurnUndead;
+        if (button == DomainPowerButton) return ActionIds.DomainPower;
+        if (button == SmiteButton) return ActionIds.Smite;
+        if (button == LayOnHandsButton) return ActionIds.LayOnHands;
+        if (button == WildShapeButton) return ActionIds.WildShape;
+        if (button == FlurryOfBlowsButton) return ActionIds.FlurryOfBlows;
+        if (button == RageButton) return ActionIds.Rage;
+        if (button == BardicMusicButton) return ActionIds.BardicMusic;
+        if (button == CastSpellButton || button == UseImbuedSpellButton) return ActionIds.CastSpell;
+        if (button == MaintainConcentrationButton) return ActionIds.MaintainConcentration;
+        if (button == ReloadButton) return ActionIds.Reload;
+        if (button == PickUpItemButton) return ActionIds.PickUpItem;
+        if (button == DropEquippedItemButton) return ActionIds.DropItem;
+        if (button == UseItemButton) return ActionIds.UseItem;
+        if (button == BreakWallButton) return ActionIds.AttackWall;
+        if (button == DischargeTouchButton) return ActionIds.DeliverHeldCharge;
+        if (button == MonsterAbilityButton) return ActionIds.BreathWeapon;
+        return null;
     }
 
     private void ComputeMovementActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -990,10 +1114,11 @@ public class ActionButtonPanel : MonoBehaviour
         bool isSpellcaster = pc.Stats.IsSpellcaster;
         SpellcastingComponent spellComp = pc.Spellcasting;
         bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnySpellWithSlotLeft();
-        bool canCast = context.Actions.HasStandardAction && hasCastableSpells && !context.IsTurned;
+        // A turned PC's casting is the flight filter's (ApplyFlightFilter: an Escape spell only, D15), not a blanket bar.
+        bool canCast = context.Actions.HasStandardAction && hasCastableSpells;
         string castBaseLabel;
         if (!canCast)
-            castBaseLabel = context.IsTurned ? "Cast Spell (Turned: no)" : "Cast Spell (N/A)";
+            castBaseLabel = "Cast Spell (N/A)";
         else if (context.IsPinned)
             castBaseLabel = "Cast Spell (Std, pinned: concentration/components apply)";
         else if (context.IsGrappling)
@@ -1388,14 +1513,13 @@ public class ActionButtonPanel : MonoBehaviour
             return;
         }
 
-        bool canBreak = context.Actions.HasStandardAction && !context.IsTurned && !context.IsPinned;
+        // Attacking a wall to escape is a flight (an Escape role): the flight filter decides on a turned PC (ApplyFlightFilter, D15).
+        bool canBreak = context.Actions.HasStandardAction && !context.IsPinned;
         string label;
         if (canBreak)
             label = $"Break Wall (STR DC {context.AdjacentWallDC})";
         else if (context.IsPinned)
             label = "Break Wall (Pinned)";
-        else if (context.IsTurned)
-            label = "Break Wall (Turned)";
         else
             label = "Break Wall (No Std Action)";
 
@@ -1412,7 +1536,8 @@ public class ActionButtonPanel : MonoBehaviour
         }
 
         int count = pc.Stats.ImbuedSpells != null ? pc.Stats.ImbuedSpells.Count : 0;
-        bool canCast = context.Actions.HasStandardAction && !context.IsTurned && !context.IsPinned;
+        // A turned PC's imbued cast is the flight filter's (ApplyFlightFilter: an imbued Escape spell only, D15).
+        bool canCast = context.Actions.HasStandardAction && !context.IsPinned;
         string label;
         if (canCast)
         {
@@ -1423,8 +1548,6 @@ public class ActionButtonPanel : MonoBehaviour
         }
         else if (context.IsPinned)
             label = "Imbued Spell (Pinned)";
-        else if (context.IsTurned)
-            label = "Imbued Spell (Turned)";
         else
             label = "Imbued Spell (No Std)";
 

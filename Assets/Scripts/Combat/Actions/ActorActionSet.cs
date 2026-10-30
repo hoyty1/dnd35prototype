@@ -29,16 +29,20 @@ public sealed class ActionOption
 ///   rage and the domain powers their executors): refused with its status and issue;
 /// then the compulsion filter of the turn (CharacterController.CurrentTurnStart, decided once at its start): a frightened,
 /// panicked or turned creature flees (PHB p.309-311, p.159; D15), so only Retreat and Escape entries, standing up,
-/// dropping an item and total defense stay legal unless it is cornered in panic, plus (in <see cref="Check"/>) a cast of
-/// an Escape spell (D15: spells may be used to flee); and the charm links (PHB p.209, D14), which bar an attack, a hostile
-/// maneuver or a hostile spell on the charmer (<see cref="Check"/>, <see cref="LegalTargets"/>). A confused or suggested
+/// dropping an item stay legal (total defense only when it is cornered in panic), plus (in <see cref="Check"/>) a cast of
+/// an Escape spell (D15: spells may be used to flee); a frightened (not panicked) creature cornered at its turn start
+/// (TurnCompulsion.Cornered) may fight (PHB p.309), so nothing is filtered; and the charm links (PHB p.209, D14;
+/// CharmRules.IsCharmedBy, the predicate of the shared attack gate's Charm bit, with that gate's hostility test for a
+/// spell, AttackLegality.IsCharmBarredAttempt), which bar an attack, a hostile maneuver
+/// or a hostile spell on the charmer (<see cref="Check"/>, <see cref="LegalTargets"/>). A confused or suggested
 /// creature's turn is its controller's whole choice (the compulsion picks the action), so the set does not filter it.
-/// Known gaps, for step 20 (which builds the restricted menus on this filter): a frightened creature's class or monster
-/// ability that would carry it away (no Escape tag on those entries yet) reads as barred; bardic music on the charmer is
-/// never charm-barred (whether a song is hostile depends on the song, which the context does not carry); a cast or a held
-/// charge whose spell the context does not name (Allows, LegalTargets) is not charm-barred.
-/// Pure: no dice, no log, no state change. Nothing reads it yet but GameManager.RunAIAction's shadow log and
-/// ActionPanelParityTests; batch 22 makes the PC panel and the evaluator read it.
+/// Known gaps: a frightened creature's class or monster ability or item that would carry it away (no Escape tag on those
+/// entries yet) reads as barred; bardic music on the charmer is never charm-barred (whether a song is hostile depends on
+/// the song, which the context does not carry); a cast or a held charge whose spell the context does not name (Allows,
+/// LegalTargets) is not charm-barred (the cast core's Charm bit refuses it at the request).
+/// Pure: no dice, no log, no state change. Read by GameManager.RunAIAction's shadow log, ActionPanelParityTests, and, for a
+/// PC's chosen flight (batch 13 step 20, C8), the PC action panel and handlers (<see cref="CompulsionFilter"/>); batch 22
+/// makes the PC panel and the evaluator read the whole set.
 /// </summary>
 public sealed class ActorActionSet
 {
@@ -158,20 +162,31 @@ public sealed class ActorActionSet
 
     /// <summary>
     /// The turn's compulsion (CurrentTurnStart.Compulsion, D15): a frightened, panicked or turned creature flees, so only
-    /// the entries that flee or free it stay legal: Retreat or Escape roles, standing up, dropping an item, and total
-    /// defense (its own Check allows it only to a cornered panicked creature, PHB p.311). A cornered panicked creature
-    /// keeps what its cowering allows (total defense); a cornered frightened creature may fight (PHB p.309), which the
-    /// turn start does not record yet, so its fight shows as a shadow disagreement until step 20 records it.
+    /// the entries that flee or free it stay legal: Retreat or Escape roles, standing up and dropping an item. Total
+    /// defense stays legal only to a panicked creature cornered in its flight (TurnStartState.CorneredInPanic: it cowers,
+    /// typically using total defense, PHB p.311); it is no flight, so a frightened or turned one has it only when cornered
+    /// at its turn start (below). A frightened (not panicked, not turned) creature cornered at its turn start
+    /// (TurnCompulsion.Cornered, batch 13 step 20) may fight (PHB p.309), so nothing is filtered; nor on a chosen flight
+    /// whose every source has died (FlightRules.IsOnChosenFlight: nothing is left to flee from). The PC action panel, the
+    /// PC handlers and the PC runner read it on a PC's flight turn (ActionButtonPanel, GameManager.IsActionBlockedByFlight,
+    /// GameManager.RunPlayerAction; C8). A 5-foot step or crawl that cuts a chosen flight short is refused at its
+    /// destination (FlightRules.DestinationRefusal).
     /// </summary>
-    internal static Legality CompulsionFilter(ActionDefinition d, CharacterController actor)
+    public static Legality CompulsionFilter(ActionDefinition d, CharacterController actor)
     {
-        TurnStartState start = actor.CurrentTurnStart;
+        TurnStartState start = actor != null ? actor.CurrentTurnStart : null;
         TurnCompulsion compulsion = start != null ? start.Compulsion : null;
-        if (compulsion == null || (compulsion.Fear == null && !compulsion.Turned))
+        if (d == null || compulsion == null || !compulsion.CompelsFlight)
+            return Legality.Allowed();
+        if (compulsion.Cornered && compulsion.Fear != null && !compulsion.Turned && !actor.HasCondition(CombatConditionType.Panicked))
+            return Legality.Allowed();
+        if (compulsion.ChoosesFlight && !FlightRules.IsOnChosenFlight(actor, out _))
             return Legality.Allowed();
         if ((d.Roles & (ActionRoles.Retreat | ActionRoles.Escape)) != 0)
             return Legality.Allowed();
-        if (d.Id == ActionIds.StandUp || d.Id == ActionIds.DropItem || d.Id == ActionIds.TotalDefense)
+        if (d.Id == ActionIds.StandUp || d.Id == ActionIds.DropItem)
+            return Legality.Allowed();
+        if (d.Id == ActionIds.TotalDefense && start.CorneredInPanic && actor.HasCondition(CombatConditionType.Panicked))
             return Legality.Allowed();
         return Legality.Refused(LegalityBar.Compulsion, compulsion.Turned
             ? "turned: it flees from the turner (PHB p.159)"
@@ -195,13 +210,14 @@ public sealed class ActorActionSet
     /// <summary>
     /// The charm link (PHB p.209, D14): a charmed creature makes no attack, hostile maneuver or hostile spell on its
     /// charmer. Barred: an Attack-role entry that neither heals nor supports; every maneuver but aid another and waking an
-    /// ally; a cast or held charge whose spell (<paramref name="ctx"/>) is hostile to the charmer (damage, debuff, control,
-    /// wall, or energy that harms it); lay on hands on an undead charmer (positive energy harms it, PHB p.44). A cast or a
+    /// ally; a cast or held charge whose spell (<paramref name="ctx"/>) is hostile to the charmer by the shared gate's test
+    /// (AttackLegality.IsCharmBarredAttempt, IsHostileSpellAt); lay on hands on an undead charmer (positive energy harms
+    /// it, PHB p.44; LayOnHandsRules refuses it too). A cast or a
     /// held charge with no spell named, and bardic music, are not barred (see the class summary's gaps).
     /// </summary>
     private bool IsCharmBarred(ActionDefinition d, CharacterController target, ActionContext ctx)
     {
-        if (_gm == null || target == null || target.Stats == null || !_gm.ActionCore_IsCharmedBy(Actor, target))
+        if (target == null || target.Stats == null || !CharmRules.IsCharmedBy(Actor, target))
             return false;
         switch (d.Id)
         {
@@ -212,22 +228,17 @@ public sealed class ActorActionSet
             case ActionIds.CastSpell:
             case ActionIds.DeliverHeldCharge:
             {
+                // The shared gate's own hostility test (AttackLegality.IsHostileSpellAt through IsCharmBarredAttempt), so
+                // the set and the cast core agree (a dispel on an opposing charmer is hostile, a cure on a living one is not).
                 SpellData spell = ctx != null ? ctx.Spell : null;
                 if (spell == null)
                     return false;
-                switch (spell.EffectType)
-                {
-                    case SpellEffectType.Damage:
-                    case SpellEffectType.Debuff:
-                    case SpellEffectType.Control:
-                    case SpellEffectType.Wall:
-                        return true;
-                    default:
-                        return SpellDiceRules.Harms(spell, target.Stats);
-                }
+                return AttackLegality.IsCharmBarredAttempt(Actor, target,
+                    d.Id == ActionIds.CastSpell ? DirectAttackKind.Spell : DirectAttackKind.Touch, AttackIntent.ForSpell(spell));
             }
             case ActionIds.LayOnHands:
-                return SpellDiceRules.IsUndead(target.Stats);
+                // Positive energy harms an undead charmer (PHB p.44): the same test as a cure spell's (IsHostileSpellAt).
+                return WardSaveLedger.IsUndead(target);
         }
         if (d.Category == ActionCategory.Maneuver)
             return true;

@@ -36,6 +36,10 @@ public partial class GameManager
     {
         CharacterController actor = ctx != null ? ctx.Actor : null;
         Legality refusal = CheckRunnable(ctx);
+        // A chosen flight (D15, batch 13 step 20): every catalog action the PC takes outside the action buttons too (the
+        // character sheet's use, draw, sheathe, ready-shield and pick-up entries) meets the legal set's compulsion filter.
+        if (refusal.Ok)
+            refusal = FlightFilterForPlayer(ctx);
         // An AiOnly entry has an executor for the AI's routing only (ImplStatus.AiOnly); none is left since batch 13 step 18
         // made the monster specials shared, but the gate stays for any later one.
         if (refusal.Ok && ctx.Definition.Status == ImplStatus.AiOnly)
@@ -274,6 +278,22 @@ public partial class GameManager
             return Legality.Refused(LegalityBar.Other, ctx.Definition.Name + " has no shared executor yet: " + ctx.Definition.Status + issues);
         }
         return Legality.Allowed();
+    }
+
+    /// <summary>
+    /// The compulsion filter of a PC's chosen flight (ActorActionSet.CompulsionFilter; D15, batch 13 step 20, C8) for a
+    /// catalog action the PC runs: refused with its reason, nothing spent. A cast of an Escape spell passes (PHB p.309: a
+    /// spell may carry it away; the cast core refuses any other, FlightRules.CastRefusal). Allowed on any other turn.
+    /// Escape items are no flight option yet (CMB-210).
+    /// </summary>
+    private static Legality FlightFilterForPlayer(ActionContext ctx)
+    {
+        if (!FlightRules.IsOnChosenFlight(ctx.Actor, out _))
+            return Legality.Allowed();
+        Legality filter = ActorActionSet.CompulsionFilter(ctx.Definition, ctx.Actor);
+        if (!filter.Ok && ctx.Definition.Id == ActionIds.CastSpell && ctx.Spell != null && ctx.Spell.EffectType == SpellEffectType.Escape)
+            return Legality.Allowed();
+        return filter;
     }
 
     /// <summary>Extracted and New entries are pre-checked (their CanExecute is the legality); a Delegating entry's core owns its refusals.</summary>

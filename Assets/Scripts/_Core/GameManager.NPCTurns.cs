@@ -1071,7 +1071,7 @@ public partial class GameManager
         // Nothing passes a Resilient Sphere's boundary (PHB p.258, CMB-092), and a target whose ward this NPC failed to
         // overcome cannot be attacked (D6): the shared gate, read only, before anything that assumes an attack happens.
         Legality attackLegality = AttackLegality.Check(npc, target, DirectAttackKind.Weapon, null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!attackLegality.Ok)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", attackLegality.Reason));

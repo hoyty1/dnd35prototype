@@ -231,7 +231,7 @@ public partial class GameManager
     /// </summary>
     internal CastOutcome CheckLegality(SpellCastRequest req)
     {
-        CastOutcome refusal = CheckCastCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req) ?? CheckDeciderCapability(req)
+        CastOutcome refusal = CheckCastCasterLegality(req) ?? CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req) ?? CheckCastFlightLegality(req) ?? CheckDeciderCapability(req)
                               ?? CheckCastTargetLegality(req) ?? CheckCastDirectAttackLegality(req) ?? CheckSummonPlacementLegality(req) ?? CheckCastRangeLegality(req) ?? CheckCastMetamagicLegality(req) ?? CheckCastActionLegality(req)
                               ?? CheckCastSpeechLegality(req)
                               ?? CheckCastComponentLegality(req);
@@ -627,8 +627,9 @@ public partial class GameManager
 
     /// <summary>
     /// <see cref="AttackLegality.CanDirectlyAttack"/> (kind Spell) for a single-target cast at another creature, for every
-    /// caster and source (a held charge's delivery included): the Resilient Sphere (CMB-092) and a known failed ward save
-    /// (D6). A targeted Dispel Magic from outside every sphere at a creature inside one passes the sphere test: the sphere
+    /// caster and source (a held charge's delivery included): the Resilient Sphere (CMB-092), the charm link (a charmed
+    /// caster casts no hostile spell on its charmer, <see cref="AttackLegality.IsHostileSpellAt"/>; PHB p.209, batch 13
+    /// step 20, D14; reason "charmed") and a known failed ward save (D6). A targeted Dispel Magic from outside every sphere at a creature inside one passes the sphere test: the sphere
     /// is subject to a targeted dispel (PHB p.258), and the dispel then reaches the sphere alone
     /// (<see cref="IsTargetedDispelAtSphere"/>). Pure; the refusal's <see cref="CastOutcome.Detail"/> is the gate's reason.
     /// Null when the cast may go on.
@@ -644,8 +645,10 @@ public partial class GameManager
         Legality legal = AttackLegality.Check(req.Caster, target, DirectAttackKind.Spell, AttackIntent.ForSpell(req.Spell), checks);
         if (legal.Ok)
             return null;
-        string reason = (checks & AttackLegalityChecks.Sphere) != 0 && ResilientSphereAreaEffect.DoesSphereBlockInteraction(req.Caster, target)
-            ? "resilient-sphere" : "ward-save-failed";
+        string reason = legal.Bar == LegalityBar.Charm
+            ? "charmed"
+            : (checks & AttackLegalityChecks.Sphere) != 0 && ResilientSphereAreaEffect.DoesSphereBlockInteraction(req.Caster, target)
+                ? "resilient-sphere" : "ward-save-failed";
         return new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, reason) { Detail = legal.Reason };
     }
 
@@ -674,6 +677,20 @@ public partial class GameManager
             return null;
         string refusal = MetamagicSystem.ValidateMetamagicApplication(req.Spell, req.Metamagic, req.Caster.Stats, req.Source);
         return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, refusal);
+    }
+
+    /// <summary>
+    /// A chosen flight (D15, batch 13 step 20; FlightRules.CastRefusal): a frightened or turned creature choosing its flight
+    /// may use a spell to flee (PHB p.309, p.159), so it casts only an Escape spell, by any path (the spell menu, an imbued
+    /// spell, a scroll, a wand, a held charge's delivery). Only a PC's turn is a chosen flight (TurnCompulsion.ChoosesFlight);
+    /// an NPC's flight is the shared flee controller's. Reason "fleeing"; the log line is in <see cref="CastOutcome.Detail"/>.
+    /// </summary>
+    private static CastOutcome CheckCastFlightLegality(SpellCastRequest req)
+    {
+        if (req == null || req.Caster == null || req.Spell == null)
+            return null;
+        string refusal = FlightRules.CastRefusal(req.Caster, req.Spell);
+        return refusal == null ? null : new CastOutcome(CastOutcomeKind.Refused, CastStage.Legality, "fleeing") { Detail = refusal + "." };
     }
 
     /// <summary>
@@ -765,8 +782,9 @@ public partial class GameManager
         }
 
         // A hold's own test (Chill Touch cannot hold its charge, PHB p.176), then the grapple casting rule for every casting
-        // (PHB p.141, p.156; SPL-146 for a hold, CMB-101 for every resolve kind since batch 12 step 9).
-        refusal = CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req);
+        // (PHB p.141, p.156; SPL-146 for a hold, CMB-101 for every resolve kind since batch 12 step 9), then a chosen
+        // flight's (an Escape spell only, D15; batch 13 step 20).
+        refusal = CheckHoldChargeLegality(req) ?? CheckCastGrappleLegality(req) ?? CheckCastFlightLegality(req);
         if (refusal != null)
         {
             CastStageTrace.Mark(caster, spell, CastStageTrace.Legality, refusal.Reason);

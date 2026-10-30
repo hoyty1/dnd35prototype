@@ -18,6 +18,8 @@ public partial class GameManager
     /// <see cref="MoveAttempt.Refused"/> and spends nothing);</item>
     /// <item>the path: the request's own (the PC's click), or one found to its destination within the move's budget (none,
     /// or nowhere to go: refused with <see cref="MoveAttempt.NoPath"/>, a Debug.Log line only, nothing spent);</item>
+    /// <item>on a chosen flight (D15, batch 13 step 20), the destination must end farther from every flight source
+    /// (<see cref="FlightRules.DestinationRefusal"/>; refused with nothing spent);</item>
     /// <item>the spend before the first step (the move action, or the standard action converted; the withdraw's own
     /// action; nothing for <see cref="MoveSpend.None"/>); a spend that fails refuses the move;</item>
     /// <item>the request's <see cref="MoveRequest.StartLogLine"/>, then the walk: the PC's per-step loop, or the AI's
@@ -98,6 +100,15 @@ public partial class GameManager
         {
             // Refused before the first step (D3): nothing spent; the caller goes on to its next choice.
             RecordNoPath(mover, what, budget > 0 ? "no valid path" : "no movement left this action", attempt);
+            yield break;
+        }
+
+        // 2b. A chosen flight (D15, batch 13 step 20; FlightRules.DestinationRefusal): every move ends farther from every
+        // source of the fear or the turning. Refused before the spend, so nothing is spent.
+        string flightRefusal = FlightRules.DestinationRefusal(mover, path[path.Count - 1]);
+        if (flightRefusal != null)
+        {
+            RecordRefusedMovement(mover, what, flightRefusal, attempt);
             yield break;
         }
 

@@ -379,7 +379,8 @@ public static class ThreatSystem
     /// CMB-163; CharacterController.IsBarredFromOrdinaryAttackOn). The holder still threatens and takes AoOs against third
     /// parties. Also false when the threatener already failed its save against the target's Sanctuary or Hide from Undead
     /// casting (WardSaveLedger, read only; PHB p.274, p.241; batch 12 step 12, D6): it cannot attack that creature at all.
-    /// The provoker lists and <see cref="ExecuteAoO"/> read it.
+    /// Also false when the threatener is charmed by the target (PHB p.209; an attack of opportunity is an attack, delegated
+    /// RAW reading 2026-10-29, batch 13 step 20, D14; CharmRules). The provoker lists and <see cref="ExecuteAoO"/> read it.
     /// </summary>
     public static bool CanMakeAoOAgainst(CharacterController threatener, CharacterController target)
     {
@@ -387,7 +388,8 @@ public static class ThreatSystem
             return false;
 
         return target == null
-            || (!threatener.IsBarredFromOrdinaryAttackOn(target, out _) && !WardSaveLedger.HasKnownFailure(threatener, target));
+            || (!threatener.IsBarredFromOrdinaryAttackOn(target, out _) && !WardSaveLedger.HasKnownFailure(threatener, target)
+                && !CharmRules.IsCharmedBy(threatener, target));
     }
 
     /// <summary>
@@ -491,6 +493,8 @@ public static class ThreatSystem
             if (HasHadMovementOpportunity(character, mover)) continue;
             // An Improved Grab holder makes no AoO against the creature it holds (CMB-163).
             if (character.IsBarredFromOrdinaryAttackOn(mover, out _)) continue;
+            // A charmed creature makes no AoO against its charmer (PHB p.209; D14).
+            if (CharmRules.IsCharmedBy(character, mover)) continue;
 
             enemyThreats[character] = GetThreatenedSquares(character);
             enemyAoOUsedThisMovement[character] = 0;
@@ -614,6 +618,7 @@ public static class ThreatSystem
             if (enemy.Team == mover.Team) continue;
             if (HasHadMovementOpportunity(enemy, mover)) continue;
             if (enemy.IsBarredFromOrdinaryAttackOn(mover, out _)) continue;
+            if (CharmRules.IsCharmedBy(enemy, mover)) continue; // no AoO on the charmer (PHB p.209; D14)
             if (enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed <= 0) continue;
             if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(enemy, mover)) continue;
 
@@ -726,6 +731,14 @@ public static class ThreatSystem
         if (threatener.IsBarredFromOrdinaryAttackOn(target, out _))
         {
             Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes no AoO against {target.Stats.CharacterName}: it holds that creature with one body part (MM p.310, CMB-163).");
+            return null;
+        }
+
+        // A charmed creature makes no attack on its charmer, an AoO included (PHB p.209; delegated RAW reading 2026-10-29,
+        // D14), so no AoO is spent.
+        if (CharmRules.IsCharmedBy(threatener, target))
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes no AoO against {target.Stats.CharacterName}: it is charmed by that creature (PHB p.209, D14).");
             return null;
         }
 

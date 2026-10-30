@@ -439,6 +439,14 @@ public partial class GameManager
             return;
         }
 
+        // A chosen flight casts only an Escape spell (D15, batch 13 step 20); the cast core refuses any other imbued spell too.
+        if (FlightRules.IsOnChosenFlight(pc, out _) && !ActionButtonPanel.HasImbuedEscapeSpell(pc))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} must flee: only a spell that carries it away."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         var entries = ImbueWithSpellAbilityManager.GetImbuedSpells(pc);
         Debug.Log($"[ImbueWithSpellAbility] Showing imbued spell selection for {pc.Stats.CharacterName}: {entries.Count} spell(s)");
 

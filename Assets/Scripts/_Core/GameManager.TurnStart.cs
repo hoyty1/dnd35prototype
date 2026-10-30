@@ -109,7 +109,13 @@ public partial class GameManager
     /// again. For a PC (the UI-controlled turn routine) a compulsion that takes the turn over starts a forced turn on the
     /// Confusion pattern: the sub-phase is Animating, the action buttons are hidden, the shared controller acts, then
     /// <c>EndCurrentTurn</c>. Returns true when it started one. An NPC's compulsions run in its AI turn, where the
-    /// scenario hook still comes after the forced kinds. Charmed stays a target restriction (the PC menu half is batch 13).
+    /// scenario hook still comes after the forced kinds. A frightened (not panicked) or turned PC that is not cornered and
+    /// not grappling chooses its flight from the restricted menu instead (batch 13 step 20, D15, inherited owner decision
+    /// Q1): <see cref="TurnCompulsion.ChoosesFlight"/> is set, the turn opens as a normal PC turn, and the action panel
+    /// and the PC's handlers read the legal set's compulsion filter (ActorActionSet.CompulsionFilter); a panicked PC
+    /// (PHB p.311: no other action), a cornered one and a grappling one keep the forced flight. The IsControllable fork
+    /// (<c>IsPC</c>) only chooses between the two. Charmed is no turn compulsion: the charm link is a legality bit of every
+    /// attack and hostile cast, both sides (AttackLegalityChecks.Charm, D14).
     /// </summary>
     private bool TryRunCompulsionTurn(CharacterController actor)
     {
@@ -133,10 +139,23 @@ public partial class GameManager
         if (compulsion.Suggested != null)
             return BeginForcedPCTurn(actor, ExecuteSuggestedForcedPCTurn(actor, compulsion.Suggested));
 
-        // A frightened or panicked PC flees through the shared flee controller, a turned one through the shared turned
-        // flight (owner decision 2026-10-23, Q1: automatic flight until batch 13's restricted PC menu; CMB-100).
-        if (compulsion.Fear != null || compulsion.Turned)
+        if (compulsion.CompelsFlight)
+        {
+            // A frightened or turned PC with a way to flee chooses it from the restricted menu (D15, Q1; batch 13 step 20).
+            if (!actor.HasCondition(CombatConditionType.Panicked) && !compulsion.Cornered && !actor.IsGrappling()
+                && compulsion.FlightSources.Count > 0)
+            {
+                compulsion.ChoosesFlight = true;
+                CharacterController source = compulsion.FlightSources[0];
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱",
+                    $"{actor.Stats.CharacterName} must flee from {source.Stats.CharacterName}: only flight is possible this turn ({FlightRules.Why(compulsion)})."));
+                return false;
+            }
+
+            // A panicked PC (PHB p.311: it takes no other action), a cornered one and a grappling one (its escape attempt is
+            // its flight; CMB-210) flee through the shared flee controller, a turned one through the shared turned flight.
             return BeginForcedPCTurn(actor, ExecuteFleeingForcedPCTurn(actor, compulsion));
+        }
 
         return false;
     }
@@ -169,6 +188,14 @@ public partial class GameManager
         // an undead, and the skip gate took every turned creature's turn.
         compulsion.Turned = actor.HasCondition(CombatConditionType.Turned);
 
+        // What it flees from, and whether it is cornered (no flight option at the turn start), for every actor (D15; batch
+        // 13 step 20): the restricted menu, the move destinations of a chosen flight and the legal set read them.
+        if (compulsion.CompelsFlight)
+        {
+            compulsion.FlightSources = FlightRules.Sources(this, actor, compulsion);
+            compulsion.Cornered = !FlightRules.HasFlightOption(this, actor, compulsion.FlightSources);
+        }
+
         return compulsion;
     }
 
@@ -182,7 +209,9 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// A PC's forced flight (owner decision 2026-10-23, Q1): a prone PC stands up first, as the AI does before its own
+    /// A PC's forced flight (owner decision 2026-10-23, Q1; since batch 13 step 20, D15, only for a panicked PC, a grappling
+    /// one (CMB-210) and one with no flight option at its turn start: any other frightened or turned PC chooses its flight
+    /// from the restricted menu, <see cref="TurnCompulsion.ChoosesFlight"/>): a prone PC stands up first, as the AI does before its own
     /// fear branch (PHB p.143, CMB-074); then the shared flee controller (Frightened, Panicked) or the shared turned
     /// flight (<see cref="AIService.ExecuteTurnedTurn"/>), and the turn ends. A frightened (not panicked) PC that could
     /// not flee gets its action menu back instead, fear penalties and fighting defensively in force: a cornered

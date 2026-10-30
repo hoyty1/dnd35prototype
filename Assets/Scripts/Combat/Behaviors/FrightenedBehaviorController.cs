@@ -281,18 +281,28 @@ public sealed class FrightenedBehaviorController
         }
     }
 
-    private static SquareCell FindBestFleeCell(
+    /// <summary>
+    /// The best cell a flight from <paramref name="sourcePos"/> can reach this action: farther from the source than
+    /// <paramref name="currentDistance"/>, open, with a path within the move's range (fewest attacks of opportunity among
+    /// the farthest). <paramref name="rangeOverride"/> (squares, when 0 or more) replaces the creature's current move range:
+    /// the range a prone creature will have once it stands (FlightRules.HasMoveFlight, D15); <paramref name="accept"/>, when
+    /// given, must accept the cell too (FlightRules: farther from every flight source). Pure. GrappleDamageRulesTests
+    /// reflects on it (TST-006).
+    /// </summary>
+    internal static SquareCell FindBestFleeCell(
         GameManager gameManager,
         CharacterController actor,
         Vector2Int sourcePos,
         bool withdraw,
         bool running,
-        int currentDistance)
+        int currentDistance,
+        int rangeOverride = -1,
+        System.Func<Vector2Int, bool> accept = null)
     {
         if (gameManager == null || gameManager.Grid == null || actor == null || actor.Stats == null)
             return null;
 
-        int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
+        int moveRange = rangeOverride >= 0 ? rangeOverride : gameManager.GetCurrentMoveRangeSquares(actor);
         int maxRange = withdraw
             ? Mathf.Max(0, gameManager.GetWithdrawMoveRangeSquares(actor)) // speed for a Restricted Withdraw (PHB p.144)
             : Mathf.Max(0, moveRange);
@@ -310,6 +320,8 @@ public sealed class FrightenedBehaviorController
 
             int candidateDistance = SquareGridUtils.GetDistance(cell.Coords, sourcePos);
             if (candidateDistance <= currentDistance)
+                continue;
+            if (accept != null && !accept(cell.Coords))
                 continue;
 
             if (!gameManager.Grid.CanPlaceCreature(cell.Coords, actor.GetVisualSquaresOccupied(), actor))

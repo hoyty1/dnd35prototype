@@ -224,7 +224,7 @@ public partial class GameManager
                 ? AttackLegality.Check(attacker, target, DirectAttackKind.Touch, intent,
                     AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Reach)
                 : AttackLegality.Check(attacker, target, aoo ? DirectAttackKind.AoO : DirectAttackKind.Weapon, intent,
-                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+                    AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
             if (legality.Ok && !aoo && !heldTouch && !IsTargetInStepRange(attacker, target, intent))
                 legality = Legality.Refused($"{target.Stats.CharacterName} is out of {attacker.Stats.CharacterName}'s reach or range");
             if (!legality.Ok)

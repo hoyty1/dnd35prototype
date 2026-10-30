@@ -148,6 +148,13 @@ public static class LayOnHandsRules
                 reason = holdReason;
                 return false;
             }
+            // The charm link (PHB p.209, D14; batch 13 step 20): harming an undead charmer is an attack on it.
+            Legality charm = AttackLegality.Check(actor, target, DirectAttackKind.Touch, null, AttackLegalityChecks.Charm);
+            if (!charm.Ok)
+            {
+                reason = charm.Reason;
+                return false;
+            }
             return true;
         }
 

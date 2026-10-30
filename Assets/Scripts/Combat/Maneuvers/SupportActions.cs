@@ -883,7 +883,7 @@ public partial class GameManager
         if (RedirectPinnedCharacterToGrappleMenu(pc, "charging"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "charge"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Charge, "charge"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;

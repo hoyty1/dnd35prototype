@@ -175,7 +175,7 @@ public sealed class RangedSpecialActionExecutor : IActionExecutor
         if (actor.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
             return Legality.Refused(LegalityBar.Target, holdReason);
         Legality barrier = AttackLegality.Check(actor, target, DirectAttackKind.Touch, null,
-            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward);
+            AttackLegalityChecks.Sphere | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
         if (!barrier.Ok)
             return barrier;
         return Legality.Allowed();

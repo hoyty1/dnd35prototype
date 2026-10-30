@@ -103,7 +103,7 @@ public sealed class AttackSequenceActionExecutor : IActionExecutor
         if (callerRequest == null && ctx.Source == ActorSource.Ui)
         {
             Legality gate = AttackLegality.Check(actor, ctx.Target, DirectAttackKind.Weapon, null,
-                AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward);
+                AttackLegalityChecks.Sphere | AttackLegalityChecks.HoldBar | AttackLegalityChecks.Ward | AttackLegalityChecks.Charm);
             if (!gate.Ok)
             {
                 o.Refuse(gate);

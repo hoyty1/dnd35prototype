@@ -7056,6 +7056,17 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
+        // A chosen flight's step ends farther from every source, and cuts no fuller flight short (D15, batch 13 step 20).
+        string flightRefusal = FlightRules.DestinationRefusal(pc, destination.Coords, shortMove: true);
+        if (flightRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", flightRefusal + "."));
+            // The step is refused as a whole (nothing spent): the PC chooses again from its restricted menu.
+            if (returnToActionChoices && pc.IsControllable && IsPlayerTurn)
+                ShowActionChoices();
+            return false;
+        }
+
         Vector2Int oldPos = pc.GridPosition;
 
         // 5-foot step does NOT consume move/standard/full-round actions and does NOT provoke AoO.
@@ -7532,7 +7543,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -7603,7 +7614,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -7834,7 +7845,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "thrown attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "thrown attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "thrown attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -8019,7 +8030,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "off-hand attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "off-hand attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -8091,7 +8102,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand thrown attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "off-hand thrown attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "off-hand thrown attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -8453,15 +8464,36 @@ public partial class GameManager : MonoBehaviour
         return CanThrowWeapon(actor);
     }
 
-    private bool IsActionBlockedByTurnedCondition(CharacterController actor, string attemptedAction)
+    /// <summary>
+    /// The PC handlers' read of the legal set's compulsion filter (ActorActionSet.CompulsionFilter; batch 13 step 20, D15,
+    /// C8): on a turn a fear or a turning compels flight, an action outside the flight (an attack, a charge, a smite, a
+    /// cast other than an Escape spell) is refused with its reason, nothing spent. A cornered frightened PC's filter lets
+    /// it fight (PHB p.309). The cast button passes when the PC can cast an Escape spell (FlightRules.HasEscapeSpell); the
+    /// spell chosen is checked again (<see cref="FlightCastRefusal"/>, and the cast core's own FlightRules.CastRefusal for
+    /// every cast path). Replaces the turned-only gate of batch 12.
+    /// </summary>
+    private bool IsActionBlockedByFlight(CharacterController actor, string actionId, string attemptedAction)
     {
-        if (actor == null || !actor.HasCondition(CombatConditionType.Turned))
+        if (actor == null || actor.Stats == null)
+            return false;
+        Legality filter = ActorActionSet.CompulsionFilter(ActionCatalog.Get(actionId), actor);
+        if (filter.Ok)
+            return false;
+        if (actionId == ActionIds.CastSpell && FlightRules.HasEscapeSpell(this, actor))
             return false;
 
         string actionLabel = string.IsNullOrWhiteSpace(attemptedAction) ? "that action" : attemptedAction;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is Turned and cannot perform {actionLabel}. They must flee from the source of divine turning."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot perform {actionLabel}: {filter.Reason}."));
         return true;
     }
+
+    /// <summary>
+    /// A spell chosen on a chosen flight: only an Escape spell (D15, PHB p.309: spells may be used to flee;
+    /// FlightRules.CastRefusal, which the cast core's Legality stage applies to every cast path too). Checked at the spell
+    /// menu so the refusal comes before any targeting. The refusal text, or null when the cast may go on.
+    /// </summary>
+    private string FlightCastRefusal(CharacterController actor, SpellData spell)
+        => FlightRules.CastRefusal(actor, spell);
 
     public bool HasThrowableMeleeWeaponEquipped(CharacterController actor)
     {
@@ -9047,7 +9079,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "full attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.FullAttack, "full attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9101,7 +9133,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "fighting defensively"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "fighting defensively"))
+        if (IsActionBlockedByFlight(pc, ActionIds.Attack, "fighting defensively"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9136,7 +9168,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "full attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.FullAttack, "full attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9183,7 +9215,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "dual-wield attacks"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "dual-wield attacks"))
+        if (IsActionBlockedByFlight(pc, ActionIds.FullAttack, "dual-wield attacks"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9232,6 +9264,16 @@ public partial class GameManager : MonoBehaviour
         if (!IsPlayerTurn) return;
 
         CharacterController pc = ActivePC;
+
+        // A chosen flight ends only when no flight option is left (D15, batch 13 step 20: "as best it can", PHB p.309, p.159).
+        string flightRefusal = FlightRules.EndTurnRefusal(this, pc);
+        if (flightRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("😱", flightRefusal + "."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (IsHoldingTouchCharge(pc))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} ends turn while holding {GetHeldTouchSpellName(pc)}. The charge persists."));
@@ -9299,7 +9341,7 @@ public partial class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "flurry of blows"))
             return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "flurry of blows"))
+        if (IsActionBlockedByFlight(pc, ActionIds.FlurryOfBlows, "flurry of blows"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9489,7 +9531,7 @@ public partial class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
 
-        if (IsActionBlockedByTurnedCondition(pc, "spellcasting"))
+        if (IsActionBlockedByFlight(pc, ActionIds.CastSpell, "spellcasting"))
         {
             CombatUI?.UpdateActionButtons(pc);
             return;
@@ -9737,6 +9779,15 @@ public partial class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
+
+        // A flight turn casts only an Escape spell (D15, batch 13 step 20).
+        string flightRefusal = FlightCastRefusal(pc, spell);
+        if (flightRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", flightRefusal + "."));
+            ShowActionChoices();
+            return;
+        }
 
         // The cast's own request and context (batch 11 step 4): a clone of the menu's spell with the metamagic's
         // pre-cast changes, the slot or cleric conversion it spends and fresh choices. Opening it ends any Ui cast the UI

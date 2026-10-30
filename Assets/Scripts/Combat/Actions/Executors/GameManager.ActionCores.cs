@@ -151,6 +151,16 @@ public partial class GameManager
             o.RefusalLogged = true;
             yield break;
         }
+        // A chosen flight's crawl ends farther from every source and cuts no fuller flight short (standing up and moving;
+        // D15, batch 13 step 20): nothing is spent.
+        string flightRefusal = FlightRules.DestinationRefusal(actor, destination, shortMove: true);
+        if (flightRefusal != null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", flightRefusal + "."));
+            o.Refuse(Legality.Refused(LegalityBar.Compulsion, flightRefusal));
+            o.RefusalLogged = true;
+            yield break;
+        }
         // A barrier across the step refuses the crawl before it starts: nothing is spent and nothing provoked (D3, PHB p.137).
         if (SquareGridUtils.IsStepBlockedByBarrier(actor, actor.GridPosition, destination))
         {
@@ -730,8 +740,4 @@ public partial class GameManager
     /// <summary>An engulf (AIService.ExecuteEngulfCore; MM p.201).</summary>
     internal bool ActionCore_Engulf(CharacterController actor, CharacterController target)
         => _aiService != null && _aiService.ExecuteEngulfCore(actor, target);
-
-    /// <summary>Whether <paramref name="actor"/> is charmed by <paramref name="candidate"/> (the AI's charm link, PHB p.209; the legal set's charm filter).</summary>
-    internal bool ActionCore_IsCharmedBy(CharacterController actor, CharacterController candidate)
-        => _aiService != null && _aiService.IsCharmedByForActions(actor, candidate);
 }
