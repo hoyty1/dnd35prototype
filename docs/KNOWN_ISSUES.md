@@ -39,8 +39,8 @@ Entries per section:
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 33 | 47 | 80 | ITM-096 |
 | [AI](issues/AI.md) | AI | 0 | 16 | 35 | 51 | AI-082 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
-| [Tests](issues/TST.md) | TST | 0 | 9 | 29 | 38 | TST-049 |
-| **All** | | 1 | 264 | 447 | 712 | |
+| [Tests](issues/TST.md) | TST | 0 | 10 | 29 | 39 | TST-050 |
+| **All** | | 1 | 265 | 447 | 713 | |
 
 ## Top issues
 
@@ -50,3 +50,4 @@ The most impactful entries, mainly High, plus any regression from the latest bat
 |---|---|---|---|---|
 | [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |
 | [TST-047](issues/TST.md) | Med | TST | `rules/combat-end-defeat-ally` fails on seeds 2 and 3 since batch 13 step 7: the orc berserker goes for the 1-HP hero first, and the hero's attacks of opportunity kill it (Victory, not the expected defeat); the rules run's verdict is FAIL | No |
+| [TST-049](issues/TST.md) | Med | TST | `rules/spittle-once-per-round-ai` fails on seed 4 since batch 13 step 19: the Scripted mouther's gibbering confuses the target, which flees out of the spittle's 30 ft before the round 2 spittle; the rules run's verdict is FAIL | No |
