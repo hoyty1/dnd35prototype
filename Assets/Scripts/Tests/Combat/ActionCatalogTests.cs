@@ -46,7 +46,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-13) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-14) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -64,6 +64,7 @@ public static class ActionCatalogTests
         Run(TestMoveEntries);
         Run(TestPostureAndReloadEntries);
         Run(TestSupportAndWallEntries);
+        Run(TestItemEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -184,6 +185,53 @@ public static class ActionCatalogTests
                 "The crawl pre-check refuses a context with no actor and no destination");
         Assert(!ReloadRules.Check(null, out string noActor, out _) && !string.IsNullOrEmpty(noActor),
             "ReloadRules refuses with no actor, with a reason", noActor);
+    }
+
+    /// <summary>
+    /// The item entries (batch 13 step 14, D7): use-item Extracted over UseItemActionExecutor and retrieve-item New over
+    /// RetrieveItemActionExecutor (a move action that provokes, PHB p.141), both with the PC's action panel as follow-up;
+    /// ItemUseRules' kinds and provocations (a potion provokes, a scroll as casting unless free, a wand, staff or worn item
+    /// never; DMG p.213, p.229) and the cast-action mapping; each pre-check refuses an empty context.
+    /// </summary>
+    private static void TestItemEntries()
+    {
+        ActionDefinition use = ActionCatalog.Get(ActionIds.UseItem);
+        ActionDefinition retrieve = ActionCatalog.Get(ActionIds.RetrieveItem);
+        Assert(use != null && use.Status == ImplStatus.Extracted && use.Executor is UseItemActionExecutor && use.UiAfter == ActionUiAfter.ShowChoices
+               && use.Provokes == ProvokeRule.Varies && (use.IssueIds == null || use.IssueIds.Length == 0),
+            "Use an item is Extracted over UseItemActionExecutor with no open issue (D7)", use != null ? use.ToString() : "null");
+        Assert(retrieve != null && retrieve.Status == ImplStatus.New && retrieve.Executor is RetrieveItemActionExecutor
+               && retrieve.UiAfter == ActionUiAfter.ShowChoices && retrieve.Cost == ActionCostType.Move && retrieve.Provokes == ProvokeRule.Yes,
+            "Retrieving a stored item is New over RetrieveItemActionExecutor: a move action that provokes (PHB p.141, Table 8-2)",
+            retrieve != null ? retrieve.ToString() : "null");
+
+        Assert(ItemUseRules.KindOf(new ItemData { IsScroll = true }) == ItemUseKind.Scroll
+               && ItemUseRules.KindOf(new ItemData { IsWand = true }) == ItemUseKind.Wand
+               && ItemUseRules.KindOf(new ItemData { IsStaff = true }) == ItemUseKind.Staff
+               && ItemUseRules.KindOf(new ItemData { IsPotion = true }) == ItemUseKind.Potion
+               && ItemUseRules.MustBeInHand(ItemUseKind.Potion) && ItemUseRules.MustBeInHand(ItemUseKind.Wand) && !ItemUseRules.MustBeInHand(ItemUseKind.Activated),
+            "ItemUseRules: scrolls, wands, staves and potions are stored kinds that must be in hand; a worn item's power is not retrieved");
+        Assert(ItemUseRules.UseProvocation(ItemUseKind.Potion, ActionCostType.Standard) == AoOProvokingAction.DrinkPotion
+               && ItemUseRules.UseProvocation(ItemUseKind.Potion, ActionCostType.FullRound) == AoOProvokingAction.DrinkPotion
+               && ItemUseRules.UseProvocation(ItemUseKind.Scroll, ActionCostType.Standard) == AoOProvokingAction.UseScroll
+               && ItemUseRules.UseProvocation(ItemUseKind.Scroll, ActionCostType.Free) == null
+               && ItemUseRules.UseProvocation(ItemUseKind.Wand, ActionCostType.Standard) == null
+               && ItemUseRules.UseProvocation(ItemUseKind.Staff, ActionCostType.Standard) == null
+               && ItemUseRules.UseProvocation(ItemUseKind.Activated, ActionCostType.Standard) == null,
+            "A potion provokes (drunk or administered, DMG p.229), a scroll as casting unless free, a wand, staff or worn item never (DMG p.213)");
+        Assert(ItemUseRules.FromCastingAction(CastActionCost.Free) == ActionCostType.Free
+               && ItemUseRules.FromCastingAction(CastActionCost.Standard) == ActionCostType.Standard
+               && ItemUseRules.FromCastingAction(CastActionCost.Swift) == ActionCostType.Standard
+               && ItemUseRules.FromCastingAction(CastActionCost.FullRound) == ActionCostType.FullRound,
+            "An item cast's action maps to the action economy (a scroll is at least a standard action, DMG p.213)");
+
+        foreach (ActionDefinition d in new[] { use, retrieve })
+        {
+            if (d == null || d.Executor == null)
+                continue;
+            Assert(!d.Executor.CanExecute(null).Ok, d.Id + ": the pre-check refuses a missing context");
+            Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, d.Id + ": the pre-check refuses a context with no actor");
+        }
     }
 
     /// <summary>
@@ -355,7 +403,8 @@ public static class ActionCatalogTests
         new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
-        new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.RetrieveItem, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.New, "" },
         new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.Withdraw, ActionCostType.FullRound, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },
         new object[] { ActionIds.FiveFootStep, ActionCostType.NotAnAction, ProvokeRule.No, ImplStatus.Delegating, "" },
@@ -445,7 +494,7 @@ public static class ActionCatalogTests
     {
         var expected = new Dictionary<CastActionCost, ActionCostType>
         {
-            { CastActionCost.ItemOrDelivery, ActionCostType.NotAnAction },
+            { CastActionCost.Delivery, ActionCostType.NotAnAction },
             { CastActionCost.Free, ActionCostType.Free },
             { CastActionCost.Swift, ActionCostType.Swift },
             { CastActionCost.Standard, ActionCostType.Standard },

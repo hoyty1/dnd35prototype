@@ -152,6 +152,20 @@ public static class ActionCatalog
         }
     }
 
+    /// <summary>
+    /// The use's own action for the context's item in hand (D7; GameManager.GetItemUseCost): a standard action, a scroll's
+    /// or wand's casting action, a full round to administer a potion. A stored item first needs the retrieval's move
+    /// action (the retrieve-item entry's cost), which is not included here: the use-item core takes it first, so a planner
+    /// must add a move action for an item not in hand (CharacterController.IsHoldingRetrievedItem; AI-009, batch 15).
+    /// </summary>
+    private static ActionCostType UseItemCostFor(CharacterController actor, ActionContext ctx)
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null || ctx == null || ctx.Item == null)
+            return ActionCostType.Standard;
+        return gm.GetItemUseCost(actor, ctx.Item, ctx.Variant == ItemUseRules.VariantAdminister);
+    }
+
     /// <summary>The load's action by the weapon and Rapid Reload (D4; PHB p.115, p.99): ReloadRules.CostFor.</summary>
     private static ActionCostType ReloadCostFor(CharacterController actor, ActionContext ctx)
         => ReloadRules.CostFor(actor);
@@ -271,8 +285,14 @@ public static class ActionCatalog
             .Run(new MaintainConcentrationActionExecutor(), ActionUiAfter.ShowChoices)
             .For(c => c.Spellcasting != null));
         l.Add(Def(ActionIds.UseItem, "Use an Item", I, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Item,
-                ActionRoles.Item | ActionRoles.Heal | ActionRoles.Support, "PHB p.141-142, Table 8-2 (potion, oil, scroll: Yes; other items: No); DMG p.212-213",
-                ImplStatus.PcOnly, "AI-054"));
+                ActionRoles.Item | ActionRoles.Heal | ActionRoles.Support,
+                "PHB p.141-142, Table 8-2 (retrieve: move, Yes; potion, oil: standard, Yes); DMG p.213 (scroll: the casting time, Yes; wand: standard, No), p.229 (administer: full-round); D7",
+                ImplStatus.Extracted)
+            .Run(new UseItemActionExecutor(), ActionUiAfter.ShowChoices)
+            .Costs(UseItemCostFor));
+        l.Add(Def(ActionIds.RetrieveItem, "Retrieve a Stored Item", I, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Item,
+                ActionRoles.Item, "PHB p.141-142, Table 8-2 (retrieve a stored item: move, Yes); D7 (the item stays in hand)", ImplStatus.New)
+            .Run(new RetrieveItemActionExecutor(), ActionUiAfter.ShowChoices));
 
         // ── Movement and posture ──
         l.Add(Def(ActionIds.Move, "Move", Mv, ActionCostType.Move, ProvokeRule.ByMovement, ActionTargetKind.Cell, ActionRoles.Approach | ActionRoles.Retreat,

@@ -476,6 +476,37 @@ public class CharacterController : MonoBehaviour
     public bool IsInTotalDefense { get; private set; }
 
     /// <summary>
+    /// The stored item this creature has retrieved into a hand and still holds (batch 13 step 14, D7: a retrieved item stays
+    /// in hand until it is used, stowed or dropped; PHB p.141, Table 8-2): an item of its pack (Inventory.GeneralSlots),
+    /// one of a stack standing for the one in hand. Using a held potion, scroll or wand takes only its own action
+    /// (ItemUseRules); the use-item executor clears it when the item in hand is used up. Null when nothing retrieved is held.
+    /// Cleared on slot reuse (<see cref="ResetForNewCreature"/>, CRE-046) and between encounters.
+    /// </summary>
+    public ItemData RetrievedItem { get; private set; }
+
+    /// <summary>Marks <paramref name="item"/> (a pack item) as retrieved and held (D7); null clears it.</summary>
+    public void SetRetrievedItem(ItemData item) => RetrievedItem = item;
+
+    /// <summary>Clears the retrieved item (used up, stowed or dropped, a new encounter, a reused slot).</summary>
+    public void ClearRetrievedItem() => RetrievedItem = null;
+
+    /// <summary>
+    /// True when <paramref name="item"/> is the retrieved item this creature holds and is still in its pack (D7).
+    /// </summary>
+    public bool IsHoldingRetrievedItem(ItemData item)
+    {
+        if (item == null || RetrievedItem == null || !ReferenceEquals(item, RetrievedItem))
+            return false;
+        Inventory inv = InventoryComp != null ? InventoryComp.CharacterInventory : null;
+        if (inv == null || inv.GeneralSlots == null)
+            return false;
+        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+            if (ReferenceEquals(inv.GeneralSlots[i], item))
+                return true;
+        return false;
+    }
+
+    /// <summary>
     /// Current selected attack damage mode for this character.
     /// This value can be manually toggled by the combat UI, or auto-resolved to a rules default on reset.
     /// </summary>
@@ -5019,6 +5050,7 @@ public class CharacterController : MonoBehaviour
         RapidShotEnabled = false;
         IsFightingDefensively = false;
         EndTotalDefense(); // CMB-179: no total defense carries over to the slot's next creature (CRE-046)
+        ClearRetrievedItem(); // D7: no retrieved item stays in the slot's next creature's hand (CRE-046)
         CurrentAttackDamageMode = AttackDamageMode.Lethal;
         _attackDamageModeManuallySetThisRound = false;
 

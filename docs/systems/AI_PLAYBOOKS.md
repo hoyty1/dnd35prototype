@@ -55,13 +55,12 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - Seven definitions carry potions in `BackpackItemIds`: `hobgoblin_sergeant`, `human_monk_3`, `human_monk_5`, `human_monk_7`, `human_paladin_3`, `human_paladin_5`, `human_paladin_7`. `InitializeNPCFromDefinition` adds them to the inventory (NPCSetup.cs:902-907). DMG random-encounter spawns carry none.
   - Potions of Cure Light Wounds are spell potions (`RegisterSpellPotion`, Equipment/Items/ItemDatabase.cs:1241) resolved by `ApplyConsumableEffectAndConsume` through the spell-consumable branch.
   - `AIConsumableManager` has a healing threshold (`HealingPotionThreshold` 0.4), potion, scroll and wand name lists and pickers, but only tests attach it and it keeps its own lists instead of reading the inventory (AI-009).
-  - The only live NPC consumable use is a charmed NPC feeding a healing potion to its charmer (`CharmedBehaviorController.TryUseHealingConsumableOnCaster`, about line 178): it removes the item and spends a standard action but resolves no AoO (AI-042 covers the charm behaviour).
+  - The only live NPC consumable use is a charmed NPC administering a healing potion to its unconscious charmer (`CharmedBehaviorController.AdministerHealingPotion`): it retrieves the potion (move, provokes), then gives it as a full-round action that provokes, through the catalog's retrieve-item and use-item entries (batch 13 step 14, D7; AI-042 covers the charm behaviour).
 - **What blocks it.**
-  - The PC wrapper refuses any actor that is not `ActivePC` and ends the PC turn (AI-054). NPC use needs its own wrapper around `ApplyConsumableEffectAndConsume`, resolving provoked AoOs with `ThreatSystem.ExecuteAoO` as `CombatFlowService.ResolveRangedAttackAoOIfProvoked` does for every shot (the attack-sequence executor's RangedAoO stage, `GameManager.RunAttackSequence`).
-  - Item use costs a full-round action for everyone (ITM-005). RAW, retrieving a stored item is a move action and drinking is a standard action, so an NPC could retrieve and drink in one turn but not also move.
+  - Nothing chooses a consumable (AI-009). The execution is done since batch 13 step 14 (D7): `RunAIAction` with `ActionIds.UseItem` (`ActionContext.Item`, `InventoryIndex`, `Target` for a scroll or wand aim) retrieves the stored item (a move action that provokes) and drinks it (a standard action that provokes, a hit forcing a Concentration check, DMG p.229), so an NPC can retrieve and drink in one turn but not also move; `ActionIds.RetrieveItem` readies it with a spare move action for the next turn.
   - Nothing decides between drinking, withdrawing and attacking; `FleeHealthThreshold` is unread (AI-010).
   - Wands and scrolls also need targets and Use Magic Device checks for non-casters (`WandValidator`), so start with self-targeted potions.
-- **Fix first.** AI-009 (wire `AIConsumableManager` to the real inventory or delete it), AI-054, ITM-005.
+- **Fix first.** AI-009 (the choice; wire `AIConsumableManager` to the real inventory or delete it).
 - **Rules.** PHB ch.8, Actions in Combat (drink a potion: standard action, provokes; retrieve a stored item: move action, provokes); DMG ch.7 (Potions).
 - **Test with.** `goblin_raiders` (hobgoblin_sergeant), or the Custom Encounter Builder with `human_monk_3` or `human_paladin_3`.
 

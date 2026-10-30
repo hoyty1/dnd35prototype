@@ -117,6 +117,26 @@ public sealed class SpellCastRequest
     }
 
     /// <summary>
+    /// An AI-run cast whose spell the source has already built (a scroll's or wand's clone with its caster level,
+    /// metamagic and DC; batch 13 step 14): <paramref name="spell"/> is used as it is, aimed at <paramref name="target"/>,
+    /// with the AI decider (run synchronously, GameManager.RunCastSync).
+    /// </summary>
+    public static SpellCastRequest ForAIPrebuilt(CharacterController caster, CharacterController target, SpellData spell,
+        MetamagicData metamagic, CastSource source)
+    {
+        var request = new SpellCastRequest
+        {
+            Caster = caster,
+            Spell = spell,
+            Metamagic = metamagic ?? new MetamagicData(),
+            Source = source ?? new CastSource(),
+            Decider = AiCastDecider.Instance
+        };
+        request.Aim.Target = target;
+        return request;
+    }
+
+    /// <summary>
     /// The PC area builder (batch 11 step 9): turns the open Ui cast <paramref name="request"/> (built by
     /// <see cref="ForUi"/> or <see cref="ForUiPrebuilt"/> when the spell, scroll, wand or F12 cast was chosen) into an area
     /// cast aimed at <paramref name="cells"/> with the creatures in them, <paramref name="targets"/> (the core's Legality

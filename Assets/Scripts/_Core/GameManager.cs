@@ -1093,6 +1093,10 @@ public partial class GameManager : MonoBehaviour
         WardSaveLedger.Clear();
         ClearAttackedReactions();
 
+        // Nor an item retrieved into a hand (D7, batch 13 step 14): the next fight starts with it stowed.
+        foreach (CharacterController c in GetAllCharacters())
+            c?.ClearRetrievedItem();
+
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();
 
@@ -4290,9 +4294,11 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Attempt to use a consumable item from inventory.
-    /// In combat this uses D&D 3.5 item-manipulation timing (move action, or standard as alternative)
-    /// and can provoke attacks of opportunity from adjacent enemies.
+    /// The Use Item panel's and the character sheet's call (and the harness's Ui UseItem step). Outside combat the item is
+    /// used at once, with no action. In combat this is the PC's entry to the catalog's use-item action (batch 13 step 14):
+    /// the PC UI's own gates (the active character, choosing an action, no prompt open), then <see cref="RunPlayerAction"/>
+    /// with the use-item entry, whose executor (UseItemActionExecutor, core ActionCore_UseItem) is the one the AI and the
+    /// harness run too; the runner continues the PC UI after it. True when the use started (its outcome is the runner's).
     /// </summary>
     public bool TryUseConsumableFromInventory(CharacterController actor, int inventoryIndex, out string feedback)
     {
@@ -4352,13 +4358,17 @@ public partial class GameManager : MonoBehaviour
                 return false;
             }
 
-            if (!CanUseItemManipulationAction(actor, out string actionReason))
+            string actionReason = GetUseItemDisabledReason(actor);
+            if (actionReason != null)
             {
                 feedback = actionReason;
                 return false;
             }
 
-            ResolveConsumableUseProvocation(actor, inventoryIndex, item);
+            ActionContext useCtx = ActionContext.For(ActionIds.UseItem, actor, ActorSource.Ui);
+            useCtx.Item = item;
+            useCtx.InventoryIndex = inventoryIndex;
+            RunPlayerAction(useCtx);
             feedback = $"Using {item.Name}...";
             return true;
         }
@@ -4375,178 +4385,50 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Returns the action type required to use a stowed item from inventory.
-    /// Currently always FullRound (retrieve + use = full-round action).
-    /// TODO: Future — bags of holding, quick-draw pouches, and feats (e.g. Quick Draw for
-    /// alchemical items) can reduce this to standard or even move action.
+    /// Why <paramref name="actor"/> cannot handle items at all now, or null: pinned (PHB p.156) or in a wild shape whose
+    /// gear is melded into the form (PHB p.197; CHR-020). No action is tested here (<see cref="CanUseItemManipulationAction"/>).
     /// </summary>
-    private string GetItemUseActionType(CharacterController actor)
+    internal static string ItemManipulationConditionRefusal(CharacterController actor)
     {
-        // Future: check actor for bags, feats, or item-specific overrides here.
-        // e.g. if (actor.HasQuickDrawPouch()) return "Move";
-        return "FullRound";
+        if (actor == null)
+            return "No active character.";
+        if (actor.HasCondition(CombatConditionType.Pinned))
+            return "Pinned creatures cannot manipulate items; only grapple escape actions are allowed.";
+        if (!WildShapeRules.CanManipulateItems(actor.Stats))
+            return "In animal form (Wild Shape): the gear is melded into the form.";
+        return null;
     }
 
+    /// <summary>
+    /// True when <paramref name="actor"/> can take a move-action item manipulation now (retrieving a stored item or
+    /// picking one up, PHB p.141-142, Table 8-2; batch 13 step 14, ITM-005): no condition bars it
+    /// (<see cref="ItemManipulationConditionRefusal"/>) and a move action is left, or a standard action to trade for one
+    /// or to use an item in hand (ItemUseRules).
+    /// </summary>
     private bool CanUseItemManipulationAction(CharacterController actor, out string reason)
     {
+        reason = ItemManipulationConditionRefusal(actor);
+        if (reason != null)
+            return false;
         reason = string.Empty;
-        if (actor == null)
-        {
-            reason = "No active character.";
-            return false;
-        }
-
-        if (actor.HasCondition(CombatConditionType.Pinned))
-        {
-            reason = "Pinned creatures cannot manipulate items; only grapple escape actions are allowed.";
-            return false;
-        }
-
-        // In a wild shape the gear, pack included, is melded into the animal form (PHB p.197; CHR-020).
-        if (!WildShapeRules.CanManipulateItems(actor.Stats))
-        {
-            reason = "In animal form (Wild Shape): the gear is melded into the form.";
-            return false;
-        }
-
-        string actionType = GetItemUseActionType(actor);
-        if (actionType == "FullRound")
-        {
-            // Retrieving a stowed item and using it requires a full-round action (PHB p.142).
-            if (actor.Actions.HasFullRoundAction)
-                return true;
-
-            reason = "No full-round action available (retrieving and using a stowed item is a full-round action).";
-            return false;
-        }
-
-        // Fallback for future reduced-action types
         if (actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove || actor.Actions.HasStandardAction)
             return true;
 
-        reason = "No action available to manipulate an item.";
+        reason = "No move or standard action left (retrieving a stored item is a move action, PHB p.141).";
         return false;
     }
 
+    /// <summary>Pays a move-action item manipulation (picking up an item): the move action, else a standard action traded for one (PHB p.141-142).</summary>
     private void ConsumeItemManipulationAction(CharacterController actor)
     {
         if (actor == null) return;
 
-        string actionType = GetItemUseActionType(actor);
-        if (actionType == "FullRound")
-        {
-            actor.Actions.UseFullRoundAction();
-            return;
-        }
-
-        // Fallback for future reduced-action types
         if (actor.Actions.HasMoveAction)
             actor.Actions.UseMoveAction();
         else if (actor.Actions.CanConvertStandardToMove)
             actor.Actions.ConvertStandardToMove();
         else if (actor.Actions.HasStandardAction)
             actor.CommitStandardAction(); // every standard action pays here (PHB p.145; CMB-072)
-    }
-
-    private void ResolveConsumableUseProvocation(CharacterController actor, int inventoryIndex, ItemData item)
-    {
-        // D&D 3.5e DMG: Wand activation (spell trigger) does NOT provoke AoO.
-        // Only the retrieve-from-stowed action provokes (handled separately).
-        // Scrolls (spell completion) and potions DO provoke.
-        bool wandNoProvoke = item != null && item.IsWand;
-
-        var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor));
-
-        if (wandNoProvoke || threateningEnemies.Count == 0)
-        {
-            if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string noThreatMessage))
-            {
-                // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
-                // do NOT consume the action or reset UI — targeting mode handles that.
-                if (ConsumableCastAwaitingSpend)
-                {
-                    CombatUI?.ShowCombatLog(noThreatMessage);
-                    return; // targeting mode is active; action consumed after cast resolves
-                }
-
-                ConsumeItemManipulationAction(actor);
-                CombatUI?.ShowCombatLog(noThreatMessage);
-                UpdateAllStatsUI();
-            }
-            else
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{noThreatMessage}"));
-            }
-
-            ShowActionChoices();
-            return;
-        }
-
-        ShowAoOActionConfirmation(new AoOProvokingActionInfo
-        {
-            ActionType = AoOProvokingAction.DrinkPotion,
-            ActionName = $"USE {item.Name.ToUpper()}",
-            ActionDescription = $"Use {item.Name} (full-round action: retrieve + use)",
-            Actor = actor,
-            ThreateningEnemies = threateningEnemies,
-            OnProceed = () => StartCoroutine(ResolveConsumableAoOsAndApply(actor, inventoryIndex, item, threateningEnemies)),
-            OnCancel = ShowActionChoices
-        });
-    }
-
-    private IEnumerator ResolveConsumableAoOsAndApply(CharacterController actor, int inventoryIndex, ItemData item, List<CharacterController> threateningEnemies)
-    {
-        if (actor == null || actor.Stats == null)
-            yield break;
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} uses a full-round action to retrieve and use {item.Name} (provokes AoO)."));
-
-        foreach (var enemy in threateningEnemies)
-        {
-            if (actor.Stats.IsDead) break;
-            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor))
-                continue;
-
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "item");
-            if (aooResult == null) continue;
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs item use: {aooResult.GetDetailedSummary()}"));
-            UpdateAllStatsUI();
-
-
-            yield return new WaitForSeconds(0.65f);
-        }
-
-        if (actor.Stats.IsDead)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{actor.Stats.CharacterName} is slain before using {item.Name}!"));
-            UpdateAllStatsUI();
-            EndActivePCTurn();
-            yield break;
-        }
-
-        if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string resultMessage))
-        {
-            // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
-            // do NOT consume the action or reset UI — targeting mode handles that.
-            if (ConsumableCastAwaitingSpend)
-            {
-                CombatUI?.ShowCombatLog(resultMessage);
-                yield break; // targeting mode is active; action consumed after cast resolves
-            }
-
-            ConsumeItemManipulationAction(actor);
-            CombatUI?.ShowCombatLog(resultMessage);
-            UpdateAllStatsUI();
-        }
-        else
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{resultMessage}"));
-        }
-
-        ShowActionChoices();
     }
 
     /// <summary>
@@ -4587,7 +4469,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!CanUseItemManipulationAction(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use items: {reason} (retrieving and using a stowed item is a full-round action)"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use items: {reason}"));
             return;
         }
 
@@ -4600,7 +4482,9 @@ public partial class GameManager : MonoBehaviour
         // Set up callbacks
         QuickItemUsePanel.OnItemSelected = (inventoryIndex) =>
         {
-            // Delegate to existing consumable use system which handles AoO, action economy, etc.
+            // The use-item action (TryUseConsumableFromInventory -> RunPlayerAction): the runner continues the PC UI after
+            // it (the action panel, or the targeting of a scroll's or wand's spell). Only a use that never started returns
+            // to the action panel here.
             if (TryUseConsumableFromInventory(pc, inventoryIndex, out string feedback))
             {
                 CombatUI?.ShowCombatLog(feedback);
@@ -4608,13 +4492,8 @@ public partial class GameManager : MonoBehaviour
             else
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
-            }
-
-            // If a scroll/wand entered the targeting pipeline (AoE cone, single-target, etc.),
-            // do NOT reset the UI — the targeting overlay needs to stay active.
-            // ShowActionChoices would kill the targeting mode.
-            if (!ConsumableCastAwaitingSpend)
                 ShowActionChoices();
+            }
         };
         QuickItemUsePanel.OnCancelled = () =>
         {
@@ -5476,7 +5355,13 @@ public partial class GameManager : MonoBehaviour
         return grid != null ? grid.GetCell(character.GridPosition) : null;
     }
 
-    private bool ApplyConsumableEffectAndConsume(CharacterController actor, int inventoryIndex, out string resultMessage)
+    /// <summary>
+    /// Applies the pack item at <paramref name="inventoryIndex"/> and uses it up (a potion's or scroll's one use, a wand's
+    /// charge), or hands a scroll's or wand's spell to the cast pipeline. <paramref name="recipient"/>, when given, is the
+    /// creature a potion is administered to (DMG p.229; batch 13 step 14): the potion's effect is its, not the actor's.
+    /// </summary>
+    private bool ApplyConsumableEffectAndConsume(CharacterController actor, int inventoryIndex, out string resultMessage,
+        CharacterController recipient = null)
     {
         _lastConsumableCast = null; // set again when this use hands a scroll or wand to the cast pipeline
         resultMessage = string.Empty;
@@ -5507,8 +5392,13 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        int oldHP = actor.Stats.CurrentHP;
-        int oldNonlethal = actor.Stats.NonlethalDamage;
+        // The potion's drinker: the actor, or the creature it is administered to (DMG p.229).
+        CharacterController drinker = recipient != null && recipient.Stats != null ? recipient : actor;
+        string usesText = drinker == actor
+            ? $"{actor.Stats.CharacterName} uses {currentItem.Name}"
+            : $"{actor.Stats.CharacterName} administers {currentItem.Name} to {drinker.Stats.CharacterName}";
+        int oldHP = drinker.Stats.CurrentHP;
+        int oldNonlethal = drinker.Stats.NonlethalDamage;
         int healedAmount = 0;
         int nonlethalHealedAmount = 0;
         string spellSummary = string.Empty;
@@ -5518,7 +5408,7 @@ public partial class GameManager : MonoBehaviour
             case ConsumableEffectType.HealHP:
             {
                 int healingRoll = RollHealingFromConsumable(currentItem);
-                healedAmount = actor.Stats.HealDamage(healingRoll, out nonlethalHealedAmount);
+                healedAmount = drinker.Stats.HealDamage(healingRoll, out nonlethalHealedAmount);
                 break;
             }
             case ConsumableEffectType.SpellEffect:
@@ -5572,7 +5462,7 @@ public partial class GameManager : MonoBehaviour
                 // Potions can be used by anyone — skip scroll-style validation
                 // Just apply the spell effect directly
 
-                if (!TryApplySpellConsumableEffect(actor, currentItem, out spellSummary))
+                if (!TryApplySpellConsumableEffect(actor, currentItem, out spellSummary, drinker))
                 {
                     resultMessage = spellSummary;
                     return false;
@@ -5585,7 +5475,7 @@ public partial class GameManager : MonoBehaviour
                 // Legacy fallback for older consumables defined with flat HealAmount only.
                 if (currentItem.HealAmount > 0)
                 {
-                    healedAmount = actor.Stats.HealDamage(currentItem.HealAmount, out nonlethalHealedAmount);
+                    healedAmount = drinker.Stats.HealDamage(currentItem.HealAmount, out nonlethalHealedAmount);
                 }
                 else
                 {
@@ -5646,14 +5536,14 @@ public partial class GameManager : MonoBehaviour
         if (currentItem.ConsumableEffect == ConsumableEffectType.SpellEffect)
         {
             string potionLabel = currentItem.IsPotion ? "🧪" : "🧪";
-            resultMessage = $"{potionLabel} {actor.Stats.CharacterName} uses {currentItem.Name}. {spellSummary} Item consumed.{stackInfo}";
+            resultMessage = $"{potionLabel} {usesText}. {spellSummary} Item consumed.{stackInfo}";
             return true;
         }
 
-        int newCurrentHP2 = actor.Stats.CurrentHP;
-        int newNonlethal2 = actor.Stats.NonlethalDamage;
+        int newCurrentHP2 = drinker.Stats.CurrentHP;
+        int newNonlethal2 = drinker.Stats.NonlethalDamage;
         int nonlethalHealed2 = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal2));
-        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP2}) and removing {nonlethalHealed2} nonlethal ({oldNonlethal} → {newNonlethal2}). Item consumed.{stackInfo}";
+        resultMessage = $"🧪 {usesText}, healing {healedAmount} HP ({oldHP} → {newCurrentHP2}) and removing {nonlethalHealed2} nonlethal ({oldNonlethal} → {newNonlethal2}). Item consumed.{stackInfo}";
         return true;
     }
 
@@ -5676,8 +5566,15 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private bool TryApplySpellConsumableEffect(CharacterController actor, ItemData item, out string summary)
+    /// <summary>
+    /// Applies a potion's (or a self-target scroll's or wand's) spell to <paramref name="actor"/>, or to
+    /// <paramref name="recipient"/> when a potion is administered (DMG p.229): the drinker is the effect's target.
+    /// </summary>
+    private bool TryApplySpellConsumableEffect(CharacterController actor, ItemData item, out string summary,
+        CharacterController recipient = null)
     {
+        if (recipient != null && recipient.Stats != null)
+            actor = recipient;
         summary = string.Empty;
         if (actor == null || actor.Stats == null)
         {
@@ -5800,7 +5697,7 @@ public partial class GameManager : MonoBehaviour
     /// level check and its mishap), so a silenced user spends and risks nothing on a use that cannot be attempted
     /// (batch 11 step 13, SPL-092). Null when the use may go on; else the refusal message, also logged.
     /// </summary>
-    private string ItemUseSilenceRefusal(CharacterController actor, ItemData item, SpellData spell, CastSourceKind kind)
+    private string ItemUseSilenceRefusal(CharacterController actor, ItemData item, SpellData spell, CastSourceKind kind, bool log = true)
     {
         if (actor == null || actor.Stats == null || item == null || spell == null || !actor.Stats.SilenceActive)
             return null;
@@ -5817,7 +5714,8 @@ public partial class GameManager : MonoBehaviour
         string message = kind == CastSourceKind.Wand
             ? $"{actor.Stats.CharacterName} cannot use {item.Name} inside a Silence: its command word cannot be spoken (DMG p.213, PHB p.279)."
             : $"{actor.Stats.CharacterName} cannot read {item.Name} inside a Silence: {spell.Name} has a verbal component (PHB p.279; DMG p.238).";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", message));
+        if (log)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🔇", message));
         return message;
     }
 
@@ -5965,6 +5863,7 @@ public partial class GameManager : MonoBehaviour
         if (validation.UsedUMD)
         {
             bool umdPassed = ScrollValidator.PerformUMDCheck(actor, scrollItem, out string umdSummary);
+            _itemActivationRolled = true; // the check is part of the activation (PHB p.86): its action is spent
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("📜", $"{charName} attempts Use Magic Device on {scrollItem.Name}: {umdSummary}"));
 
             if (!umdPassed)
@@ -5986,6 +5885,7 @@ public partial class GameManager : MonoBehaviour
             if (validation.NeedsCasterLevelCheck)
             {
                 var clCheck = ScrollValidator.PerformCasterLevelCheck(actor, scrollItem, validation.CharacterCasterLevel);
+                _itemActivationRolled = true; // the reading was attempted (DMG p.238): its action is spent
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("📜", $"{charName} attempts caster level check: {clCheck.Summary}"));
 
                 if (!clCheck.Success)
@@ -6013,18 +5913,10 @@ public partial class GameManager : MonoBehaviour
 
         // Step 4: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
         SpellData scrollSpell = ResolveScrollSpell(scrollItem);
-        bool needsTargeting = scrollSpell != null && (
-            scrollSpell.EffectType == SpellEffectType.Damage ||
-            scrollSpell.EffectType == SpellEffectType.Summon ||
-            scrollSpell.EffectType == SpellEffectType.Escape ||
-            scrollSpell.EffectType == SpellEffectType.Dispel ||
-            scrollSpell.EffectType == SpellEffectType.Wall ||
-            scrollSpell.EffectType == SpellEffectType.Divination ||
-            scrollSpell.EffectType == SpellEffectType.Utility ||
-            scrollSpell.TargetType == SpellTargetType.SingleEnemy ||
-            scrollSpell.TargetType == SpellTargetType.SingleAlly ||
-            scrollSpell.TargetType == SpellTargetType.Touch ||
-            AoESystem.RoutesToArea(scrollSpell)); // an Area target type or an area shape (Prayer), batch 11 step 23
+        bool needsTargeting = ItemSpellNeedsTargeting(scrollSpell);
+
+        if (needsTargeting && IsCombatEncounterRunning() && _itemCastForAI)
+            return RunItemCastForAI(actor, scrollItem, inventoryIndex, scrollSpell, CastSourceKind.Scroll, out resultMessage);
 
         if (needsTargeting && IsCombatEncounterRunning())
         {
@@ -6207,8 +6099,10 @@ public partial class GameManager : MonoBehaviour
         CharacterController caster = cast.Request.Caster;
         ItemData scroll = source.Item;
 
-        // Consume the action that was deferred when the scroll entered targeting mode
-        ConsumeItemManipulationAction(caster);
+        // The cast core's Cost stage paid the reading (its casting time, DMG p.213; batch 13 step 14, D7). The scroll in
+        // hand is used up (a cancel at the AoO prompt puts it back in hand, CastResourceSnapshot.RetrievedItem).
+        if (caster != null && ReferenceEquals(caster.RetrievedItem, scroll))
+            caster.ClearRetrievedItem();
 
         var inv = caster?.InventoryComp?.CharacterInventory;
         if (inv != null && source.ItemIndex >= 0)
@@ -6331,8 +6225,8 @@ public partial class GameManager : MonoBehaviour
         if (source == null || source.Kind != CastSourceKind.Wand || source.Item == null) return;
         ItemData wand = source.Item;
 
-        // Consume the action that was deferred when the wand entered targeting mode
-        ConsumeItemManipulationAction(cast.Request.Caster);
+        // The cast core's Cost stage paid the activation (a standard action, or the casting time, DMG p.213; batch 13 step
+        // 14, D7); the wand stays in hand.
 
         string wandName = wand.Name;
 
@@ -6394,6 +6288,7 @@ public partial class GameManager : MonoBehaviour
         if (validation.NeedsUMDCheck)
         {
             bool umdPassed = WandValidator.PerformUMDCheck(actor, wandItem, out string umdSummary);
+            _itemActivationRolled = true; // the check is part of the activation (PHB p.86): its action is spent
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{charName} attempts Use Magic Device on {wandItem.Name}: {umdSummary}"));
 
             if (!umdPassed)
@@ -6417,18 +6312,10 @@ public partial class GameManager : MonoBehaviour
                   $"WandSpellId='{wandItem.WandSpellId}', ConsumableSpellName='{wandItem.ConsumableSpellName}', " +
                   $"Found={wandSpell != null} ({wandSpell?.Name ?? "null"})");
 
-        bool needsTargeting = wandSpell != null && (
-            wandSpell.EffectType == SpellEffectType.Damage ||
-            wandSpell.EffectType == SpellEffectType.Summon ||
-            wandSpell.EffectType == SpellEffectType.Escape ||
-            wandSpell.EffectType == SpellEffectType.Dispel ||
-            wandSpell.EffectType == SpellEffectType.Wall ||
-            wandSpell.EffectType == SpellEffectType.Divination ||
-            wandSpell.EffectType == SpellEffectType.Utility ||
-            wandSpell.TargetType == SpellTargetType.SingleEnemy ||
-            wandSpell.TargetType == SpellTargetType.SingleAlly ||
-            wandSpell.TargetType == SpellTargetType.Touch ||
-            AoESystem.RoutesToArea(wandSpell)); // an Area target type or an area shape (Prayer), batch 11 step 23
+        bool needsTargeting = ItemSpellNeedsTargeting(wandSpell);
+
+        if (needsTargeting && IsCombatEncounterRunning() && _itemCastForAI)
+            return RunItemCastForAI(actor, wandItem, inventoryIndex, wandSpell, CastSourceKind.Wand, out resultMessage);
 
         // A wand use does not end the user's concentration (SPL-114), but it takes the standard action that maintaining
         // the spell needs, so the spell ends at the end of the turn (decision D2): the player is told first.

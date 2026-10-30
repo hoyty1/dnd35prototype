@@ -2,13 +2,11 @@
 public enum CastActionCost
 {
     /// <summary>
-    /// Nothing at the cast: a scroll or wand charges the item's own action when the item is spent
-    /// (GameManager.ConsumeScrollAfterCast, ConsumeWandChargeAfterCast; ITM-005), and a held-charge delivery is no casting:
-    /// its cost is <see cref="HeldChargeDeliveryRules"/>'s (batch 12 step 18, SPL-156). For an item this is not the whole RAW cost: activating a
-    /// spell's power in a scroll or wand takes the spell's casting time (DMG p.213), so a 1-round spell from an item is
-    /// a full-round action and a Feather Fall a free action (ITM-086).
+    /// Nothing at the cast: a held-charge delivery is no casting; its cost is <see cref="HeldChargeDeliveryRules"/>'s
+    /// (batch 12 step 18, SPL-156). A scroll or wand cast costs its own action since batch 13 step 14 (D7; see
+    /// <see cref="CastActionRules.CastingAction"/>).
     /// </summary>
-    ItemOrDelivery,
+    Delivery,
 
     /// <summary>A free action: a quickened spell (PHB p.98) or a spell whose casting time is a free action (Feather Fall, PHB p.174, p.229).</summary>
     Free,
@@ -47,8 +45,14 @@ public enum CastActionCost
 /// - PHB p.174 (Casting Time): a spell whose casting time is 1 free action (Feather Fall) may be cast only once per
 ///   round and provokes no attack of opportunity; PHB p.229 (Feather Fall) counts it toward the one quickened spell per
 ///   round. Explicit RAW.
-/// - Items: a scroll or wand costs the item's own action today (CastActionCost.ItemOrDelivery), not the spell's
-///   casting time, and a scroll of Feather Fall provokes (DMG p.213; ITM-086).
+/// - Items (batch 13 step 14, D7): DMG p.213 (Activation): the casting time of a spell is the time needed to activate the
+///   same power in an item of any kind (scroll, wand or other). A scroll (spell completion) or a wand
+///   (spell trigger) takes the spell's casting time, at least a standard action (a full round for a 1-round spell); a
+///   scroll provokes as casting does, a wand does not (DMG p.213, p.245). Delegated RAW readings 2026-10-14 (a scroll),
+///   extended to a wand 2026-10-29 (RULES_COVERAGE 4.1, D7): the same sentence covers both item kinds, so a scroll or wand of a free-action spell
+///   (Feather Fall) or a quickened one is a free action that provokes nothing and counts as the round's free-action
+///   spell; a swift-action spell's scroll or wand stays a standard action (the items' own "standard action"). Retrieving
+///   the item first is the use-item action's own move action (GameManager.ActionCore_UseItem).
 /// </summary>
 public static class CastActionRules
 {
@@ -69,27 +73,33 @@ public static class CastActionRules
     /// True when the cast is the caster's one quickened or free-action spell of the round and provokes no attack of
     /// opportunity: a cast whose casting action is a free action (<see cref="CastingAction"/>), that is a quickened cast
     /// (PHB p.98) or a spell whose casting time is a free action (Feather Fall, PHB p.174, p.229), unless spontaneous
-    /// metamagic made it a full-round action (PHB p.88). Not a held charge's delivery (no casting, PHB p.141) nor a
-    /// scroll or wand, whose activation costs the item's own action today and provokes as before (ITM-086).
+    /// metamagic made it a full-round action (PHB p.88). A scroll or wand of such a spell counts too (DMG p.213: the item
+    /// takes the spell's casting time; batch 13 step 14, D7, delegated RAW reading 2026-10-29). Not a held charge's
+    /// delivery (no casting, PHB p.141).
     /// </summary>
     public static bool CountsAsQuickenedSpell(SpellData spell, MetamagicData metamagic, CastSource source)
     {
-        if (source != null && (source.Kind == CastSourceKind.HeldChargeDelivery || source.IsItem))
+        if (source != null && source.Kind == CastSourceKind.HeldChargeDelivery)
             return false;
         return CastingAction(spell, metamagic, source) == CastActionCost.Free;
     }
 
     /// <summary>
-    /// The action the cast charges (see <see cref="CastActionCost"/>): the item's own action for a scroll or wand and
-    /// none for a held charge's delivery, else the casting action with the cast's metamagic
-    /// (MetamagicSystem.GetMetamagicCastingAction, batch 11 step 21).
+    /// The action the cast charges (see <see cref="CastActionCost"/>): none for a held charge's delivery, else the
+    /// casting action with the cast's metamagic (MetamagicSystem.GetMetamagicCastingAction, batch 11 step 21), which an
+    /// item adjusts (batch 13 step 14, D7; DMG p.213): a scroll or wand takes the casting time but at least a standard
+    /// action (a swift-action spell's item is a standard action; a free-action or quickened spell's stays free; a 1-round
+    /// spell's is a full round).
     /// </summary>
     public static CastActionCost CastingAction(SpellData spell, MetamagicData metamagic, CastSource source)
     {
         CastSourceKind kind = source != null ? source.Kind : CastSourceKind.PreparedSlot;
-        if (kind == CastSourceKind.HeldChargeDelivery || kind == CastSourceKind.Scroll || kind == CastSourceKind.Wand)
-            return CastActionCost.ItemOrDelivery;
-        return MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, source);
+        if (kind == CastSourceKind.HeldChargeDelivery)
+            return CastActionCost.Delivery;
+        CastActionCost casting = MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, source);
+        if (kind == CastSourceKind.Scroll || kind == CastSourceKind.Wand)
+            return casting == CastActionCost.Swift ? CastActionCost.Standard : casting;
+        return casting;
     }
 
     /// <summary>
@@ -148,9 +158,9 @@ public static class CastActionRules
 
     /// <summary>
     /// Why the caster lacks the action its casting needs, or null (batch 12 step 9, SPL-160 a; one test for every caster,
-    /// formerly the NPC path's own): a casting that costs a standard action, a full round or an item's activation (a
-    /// scroll or wand, a standard action at least, DMG p.213) needs a standard action left this round (PHB p.140-141); a
-    /// quickened or free-action spell, or a swift one, does not (PHB p.98, p.174), and <see cref="ActionRefusal"/> holds it
+    /// formerly the NPC path's own): a casting that costs a standard action or a full round, a scroll's or wand's
+    /// included (<see cref="CastingAction"/>, DMG p.213), needs a standard action left this round (PHB p.140-141); a
+    /// quickened or free-action spell (a scroll of one too), or a swift one, does not (PHB p.98, p.174), and <see cref="ActionRefusal"/> holds it
     /// to its own action. A held charge's delivery is no casting (PHB p.141): its own action test is
     /// <see cref="HeldChargeDeliveryRules.Refusal"/> (batch 12 step 18, SPL-156); the F12 test panel casts out of turn, so
     /// neither is tested here.

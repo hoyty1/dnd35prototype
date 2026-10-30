@@ -101,11 +101,13 @@ public sealed class CharmedBehaviorController
                 }
             }
 
-            // Then try healing consumable, moving next to the caster first if needed.
-            if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1
+            // Then a healing potion, administered to an unconscious charmer (DMG p.229: a full-round action; ITM-070; delegated
+            // RAW reading 2026-10-29: a conscious charmer drinks its own), moving next to the caster first if needed.
+            bool administers = caster.IsUnconscious && !caster.IsDead && HasHealingConsumable(actor);
+            if (administers
+                && actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1
                 && actor.Actions.HasStandardAction
                 && HasAnyMoveAction(actor)
-                && HasHealingConsumable(actor)
                 && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int consumableCell))
             {
                 var consumableMove = new MoveAttempt();
@@ -114,10 +116,15 @@ public sealed class CharmedBehaviorController
                     yield break;
             }
 
-            if (TryUseHealingConsumableOnCaster(gameManager, actor, caster))
+            if (administers)
             {
-                yield return new WaitForSeconds(0.35f);
-                yield break;
+                bool acted = false;
+                yield return gameManager.StartCoroutine(AdministerHealingPotion(gameManager, actor, caster, result => acted = result));
+                if (acted)
+                {
+                    yield return new WaitForSeconds(0.35f);
+                    yield break;
+                }
             }
         }
 
@@ -180,43 +187,66 @@ public sealed class CharmedBehaviorController
         return healingSpell != null;
     }
 
-    private static bool TryUseHealingConsumableOnCaster(GameManager gameManager, CharacterController actor, CharacterController caster)
+    /// <summary>
+    /// A charmed creature's potion for its unconscious charmer (batch 13 step 14, D7, ITM-070), through the catalog's item
+    /// entries that PCs and NPCs share (RunAIAction): it retrieves the potion when it is not in hand (a move action that
+    /// provokes, PHB p.141) and administers it when a full-round action is left (DMG p.229: a full-round action that
+    /// provokes; the charmer, not the charmed creature, gets the effect; one potion of the stack is used). <paramref name="done"/>
+    /// gets true when it took either action.
+    /// </summary>
+    private static IEnumerator AdministerHealingPotion(GameManager gameManager, CharacterController actor, CharacterController caster,
+        System.Action<bool> done)
     {
-        if (gameManager == null || actor == null || caster == null || actor.Stats == null || caster.Stats == null)
-            return false;
-
-        if (!actor.Actions.HasStandardAction)
-            return false;
-
-        // ExecuteDecision moves the actor next to the caster first (and waits for that move).
-        if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1)
-            return false;
-
-        InventoryComponent invComp = actor.InventoryComp;
-        Inventory inventory = invComp != null ? invComp.CharacterInventory : null;
-        if (inventory == null || inventory.GeneralSlots == null)
-            return false;
-
-        for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+        bool acted = false;
+        int index = FindHealingConsumable(actor);
+        Inventory inventory = actor.InventoryComp != null ? actor.InventoryComp.CharacterInventory : null;
+        if (index < 0 || inventory == null || actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1)
         {
-            ItemData item = inventory.GeneralSlots[i];
-            if (item == null || !item.IsConsumable)
-                continue;
-            if (!IsHealingConsumable(item))
-                continue;
-
-            int healed = ApplyConsumableHealing(actor, caster, item);
-            if (healed <= 0)
-                continue;
-
-            inventory.RemoveItemAt(i);
-            actor.CommitStandardAction(); // a disabled actor takes its strenuous 1 hp (PHB p.145)
-            gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{actor.Stats.CharacterName} uses {item.Name} to heal {caster.Stats.CharacterName} for {healed} HP."));
-            gameManager.Combat_UpdateAllStatsUI();
-            return true;
+            done(false);
+            yield break;
         }
 
-        return false;
+        ItemData potion = inventory.GeneralSlots[index];
+        if (!actor.IsHoldingRetrievedItem(potion))
+        {
+            ActionContext retrieve = ActionContext.For(ActionIds.RetrieveItem, actor, ActorSource.AI);
+            retrieve.Item = potion;
+            retrieve.InventoryIndex = index;
+            var retrieved = new ActionOutcome();
+            yield return gameManager.RunAIAction(retrieve, retrieved);
+            acted = retrieved.Performed;
+            if (!retrieved.Performed || !actor.CanTakeTurnActions())
+            {
+                done(acted);
+                yield break;
+            }
+        }
+
+        if (actor.Actions.HasFullRoundAction && actor.IsHoldingRetrievedItem(potion))
+        {
+            ActionContext administer = ActionContext.For(ActionIds.UseItem, actor, ActorSource.AI, caster);
+            administer.Item = potion;
+            administer.InventoryIndex = index;
+            administer.Variant = ItemUseRules.VariantAdminister;
+            var given = new ActionOutcome();
+            yield return gameManager.RunAIAction(administer, given);
+            acted |= given.Performed;
+        }
+
+        done(acted);
+    }
+
+    /// <summary>The pack index of <paramref name="actor"/>'s first healing potion, or -1.</summary>
+    private static int FindHealingConsumable(CharacterController actor)
+    {
+        InventoryComponent invComp = actor != null ? actor.InventoryComp : null;
+        Inventory inventory = invComp != null ? invComp.CharacterInventory : null;
+        if (inventory == null || inventory.GeneralSlots == null)
+            return -1;
+        for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+            if (IsHealingConsumable(inventory.GeneralSlots[i]))
+                return i;
+        return -1;
     }
 
     private static bool HasHealingConsumable(CharacterController actor)
@@ -240,9 +270,8 @@ public sealed class CharmedBehaviorController
         if (item == null || !item.IsConsumable)
             return false;
 
-        // A potion only: reading a scroll or using a wand or staff is spell completion or spell trigger use (DMG p.213),
-        // subject to the casting checks of the cast core (Silence, deafness, arcane spell failure, entangled, Blink; batch
-        // 11 step 13), which this direct SpellCaster.Cast path does not make.
+        // A potion only: only a potion or oil can be administered to an unconscious creature (DMG p.229); a scroll, wand
+        // or staff is the user's own spell completion or spell trigger use (DMG p.213).
         if (item.IsScroll || item.IsWand || item.IsStaff)
             return false;
 
@@ -260,45 +289,6 @@ public sealed class CharmedBehaviorController
         }
 
         return false;
-    }
-
-    private static int ApplyConsumableHealing(CharacterController actor, CharacterController caster, ItemData item)
-    {
-        if (actor == null || caster == null || item == null)
-            return 0;
-
-        // Spell-based consumables first (Potion of Cure...).
-        if (item.ConsumableEffect == ConsumableEffectType.SpellEffect && !string.IsNullOrWhiteSpace(item.ConsumableSpellName))
-        {
-            SpellData spell = item.Scroll?.GetSpell()
-                              ?? SpellDatabase.GetSpell(item.ConsumableSpellName)
-                              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
-            if (spell != null && SpellDiceRules.Heals(spell, caster.Stats))
-            {
-                // The item's spell at the item's caster level (DMG p.213/229/237), as the PC consumable path builds it (SPL-005).
-                spell = GameManager.BuildConsumableSpellVariant(spell, item, GameManager.GetConsumableCasterLevel(item));
-                SpellResult result = SpellCaster.Cast(spell, actor.Stats, caster.Stats, null, forceFriendlyTouchNoRoll: true, forceTargetToFailSave: false, actor, caster);
-                return result != null ? Mathf.Max(0, result.HealingDone) : 0;
-            }
-        }
-
-        int rolled = 0;
-        if (item.HealDiceCount > 0 && item.HealDiceSides > 0)
-        {
-            for (int die = 0; die < item.HealDiceCount; die++)
-                rolled += Random.Range(1, item.HealDiceSides + 1);
-            rolled += item.HealBonus;
-        }
-        else if (item.HealAmount > 0)
-        {
-            rolled = item.HealAmount;
-        }
-
-        if (rolled <= 0)
-            return 0;
-
-        int nonlethalHealed;
-        return caster.Stats.HealDamage(rolled, out nonlethalHealed);
     }
 
     private static bool TryFindCellAdjacentToCaster(GameManager gameManager, CharacterController actor, CharacterController caster, out Vector2Int destination)

@@ -36,11 +36,11 @@ Entries per section:
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-088 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 36 | 64 | CRE-078 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 16 | 23 | ENC-025 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 36 | 43 | 79 | ITM-089 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 34 | 47 | 81 | ITM-095 |
 | [AI](issues/AI.md) | AI | 0 | 20 | 37 | 57 | AI-081 |
-| [UI](issues/UI.md) | UI | 0 | 12 | 42 | 54 | UI-056 |
+| [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 9 | 29 | 38 | TST-049 |
-| **All** | | 1 | 271 | 444 | 716 | |
+| **All** | | 1 | 269 | 449 | 719 | |
 
 ## Top issues
 

@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Enumerates actions that can provoke attacks of opportunity.
+/// Enumerates actions that can provoke attacks of opportunity. Using a wand is not one: a spell trigger item's
+/// activation does not provoke (DMG p.213, p.245); retrieving the wand does (RetrieveItem; batch 13 step 14, D7).
 /// </summary>
 public enum AoOProvokingAction
 {
@@ -14,8 +15,7 @@ public enum AoOProvokingAction
     UseScroll,
     RetrieveItem,
     LoadCrossbow,
-    RangedAttackInMelee,
-    UseWand
+    RangedAttackInMelee
 }
 
 /// <summary>

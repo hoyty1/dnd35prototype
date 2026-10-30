@@ -147,9 +147,11 @@ public partial class GameManager
     /// <see cref="ActionOutcome.ActorDown"/> and <see cref="ActionOutcome.CombatEnded"/>. <paramref name="payOnProceed"/>, when
     /// given, pays the action once the actor goes on (with nobody threatening, at once; after the prompt otherwise) and
     /// before any attack is taken (an action is paid when it is taken, D3, D6); false refuses it with no attack taken.
+    /// <paramref name="afterEachAttack"/>, when given, sees each attack's result once it is logged, while the actor still
+    /// stands (the drink's Concentration check after a hit, DMG p.229; batch 13 step 14).
     /// </summary>
     internal IEnumerator ResolveActionProvocation(CharacterController actor, AoOProvokingAction action, IActionDecider decider, ActionOutcome outcome,
-        string actionName = null, System.Func<bool> payOnProceed = null)
+        string actionName = null, System.Func<bool> payOnProceed = null, System.Action<CombatResult> afterEachAttack = null)
     {
         if (outcome == null)
             outcome = new ActionOutcome();
@@ -187,6 +189,8 @@ public partial class GameManager
             outcome.Provoked = true;
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs {label}: {aoo.GetDetailedSummary()}"));
             UpdateAllStatsUI();
+            if (afterEachAttack != null && !CombatEndRules.IsOutOfFight(actor))
+                afterEachAttack(aoo);
             yield return new WaitForSeconds(0.65f);
         }
 

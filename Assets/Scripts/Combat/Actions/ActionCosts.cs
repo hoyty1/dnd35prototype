@@ -80,7 +80,7 @@ public static class ActionCosts
     {
         switch (cost)
         {
-            case CastActionCost.ItemOrDelivery: return ActionCostType.NotAnAction;
+            case CastActionCost.Delivery: return ActionCostType.NotAnAction;
             case CastActionCost.Free: return ActionCostType.Free;
             case CastActionCost.Swift: return ActionCostType.Swift;
             case CastActionCost.Standard: return ActionCostType.Standard;

@@ -43,6 +43,18 @@ namespace Tests.Scenarios
             yield return S("cast-wand-ui", () => ItemCast(scroll: false));
             yield return S("cast-scroll-aoo-cancel", () => ItemAoOCancel(scroll: true));
             yield return S("cast-wand-aoo-cancel", () => ItemAoOCancel(scroll: false));
+            yield return S("potion-drink-provokes-ui", () => PotionDrinkProvokes(ui: true));
+            yield return S("potion-drink-provokes-ai", () => PotionDrinkProvokes(ui: false));
+            yield return S("potion-drink-interrupted-ai", PotionDrinkInterruptedAi);
+            yield return S("retrieve-then-drink-ui", RetrieveThenDrinkUi);
+            yield return S("scroll-casting-time-ui", () => ScrollCastingTime(ui: true));
+            yield return S("scroll-casting-time-ai", () => ScrollCastingTime(ui: false));
+            yield return S("scroll-feather-fall-free-ui", ScrollFeatherFallFreeUi);
+            yield return S("wand-no-aoo-ui", () => WandNoAoO(ui: true));
+            yield return S("wand-no-aoo-ai", () => WandNoAoO(ui: false));
+            yield return S("administer-potion-unconscious-charmer-ai", AdministerPotionUnconsciousCharmerAi);
+            yield return S("scroll-silenced-refused-ai", ScrollSilencedRefusedAi);
+            yield return S("scroll-mishap-costs-action-ai", ScrollMishapCostsActionAi);
             yield return S("cast-held-touch-charge", HeldTouchCharge);
             yield return S("cast-held-aoo-cancel", HeldAoOCancel);
             yield return S("cast-held-grappled", HeldGrappled);
@@ -1140,20 +1152,21 @@ namespace Tests.Scenarios
         /// <summary>
         /// A Ui wizard 5 with no enemy adjacent uses a scroll (or a wand) of magic missile (caster level 1: one missile,
         /// 1d4+1, PHB p.251; DMG p.237 and p.245: the item's caster level) on a dummy through the Use Item call
-        /// (TryUseConsumableFromInventory), which enters the cast pipeline (InitiateScrollCastThroughPipeline,
-        /// InitiateWandCastThroughPipeline) and PerformSpellCast. Every d4 is 4. The scroll is used up (or the wand loses one
-        /// charge, both charge fields, ITM-034), no prepared slot is spent, and no action is left: RAW retrieving the stored
-        /// item is a move action (PHB p.141, Table 8-2) and activating it a standard action (DMG p.213). The missiles count
-        /// at the item's caster level 1, not the user's 5 (one missile, 5; CasterLevelRules, batch 11 step 14, SPL-016).
-        /// Pinned: today the item use is charged as one full-round action (GetItemUseActionType, ITM-005; the fact
-        /// "fullround" tells the two apart, since both leave no action).
+        /// (TryUseConsumableFromInventory -> the use-item entry), which retrieves the stored item (a move action, PHB p.141,
+        /// Table 8-2; nobody threatens, so no prompt) and enters the cast pipeline (InitiateScrollCastThroughPipeline,
+        /// InitiateWandCastThroughPipeline), whose Cost stage pays the activation, a standard action (DMG p.213;
+        /// CastActionRules.CastingAction, batch 13 step 14, D7). Every d4 is 4. The scroll is used up and leaves the hand
+        /// (or the wand loses one charge, both charge fields, ITM-034, and stays in hand), no prepared slot is spent, and no
+        /// action is left: the move and standard actions are spent, not one full-round action (ITM-005, fixed in step 14).
+        /// The missiles count at the item's caster level 1, not the user's 5 (one missile, 5; CasterLevelRules, batch 11
+        /// step 14, SPL-016).
         /// </summary>
         private static ScenarioDef ItemCast(bool scroll)
         {
             string id = scroll ? ScrollId : WandId;
             string name = scroll ? "scroll" : "wand";
-            ScenarioBuilder b = Rules("rules/cast-" + name + "-ui", "A Ui " + name + " of magic missile through the cast pipeline: the " + name + " is spent, no slot, the item action (DMG p.237, p.245)")
-                .Covers("DMG p.237", "DMG p.245", "PHB p.251", "ITM-005", "ITM-034", "SPL-016")
+            ScenarioBuilder b = Rules("rules/cast-" + name + "-ui", "A Ui " + name + " of magic missile through the cast pipeline: the " + name + " is spent, no slot; a move action to retrieve and a standard action to activate (PHB p.141, DMG p.213)")
+                .Covers("DMG p.213", "DMG p.237", "DMG p.245", "PHB p.141", "PHB p.251", "ITM-005", "ITM-034", "SPL-016", "D7")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
                 .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
@@ -1170,23 +1183,28 @@ namespace Tests.Scenarios
                         FactHpLost(ctx, "missile", "dummy");
                         Fact(ctx, "actions", Actions(w));
                         Fact(ctx, "fullround", w.Actions.FullRoundActionUsed);
+                        Fact(ctx, "move.used", w.Actions.MoveActionUsed);
+                        Fact(ctx, "standard.used", w.Actions.StandardActionUsed);
+                        Fact(ctx, "held", w.RetrievedItem != null);
                         return true;
                     }))
                 .Expect("The item use ran", Expect.StepStatus("wizard", 1, "UseItem", 0, "done"))
                 .Expect("The missiles count at the item's caster level 1: one missile of 1d4+1 = 5 (DMG p.237, p.245; PHB p.251)", FactIs("missile.lost.dummy", 5))
                 .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"))
                 .Expect("The item cast is in the trace (ScenarioHooks.SpellCast)", CastEvents("wizard", SpellNames.MAGIC_MISSILE, 1))
-                .Expect("No action is left: a move action to retrieve the stored item and a standard action to activate it (PHB p.141 Table 8-2, DMG p.213)", FactIs("actions", "---"))
-                .ExpectKnown("ITM-005", "Today the item use is charged as one full-round action, not a move and a standard action (ITM-005)", FactIs("fullround", true));
+                .Expect("No action is left (PHB p.141 Table 8-2, DMG p.213)", FactIs("actions", "---"))
+                .Expect("A move action retrieves the stored item and a standard action activates it, not one full-round action (D7, ITM-005)",
+                    FactsAre(("move.used", true), ("standard.used", true), ("fullround", false)));
             b = scroll
-                ? b.Expect("The scroll is used up", Expect.All(FactIs("count.before", 1), FactIs("count.after", 0)))
-                : b.Expect("The wand loses one charge in both charge fields (ITM-034)", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49")));
+                ? b.Expect("The scroll is used up and leaves the hand", Expect.All(FactIs("count.before", 1), FactIs("count.after", 0), FactIs("held", false)))
+                : b.Expect("The wand loses one charge in both charge fields (ITM-034) and stays in hand (D7)",
+                    Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49"), FactIs("held", true)));
             return b.Build();
         }
 
-        private static bool RecordItem(ScenarioContext ctx, string itemId, string when)
+        private static bool RecordItem(ScenarioContext ctx, string itemId, string when, string actor = "wizard")
         {
-            CharacterController w = ctx.Get("wizard");
+            CharacterController w = ctx.Get(actor);
             if (when == "before")
                 RecordHp(ctx, "dummy");
             Fact(ctx, "slots." + when, Slots(w));
@@ -1200,26 +1218,26 @@ namespace Tests.Scenarios
         // ── rules/cast-scroll-aoo-cancel, rules/cast-wand-aoo-cancel ────
 
         /// <summary>
-        /// ITM-084: a threatened Ui wizard 5 starts a scroll (or wand) cast of magic missile at a dummy and answers the
-        /// cast's AoO confirmation Cancel. The goblin beside it has Combat Reflexes (two AoOs a round: with a scroll, its
-        /// first goes to the item use's own confirmation, answered Proceed) and -30 on attacks. The pipeline spends the
-        /// scroll or the charge (ConsumePendingSpellSlot) before the confirmation; since batch 11 step 14 the cancel restores
-        /// the snapshot, which records the scroll's stack and slot and both of the wand's charge stores (ITM-034), so the
-        /// scroll is kept (or no charge lost), no slot is spent and the standard action of activation is left. Every other
-        /// action is left too, but only because the item use is one deferred full-round action (ITM-005): RAW the
-        /// retrieval is a move action that provoked (PHB p.141, Table 8-2) and stays spent once its confirmation was
-        /// answered Proceed, so that part is pinned as today's behaviour.
-        /// A scroll is a spell completion item and provokes as casting does (DMG p.213), so its cast confirmation is the
-        /// rule. A wand is a spell trigger item whose activation does not provoke (DMG p.213, p.245); only retrieving it
-        /// provokes (PHB p.141). Today the wand skips the item-use confirmation and its pipeline cast opens the spellcasting
-        /// one (ITM-085), so the wand scenario pins that confirmation as today's behaviour, not as the rule.
+        /// ITM-084, D7: a threatened Ui wizard 5 starts to use a scroll (or wand) of magic missile on a dummy. The goblin
+        /// beside it has Combat Reflexes (two AoOs a round) and -30 on attacks. Retrieving the stored item is a move action
+        /// that provokes (PHB p.141, Table 8-2): its prompt comes first.
+        /// Scroll: the retrieval is answered Proceed (the move action is spent and the goblin takes its AoO), then the cast's
+        /// own confirmation (a scroll provokes as casting does, DMG p.213) is answered Cancel. The pipeline spends the scroll
+        /// (ConsumePendingSpellSlot) before the confirmation; the cancel restores the snapshot (ITM-084, batch 11 step 14),
+        /// which records the scroll's stack and slot and the item in hand: the scroll is kept in hand, no slot is spent, the
+        /// standard action is left and the retrieval's move action stays spent (ITM-005, fixed in batch 13 step 14).
+        /// Wand: the retrieval is answered Cancel: nothing is spent, no charge is lost and no cast opens. A wand's
+        /// activation does not provoke (DMG p.213, p.245), so a wand in hand has no prompt at all (rules/wand-no-aoo-ui;
+        /// ITM-085, fixed in batch 13 step 14).
         /// </summary>
         private static ScenarioDef ItemAoOCancel(bool scroll)
         {
             string id = scroll ? ScrollId : WandId;
             string name = scroll ? "scroll" : "wand";
-            ScenarioBuilder b = Rules("rules/cast-" + name + "-aoo-cancel", "A " + name + " cast cancelled at the AoO prompt keeps the " + name + (scroll ? " (ITM-084)" : " (ITM-084; ITM-085 pinned)"))
-                .Covers("ITM-084", "PHB p.141", "DMG p.213", scroll ? "DMG p.237" : "DMG p.245")
+            ScenarioBuilder b = Rules("rules/cast-" + name + "-aoo-cancel", scroll
+                    ? "A scroll cast cancelled at its AoO prompt keeps the scroll in hand; the retrieval's move action stays spent (ITM-084, D7)"
+                    : "A wand use cancelled at the retrieval's AoO prompt spends nothing (ITM-084, D7)")
+                .Covers("ITM-084", "ITM-005", "PHB p.141", "DMG p.213", scroll ? "DMG p.237" : "DMG p.245", "D7")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
                 .Npc("gob", "goblin", 6, 10, Control.Idle)
@@ -1230,23 +1248,542 @@ namespace Tests.Scenarios
                 .Force(4, 4, null, -1);
             var steps = new List<Step> { Step.Assert("record", ctx => RecordItem(ctx, id, "before")), Step.UseItem(id, "dummy") };
             if (scroll)
-                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the item use's own confirmation (retrieving and reading)
-            steps.Add(Step.AnswerAoO(AoOAnswer.Cancel));       // the cast's confirmation
-            steps.Add(Step.Assert("after", ctx => { RecordItem(ctx, id, "after"); FactHpLost(ctx, "missile", "dummy"); Fact(ctx, "actions", Actions(ctx.Get("wizard"))); Fact(ctx, "standard.left", ctx.Get("wizard").Actions.HasStandardAction); return true; }));
-            b = b.Turn("wizard", 1, steps.ToArray());
-            b = scroll
-                ? b.Expect("The scroll's cast confirmation (it provokes as casting does, DMG p.213) was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
-                : b.Covers("ITM-085").ExpectKnown("ITM-085", "Today the wand's activation opens the spellcasting AoO confirmation, answered Cancel, where a spell trigger activation does not provoke and the retrieval that does gets no confirmation (ITM-085)",
-                    Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"));
-            b = b.Expect("The cancelled spell does nothing", FactIs("missile.lost.dummy", 0))
+                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the retrieval's confirmation
+            steps.Add(Step.AnswerAoO(AoOAnswer.Cancel));       // scroll: the cast's confirmation; wand: the retrieval's
+            steps.Add(Step.Assert("after", ctx =>
+            {
+                CharacterController w = ctx.Get("wizard");
+                RecordItem(ctx, id, "after");
+                FactHpLost(ctx, "missile", "dummy");
+                Fact(ctx, "actions", Actions(w));
+                Fact(ctx, "standard.left", w.Actions.HasStandardAction);
+                Fact(ctx, "held", w.RetrievedItem != null);
+                return true;
+            }));
+            b = b.Turn("wizard", 1, steps.ToArray())
+                .Expect("The confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("The cancelled spell does nothing", FactIs("missile.lost.dummy", 0))
                 .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"))
-                .Expect("The standard action is left: the cancelled spell cost no activation (ITM-084; DMG p.237, p.245)", FactIs("standard.left", true))
-                .Covers("ITM-005").ExpectKnown("ITM-005", "Today every action is left, the move and full-round ones too: the cancel refunds the one deferred full-round item action, where RAW the retrieval's move action stays spent once it provoked (PHB p.141, Table 8-2; ITM-005)",
-                    FactIs("actions", "smf"));
+                .Expect("The standard action is left: the cancelled use cost no activation (ITM-084; DMG p.237, p.245)", FactIs("standard.left", true));
             b = scroll
-                ? b.Expect("The scroll is kept: the cancel restores it (ITM-084)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 1)))
-                : b.Expect("The wand keeps its charge in both charge fields: the cancel restores them (ITM-084, ITM-034)", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "50/50")));
+                ? b.Expect("The retrieval's move action stays spent once it provoked; the standard action comes back (PHB p.141, Table 8-2; D7)", FactIs("actions", "s--"))
+                    .Expect("The goblin took one AoO, for the retrieval", Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1))
+                    .Expect("The scroll is kept, in hand: the cancel restores it (ITM-084, D7)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 1), FactIs("held", true)))
+                : b.Expect("Nothing is spent: the retrieval was cancelled before its move action was paid", FactIs("actions", "smf"))
+                    .Expect("No AoO is taken", Expect.None("aoo", null))
+                    .Expect("The wand keeps its charge in both charge fields and stays stored (ITM-034)",
+                        Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "50/50"), FactIs("held", false)));
             return b.Build();
+        }
+
+        // ── rules/potion-drink-provokes-ui, rules/potion-drink-provokes-ai ──
+
+        private const string PotionId = "potion_cure_light_wounds";
+
+        /// <summary>Empties the pack (a class kit's or template's own items), so only the scenario's item is there.</summary>
+        private static void EmptyPack(CharacterController c)
+        {
+            global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+            if (inv == null || inv.GeneralSlots == null)
+                return;
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                inv.GeneralSlots[i] = null;
+            inv.RecalculateStats();
+        }
+
+        /// <summary>
+        /// D7 (batch 13 step 14; PHB p.141, Table 8-2; DMG p.229): a wizard 5 at 10 hit points drinks a stored potion of
+        /// cure light wounds (1d8+1, forced 9) beside a goblin with Combat Reflexes (two AoOs a round) and -30 on attacks;
+        /// every d20 is 5, so both AoOs miss. Retrieving the potion is a move action that provokes and drinking it a
+        /// standard action that provokes: two prompts for the Ui wizard (both answered Proceed), none for the Scripted one
+        /// (the use-item entry through RunAIAction, the AI decider goes on); the goblin takes one AoO for each. One potion
+        /// is used up, the wizard heals 9 and no action is left. One rule for both sides (owner, 2026-10-07).
+        /// </summary>
+        private static ScenarioDef PotionDrinkProvokes(bool ui)
+        {
+            string side = ui ? "ui" : "ai";
+            var steps = new List<Step>
+            {
+                Step.Assert("record", ctx => { RecordHp(ctx, "wizard"); Fact(ctx, "count.before", CountItems(ctx.Get("wizard"), PotionId)); return true; })
+            };
+            if (ui)
+            {
+                steps.Add(Step.UseItem(PotionId, "wizard"));
+                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the retrieval (a move action)
+                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the drink (a standard action)
+            }
+            else
+            {
+                steps.Add(Step.ActionItem(ActionIds.UseItem, PotionId));
+            }
+            steps.Add(Step.Assert("after", ctx =>
+            {
+                CharacterController w = ctx.Get("wizard");
+                Fact(ctx, "count.after", CountItems(w, PotionId));
+                Fact(ctx, "healed", ctx.Get("wizard").Stats.CurrentHP - Numbers(ctx)["hp|wizard"]);
+                Fact(ctx, "actions", Actions(w));
+                Fact(ctx, "held", w.RetrievedItem != null);
+                return true;
+            }));
+            if (!ui)
+                steps.Add(Step.EndTurn());
+            return Rules("rules/potion-drink-provokes-" + side, "A " + (ui ? "Ui" : "Scripted") + " potion: retrieving it (move) and drinking it (standard) each provoke (PHB p.141, DMG p.229; D7)")
+                .Covers("PHB p.141", "DMG p.229", "ITM-005", "D7", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Hp("wizard", 10)
+                .Tweak("wizard", c => { EmptyPack(c); GiveItem(c, PotionId); })
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob")
+                .Force(20, 5, null, -1)
+                .Force(8, 8, null, -1)
+                .Turn("wizard", 1, steps.ToArray())
+                .Expect("The goblin takes two AoOs: one for the retrieval, one for the drink (PHB p.141, Table 8-2)",
+                    Expect.All(Expect.Count("aoo", e => e.Str("by") == "gob", 2, 2),
+                        Expect.Count("aoo", e => (e.Str("trigger") ?? "").StartsWith("retrieve"), 1, 1),
+                        Expect.Count("aoo", e => (e.Str("trigger") ?? "").StartsWith("use"), 1, 1)))
+                .Expect("One potion is used up and leaves the hand", FactsAre(("count.before", 1), ("count.after", 0), ("held", false)))
+                .Expect("The potion heals 1d8+1 = 9 at its caster level 1 (DMG p.229)", FactIs("healed", 9))
+                .Expect("No action is left: a move action and a standard action (PHB p.141)", FactIs("actions", "---"))
+                .Build();
+        }
+
+        // ── rules/potion-drink-interrupted-ai ───────────────────────────
+
+        /// <summary>
+        /// DMG p.229 (batch 13 step 14): a successful attack on a creature drinking a potion forces a Concentration check
+        /// as for casting a spell (DC 10 + damage + the potion's spell level, PHB p.69-70); on a failure it cannot drink the
+        /// potion. A Scripted wizard 5 beside a goblin with Combat Reflexes and +30 on attacks uses a stored potion of cure
+        /// light wounds; every d20 is 2 (the goblin hits, the Concentration check fails) and every d6 is 6. Both AoOs hit;
+        /// only the drink's AoO forces the check. The potion is not drunk (no d8 is rolled), stays in the pack and in hand,
+        /// and the move and standard actions are spent.
+        /// </summary>
+        private static ScenarioDef PotionDrinkInterruptedAi()
+        {
+            return Rules("rules/potion-drink-interrupted-ai", "A hit on a potion drinker forces a Concentration check; on a failure the potion is not drunk (DMG p.229)")
+                .Covers("DMG p.229", "PHB p.69", "D7")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => { EmptyPack(c); GiveItem(c, PotionId); Sturdy(c); c.Stats.CurrentHP -= 40; })
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, 30); })
+                .Initiative("wizard", "gob")
+                .Force(20, 2, null, -1)
+                .Force(6, 6, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { Fact(ctx, "count.before", CountItems(ctx.Get("wizard"), PotionId)); return true; }),
+                    Step.ActionItem(ActionIds.UseItem, PotionId),
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "count.after", CountItems(w, PotionId));
+                        Fact(ctx, "actions", Actions(w));
+                        Fact(ctx, "held", w.RetrievedItem != null);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("Both AoOs hit", Expect.Count("aoo", e => e.Str("by") == "gob" && e.Bool("hit"), 2, 2))
+                .Expect("The drink's hit forces one Concentration check, which fails (DMG p.229)", v =>
+                    v.Log("Concentration to keep using").Count == 1 && v.Log("cannot drink").Count == 1
+                        ? ExpectResult.Pass("one failed check, the potion undrunk")
+                        : ExpectResult.Fail(v.Log("Concentration to keep using").Count + " checks, " + v.Log("cannot drink").Count + " interruption lines"))
+                .Expect("The potion is not drunk: no d8 is rolled, it stays in the pack and in hand", Expect.All(
+                    Expect.Count("dice", e => e.Int("sides") == 8, 0, 0), FactsAre(("count.before", 1), ("count.after", 1), ("held", true))))
+                .Expect("The move and standard actions are spent", FactIs("actions", "---"))
+                .Build();
+        }
+
+        // ── rules/retrieve-then-drink-ui ───────────────────────────────
+
+        /// <summary>
+        /// D7 (delegated RAW reading 2026-10-29: a retrieved item stays in hand): round 1, a Ui wizard 5 at 10 hit points
+        /// moves (its move action), then uses a stored potion of cure light wounds: retrieving it takes the standard action
+        /// traded for a move action (PHB p.141), so the action ends with the potion in hand, undrunk. Round 2, the potion in
+        /// hand is drunk with a standard action alone (PHB p.141, Table 8-2), healing 1d8+1 (forced 9); the move action is
+        /// left. Nobody threatens the wizard.
+        /// </summary>
+        private static ScenarioDef RetrieveThenDrinkUi()
+        {
+            return Rules("rules/retrieve-then-drink-ui", "A potion retrieved with the last action stays in hand and is drunk next round with a standard action (PHB p.141; D7)")
+                .Covers("PHB p.141", "DMG p.229", "D7")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Idle)
+                .Hp("wizard", 10)
+                .Tweak("wizard", c => { EmptyPack(c); GiveItem(c, PotionId); })
+                .Initiative("wizard", "dummy")
+                .Force(8, 8, null, -1)
+                .Turn("wizard", 1,
+                    Step.Move(7, 10),
+                    Step.UseItem(PotionId, "wizard"),
+                    Step.Assert("round 1", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "r1.count", CountItems(w, PotionId));
+                        Fact(ctx, "r1.hp", w.Stats.CurrentHP);
+                        Fact(ctx, "r1.actions", Actions(w));
+                        Fact(ctx, "r1.held", w.RetrievedItem != null);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Turn("wizard", 2,
+                    Step.UseItem(PotionId, "wizard"),
+                    Step.Assert("round 2", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "r2.count", CountItems(w, PotionId));
+                        Fact(ctx, "r2.hp", w.Stats.CurrentHP);
+                        Fact(ctx, "r2.actions", Actions(w));
+                        Fact(ctx, "r2.held", w.RetrievedItem != null);
+                        return true;
+                    }))
+                .Expect("Round 1: the potion is retrieved with the traded standard action and stays in hand, undrunk",
+                    FactsAre(("r1.count", 1), ("r1.hp", 10), ("r1.actions", "---"), ("r1.held", true)))
+                .Expect("Round 2: the potion in hand is drunk with a standard action alone (9 hp); the move action is left",
+                    FactsAre(("r2.count", 0), ("r2.hp", 19), ("r2.actions", "-m-"), ("r2.held", false)))
+                .Build();
+        }
+
+        // ── rules/scroll-casting-time-ui, rules/scroll-casting-time-ai ──
+
+        private static readonly string EnlargeScrollId = ScrollFactory.GenerateScrollId(SpellNames.ENLARGE_PERSON, "Arcane");
+
+        /// <summary>
+        /// ITM-086, D7 (DMG p.213: the casting time of a spell is the time to activate the same power in an item): a scroll
+        /// of enlarge person (casting time 1 round, PHB p.226) takes a full-round action to read. Round 1, a wizard 5 uses
+        /// the stored scroll: retrieving it is a move action (PHB p.141), after which no full-round action is left, so the
+        /// action ends with the scroll in hand. Round 2, it reads the scroll in hand on itself: the cast core's Cost stage
+        /// charges the full-round action (CastActionRules.CastingAction), the scroll is used up and the wizard is enlarged.
+        /// The Ui wizard goes through the Use Item call and the targeting; the Scripted one through the use-item entry
+        /// (RunAIAction), whose AI cast runs through the cast core with the AI decider (RunItemCastForAI).
+        /// </summary>
+        private static ScenarioDef ScrollCastingTime(bool ui)
+        {
+            string side = ui ? "ui" : "ai";
+            Step use = ui ? Step.UseItem(EnlargeScrollId, "wizard") : Step.ActionItem(ActionIds.UseItem, EnlargeScrollId, "wizard");
+            Step use2 = ui ? Step.UseItem(EnlargeScrollId, "wizard") : Step.ActionItem(ActionIds.UseItem, EnlargeScrollId, "wizard");
+            Func<string, Step> record = tag => Step.Assert(tag, ctx =>
+            {
+                CharacterController w = ctx.Get("wizard");
+                Fact(ctx, tag + ".count", CountItems(w, EnlargeScrollId));
+                Fact(ctx, tag + ".actions", Actions(w));
+                Fact(ctx, tag + ".fullround", w.Actions.FullRoundActionUsed);
+                Fact(ctx, tag + ".held", w.RetrievedItem != null);
+                Fact(ctx, tag + ".enlarged", w.StatusEffectManager != null && w.StatusEffectManager.HasEffect(SpellNames.ENLARGE_PERSON));
+                return true;
+            });
+            var round1 = new List<Step> { use, record("r1") };
+            var round2 = new List<Step> { use2, record("r2") };
+            if (!ui)
+            {
+                round1.Add(Step.EndTurn());
+                round2.Add(Step.EndTurn());
+            }
+            else
+            {
+                round1.Add(Step.EndTurn());
+            }
+            return Rules("rules/scroll-casting-time-" + side, "A scroll of a 1-round spell takes a full-round action to read: retrieved in round 1, read in round 2 (DMG p.213; ITM-086, D7)")
+                .Covers("DMG p.213", "PHB p.141", "PHB p.226", "ITM-086", "D7", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Idle)
+                .Tweak("wizard", c => GiveItem(c, EnlargeScrollId))
+                .Initiative("wizard", "dummy")
+                .Turn("wizard", 1, round1.ToArray())
+                .Turn("wizard", 2, round2.ToArray())
+                .Expect("Round 1: the retrieval spends the move action; the full-round reading cannot follow, so the scroll waits in hand",
+                    FactsAre(("r1.count", 1), ("r1.actions", "s--"), ("r1.held", true), ("r1.enlarged", false)))
+                .Expect("Round 2: reading the scroll in hand takes the full-round action (DMG p.213); it is used up and the wizard is enlarged",
+                    FactsAre(("r2.count", 0), ("r2.actions", "---"), ("r2.fullround", true), ("r2.held", false), ("r2.enlarged", true)))
+                .Expect("One Enlarge Person cast", CastEvents("wizard", SpellNames.ENLARGE_PERSON, 1))
+                .Build();
+        }
+
+        // ── rules/scroll-feather-fall-free-ui ──────────────────────────
+
+        private const string FeatherFallScrollId = "scenario_scroll_feather_fall";
+
+        /// <summary>
+        /// A scroll of feather fall: the database has none (Feather Fall is a placeholder spell, which ScrollFactory skips),
+        /// so the scenario makes one from a clone of the magic missile scroll (the clone only; the template is untouched).
+        /// </summary>
+#pragma warning disable CS0618 // scroll ids are generated at runtime (ScrollFactory): no ItemID value
+        private static void GiveFeatherFallScroll(CharacterController c)
+        {
+            ItemData item = ItemDatabase.CloneItem(ScrollId);
+            if (item == null || item.Scroll == null)
+                throw new InvalidOperationException("no magic missile scroll to make a feather fall scroll from");
+            item.Id = FeatherFallScrollId;
+            item.Name = "Scroll of Feather Fall (scenario)";
+            item.ConsumableSpellName = SpellNames.FEATHER_FALL;
+            item.Scroll.SpellId = SpellNames.FEATHER_FALL;
+            global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+            if (inv == null || !inv.AddItem(item))
+                throw new InvalidOperationException(c.Stats.CharacterName + " cannot carry the feather fall scroll");
+        }
+#pragma warning restore CS0618
+
+        /// <summary>
+        /// D7 (delegated RAW reading 2026-10-14: a free-action scroll is free and does not provoke; DMG p.213 gives the
+        /// item the spell's casting time; PHB p.174, p.229: Feather Fall is a free action that provokes nothing and counts
+        /// as the round's quickened spell): a threatened Ui wizard 5 reads a stored scroll of feather fall on itself. The
+        /// goblin beside it has Combat Reflexes and -30 on attacks (every d20 is 5). Retrieving the scroll is a move action
+        /// that provokes (one prompt, answered Proceed, one AoO); the reading opens no prompt, takes no AoO and costs no
+        /// action, so the standard action is left; the scroll is used up and the round's free-action spell is spent.
+        /// </summary>
+        private static ScenarioDef ScrollFeatherFallFreeUi()
+        {
+            return Rules("rules/scroll-feather-fall-free-ui", "A scroll of feather fall is a free action that provokes nothing; only its retrieval does (DMG p.213, PHB p.174; D7)")
+                .Covers("DMG p.213", "PHB p.174", "PHB p.229", "PHB p.141", "ITM-086", "D7")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", GiveFeatherFallScroll)
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob")
+                .Force(20, 5, null, -1)
+                .Turn("wizard", 1,
+                    Step.UseItem(FeatherFallScrollId, "wizard"),
+                    Step.AnswerAoO(AoOAnswer.Proceed), // the retrieval
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "count", CountItems(w, FeatherFallScrollId));
+                        Fact(ctx, "actions", Actions(w));
+                        Fact(ctx, "free.spell.used", w.Spellcasting != null && w.Spellcasting.HasCastQuickenedSpellThisRound);
+                        return true;
+                    }))
+                .Expect("The reading is cast", CastEvents("wizard", SpellNames.FEATHER_FALL, 1))
+                .Expect("One AoO, for the retrieval only: the free-action reading provokes nothing (PHB p.174)",
+                    Expect.All(Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1), Expect.Count("aoo", e => (e.Str("trigger") ?? "").StartsWith("retrieve"), 1, 1)))
+                .Expect("The scroll is used up; the standard action is left (the reading is free), the move action spent on the retrieval",
+                    FactsAre(("count", 0), ("actions", "s--")))
+                .Expect("The reading is the round's free-action spell (PHB p.174, p.229)", FactIs("free.spell.used", true))
+                .Build();
+        }
+
+        // ── rules/wand-no-aoo-ui, rules/wand-no-aoo-ai ────────────────
+
+        /// <summary>
+        /// ITM-085, D7 (DMG p.213, p.245: activating a wand is a standard action that does not provoke; PHB p.141:
+        /// retrieving it does): a threatened wizard 5 uses a stored wand of magic missile on a dummy. The goblin beside it
+        /// has Combat Reflexes and -30 on attacks (every d20 is 5); every d4 is 4. The retrieval provokes (the Ui wizard's
+        /// prompt, answered Proceed; the Scripted wizard's AI decider goes on) and the goblin takes one AoO; the activation
+        /// opens no spellcasting prompt and takes no AoO. One missile of 5 hits the dummy, the wand loses one charge and
+        /// stays in hand, and the move and standard actions are spent.
+        /// </summary>
+        private static ScenarioDef WandNoAoO(bool ui)
+        {
+            string side = ui ? "ui" : "ai";
+            var steps = new List<Step> { Step.Assert("record", ctx => RecordItem(ctx, WandId, "before")) };
+            if (ui)
+            {
+                steps.Add(Step.UseItem(WandId, "dummy"));
+                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the retrieval
+            }
+            else
+            {
+                steps.Add(Step.ActionItem(ActionIds.UseItem, WandId, "dummy"));
+            }
+            steps.Add(Step.Assert("after", ctx =>
+            {
+                CharacterController w = ctx.Get("wizard");
+                RecordItem(ctx, WandId, "after");
+                FactHpLost(ctx, "missile", "dummy");
+                Fact(ctx, "actions", Actions(w));
+                Fact(ctx, "held", w.RetrievedItem != null);
+                return true;
+            }));
+            if (!ui)
+                steps.Add(Step.EndTurn());
+            return Rules("rules/wand-no-aoo-" + side, "A wand's activation provokes nothing; only its retrieval does (DMG p.213, p.245; PHB p.141; ITM-085, D7)")
+                .Covers("DMG p.213", "DMG p.245", "PHB p.141", "ITM-085", "D7", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("wizard", c => GiveItem(c, WandId))
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob", "dummy")
+                .Force(20, 5, null, -1)
+                .Force(4, 4, null, -1)
+                .Turn("wizard", 1, steps.ToArray())
+                .Expect("One AoO, for the retrieval only (PHB p.141); the activation provokes none (DMG p.213)",
+                    Expect.All(Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1), Expect.Count("aoo", e => (e.Str("trigger") ?? "").StartsWith("retrieve"), 1, 1)))
+                .Expect("The wand's missile hits: one missile of 1d4+1 = 5 at its caster level 1", FactIs("missile.lost.dummy", 5))
+                .Expect("The wand loses one charge in both charge fields and stays in hand", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49"), FactIs("held", true)))
+                .Expect("The move and standard actions are spent", FactIs("actions", "---"))
+                .Build();
+        }
+
+        // ── rules/scroll-silenced-refused-ai ───────────────────────────
+
+        private static readonly string ShieldScrollId = ScrollFactory.GenerateScrollId(SpellNames.SHIELD, "Arcane");
+
+        /// <summary>
+        /// PHB p.279, DMG p.213, p.238 (batch 13 step 14 review; SPL-092): a silenced reader cannot attempt a scroll at all,
+        /// so the use is refused before anything is retrieved, paid or rolled. A Scripted wizard 5 under a Silence, beside a
+        /// goblin with Combat Reflexes, uses a stored scroll of shield (a self-target spell, resolved outside the cast core):
+        /// the use-item entry refuses it (CheckItemUse), no AoO is taken, every action is left, and the scroll stays in the
+        /// pack, not in hand.
+        /// </summary>
+        private static ScenarioDef ScrollSilencedRefusedAi()
+        {
+            return Rules("rules/scroll-silenced-refused-ai", "A silenced reader's scroll use is refused before the retrieval: no action spent, no AoO (PHB p.279; D7)")
+                .Covers("PHB p.279", "DMG p.213", "DMG p.238", "SPL-092", "D7", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Scripted)
+                .Npc("gob", "goblin", 6, 10, Control.Idle)
+                .Tweak("wizard", c => { EmptyPack(c); GiveItem(c, ShieldScrollId); Silence(c); })
+                .Tweak("gob", c => { c.Stats.Feats.Add("Combat Reflexes"); AttackTweak(c, -30); })
+                .Initiative("wizard", "gob")
+                .Force(20, 5, null, -1)
+                .Turn("wizard", 1,
+                    Step.ActionItem(ActionIds.UseItem, ShieldScrollId),
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "count", CountItems(w, ShieldScrollId));
+                        Fact(ctx, "actions", Actions(w));
+                        Fact(ctx, "held", w.RetrievedItem != null);
+                        Fact(ctx, "shielded", w.StatusEffectManager != null && w.StatusEffectManager.HasEffect(SpellNames.SHIELD));
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("The use-item entry refuses the reading", Expect.StepStatus("wizard", 1, "Action", 0, "refused"))
+                .Expect("No AoO: nothing was retrieved or read", Expect.Count("aoo", e => e.Str("by") == "gob", 0, 0))
+                .Expect("Nothing is spent: every action is left, the scroll stays in the pack and not in hand, no Shield",
+                    FactsAre(("count", 1), ("actions", "smf"), ("held", false), ("shielded", false)))
+                .Build();
+        }
+
+        // ── rules/scroll-mishap-costs-action-ai ─────────────────────────
+
+        /// <summary>
+        /// DMG p.213, p.238 (batch 13 step 14 review): an attempted reading spends its action even when it fails. A Scripted
+        /// wizard 5 uses a stored scroll of magic missile whose caster level is 9 on a dummy: the retrieval is a move action;
+        /// the reading needs a caster level check (d20 + 5 vs DC 10) and every d20 is 1, so the check fails and so does the
+        /// DC 5 Wisdom check (Wis 10): a mishap of 1d6 (forced 3) untyped damage to the reader, and the scroll is destroyed.
+        /// No missile is cast; the reading's standard action is spent as well as the retrieval's move action.
+        /// </summary>
+        private static ScenarioDef ScrollMishapCostsActionAi()
+        {
+            return Rules("rules/scroll-mishap-costs-action-ai", "A scroll mishap still spends the reading's standard action (DMG p.213, p.238; D7)")
+                .Covers("DMG p.213", "DMG p.238", "PHB p.141", "D7", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 9, 10, Control.Idle)
+                .Tweak("wizard", c =>
+                {
+                    EmptyPack(c);
+                    GiveItem(c, ScrollId);
+                    Sturdy(c);
+                    foreach (ItemData item in c.InventoryComp.CharacterInventory.GeneralSlots)
+                        if (item != null && item.IsScroll)
+                        {
+                            if (item.Scroll != null) item.Scroll.CasterLevel = 9;
+                            item.ConsumableMinimumCasterLevel = 9;
+                        }
+                })
+                .Tweak("dummy", Sturdy)
+                .Initiative("wizard", "dummy")
+                .Force(20, 1, null, -1)
+                .Force(6, 3, null, -1)
+                .Turn("wizard", 1,
+                    Step.Assert("record", ctx => { RecordHp(ctx, "wizard"); RecordHp(ctx, "dummy"); return true; }),
+                    Step.ActionItem(ActionIds.UseItem, ScrollId, "dummy"),
+                    Step.Assert("after", ctx =>
+                    {
+                        CharacterController w = ctx.Get("wizard");
+                        Fact(ctx, "count", CountItems(w, ScrollId));
+                        Fact(ctx, "actions", Actions(w));
+                        Fact(ctx, "held", w.RetrievedItem != null);
+                        FactHpLost(ctx, "mishap", "wizard");
+                        FactHpLost(ctx, "missile", "dummy");
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("The reading is performed (attempted), not refused", Expect.StepStatus("wizard", 1, "Action", 0, "done"))
+                .Expect("A mishap: 3 damage to the reader, no missile at the dummy (DMG p.238)", FactsAre(("mishap.lost.wizard", 3), ("missile.lost.dummy", 0)))
+                .Expect("The scroll is destroyed and leaves the hand", FactsAre(("count", 0), ("held", false)))
+                .Expect("The move (retrieval) and standard (reading) actions are spent", FactIs("actions", "---"))
+                .Build();
+        }
+
+        // ── rules/administer-potion-unconscious-charmer-ai ─────────────
+
+        /// <summary>
+        /// ITM-070, D7 (DMG p.229: administering a potion to an unconscious creature is a full-round action; delegated RAW
+        /// reading 2026-10-29: a charmed creature administers one only to an unconscious charmer): the hero (a wizard 5)
+        /// has charmed a goblin (Charm Person, PHB p.209) and drops to -3 hit points (its stabilization d% is 5, so it
+        /// stabilizes). The goblin (AI-run, the charmed turn, CharmedBehaviorController) stands beside it with a stored
+        /// potion of cure light wounds (1d8+1, forced 9). Round 1, it retrieves the potion through the retrieve-item entry
+        /// (a move action); no full-round action is left. Round 2, it administers the potion in hand through the use-item
+        /// entry (variant "administer", a full-round action): the hero, not the goblin, heals 9, to 6 hit points, and one
+        /// potion is used. An idle ally and an idle orc far off keep both sides in the fight.
+        /// </summary>
+        private static ScenarioDef AdministerPotionUnconsciousCharmerAi()
+        {
+            return Rules("rules/administer-potion-unconscious-charmer-ai", "A charmed goblin retrieves a potion, then administers it to its unconscious charmer as a full-round action (DMG p.229; ITM-070, D7)")
+                .Covers("DMG p.229", "PHB p.141", "PHB p.209", "ITM-070", "D7", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 10, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => Wizard("Ally Wizard", 5)), 2, 2, Control.Scripted)
+                .Npc("gob", "goblin", 11, 10, Control.Ai)
+                .Npc("orc", "orc_warrior", 18, 18, Control.Idle)
+                .Tweak("gob", c => { EmptyPack(c); GiveItem(c, PotionId); })
+                .Force(8, 8, null, -1)
+                .Force(100, 5, CharacterController.StabilizationCheckContext, -1)
+                .Initiative("hero", "gob", "ally", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("The hero has charmed the goblin and drops", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        CharacterController gob = ctx.Get("gob");
+                        var charm = new CharmedConditionData
+                        {
+                            Caster = hero, CasterName = hero.Stats.CharacterName, RemainingRounds = 10,
+                            SourceSpellId = SpellNames.CHARM_PERSON, SourceEffectName = "Charm Person"
+                        };
+                        ctx.Gm.ApplyCondition(gob, CombatConditionType.Charmed, 10, source: hero, data: charm,
+                            sourceNameOverride: "Charm Person", sourceCategory: "Spell", sourceId: SpellNames.CHARM_PERSON);
+                        hero.Stats.CurrentHP = -3;
+                        Fact(ctx, "count.before", CountItems(gob, PotionId));
+                        return ctx.Gm.HasCondition(gob, CombatConditionType.Charmed);
+                    }),
+                    Step.EndTurn())
+                .Turn("ally", 1,
+                    Step.Assert("round 1", ctx =>
+                    {
+                        CharacterController gob = ctx.Get("gob");
+                        Fact(ctx, "r1.held", gob.RetrievedItem != null);
+                        Fact(ctx, "r1.count", CountItems(gob, PotionId));
+                        Fact(ctx, "r1.hero.hp", ctx.Get("hero").Stats.CurrentHP);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Turn("ally", 2,
+                    Step.Assert("round 2", ctx =>
+                    {
+                        CharacterController gob = ctx.Get("gob");
+                        Fact(ctx, "r2.held", gob.RetrievedItem != null);
+                        Fact(ctx, "r2.count", CountItems(gob, PotionId));
+                        Fact(ctx, "r2.hero.hp", ctx.Get("hero").Stats.CurrentHP);
+                        return true;
+                    }),
+                    Step.EndTurn())
+                .Expect("The charm setup ran", Expect.AssertsPass())
+                .Expect("Round 1: the goblin retrieves the potion and holds it, undrunk; the hero is still at -3",
+                    FactsAre(("r1.held", true), ("r1.count", 1), ("r1.hero.hp", -3)))
+                .Expect("Round 2: the goblin administers the potion to the hero (a full-round action): the hero heals 9 to 6, one potion is used",
+                    FactsAre(("r2.held", false), ("r2.count", 0), ("r2.hero.hp", 6)))
+                .Expect("The administering is logged", v =>
+                    v.Log("administers Potion of Cure Light Wounds to Pin Wizard").Count == 1
+                        ? ExpectResult.Pass("administered once")
+                        : ExpectResult.Fail(v.Log("administers").Count + " administer lines"))
+                .Build();
         }
 
         // ── rules/cast-held-touch-charge ────────────────────────────────

@@ -6594,7 +6594,8 @@ public partial class GameManager
             StrenuousDamagePending = caster.StrenuousDamagePending,
             NoFurtherActions = caster.Actions.NoFurtherActions,
             SlotUsedStates = null,
-            QuickenedSpellUsed = false
+            QuickenedSpellUsed = false,
+            RetrievedItem = caster.RetrievedItem
         };
 
         var spellComp = caster.Spellcasting;
@@ -6736,6 +6737,7 @@ public partial class GameManager
         }
 
         RestoreSnapshotItem(_pendingSpellcastSnapshot, caster);
+        caster.SetRetrievedItem(_pendingSpellcastSnapshot.RetrievedItem);
         SpellComponentRules.RefundCostlyComponents(caster, _pendingSpellcastSnapshot.ComponentItemsSpent, _pendingSpellcastSnapshot.ComponentGoldSpent);
         _pendingSpellcastSnapshot = null;
     }

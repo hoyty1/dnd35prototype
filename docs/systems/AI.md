@@ -611,7 +611,7 @@ The damage estimates of the strategist and of the profile casters (`AISpellcasti
 
 - **Spell-like abilities:** none. No `NPCDefinition` field, no cast path; dragon SLA lists are unread (CRE-015); creature SLAs are text (CRE-017). MM Introduction treats SLAs as spells without components or slots, usable at will or per day.
 - **Counterspells:** `AIService.TryAIReadyCounterspell` (2705) has no callers (SPL-047). PHB ch.10 counterspelling requires a readied action (PHB ch.8), which does not exist (CMB-029).
-- **Consumables:** `AIConsumableManager` is test-only and only returns a potion name (AI-009). The only live NPC consumable use is a charmed NPC healing its charmer. Seven NPC definitions carry potions they never drink (11.8.3).
+- **Consumables:** `AIConsumableManager` is test-only and only returns a potion name (AI-009). Since batch 13 step 14 (D7) the catalog's use-item and retrieve-item entries run for the AI through `RunAIAction` at the RAW costs, but no routine chooses them; the only live NPC consumable use is a charmed NPC administering a healing potion to its unconscious charmer (a full-round action). Seven NPC definitions carry potions they never drink (11.8.3).
 
 ## 8. Special creatures and condition-driven behaviour
 
@@ -620,7 +620,7 @@ The damage estimates of the strategist and of the profile casters (`AISpellcasti
 | Controller | Reached? | Behaviour | Deviation |
 |---|---|---|---|
 | Confused | yes (also forces PC turns through the compulsion pass, `TryRunCompulsionTurn`) | d%: 01-10 attack the source if in reach else **hit itself**; 11-20 act normally; 21-50 babble; 51-70 flee one move; 71-100 attack the nearest creature of any team (a prone creature that cannot already attack it from the ground stands up first, and a prone one that flees stands first too, batch 13 step 12, D5) | PHB ch.11 (Confusion): 01-10 attacks the caster or closes with it; no self-damage; no "attacked creature retaliates" rule; flee should be at top speed (AI-043) |
-| Charmed | yes | caster dead → remove, lose turn; caster injured → move adjacent (awaited) and heal it by spell or potion; else attack the nearest enemy of the caster | PHB ch.11 (Charm Person): friendly, not controlled; attacking its own allies is Dominate behaviour (AI-042). Charm breaks only when the charmer attacks the subject |
+| Charmed | yes | caster dead → remove, lose turn; caster injured → move adjacent (awaited) and heal it by spell, or, when the caster is unconscious, retrieve a healing potion and administer it (a full-round action, batch 13 step 14); else attack the nearest enemy of the caster | PHB ch.11 (Charm Person): friendly, not controlled; attacking its own allies is Dominate behaviour (AI-042). Charm breaks only when the charmer attacks the subject |
 | Fascinated | no (turn skipped, 3.2); the source-gone release runs in `BeginCombatantTurn` for both sides | stares | |
 | Frightened | yes, Frightened and Panicked, for NPCs and (forced turns, Q1) PCs | source dead → clear; withdraw when the shared legality allows it (2× move with a full-round action, or a Restricted Withdraw at 1× move for a creature limited to one action; never blinded; batch 12 step 22), else "run" at 1× move (it provokes like any move); cornered Frightened fights defensively and **never attacks**; cornered Panicked cowers (Cowering until its next turn) | PHB ch.8 run is ×4; DMG ch.8 a cornered frightened creature may fight (AI-044) |
 

@@ -1967,7 +1967,17 @@ public class CombatUI : MonoBehaviour
             else if (actionInfo.ActionType == AoOProvokingAction.DrinkPotion)
             {
                 proceedText.AppendLine();
-                proceedText.AppendLine("Manipulate item (move action, or standard)");
+                proceedText.AppendLine("Drink or administer a potion, or apply an oil (standard action; full-round to an unconscious creature)");
+            }
+            else if (actionInfo.ActionType == AoOProvokingAction.RetrieveItem)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Retrieve a stored item (move action)");
+            }
+            else if (actionInfo.ActionType == AoOProvokingAction.UseScroll)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Read a scroll (the spell's casting time)");
             }
             else if (actionInfo.ActionType == AoOProvokingAction.LoadCrossbow && actionInfo.Actor != null)
             {

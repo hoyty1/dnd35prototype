@@ -614,9 +614,9 @@ public static class MetamagicSystemTests
             "A prepared metamagic spell keeps its standard action, whatever other classes the caster has (SPL-159)");
         Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.HeldChargeHold)) == CastActionCost.Standard,
             "A held charge of a prepared metamagic spell keeps its standard action");
-        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Scroll)) == CastActionCost.ItemOrDelivery
-               && CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Wand)) == CastActionCost.ItemOrDelivery,
-            "A scroll or wand charges the item's own action, not a casting action of its own (SPL-163; the spell's casting time is ITM-086)");
+        Assert(CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Scroll)) == CastActionCost.Standard
+               && CastActionRules.CastingAction(spell, mm, Source(CastSourceKind.Wand)) == CastActionCost.Standard,
+            "A scroll or wand of a standard-action spell is a standard action (DMG p.213; batch 13 step 14, D7)");
         Assert(CastSource.SlotKindFor(null, spell) == CastSourceKind.PreparedSlot,
             "A caster with no spellcasting component casts from a prepared slot (CastSource.SlotKindFor)");
     }
@@ -655,8 +655,16 @@ public static class MetamagicSystemTests
         Assert(featherFall != null && CastActionRules.CastingAction(featherFall, null, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Free
                && CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.PreparedSlot)),
             "Feather Fall is a free action that counts toward the one quickened spell per round (PHB p.174, p.229)");
-        Assert(featherFall != null && !CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.Scroll)),
-            "A scroll of Feather Fall costs the item's action and provokes today (ITM-086)");
+        Assert(featherFall != null && CastActionRules.CastingAction(featherFall, null, Source(CastSourceKind.Scroll)) == CastActionCost.Free
+               && CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.Scroll)),
+            "A scroll of Feather Fall is a free action that provokes nothing and is the round's free-action spell (DMG p.213; D7, delegated RAW reading)");
+        Assert(featherFall != null && CastActionRules.CastingAction(featherFall, null, Source(CastSourceKind.Wand)) == CastActionCost.Free
+               && CastActionRules.CountsAsQuickenedSpell(featherFall, null, Source(CastSourceKind.Wand)),
+            "A wand of Feather Fall is a free action and the round's free-action spell, as a scroll is (DMG p.213: the casting time rule covers every item kind; D7, delegated RAW reading)");
+        SpellData sleepSpell = SpellDatabase.GetSpell(SpellNames.SLEEP);
+        Assert(sleepSpell != null && CastActionRules.CastingAction(sleepSpell, null, Source(CastSourceKind.Scroll)) == CastActionCost.FullRound
+               && CastActionRules.CastingAction(sleepSpell, null, Source(CastSourceKind.Wand)) == CastActionCost.FullRound,
+            "A scroll or wand of Sleep takes its 1-round casting time, a full-round action (DMG p.213; ITM-086)");
 
         SpellData missile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
         Assert(missile != null && CastActionRules.CastingAction(missile, null, Source(CastSourceKind.PreparedSlot)) == CastActionCost.Standard

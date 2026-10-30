@@ -51,6 +51,7 @@ public static class NpcSlotReuseTests
             TestAuraSaveImmunityForgottenWithSource();
             TestReusedSlotDestroysOldProfile();
             TestTotalDefenseClearedOnRespawn();
+            TestRetrievedItemClearedOnRespawn();
         }
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -541,6 +542,30 @@ public static class NpcSlotReuseTests
                 "CRE-046, CMB-179: the respawned slot is not in total defense and has no total defense bonus");
             Assert(ThreatSystem.CanMakeAoO(slot) == slot.HasMeleeWeaponEquipped(),
                 "CMB-179: the respawned creature makes AoOs again (as its melee weapon allows)");
+        }
+        finally
+        {
+            Cleanup(slot);
+        }
+    }
+
+    /// <summary>
+    /// Batch 13 step 14 (D7, CRE-046): an item a creature retrieved stays in its hand (CharacterController.RetrievedItem);
+    /// a respawned slot holds nothing, so the new creature retrieves its own items (PHB p.141).
+    /// </summary>
+    private static void TestRetrievedItemClearedOnRespawn()
+    {
+        CharacterController slot = NewController("CRE046_RetrievedItemSlot");
+        try
+        {
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            var potion = new ItemData { Id = "slot_reuse_test_potion", Name = "Test Potion", IsPotion = true };
+            slot.SetRetrievedItem(potion);
+            Assert(ReferenceEquals(slot.RetrievedItem, potion), "D7 control: the old orc holds the retrieved potion");
+
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            Assert(slot.RetrievedItem == null && !slot.IsHoldingRetrievedItem(potion),
+                "CRE-046, D7: the respawned slot holds no retrieved item");
         }
         finally
         {

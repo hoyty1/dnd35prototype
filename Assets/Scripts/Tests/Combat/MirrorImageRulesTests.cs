@@ -567,7 +567,7 @@ namespace Tests.Combat
                 {
                     scroll.Scroll.CasterLevel = 6;
                     ScenarioHooks.RollFilter = Forced(1, 10, 1);
-                    object[] args = { target, scroll, null };
+                    object[] args = { target, scroll, null, null };
                     bool ok = (bool)apply.Invoke(gm, args);
                     Assert(ok && MirrorImageRules.ImagesOf(target) == 3,
                         "A caster level 6 scroll of Mirror Image gives 1d4 + 2 images, whatever the reader's level (DMG p.238)",

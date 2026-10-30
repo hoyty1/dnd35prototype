@@ -883,9 +883,9 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Cost: the snapshot for a cancel, then the action (none for a scroll or wand, which charge theirs when spent; none
-    /// for a held-charge delivery; the quickened spell of the round; full round for spontaneous metamagic; else
-    /// standard), the scenario hook for a cast, the spellcasting component, the spend's parameters and the log prefix.
+    /// Cost: the snapshot for a cancel, then the action (a scroll's or wand's casting action,
+    /// CastActionRules.CastingAction, batch 13 step 14, D7; a held-charge delivery's own cost; the quickened or
+    /// free-action spell of the round; full round for spontaneous metamagic or a 1-round spell; else standard), the scenario hook for a cast, the spellcasting component, the spend's parameters and the log prefix.
     /// </summary>
     private void CastStageCost(CastContext ctx)
     {
@@ -900,8 +900,6 @@ public partial class GameManager
 
         CastSourceKind sourceKind = req.Source.Kind;
         bool isDeliveringHeldCharge = sourceKind == CastSourceKind.HeldChargeDelivery;
-        bool isScrollCast = sourceKind == CastSourceKind.Scroll;
-        bool isWandCast = sourceKind == CastSourceKind.Wand;
         ctx.IsHeldChargeDelivery = isDeliveringHeldCharge;
 
         // Quickened applies when CASTING the spell, not when delivering a previously held charge. A quickened cast and a
@@ -912,21 +910,14 @@ public partial class GameManager
         ctx.CountsAsQuickenedSpell = CastActionRules.CountsAsQuickenedSpell(spell, metamagic, req.Source);
 
         // One action cost from the cast's source and the spell's casting time (CastActionRules.CastingAction, batch 11
-        // step 12): the item's own action for a scroll or wand (SPL-163), a free action for a quickened spell or a
-        // free-action spell, a full round for a 1-round casting time (PHB p.174, SPL-162) or a spontaneous metamagic
-        // cast (PHB p.88, by the source, SPL-159), else a standard action. Legality has already refused a full-round or
-        // swift cost the caster cannot pay. A casting's action with its metamagic is MetamagicSystem's rule (batch 11 step
-        // 21, SPL-055), the one CastActionRules.CastingAction gives the PC menu and the AI.
-        CastActionCost actionCost = isScrollCast || isWandCast || isDeliveringHeldCharge
-            ? CastActionCost.ItemOrDelivery
-            : MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, req.Source);
-        if (isScrollCast || isWandCast)
-        {
-            // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
-            Debug.Log($"[{(isWandCast ? "WandCast" : "ScrollCast")}] {caster.Stats.CharacterName} casting from {(isWandCast ? "wand" : "scroll")} — action consumed via post-cast handler.");
-            CastStageTrace.Mark(caster, spell, CastStageTrace.Cost, isWandCast ? "wand" : "scroll");
-        }
-        else if (isDeliveringHeldCharge)
+        // step 12): a free action for a quickened spell or a free-action spell, a full round for a 1-round casting time
+        // (PHB p.174, SPL-162) or a spontaneous metamagic cast (PHB p.88, by the source, SPL-159), else a standard action;
+        // a scroll the casting time but at least a standard action, a wand a standard action or a full round (DMG p.213;
+        // batch 13 step 14, D7: no longer the item's own deferred action, ITM-086). Legality has already refused a
+        // full-round or swift cost the caster cannot pay. A casting's action with its metamagic is MetamagicSystem's rule
+        // (batch 11 step 21, SPL-055), the one CastActionRules.CastingAction gives the PC menu and the AI.
+        CastActionCost actionCost = CastActionRules.CastingAction(spell, metamagic, req.Source);
+        if (isDeliveringHeldCharge)
         {
             // The delivery's cost (batch 12 step 18, SPL-156; HeldChargeDeliveryRules): none for the casting's own touch in its
             // casting round (PHB p.140-141); after it, a foe's touch is an attack (the attack-sequence executor paid it,
@@ -1056,7 +1047,8 @@ public partial class GameManager
     /// from Undead casting (WardSaveLedger.Commit, PHB p.274, p.241; batch 12 step 12, decision D6), after the action is
     /// paid and before anything spends the slot. On a failure the casting action is lost but the slot (scroll, wand charge,
     /// held charge) is kept, because the spell was never cast ("can't follow through"): the cast ends Failed at this
-    /// stage. A scroll or wand use pays its item's standard action here, as its spend would have. Then Distraction.
+    /// stage; for a scroll or wand use the action the Cost stage paid stays spent and the scroll or charge is kept. Then
+    /// Distraction.
     /// </summary>
     private void CastStageWard(CastContext ctx)
     {
@@ -1073,8 +1065,6 @@ public partial class GameManager
             if (verdict == WardVerdict.Failed)
             {
                 CharacterController caster = req.Caster;
-                if (req.Source.Kind == CastSourceKind.Scroll || req.Source.Kind == CastSourceKind.Wand)
-                    caster.CommitStandardAction();
                 CastStageTrace.Mark(caster, req.Spell, CastStageTrace.Cost, "ward-save-failed");
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{caster.Stats.CharacterName} keeps {req.Spell.Name}: the spell was never cast (PHB p.274)."));
                 ClearSpellcastResourceSnapshot();
@@ -1329,12 +1319,14 @@ public partial class GameManager
     /// defensively, cast normally or cancel and resolves the rolls. No provocation for a held-charge delivery, nor for a
     /// quickened cast (PHB p.98: casting a quickened spell does not provoke; SPL-143) or a spell whose casting time is a
     /// free action (Feather Fall; PHB p.174: such a casting does not provoke), unless spontaneous metamagic made it a
-    /// full-round action (CastActionRules.CountsAsQuickenedSpell).
+    /// full-round action (CastActionRules.CountsAsQuickenedSpell); nor for a wand, a spell trigger item whose activation
+    /// does not provoke (DMG p.213, p.245; batch 13 step 14, D7, ITM-085: retrieving it does, the use-item action's own
+    /// provocation). A scroll provokes as casting does (DMG p.213).
     /// </summary>
     private void CastStageProvocation(CastContext ctx)
     {
         EnterCastStage(ctx, CastStage.Provocation);
-        bool provokes = !ctx.IsHeldChargeDelivery && !ctx.CountsAsQuickenedSpell;
+        bool provokes = !ctx.IsHeldChargeDelivery && !ctx.CountsAsQuickenedSpell && ctx.Request.Source.Kind != CastSourceKind.Wand;
         if (!provokes)
         {
             _spellcastProvocationCancelled = false;

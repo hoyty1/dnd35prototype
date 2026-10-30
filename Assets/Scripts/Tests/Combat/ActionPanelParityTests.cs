@@ -80,7 +80,6 @@ public static class ActionPanelParityTests
         { "wildshaped-druid:attack", "UI-055: the panel's natural attack option (GameManager.CanUseNaturalAttackOption) requires the actor to be ActivePC, which a fixture is not; the set does not read ActivePC" },
         { "wildshaped-druid:cast-spell", "UI-055: the cast entry's start gate only asks for a SpellcastingComponent; the panel also needs a slot left (the fixture druid prepared none), and the wild shape bar (WildShapeRules, PHB p.37, p.98) is the cast core's" },
         // Use an Item has no shared legality yet.
-        { "wildshaped-druid:use-item", "batch 13 step 14 (use-item becomes a shared executor at its RAW cost; PcOnly today, AI-054)" },
         // A frightened PC's panel is not restricted yet (CMB-100).
         { "frightened:attack", "batch 13 step 20 (the restricted PC menu for flight; the set's compulsion filter, D15, already bars it)" },
         { "frightened:drop-prone", "batch 13 step 20 (the restricted PC menu for flight; the set's compulsion filter, D15, already bars it)" },

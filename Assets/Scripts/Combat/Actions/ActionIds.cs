@@ -33,6 +33,7 @@ public static class ActionIds
     public const string CastSpell = "cast-spell";
     public const string MaintainConcentration = "maintain-concentration";
     public const string UseItem = "use-item";
+    public const string RetrieveItem = "retrieve-item";
 
     // Movement and posture (PHB p.143-144, p.311)
     public const string Move = "move";

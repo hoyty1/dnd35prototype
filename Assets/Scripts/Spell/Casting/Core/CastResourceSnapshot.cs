@@ -42,6 +42,11 @@ internal sealed class CastResourceSnapshot
     public int ItemCharges;
     /// <summary>The wand's WandData.CurrentCharges before the spend; -1 without WandData.</summary>
     public int WandDataCharges = -1;
+    /// <summary>
+    /// The item the caster held in hand before the cast (CharacterController.RetrievedItem, batch 13 step 14, D7): the
+    /// spend of a scroll clears it, so a cancel puts the scroll back in hand.
+    /// </summary>
+    public ItemData RetrievedItem;
 
     // The priced material components the spend used up (batch 11 step 17, SpellComponentRules.SpendCostlyComponents), so
     // a cast cancelled at the AoO prompt gives them back with the slot.

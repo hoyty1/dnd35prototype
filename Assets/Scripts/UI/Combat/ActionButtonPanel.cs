@@ -1087,28 +1087,15 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(PickUpItemButton, new ActionButtonState(hasNearbyGroundItem, canPickUp, canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({pickupDisabledReason})"));
 
         // Use Item button: visible if character has consumable items, enabled if full-round action available
-        // D&D 3.5e: Retrieving a stowed item and using it is a full-round action (PHB p.142).
-        // TODO: Future — bags, quick-draw pouches, feats may reduce this requirement.
+        // The use-item entry's own gate (UseItemActionExecutor.CanStart, GameManager.GetUseItemDisabledReason; batch 13
+        // step 14, D7): the button and the AI read one rule. Each item's cost (retrieve, then its use) is the executor's.
         int useableItemCount = QuickItemUsePanel.GetUseableItemCount(pc);
         bool hasUseableItems = useableItemCount > 0;
-        string useItemReason = "";
-        bool canUseItem = hasUseableItems && context.Gm != null;
-        if (canUseItem)
-        {
-            if (!context.Actions.HasFullRoundAction)
-            {
-                canUseItem = false;
-                useItemReason = "No full-round action";
-            }
-            else if (pc.HasCondition(CombatConditionType.Pinned))
-            {
-                canUseItem = false;
-                useItemReason = "Pinned";
-            }
-        }
+        string useItemReason = context.Gm != null ? context.Gm.GetUseItemDisabledReason(pc) : "No game";
+        bool canUseItem = hasUseableItems && useItemReason == null;
         string useItemLabel = !hasUseableItems
             ? "Use Item (None)"
-            : (canUseItem ? $"Use Item [Full-Rnd] ({useableItemCount})" : $"Use Item ({useItemReason})");
+            : (canUseItem ? $"Use Item ({useableItemCount})" : $"Use Item ({useItemReason.TrimEnd('.')})");
         states.Set(UseItemButton, new ActionButtonState(hasUseableItems, canUseItem, useItemLabel));
     }
 
