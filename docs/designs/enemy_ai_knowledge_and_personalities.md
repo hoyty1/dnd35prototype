@@ -1,4 +1,4 @@
-> Status (2026-10-03): proposal, nothing built yet. 2026-10-09: the owner directed that there be no house rules (CLAUDE.md, `docs/systems/RULES_COVERAGE.md` 4.1); the items below that were planned as house rules (wound visibility, Gather Information between battles) are now open owner questions about RAW silences, to be listed in RULES_COVERAGE 4.1 once ruled. 2026-10-29: batch 13 step 7 (`docs/designs/action_catalog_batch13.md`) built the foundation of section 3 on the Omniscient default: `Assets/Scripts/AI/Knowledge/` (`FactKey`, `KnowledgeLevel`, `WoundBand`, `FactValue`, `ITargetView`, `IKnowledgeProvider`, `KnowledgeService`, `FactQuery`), exact fact matching, wound bands, `AIControlFlags` out of the tags, one position store, no `Class:` tag (AI-078 and AI-021 closed; `docs/systems/AI.md` 6.6). The current-state notes in section 2 predate it. Batch 14 scores the facts; batch 17 swaps the provider.
+> Status (2026-10-03): proposal, nothing built yet. 2026-10-09: the owner directed that there be no house rules (CLAUDE.md, `docs/systems/RULES_COVERAGE.md` 4.1); the items below that were planned as house rules (wound visibility, Gather Information between battles) are now open owner questions about RAW silences, to be listed in RULES_COVERAGE 4.1 once ruled. 2026-10-29: batch 13 step 7 (`docs/designs/action_catalog_batch13.md`) built the foundation of section 3 on the Omniscient default: `Assets/Scripts/AI/Knowledge/` (`FactKey`, `KnowledgeLevel`, `WoundBand`, `FactValue`, `ITargetView`, `IKnowledgeProvider`, `KnowledgeService`, `FactQuery`), exact fact matching, wound bands, `AIControlFlags` out of the tags, one position store, no `Class:` tag (AI-078 and AI-021 closed; `docs/systems/AI.md` 6.6). The current-state notes in section 2 predate it. Batch 14 scores the facts; batch 17 swaps the provider. 2026-10-30: the owner answered the three batch 14 questions in section 9: 1 (the starter values, since the old profiles were not found), 4 (a sadistic coup de grace is allowed at Normal and above, blocked on Easy) and 7 (alignment only warns).
 
 # Enemy AI: knowledge tags and blended personalities
 
@@ -54,7 +54,16 @@ Scope: this design answers the two owner requests. The first is "visual" knowled
 - `stash@{0}`;
 - sibling Unity projects under `F:/` and `D:/`.
 
-The only "smart" hits are comments in `AI/Profiles/DragonAIProfile.cs:296, 329`. Not checked: unreachable git objects, unfetched remotes, and other drives or OneDrive. If those profiles exist somewhere, send them and their logic becomes trait rows (§4.4).
+The only "smart" hits are comments in `AI/Profiles/DragonAIProfile.cs:296, 329`. If those profiles exist somewhere, send them and their logic becomes trait rows (§4.4).
+
+Searched again on 2026-10-30, after the owner said they had assumed the earlier agent left the profiles in the code base. Still not found:
+- the working tree (`Assets/Scripts`);
+- `git log --all -S` for "Sadistic" and "Cowardly", where the only hits are this design (ae06045) and the tactics inventory (f25ccbd);
+- the GitHub remote, where every branch is already fetched;
+- the two unreachable git objects;
+- `*.cs` and `*.md` files in OneDrive and in the user's Desktop, Documents and Downloads folders on C: and D:.
+
+They were most likely never committed from the earlier agent's own workspace. Batch 14 uses the starter values (§4.4).
 
 What does exist is 19 profile classes:
 
@@ -549,11 +558,11 @@ That difference, shown in the trace, is the demonstration of fairness.
 
 ## 9. Open questions for the owner
 
-1. **Where are your Sadistic, Cowardly and Smart profiles?** They are confirmed absent from this repo and its history. If they exist, their logic becomes trait rows, and your tuning replaces the starter values in §4.4.
+1. **Where are your Sadistic, Cowardly and Smart profiles?** They are confirmed absent from this repo and its history. If they exist, their logic becomes trait rows, and your tuning replaces the starter values in §4.4. *Answered 2026-10-30:* the owner had assumed they were in the code base from the earlier agent's work. A second search found nothing (§2.1), so batch 14 uses the starter values.
 2. **Which wound-visibility mode should be the default:** Strict, Coarse (proposed) or Fine? RAW is silent, so the answer is an owner interpretation, listed in RULES_COVERAGE 4.1.
 3. **In Rules mode, should the encounter cards and NPC panels still show creature names, CR and EL before identification?** These are DM meta-knowledge today.
-4. **Is a sadistic coup de grace on downed PCs acceptable at Normal difficulty,** or should Easy and Normal add a rules gate?
+4. **Is a sadistic coup de grace on downed PCs acceptable at Normal difficulty,** or should Easy and Normal add a rules gate? *Answered 2026-10-30:* yes, allowed at Normal and above. Easy blocks it, as the recommendation the owner accepted said.
 5. **Should the "Rumours" version of Gather Information exist** before a clock and town system exist, or wait for them? And is the abstract preparation budget an acceptable stand-in for hours?
 6. **Should Increment 3 (stances) and Phase 4 (knowledge rolls and hub intel) swap?** Stances finish request 2 but are blocked by the AI-047 and AI-010 rules fixes. Phase 4 finishes request 1 but needs monster skill data.
-7. **Should alignment stay a warning,** as proposed, or become a hard gate, such as Sadistic requiring Evil? A hard gate needs alignment data on every definition, which exists since the CRE-056 data fix (2026-10-14; CRE-002, the spawn copy, was fixed 2026-10-08); individuals of a "usually" alignment all take the listed one (delegated RAW reading 2026-10-14, docs/systems/RULES_COVERAGE.md 4.1).
+7. **Should alignment stay a warning,** as proposed, or become a hard gate, such as Sadistic requiring Evil? A hard gate needs alignment data on every definition, which exists since the CRE-056 data fix (2026-10-14; CRE-002, the spawn copy, was fixed 2026-10-08); individuals of a "usually" alignment all take the listed one (delegated RAW reading 2026-10-14, docs/systems/RULES_COVERAGE.md 4.1). *Answered 2026-10-30:* the owner chose warn only for now. A hard gate would first need a plan for each alignment.
 8. **Should Rules mode eventually become the default,** or stay a difficulty and realism option?
