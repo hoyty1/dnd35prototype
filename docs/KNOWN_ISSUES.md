@@ -30,17 +30,17 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 15 | 32 | CORE-041 |
-| [Combat](issues/CMB.md) | CMB | 0 | 40 | 78 | 118 | CMB-209 |
+| [Combat](issues/CMB.md) | CMB | 0 | 40 | 78 | 118 | CMB-210 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 7 | 12 | 19 | GRID-028 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 0 | 59 | 87 | 146 | SPL-210 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 31 | 41 | 73 | CHR-088 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 36 | 64 | CRE-078 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 16 | 23 | ENC-025 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 34 | 47 | 81 | ITM-095 |
-| [AI](issues/AI.md) | AI | 0 | 20 | 37 | 57 | AI-081 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 33 | 47 | 80 | ITM-096 |
+| [AI](issues/AI.md) | AI | 0 | 19 | 37 | 56 | AI-082 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 9 | 29 | 38 | TST-049 |
-| **All** | | 1 | 269 | 449 | 719 | |
+| **All** | | 1 | 267 | 449 | 717 | |
 
 ## Top issues
 

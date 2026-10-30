@@ -154,6 +154,15 @@ public partial class GameManager
             }
         }
 
+        // A wand in easy reach is drawn, not retrieved (PHB p.142; batch 13 step 15, D8, ITM-092): a move action, free with
+        // a regular move at base attack bonus +1 (EquipmentActionRules.DrawPaymentFor).
+        if (kind == ItemUseKind.Wand && !actor.IsHoldingRetrievedItem(item))
+        {
+            return EquipmentActionRules.CanPay(actor, EquipmentActionRules.DrawPaymentFor(actor, item))
+                ? Legality.Allowed()
+                : Legality.Refused(LegalityBar.Action, "No move action left to draw " + item.Name + " (PHB p.142).");
+        }
+
         if (ItemUseRules.MustBeInHand(kind) && !actor.IsHoldingRetrievedItem(item))
         {
             ActionEconomy a = actor.Actions;
@@ -391,9 +400,21 @@ public partial class GameManager
         bool administer = variant == ItemUseRules.VariantAdminister;
         string name = actor.Stats.CharacterName;
 
-        // 1. A stored item is retrieved first: a move action that provokes (PHB p.141).
+        // 1. A wand in easy reach is drawn first: a move action that does not provoke, free with a regular move at base
+        // attack bonus +1 (PHB p.142; batch 13 step 15, D8, ITM-092). Any other stored item is retrieved first: a move
+        // action that provokes (PHB p.141).
         bool retrieved = false;
-        if (ItemUseRules.MustBeInHand(kind) && !actor.IsHoldingRetrievedItem(item))
+        if (kind == ItemUseKind.Wand && !actor.IsHoldingRetrievedItem(item))
+        {
+            if (!DrawWeaponNow(actor, inventoryIndex, item, null, out string drawRefusal))
+            {
+                o.Refuse(Legality.Refused(LegalityBar.Action, drawRefusal ?? ("could not draw " + item.Name)));
+                yield break;
+            }
+            o.Performed = true;
+            retrieved = true;
+        }
+        else if (ItemUseRules.MustBeInHand(kind) && !actor.IsHoldingRetrievedItem(item))
         {
             IEnumerator retrieve = InlineAction(ActionCore_RetrieveItem(actor, inventoryIndex, item, source, decider, o), 0);
             while (retrieve.MoveNext())

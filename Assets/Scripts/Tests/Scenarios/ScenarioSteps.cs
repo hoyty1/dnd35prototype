@@ -578,6 +578,12 @@ namespace Tests.Scenarios
                 sb.Append('|').Append(string.Join(",", ScenarioTrace.ConditionNames(a)));
                 // A bardic music stop costs no action: the song under way and the uses left show the change.
                 sb.Append('|').Append(BardicMusicRules.ActiveAbility(a.Stats)).Append(BardicMusicRules.UsesLeft(a.Stats));
+                // A free draw or drop costs no action either (Quick Draw, a draw with a move, a drop; batch 13 step 15): the
+                // items in hand show the change.
+                global::Inventory held = a.InventoryComp != null ? a.InventoryComp.CharacterInventory : null;
+                sb.Append('|').Append(held != null && held.RightHandSlot != null ? held.RightHandSlot.Id : "-")
+                  .Append(',').Append(held != null && held.LeftHandSlot != null ? held.LeftHandSlot.Id : "-")
+                  .Append(',').Append(a.RetrievedItem != null ? a.RetrievedItem.Id : "-");
             }
             return sb.ToString();
         }

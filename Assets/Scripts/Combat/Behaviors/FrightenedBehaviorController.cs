@@ -106,6 +106,12 @@ public sealed class FrightenedBehaviorController
         bool isPanicked = actor.HasCondition(CombatConditionType.Panicked);
         string actorName = actor.Stats.CharacterName;
 
+        // A panicked creature drops anything it holds (PHB glossary p.311): when Panicked is applied (ConditionManager) and,
+        // as a backstop for anything it took up since, at the start of its panicked turn (batch 13 step 15, CMB-181): the
+        // catalog's drop entry, PC or NPC; a readied shield is worn, not held (PHB p.143).
+        if (isPanicked)
+            DropHeldItemsInPanic(gameManager, actor);
+
         yield return gameManager.StartCoroutine(Flee(gameManager, actor, source, isPanicked ? " (Panicked!)" : string.Empty, result));
         if (result.Outcome != FlightOutcome.Cornered)
             yield break;
@@ -131,6 +137,23 @@ public sealed class FrightenedBehaviorController
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{actorName} is cornered by fear and fights defensively."));
         }
         yield return new WaitForSeconds(0.25f);
+    }
+
+    /// <summary>
+    /// The panicked creature's turn-start drop (PHB p.311; CMB-181), a backstop to the drop when Panicked is applied
+    /// (ConditionManager.OnConditionApplied): everything it holds, through the drop entry's "all-held" variant
+    /// (GameManager.RunAIActionNow; a forced turn's choices are the AI's, C7). A readied shield is strapped on, not held, so
+    /// it stays (delegated RAW reading 2026-10-29, PHB p.143). Nothing happens when it holds nothing.
+    /// </summary>
+    public static void DropHeldItemsInPanic(GameManager gameManager, CharacterController actor)
+    {
+        if (gameManager == null || actor == null)
+            return;
+        var ctx = ActionContext.For(ActionIds.DropItem, actor, ActorSource.AI);
+        ctx.Variant = EquipmentActionRules.VariantAllHeld;
+        if (!ctx.Definition.Executor.CanExecute(ctx).Ok)
+            return;
+        gameManager.RunAIActionNow(ctx);
     }
 
     /// <summary>

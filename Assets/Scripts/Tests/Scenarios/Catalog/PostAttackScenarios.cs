@@ -344,13 +344,15 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// CMB-174 and CMB-096's drop (origins G and H; PHB p.113): an orc holding a javelin, with one more in its pack, throws
-        /// at a hero 20 ft away. Each javelin lands in the hero's square, and after the first throw the orc draws the second.
-        /// After the second throw it has none left.
+        /// at a hero 20 ft away. Each javelin lands in the hero's square. Without Quick Draw the second is not drawn for free
+        /// after the first throw (each next thrown weapon is a draw, PHB p.98, p.142; batch 13 step 15, D8): in round 2 the
+        /// attack prelude draws it through the draw entry (a move action, AI-073's fallback), and the orc throws it. After the
+        /// second throw it has none left.
         /// </summary>
         private static ScenarioDef NpcThrowsJavelin()
         {
-            return Rules("rules/npc-throws-javelin", "An NPC's thrown javelin lands on the ground and the next is drawn (PHB p.113; CMB-174, CMB-096)")
-                .Covers("CMB-174", "CMB-096", "CMB-019", "PHB p.113")
+            return Rules("rules/npc-throws-javelin", "An NPC's thrown javelin lands on the ground; the next is drawn with a move action (PHB p.98, p.113, p.142; CMB-174, CMB-096, D8)")
+                .Covers("CMB-174", "CMB-096", "CMB-019", "CHR-021", "D8", "PHB p.113", "PHB p.142")
                 .MaxRounds(3)
                 .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
                 .Npc("orc", "orc_warrior", 14, 10, Control.Scripted)
@@ -376,8 +378,16 @@ namespace Tests.Scenarios
                 .Turn("orc", 3, Step.Pass())
                 .Expect("Round 1: one javelin thrown", v => OneThrow(v, 1))
                 .Expect("Round 2: one javelin thrown", v => OneThrow(v, 2))
-                .Expect("After the first throw: one more javelin on the ground in the hero's square and the second drawn into the hand", Expect.All(
-                    GroundGain("r1", 1), Fact("r1.hand", "javelin"), Fact("r1.pack", "0")))
+                .Expect("After the first throw: one more javelin on the ground in the hero's square; no free redraw without Quick Draw (PHB p.98)", Expect.All(
+                    GroundGain("r1", 1), Fact("r1.hand", "none"), Fact("r1.pack", "1")))
+                .Expect("Round 2: the orc draws the second javelin with a move action before it throws (PHB p.142; D8)", v =>
+                {
+                    TraceEvent draw = v.Log("draws Javelin [(]move action[)]").FirstOrDefault(e => e.Round == 2);
+                    List<TraceEvent> throws = v.Attacks("orc", "hero", false, 2);
+                    if (draw == null) return ExpectResult.Fail("no round-2 draw line");
+                    return throws.Count == 1 && draw.Seq < throws[0].Seq ? ExpectResult.Pass("draw #" + draw.Seq + " before the throw #" + throws[0].Seq, draw.Seq, throws[0].Seq)
+                        : ExpectResult.Fail(throws.Count + " round-2 throw(s)", draw.Seq);
+                })
                 .Expect("After the second throw: both javelins on the ground and none left to draw", Expect.All(
                     GroundGain("r2", 2), Fact("r2.hand", "none"), Fact("r2.pack", "0")))
                 .Build();

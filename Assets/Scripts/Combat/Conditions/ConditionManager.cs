@@ -279,11 +279,19 @@ public class ConditionManager : MonoBehaviour
                 Owner?.RefreshActionLimits();
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (move action only)");
                 break;
+            case CombatConditionType.Panicked:
+                // A panicked creature drops anything it holds (PHB glossary p.311): when the condition takes hold, PC or
+                // NPC, with the drop entry's core ("all-held"; batch 13 step 15, CMB-181; a readied shield is strapped on,
+                // not held, PHB p.143). It is a consequence of the condition, not an action, so no action runner. The flee
+                // controller's turn-start drop is the backstop (FrightenedBehaviorController.DropHeldItemsInPanic).
+                if (GameManager.Instance != null && Owner != null)
+                    GameManager.Instance.DropItemNow(Owner, null, EquipmentActionRules.VariantAllHeld, "panicked: everything it holds");
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (held items dropped)");
+                break;
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
             case CombatConditionType.Asleep:
             case CombatConditionType.Dazed:
-            case CombatConditionType.Panicked:
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (action-limiting stub hook)");
                 break;
             case CombatConditionType.Invisible:

@@ -36,6 +36,12 @@ namespace Tests.Scenarios
     /// p.280): a standard action paid first, then an attack roll against AC 10 that gives the ally +2; waking a sleeper
     /// is a standard action; neither provokes. The attack-wall executor serves the PC's wall buttons and the NPC's wall
     /// branch alike, and continues no UI, so an NPC's Wall of Ice attack advances the turn once.
+    ///
+    /// Step 15 (ITM-069, AI-073, AI-074, CMB-181; CHR-021 narrowed; decision D8): the equipment entries for both sides (PHB
+    /// p.141-143, Table 8-2, Quick Draw p.98): drawing is a move action that does not provoke, free with Quick Draw or with a
+    /// regular move at BAB +1; sheathing and picking up are move actions that provoke; readying a shield is a move action
+    /// that does not; dropping is free. An archer with no arrows draws its melee weapon, the AI keeps its last melee weapon,
+    /// and a panicked creature, PC or NPC, drops what it holds before it flees.
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -98,6 +104,22 @@ namespace Tests.Scenarios
             yield return S("pc-wall-of-ice-attack-ui", () => PcWallAttack(ranged: true));
             yield return S("pc-wall-of-ice-reach-ui", () => PcWallAttack(ranged: false));
             yield return S("pc-break-wall-ui", PcBreakWall);
+            yield return S("draw-weapon-move-ui", () => DrawWeaponMove(ui: true));
+            yield return S("draw-weapon-move-ai", () => DrawWeaponMove(ui: false));
+            yield return S("draw-with-move-bab1-ui", DrawWithMoveBab1Ui);
+            yield return S("quick-draw-free-ui", () => QuickDrawFree(ui: true));
+            yield return S("quick-draw-free-ai", () => QuickDrawFree(ui: false));
+            yield return S("sheathe-provokes-ui", SheatheProvokesUi);
+            yield return S("ready-shield-ui", ReadyShieldUi);
+            yield return S("loose-shield-ui", LooseShieldUi);
+            yield return S("twf-paired-draw-ui", TwfPairedDrawUi);
+            yield return S("inventory-equip-locked-ui", InventoryEquipLockedUi);
+            yield return S("pick-up-provokes-ui", () => PickUpProvokes(ui: true));
+            yield return S("pick-up-provokes-ai", () => PickUpProvokes(ui: false));
+            yield return S("archer-no-ammo-draws-melee-ai", ArcherNoAmmoDrawsMeleeAi);
+            yield return S("npc-keeps-last-melee-weapon-ai", NpcKeepsLastMeleeWeaponAi);
+            yield return S("panicked-drops-held-ai", PanickedDropsHeldAi);
+            yield return S("panicked-drops-held-pc", PanickedDropsHeldPc);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -530,7 +552,8 @@ namespace Tests.Scenarios
         /// dagger (thrown: five 10-ft. increments, 50 ft., PHB p.134) and its foe is 70 ft. away. No target passes the guard,
         /// so its profile moves it to its preferred range (the C1 ranged list: another target, the preferred range, an
         /// approach); the move brings the foe within 50 ft., and the standard action left throws the dagger the same turn
-        /// (before step 5 the turn ended after the move).
+        /// (before step 5 the turn ended after the move). It carries a second dagger: since batch 13 step 15 the AI never
+        /// throws its last weapon (AI-074).
         /// </summary>
         private static ScenarioDef AiKiterApproachThenAttack()
         {
@@ -539,7 +562,14 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Npc("wiz", "mist_wizard", 2, 10, Control.Ai)
                 .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Distant Hero", 3)), 16, 10, Control.Idle)
-                .Tweak("wiz", c => { Wield(c, ItemDatabase.CloneItem(ItemID.WeaponDagger)); SpendAllSlots(c); Sturdy(c); })
+                .Tweak("wiz", c =>
+                {
+                    Wield(c, ItemDatabase.CloneItem(ItemID.WeaponDagger));
+                    Inv(c).AddItem(ItemDatabase.CloneItem(ItemID.WeaponDagger)); // a second to draw, so the throw keeps it a weapon (AI-074)
+                    Inv(c).RecalculateStats();
+                    SpendAllSlots(c);
+                    Sturdy(c);
+                })
                 .Tweak("foe", Sturdy)
                 .Initiative("wiz", "foe")
                 .Expect("Round 1: the wizard moves, then throws the dagger at the foe", v =>
@@ -593,11 +623,7 @@ namespace Tests.Scenarios
                 })
                 .Expect("No preferred-range move", NoLog("moves to get a better shot", "preferred-range move"))
                 .Expect("No retreat line", NoLog("retreats to maintain distance|repositions to avoid|tactical 5-foot step", "retreat"))
-                .Expect("It declares no shot", v =>
-                {
-                    List<TraceEvent> shots = v.Attacks("archer", null, aoo: false);
-                    return shots.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(shots.Count + " attack(s)", shots.Select(e => e.Seq).ToArray());
-                })
+                .Expect("It declares no shot (it may fight with the longsword it draws, AI-073)", NoBowShot("archer"))
                 .Build();
         }
 
@@ -696,11 +722,11 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// AI-073 (narrowed): an AI-run Enemy archer (test_archer_gust) with an empty quiver and a foe 30 ft. away declares
-        /// no shot (the guard refuses a projectile weapon without ammunition, PHB p.113), so the refused shot's
-        /// "has no Arrow ammunition" line never appears, and it does not walk to its preferred range for a shot it can never
-        /// take (AiOutOfReach skips the move without ranged means). It cannot draw its stowed weapon yet (ITM-069, batch 13
-        /// step 15).
+        /// AI-073: an AI-run Enemy archer (test_archer_gust) with an empty quiver and a foe 30 ft. away declares no shot (the
+        /// guard refuses a projectile weapon without ammunition, PHB p.113), so the refused shot's "has no Arrow ammunition"
+        /// line never appears, and it does not walk to its preferred range for a shot it can never take (AiOutOfReach skips
+        /// the move without ranged means). Since batch 13 step 15 it draws its stowed longsword instead
+        /// (rules/archer-no-ammo-draws-melee-ai), so attacks with the sword may follow; none is a bow shot.
         /// </summary>
         private static ScenarioDef AiArcherNoAmmoNoShot()
         {
@@ -712,15 +738,21 @@ namespace Tests.Scenarios
                 .Tweak("archer", c => { EmptyQuiver(c); Sturdy(c); })
                 .Tweak("foe", Sturdy)
                 .Initiative("archer", "foe")
-                .Expect("It declares no shot", v =>
-                {
-                    List<TraceEvent> shots = v.Attacks("archer", null, aoo: false);
-                    return shots.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(shots.Count + " attack(s)", shots.Select(e => e.Seq).ToArray());
-                })
+                .Expect("It declares no shot", NoBowShot("archer"))
                 .Expect("No refused shot for want of arrows", NoLog("has no Arrow ammunition", "no-ammunition"))
                 .Expect("No move to a better shot", NoLog("moves to get a better shot", "preferred-range move"))
                 .Build();
         }
+
+        /// <summary>No attack of <paramref name="by"/>'s with a bow (an empty quiver: no shot, PHB p.113).</summary>
+        private static Func<TraceView, ExpectResult> NoBowShot(string by)
+            => v =>
+            {
+                List<TraceEvent> attacks = v.Attacks(by, null, aoo: false);
+                List<TraceEvent> shots = attacks.Where(e => (e.Str("weapon") ?? "").IndexOf("bow", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                return shots.Count == 0 ? ExpectResult.Pass("no bow shot (" + attacks.Count + " other attack(s): " + string.Join(",", attacks.Select(e => e.Str("weapon"))) + ")")
+                    : ExpectResult.Fail(shots.Count + " bow shot(s)", shots.Select(e => e.Seq).ToArray());
+            };
 
         // ── batch 13 step 7: typed facts in AI target scoring ──────────
 
@@ -1917,6 +1949,11 @@ namespace Tests.Scenarios
                     {
                         inv.RightHandSlot = null;
                         inv.LeftHandSlot = null;
+                        // No weapon in the pack either: since batch 13 step 15 an AI creature with empty hands draws one (AI-073).
+                        if (inv.GeneralSlots != null)
+                            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                                if (inv.GeneralSlots[i] != null && inv.GeneralSlots[i].IsWeapon)
+                                    inv.GeneralSlots[i] = null;
                         inv.RecalculateStats();
                     }
                 })
@@ -2039,6 +2076,492 @@ namespace Tests.Scenarios
                 .Expect("The check is a standard action: the move action is left", Expect.All(Fact12("hero.standard", "False"), Fact12("hero.move", "True")))
                 .Build();
         }
+
+        // ── Step 15: equipment actions (D8; ITM-069, AI-073, AI-074, CMB-181) ──
+
+        /// <summary>
+        /// Empties <paramref name="c"/>'s hands and every weapon and shield from its pack, then holds <paramref name="right"/>
+        /// and <paramref name="left"/> (null: empty) and stows <paramref name="pack"/>.
+        /// </summary>
+        private static void Gear(CharacterController c, ItemID? right, ItemID? left, params ItemID[] pack)
+        {
+            global::Inventory inv = Inv(c);
+            if (inv == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no inventory");
+            if (inv.GeneralSlots != null)
+                for (int i = 0; i < inv.GeneralSlots.Length; i++)
+                    if (inv.GeneralSlots[i] != null && (inv.GeneralSlots[i].IsWeapon || inv.GeneralSlots[i].IsShield))
+                        inv.GeneralSlots[i] = null;
+            inv.RightHandSlot = right.HasValue ? ItemDatabase.CloneItem(right.Value) : null;
+            inv.LeftHandSlot = left.HasValue ? ItemDatabase.CloneItem(left.Value) : null;
+            inv.HandsSlot = null;
+            foreach (ItemID id in pack)
+                inv.AddItem(ItemDatabase.CloneItem(id));
+            inv.RecalculateStats();
+        }
+
+        /// <summary>Notes <paramref name="key"/>'s hands, its pack's weapons and shields and the actions it has left, under "<paramref name="tag"/>.*".</summary>
+        private static bool NoteGear(ScenarioContext ctx, string key, string tag)
+        {
+            CharacterController c = ctx.Get(key);
+            global::Inventory inv = Inv(c);
+            Note12(ctx, tag + ".right", inv != null && inv.RightHandSlot != null ? inv.RightHandSlot.Id : "none");
+            Note12(ctx, tag + ".left", inv != null && inv.LeftHandSlot != null ? inv.LeftHandSlot.Id : "none");
+            Note12(ctx, tag + ".pack", inv != null && inv.GeneralSlots != null
+                ? string.Join("+", inv.GeneralSlots.Where(i => i != null && (i.IsWeapon || i.IsShield)).Select(i => i.Id).OrderBy(i => i, StringComparer.Ordinal))
+                : "?");
+            Note12(ctx, tag + ".move", c.Actions.HasMoveAction);
+            Note12(ctx, tag + ".standard", c.Actions.HasStandardAction);
+            return true;
+        }
+
+        /// <summary><paramref name="by"/>'s attacks of opportunity on <paramref name="target"/>: exactly <paramref name="want"/>, each with trigger <paramref name="trigger"/> (null: any).</summary>
+        private static Func<TraceView, ExpectResult> AoOCount(string by, string target, string trigger, int want)
+            => v =>
+            {
+                List<TraceEvent> all = v.AoOs(by, target);
+                int matching = all.Count(e => trigger == null || e.Str("trigger") == trigger);
+                return all.Count == want && matching == want
+                    ? ExpectResult.Pass(want + " AoO(s)" + (trigger != null ? " for " + trigger : ""), all.Select(e => e.Seq).ToArray())
+                    : ExpectResult.Fail(all.Count + " AoO(s) (" + string.Join(",", all.Select(e => e.Str("trigger"))) + "), expected " + want
+                        + (trigger != null ? " for " + trigger : ""), all.Select(e => e.Seq).ToArray());
+            };
+
+        private static Func<TraceView, ExpectResult> HasLog(string regex, string what)
+            => v =>
+            {
+                List<TraceEvent> lines = v.Log(regex);
+                return lines.Count > 0 ? ExpectResult.Pass(what, lines[0].Seq) : ExpectResult.Fail("no " + what + " line");
+            };
+
+        /// <summary>
+        /// D8 (PHB p.142, Table 8-2): drawing a weapon is a move action that does not provoke. A fighter 4 with empty hands
+        /// and a longsword in its pack, beside an orc that has acted (so it is not flat-footed and threatens), draws the
+        /// longsword without moving first: the orc takes no attack of opportunity, the sword is in the main hand, the move
+        /// action is spent and the standard action left. The Ui twin runs the PC runner (no prompt opens), the AI twin
+        /// the same executor through RunAIAction.
+        /// </summary>
+        private static ScenarioDef DrawWeaponMove(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/draw-weapon-move-ui" : "rules/draw-weapon-move-ai",
+                    "Drawing a weapon is a move action that does not provoke (PHB p.142, Table 8-2; D8, ITM-069)")
+                .Covers("ITM-069", "D8", "PHB p.142", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, null, null, ItemID.WeaponLongsword); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.DrawWeapon, ItemIDs.LONGSWORD),
+                    Step.Assert("after the draw", ctx => NoteGear(ctx, "hero", "hero")));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The draw step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("Drawing provokes no attack of opportunity (PHB p.142, Table 8-2)", AoOCount("orc", "hero", null, 0))
+                .Expect("The longsword is in hand, out of the pack", Expect.All(Fact12("hero.right", ItemIDs.LONGSWORD), Fact12("hero.pack", "")))
+                .Expect("The draw spent the move action; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Expect("The log names the move action", HasLog("draws Longsword [(]move action[)]", "draw"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Table 8-2 note 4 (PHB p.142): with a base attack bonus of +1 or higher a creature may draw a weapon as a free
+        /// action combined with a regular move (delegated RAW reading 2026-10-29: one draw for a move action spent moving,
+        /// not with a 5-foot step or a charge). A Ui fighter 1 (BAB +1) with its longsword stowed moves 10 ft., then draws:
+        /// the draw is free, so the standard action is still left.
+        /// </summary>
+        private static ScenarioDef DrawWithMoveBab1Ui()
+        {
+            return Rules("rules/draw-with-move-bab1-ui", "At BAB +1 a draw is free with a regular move (PHB p.142, Table 8-2 note 4; D8)")
+                .Covers("ITM-069", "D8", "PHB p.142")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 1)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 18, 10, Control.Idle)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, null, null, ItemID.WeaponLongsword); })
+                .Tweak("orc", Sturdy)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1, Step.Move(12, 10), Step.ActionItem(ActionIds.DrawWeapon, ItemIDs.LONGSWORD),
+                    Step.Assert("after the draw", ctx => NoteGear(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The draw step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("The longsword is in hand", Fact12("hero.right", ItemIDs.LONGSWORD))
+                .Expect("The move spent the move action; the draw spent nothing: the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Expect("The log names the free draw with the move", HasLog("draws Longsword [(]free action with its move[)]", "free draw"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Quick Draw (PHB p.98): a creature with the feat draws a weapon as a free action. A fighter 4 with Quick Draw, empty
+        /// hands and a stowed longsword, beside an orc, draws it: no attack of opportunity, and both its move and standard
+        /// actions are left. Ui and AI twins run the same executor.
+        /// </summary>
+        private static ScenarioDef QuickDrawFree(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/quick-draw-free-ui" : "rules/quick-draw-free-ai",
+                    "Quick Draw draws a weapon as a free action (PHB p.98; D8, CHR-021)")
+                .Covers("CHR-021", "ITM-069", "D8", "PHB p.98", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4, "Quick Draw")), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, null, null, ItemID.WeaponLongsword); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.DrawWeapon, ItemIDs.LONGSWORD),
+                    Step.Assert("after the draw", ctx => NoteGear(ctx, "hero", "hero")));
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The draw step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("No attack of opportunity", AoOCount("orc", "hero", null, 0))
+                .Expect("The longsword is in hand", Fact12("hero.right", ItemIDs.LONGSWORD))
+                .Expect("The draw is free: the move and standard actions are left (PHB p.98)", Expect.All(Fact12("hero.move", "True"), Fact12("hero.standard", "True")))
+                .Expect("The log names Quick Draw", HasLog("draws Longsword [(]free action, Quick Draw[)]", "Quick Draw"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D8 (PHB p.142, Table 8-2): sheathing a weapon is a move action that provokes. A Ui fighter 4 holding a longsword
+        /// beside an orc sheathes it, answering the attack-of-opportunity prompt Proceed: the orc takes one attack of
+        /// opportunity for the sheathe, the sword goes to the pack, the move action is spent and the standard action left.
+        /// </summary>
+        private static ScenarioDef SheatheProvokesUi()
+        {
+            return Rules("rules/sheathe-provokes-ui", "Sheathing a weapon is a move action that provokes (PHB p.142, Table 8-2; D8, ITM-069)")
+                .Covers("ITM-069", "D8", "PHB p.142")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, ItemID.WeaponLongsword, null); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.SheatheWeapon, ItemIDs.LONGSWORD), Step.AnswerAoO(AoOAnswer.Proceed),
+                    Step.Assert("after the sheathe", ctx => NoteGear(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The sheathe step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("The orc takes one attack of opportunity for the sheathe (PHB p.142)", AoOCount("orc", "hero", "sheathe Longsword", 1))
+                .Expect("The longsword is in the pack, the hand empty", Expect.All(Fact12("hero.right", "none"), Fact12("hero.pack", ItemIDs.LONGSWORD)))
+                .Expect("The move action is spent; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D8 (PHB p.142-143, Table 8-2): readying a shield is a move action that does not provoke. A Ui fighter 4 with a
+        /// longsword in its main hand and a heavy wooden shield in its pack, beside an orc, readies the shield: no attack
+        /// of opportunity, the shield is on the off-hand arm, the move action spent and the standard action left.
+        /// </summary>
+        private static ScenarioDef ReadyShieldUi()
+        {
+            return Rules("rules/ready-shield-ui", "Readying a shield is a move action that does not provoke (PHB p.142-143, Table 8-2; D8, ITM-069)")
+                .Covers("ITM-069", "D8", "PHB p.142", "PHB p.143")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, ItemID.WeaponLongsword, null, ItemID.ShieldHeavyWooden); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.ReadyShield, ItemIDs.SHIELD_HEAVY_WOODEN),
+                    Step.Assert("after the shield", ctx => NoteGear(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The shield step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("No attack of opportunity", AoOCount("orc", "hero", null, 0))
+                .Expect("The shield is readied on the arm, the sword still in hand", Expect.All(
+                    Fact12("hero.left", ItemIDs.SHIELD_HEAVY_WOODEN), Fact12("hero.right", ItemIDs.LONGSWORD), Fact12("hero.pack", "")))
+                .Expect("The move action is spent; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D8 (PHB p.143, Table 8-2): loosing a shield (unstrapping and dropping it) is a move action that does not provoke.
+        /// A Ui fighter 4 with a longsword and a heavy wooden shield readied, beside an orc, looses the shield: no attack of
+        /// opportunity, the shield lies in the hero's square, the move action is spent and the standard action left.
+        /// </summary>
+        private static ScenarioDef LooseShieldUi()
+        {
+            return Rules("rules/loose-shield-ui", "Loosing a shield is a move action that does not provoke; the shield drops (PHB p.143, Table 8-2; D8, ITM-069)")
+                .Covers("ITM-069", "D8", "PHB p.143")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, ItemID.WeaponLongsword, ItemID.ShieldHeavyWooden); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.ReadyShield, ItemIDs.SHIELD_HEAVY_WOODEN),
+                    Step.Assert("after the loose", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        SquareCell cell = SquareGrid.Instance != null ? SquareGrid.Instance.GetCell(hero.GridPosition) : null;
+                        // At least one: the grid is shared by the seeds of a run, so earlier seeds' shields may lie there too.
+                        Note12(ctx, "hero.ground", cell != null && cell.GroundItems.Any(i => i != null && i.Id == ItemIDs.SHIELD_HEAVY_WOODEN));
+                        return NoteGear(ctx, "hero", "hero");
+                    }))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The loose step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("No attack of opportunity", AoOCount("orc", "hero", null, 0))
+                .Expect("The shield lies in the hero's square; the sword is still in hand", Expect.All(
+                    Fact12("hero.left", "none"), Fact12("hero.right", ItemIDs.LONGSWORD), Fact12("hero.ground", "True")))
+                .Expect("The move action is spent; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Expect("The log names the loose", HasLog("looses Shield, Heavy Wooden and drops it [(]move action[)]", "loose"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D8 (PHB p.142, Table 8-2 note 4; delegated RAW reading 2026-10-29): a Two-Weapon Fighting creature draws two light
+        /// or one-handed weapons in the time of one. A Ui fighter 4 with the feat, empty hands and a dagger and a shortsword
+        /// stowed draws the dagger (a move action), then at once the shortsword (free, into the other hand): the standard
+        /// action is left.
+        /// </summary>
+        private static ScenarioDef TwfPairedDrawUi()
+        {
+            return Rules("rules/twf-paired-draw-ui", "Two-Weapon Fighting draws two weapons in the time of one (PHB p.142, Table 8-2 note 4; D8)")
+                .Covers("ITM-069", "D8", "PHB p.142")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4, "Two-Weapon Fighting")), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, null, null, ItemID.WeaponDagger, ItemID.WeaponShortsword); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.ActionItem(ActionIds.DrawWeapon, ItemIDs.DAGGER), Step.ActionItem(ActionIds.DrawWeapon, ItemIDs.SHORT_SWORD),
+                    Step.Assert("after the draws", ctx => NoteGear(ctx, "hero", "hero")))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("Both draw steps are done", Expect.All(Expect.StepStatus("hero", 1, "Action", 0, "done"), Expect.StepStatus("hero", 1, "Action", 1, "done")))
+                .Expect("A weapon in each hand", Expect.All(Fact12("hero.right", ItemIDs.DAGGER), Fact12("hero.left", ItemIDs.SHORT_SWORD), Fact12("hero.pack", "")))
+                .Expect("One move action for both draws; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Expect("The log names the paired draw", HasLog("draws Shortsword [(]free, drawn with the first by Two-Weapon Fighting[)]", "paired draw"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Owner question Q5's default (batch 13 step 15; ITM-095): the character sheet's inventory in combat calls the
+        /// equipment entries, armor stays locked, and a hand slot the PC names is strict. A Ui fighter 4 holding a longsword
+        /// with a chain shirt and a dagger stowed tries, on its turn, to don the chain shirt (refused with the ITM-095 reason)
+        /// and to draw the dagger into its full right hand (refused: no silent move to the left hand). Nothing is spent.
+        /// </summary>
+        private static ScenarioDef InventoryEquipLockedUi()
+        {
+            return Rules("rules/inventory-equip-locked-ui", "In combat the inventory locks armor and refuses a draw into a full hand, spending nothing (Q5 default; ITM-095, D8)")
+                .Covers("ITM-069", "ITM-095", "Q5", "D8", "PHB p.123")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Ui)
+                .Tweak("hero", c =>
+                {
+                    Sturdy(c);
+                    Gear(c, ItemID.WeaponLongsword, null, ItemID.WeaponDagger);
+                    Inv(c).AddItem(ItemDatabase.CloneItem(ItemID.ArmorChainShirt));
+                })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, Step.Assert("the inventory's equip attempts", ctx =>
+                {
+                    CharacterController hero = ctx.Get("hero");
+                    global::Inventory inv = Inv(hero);
+                    int armor = Array.FindIndex(inv.GeneralSlots, i => i != null && i.Id == ItemIDs.CHAIN_SHIRT);
+                    int dagger = Array.FindIndex(inv.GeneralSlots, i => i != null && i.Id == ItemIDs.DAGGER);
+                    bool armorOk = ctx.Gm.TryInventoryEquip(hero, armor, EquipSlot.Armor, out string armorWhy);
+                    bool daggerOk = ctx.Gm.TryInventoryEquip(hero, dagger, EquipSlot.RightHand, out string daggerWhy);
+                    Note12(ctx, "armor.ok", armorOk);
+                    Note12(ctx, "armor.itm095", (armorWhy ?? "").Contains("ITM-095"));
+                    Note12(ctx, "dagger.ok", daggerOk);
+                    Note12(ctx, "dagger.fullhand", (daggerWhy ?? "").Contains("is in that hand"));
+                    ctx.Note(NotePrefix + "why=" + armorWhy + " | " + daggerWhy);
+                    return NoteGear(ctx, "hero", "hero");
+                }), Step.Pass())
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("Donning armor is refused with the ITM-095 reason (PHB Table 7-7, p.123)", Expect.All(Fact12("armor.ok", "False"), Fact12("armor.itm095", "True")))
+                .Expect("A draw into the full right hand is refused", Expect.All(Fact12("dagger.ok", "False"), Fact12("dagger.fullhand", "True")))
+                .Expect("Nothing changed and nothing was spent", Expect.All(Fact12("hero.right", ItemIDs.LONGSWORD), Fact12("hero.left", "none"),
+                    Fact12("hero.move", "True"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D8 (PHB p.142, Table 8-2): picking up an item is a move action that provokes. A fighter 4 with empty hands and a
+        /// dagger on its square, beside an orc, picks the dagger up: the orc takes one attack of opportunity for it, the
+        /// dagger is in the hero's hand (a free hand; delegated RAW reading 2026-10-29), the move action is spent and the
+        /// standard action left. The Ui twin answers the prompt Proceed; the AI twin's decider goes on. One executor.
+        /// </summary>
+        private static ScenarioDef PickUpProvokes(bool ui)
+        {
+            var steps = new List<Step>
+            {
+                Step.Assert("a dagger on the hero's square (fixture)", ctx =>
+                {
+                    CharacterController hero = ctx.Get("hero");
+                    SquareCell cell = SquareGrid.Instance != null ? SquareGrid.Instance.GetCell(hero.GridPosition) : null;
+                    if (cell == null)
+                        return false;
+                    cell.AddGroundItem(ItemDatabase.CloneItem(ItemID.WeaponDagger));
+                    return true;
+                }),
+                Step.Action(ActionIds.PickUpItem, null, ItemIDs.DAGGER),
+            };
+            if (ui)
+                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed));
+            steps.Add(Step.Assert("after the pick-up", ctx => NoteGear(ctx, "hero", "hero")));
+            ScenarioBuilder b = Rules(ui ? "rules/pick-up-provokes-ui" : "rules/pick-up-provokes-ai",
+                    "Picking up an item is a move action that provokes (PHB p.142, Table 8-2; D8, AI-054)")
+                .Covers("AI-054", "D8", "PHB p.142", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, null, null); })
+                .Tweak("orc", Sturdy)
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 1, steps.ToArray());
+            if (ui)
+                b = b.Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            return b
+                .Expect("The pick-up step is done", Expect.StepStatus("hero", 1, "Action", 0, "done"))
+                .Expect("The orc takes one attack of opportunity for the pick-up (PHB p.142)", AoOCount("orc", "hero", "pick up Dagger", 1))
+                .Expect("The dagger is in the hero's hand", Fact12("hero.right", ItemIDs.DAGGER))
+                .Expect("The move action is spent; the standard action is left", Expect.All(Fact12("hero.move", "False"), Fact12("hero.standard", "True")))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-073 (batch 13 step 15, D8): an AI-run Enemy archer (test_archer_gust: a longbow in hand, its longsword stowed)
+        /// with an empty quiver and a foe adjacent drops the useless bow (a free action, PHB p.141) and draws the longsword
+        /// through the draw entry (a move action that does not provoke, PHB p.142), then fights the foe with it in round 1
+        /// (an attack, or a maneuver such as a trip, the profile's choice). It never shoots.
+        /// </summary>
+        private static ScenarioDef ArcherNoAmmoDrawsMeleeAi()
+        {
+            return Rules("rules/archer-no-ammo-draws-melee-ai", "An AI archer with an empty quiver drops its bow and draws its melee weapon (PHB p.141-142; AI-073, D8)")
+                .Covers("AI-073", "ITM-069", "D8", "PHB p.141", "PHB p.142")
+                .MaxRounds(1)
+                .Npc("archer", "test_archer_gust", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Adjacent Hero", 3)), 11, 10, Control.Idle)
+                .Tweak("archer", c => { EmptyQuiver(c); Sturdy(c); })
+                .Tweak("foe", Sturdy)
+                .Initiative("archer", "foe")
+                .Expect("It drops the bow (free) before it draws the longsword (move action)", v =>
+                {
+                    TraceEvent drop = v.Log("drops Longbow [(]free action").FirstOrDefault();
+                    TraceEvent draw = v.Log("draws Longsword [(]move action[)]").FirstOrDefault();
+                    if (drop == null || draw == null)
+                        return ExpectResult.Fail("drop line " + (drop != null) + ", draw line " + (draw != null));
+                    return drop.Seq < draw.Seq ? ExpectResult.Pass("drop #" + drop.Seq + " then draw #" + draw.Seq, drop.Seq, draw.Seq)
+                        : ExpectResult.Fail("the draw came first", drop.Seq, draw.Seq);
+                })
+                .Expect("Drawing provokes nothing", AoOCount("foe", "archer", null, 0))
+                .Expect("Round 1: it fights the foe in melee (an attack or a maneuver with the drawn sword)", FightsInMeleeBy("archer", "foe", 1))
+                .Expect("Any weapon attack it makes is with the longsword", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("archer", null, aoo: false);
+                    List<TraceEvent> other = attacks.Where(e => (e.Str("weapon") ?? "").IndexOf("Longsword", StringComparison.OrdinalIgnoreCase) < 0).ToList();
+                    return other.Count == 0 ? ExpectResult.Pass(attacks.Count + " longsword attack(s)")
+                        : ExpectResult.Fail(other.Count + " attack(s) with " + string.Join(",", other.Select(e => e.Str("weapon"))), other.Select(e => e.Seq).ToArray());
+                })
+                .Expect("It never shoots", NoBowShot("archer"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-074 (design choice C2's interim rule, batch 13 step 15): the AI's attack-mode chooser
+        /// (AttackIntent.ChooseAiMode) never throws a creature's last melee weapon unless it has another weapon to draw. A
+        /// Scripted orc whose only weapon is a dagger is told to attack a hero 20 ft. away (inside the dagger's thrown range,
+        /// PHB p.113): it does not throw, so it makes no ranged attack and still holds the dagger.
+        /// </summary>
+        private static ScenarioDef NpcKeepsLastMeleeWeaponAi()
+        {
+            return Rules("rules/npc-keeps-last-melee-weapon-ai", "An AI creature does not throw its last melee weapon (AI-074; C2)")
+                .Covers("AI-074", "C2", "PHB p.113")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 14, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); Gear(c, ItemID.WeaponDagger, null); })
+                .Initiative("orc", "hero")
+                .Turn("orc", 1, Step.Attack("hero"), Step.Assert("after", ctx => NoteGear(ctx, "orc", "orc")))
+                .Expect("It makes no ranged attack (no throw)", v =>
+                {
+                    List<TraceEvent> throws = v.Attacks("orc", null, aoo: false).Where(e => e.Bool("ranged")).ToList();
+                    return throws.Count == 0 ? ExpectResult.Pass("no throw") : ExpectResult.Fail(throws.Count + " ranged attack(s)", throws.Select(e => e.Seq).ToArray());
+                })
+                .Expect("It still holds its dagger", Fact12("orc.right", ItemIDs.DAGGER))
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-181 (PHB p.311: a panicked creature drops anything it holds and flees): an AI-run orc holding a longsword
+        /// with a heavy wooden shield readied is panicked by the Scripted hero beside it (the harness stand-in for a failed
+        /// save). When Panicked is applied (and, as a backstop, at the start of its panicked turn in the shared flee
+        /// controller) it drops the sword (PHB p.141, p.311; delegated RAW reading 2026-10-29) before it flees; the readied shield is strapped on, not held, and stays (delegated RAW reading 2026-10-29).
+        /// </summary>
+        private static ScenarioDef PanickedDropsHeldAi()
+        {
+            return Rules("rules/panicked-drops-held-ai", "A panicked AI creature drops what it holds before it flees (PHB p.311, p.141; CMB-181)")
+                .Covers("CMB-181", "PHB p.311", "PHB p.141", "D8", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Ai)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); Gear(c, ItemID.WeaponLongsword, ItemID.ShieldHeavyWooden); })
+                .Initiative("hero", "orc")
+                .Turn("hero", 1, Step.Assert("the hero panics the orc (fixture)", ctx =>
+                {
+                    ctx.Gm.ApplyCondition(ctx.Get("orc"), CombatConditionType.Panicked, 3, ctx.Get("hero"), sourceCategory: "Harness");
+                    return ctx.Get("orc").HasCondition(CombatConditionType.Panicked);
+                }), Step.Pass())
+                .Turn("hero", 2, Step.Assert("after the orc's turn", ctx => NoteGear(ctx, "orc", "orc")), Step.Pass())
+                .Expect("Round 1: the orc drops the longsword before it moves", DropBeforeMove("orc", "Longsword", 1))
+                .Expect("The sword is gone from its hands; the readied shield stays", Expect.All(
+                    Fact12("orc.right", "none"), Fact12("orc.left", ItemIDs.SHIELD_HEAVY_WOODEN)))
+                .Expect("The orc makes no attack", Expect.None("attack", e => e.Str("attacker") == "orc"))
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-181 for a PC (the same flee controller, PC_NPC_PARITY): a Ui fighter holding a longsword with a heavy wooden
+        /// shield readied is panicked by the Scripted goblin beside it; on its forced turn it drops the sword (a free action)
+        /// before it flees, and keeps the readied shield.
+        /// </summary>
+        private static ScenarioDef PanickedDropsHeldPc()
+        {
+            return Rules("rules/panicked-drops-held-pc", "A panicked PC drops what it holds before it flees (PHB p.311, p.141; CMB-181)")
+                .Covers("CMB-181", "PHB p.311", "PHB p.141", "D8", "Q1", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Npc("gob", "goblin", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { Sturdy(c); Gear(c, ItemID.WeaponLongsword, ItemID.ShieldHeavyWooden); })
+                .Tweak("gob", Sturdy)
+                .Initiative("gob", "hero")
+                .Turn("gob", 1, Step.Assert("the goblin panics the hero (fixture)", ctx =>
+                {
+                    ctx.Gm.ApplyCondition(ctx.Get("hero"), CombatConditionType.Panicked, 3, ctx.Get("gob"), sourceCategory: "Harness");
+                    return ctx.Get("hero").HasCondition(CombatConditionType.Panicked);
+                }), Step.Pass())
+                .Turn("hero", 1, Step.Attack("gob"))
+                .Turn("gob", 2, Step.Assert("after the hero's turn", ctx => NoteGear(ctx, "hero", "hero")), Step.Pass())
+                .Expect("Round 1: the hero drops the longsword before it moves", DropBeforeMove("hero", "Longsword", 1))
+                .Expect("The sword is gone from its hands; the readied shield stays", Expect.All(
+                    Fact12("hero.right", "none"), Fact12("hero.left", ItemIDs.SHIELD_HEAVY_WOODEN)))
+                .Expect("The hero makes no attack", Expect.None("attack", e => e.Str("attacker") == "hero"))
+                .Build();
+        }
+
+        /// <summary>The panicked drop of <paramref name="item"/> (DropItemNow's "everything it holds" line, when Panicked is applied or at the panicked turn's start) comes before <paramref name="key"/>'s first move in <paramref name="round"/>.</summary>
+        private static Func<TraceView, ExpectResult> DropBeforeMove(string key, string item, int round)
+            => v =>
+            {
+                TraceEvent drop = v.Log("drops " + item + " [(](panicked: )?everything it holds; a free action").FirstOrDefault(e => e.Round == round);
+                if (drop == null)
+                    return ExpectResult.Fail("no panicked drop line in round " + round);
+                TraceEvent move = v.Moves(key, round).FirstOrDefault();
+                if (move == null)
+                    return ExpectResult.Pass("dropped #" + drop.Seq + " (no move)", drop.Seq);
+                return drop.Seq < move.Seq ? ExpectResult.Pass("drop #" + drop.Seq + " before the move #" + move.Seq, drop.Seq, move.Seq)
+                    : ExpectResult.Fail("the move came first", drop.Seq, move.Seq);
+            };
     }
 }
 #endif

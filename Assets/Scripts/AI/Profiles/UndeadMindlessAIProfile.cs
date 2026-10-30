@@ -89,77 +89,12 @@ namespace DND35.AI.Profiles
             return false;
         }
 
+        /// <summary>
+        /// A mindless undead re-arms itself after a disarm (or a throw) with the melee weapon in its pack, through the
+        /// catalog's draw entry at its RAW cost (a move action, PHB p.142; batch 13 step 15, D8), even when it has natural
+        /// attacks (a skeleton's claws): the shambling pressure this profile models.
+        /// </summary>
         public override bool TryEnsureWeaponFallback(CharacterController self)
-        {
-            if (self == null || self.Stats == null)
-                return false;
-
-            if (self.GetEquippedMainWeapon() != null)
-                return false;
-
-            InventoryComponent inventoryComponent = self.InventoryComp;
-            Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
-            if (inventory == null || inventory.GeneralSlots == null)
-                return false;
-
-            int weaponIndex = FindBestFallbackWeaponIndex(inventory);
-            if (weaponIndex < 0)
-            {
-                // No manufactured weapon left: combat naturally falls back to natural attacks (if any), then unarmed.
-                return false;
-            }
-
-            ItemData weapon = inventory.GeneralSlots[weaponIndex];
-            if (weapon == null)
-                return false;
-
-            EquipSlot slot = ResolveFallbackEquipSlot(weapon);
-            if (slot == EquipSlot.None)
-                return false;
-
-            bool equipped = inventory.EquipFromInventory(weaponIndex, slot);
-            if (equipped)
-                Debug.Log($"[AI][UndeadMindless] {self.Stats.CharacterName} re-equips {weapon.Name} in {slot}.");
-
-            return equipped;
-        }
-
-        private static int FindBestFallbackWeaponIndex(Inventory inventory)
-        {
-            int firstWeapon = -1;
-
-            for (int i = 0; i < inventory.GeneralSlots.Length; i++)
-            {
-                ItemData candidate = inventory.GeneralSlots[i];
-                if (candidate == null || !candidate.IsWeapon)
-                    continue;
-
-                if (firstWeapon < 0)
-                    firstWeapon = i;
-
-                // Prefer melee for shambling undead pressure.
-                if (candidate.WeaponCat == WeaponCategory.Melee)
-                    return i;
-            }
-
-            return firstWeapon;
-        }
-
-        private static EquipSlot ResolveFallbackEquipSlot(ItemData weapon)
-        {
-            if (weapon == null)
-                return EquipSlot.None;
-
-            if (weapon.CanEquipIn(EquipSlot.RightHand))
-                return EquipSlot.RightHand;
-
-            if (weapon.CanEquipIn(EquipSlot.LeftHand))
-                return EquipSlot.LeftHand;
-
-            if (weapon.CanEquipIn(EquipSlot.Hands))
-                return EquipSlot.Hands;
-
-            return EquipSlot.None;
-        }
+            => AiWeaponFallback.TryDraw(self, preferMelee: true, evenWithNaturalAttacks: true);
     }
 }

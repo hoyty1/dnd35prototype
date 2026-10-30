@@ -302,6 +302,12 @@ public class AIService : MonoBehaviour
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} spots {targetPC.Stats.CharacterName} after searching."));
         }
 
+        // The weapon fallback (batch 13 step 15, AI-073): a creature that holds no weapon it can fight with (empty hands
+        // after a throw or a disarm, a bow with an empty quiver) draws one through the catalog's draw entry at its RAW cost,
+        // before its routine reads the weapon in hand (AIProfile.EnsureWeapon).
+        if (!npc.IsGrappling())
+            AIProfile.EnsureWeapon(npc);
+
         if (npc.IsGrappling())
         {
             // A grappling caster may keep its spell up (ConcentrationRules; delegated RAW reading 2026-10-15, PHB p.156,

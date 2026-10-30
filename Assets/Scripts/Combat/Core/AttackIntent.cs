@@ -189,17 +189,36 @@ public sealed class AttackIntent
     /// The NPC's attack mode with <paramref name="weapon"/> against <paramref name="target"/> (PHB p.113: throwing is the
     /// wielder's choice for each attack): Ranged with a ranged weapon (a bow, a crossbow, a javelin); Thrown with a melee
     /// weapon that can be thrown (a dagger, a spear, a handaxe) when the target is beyond its melee reach and within its
-    /// thrown range; Melee otherwise. AI stopgap (batch 13 catalog): it throws only at a target it cannot reach, and never
-    /// weighs a throw against closing in.
+    /// thrown range, unless it is the creature's last melee weapon and it has no other weapon to draw (AI-074, design choice
+    /// C2; batch 13 step 15); Melee otherwise. Interim rule, replaced by batch 22's evaluator: it throws only at a target it
+    /// cannot reach, and never weighs a throw against closing in.
     /// </summary>
     public static AttackMode ChooseAiMode(CharacterController actor, ItemData weapon, CharacterController target)
     {
         if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
             return AttackMode.Ranged;
         if (actor != null && target != null && GameManager.IsThrowableWeapon(weapon, meleeOnly: true)
-            && !actor.IsTargetInCurrentWeaponRange(target) && actor.IsTargetInThrownWeaponRange(target, weapon))
+            && !actor.IsTargetInCurrentWeaponRange(target) && actor.IsTargetInThrownWeaponRange(target, weapon)
+            && KeepsAWeaponAfterThrowing(actor, weapon))
             return AttackMode.Thrown;
         return AttackMode.Melee;
+    }
+
+    /// <summary>
+    /// The interim chooser's guard (AI-074, design choice C2; batch 13 step 15, replaced by batch 22's evaluator): throwing
+    /// <paramref name="weapon"/> leaves <paramref name="actor"/> a weapon, another melee weapon in its other hand or a pack
+    /// weapon it can draw and fight with (PHB p.142; AiWeaponFallback.HasUsablePackWeapon: not an empty bow or sling). A
+    /// creature whose only usable weapon is the one it would throw keeps it for melee.
+    /// </summary>
+    public static bool KeepsAWeaponAfterThrowing(CharacterController actor, ItemData weapon)
+    {
+        Inventory inv = actor != null && actor.InventoryComp != null ? actor.InventoryComp.CharacterInventory : null;
+        if (inv == null)
+            return false;
+        ItemData other = ReferenceEquals(inv.RightHandSlot, weapon) ? inv.LeftHandSlot : inv.RightHandSlot;
+        if (other != null && other.IsWeapon && other.WeaponCat == WeaponCategory.Melee)
+            return true;
+        return AiWeaponFallback.HasUsablePackWeapon(actor);
     }
 
     private static void CopyDeclarations(AttackIntent intent, CharacterController attacker)

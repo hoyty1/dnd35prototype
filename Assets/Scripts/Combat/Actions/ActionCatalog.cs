@@ -166,6 +166,13 @@ public static class ActionCatalog
         return gm.GetItemUseCost(actor, ctx.Item, ctx.Variant == ItemUseRules.VariantAdminister);
     }
 
+    /// <summary>
+    /// The draw's action for the context's item (D8; EquipmentActionRules.DrawCost): free with Quick Draw, with a regular
+    /// move at base attack bonus +1, or as a Two-Weapon Fighting creature's second draw; else a move action.
+    /// </summary>
+    private static ActionCostType DrawCostFor(CharacterController actor, ActionContext ctx)
+        => EquipmentActionRules.DrawCost(actor, ctx != null ? ctx.Item : null);
+
     /// <summary>The load's action by the weapon and Rapid Reload (D4; PHB p.115, p.99): ReloadRules.CostFor.</summary>
     private static ActionCostType ReloadCostFor(CharacterController actor, ActionContext ctx)
         => ReloadRules.CostFor(actor);
@@ -350,17 +357,25 @@ public static class ActionCatalog
             .Run(new ReloadActionExecutor(), ActionUiAfter.ShowChoices)
             .Costs(ReloadCostFor));
         l.Add(Def(ActionIds.DrawWeapon, "Draw a Weapon", E, ActionCostType.Move, ProvokeRule.No, ActionTargetKind.Item, ActionRoles.Equip,
-                "PHB p.142, Table 8-2 (No) and note 4 (with a move at BAB +1)", ImplStatus.Missing, "ITM-069"));
+                "PHB p.142 (a weapon, or a wand in easy reach), Table 8-2 (No) and note 4 (free with a regular move at BAB +1; Two-Weapon Fighting draws two light or one-handed weapons at once), p.98 (Quick Draw: free); D8",
+                ImplStatus.New)
+            .Run(new DrawWeaponActionExecutor(), ActionUiAfter.ShowChoices)
+            .Costs(DrawCostFor));
         l.Add(Def(ActionIds.SheatheWeapon, "Sheathe a Weapon", E, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Item, ActionRoles.Equip,
-                "PHB p.142, Table 8-2", ImplStatus.Missing, "ITM-069"));
+                "PHB p.142, Table 8-2 (move, Yes); D8", ImplStatus.New)
+            .Run(new SheatheWeaponActionExecutor(), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.ReadyShield, "Ready or Loose a Shield", E, ActionCostType.Move, ProvokeRule.No, ActionTargetKind.Item, ActionRoles.Equip | ActionRoles.Defend,
-                "PHB p.142, Table 8-2 (No) and note 4", ImplStatus.Missing, "ITM-069"));
+                "PHB p.142-143 (loosing unstraps and drops it), Table 8-2 (No) and note 4 (free with a regular move at BAB +1); D8", ImplStatus.New)
+            .Run(new ReadyShieldActionExecutor(), ActionUiAfter.ShowChoices)
+            .Costs((c, ctx) => EquipmentActionRules.ShieldCost(c)));
         l.Add(Def(ActionIds.DonArmor, "Don Armor", E, ActionCostType.FullRound, ProvokeRule.No, ActionTargetKind.Item, ActionRoles.Equip | ActionRoles.Defend,
-                "PHB p.123 Table 7-7 (rounds to minutes; not a Table 8-2 row)", ImplStatus.Missing, "ITM-069"));
+                "PHB p.123 Table 7-7 (rounds to minutes; not a Table 8-2 row): no action spans rounds, so armor is locked in combat; D8", ImplStatus.OutOfScope, "ITM-095"));
         l.Add(Def(ActionIds.PickUpItem, "Pick Up an Item", E, ActionCostType.Move, ProvokeRule.Yes, ActionTargetKind.Item, ActionRoles.Equip | ActionRoles.Item,
-                "PHB p.142, Table 8-2", ImplStatus.PcOnly, "AI-054"));
+                "PHB p.142, Table 8-2 (move, Yes); D8 (a weapon into a free hand)", ImplStatus.Extracted)
+            .Run(new PickUpItemActionExecutor(), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.DropItem, "Drop an Item", E, ActionCostType.Free, ProvokeRule.No, ActionTargetKind.Item, ActionRoles.Equip,
-                "PHB p.141 Table 8-2 (free action)", ImplStatus.PcOnly, "AI-054"));
+                "PHB p.141 Table 8-2 (free action), p.143 (a readied shield is loosed), p.311 (a panicked creature drops what it holds); D8", ImplStatus.Extracted)
+            .Run(new DropItemActionExecutor(), ActionUiAfter.ShowChoices));
 
         // ── Monster abilities (per creature) ──
         l.Add(Def(ActionIds.BreathWeapon, "Breath Weapon", Mo, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Cell, ActionRoles.Attack,

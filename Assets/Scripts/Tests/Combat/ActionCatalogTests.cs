@@ -46,7 +46,7 @@ public static class ActionCatalogTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-14) ==========");
+        Debug.Log("========== ACTION CATALOG TESTS (batch 13 steps 3-15) ==========");
 
         Run(TestOneEntryPerId);
         Run(TestEveryEntryComplete);
@@ -65,6 +65,7 @@ public static class ActionCatalogTests
         Run(TestPostureAndReloadEntries);
         Run(TestSupportAndWallEntries);
         Run(TestItemEntries);
+        Run(TestEquipmentEntries);
         if (Application.isPlaying && GameManager.Instance != null)
             Run(TestRunnerRefusalsInPlay);
         else
@@ -232,6 +233,75 @@ public static class ActionCatalogTests
             Assert(!d.Executor.CanExecute(null).Ok, d.Id + ": the pre-check refuses a missing context");
             Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, d.Id + ": the pre-check refuses a context with no actor");
         }
+    }
+
+    /// <summary>
+    /// The equipment entries (batch 13 step 15, D8): drawing (a move action that does not provoke, free with Quick Draw or
+    /// a regular move at base attack bonus +1), sheathing (a move action that provokes) and readying or loosing a shield (a
+    /// move action that does not provoke) are New; picking up (a move action that provokes) and dropping (free, no
+    /// provocation) are Extracted; donning armor is out of scope in combat (ITM-095). Their rules: the free draw's credit
+    /// clears with the turn, the costs map to the action economy, a wand is drawable and a two-handed weapon is not paired,
+    /// the hand slots are the only ones that change in combat; each pre-check refuses an empty context.
+    /// </summary>
+    private static void TestEquipmentEntries()
+    {
+        var expected = new (string id, System.Type executor, ImplStatus status, ActionCostType cost, ProvokeRule provokes)[]
+        {
+            (ActionIds.DrawWeapon, typeof(DrawWeaponActionExecutor), ImplStatus.New, ActionCostType.Move, ProvokeRule.No),
+            (ActionIds.SheatheWeapon, typeof(SheatheWeaponActionExecutor), ImplStatus.New, ActionCostType.Move, ProvokeRule.Yes),
+            (ActionIds.ReadyShield, typeof(ReadyShieldActionExecutor), ImplStatus.New, ActionCostType.Move, ProvokeRule.No),
+            (ActionIds.PickUpItem, typeof(PickUpItemActionExecutor), ImplStatus.Extracted, ActionCostType.Move, ProvokeRule.Yes),
+            (ActionIds.DropItem, typeof(DropItemActionExecutor), ImplStatus.Extracted, ActionCostType.Free, ProvokeRule.No),
+        };
+        foreach (var e in expected)
+        {
+            ActionDefinition d = ActionCatalog.Get(e.id);
+            Assert(d != null && d.Status == e.status && d.Executor != null && d.Executor.GetType() == e.executor
+                   && d.UiAfter == ActionUiAfter.ShowChoices && d.Cost == e.cost && d.Provokes == e.provokes,
+                e.id + " is " + e.status + " over " + e.executor.Name + " (" + e.cost + ", provokes " + e.provokes + "; PHB p.141-143, D8)",
+                d != null ? d.ToString() : "null");
+            if (d != null && d.Executor != null)
+            {
+                Assert(!d.Executor.CanExecute(null).Ok, e.id + ": the pre-check refuses a missing context");
+                Assert(!d.Executor.CanExecute(new ActionContext { Definition = d }).Ok, e.id + ": the pre-check refuses a context with no actor");
+            }
+        }
+        ActionDefinition armor = ActionCatalog.Get(ActionIds.DonArmor);
+        Assert(armor != null && armor.Status == ImplStatus.OutOfScope && armor.Executor == null && armor.IssueIds != null
+               && Array.IndexOf(armor.IssueIds, "ITM-095") >= 0,
+            "Donning armor is out of scope in combat (PHB Table 7-7 p.123; ITM-095)", armor != null ? armor.ToString() : "null");
+        Assert(ActionCatalog.Get(ActionIds.DrawWeapon).CostFor(null, null) == ActionCostType.Move
+               && ActionCatalog.Get(ActionIds.ReadyShield).CostFor(null, null) == ActionCostType.Move,
+            "With no actor the draw and the shield cost a move action (their table cost)");
+
+        Assert(EquipmentActionRules.CostOf(DrawPayment.MoveAction) == ActionCostType.Move
+               && EquipmentActionRules.CostOf(DrawPayment.QuickDraw) == ActionCostType.Free
+               && EquipmentActionRules.CostOf(DrawPayment.WithMove) == ActionCostType.Free
+               && EquipmentActionRules.CostOf(DrawPayment.Paired) == ActionCostType.Free,
+            "A draw costs a move action, or nothing with Quick Draw, a regular move at BAB +1 or the paired Two-Weapon Fighting draw (PHB p.142, p.98)");
+        var a = new ActionEconomy { FreeDrawsWithMove = 2, PairedDrawAvailable = true };
+        a.Reset();
+        Assert(a.FreeDrawsWithMove == 0 && !a.PairedDrawAvailable, "The free draws of a turn's moves and the paired draw clear with the turn");
+        bool closedByEveryAction = true;
+        foreach (Action<ActionEconomy> spend in new Action<ActionEconomy>[] { e => e.UseMoveAction(), e => e.UseStandardAction(), e => e.UseFullRoundAction(), e => e.UseSwiftAction(), e => { e.UseMoveAction(); e.PairedDrawAvailable = true; e.PairedDrawFirst = new ItemData(); e.ConvertStandardToMove(); } })
+        {
+            var e2 = new ActionEconomy { PairedDrawAvailable = true, PairedDrawFirst = new ItemData() };
+            spend(e2);
+            closedByEveryAction &= !e2.PairedDrawAvailable && e2.PairedDrawFirst == null;
+        }
+        Assert(closedByEveryAction, "Any action spent closes the paired Two-Weapon Fighting draw: the two draws are one act (PHB p.142 note 4; delegated RAW reading 2026-10-29)");
+
+        ItemData longsword = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponLongsword);
+        ItemData greatsword = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponGreatsword);
+        Assert(longsword != null && greatsword != null && EquipmentActionRules.IsDrawable(longsword) && EquipmentActionRules.IsPairable(longsword)
+               && EquipmentActionRules.IsDrawable(greatsword) && !EquipmentActionRules.IsPairable(greatsword)
+               && EquipmentActionRules.IsDrawable(new ItemData { Type = ItemType.Consumable, IsWand = true }) && !EquipmentActionRules.IsDrawable(new ItemData { Type = ItemType.Consumable, IsPotion = true }),
+            "Weapons and wands are drawn (PHB p.142); Two-Weapon Fighting pairs light and one-handed weapons only; a potion is retrieved");
+        Assert(EquipmentActionRules.IsHandSlot(EquipSlot.RightHand) && EquipmentActionRules.IsHandSlot(EquipSlot.LeftHand)
+               && !EquipmentActionRules.IsHandSlot(EquipSlot.Armor) && !EquipmentActionRules.IsHandSlot(EquipSlot.Neck),
+            "Only the hand slots change in combat; armor and worn slots are locked (ITM-095)");
+        Assert(EquipmentActionRules.WornSlotLockedReason(EquipSlot.Armor, null).Contains("Table 7-7"),
+            "The armor lock names PHB Table 7-7");
     }
 
     /// <summary>
@@ -419,12 +489,12 @@ public static class ActionCatalogTests
         new object[] { ActionIds.Rage, ActionCostType.Free, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.DomainPower, ActionCostType.Standard, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
         new object[] { ActionIds.Reload, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
-        new object[] { ActionIds.DrawWeapon, ActionCostType.Move, ProvokeRule.No, ImplStatus.Missing, "ITM-069" },
-        new object[] { ActionIds.SheatheWeapon, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Missing, "ITM-069" },
-        new object[] { ActionIds.ReadyShield, ActionCostType.Move, ProvokeRule.No, ImplStatus.Missing, "ITM-069" },
-        new object[] { ActionIds.DonArmor, ActionCostType.FullRound, ProvokeRule.No, ImplStatus.Missing, "ITM-069" },
-        new object[] { ActionIds.PickUpItem, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.PcOnly, "AI-054" },
-        new object[] { ActionIds.DropItem, ActionCostType.Free, ProvokeRule.No, ImplStatus.PcOnly, "AI-054" },
+        new object[] { ActionIds.DrawWeapon, ActionCostType.Move, ProvokeRule.No, ImplStatus.New, "" },
+        new object[] { ActionIds.SheatheWeapon, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.New, "" },
+        new object[] { ActionIds.ReadyShield, ActionCostType.Move, ProvokeRule.No, ImplStatus.New, "" },
+        new object[] { ActionIds.DonArmor, ActionCostType.FullRound, ProvokeRule.No, ImplStatus.OutOfScope, "ITM-095" },
+        new object[] { ActionIds.PickUpItem, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.Extracted, "" },
+        new object[] { ActionIds.DropItem, ActionCostType.Free, ProvokeRule.No, ImplStatus.Extracted, "" },
         new object[] { ActionIds.BreathWeapon, ActionCostType.Standard, ProvokeRule.No, ImplStatus.AiOnly, "CRE-039,AI-040" },
         new object[] { ActionIds.Spittle, ActionCostType.Free, ProvokeRule.Varies, ImplStatus.AiOnly, "CRE-039" },
         new object[] { ActionIds.Engulf, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.AiOnly, "CRE-039" },

@@ -31,7 +31,8 @@ public enum ItemUseKind
 /// (CharacterController.RetrievedItem) until it is used up, stowed, dropped or the encounter ends; a scroll of a
 /// free-action spell is free, provokes nothing and counts as the round's free-action spell (Table 8-2, as a quickened
 /// spell); administering a potion provokes as using one does (DMG p.229 says using a potion provokes and names no
-/// exception for administering it); a wand in easy reach is still retrieved until the draw entry (batch 13 step 15).
+/// exception for administering it); a wand in easy reach is drawn, not retrieved (batch 13 step 15, D8, ITM-092: a move
+/// action that does not provoke, free with a regular move at base attack bonus +1; EquipmentActionRules).
 /// A ring or wondrous item's activated power is worn, not stored: no retrieval, a standard action, no provocation.
 /// </summary>
 public static class ItemUseRules

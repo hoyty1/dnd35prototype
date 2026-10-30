@@ -1226,9 +1226,11 @@ namespace Tests.Scenarios
         /// (ConsumePendingSpellSlot) before the confirmation; the cancel restores the snapshot (ITM-084, batch 11 step 14),
         /// which records the scroll's stack and slot and the item in hand: the scroll is kept in hand, no slot is spent, the
         /// standard action is left and the retrieval's move action stays spent (ITM-005, fixed in batch 13 step 14).
-        /// Wand: the retrieval is answered Cancel: nothing is spent, no charge is lost and no cast opens. A wand's
-        /// activation does not provoke (DMG p.213, p.245), so a wand in hand has no prompt at all (rules/wand-no-aoo-ui;
-        /// ITM-085, fixed in batch 13 step 14).
+        /// Wand: since batch 13 step 15 (ITM-092 fixed, D8) a carried wand is drawn, a move action that does not provoke
+        /// (PHB p.142), and its activation does not provoke either (DMG p.213, p.245; ITM-085), so a threatened wand use
+        /// opens no prompt at all: there is nothing to cancel. The wand variant pins that: no AoO, the missile fired, one
+        /// charge spent, the wand in hand, the move (the draw) and standard actions spent (rules/wand-no-aoo-ui is its twin
+        /// without Combat Reflexes' second AoO).
         /// </summary>
         private static ScenarioDef ItemAoOCancel(bool scroll)
         {
@@ -1236,8 +1238,8 @@ namespace Tests.Scenarios
             string name = scroll ? "scroll" : "wand";
             ScenarioBuilder b = Rules("rules/cast-" + name + "-aoo-cancel", scroll
                     ? "A scroll cast cancelled at its AoO prompt keeps the scroll in hand; the retrieval's move action stays spent (ITM-084, D7)"
-                    : "A wand use cancelled at the retrieval's AoO prompt spends nothing (ITM-084, D7)")
-                .Covers("ITM-084", "ITM-005", "PHB p.141", "DMG p.213", scroll ? "DMG p.237" : "DMG p.245", "D7")
+                    : "A threatened wand use opens no AoO prompt to cancel: the draw and the activation provoke nothing (ITM-092, D8)")
+                .Covers("ITM-084", "ITM-005", "PHB p.141", "DMG p.213", scroll ? "DMG p.237" : "DMG p.245", "D7", scroll ? "PHB p.141" : "D8")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, Control.Ui)
                 .Npc("gob", "goblin", 6, 10, Control.Idle)
@@ -1248,8 +1250,10 @@ namespace Tests.Scenarios
                 .Force(4, 4, null, -1);
             var steps = new List<Step> { Step.Assert("record", ctx => RecordItem(ctx, id, "before")), Step.UseItem(id, "dummy") };
             if (scroll)
+            {
                 steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the retrieval's confirmation
-            steps.Add(Step.AnswerAoO(AoOAnswer.Cancel));       // scroll: the cast's confirmation; wand: the retrieval's
+                steps.Add(Step.AnswerAoO(AoOAnswer.Cancel));  // the cast's confirmation
+            }
             steps.Add(Step.Assert("after", ctx =>
             {
                 CharacterController w = ctx.Get("wizard");
@@ -1261,19 +1265,22 @@ namespace Tests.Scenarios
                 return true;
             }));
             b = b.Turn("wizard", 1, steps.ToArray())
-                .Expect("The confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
+                .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"));
+            if (!scroll)
+                return b
+                    .Expect("No AoO: the wand is drawn and activated without provoking (PHB p.142; DMG p.213, p.245)", Expect.None("aoo", null))
+                    .Expect("The missile hits the dummy: one missile of 1d4+1 = 5", FactIs("missile.lost.dummy", 5))
+                    .Expect("One charge is spent in both charge fields and the wand stays in hand",
+                        Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49"), FactIs("held", true)))
+                    .Expect("The move (the draw) and standard actions are spent", FactIs("actions", "---"))
+                    .Build();
+            b = b.Expect("The confirmation was answered Cancel", Expect.StepStatus("wizard", 1, "AnswerAoO(Cancel)", 0, "done"))
                 .Expect("The cancelled spell does nothing", FactIs("missile.lost.dummy", 0))
-                .Expect("No prepared slot is spent", FactsEqual("slots.before", "slots.after"))
                 .Expect("The standard action is left: the cancelled use cost no activation (ITM-084; DMG p.237, p.245)", FactIs("standard.left", true));
-            b = scroll
-                ? b.Expect("The retrieval's move action stays spent once it provoked; the standard action comes back (PHB p.141, Table 8-2; D7)", FactIs("actions", "s--"))
-                    .Expect("The goblin took one AoO, for the retrieval", Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1))
-                    .Expect("The scroll is kept, in hand: the cancel restores it (ITM-084, D7)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 1), FactIs("held", true)))
-                : b.Expect("Nothing is spent: the retrieval was cancelled before its move action was paid", FactIs("actions", "smf"))
-                    .Expect("No AoO is taken", Expect.None("aoo", null))
-                    .Expect("The wand keeps its charge in both charge fields and stays stored (ITM-034)",
-                        Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "50/50"), FactIs("held", false)));
-            return b.Build();
+            return b.Expect("The retrieval's move action stays spent once it provoked; the standard action comes back (PHB p.141, Table 8-2; D7)", FactIs("actions", "s--"))
+                .Expect("The goblin took one AoO, for the retrieval", Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1))
+                .Expect("The scroll is kept, in hand: the cancel restores it (ITM-084, D7)", Expect.All(FactIs("count.before", 1), FactIs("count.after", 1), FactIs("held", true)))
+                .Build();
         }
 
         // ── rules/potion-drink-provokes-ui, rules/potion-drink-provokes-ai ──
@@ -1567,12 +1574,12 @@ namespace Tests.Scenarios
         // ── rules/wand-no-aoo-ui, rules/wand-no-aoo-ai ────────────────
 
         /// <summary>
-        /// ITM-085, D7 (DMG p.213, p.245: activating a wand is a standard action that does not provoke; PHB p.141:
-        /// retrieving it does): a threatened wizard 5 uses a stored wand of magic missile on a dummy. The goblin beside it
-        /// has Combat Reflexes and -30 on attacks (every d20 is 5); every d4 is 4. The retrieval provokes (the Ui wizard's
-        /// prompt, answered Proceed; the Scripted wizard's AI decider goes on) and the goblin takes one AoO; the activation
-        /// opens no spellcasting prompt and takes no AoO. One missile of 5 hits the dummy, the wand loses one charge and
-        /// stays in hand, and the move and standard actions are spent.
+        /// ITM-085, D7, ITM-092 and D8 (DMG p.213, p.245: activating a wand is a standard action that does not provoke;
+        /// PHB p.142: a wand is a weapon-like object carried in easy reach, so it is drawn, a move action that does not
+        /// provoke; batch 13 step 15): a threatened wizard 5 uses a carried wand of magic missile on a dummy. The goblin
+        /// beside it has Combat Reflexes and -30 on attacks (every d20 is 5); every d4 is 4. Neither the draw nor the
+        /// activation provokes, so no prompt opens and the goblin takes no AoO. One missile of 5 hits the dummy, the wand
+        /// loses one charge and stays in hand, and the move (the draw) and standard actions are spent.
         /// </summary>
         private static ScenarioDef WandNoAoO(bool ui)
         {
@@ -1580,8 +1587,7 @@ namespace Tests.Scenarios
             var steps = new List<Step> { Step.Assert("record", ctx => RecordItem(ctx, WandId, "before")) };
             if (ui)
             {
-                steps.Add(Step.UseItem(WandId, "dummy"));
-                steps.Add(Step.AnswerAoO(AoOAnswer.Proceed)); // the retrieval
+                steps.Add(Step.UseItem(WandId, "dummy")); // drawn, not retrieved: no prompt (ITM-092, D8)
             }
             else
             {
@@ -1598,8 +1604,8 @@ namespace Tests.Scenarios
             }));
             if (!ui)
                 steps.Add(Step.EndTurn());
-            return Rules("rules/wand-no-aoo-" + side, "A wand's activation provokes nothing; only its retrieval does (DMG p.213, p.245; PHB p.141; ITM-085, D7)")
-                .Covers("DMG p.213", "DMG p.245", "PHB p.141", "ITM-085", "D7", "PC_NPC_PARITY")
+            return Rules("rules/wand-no-aoo-" + side, "A wand's draw and activation provoke nothing (DMG p.213, p.245; PHB p.142; ITM-085, ITM-092, D7, D8)")
+                .Covers("DMG p.213", "DMG p.245", "PHB p.142", "ITM-085", "ITM-092", "D7", "D8", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Pc("wizard", ActorSource.Stats(() => Wizard("Pin Wizard", 5)), 5, 10, ui ? Control.Ui : Control.Scripted)
                 .Npc("gob", "goblin", 6, 10, Control.Idle)
@@ -1610,8 +1616,10 @@ namespace Tests.Scenarios
                 .Force(20, 5, null, -1)
                 .Force(4, 4, null, -1)
                 .Turn("wizard", 1, steps.ToArray())
-                .Expect("One AoO, for the retrieval only (PHB p.141); the activation provokes none (DMG p.213)",
-                    Expect.All(Expect.Count("aoo", e => e.Str("by") == "gob", 1, 1), Expect.Count("aoo", e => (e.Str("trigger") ?? "").StartsWith("retrieve"), 1, 1)))
+                .Expect("No AoO: the wand is drawn (PHB p.142) and its activation provokes none (DMG p.213)",
+                    Expect.Count("aoo", e => e.Str("by") == "gob", 0, 0))
+                .Expect("The wand is drawn with the move action (PHB p.142; D8)", v =>
+                    v.Log("draws .*Wand.* [(]move action[)]").Count > 0 ? ExpectResult.Pass("draw line") : ExpectResult.Fail("no wand draw line"))
                 .Expect("The wand's missile hits: one missile of 1d4+1 = 5 at its caster level 1", FactIs("missile.lost.dummy", 5))
                 .Expect("The wand loses one charge in both charge fields and stays in hand", Expect.All(FactIs("charges.before", "50/50"), FactIs("charges.after", "49/49"), FactIs("held", true)))
                 .Expect("The move and standard actions are spent", FactIs("actions", "---"))

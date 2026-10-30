@@ -339,12 +339,25 @@ namespace DND35.AI
         }
 
         /// <summary>
-        /// Optional per-profile weapon fallback hook used at attack time.
-        /// Return true if this profile changed weapon state this turn.
+        /// AI choice, not a rule: the weapon fallback (batch 13 step 15, AI-073), run at the AI turn's start and in the NPC
+        /// attack prelude (<see cref="EnsureWeapon"/>). By default a creature that holds no weapon it can fight with draws
+        /// one through the catalog's draw entry at its RAW cost (AiWeaponFallback: a melee weapon first unless the profile
+        /// is Ranged; an archer with an empty quiver draws its melee weapon); a casting profile keeps its move action.
+        /// True when it drew a weapon.
         /// </summary>
         public virtual bool TryEnsureWeaponFallback(CharacterController self)
         {
-            return false;
+            if (IsCastingProfile)
+                return false;
+            return AiWeaponFallback.TryDraw(self, preferMelee: CombatStyle != CombatStyle.Ranged);
+        }
+
+        /// <summary>The weapon fallback of <paramref name="self"/>'s profile, or the default's for a creature without one.</summary>
+        public static bool EnsureWeapon(CharacterController self)
+        {
+            if (self == null)
+                return false;
+            return self.aiProfile != null ? self.aiProfile.TryEnsureWeaponFallback(self) : AiWeaponFallback.TryDraw(self, preferMelee: true);
         }
 
         /// <summary>
@@ -696,7 +709,9 @@ namespace DND35.AI
         /// when it may be declared now (the feat, no attack made yet, the full-round action free) and the expected hits of the
         /// turn's shots with it (one extra shot at the highest bonus, -2 on every shot, PHB p.99) beat those without it.
         /// Damage per hit is taken as equal; Haste's extra shot is in both. A thrown weapon (a javelin, or a dagger the NPC
-        /// throws, PHB p.113) counts only the throws it has weapons for: the one in hand and the like ones it carries.
+        /// throws, PHB p.113) counts only the throws it can make this turn: the one in hand, then the like ones it carries
+        /// only with Quick Draw (each next thrown weapon is a draw, PHB p.98; batch 13 step 15, D8), else a like throwable
+        /// weapon in its other hand.
         /// </summary>
         public static bool DefaultShouldUseRapidShot(CharacterController self, CharacterController target, ItemData weapon)
         {
@@ -724,13 +739,23 @@ namespace DND35.AI
             return rapid > plain;
         }
 
-        /// <summary>The throws <paramref name="weapon"/> allows this turn: unlimited for a projectile weapon; for a thrown one the weapon in hand plus the like throwable weapons carried (the post-attack draw's pick, GameManager.TryEquipNextThrowableWeapon).</summary>
+        /// <summary>
+        /// The throws <paramref name="weapon"/> allows this turn: unlimited for a projectile weapon; for a thrown one the
+        /// weapon in hand plus, with Quick Draw, the like throwable weapons carried (the post-attack free draw's pick,
+        /// GameManager.TryEquipNextThrowableWeapon, PHB p.98); without it, plus a like throwable weapon in the other hand
+        /// (the hand empties after each throw and the attack sequence stops, batch 13 step 15, D8).
+        /// </summary>
         private static int ThrowsAvailable(CharacterController self, ItemData weapon)
         {
             if (!GameManager.IsThrowableWeapon(weapon))
                 return int.MaxValue;
             int count = 1;
             Inventory inv = self.InventoryComp != null ? self.InventoryComp.CharacterInventory : null;
+            if (!EquipmentActionRules.HasQuickDraw(self))
+            {
+                ItemData other = inv == null ? null : ReferenceEquals(inv.RightHandSlot, weapon) ? inv.LeftHandSlot : inv.RightHandSlot;
+                return GameManager.IsThrowableWeapon(other) && other.WeaponCat == weapon.WeaponCat ? count + 1 : count;
+            }
             if (inv != null && inv.GeneralSlots != null)
                 foreach (ItemData item in inv.GeneralSlots)
                     if (GameManager.IsThrowableWeapon(item) && item.WeaponCat == weapon.WeaponCat)

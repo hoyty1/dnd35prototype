@@ -4385,6 +4385,142 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
+    /// The PC inventory's combat gates (batch 13 step 15, Q5 default), as for a consumable: the active character on its
+    /// turn, choosing an action, no attack-of-opportunity prompt open. False with <paramref name="feedback"/> otherwise.
+    /// </summary>
+    private bool CanChangeEquipmentFromInventoryNow(CharacterController actor, out string feedback)
+    {
+        feedback = string.Empty;
+        if (!IsPlayerTurn || ActivePC != actor)
+        {
+            feedback = "Only the active character can change equipment during combat.";
+            return false;
+        }
+        if (CurrentSubPhase != PlayerSubPhase.ChoosingAction)
+        {
+            feedback = "Cannot change equipment right now.";
+            return false;
+        }
+        if (_waitingForAoOConfirmation)
+        {
+            feedback = "Resolve the current attack-of-opportunity prompt first.";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The character sheet's inventory puts the pack item at <paramref name="generalIndex"/> in <paramref name="slot"/>
+    /// (InventoryUI.OnEquipSlotClicked). Outside combat it is equipped at once (Inventory.EquipFromInventory). In combat
+    /// (batch 13 step 15, owner question Q5's default) it is a catalog action at its RAW cost through
+    /// <see cref="RunPlayerAction"/>, the same entry every creature uses (ITM-069): a weapon is drawn (DrawWeapon: a move
+    /// action, free with Quick Draw or with a regular move at base attack bonus +1), a shield readied (ReadyShield); armor
+    /// and the other worn slots are locked (ITM-095). True when the change was made or the action started.
+    /// </summary>
+    public bool TryInventoryEquip(CharacterController actor, int generalIndex, EquipSlot slot, out string feedback)
+    {
+        feedback = string.Empty;
+        Inventory inv = EquipmentActionRules.InventoryOf(actor);
+        if (actor == null || actor.Stats == null || inv == null || generalIndex < 0 || generalIndex >= inv.GeneralSlots.Length)
+        {
+            feedback = "Invalid inventory slot.";
+            return false;
+        }
+        ItemData item = inv.GeneralSlots[generalIndex];
+        if (item == null || !item.CanEquipIn(slot))
+        {
+            feedback = item == null ? "Inventory slot is empty." : $"{item.Name} cannot go in {slot}.";
+            return false;
+        }
+        if (!IsCombatEncounterRunning())
+            return inv.EquipFromInventory(generalIndex, slot);
+
+        if (!CanChangeEquipmentFromInventoryNow(actor, out feedback))
+            return false;
+        if (!EquipmentActionRules.IsHandSlot(slot))
+        {
+            feedback = $"{item.Name}: {EquipmentActionRules.WornSlotLockedReason(slot, item)}.";
+            return false;
+        }
+
+        ActionContext ctx;
+        if (item.IsShield)
+        {
+            ctx = ActionContext.For(ActionIds.ReadyShield, actor, ActorSource.Ui);
+        }
+        else if (item.IsWeapon)
+        {
+            ctx = ActionContext.For(ActionIds.DrawWeapon, actor, ActorSource.Ui);
+            ctx.Variant = ItemData.ResolveHandAlias(slot) == EquipSlot.LeftHand ? EquipmentActionRules.VariantLeftHand : EquipmentActionRules.VariantRightHand;
+        }
+        else
+        {
+            feedback = $"{item.Name}: only a weapon is drawn or a shield readied in combat (PHB p.142).";
+            return false;
+        }
+        ctx.Item = item;
+        ctx.InventoryIndex = generalIndex;
+        // Refused here, with nothing spent, so the sheet shows why (a full hand: no silent move to the other hand).
+        Legality legal = item.IsShield ? CheckReadyShield(actor, generalIndex, item, null) : CheckDrawWeapon(actor, generalIndex, item, ctx.Variant);
+        if (!legal.Ok)
+        {
+            feedback = $"{item.Name}: {legal.Reason}.";
+            return false;
+        }
+        RunPlayerAction(ctx);
+        return true;
+    }
+
+    /// <summary>
+    /// The character sheet's inventory takes the item in <paramref name="slot"/> off (InventoryUI.OnEquipSlotClicked).
+    /// Outside combat it goes to the pack at once. In combat (batch 13 step 15, Q5 default) a held weapon is sheathed
+    /// (SheatheWeapon: a move action that provokes) and a readied shield loosed (ReadyShield "loose": a move action, the
+    /// shield dropped, PHB p.143), through <see cref="RunPlayerAction"/>; armor and the other worn slots are locked
+    /// (ITM-095). True when the change was made or the action started.
+    /// </summary>
+    public bool TryInventoryUnequip(CharacterController actor, EquipSlot slot, out string feedback)
+    {
+        feedback = string.Empty;
+        Inventory inv = EquipmentActionRules.InventoryOf(actor);
+        ItemData item = inv != null ? inv.GetEquipped(slot) : null;
+        if (actor == null || actor.Stats == null || item == null)
+        {
+            feedback = "Nothing is equipped there.";
+            return false;
+        }
+        if (!IsCombatEncounterRunning())
+            return inv.Unequip(slot);
+
+        if (!CanChangeEquipmentFromInventoryNow(actor, out feedback))
+            return false;
+        if (!EquipmentActionRules.IsHandSlot(slot))
+        {
+            feedback = $"{item.Name}: {EquipmentActionRules.WornSlotLockedReason(slot, item)}.";
+            return false;
+        }
+
+        ActionContext ctx;
+        if (EquipmentActionRules.IsReadiedShield(item))
+        {
+            ctx = ActionContext.For(ActionIds.ReadyShield, actor, ActorSource.Ui);
+            ctx.Variant = EquipmentActionRules.VariantLoose;
+        }
+        else
+        {
+            ctx = ActionContext.For(ActionIds.SheatheWeapon, actor, ActorSource.Ui);
+        }
+        ctx.Item = item;
+        Legality legal = EquipmentActionRules.IsReadiedShield(item) ? CheckReadyShield(actor, -1, item, ctx.Variant) : CheckSheatheWeapon(actor, item);
+        if (!legal.Ok)
+        {
+            feedback = $"{item.Name}: {legal.Reason}.";
+            return false;
+        }
+        RunPlayerAction(ctx);
+        return true;
+    }
+
+    /// <summary>
     /// Why <paramref name="actor"/> cannot handle items at all now, or null: pinned (PHB p.156) or in a wild shape whose
     /// gear is melded into the form (PHB p.197; CHR-020). No action is tested here (<see cref="CanUseItemManipulationAction"/>).
     /// </summary>
@@ -4418,22 +4554,9 @@ public partial class GameManager : MonoBehaviour
         return false;
     }
 
-    /// <summary>Pays a move-action item manipulation (picking up an item): the move action, else a standard action traded for one (PHB p.141-142).</summary>
-    private void ConsumeItemManipulationAction(CharacterController actor)
-    {
-        if (actor == null) return;
-
-        if (actor.Actions.HasMoveAction)
-            actor.Actions.UseMoveAction();
-        else if (actor.Actions.CanConvertStandardToMove)
-            actor.Actions.ConvertStandardToMove();
-        else if (actor.Actions.HasStandardAction)
-            actor.CommitStandardAction(); // every standard action pays here (PHB p.145; CMB-072)
-    }
-
     /// <summary>
-    /// Drop one equipped held item into the actor's current square.
-    /// D&D 3.5e: dropping a held item is a free action.
+    /// Why <paramref name="character"/> cannot drop a held item now, or empty: the drop entry's gate (its CanStart, batch 13
+    /// step 15, D8) and the PC Drop button's. Dropping a held item is a free action (PHB p.141, Table 8-2).
     /// </summary>
     public string GetDropEquippedItemDisabledReason(CharacterController character)
     {
@@ -4447,7 +4570,11 @@ public partial class GameManager : MonoBehaviour
         if (character.HasCondition(CombatConditionType.Pinned))
             return "Pinned: only grapple escape actions allowed";
 
-        if (inv.RightHandSlot == null && inv.LeftHandSlot == null)
+        // A readied shield is loosed, not dropped (PHB p.143); a retrieved item in hand can be dropped (D7, D8).
+        bool droppable = (inv.RightHandSlot != null && !EquipmentActionRules.IsReadiedShield(inv.RightHandSlot))
+            || (inv.LeftHandSlot != null && !EquipmentActionRules.IsReadiedShield(inv.LeftHandSlot))
+            || (character.RetrievedItem != null && character.IsHoldingRetrievedItem(character.RetrievedItem));
+        if (!droppable)
             return "No held item";
 
         return string.Empty;
@@ -4525,15 +4652,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (options.Count == 1)
+        if (options.Count == 1 || CombatUI == null)
         {
-            ResolveDropEquippedHeldItemFreeAction(pc, options[0].HandSlot);
-            return;
-        }
-
-        if (CombatUI == null)
-        {
-            ResolveDropEquippedHeldItemFreeAction(pc, options[0].HandSlot);
+            StartDropAction(pc, options[0].HeldItem);
             return;
         }
 
@@ -4557,39 +4678,32 @@ public partial class GameManager : MonoBehaviour
                 List<DropEquippedHeldItemOption> latestOptions = new List<DropEquippedHeldItemOption>();
                 TryGetHeldItemDropOptions(pc, out latestOptions);
 
-                EquipSlot selectedSlot = options[selectedIndex].HandSlot;
-                bool slotStillHeld = latestOptions.Exists(o => o.HandSlot == selectedSlot);
-                if (!slotStillHeld)
+                ItemData selectedItem = options[selectedIndex].HeldItem;
+                bool stillHeld = latestOptions.Exists(o => ReferenceEquals(o.HeldItem, selectedItem));
+                if (!stillHeld)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "That held item is no longer equipped."));
                     ShowActionChoices();
                     return;
                 }
 
-                ResolveDropEquippedHeldItemFreeAction(pc, selectedSlot);
+                StartDropAction(pc, selectedItem);
             },
             onCancel: ShowActionChoices);
     }
 
-    private void ResolveDropEquippedHeldItemFreeAction(CharacterController actor, EquipSlot handSlot)
+    /// <summary>The PC's drop: the catalog's drop entry through RunPlayerAction (a free action, D8); the runner shows the action panel after it.</summary>
+    private void StartDropAction(CharacterController actor, ItemData item)
     {
-        if (!TryDropEquippedHeldItemToGround(actor, handSlot, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback))
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
-            ShowActionChoices();
-            return;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⬇", $"{actor.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}."));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(Free action - no attacks of opportunity provoked)"));
-        UpdateAllStatsUI();
-        InvalidatePreviewThreats();
-        ShowActionChoices();
+        ActionContext ctx = ActionContext.For(ActionIds.DropItem, actor, ActorSource.Ui);
+        ctx.Item = item;
+        RunPlayerAction(ctx);
     }
 
     /// <summary>
-    /// Drop an item from inventory (used by inventory context menu).
-    /// This is an immediate utility action and does not consume action economy.
+    /// Drop an item from inventory (the inventory context menu). Outside combat it is dropped at once. In combat (batch 13
+    /// step 15, Q5 default) only an item in hand can be dropped, a free action (PHB p.141): the item the creature retrieved
+    /// goes through the drop entry; a stored item must be retrieved first (a move action that provokes, PHB p.141).
     /// </summary>
     public bool TryDropInventoryItemToGround(CharacterController actor, int inventoryIndex, out string feedback)
     {
@@ -4618,6 +4732,20 @@ public partial class GameManager : MonoBehaviour
         {
             feedback = "Inventory slot is empty.";
             return false;
+        }
+
+        if (IsCombatEncounterRunning())
+        {
+            if (!CanChangeEquipmentFromInventoryNow(actor, out feedback))
+                return false;
+            if (!actor.IsHoldingRetrievedItem(item))
+            {
+                feedback = $"{item.Name} is stored: only a held item can be dropped in combat (retrieving it first is a move action, PHB p.141).";
+                return false;
+            }
+            StartDropAction(actor, item);
+            feedback = string.Empty;
+            return true;
         }
 
         SquareCell cell = GetCharacterCurrentCell(actor);
@@ -4687,10 +4815,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (options.Count == 1)
+        if (options.Count == 1 || CombatUI == null)
         {
-            PickUpGroundItemOption single = options[0];
-            ResolvePickUpItemProvocation(pc, single.Cell, single.Item);
+            StartPickUpAction(pc, options[0].Cell, options[0].Item);
             return;
         }
 
@@ -4698,13 +4825,6 @@ public partial class GameManager : MonoBehaviour
         for (int i = 0; i < options.Count; i++)
         {
             optionLabels.Add(options[i].GetSelectionLabel());
-        }
-
-        if (CombatUI == null)
-        {
-            PickUpGroundItemOption fallbackOption = options[0];
-            ResolvePickUpItemProvocation(pc, fallbackOption.Cell, fallbackOption.Item);
-            return;
         }
 
         CombatUI.ShowPickUpItemSelection(
@@ -4726,92 +4846,22 @@ public partial class GameManager : MonoBehaviour
                     return;
                 }
 
-                ResolvePickUpItemProvocation(pc, selectedOption.Cell, selectedOption.Item);
+                StartPickUpAction(pc, selectedOption.Cell, selectedOption.Item);
             },
             onCancel: ShowActionChoices);
     }
 
-    private void ResolvePickUpItemProvocation(CharacterController actor, SquareCell cell, ItemData item)
+    /// <summary>
+    /// The PC's pick-up: the catalog's pick-up entry through RunPlayerAction (a move action that provokes, D8; its
+    /// attack-of-opportunity prompt is the UI decider's); the runner shows the action panel after it.
+    /// </summary>
+    private void StartPickUpAction(CharacterController actor, SquareCell cell, ItemData item)
     {
-        if (actor == null || cell == null || item == null)
-            return;
-
-        var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor));
-
-        if (threateningEnemies.Count == 0)
-        {
-            if (TryPickUpGroundItem(actor, cell, item, out string pickupMsg))
-            {
-                ConsumeItemManipulationAction(actor);
-                CombatUI?.ShowCombatLog(pickupMsg);
-                UpdateAllStatsUI();
-            }
-            else
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pickupMsg}"));
-            }
-
-            ShowActionChoices();
-            return;
-        }
-
-        ShowAoOActionConfirmation(new AoOProvokingActionInfo
-        {
-            ActionType = AoOProvokingAction.RetrieveItem,
-            ActionName = $"PICK UP {item.Name.ToUpper()}",
-            ActionDescription = $"Pick up {item.Name} from ground",
-            Actor = actor,
-            ThreateningEnemies = threateningEnemies,
-            OnProceed = () => StartCoroutine(ResolvePickUpAoOsAndApply(actor, cell, item, threateningEnemies)),
-            OnCancel = ShowActionChoices
-        });
-    }
-
-    private IEnumerator ResolvePickUpAoOsAndApply(CharacterController actor, SquareCell cell, ItemData item, List<CharacterController> threateningEnemies)
-    {
-        if (actor == null || actor.Stats == null)
-            yield break;
-
-        CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} reaches for {item.Name} on the ground (provokes AoO)."));
-
-        foreach (var enemy in threateningEnemies)
-        {
-            if (actor.Stats.IsDead) break;
-            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor))
-                continue;
-
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "pickup");
-            if (aooResult == null) continue;
-
-            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs pick up: {aooResult.GetDetailedSummary()}"));
-            UpdateAllStatsUI();
-
-
-            yield return new WaitForSeconds(0.65f);
-        }
-
-        if (actor.Stats.IsDead)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{actor.Stats.CharacterName} is slain before picking up {item.Name}!"));
-            UpdateAllStatsUI();
-            EndActivePCTurn();
-            yield break;
-        }
-
-        if (TryPickUpGroundItem(actor, cell, item, out string pickupMsg))
-        {
-            ConsumeItemManipulationAction(actor);
-            CombatUI?.ShowCombatLog(pickupMsg);
-            UpdateAllStatsUI();
-        }
-        else
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pickupMsg}"));
-        }
-
-        ShowActionChoices();
+        ActionContext ctx = ActionContext.For(ActionIds.PickUpItem, actor, ActorSource.Ui);
+        ctx.Item = item;
+        if (cell != null)
+            ctx.Cell = cell.Coords;
+        RunPlayerAction(ctx);
     }
 
     private bool TryGetHeldItemDropOptions(CharacterController actor, out List<DropEquippedHeldItemOption> options)
@@ -4824,11 +4874,15 @@ public partial class GameManager : MonoBehaviour
         if (inv == null)
             return false;
 
-        if (inv.RightHandSlot != null)
+        // A readied shield is loosed, not dropped (PHB p.143); the item the creature retrieved is held too (D7).
+        if (inv.RightHandSlot != null && !EquipmentActionRules.IsReadiedShield(inv.RightHandSlot))
             options.Add(new DropEquippedHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
 
-        if (inv.LeftHandSlot != null)
+        if (inv.LeftHandSlot != null && !EquipmentActionRules.IsReadiedShield(inv.LeftHandSlot))
             options.Add(new DropEquippedHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
+
+        if (actor.RetrievedItem != null && actor.IsHoldingRetrievedItem(actor.RetrievedItem))
+            options.Add(new DropEquippedHeldItemOption(EquipSlot.None, actor.RetrievedItem));
 
         return options.Count > 0;
     }
@@ -4900,8 +4954,10 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// After a throw (<see cref="AttackIntent.IsThrowOf"/>: every weapon with IsThrown and a range increment, javelins and
-    /// darts included; PHB p.113) the weapon lands in the target's square and the thrower draws the next throwable weapon
-    /// into the same hand, through its own inventory (an off-hand throw, the intent's OffHand step, into the left hand).
+    /// darts included; PHB p.113) the weapon lands in the target's square. With Quick Draw the thrower draws the next
+    /// throwable weapon into the same hand as a free action (PHB p.98; an off-hand throw, the intent's OffHand step, into
+    /// the left hand); without it the hand stays empty, so a full attack throws once per weapon in hand (batch 13 step 15,
+    /// D8, CHR-021) and the next is drawn through the draw entry.
     /// True when the weapon was dropped. Run by the post-attack hook (OnAttackResolved) for PCs and NPCs alike; the PC
     /// attack paths read their UI fields back from the inventory afterwards.
     /// </summary>
@@ -4924,6 +4980,17 @@ public partial class GameManager : MonoBehaviour
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y})."));
 
+        // Each next thrown weapon is a draw (batch 13 step 15, D8; CHR-021): only Quick Draw draws it as a free action and
+        // throws at the full rate of attacks (PHB p.98). Without it the hand stays empty; drawing the next is a move action,
+        // or free with a regular move at base attack bonus +1 (PHB p.142), through the draw entry.
+        if (!EquipmentActionRules.HasQuickDraw(thrower))
+        {
+            bool stillHolding = offHand ? thrower.HasThrowableOffHandWeaponEquipped() : thrower.HasThrowableWeaponEquipped();
+            if (!stillHolding)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{thrower.Stats.CharacterName} has no weapon in hand to throw; drawing another takes an action without Quick Draw."));
+            return true;
+        }
+
         ItemData nextWeapon;
         string equipFeedback;
         bool drew = offHand
@@ -4933,8 +5000,8 @@ public partial class GameManager : MonoBehaviour
         if (drew)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", offHand
-                ? $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand."
-                : $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}."));
+                ? $"{thrower.Stats.CharacterName} draws {nextWeapon.Name} into the off hand (free action, Quick Draw)."
+                : $"{thrower.Stats.CharacterName} draws {nextWeapon.Name} (free action, Quick Draw)."));
             return true;
         }
 
@@ -5317,7 +5384,7 @@ public partial class GameManager : MonoBehaviour
         public string GetSelectionLabel()
         {
             string itemName = HeldItem != null && !string.IsNullOrEmpty(HeldItem.Name) ? HeldItem.Name : "Unknown Item";
-            return $"{itemName} ({HandSlot})";
+            return HandSlot == EquipSlot.None ? $"{itemName} (in hand)" : $"{itemName} ({HandSlot})";
         }
     }
 

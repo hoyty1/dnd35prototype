@@ -14,7 +14,7 @@ namespace Tests.Character
 /// Skeletons and zombies are always neutral evil (MM p.226, p.266). Gear: MainHand is the right hand and OffHand the
 /// left hand (ItemData.ResolveHandAlias, also at the bottom inventory layer); a weapon listed under Ranged is held by
 /// a creature the AI runs through the ranged routine (AIService.RoutesToRangedTurn) and otherwise carried in the
-/// pack, since NPCs cannot draw a stowed weapon (ITM-069; Inventory.EquipStartingLoadout). The alias and template
+/// pack (Inventory.EquipStartingLoadout), from which it can draw it in play (batch 13 step 15, D8; AiWeaponFallback). The alias and template
 /// tests need no scene; the spawn tests go through
 /// GameManager.InitializeNPCFromDefinition and need Play mode. Spawned controllers sit off the grid and are destroyed
 /// afterwards. Database templates are cloned before any change.

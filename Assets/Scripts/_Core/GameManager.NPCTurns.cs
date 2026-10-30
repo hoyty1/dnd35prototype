@@ -1083,10 +1083,10 @@ public partial class GameManager
         // this backstop covers every other caller (the compulsion controllers, the catalog's attack entry, a scripted
         // step) before anything is spent: no ward break, no frightful presence. A melee attack on a creature it holds with
         // one body part is left to the sequence, which retargets (MM p.310). An unloaded crossbow that can be reloaded
-        // passes to the reload below. The profile's weapon fallback (a re-equip after a disarm, UndeadMindlessAIProfile) runs
-        // first, so the guard judges the weapon the attack would use.
-        if (npc.aiProfile != null)
-            npc.aiProfile.TryEnsureWeaponFallback(npc);
+        // passes to the reload below. The profile's weapon fallback (batch 13 step 15, AI-073: a creature holding no weapon it
+        // can fight with draws one through the draw entry at its RAW cost) runs first, so the guard judges the weapon the
+        // attack would use.
+        DND35.AI.AIProfile.EnsureWeapon(npc);
         AttackIntent guardIntent = AttackIntent.ForAI(this, npc, target);
         Legality inReach = AttackLegality.IsInReachOrRange(npc, target, DirectAttackKind.Weapon, guardIntent, out _)
             ? AiAttackGuard.CheckWeapon(npc, guardIntent, anyReload: true)

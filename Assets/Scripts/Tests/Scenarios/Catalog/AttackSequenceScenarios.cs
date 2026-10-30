@@ -29,18 +29,24 @@ namespace Tests.Scenarios
             yield return S("npc-throws-dagger", NpcThrowsDagger);
             yield return S("twf-full-attack-ai", TwfFullAttackAi);
             yield return S("rapid-shot-ai", RapidShotAi);
+            yield return S("thrown-full-attack-quick-draw-ai", () => ThrownFullAttack(quickDraw: true));
+            yield return S("thrown-full-attack-no-quick-draw-ai", () => ThrownFullAttack(quickDraw: false));
+            yield return S("rapid-shot-thrown-quick-draw-ai", () => RapidShotThrown(quickDraw: true));
+            yield return S("rapid-shot-thrown-no-quick-draw-ai", () => RapidShotThrown(quickDraw: false));
         }
 
         /// <summary>
         /// CMB-096 (PHB p.113): an orc holding a dagger, with a second one in its pack, attacks a sturdy hero 20 ft away, beyond
         /// its reach and within the dagger's thrown range. Its intent is its own (AttackIntent.ChooseAiMode: Thrown), never the PC
-        /// UI's selection: it throws the dagger as a ranged attack, the dagger lands in the hero's square and the second is
-        /// drawn. Before the fix NPCs could not throw melee weapons.
+        /// UI's selection: it throws the dagger as a ranged attack and the dagger lands in the hero's square. Before the fix
+        /// NPCs could not throw melee weapons. Without Quick Draw the second dagger is not drawn for free (each next thrown
+        /// weapon is a draw, PHB p.98, p.142; batch 13 step 15, D8, CHR-021): the hand is empty and the dagger stays in the
+        /// pack.
         /// </summary>
         private static ScenarioDef NpcThrowsDagger()
         {
-            return Rules("rules/npc-throws-dagger", "An NPC throws a dagger at a foe beyond its reach, and the next is drawn (PHB p.113; CMB-096)")
-                .Covers("CMB-096", "PHB p.113")
+            return Rules("rules/npc-throws-dagger", "An NPC throws a dagger at a foe beyond its reach; without Quick Draw the next is not drawn for free (PHB p.98, p.113; CMB-096, D8)")
+                .Covers("CMB-096", "CHR-021", "D8", "PHB p.98", "PHB p.113")
                 .MaxRounds(1)
                 .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 4)), 10, 10, Control.Idle)
                 .Npc("orc", "orc_warrior", 14, 10, Control.Scripted)
@@ -61,6 +67,8 @@ namespace Tests.Scenarios
                         SquareCell cell = SquareGrid.Instance != null ? SquareGrid.Instance.GetCell(hero.GridPosition) : null;
                         Note(ctx, "hand", hand != null ? hand.Id : "none");
                         Note(ctx, "ground", cell != null ? cell.GroundItems.Count(i => i != null && i.Id == ItemIDs.DAGGER) : -1);
+                        global::Inventory inv = Inv(orc);
+                        Note(ctx, "pack", inv != null && inv.GeneralSlots != null ? inv.GeneralSlots.Count(i => i != null && i.Id == ItemIDs.DAGGER) : -1);
                         return true;
                     }))
                 .Expect("The orc makes one ranged attack with the dagger", v =>
@@ -70,9 +78,12 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("one thrown " + throws[0].Str("weapon"), throws[0].Seq)
                         : ExpectResult.Fail(throws.Count + " attacks: " + string.Join(",", throws.Select(e => e.Str("weapon") + (e.Bool("ranged") ? " (ranged)" : " (melee)"))), throws.Select(e => e.Seq).ToArray());
                 })
-                .Expect("The thrown dagger lies in the hero's square and the second is in the orc's hand", Expect.All(
+                .Expect("The thrown dagger lies in the hero's square; without Quick Draw the hand stays empty and the second stays in the pack (PHB p.98, p.142; D8)", Expect.All(
                     v => NoteValue(v, "ground") >= 1 ? ExpectResult.Pass("ground daggers " + NoteValue(v, "ground")) : ExpectResult.Fail("ground daggers " + NoteValue(v, "ground")),
-                    Fact("hand", ItemIDs.DAGGER)))
+                    Fact("hand", "none"), Fact("pack", "1")))
+                .Expect("The log says the next is not drawn for free", v =>
+                    v.Log("has no weapon in hand to throw; drawing another takes an action without Quick Draw").Count > 0
+                        ? ExpectResult.Pass("no-free-redraw line") : ExpectResult.Fail("no no-free-redraw line"))
                 .Build();
         }
 
@@ -174,6 +185,95 @@ namespace Tests.Scenarios
                 .Expect("The AI declared Rapid Shot with its toggle off; the turn is a full attack; three arrows spent", Expect.All(
                     Fact("declared", "True"), Fact("toggle", "False"), Fact("full", "True"), Fact("arrows", "17")))
                 .Build();
+        }
+
+        // ── Thrown weapons and Quick Draw (batch 13 step 15, D8; CHR-021) ──
+
+        /// <summary>
+        /// Arms <paramref name="c"/> with <paramref name="weapon"/> in the right hand and <paramref name="spares"/> more of it
+        /// in the pack (no other weapons or ammunition).
+        /// </summary>
+        private static void ArmThrower(CharacterController c, ItemID weapon, int spares)
+        {
+            Sturdy(c);
+            Arm(c, weapon, null, 0);
+            for (int i = 0; i < spares; i++)
+                Inv(c).AddItem(ItemDatabase.CloneItem(weapon));
+            Inv(c).RecalculateStats();
+        }
+
+        private static bool NoteThrower(ScenarioContext ctx, string key, string itemId)
+        {
+            CharacterController a = ctx.Get(key);
+            ItemData hand = a.GetEquippedMainWeapon();
+            global::Inventory inv = Inv(a);
+            Note(ctx, "declared", a.IsRapidShotDeclared);
+            Note(ctx, "hand", hand != null ? hand.Id : "none");
+            Note(ctx, "pack", inv != null && inv.GeneralSlots != null ? inv.GeneralSlots.Count(i => i != null && i.Id == itemId) : -1);
+            return true;
+        }
+
+        /// <summary>
+        /// CHR-021 (Quick Draw part) and D8 (PHB p.98): only Quick Draw lets a creature throw at its full rate of attacks, since
+        /// each next thrown weapon is a draw. A fighter 6 (BAB +6/+1) on the NPC turn path, a dagger in hand and two in the
+        /// pack, full attacks a sturdy dummy 20 ft away. With Quick Draw it throws twice (the second 5 lower) and draws the
+        /// next dagger for free after each throw; without it, it throws once and its hand stays empty.
+        /// </summary>
+        private static ScenarioDef ThrownFullAttack(bool quickDraw)
+        {
+            string id = quickDraw ? "rules/thrown-full-attack-quick-draw-ai" : "rules/thrown-full-attack-no-quick-draw-ai";
+            string[] feats = quickDraw ? new[] { "Quick Draw" } : new string[0];
+            ScenarioBuilder b = Rules(id, quickDraw
+                    ? "With Quick Draw a full attack throws at the full rate (PHB p.98; CHR-021, D8)"
+                    : "Without Quick Draw a full attack throws once per weapon in hand (PHB p.98; CHR-021, D8)")
+                .Covers("CHR-021", "D8", "PHB p.98", "PHB p.113")
+                .MaxRounds(1)
+                .Pc("thrower", ActorSource.Stats(() => RulesScenarios.Fighter("Thrower", 6, feats)), 10, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Idle)
+                .Tweak("thrower", c => ArmThrower(c, ItemID.WeaponDagger, 2))
+                .Tweak("dummy", Sturdy)
+                .Initiative("thrower", "dummy")
+                .Turn("thrower", 1, Step.FullAttack("dummy"), Step.Assert("after", ctx => NoteThrower(ctx, "thrower", ItemIDs.DAGGER)));
+            return quickDraw
+                ? b.Expect("Two throws, the second 5 lower (BAB +6/+1)", Shots("thrower", 1, 2, 5))
+                    .Expect("Each next dagger was drawn free: one left in hand, none in the pack", Expect.All(Fact("hand", ItemIDs.DAGGER), Fact("pack", "0")))
+                    .Expect("The log names the Quick Draw redraw", v => v.Log("draws Dagger [(]free action, Quick Draw[)]").Count >= 2
+                        ? ExpectResult.Pass("two Quick Draw redraws") : ExpectResult.Fail(v.Log("draws Dagger [(]free action, Quick Draw[)]").Count + " Quick Draw redraw(s)"))
+                    .Build()
+                : b.Expect("One throw: the hand is empty after it (PHB p.98)", Shots("thrower", 1, 1))
+                    .Expect("No free redraw: the hand is empty and both spares are in the pack", Expect.All(Fact("hand", "none"), Fact("pack", "2")))
+                    .Build();
+        }
+
+        /// <summary>
+        /// The Rapid Shot chooser's throw count (AIProfile.DefaultShouldUseRapidShot, the Q2 interim formula unchanged; batch
+        /// 13 step 15 review): a fighter 6 with Point Blank Shot and Rapid Shot on the NPC turn path, a javelin in hand and two
+        /// in the pack, attacks a sturdy dummy 20 ft away. Without Quick Draw only the javelin in hand can be thrown this turn
+        /// (PHB p.98), so Rapid Shot's extra throw cannot be made and it is not declared: one throw. With Quick Draw the
+        /// spares are free draws, so it declares Rapid Shot and makes three throws: +6, +6, +1, each at -2 (PHB p.99).
+        /// </summary>
+        private static ScenarioDef RapidShotThrown(bool quickDraw)
+        {
+            string id = quickDraw ? "rules/rapid-shot-thrown-quick-draw-ai" : "rules/rapid-shot-thrown-no-quick-draw-ai";
+            string[] feats = quickDraw ? new[] { "Point Blank Shot", "Rapid Shot", "Quick Draw" } : new[] { "Point Blank Shot", "Rapid Shot" };
+            ScenarioBuilder b = Rules(id, quickDraw
+                    ? "With Quick Draw the AI declares Rapid Shot with thrown javelins (PHB p.98, p.99; AI-055, D8)"
+                    : "Without Quick Draw the AI does not declare Rapid Shot with one javelin in hand (PHB p.98, p.99; AI-055, D8)")
+                .Covers("AI-055", "CHR-021", "D8", "PHB p.98", "PHB p.99")
+                .MaxRounds(1)
+                .Pc("archer", ActorSource.Stats(() => RulesScenarios.Fighter("Archer", 6, feats)), 10, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 14, 10, Control.Idle)
+                .Tweak("archer", c => { ArmThrower(c, ItemID.WeaponJavelin, 2); c.SetRapidShot(false); })
+                .Tweak("dummy", Sturdy)
+                .Initiative("archer", "dummy")
+                .Turn("archer", 1, Step.Attack("dummy"), Step.Assert("after", ctx => NoteThrower(ctx, "archer", ItemIDs.JAVELIN)));
+            return quickDraw
+                ? b.Expect("Rapid Shot is declared", Fact("declared", "True"))
+                    .Expect("Three throws: +6, +6 (Rapid Shot's), then +1 (PHB p.99)", Shots("archer", 1, 3, 0, 5))
+                    .Build()
+                : b.Expect("Rapid Shot is not declared", Fact("declared", "False"))
+                    .Expect("One throw", Shots("archer", 1, 1))
+                    .Build();
         }
 
         private static int NoteValue(TraceView v, string key)

@@ -145,7 +145,7 @@ public partial class GameManager
             }
             if (state.ThrownSequence && kind != AttackStepKind.OffHand && !intent.IsThrowOf(intent.Weapon))
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} has no more weapons to throw."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} has no weapon in hand to throw again."));
                 o.StopReason = "no weapon left to throw";
                 break;
             }

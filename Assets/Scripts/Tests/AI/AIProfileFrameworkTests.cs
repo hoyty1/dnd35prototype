@@ -534,16 +534,18 @@ namespace Tests.AI
         /// <summary>
         /// AIProfile.DefaultShouldUseRapidShot (AI stopgap, batch 13 catalog): a fighter 6 with Rapid Shot and a longbow
         /// declares it (three shots at -2 beat two, PHB p.99); without the feat it does not; with a single dagger to throw
-        /// there is no extra throw to make, so it does not, and with a second dagger carried it does (PHB p.113).
+        /// there is no extra throw to make, so it does not; with a second dagger carried it still does not without Quick Draw
+        /// (each next thrown weapon is a draw, PHB p.98; batch 13 step 15, D8), and with Quick Draw it does (PHB p.113).
         /// </summary>
         private static void TestAiRapidShotStopgap()
         {
-            CharacterController archer = null, noFeat = null, thrower = null, target = null;
+            CharacterController archer = null, noFeat = null, thrower = null, quickThrower = null, target = null;
             try
             {
                 archer = CreateArmedFighter("RapidArcher", 6, Vector2Int.zero, ItemID.WeaponLongbow, null, "Rapid Shot");
                 noFeat = CreateArmedFighter("PlainArcher", 6, new Vector2Int(0, 2), ItemID.WeaponLongbow, null);
                 thrower = CreateArmedFighter("DaggerThrower", 6, new Vector2Int(0, 4), ItemID.WeaponDagger, null, "Rapid Shot");
+                quickThrower = CreateArmedFighter("QuickThrower", 6, new Vector2Int(0, 6), ItemID.WeaponDagger, null, "Rapid Shot", "Quick Draw");
                 target = CreateArmedFighter("RapidTarget", 1, new Vector2Int(4, 0), null, null);
 
                 Assert(AIProfile.DefaultShouldUseRapidShot(archer, target, archer.GetEquippedMainWeapon()),
@@ -553,13 +555,17 @@ namespace Tests.AI
                 Assert(!AIProfile.DefaultShouldUseRapidShot(thrower, target, thrower.GetEquippedMainWeapon()),
                     "AI stopgap: one dagger to throw gives no extra throw, so no Rapid Shot");
                 thrower.GetComponent<InventoryComponent>().CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemID.WeaponDagger));
-                Assert(AIProfile.DefaultShouldUseRapidShot(thrower, target, thrower.GetEquippedMainWeapon()),
-                    "AI stopgap: with a second dagger carried the thrower declares Rapid Shot (PHB p.99, p.113)");
+                Assert(!AIProfile.DefaultShouldUseRapidShot(thrower, target, thrower.GetEquippedMainWeapon()),
+                    "AI stopgap: a second dagger carried gives no extra throw without Quick Draw (PHB p.98; D8), so no Rapid Shot");
+                quickThrower.GetComponent<InventoryComponent>().CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemID.WeaponDagger));
+                Assert(AIProfile.DefaultShouldUseRapidShot(quickThrower, target, quickThrower.GetEquippedMainWeapon()),
+                    "AI stopgap: with Quick Draw and a second dagger carried the thrower declares Rapid Shot (PHB p.98, p.99, p.113)");
             }
             finally
             {
                 TestHelpers.Cleanup(archer != null ? archer.gameObject : null, noFeat != null ? noFeat.gameObject : null,
-                    thrower != null ? thrower.gameObject : null, target != null ? target.gameObject : null);
+                    thrower != null ? thrower.gameObject : null, quickThrower != null ? quickThrower.gameObject : null,
+                    target != null ? target.gameObject : null);
             }
         }
 

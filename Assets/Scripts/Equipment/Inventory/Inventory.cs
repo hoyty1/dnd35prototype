@@ -366,10 +366,11 @@ public class Inventory
     /// creature whose AI fights at range) the first one goes in the right hand and the melee weapon that was there goes
     /// to the pack (and the left-hand item too when the ranged weapon is two-handed, by RecalculateStats' two-handed
     /// rule); otherwise the ranged weapon goes to the pack. The caller decides <paramref name="wieldRanged"/> with the
-    /// AI's own routing test (AIService.RoutesToRangedTurn). NPCs cannot draw a stowed weapon (ITM-069; only mindless
-    /// undead re-equip, after a disarm), so the weapon a creature starts holding is the one it fights with; once NPCs
-    /// can draw (a move action, PHB p.142), revisit this choice. An item that cannot be equipped is put in the pack
-    /// (with DirectEquip's warning) rather than lost.
+    /// AI's own routing test (AIService.RoutesToRangedTurn). Since batch 13 step 15 (D8) every creature can draw a stowed
+    /// weapon (the catalog's draw entry, a move action, PHB p.142), but the AI draws only when it holds no weapon it can
+    /// fight with (AiWeaponFallback: an archer whose quiver is empty draws its melee weapon); switching to the carried
+    /// weapon by choice (a melee foe beside an archer) is the evaluator's (batch 22). An item that cannot be equipped is
+    /// put in the pack (with DirectEquip's warning) rather than lost.
     /// </summary>
     public void EquipStartingLoadout(System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<ItemData, EquipSlot>> gear, bool wieldRanged)
     {

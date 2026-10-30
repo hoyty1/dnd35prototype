@@ -34,6 +34,27 @@ public class ActionEconomy
     // points, which keep it disabled); cleared by Reset and by a refunded cast's snapshot.
     public bool NoFurtherActions;
 
+    // The free weapon draws earned by regular moves this turn (PHB p.142, Table 8-2 note 4; batch 13 step 15, D8): one per
+    // move action spent moving (GameManager.SpendMoveForMovement), not by a 5-foot step, a charge or a withdraw (delegated
+    // RAW reading 2026-10-29). A creature with base attack bonus +1 or more spends one to draw a weapon, a wand, or ready or
+    // loose a shield as a free action (EquipmentActionRules.DrawCost). Cleared by Reset.
+    public int FreeDrawsWithMove;
+
+    // A Two-Weapon Fighting creature drew a light or one-handed weapon (PairedDrawFirst) and may draw a second one in the
+    // same time (PHB p.142, Table 8-2 note 4): the next such draw costs nothing while the first is still in its hand, so
+    // the second goes into the other hand (EquipmentActionRules.IsPairedDrawOpen). Cleared by Reset, by that second draw
+    // and by any other action spent (every Use*/Convert method below): the two draws are one act (delegated RAW reading
+    // 2026-10-29).
+    public bool PairedDrawAvailable;
+    [System.NonSerialized] public ItemData PairedDrawFirst;
+
+    /// <summary>Closes the paired Two-Weapon Fighting draw (<see cref="PairedDrawAvailable"/>).</summary>
+    public void ClearPairedDraw()
+    {
+        PairedDrawAvailable = false;
+        PairedDrawFirst = null;
+    }
+
     // ========== AVAILABILITY CHECKS ==========
 
     /// <summary>Can the character still take a Move Action this turn?</summary>
@@ -111,6 +132,7 @@ public class ActionEconomy
             return false;
 
         MoveActionUsed = true;
+        ClearPairedDraw();
         // The one move action of a single-action or move-only turn is the whole turn: lifting the limit later in the
         // turn gives no standard action back (CharacterController.RefreshActionLimits).
         if (SingleActionOnly || MoveActionOnly)
@@ -120,6 +142,7 @@ public class ActionEconomy
 
     public void UseStandardAction()
     {
+        ClearPairedDraw();
         StandardActionUsed = true;
         if (SingleActionOnly)
             MoveActionUsed = true;
@@ -127,17 +150,20 @@ public class ActionEconomy
 
     public void UseFullRoundAction()
     {
+        ClearPairedDraw();
         FullRoundActionUsed = true;
     }
 
     public void UseSwiftAction()
     {
+        ClearPairedDraw();
         SwiftActionUsed = true;
     }
 
     /// <summary>Convert the remaining standard action into a move action (for double move).</summary>
     public void ConvertStandardToMove()
     {
+        ClearPairedDraw();
         StandardConvertedToMove = true;
         if (SingleActionOnly)
             MoveActionUsed = true;
@@ -156,6 +182,8 @@ public class ActionEconomy
         MoveActionOnly = false;
         NoFurtherActions = false;
         HasMoved5Ft = false;
+        FreeDrawsWithMove = 0;
+        ClearPairedDraw();
     }
 
     // ========== STATUS STRING ==========

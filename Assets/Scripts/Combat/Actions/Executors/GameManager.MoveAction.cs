@@ -162,7 +162,8 @@ public partial class GameManager
     }
 
     /// <summary>Spends one move action, or converts the standard action when <paramref name="allowConvertStandard"/>
-    /// (PHB p.141). False when neither is left (nothing spent).</summary>
+    /// (PHB p.141), and earns the regular move's free draw (PHB p.142, Table 8-2 note 4; ActionEconomy.FreeDrawsWithMove,
+    /// batch 13 step 15, D8). False when neither is left (nothing spent).</summary>
     private static bool SpendMoveForMovement(CharacterController mover, bool allowConvertStandard)
     {
         if (mover == null || mover.Actions == null)
@@ -170,11 +171,13 @@ public partial class GameManager
         if (mover.Actions.HasMoveAction)
         {
             mover.Actions.UseMoveAction();
+            mover.Actions.FreeDrawsWithMove++;
             return true;
         }
         if (allowConvertStandard && mover.Actions.CanConvertStandardToMove)
         {
             mover.Actions.ConvertStandardToMove();
+            mover.Actions.FreeDrawsWithMove++;
             return true;
         }
         return false;

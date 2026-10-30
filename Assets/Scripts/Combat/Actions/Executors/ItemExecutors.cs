@@ -78,6 +78,8 @@ public sealed class RetrieveItemActionExecutor : IActionExecutor
         ItemData item = ctx.Actor.InventoryComp.CharacterInventory.GeneralSlots[ctx.InventoryIndex];
         if (!ItemUseRules.MustBeInHand(ItemUseRules.KindOf(item)))
             return Legality.Refused(LegalityBar.Equipment, item.Name + " is worn, not stored");
+        if (EquipmentActionRules.IsDrawable(item))
+            return Legality.Refused(LegalityBar.Equipment, item.Name + " is carried in easy reach: it is drawn, not retrieved (PHB p.142; the draw entry)");
         if (ctx.Actor.IsHoldingRetrievedItem(item))
             return Legality.Refused(LegalityBar.Equipment, item.Name + " is already in hand");
         ActionEconomy a = ctx.Actor.Actions;

@@ -580,15 +580,25 @@ public class InventoryUI : MonoBehaviour
         var inv = GetInventory();
         if (inv == null) return;
 
+        // In combat both go through the catalog's equipment entries at their RAW costs (GameManager.TryInventoryEquip and
+        // TryInventoryUnequip; batch 13 step 15, owner question Q5's default, ITM-069): draw, sheathe, ready or loose a
+        // shield; armor and the other worn slots are locked (ITM-095). Outside combat they change at once.
+        GameManager gm = GameManager.Instance;
         if (_hasSelection && _selectedGeneralSlot >= 0)
         {
             var item = inv.GeneralSlots[_selectedGeneralSlot];
             if (item != null && item.CanEquipIn(slot))
             {
-                inv.EquipFromInventory(_selectedGeneralSlot, slot);
+                string feedback = string.Empty;
+                bool changed = gm != null
+                    ? gm.TryInventoryEquip(CurrentCharacter, _selectedGeneralSlot, slot, out feedback)
+                    : inv.EquipFromInventory(_selectedGeneralSlot, slot);
+                if (!changed && !string.IsNullOrEmpty(feedback))
+                    gm.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", feedback));
                 ClearSelection();
                 RefreshUI();
-                NotifyStatsChanged();
+                if (changed)
+                    NotifyStatsChanged();
             }
             else
             {
@@ -600,10 +610,14 @@ public class InventoryUI : MonoBehaviour
         {
             if (inv.GetEquipped(slot) != null)
             {
-                inv.Unequip(slot);
+                string feedback = string.Empty;
+                bool changed = gm != null ? gm.TryInventoryUnequip(CurrentCharacter, slot, out feedback) : inv.Unequip(slot);
+                if (!changed && !string.IsNullOrEmpty(feedback))
+                    gm.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", feedback));
                 ClearSelection();
                 RefreshUI();
-                NotifyStatsChanged();
+                if (changed)
+                    NotifyStatsChanged();
             }
         }
     }

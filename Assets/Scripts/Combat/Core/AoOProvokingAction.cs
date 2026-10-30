@@ -15,7 +15,9 @@ public enum AoOProvokingAction
     UseScroll,
     RetrieveItem,
     LoadCrossbow,
-    RangedAttackInMelee
+    RangedAttackInMelee,
+    SheatheWeapon,   // PHB p.142, Table 8-2: sheathing a weapon is a move action that provokes (batch 13 step 15, D8)
+    PickUpItem       // PHB p.142, Table 8-2: picking up an item is a move action that provokes (batch 13 step 15, D8)
 }
 
 /// <summary>

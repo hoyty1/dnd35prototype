@@ -1974,6 +1974,16 @@ public class CombatUI : MonoBehaviour
                 proceedText.AppendLine();
                 proceedText.AppendLine("Retrieve a stored item (move action)");
             }
+            else if (actionInfo.ActionType == AoOProvokingAction.SheatheWeapon)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Sheathe a weapon (move action)");
+            }
+            else if (actionInfo.ActionType == AoOProvokingAction.PickUpItem)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Pick up an item (move action)");
+            }
             else if (actionInfo.ActionType == AoOProvokingAction.UseScroll)
             {
                 proceedText.AppendLine();
