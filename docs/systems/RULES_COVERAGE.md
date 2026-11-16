@@ -22,7 +22,7 @@ Deviations found or re-checked while writing this doc are filed like any other d
 
 Paths are relative to `Assets/Scripts/`.
 
-**Keeping this doc current.** When a fix closes an issue cited here, update the row's status and IDs in the same commit, as the issue rules in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) require for every doc that cites an ID. When the owner confirms a house rule, move it from [4.2](#42-unconfirmed-deviations) to [4.1](#41-deliberate-house-rules) with the date. When a new rule area is implemented, add or upgrade its row here and give the detail in the matching systems doc, not here.
+**Keeping this doc current.** When a fix closes an issue cited here, update the row's status and IDs in the same commit, as the issue rules in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) require for every doc that cites an ID. When the owner confirms a house rule, move it from [4.2](#42-unconfirmed-deviations) to [4.1](#41-owner-interpretations-of-raw-silences) with the date. When a new rule area is implemented, add or upgrade its row here and give the detail in the matching systems doc, not here.
 
 ## 2. Summary by book and chapter
 
