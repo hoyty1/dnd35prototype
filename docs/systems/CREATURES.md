@@ -343,7 +343,7 @@ Ordered by impact on "fights play like 3.5e".
    - Change Undead to Poor BAB (CRE-009).
    - Fix celestial and fiendish to MM values (CRE-008).
 2. **Make existing ability data execute.**
-   - Breath recharge, and breath for non-dragon archetypes.
+   - Breath for non-dragon archetypes (AI-033). Breath recharge is built (each breath rolls its MM recharge, 1d4 rounds for dragons, CRE-073).
    - Metallic gases (AI-008).
    - Stench and grapple blood drain (CRE-031).
    - `BonusElementalDamage*`.
@@ -363,7 +363,7 @@ Ordered by impact on "fights play like 3.5e".
 7. **Templates:** multi-form lycanthropes and the curse (CRE-011), and the ghost, vampire, lich, half-dragon, half-celestial and half-fiend templates (half-dragon is already emitted by the DMG table parser, ENC-005).
 8. **NPC generation (DMG Chapter 4):**
    - Wire `QuickSpawnSystem` and the 70 templates into encounters, with skills, spells and real equipment (CRE-020).
-   - Apply feats, ability increases and LA/ECL in `ApplyClassToDefinition`.
+   - Apply feats and LA/ECL in `ApplyClassToDefinition` (the ability increases are applied since CRE-058, 2026-10-14).
    - Fix the NPC-class CR formulas.
    - Implement Adept spellcasting.
 9. **Data safety:** add a static NPCDefinition validator (CRE-026), warn on duplicate IDs (CRE-022), and deep-copy everything in `Clone` and the adapters (CRE-023).
@@ -372,9 +372,9 @@ Ordered by impact on "fights play like 3.5e".
 
 This is the creature-side input for AI work. Routing and profiles are in [AI.md section 6](AI.md#6-profiles-and-archetypes), spellcasting in [section 7](AI.md#7-spellcasting-ai), and the per-action status in the [action coverage matrix](AI.md#9-action-coverage-matrix).
 
-- **The AI uses:** melee and full attacks; improved grab, grapple, pounce, rake and trip; charge; dragon breath (once), casting and frightful presence; auras and gazes (on the owner's turn); mouther spittle and engulf; bombardier spray; swarm movement and damage; dragon spells, area spells included since batch 11 step 25 (aimed by `AreaAimSearch`; walls, swarms and Grease on an object excepted, AI-071).
+- **The AI uses:** melee and full attacks; improved grab, grapple, pounce, rake and trip; charge; dragon breath (it recharges after 1d4 rounds, MM p.69, CRE-073), casting and frightful presence; auras and gazes (on the owner's turn); mouther spittle and engulf; bombardier spray; swarm movement and damage; dragon spells, area spells included since batch 11 step 25 (aimed by `AreaAimSearch`; walls, swarms and Grease on an object excepted, AI-071).
 - **The lich never casts.** Its 16 `PreparedSpellSlotIds` are matched to slots by index (SPL-015). Wizard slots stop at 2nd level (SPL-041), so the lich has 4 cantrip, 4 first-level and 3 second-level slots, and its list starts at 1st level. Each of its first 11 entries lands in a slot of another level and is rejected, the other 5 have no slot, and auto-preparation is skipped because explicit data was given. It spawns with no prepared spells, even though `LichAIProfile` (Ranged) routes it to a casting routine.
-- **The AI never uses:** class features that need activation (see [Class features on NPCs](#class-features-on-npcs)), metallic gases, non-dragon breath weapons, stench, SLAs, any creature summoning (including the MM "summon" abilities of mephits, demons and devils), consumables (AI-009), constrict or swallow, terrain effects, shape changes, or flight.
+- **The AI never uses:** class features that need activation and have no AI use (the domain powers, which the AI never chooses, CHR-023; Stunning Fist, which no one can arm, CMB-022; a paladin's detect evil and remove disease, CHR-083; see [Class features on NPCs](#class-features-on-npcs)); the AI does declare flurry of blows, rage, smite, turn undead, lay on hands, bardic music and wild shape, metallic gases, non-dragon breath weapons, stench, SLAs, any creature summoning ability (the MM "summon" abilities of mephits, demons and devils; its casters do cast Summon Monster and Summon Nature's Ally since batch 11 step 27), consumables (AI-009), constrict or swallow, terrain effects, shape changes, or flight.
 - **Archetype gaps:**
   - The 29 Brute creatures and the 2 spell-less Caster creatures get the plain `BruteAIProfile` since batch 13 step 8 (AI-004, Q4's default): melee without maneuvers. Among them are ankheg, chimera, gorgon, hydras and wyvern, whose abilities (breath, poison) still have no tactical use (AI-033).
   - `NPCAIBehavior.Ranged` runs the ranged routine since batch 13 step 8 (AI-003).
