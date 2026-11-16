@@ -10,7 +10,7 @@ Part of the [tactics inventory](README.md): [actions](ACTIONS.md), [spells 0-2](
 
 A spell is listed at the lowest level it has on any PHB class or domain list. Scope: PHB spells of levels 0-4, plus 5th-level Sor/Wiz, Clr and Drd spells for enemy casters (see SPELLS_AND_METAMAGIC.md for database IDs and class lists).
 
-205 entries: missing 108, partial 47, impl 37, placeholder 9, data only 4. AI usable: no 151, partial 33, n/a 15, yes 6. Priority: P1 15, P2 59, P3 131.
+205 entries: missing 108, partial 50, impl 37, placeholder 8, data only 2. AI usable: no 145, partial 34, n/a 15, yes 11. Priority: P1 15, P2 59, P3 131.
 
 Columns:
 
