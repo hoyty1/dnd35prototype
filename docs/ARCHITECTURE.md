@@ -77,12 +77,12 @@ The scene references `SceneBootstrap` by the GUID in `Assets/Scripts/_Core/Scene
 2. `CreateSquareGrid`: a `SquareGrid` GameObject with a procedurally drawn cell sprite.
 3. `CreateCharacters`: `PC_Hero1..4` (Player team, controllable) and `NPC_Enemy_0..14` (Enemy team, not controllable). Each is a `SpriteRenderer` plus a `CharacterController` with no stats yet; the enemy slots come from `GameManager.CreateNPCPoolSlot` (`initialEnemySlots = 15`), and `SetupEnemyEncounter` adds more for a larger encounter (ENC-001).
 4. `CreateUI`: Canvas (ScreenSpaceOverlay, `CanvasScaler` 1920x1080), an `EventSystem` if missing, `CombatUI` and its panels (initiative, party, 3 NPC panels, combat log, action buttons, feat toggles) and `SpellTestingPanel`.
-5. `SetupGameManager` (:997):
-   - `gameObject.AddComponent<GameManager>()` (:1001).
+5. `SetupGameManager` (:998):
+   - `gameObject.AddComponent<GameManager>()` (:1002).
    - Assigns `Grid`, `PC1..4`, `NPC`, `PCs`, `NPCs` and `CombatUI`.
    - Adds the other UI components to the Canvas and calls their `BuildUI`: Inventory, CharacterSheet, QuickItemUse, StaffSpellSelection, Wish, CharacterCreation, Skills, FeatSelection, SpellSelection, SpellPreparation. Adds `LootCollectionUI`.
    - Calls `Init()` on the Ring, Wondrous, Rod, Staff, Race, Item, Feat, Spell and CraftableItem databases.
-   - Starts the `WireButtons` coroutine. After one frame it binds the `CombatUI` action buttons to `GameManager.Instance.On*ButtonPressed` (:1101).
+   - Starts the `WireButtons` coroutine. After one frame it binds the `CombatUI` action buttons to `GameManager.Instance.On*ButtonPressed` (`WireButtons`, :1102).
 
 Other GameObjects created at runtime:
 
@@ -101,26 +101,26 @@ Other GameObjects created at runtime:
 - the pending-action and targeting fields;
 - summons, test flags and loop statistics.
 
-`GameManager.Instance` is assigned in `Awake` (:483-490). A second instance destroys its own GameObject. There is no `DontDestroyOnLoad`. `CurrentPhase` defaults to `PCTurn` (enum value 0) before the first combat, so a raw `CurrentPhase == PCTurn` check is true out of combat.
+`GameManager.Instance` is assigned in `Awake` (:471-478). A second instance destroys its own GameObject. There is no `DontDestroyOnLoad`. `CurrentPhase` defaults to `PCTurn` (enum value 0) before the first combat, so a raw `CurrentPhase == PCTurn` check is true out of combat.
 
 Awake-before-wiring caveat: `AddComponent<GameManager>()` runs `GameManager.Awake` immediately, before `SceneBootstrap` assigns `Grid`, `PCs`, `NPCs` and `CombatUI`. Consequences:
 
-- In Awake, `MovementService.Initialize` receives a null `Grid`, and `InputService` receives a null camera. `Start` initializes both again (:612-620).
+- In Awake, `MovementService.Initialize` receives a null `Grid`, and `InputService` receives a null camera. `Start` initializes both again (:601-609).
 - `BaseCombatManeuver.Initialize` caches `combatUI = null`.
 - Services read `CombatUI` through lambdas (`() => CombatUI`) for this reason.
 - New code that needs scene references must read them in `Start` or later, or take a provider.
 
-`Update` (:2189) does three things:
+`Update` (:2205) does three things:
 
 - It ticks poison timers every frame, in real time.
-- It returns early while any of `WaitingForCharacterCreation`, `WaitingForEncounterSelection`, `WaitingForPreCombatInventory`, `WaitingForLootCollection` or `WaitingForDefeatChoice` is set. These flags are how modal phases block world input.
+- It returns early (after hiding the hover tooltip) while `ScenarioHooks.SuppressPlayerInput` is set (scenario harness runs) or while any of `WaitingForCharacterCreation`, `WaitingForEncounterSelection`, `WaitingForPreCombatInventory`, `WaitingForLootCollection` or `WaitingForDefeatChoice` is set. These flags are how modal phases block world input.
 - Otherwise it feeds `InputService` and updates the hover previews.
 
 `OnDestroy` unsubscribes events and calls `Cleanup` on the AI, CombatFlow and maneuver components.
 
 #### How services are created
 
-`GameManager.Awake` (:494-575) first calls `InitializeDiseaseAndPoisonDatabases`, then adds each MonoBehaviour service to the GameManager's own GameObject (not a separate one) with `_x ??= gameObject.GetComponent<T>() ?? gameObject.AddComponent<T>()`, then calls `Initialize(...)`. The `Initialize` signatures differ:
+`GameManager.Awake` (:471-564) first calls `InitializeDiseaseAndPoisonDatabases`, then adds each MonoBehaviour service to the GameManager's own GameObject (not a separate one) with `_x ??= gameObject.GetComponent<T>() ?? gameObject.AddComponent<T>()`, then calls `Initialize(...)`. The `Initialize` signatures differ:
 
 - `AIService` and `CombatFlowService` take `(this)`.
 - `EconomyService` takes `(this, () => CombatUI, partyGold)` (`partyGold` defaults to 1000).
