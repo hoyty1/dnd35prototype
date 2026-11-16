@@ -230,7 +230,7 @@ Despite its name, `Equipment/SpellStorage/` holds the Ring of Spell Storing and 
 - 2 potions, 11 spell components (pouch, diamond dust, holy and unholy symbols, holly and mistletoe, the priced foci; batch 11 step 17) and gear
 - then every generated scroll, potion and wand, and every ring, rod and wondrous item
 
-`StoreUI` (`Equipment/Store/StoreUI.cs`, about 2,510 lines of code-built uGUI; the sell logic is in `StoreSelling.cs`) is opened from the pre-combat hub through `GameManager.OpenStoreFromPreCombat` (GameManager.cs:1499).
+`StoreUI` (`Equipment/Store/StoreUI.cs`, about 2,510 lines of code-built uGUI; the sell logic is in `StoreSelling.cs`) is opened from the pre-combat hub through `GameManager.OpenStoreFromPreCombat` (GameManager.cs:1502).
 
 ```
 Buy  StoreUI.BuyItem (:2046)
@@ -242,7 +242,7 @@ Sell StoreUI.BuildSellStacks (:1436)  stash, or the chosen character's GeneralSl
      StoreUI.SellStackItems (:2266)  StoreSelling.RemoveUnits(N units) -> GameManager.AddGold(SellStack.LotPrice(N))
 ```
 
-**Pricing.** The buy price is `StoreItemEntry.PriceGp`. The sell value is `StoreInventory.GetSellValue` (:394), which is `StoreSelling.SellValue(ResolveBaseValue)`: half the base value as an unrounded `decimal`, and for wands times current/max charges, preferring the `WandData` values (DMG p.214). `GetSellPrice` (:384) is one unit rounded down. A sale pays `SellStack.LotPrice(N)`, the lot's value rounded down once, because gold is kept in whole gp (three 25 gp scrolls pay 37 gp). `ResolveBaseValue` takes the first match in this order:
+**Pricing.** The buy price is `StoreItemEntry.PriceGp`. The sell value is `StoreInventory.GetSellValue` (:404), which is `StoreSelling.SellValue(ResolveBaseValue)`: half the base value as an unrounded `decimal`, and for wands times current/max charges, preferring the `WandData` values (DMG p.214). `GetSellPrice` (:394) is one unit rounded down. A sale pays `SellStack.LotPrice(N)`, the lot's value rounded down once, because gold is kept in whole gp (three 25 gp scrolls pay 37 gp). `ResolveBaseValue` takes the first match in this order:
 
 1. The appraised value, for appraised treasure items such as gems and art. They sell at 50% of it, although PHB p.112 makes them trade goods sold at full value (ITM-082).
 2. The listed store price for the item's `Id`.
@@ -251,21 +251,21 @@ Sell StoreUI.BuildSellStacks (:1436)  stash, or the chosen character's GeneralSl
 
 Store quirks (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
-- `Add` writes the store price into a template's `BasePriceGp` when it is 0 (:285), and `AddEnhancedStoreVariants` overwrites the +1/+2 templates' `BasePriceGp` (:165). Prices seen elsewhere can therefore depend on whether the store has been opened.
+- `Add` writes the store price into a template's `BasePriceGp` when it is 0 (:294), and `AddEnhancedStoreVariants` overwrites the +1/+2 templates' `BasePriceGp` (:175). Prices seen elsewhere can therefore depend on whether the store has been opened.
 - Treasure magic weapons and armor already include their enhancement in `BasePriceGp`, and `GetEnhancedPriceGp` adds it again.
 - Only wands are prorated by charges; charged rings and wondrous items sell at half their full price whatever their charges (ITM-083).
-- `EconomyService` has its own `GetBuyPrice`, `GetSellPrice`/`GetSellValue` (base price or appraised value, then `StoreSelling.SellValue`), `BuyItem` and `SellItem`. `BuyItem` and `SellItem` have no callers; `SellItem` sells one unit of a stack (ITM-003). The two price methods are used only by `Tests/Services/EconomyServiceTests.cs`, so that test does not cover the real store.
+- `EconomyService` has its own `GetBuyPrice`, `GetSellPrice`/`GetSellValue` (base price or appraised value, then `StoreSelling.SellValue`), `BuyItem` and `SellItem`. `BuyItem` and `SellItem` have no game callers (only `Tests/Inventory/StoreSellingRulesTests.cs` calls `SellItem`); `SellItem` sells one unit of a stack (ITM-003). The EconomyService price methods and `CalculateTotalSellValue` are used only by tests (`Tests/Services/EconomyServiceTests.cs`, `Tests/Inventory/StoreSellingRulesTests.cs`), so those EconomyService checks do not cover the real store.
 
 **Gold pools.** There are two, and no code moves gold between them:
 
 | Pool | Field | Used by |
 |---|---|---|
 | Party gold | `EconomyService.PartyGold`; `GameManager.PartyGold/SpendGold/AddGold` delegate to it; starts at 1000 | Store buy and sell, treasure coins |
-| Per-character | `CharacterStats.ComponentGold` (default 1000, CharacterStats.cs:196) | Crafting (`SpendComponentGold`), the priced material components no item stands for (`SpellComponentRules.SpendCostlyComponents`, every caster since batch 11 step 17; an NPC starts with 0) |
+| Per-character | `CharacterStats.ComponentGold` (default 1000, CharacterStats.cs:301) | Crafting (`SpendComponentGold`), the priced material components no item stands for (`SpellComponentRules.SpendCostlyComponents`, every caster since batch 11 step 17; an NPC starts with 0) |
 
 ## Crafting
 
-The crafting files are `Assets/Scripts/Crafting/` (10 files) and the UI in `UI/Crafting/CraftingWorkshopUI.cs`. The workshop is opened from the "Crafting Workshop" button in `UI/Encounter/PreCombatHubUI.cs`, which calls `GameManager.OpenCraftingWorkshopFromPreCombat` (GameManager.cs:1439). Only the **first** party member with any item creation feat can craft. If no one has one, nothing is shown to the player (TODO at GameManager.cs:1455).
+The crafting files are `Assets/Scripts/Crafting/` (10 files) and the UI in `UI/Crafting/CraftingWorkshopUI.cs`. The workshop is opened from the "Crafting Workshop" button in `UI/Encounter/PreCombatHubUI.cs`, which calls `GameManager.OpenCraftingWorkshopFromPreCombat` (GameManager.cs:1442). Only the **first** party member with any item creation feat can craft. If no one has one, nothing is shown to the player (TODO at GameManager.cs:1458).
 
 ```
 CraftingWorkshopUI.Open(stats, spellcasting, Inventory)
@@ -323,10 +323,12 @@ Dead code to ignore: `Equipment/SpecificItems/MagicItemLootGenerator.cs`, an old
 
 The tests are static `RunAll()` harnesses run by hand (see [TESTING.md](../TESTING.md)). Coverage of this area:
 
-- `Tests/Crafting/CraftingSystemTests.cs`: cost formulas, minimum caster levels, constants and `SpendXP`; no validator or executor.
+- `Tests/Crafting/CraftingSystemTests.cs`: cost formulas, minimum caster levels, constants, `SpendXP` and the crafted scroll's DC and class (`CraftingExecutor.CraftedScrollSaveDC`, `Execute` in debug mode); no `Validate` run.
+- `Tests/Crafting/BrewedPotionRulesTests.cs`: brewed potions (`PotionFactory.BuildPotion`, `CraftingExecutor` ids and stacking, the brew list, drinking).
+- `Tests/Inventory/StoreSellingRulesTests.cs`: sell stacks, lot rounding, wand proration, `EconomyService.SellItem` and `StoreInventory` sell prices.
 - `Tests/Equipment/RodTests.cs`: rod data and `MetamagicRodActivation`.
 - `Tests/Services/EconomyServiceTests.cs`: the unused EconomyService pricing.
 - `Tests/Inventory/PostCombatLootCollectionTests.cs`: loot, stash and inventory transfer.
 - `Tests/Character/EncumbranceTests.cs`, `Tests/Maneuvers/SunderInventoryRemovalTests.cs`: inventory weight and removal.
 
-No test references the scroll, potion or wand factories, `ScrollData`/`WandData`, the validators, `StoreInventory`, rings, wondrous items, staves, enchantments, materials, the crafting validator and executor, or the treasure generator. Changes there need a manual Play-mode check. Item recipes (weapons, abilities, rings, rods, staves, wondrous items, consumables, store, crafting) are in [DEVELOPMENT_RECIPES.md](../DEVELOPMENT_RECIPES.md).
+Other suites reach parts of this area in passing: the scroll and wand factories and `ScrollData`/`WandData` (`Tests/Magic`, `Tests/Combat/MirrorImageRulesTests.cs`, the cast-pipeline scenarios), `RingFactory` and `WondrousItemFactory` (the save, bonus-stacking and class suites), `EnchantmentFactory`, `MaterialProperties`, `WandValidator` and `StaffValidator`. No test references `ScrollValidator`, `StaffDatabase`, `WondrousItemDatabase`, the treasure generator (`TreasureGenerator`, `MagicItemGenerator`) or `TreasureItemConverter`. Changes there need a manual Play-mode check. Item recipes (weapons, abilities, rings, rods, staves, wondrous items, consumables, store, crafting) are in [DEVELOPMENT_RECIPES.md](../DEVELOPMENT_RECIPES.md).
