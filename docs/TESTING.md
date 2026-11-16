@@ -1351,14 +1351,14 @@ Totals: party 232 attacks, 90 AoOs, 209 maneuvers (52 succeeded), 111 casts, 281
 
 Press Play in `Assets/Scenes/MainScene.unity`; `_Core/SceneBootstrap.cs` builds everything at runtime. On the character-creation screen (`UI/CharacterCreation/CharacterCreationUI.cs`):
 
-- **Play Now!** (`OnVeryQuickStart`, line 2802) creates Fighter Aldric (Dwarf), Rogue Lyra (Elf), Cleric Theron (Human) and Wizard Elara (Elf) from each class's `GetQuickStartCharacter()`.
+- **Play Now!** (`OnVeryQuickStart`, line 2869) creates Fighter Aldric (Dwarf), Rogue Lyra (Elf), Cleric Theron (Human) and Wizard Elara (Elf) from each class's `GetQuickStartCharacter()`.
 - **Quick Start** (`OnQuickStart`) picks a party size of 1-6 from the 11 PHB quick-start characters. Only PC1-PC4 exist and `GameManager.SetupCreatedCharacters` stops at 4, so sizes 5-6 probably drop the extra characters (not verified in Play mode).
 
-Then the Encounter Selection UI opens (`GameManager.PromptEncounterSelection`, `_Core/GameManager.cs:785`), followed by the Pre-Combat Hub (`UI/Encounter/PreCombatHubUI.cs`: Manage Inventory (Stash), Open Store, Prepare Spells, Crafting Workshop, Start Encounter, Back to Encounter Selection).
+Then the Encounter Selection UI opens (`GameManager.PromptEncounterSelection`, `_Core/GameManager.cs:761`), followed by the Pre-Combat Hub (`UI/Encounter/PreCombatHubUI.cs`: Manage Inventory (Stash), Open Store, Prepare Spells, Crafting Workshop, Start Encounter, Back to Encounter Selection).
 
 ### 4.2 Test encounter presets
 
-24 presets in `NPCDatabase.ListEncounterPresets()` (`Character/Creatures/NPCDatabase.cs:90-117`) are test scenarios. `GameManager.ApplyEncounterPreset` (`_Core/GameManager.cs:1769`) matches the id against the constants at `GameManager.cs:100-121` and calls a `Configure<X>TestParty()` method in `_Core/GameManager.TestConfigs.cs`. Those methods re-`Init` PC1-PC4 with fixed stats and deactivate unused PCs. The replacement persists: picking a normal preset next only re-activates PCs (`RestoreStandardPartyLayout`), so restart Play mode to get your created party back (CORE-004 in [issues/CORE.md](issues/CORE.md)).
+24 presets in `NPCDatabase.ListEncounterPresets()` (`Character/Creatures/NPCDatabase.cs:90-117`) are test scenarios. `GameManager.ApplyEncounterPreset` (`_Core/GameManager.cs:1772`) matches the id against the constants at `GameManager.cs:100-121` and calls a `Configure<X>TestParty()` method in `_Core/GameManager.TestConfigs.cs`. Those methods re-`Init` PC1-PC3 with fixed stats and deactivate unused PCs. The replacement persists: picking a normal preset next only re-activates PCs (`RestoreStandardPartyLayout`), so restart Play mode to get your created party back (CORE-004 in [issues/CORE.md](issues/CORE.md)).
 
 | Preset id | Active PCs | Notes |
 |---|---|---|
@@ -1369,18 +1369,18 @@ Then the Encounter Selection UI opens (`GameManager.PromptEncounterSelection`, `
 | `armor_targeting_test`, `tiger_hunt_test` | 3 | |
 | `grease_test` (2), `protection_from_evil_test` (1), `wind_dispersion_test` (2, displayed as "Obscuring Mist Test"), `obscuring_mist_ranged_only` (3), `charm_person_test` (2), `sleep_spell_test` (1), `mirror_image_test` (1) | as shown | **Spell preparation probably broken.** See below. |
 
-The last row's presets set `PreparedSpellSlotIds` to level-1+ spells only (`GameManager.TestConfigs.cs:159, 1021, 1104, 1150, 1278, 1568, 1636, 1702`). `SpellcastingComponent.ApplyPreparedSpellSlotIds` (`Spell/Components/SpellcastingComponent.cs:1258`) fills slots by index, slots start with level 0, and `IsValidSpellForSlot` (:1446) requires an exact level match, so the entries are rejected and auto-prepare is skipped. Expect Console warnings `Cannot prepare level 1 spell in level 0 slot!` and `Ignored invalid prepared spell`. The fix is to pad with cantrips first, as `ConfigureNpcMagicMissileTestParty` does (:933). Until then, cast through the F12 panel or try the hub's Prepare Spells (not verified).
+The last row's presets set `PreparedSpellSlotIds` to level-1+ spells only (`GameManager.TestConfigs.cs:159, 1021, 1104, 1150, 1278, 1568, 1636, 1702`). `SpellcastingComponent.ApplyPreparedSpellSlotIds` (`Spell/Components/SpellcastingComponent.cs:1295`) fills slots by index, slots start with level 0, and `IsValidSpellForSlot` (:1486) requires an exact level match, so the entries are rejected and auto-prepare is skipped. Expect Console warnings `Cannot prepare level 1 spell in level 0 slot!` and `Ignored invalid prepared spell`. The fix is to pad with cantrips first, as `ConfigureNpcMagicMissileTestParty` does (:953). Until then, cast through the F12 panel or try the hub's Prepare Spells (not verified).
 
 ### 4.3 F12 Spell Testing Panel
 
-`UI/Spells/SpellTestingPanel.cs` is added to the canvas unconditionally (`SceneBootstrap.cs:193`, no debug-build guard) and toggled with F12 (`Update`, line 92; key check at :94). It lists every `SpellDatabase` spell (placeholders shown with a darker background), filters by text and level, offers metamagic toggles, and keeps damage/save/SR counters.
+`UI/Spells/SpellTestingPanel.cs` is added to the canvas unconditionally (`SceneBootstrap.cs:186`, no debug-build guard) and toggled with F12 (`Update`, line 92; key check at :94). It lists every `SpellDatabase` spell (placeholders shown with a darker background), filters by text and level, offers metamagic toggles, and keeps damage/save/SR counters.
 
 `CastSpell` (line 1096) works only during a PC's turn (`gm.ActivePC` must be non-null; otherwise it logs "No active PC!"). Bypasses applied to that PC, so do not treat results as normal play:
 
 - A non-caster temporarily gets a Wizard 10 class level and a `SpellcastingComponent` (`EnsureTemporaryCasterSetup`).
 - +4 to the casting ability (`ApplyAbilityBoost`); `Update` restores it (and the temporary Wizard setup) once `GetTestPanelCaster()` returns null.
 - `EnsureSpellAvailable` adds the spell to known and prepared lists regardless of class list or caster level, adds a slot at the spell's level if none is ready, sets `SlotsRemaining` to 99 and un-uses spent slots holding that spell.
-- `GameManager.TestCastSpellFromPanel` (`_Core/GameManager.TestPanel.cs:43`) forces `CurrentPhase = PCTurn`, opens the cast's own context (`BeginCast` with a clone of the template, the metamagic applied, and a `TestPanel` `CastSource` whose `TestPanelBypass` flags are `Components` and `ArcaneFailure`, plus `Slots` for infinite slots; batch 11 step 4), and calls `BeginPendingSpellTargeting`. `OnCellClicked` falls back to `GetTestPanelCaster()` (`GameManager.CombatActions.cs:558`). Because `ActivePC` already requires `PCTurn` (`GameManager.cs:282-291`), forcing the phase has no effect in practice, and the class comment's claim that the panel works outside a PC turn is outdated (UI-021, UI-046 in [issues/UI.md](issues/UI.md)).
+- `GameManager.TestCastSpellFromPanel` (`_Core/GameManager.TestPanel.cs:43`) forces `CurrentPhase = PCTurn`, opens the cast's own context (`BeginCast` with a clone of the template, the metamagic applied, and a `TestPanel` `CastSource` whose `TestPanelBypass` flags are `Components` and `ArcaneFailure`, plus `Slots` for infinite slots; batch 11 step 4), and calls `BeginPendingSpellTargeting`. `OnCellClicked` falls back to `GetTestPanelCaster()` (`GameManager.CombatActions.cs:569`). Because `ActivePC` already requires `PCTurn` (`GameManager.cs:292-301`), forcing the phase has no effect in practice, and the class comment's claim that the panel works outside a PC turn is outdated (UI-021, UI-046 in [issues/UI.md](issues/UI.md)).
 - For the whole cast, three checks are skipped: the arcane spell failure roll (`GameManager.TryRollArcaneSpellFailure`, the `ArcaneFailure` flag), the component test of the cast core's Legality stage and the spend of priced material components (the `Components` flag; `SpellComponentRules.IsExempt`, one rule for every caster since batch 11 step 17: the pouch, the divine focus, priced foci and material components, Stoneskin's diamond dust included). Since batch 11 step 4 (2026-10-15) the flags are the cast's own: they hold through a single-target, touch or self cast's resolution as well as an area, summon, Grease or held-touch cast (every path makes the component test since batch 11 step 15, and every caster since step 17), and they end with the cast, which also forgets the panel's caster, so nothing leaks into the next cast or an NPC's (SPL-036, fixed; checked by `rules/stale-cast-state-f12-bypass`). `infiniteSlots` sets the `Slots` flag, which nothing reads (UI-046).
 
 ### 4.4 Other dev hooks
@@ -1391,11 +1391,11 @@ Left Ctrl+H cycles the HP calculation mode (`Utilities/DebugCommands.cs`). `Iden
 
 ### 5.1 Aid Another
 
-Code: `Combat/Maneuvers/SupportActions.cs` (a `partial class GameManager`; the file's `SupportActions` class itself is empty). No preset exists; use a multi-PC party (Play Now! + `test_2_goblins`) and move characters into the layouts below (read "Orc" as any enemy). Distances are Chebyshev squares, reach-aware via `CharacterController.ThreatensWith`. Equipping a longspear for case 2 was not checked; the Store or stash may have one.
+Code: `Combat/Maneuvers/SupportActions.cs` (a `partial class GameManager`; the file's `SupportActions` class itself is empty). The PC menu ends in `GameManager.ExecuteAidAnother`, which runs the catalog entry (`AidAnotherActionExecutor`, `Combat/Actions/Executors/SupportExecutors.cs`) through `RunPlayerAction`; the standard action, the roll and the +2 are in `GameManager.ActionCore_AidAnother` (`Combat/Actions/Executors/GameManager.ActionCores.cs`). No preset exists; use a multi-PC party (Play Now! + `test_2_goblins`) and move characters into the layouts below (read "Orc" as any enemy). Distances are Chebyshev squares, reach-aware via `CharacterController.ThreatensWith`. Equipping a longspear for case 2 was not checked; the Store or stash may have one.
 
 Flow:
 
-0. Open **Special Attack** and choose **Aid Another**. The main-panel Aid Another button is always hidden (`UI/Combat/ActionButtonPanel.cs:706-707`). The entry (`UI/Combat/CombatUI.cs:1171-1174`) reads `Aid Another (Standard)` or `Aid Another (<reason>)` with reason `Used`, `Pinned`, `No ally` or `No target`, and is disabled unless `CanUseAidAnother` passes. `OnAidAnotherButtonPressed` has a pinned-to-grapple-menu redirect, but it is not reached from this menu because `CanUseAidAnother` already rejects pinned characters.
+0. Open **Special Attack** and choose **Aid Another**. The main-panel Aid Another button is always hidden (`UI/Combat/ActionButtonPanel.cs:1002-1003`). The entry (`UI/Combat/CombatUI.cs:1160-1164`) reads `Aid Another (Standard)` or `Aid Another (<reason>)` with reason `Used`, `Pinned`, `Grappling`, `No ally` or `No target`, and is disabled unless `CanUseAidAnother` passes. `OnAidAnotherButtonPressed` has a pinned-to-grapple-menu redirect, but it is not reached from this menu because `CanUseAidAnother` already rejects pinned characters.
 1. If both an aid target and an adjacent sleeping ally exist, a picker offers **Aid Attack/Defense** or **Wake Sleeping Ally**; otherwise this step is skipped.
 2. Select an enemy the initiator threatens with its equipped weapon.
 3. Choose **Aid Defense (+2 AC)** or **Aid Offense (+2 Attack)**.
@@ -1414,7 +1414,7 @@ Bonus checks: each successful aider adds a +2 entry and entries stack; the first
 
 ### 5.2 Sleep
 
-Code: `GameManager.ResolveSleepSpell` (`Spell/Resolution/GameManager.SpellCasting.cs:5131`). Automated coverage: `Tests.Combat.SleepSpellRulesTests.RunAll()` (definition, Asleep condition, wake helper, Aid Another availability; not the HD pool).
+Code: `GameManager.ResolveSleepSpell` (`Spell/Resolution/GameManager.SpellCasting.cs:3099`). Automated coverage: `Tests.Combat.SleepSpellRulesTests.RunAll()` (definition, Asleep condition, wake helper, Aid Another availability; not the HD pool).
 
 Setup: `sleep_spell_test` makes PC1 Archmage Theron (Wizard 20, only active PC) against skeleton_archer (1 HD undead, immune), goblin_warchief (2 HD), orc_berserker (3 HD) and human_cleric (5 HD, over the cap). Its prepared list fails (section 4.2), so cast Sleep from the F12 panel on Theron's turn. Immune and over-cap creatures are dropped silently; the `Candidates: N` count excludes them.
 
