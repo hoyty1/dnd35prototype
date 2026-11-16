@@ -725,14 +725,14 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-045 (fixed 2026-10-29) | The kiter's approach branch ended the turn with the standard action unused; since batch 13 step 5 the alternatives attack after the move |
 | CMB-077 | Natural attacks are used only when no weapon is equipped (no weapon plus secondary naturals) |
 | AI-046 (fixed 2026-10-16) | The strategist's SR chance `(CL+1-SR)/20` was 20 points too low; `(21+CL-SR)/20` since batch 11 step 28 |
-| AI-047 | The healer buffs itself when no ally is adjacent, never moves to touch (Med since the batch 7 soak: 298 of the AI-run cleric's 414 turns had a hurt ally out of touch range), and can aim an offensive spell at its wounded ally |
+| AI-047 | The healer buffs itself when no ally is adjacent, never moves to touch (Med since the batch 7 soak: 298 of the AI-run cleric's 414 turns had a hurt ally out of touch range); an offensive spell is no longer aimed at its wounded ally (AI-016, batch 11 step 22) |
 | AI-048 | The domain spell term rewards any spell on any domain list |
 | SPL-093 | Charm Person targeting is capped at HD 4 |
 | CRE-031 | Stench auras and the grapple `BloodDrainDefinition` are configured but never read |
 | CRE-032 | The summon command menu has no effect; ProtectCaster is unreachable |
 | CMB-078 | Incorporeal creatures count as unseen to every AI observer |
 | AI-049 | DefensiveMelee moves toward the lowest-HP enemy without ward, charm or visibility filters |
-| AI-050 | Summon, swarm, charmed and confused targeting ignore wards and visibility |
+| AI-050 | Swarm, charmed and confused targeting ignore wards and visibility; summon targeting ignores visibility only |
 | AI-051 | Melee routines path to the true square of unseen targets |
 | AI-052 | `EvaluateMovementOptions` accepts A*'s partial fallback path, so unreachable cells can win |
 | TST-025 | Stale `AIProfileFrameworkTests` expectations; the AoE safety test can pass vacuously |
@@ -750,9 +750,9 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 ### 11.1 Add a tactical routine
 
-1. Add the value to `NPCAIBehavior` (NPCDatabase.cs:808) and fix its XML doc (AI-031).
-2. Route it in `ExecuteNPCTurn`: the profile branch (267-278), the no-profile switch (283-297), and the Healer PhysicalAttack sub-branch if relevant. Dragon, swarm and summon routing bypass behaviour.
-3. Write `private IEnumerator ExecuteXTurn(CharacterController npc, CharacterController target)` following AggressiveMelee: HP check on entry; charge via `SelectBestAction`; `EvaluateMovementOptions` → `MoveCharacterAlongComputedPathForAI(npc, cell, GetPlayerMoveSecondsPerStepForAI())`; **HP check after every movement yield**; **test `HasMoveAction` before moving** and call `UseMoveAction` (it returns false when no move is left); re-target; maneuver or `NPCPerformAttackForAI` (it chooses full vs single attack); fallback `TryAIWallInteraction`. Call `TryExecuteSpellcastAction` if it should cast. Start nested coroutines with `_gameManager.StartCoroutine` and `yield return` them.
+1. Add the value to `NPCAIBehavior` (NPCDatabase.cs:1118) and fix its XML doc (AI-031).
+2. Route it in `ExecuteNPCTurnBody` (`AIService.ExecuteNPCTurn` only wraps it and delivers a held touch charge afterwards): the `if (profile != null)` branch (`RunsRangedRoutine` picks the ranged routine), the no-profile `switch (behavior)`, and the Healer PhysicalAttack sub-branch if relevant. Dragon, swarm and summon routing bypass behaviour.
+3. Write `private IEnumerator ExecuteXTurn(CharacterController npc, CharacterController target)` following AggressiveMelee: HP check on entry; charge via `SelectBestAction`; `EvaluateMovementOptions` → `MoveCharacterAlongComputedPathForAI(MoveRequest.ForAI(npc, cell.Coords, GetPlayerMoveSecondsPerStepForAI(), MoveSpend.MoveAction, attempt))` (a `MoveAttempt`; the move executor spends the move action before the first step, and a refused move spends nothing, so read `attempt.Refused`); **HP check after every movement yield**; **test `HasMoveAction` before moving** and do not call `UseMoveAction` yourself; re-target; maneuver or `NPCPerformAttackForAI` (it chooses full vs single attack); fallback `TryAIWallInteraction`. Call `TryExecuteSpellcastAction` if it should cast. Start nested coroutines with `_gameManager.StartCoroutine` and `yield return` them.
 4. Set `AIBehavior` in data and in the other writers (2.4). The value reaches the AI through `_npcAIBehaviors`; keep it aligned (AI-015).
 
 ### 11.2 Add a profile
@@ -761,13 +761,13 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 2. Set tuning in `public override void ApplyRuntimeDefaults()`: call `base.ApplyRuntimeDefaults()` first, then set `ProfileName` (unconditionally, for readable logs) and the rest. Never write tuning in `OnEnable`, which keeps only runtime-state resets, so saved `.asset` values survive (AI-017). Set `CombatStyle` explicitly; `SpellcasterAIProfile` leaves it Melee, so a creature with it runs a melee routine, which casts first when it has a combat spell (batch 13 step 8) and otherwise holds at its preferred range (AI-038). Create instances with `GameManager.CreateRuntimeAIProfile<T>()` (tracked and destroyed by the GameManager) or, outside the spawn path, `AIProfile.CreateRuntime<T>()`; a bare `ScriptableObject.CreateInstance` gives the base defaults.
 3. Override hooks from 6.3. Keep score magnitudes in mind: visibility terms are ±50-120.
 4. Add an `NPCAIProfileArchetype` value and a `case` in `GameManager.RuntimeAIProfileTypeFor` (`return typeof(T);`; `BuildRuntimeAIProfile` creates and tracks it); set the archetype on definitions. `AIProfileFrameworkTests` fails when a value but None maps to no profile.
-5. Needs its own routine (like Healer or Dragon)? Add an `is` branch in `ExecuteNPCTurn` before line 266.
+5. Needs its own routine (like Healer or Dragon)? Add an `is` branch in `ExecuteNPCTurnBody`, inside the `if (profile != null)` block before the generic behaviour routing (where the Healer and Dragon branches are).
 6. Per-turn state on the instance is safe only because every creature gets its own instance; never share one.
 7. Unit-test it in `AIProfileFrameworkTests` (`AIProfile.CreateRuntime<T>()`, never a bare `ScriptableObject.CreateInstance<T>()`, which has no tuning; then `TestHelpers.Cleanup` or `DestroyImmediate`).
 
 ### 11.3 Add a `*ForAI` wrapper
 
-AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10884-11041, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 44 in GameManager.cs (re-counted 2026-10-29); the uncalled turn-undead and undead-test wrappers were deleted in batch 13 step 2 (AI-053), and `HasActiveShieldSpellForAI` stays for its scenario caller.
+AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:11133-11410, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 44 in GameManager.cs (re-counted 2026-10-29); the uncalled turn-undead and undead-test wrappers were deleted in batch 13 step 2 (AI-053), and `HasActiveShieldSpellForAI` stays for its scenario caller.
 
 ### 11.4 Add an NPC action (attack form, monster ability, special action)
 
@@ -782,11 +782,11 @@ Maneuvers go through `ManeuverPreferences` → `GetPreferredManeuver` → `Shoul
 
 ### 11.5 Add a condition-forced turn
 
-Write `Combat/Behaviors/<Name>BehaviorController.cs` with `TryBuildDecision` and `ExecuteDecision`; add a lazy field and `TryGet...TurnDecisionForAI` / `Execute...TurnDecisionForAI` wrappers in GameManager; call them in `ExecuteNPCTurn` before targeting (73-111). Evaluate it in the compulsion pass (`GameManager.EvaluateTurnCompulsion`, a field on `TurnCompulsion`) so it is decided once per turn for PCs and NPCs, and give a PC a forced turn in `TryRunCompulsionTurn`. A condition in `ConditionRules.DeniesAllActions` skips the turn before any controller runs.
+Write `Combat/Behaviors/<Name>BehaviorController.cs` with `TryBuildDecision` and `ExecuteDecision`; add a lazy field and `TryGet...TurnDecisionForAI` / `Execute...TurnDecisionForAI` wrappers in GameManager; call them in `ExecuteNPCTurnBody` before targeting (`SelectBestTarget`), next to the confused, charmed, fascinated, suggested, frightened and turned gates. Evaluate it in the compulsion pass (`GameManager.EvaluateTurnCompulsion`, a field on `TurnCompulsion`) so it is decided once per turn for PCs and NPCs, and give a PC a forced turn in `TryRunCompulsionTurn`. A condition in `ConditionRules.DeniesAllActions` skips the turn before any controller runs.
 
 ### 11.6 Add a spell-scoring term
 
-Add a static `Get<X>Score` to `AISpellcastingStrategist` and sum it in `ScoreSpellComprehensive` (1115); constants at 31-87. Profile-specific terms go in a `ScoreSpell` override. Remember `EffectType` is the reclassified value (7.5) and that the scale must compete with school ×10 (AI-022). See DEVELOPMENT_RECIPES "Make NPCs cast a spell, and test a spell".
+Add a static `Get<X>Score` to `AISpellcastingStrategist` and sum it in `ScoreSpellComprehensive` (AISpellcastingStrategist.cs:1295); constants at 31-87. Profile-specific terms go in a `ScoreSpell` override. Remember `EffectType` is the reclassified value (7.5) and that the scale must compete with school ×10 (AI-022). See DEVELOPMENT_RECIPES "Make NPCs cast a spell, and test a spell".
 
 ### 11.7 Pitfalls
 
