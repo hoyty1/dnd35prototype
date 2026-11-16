@@ -1,4 +1,4 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-02.
+> Verified against commit f29d07f (2026-11-16) on 2026-11-16 (every claim re-checked in the code; not verified in Play mode).
 
 # Characters & creatures
 

@@ -1,4 +1,4 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-02; sections 1 and 3.3-3.5 re-verified against c92a217 plus the soak and batch change on 2026-10-07; sections 3.2 and 3.4-3.5 run again at 09fda1d on 2026-10-14 (the owner-rulings batch), at ecb62e6 the same day (batch 9) and at a966972 on 2026-10-15 (batch 10), and on 34b7f2e plus batch 11 step 2 on 2026-10-15 (the batch 11 reference run, sections 3.2, 3.4 and 3.5).
+> Verified against commit f29d07f (2026-11-16) on 2026-11-16 for sections 1-2, 3.1, 3.3, 3.4 up to "Limits of AI-run party members", 3.5 up to "The soak", 4 and 5 (every claim re-checked in the code; not verified in Play mode). The rest is dated history: the run records in 3.2, 3.4 and 3.5 and the scenario lists in 3.4, last added for batch 13 on 2026-10-30.
 
 # Testing
 
