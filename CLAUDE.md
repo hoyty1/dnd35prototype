@@ -117,4 +117,4 @@ Where to look first:
 - `docs/archive/INDEX.md`: retired docs via `git show`.
 - `docs/systems/*.md`: per-system content, 3.5e status, backlog (AI, rules, encounters, party, spells, creatures, items).
 - `docs/systems/PC_NPC_PARITY.md`: PC/NPC rules parity audit (2026-10-07): fork map, scorecard, divergences, unification plan.
-- `docs/systems/tactics/`: level 1-8 tactics inventory (actions, spells, creatures, summons) and the proposed action-catalog design; sampled verification only.
+- `docs/systems/tactics/`: level 1-8 tactics inventory (actions, spells, creatures, summons) and the proposed action-catalog design; first checked by sampling, every code claim re-checked 2026-11-16 (rules summaries not re-compared with the books).

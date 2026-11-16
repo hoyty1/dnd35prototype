@@ -1,4 +1,4 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-07.
+> Verified against commit 78ff67e (2026-11-16) on 2026-11-16 (every code claim re-checked by an independent pass, each correction confirmed by a second agent; rules claims not re-compared with the books; not verified in Play mode).
 
 # Tactics inventory and action-catalog design
 
@@ -18,7 +18,7 @@ An inventory of every combat option in the level 1-8 scope (actions, maneuvers, 
 - **Planning AI work:** pick P1 rows whose AI status is `no` or `partial`; the "AI use today" cell names the blocking issue IDs. The backlog in section 2 below orders them.
 - **Building the action catalog:** the "When smart", "Bad when / counters" and "Value model" cells are the seed data for each catalog entry's AI metadata; section 1 below proposed the C# types (the built catalog is `Combat/Actions/ActionCatalog.cs` and `ActionDefinition.cs`, batch 13).
 - **Personalities:** creature rows suggest a blend of the traits in section 4.4 of the design doc.
-- **Trust:** this is an agent-written inventory checked by sampling (spells about 1 in 8, actions 1 in 3, creatures 13 of 310 in depth). The code is the source of truth; grep before relying on any status. Nothing was verified in Play mode.
+- **Trust:** this is an agent-written inventory, first checked by sampling (spells about 1 in 8, actions 1 in 3, creatures 13 of 310 in depth; section "Sampled verification" below). On 2026-11-16 every code claim in these files was re-checked by an independent pass, each correction confirmed by a second agent; the rules summaries were not re-compared with the books, and the systematic errors listed below were not re-graded as a set. The code is the source of truth; grep before relying on any status. Nothing was verified in Play mode.
 - **Rules sources:** the SRD at d20srd.org and the owner's PHB, DMG and MM (cited as book + printed page; summarized, never quoted).
 - **Regenerating:** the raw JSON and the assembly script are local work files (not in git). If they are gone, re-run an inventory before editing these tables by hand, or edit rows directly as code changes.
 

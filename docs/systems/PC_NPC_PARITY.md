@@ -1,4 +1,4 @@
-> Verified against commit 11c2228 on 2026-10-07 (static audit by 20 agents with adversarial verification; not verified in Play mode).
+> Verified against commit 78ff67e (2026-11-16) on 2026-11-16 (every code claim re-checked by an independent pass, each correction confirmed by a second agent; rules claims not re-compared with the books; first written as a static audit of 11c2228 by 20 agents on 2026-10-07; not verified in Play mode).
 
 # PC/NPC rules parity
 

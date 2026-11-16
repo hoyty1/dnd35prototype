@@ -1,4 +1,4 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-03.
+> Verified against commit 78ff67e (2026-11-16) on 2026-11-16 (every code claim re-checked by an independent pass, each correction confirmed by a second agent; rules claims not re-compared with the books; not verified in Play mode).
 
 # Enemy AI: action coverage matrix
 
