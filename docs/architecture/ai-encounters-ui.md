@@ -113,7 +113,7 @@ The live virtual hooks on `AIProfile` are `ShouldTryCastBeforeMelee`, `GetOutOfR
 
 ```
 AIService.TryExecuteSpellcastAction              requires a standard action and Stats.IsSpellcaster
-  ScoreCastableSpells (behind SelectSpell)       castable prepared spells only, best score first;
+  ScoreCastableSpells (behind SelectSpell)       castable prepared spells plus spontaneous metamagic (AiMetamagicPlanner) and cleric conversion (AiConversionPlanner) candidates, best score first;
                                                  the cast core's caster tests (CheckCasterLegalityForAI)
     AIControlFlags.MagicMissileOnly (from the "AI:MagicMissileOnly" tag at spawn) -> Magic Missile or nothing
     skip Buff/Illusion spells already active with > 1 round left (or indefinite)
@@ -124,15 +124,15 @@ AIService.TryExecuteSpellcastAction              requires a standard action and 
                                                      1 = "cast defensively" (logged; rolled at cast time)
   AISpellcastingStrategist.SelectBestSpellTarget     self / ally (lowest HP, frontliner) / enemy, only targets
                                                      GameManager.CheckLegalityForAI accepts; none = skip
-  AiSpellCandidates.TryInOrder                       a refused cast passes to the next, at most 5 tries
-  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs) -> RunCastSync -> ExecuteCast (Spell/Resolution/GameManager.CastCore.cs, AI decider)
+  AiSpellCandidates.TryInOrder                       a refused cast passes to the next, at most 5 tries; an area candidate (with its AreaAimSearch aim) and a summon skip SelectBestSpellTarget and go to TryNPCPerformAreaSpellCastForAI and TryNPCPerformSummonSpellCastForAI; a melee touch spell that SelectBestSpellTarget finds no target for is cast and held (TryNPCHoldTouchChargeForAI) when a foe can be reached this turn
+  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs) -> RunAICastAction (the action catalog's CastSpell entry, through RunAIActionNow) -> RunCastSync -> ExecuteCast (Spell/Resolution/GameManager.CastCore.cs, AI decider)
     ResolveNPCSpellcastProvocation                 if threatened: ShouldCastDefensively -> defensive roll or AoOs
 ```
 
-`TryExecuteSpellcastAction` has callers only in the Healer branch (AIService.cs:231, 245), `ExecuteDragonTurn` (651) and `ExecuteRangedKiterTurn` (896, 970). The only other NPC cast path is a charmed NPC healing its charmer (Combat/Behaviors/CharmedBehaviorController.cs:91).
+`TryExecuteSpellcastAction` is called from the Healer branch of `ExecuteNPCTurnBody` (AIService.cs:484, 498), `ExecuteDragonTurn` (1060), `ExecuteRangedKiterTurn` (1352, 1444), `TryCastBeforeMelee` (2054, used by the aggressive and defensive melee routines) and `TryGrappledSpellcastForAI` (4525). Another NPC cast path is a charmed NPC healing its charmer (Combat/Behaviors/CharmedBehaviorController.cs:96).
 
-- **`AISpellcastingStrategist`** (AI/AISpellcastingStrategist.cs) is a static class of about 1.5K lines. Its header lists tiers T1-T4. `ScoreSpellComprehensive` (1115) adds up roughly 20 modifiers: pre-buff, threatened penalty, save weakness, resistance and SR, slot conservation, dispel value, summons, combos, area denial, domain and class tweaks. Its static per-combat dictionaries are cleared by `ResetCombatState`, which runs at combat start (GameManager.cs:3735). `RegisterPlan`, `RecordIneffectiveDamage` and `RecordSpellSaveSuccess` have no callers, so the multi-round planning and "pattern learning" features do nothing. The school-priority term (0-100) in `SpellcasterAIProfile.ScoreSpell` usually outweighs the strategist's terms.
-- **`SpellCategoryClassifier.ReclassifyAll`** (AI/SpellCategoryClassifier.cs) lives with the AI but runs once from `SpellDatabase.Init` (Spell/Database/SpellDatabase.cs:75) and permanently rewrites `SpellData.EffectType` for all gameplay code; see [Spell data model](spells.md#spell-data-model).
+- **`AISpellcastingStrategist`** (AI/AISpellcastingStrategist.cs) is a static class of about 1.7K lines. Its header lists tiers T1-T4. `ScoreSpellComprehensive` (1295) adds up roughly 20 modifiers: pre-buff, threatened penalty, save weakness, resistance and SR, slot conservation, dispel value, summons, combos, area denial, domain and class tweaks. Its static per-combat dictionaries are cleared by `ResetCombatState`, which runs at combat start (GameManager.cs:3665) and when a new party starts after defeat (GameManager.CombatEnd.cs:340). `RegisterPlan`, `RecordIneffectiveDamage` and `RecordSpellSaveSuccess` have no callers, so the multi-round planning and "pattern learning" features do nothing. The school-priority term (0-100) in `SpellcasterAIProfile.ScoreSpell` usually outweighs the strategist's terms.
+- **`SpellCategoryClassifier.ReclassifyAll`** (AI/SpellCategoryClassifier.cs) lives with the AI but runs once from `SpellDatabase.Init` (Spell/Database/SpellDatabase.cs:80) and permanently rewrites `SpellData.EffectType` for all gameplay code; see [Spell data model](spells.md#spell-data-model).
 
 ## NPC AI: perception
 
@@ -148,15 +148,15 @@ The full option-by-option list (PHB ch.8 actions, maneuvers, spells, items, mons
 
 - **Place some areas.** Since batch 11 step 25 (2026-10-16) NPCs cast area spells: `AreaAimSearch` (AI/Spellcasting) aims the area and `GameManager.TryNPCPerformAreaSpellCastForAI` runs `SpellCastRequest.ForAIArea` (or `ForAIGrease`) through the cast core's area resolve (systems/AI.md 7.8). The AI decider cannot place a wall's ends, grease a held object or worn armor, or place a summoned swarm (`AiCastDecider.CanFill`; the core refuses such a request, "choices-incomplete"), the search gives no value to obscurement, light or terrain areas, and the caster never moves to a better square to cast one (AI-071).
 - **Cast from the melee routines.** Since batch 13 step 8 (AI-002) `ExecuteAggressiveMeleeTurn` and `ExecuteDefensiveMeleeTurn` try `TryExecuteSpellcastAction` first when `AIProfile.ShouldTryCastBeforeMelee` asks for it (a castable spell that `AIProfile.IsCastFirstCandidate` accepts: not Utility or Divination, not Light, Prestidigitation, Read Magic or another out-of-combat spell, AI-069; the cast takes only such spells, scoring above 0; the defensive routine withdraws first when badly hurt), and the turn ends after a cast (AI-077). Spellcaster-archetype monsters such as mind_flayer still cast nothing: they have no spells (CRE-015, CRE-017), and the vampire spawns without spellcasting (CRE-030). The Lich reaches RangedKiter because its profile sets `CombatStyle.Ranged`, but it still never casts: its prepared list is assigned to slots by position and starts at 1st level, so no spell lands in a matching slot (SPL-015). See [Who can cast](../systems/AI.md#71-who-can-cast) in systems/AI.md.
-- **Counterspell.** `AIService.TryAIReadyCounterspell` (2660) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:12349); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
+- **Counterspell.** `AIService.TryAIReadyCounterspell` (3639) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:16237); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
 - **Rules deviations.** The NPC cast path casts a prepared metamagic slot with its metamagic (batch 11 step 21) and, since batch 11 step 28, metamagic the AI chose for a spontaneous cast (`AiMetamagicPlanner`, systems/AI.md 7.10), under the same `MetamagicSystem` rules as a PC (see the `TryNPCPerformSpellCast` row in [Cast pipelines](spells.md#cast-pipelines)); it does provoke and roll Concentration like the PC path, makes the same component test and carries the same kit (batch 11 step 17, `SpellComponentRules`, `SpellComponentKit`), and its concentration spells are tracked, end when it casts and cost a standard action to maintain, as a PC's (batch 11 steps 15 and 16). Monster special attacks (Spittle, swarm damage) bypass the normal attack and damage math. These and the other AI rules gaps are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
-- **Consumables.** `AIConsumableManager` is used only in Tests/Classes/NPCTemplateSystemTests.cs, so NPCs never use potions, scrolls or wands.
+- **Consumables.** `AIConsumableManager` is used only in Tests/Classes/NPCTemplateSystemTests.cs, and since batch 13 step 14 the action catalog's use-item entry (`UseItemActionExecutor`; scroll and wand casts through `RunItemCastForAI`) runs for the AI, but no AIService routine chooses it, so NPCs never use potions, scrolls or wands on their own; the only live use is a charmed NPC administering a healing potion to its charmer (CharmedBehaviorController.cs:227).
 
 ## Encounters: the four sources
 
 Detail, status and backlog for both Encounters sections: [systems/ENCOUNTERS.md](../systems/ENCOUNTERS.md).
 
-All four sources end in a `List<string>` of NPC IDs. `GameManager.PromptEncounterSelection` (GameManager.cs:785) passes three callbacks to `EncounterSelectionUI.Open`: `onSelect` receives a preset ID (an empty ID becomes `goblin_raiders`) that `ApplyEncounterPreset` resolves to its ID list, `onStartRandomEncounter` receives the ID list directly, and `onCancel` applies `goblin_raiders`.
+All four sources end in a `List<string>` of NPC IDs. `GameManager.PromptEncounterSelection` (GameManager.cs:761) passes three callbacks to `EncounterSelectionUI.Open`: `onSelect` receives a preset ID (an empty ID becomes `goblin_raiders`) that `ApplyEncounterPreset` resolves to its ID list, `onStartRandomEncounter` receives the ID list directly, and `onCancel` applies `goblin_raiders`.
 
 | Source | Code | Path into GameManager |
 |---|---|---|
@@ -206,13 +206,13 @@ Panels expose `Open(..., callbacks)`, `Close()` and `IsOpen`. They never advance
 
 Shared helpers in Assets/Scripts/UI/Common are `UIFactory` (buttons, labels, panels, scroll panels; used by only 7 files), `UITheme` (constants used only by UIFactory), `ScrollbarHelper.CreateVerticalScrollbar` (10 files), `DraggableWindow` and `ResizableWindow` (PlayerPrefs keys `ui_window_combat_log`, `ui_window_action_panel` and `ui_window_precombat_inventory`), `IconLoader` (real token and portrait loader), `IconManager` (overlapping icon cache) and `HoverMarker`. Most panels still carry private `CreateText`/`CreatePanel` copies and their own colour constants.
 
-To add an action button you need: a public `Button` field on `CombatUI`, a `CreateGridButton` call in `SceneBootstrap.CreateActionButtonsSection` (661), a listener in `WireButtons`, a proxy property and state rule in `ActionButtonPanel`, and a `GameManager.OnXxxButtonPressed` handler. A `CombatUI` field that SceneBootstrap never assigns stays null and does nothing. `StunningFistPanel` and `ManyshotPanel` are examples. Recipes: "Add a combat action button" and "Add a UI panel" in [DEVELOPMENT_RECIPES.md](../DEVELOPMENT_RECIPES.md).
+To add an action button you need: a public `Button` field on `CombatUI`, a `CreateGridButton` call in `SceneBootstrap.CreateActionButtonsSection` (654), a listener in `WireButtons`, a proxy property and state rule in `ActionButtonPanel`, and a `GameManager.OnXxxButtonPressed` handler. A `CombatUI` field that SceneBootstrap never assigns stays null and does nothing. `StunningFistPanel` and `ManyshotPanel` are examples. Recipes: "Add a combat action button" and "Add a UI panel" in [DEVELOPMENT_RECIPES.md](../DEVELOPMENT_RECIPES.md).
 
 ## UI: screens and panels
 
 | Screen | Owning class (Assets/Scripts/...) | Hosting | Opened by |
 |---|---|---|---|
-| Character creation wizard (4 PCs, Quick Start, premades) | UI/CharacterCreation/CharacterCreationUI.cs | Eager | At boot; `GameManager.Start` assigns `OnCreationComplete4 = OnCharacterCreationComplete4` (GameManager.cs:657) |
+| Character creation wizard (4 PCs, Quick Start, premades) | UI/CharacterCreation/CharacterCreationUI.cs | Eager | At boot; `GameManager.Start` assigns `OnCreationComplete4 = OnCharacterCreationComplete4` (GameManager.cs:646) |
 | Feats, skills, spells, preparation | UI/Spells/FeatSelectionUI.cs, UI/CharacterSheet/SkillsUIPanel.cs, UI/Spells/SpellSelectionUI.cs, UI/Spells/SpellPreparationUI.cs | Eager | Creation steps; level-up through `CharacterCreationManager.StartLevelUpFlow` |
 | Domains, wizard school, familiar, ranger favored enemy and combat style | UI/CharacterCreation/DomainSelectionUI.cs, WizardSpecializationUI.cs, FamiliarSelectionUI.cs, RangerFeatureSelectionUI.cs (CHR-020, 2026-10-14: the choices due by ranger level, validated by `RangerRules`) | Lazy | CharacterCreationUI (the `SelectRangerFeatures` step, after skills and before feats) and CharacterCreationManager (`ShowRangerChoices`, first in the level-up flow, before feats) |
 | Encounter selection | UI/Encounter/EncounterSelectionUI.cs | Lazy (GameManager object) | `GameManager.PromptEncounterSelection` |
@@ -223,15 +223,15 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 | Crafting workshop | UI/Crafting/CraftingWorkshopUI.cs | Lazy | `OpenCraftingWorkshopFromPreCombat` (1439); does nothing unless a party member has an item creation feat |
 | Combat HUD (turn, initiative, party, 3 NPC panels, Combat Log and Action windows) | UI/Combat/CombatUI.cs with presenters CombatLogPanel, ActionButtonPanel, InitiativePanel, TargetSelectionPanel (UI/Combat) and CharacterInfoPanel (UI/CharacterSheet) | Eager | Always present |
 | In-combat modals (spell + metamagic, AoO confirm, cast defensively, touch spell, summon choice and menu, confirmation, pick-up/drop/disarm/sunder, special attack, bull rush push (`ShowBullRushExtraPushChoice`: "Push 5 ft, stay" or "N x 5 ft and follow"; not shown when the attacker cannot move), character choice, Disguise Self race) | `CombatUI.Show*` methods | Rebuilt per call under the canvas | GameManager and Combat/Maneuvers code |
-| Use Item | UI/Combat/QuickItemUsePanel.cs | Eager | `GameManager.OnUseItemButtonPressed` (4610) |
-| Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6381 |
-| Wish | UI/Wish/WishUI.cs | Eager | Spell/Resolution/GameManager_Spells_W.cs:1087, 1144 |
+| Use Item | UI/Combat/QuickItemUsePanel.cs | Eager | `GameManager.OnUseItemButtonPressed` (4590) |
+| Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6537 |
+| Wish | UI/Wish/WishUI.cs | Eager | Spell/Resolution/GameManager_Spells_W.cs:1101, 1159 |
 | Character sheet with embedded inventory | UI/CharacterSheet/CharacterSheetUI.cs + UI/Inventory/InventoryUI.cs | Eager | C key |
-| Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:1372; GameManager.cs:632 |
-| Loot, XP, level-up | UI/Inventory/LootCollectionUI.cs, UI/Combat/CombatEndXPUI.cs, UI/CharacterSheet/LevelUpUI.cs | Eager / lazy / lazy | _Core/GameManager.LootCollection.cs: `BeginPostCombatLootCollection` (25), `ShowPostCombatXPFlow` (175), `ShowLevelUpUISequence` (344) |
+| Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:2426; GameManager.cs:621 |
+| Loot, XP, level-up | UI/Inventory/LootCollectionUI.cs, UI/Combat/CombatEndXPUI.cs, UI/CharacterSheet/LevelUpUI.cs | Eager / lazy / lazy | _Core/GameManager.LootCollection.cs: `BeginPostCombatLootCollection` (25), `ShowPostCombatXPFlow` (175), `ShowLevelUpUISequence` (354) |
 | Defeat screen | UI/Combat/CombatUI.cs (`ShowDefeatPanel`, `HideDefeatPanel`; built like `ShowConfirmationDialog`) | On defeat | _Core/GameManager.CombatEnd.cs: `ShowDefeatScreen`, `StartNewPartyAfterDefeat` (New Party -> `CharacterCreationUI.ReopenForNewParty`), `QuitAfterDefeat` |
 
-Dead UI: `EncounterPreviewPanel` and `SpellStorageUI` are never opened. `TreasureGenerator/TreasureUI.cs` is dead (see [Treasure generation and post-combat loot](items-and-economy.md#treasure-generation-and-post-combat-loot)), and `UI/Panels` is an empty leftover folder (see [Folder map](../ARCHITECTURE.md#folder-map-of-assetsscripts)).
+Dead UI: `EncounterPreviewPanel` and `SpellStorageUI` are never opened. `TreasureGenerator/TreasureUI.cs` is dead (see [Treasure generation and post-combat loot](items-and-economy.md#treasure-generation-and-post-combat-loot)), and the empty `UI/Panels` folder was removed on 2026-10-03 (see [Folder map](../ARCHITECTURE.md#folder-map-of-assetsscripts)).
 
 ## UI: debug and test tools
 
