@@ -37,10 +37,10 @@ Entries per section:
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 212 | 61 | 273 | CRE-290 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 18 | 17 | 35 | ENC-037 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 83 | 91 | 174 | ITM-225 |
-| [AI](issues/AI.md) | AI | 0 | 16 | 35 | 51 | AI-082 |
+| [AI](issues/AI.md) | AI | 0 | 17 | 35 | 52 | AI-083 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 666 | 580 | 1247 | |
+| **All** | | 1 | 667 | 580 | 1248 | |
 
 ## Top issues
 
