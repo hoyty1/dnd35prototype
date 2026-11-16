@@ -33,14 +33,14 @@ Entries per section:
 | [Combat](issues/CMB.md) | CMB | 0 | 48 | 76 | 124 | CMB-222 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 12 | 20 | GRID-029 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 0 | 117 | 133 | 250 | SPL-316 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 35 | 41 | 77 | CHR-093 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 38 | 42 | 81 | CHR-097 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 212 | 61 | 273 | CRE-290 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 16 | 23 | ENC-025 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 49 | 61 | 110 | ITM-126 |
 | [AI](issues/AI.md) | AI | 0 | 16 | 35 | 51 | AI-082 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 533 | 528 | 1062 | |
+| **All** | | 1 | 536 | 529 | 1066 | |
 
 ## Top issues
 
