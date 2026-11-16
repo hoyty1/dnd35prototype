@@ -250,7 +250,7 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; a call
 
 ### 4.2 Score terms
 
-**No profile: `GetTargetPriority` (2038)** + perception.
+**No profile: `GetTargetPriority` (2522)** + perception.
 
 | Term | Formula |
 |---|---|
@@ -261,7 +261,7 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; a call
 | Flanking | +2.5 if the NPC flanks the target from its square (`CombatUtils.IsAttackerFlanking`, PHB p.153; until batch 13 step 7 the term only tested threat, AI-053) |
 | Creature type | +1.5 if the target's CreatureType fact is Undead or Outsider |
 
-**Base `AIProfile.ScoreTarget` (AI/AIProfile.cs:64):** 10; each `TagPriorities` row whose fact query matches ±priority (`AIProfile.AddFactPriorities`: `FactQuery.Parse` turns the string into a typed query on one `FactKey`, matched whole against the observer's view of the target, 6.6; so "Elf" no longer matches "Half-Elf", AI-078, fixed in batch 13 step 7); `PrioritizeWounded` +(1-hp%)×8; `PrioritizeIsolated` +4 alone or -1.25 per adjacent ally; Ranged style `-|dist - PreferredRange| * 0.9` and -5 adjacent; Melee style `max(0, 6 - dist) * 0.7`; Mixed no distance term. The seven profiles' "HP State: Staggered" rows read the BadlyHurt wound band (below half hit points and above 0) since batch 13 step 7, because they mean a badly wounded target and `HPState.Staggered` means nonlethal damage equal to current hit points (PHB p.313); "HP State: Disabled" and "HP State: Dying" stay hit point states.
+**Base `AIProfile.ScoreTarget` (AI/AIProfile.cs:100):** 10; each `TagPriorities` row whose fact query matches ±priority (`AIProfile.AddFactPriorities`: `FactQuery.Parse` turns the string into a typed query on one `FactKey`, matched whole against the observer's view of the target, 6.6; so "Elf" no longer matches "Half-Elf", AI-078, fixed in batch 13 step 7); `PrioritizeWounded` +(1-hp%)×8; `PrioritizeIsolated` +4 alone or -1.25 per adjacent ally; Ranged style `-|dist - PreferredRange| * 0.9` and -5 adjacent; Melee style `max(0, 6 - dist) * 0.7`; Mixed no distance term. The seven profiles' "HP State: Staggered" rows read the BadlyHurt wound band (below half hit points and above 0) since batch 13 step 7, because they mean a badly wounded target and `HPState.Staggered` means nonlethal damage equal to current hit points (PHB p.313); "HP State: Disabled" and "HP State: Dying" stay hit point states.
 
 **Overrides:**
 
@@ -280,25 +280,25 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; a call
 
 Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUnconsciousTargets` (only Animal) and a conscious one exists. Everyone else keeps hitting dying PCs, and the maneuver chooser trips, disarms and grapples helpless targets (AI-058).
 
-**Perception adjustment (`GetPerceptionTargetingAdjustment`, 1925),** added in all scorers. Side effect: a target the NPC sees now is recorded in its `LastKnownPositionTracker` (`RecordSighting`), the one position store since batch 13 step 7 (AI-021). Invisible: -18, or with Scent +4 within 6 squares / -6 beyond. Unseen: -12, +4 back if tracked. Then `GetConcealmentTargetingAdjustment` (2001): miss chance 0% +50, below 50% -30, else -80 (-40 more if unseen, +20 if tracked), times `ConcealmentPenaltyMultiplier` (always 1). These ±50-120 terms dwarf every profile term (about 10-60), so the concealment tier decides the target almost always; within a tier, distance and threat decide.
+**Perception adjustment (`GetPerceptionTargetingAdjustment`, 2432),** added in all scorers. Side effect: a target the NPC sees now is recorded in its `LastKnownPositionTracker` (`RecordSighting`), the one position store since batch 13 step 7 (AI-021). Invisible: -18, or with Scent +4 within 6 squares / -6 beyond. Unseen: -12, +4 back if tracked. Then `GetConcealmentTargetingAdjustment` (2485): miss chance 0% +50, below 50% -30, else -80 (-40 more if unseen, +20 if tracked), times `ConcealmentPenaltyMultiplier` (always 1). These ±50-120 terms dwarf every profile term (about 10-60), so the concealment tier decides the target almost always; within a tier, distance and threat decide.
 
 ### 4.3 Other target selectors
 
 | Selector | Used by | Filters |
 |---|---|---|
-| `SelectLowestHPEnemy` (2657) | DefensiveMelee's first target and charge | lowest absolute HP; no ward, charm, visibility or unconscious filter (AI-049) |
-| `SelectAdaptiveFullAttackTarget` (3063) | mid-full-attack retarget | living, in reach if required, then `SelectBestTarget` |
-| `TryTakeFiveFootStepForAdaptiveFullAttack` (NPCTurns.cs:863) | full attack with no target in reach | `ScoreTarget - dist*0.25` over legal 5-ft steps |
-| `SelectSummonTarget` (2911) | `AI_SummonedCreature` | nearest enemy to summon or caster; no filters (AI-050) |
+| `SelectLowestHPEnemy` (3591) | DefensiveMelee's first target and charge | lowest absolute HP; no ward, charm, visibility or unconscious filter (AI-049) |
+| `SelectAdaptiveFullAttackTarget` (4002) | mid-full-attack retarget | living enemies that `AttackLegality.Check` allows (sphere, hold bar, known failed ward, charm), unconscious ones dropped if the profile ignores them and a conscious one exists, in reach if required (the step's mode, else `AiAttackGuard.CheckTarget`), then `SelectBestTarget` |
+| `TryTakeFiveFootStepForAdaptiveFullAttack` (NPCTurns.cs:800) | full attack with no target in reach | `ScoreTarget - dist*0.25` over legal 5-ft steps |
+| `SelectSummonTarget` (3850) | `AI_SummonedCreature` | nearest enemy to summon or caster; filters the Resilient Sphere, the hold bar, known failed wards and charm through `AttackLegality.Check`, but not visibility or concealment (AI-050) |
 | `BuildSwarmTargetCandidates` + `SwarmAI.ResolveTarget` | swarms | sticky nearest; no filters (AI-050) |
 | Controllers' nearest-creature helpers | Charmed, Confused | no filters (AI-050) |
 
 ### 4.4 Movement scoring
 
-**`EvaluateMovementOptions(mover, targetPos, retreat, targetCharacter, profile)` (2087)**, 13 call sites.
+**`EvaluateMovementOptions(mover, targetPos, retreat, targetCharacter, profile, preferredRangeOverride)` (2580)**, 14 call sites.
 
 - Candidates: every cell in one move range (`Grid.GetCellsInRange`, 3.5 1-2-1 diagonals, **current cell excluded**, so "stay" is never an option) that passes `CanPlaceCreature` and has a path from `FindPath(avoidThreats:false)`. One A* per cell (AI-019). A failed A* returns a non-null partial fallback path that the scorer accepts (AI-052).
-- Parameters: `preferredRange = profile.Movement.PreferredRangeSquares` (1 without a profile; melee profiles 0; Dragon and Vampire 2; Ranged 6; casters 6; Lich 8). `avoidAoOs = Movement.AvoidAoOs && !ShouldIgnoreAoO` (false without a profile). `seekFlanking = Movement.SeekFlanking` (true without a profile).
+- Parameters: `preferredRange = preferredRangeOverride` when given (the out-of-reach approach to the weapon's reach or range, `AiOutOfReach`, 5.10), else `profile.Movement.PreferredRangeSquares` (1 without a profile; melee profiles 0; Dragon and Vampire 2; Ranged 6; casters 6; Lich 8). `avoidAoOs = Movement.AvoidAoOs && !ShouldIgnoreAoO` (false without a profile). `seekFlanking = Movement.SeekFlanking` (true without a profile).
 
 | Mode | Score per cell |
 |---|---|
@@ -308,7 +308,7 @@ Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUncon
 
 Ties keep the first cell in dictionary order. There is no cover, terrain, hazard, reach-weapon, ally-spacing or area-spread logic, and the horizon is one move action.
 
-Other movement scorers: `EvaluateWithdrawRetreatDestination` (2143; 2× range, `dist*3 - provokes*4 - overshoot*2`); `TryTakeTacticalFiveFootStep` (1074; minimise expected AoO damage, +6 if no threats remain); dragon breath positioning (8.2); `ConfusedBehaviorController.FindBestMovementCell` (no path check); `FrightenedBehaviorController.FindBestFleeCell` (must increase distance).
+Other movement scorers: `EvaluateWithdrawRetreatDestination` (2666; cells within `GetWithdrawMoveRangeSquares`, double speed or speed for a Restricted Withdraw, `dist*3 - provokes*4 - overshoot*2`); `TryTakeTacticalFiveFootStep` (1571; minimise expected AoO damage, +6 if no threats remain); dragon breath positioning (8.2); `ConfusedBehaviorController.FindBestMovementCell` (no path check); `FrightenedBehaviorController.FindBestFleeCell` (must increase distance).
 
 ### 4.5 Movement execution and attacks of opportunity
 
@@ -316,12 +316,13 @@ Other movement scorers: `EvaluateWithdrawRetreatDestination` (2143; 2× range, `
 
 ## 5. Routines
 
-### 5.1 `ExecuteAggressiveMeleeTurn` (503)
+### 5.1 `ExecuteAggressiveMeleeTurn` (771)
 
 Used by 293 of 389 effective NPC definitions.
 
 1. Standard-action ranged special in range → fire, end.
 1a. Cast first (batch 13 step 8, AI-002): when `AIProfile.ShouldTryCastBeforeMelee` (default `DefaultShouldTryCastBeforeMelee`: a castable spell that `AIProfile.IsCastFirstCandidate` accepts: not Utility or Divination by `SpellCategoryClassifier`, not `HasNoModelledCombatEffect`, and not one of the out-of-combat spells the classifier files as Buff, such as Light, Prestidigitation or Read Magic (AI-069); the same default without a profile) asks for it, `TryExecuteSpellcastAction` through the catalog's cast entry, with the same predicate as its filter and a score floor of 0, so the gate and the cast agree; a cast ends the turn (C4, AI-077), nothing cast spends nothing and the routine goes on.
+1b. Overrun (batch 12 step 20, D11): when `AIProfile.ShouldOverrun` agrees and `GameManager.TryPlanOverrunPathForAI` finds a path, the move through the target's space runs through the one overrun (`NPCExecuteOverrunForAI`); the routine goes on only if the standard action is left, and after an overrun that started it attacks without the charge choice of step 2.
 2. `SelectBestAction(preferAggression:true)`; only `Charge` is used (AI-027) → `NPCExecuteChargeForAI`, end.
 3. Out of weapon reach and `HasMoveAction` → `EvaluateMovementOptions`, move, `UseMoveAction`, `ActivateTerrainManipulation` (log only, CRE-013).
 4. Re-target among the targets the attack guard allows (`SelectGuardPassingTarget`, section 5.10; batch 13 step 5), else `SelectBestTarget` (may differ from the target moved toward).
@@ -330,7 +331,7 @@ Used by 293 of 389 effective NPC definitions.
 
 Casts only at step 1a; never runs or double-moves, never uses Total Defense, Power Attack or Combat Expertise. Standard-action specials, Engulf and terrain manipulation exist only in this routine.
 
-### 5.2 `ExecuteDragonTurn` (655)
+### 5.2 `ExecuteDragonTurn` (1032)
 
 1. Resets per-turn breath state on the profile instance (one instance per creature, 2.4).
 2. If at most 2 enemies are adjacent (`IsTooCloseForCasting`) and `IsSpellcaster`: `TryExecuteSpellcastAction` with the dragon filter `IsDragonCastFirstCandidate` and a score floor of 0 (2026-10-14, AI-037 partial): never a 0-level spell; while the breath is ready or an enemy is adjacent, only a self or ally buff not yet active. Success ends the turn. No expected-value comparison with the breath or a full attack (AI-037).
@@ -339,7 +340,7 @@ Casts only at step 1a; never runs or double-moves, never uses Total Defense, Pow
 
 Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread (AI-026). Breath recharge ticks at the dragon's turn start and rolls the MM's 1d4 rounds (batch 12 step 6, D14); the secondary breath shares it.
 
-### 5.3 `ExecuteRangedKiterTurn` (861)
+### 5.3 `ExecuteRangedKiterTurn` (1287)
 
 1. Target `SelectBestTarget` (variable named `closestPC`). Update tracker if visible.
 2. Not visible: if the turn-start check pinpointed it or it is tracked, attack (`NPCPerformAttackForAI`; the last-known-square auto-miss applies when it moved); else advance and end.
@@ -349,7 +350,7 @@ Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread 
 6. Re-target, second `TryExecuteSpellcastAction`.
 7. The attack target is the best one the guard allows (`SelectGuardPassingTarget`; a spell's range no longer widens the weapon's, the AI-075 cause): maneuver or attack. None passes → the profile's out-of-reach alternatives (`AiOutOfReach.Run`, section 5.10): the move to the preferred range or the approach is followed by the attack with the standard action left when a target now passes (AI-045 fixed).
 
-### 5.4 `ExecuteDefensiveMeleeTurn` (1170)
+### 5.4 `ExecuteDefensiveMeleeTurn` (1637)
 
 1. Target `SelectLowestHPEnemy` (unfiltered, AI-049); fall back to the passed target.
 1a. Cast first, as in 5.1 step 1a (batch 13 step 8, AI-002), unless HP < 30% and a withdraw is legal (step 3): then the cast is tried only after a withdraw that did not start (step 3a), so the routine's withdraw keeps its place (`rules/defensive-caster-withdraws-when-hurt-ai`).
@@ -360,23 +361,23 @@ Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread 
 
 The enum docs promise Combat Expertise and holding position; neither exists (AI-031).
 
-### 5.5 `ExecuteSwarmTurn` (1261)
+### 5.5 `ExecuteSwarmTurn` (1778)
 
-Sticky target via `SwarmAI.ResolveTarget`. Moves directly onto the target's square (no movement scoring; only swarms share squares, GRID-005). `ApplySwarmDamageToOccupants` (1338) hits everything on the swarm's square: flat `SwarmDamage` (CRE-007) through `GameManager.DealDamage` as a natural attack (damage reduction, resistance and immunity apply, MM p.316; SPL-004), then Fort vs `DistractionDC` or Nauseated 1 round for every surviving creature on the square, without MM p.316's vulnerability and living-creature limits (CRE-060); one combat-end check after the swarm's damage; poison is log-only (CRE-014). No attack roll and no action spent. MM (Swarm subtype) checks distraction when a creature begins its turn in the swarm.
+Sticky target via `SwarmAI.ResolveTarget`. Moves directly onto the target's square (no movement scoring; only swarms share squares, GRID-005). `ApplySwarmDamageToOccupants` (1858) hits everything on the swarm's square: flat `SwarmDamage` (CRE-007) through `GameManager.DealDamage` as a natural attack (damage reduction, resistance and immunity apply, MM p.316; SPL-004), then Fort vs `DistractionDC` or Nauseated 1 round for every surviving creature on the square, without MM p.316's vulnerability and living-creature limits (CRE-060); one combat-end check after the swarm's damage; poison is log-only (CRE-014). No attack roll and no action spent. MM (Swarm subtype) checks distraction when a creature begins its turn in the swarm.
 
-### 5.6 Healer branch (197-257)
+### 5.6 Healer branch (450-510)
 
 `HealerAIProfile.DetermineActionPriority`: any ally (including itself; `TeamUtility.IsAlly` since batch 11 step 22) below 70% HP → Healing (≤25% → CriticalHealing); else castable spells and every ally ≥75% → Buffing; else castable → OffensiveSpell; else PhysicalAttack (`DetermineCombatMode`: kiter if AC < 16 or the ranged bonus is at least 2 higher than melee; melee if the melee bonus is at least 2 higher; otherwise melee only at AC ≥ 18. Melee then means DefensiveMelee or AggressiveMelee by behaviour). Heal and buff attempts call `TryExecuteSpellcastAction`; failure or OffensiveSpell → `ExecuteRangedKiterTurn`. The healer never moves to deliver a touch heal or buff and can buff itself instead (AI-047); since SPL-005 it casts no cure when nobody within the spell's range is hurt. Since batch 11 step 22 (2026-10-16) `TryExecuteSpellcastAction` walks its ranked (spell, legal target) candidates, so a cure with no ally in reach or a refused Bless passes the turn's spell to the next castable spell with a legal target (7.2); when none has one, the healer falls to `ExecuteRangedKiterTurn`, where since batch 13 step 5 it attacks a foe its weapon can reach (the attack guard, D1) and otherwise runs its out-of-reach alternatives (C1: another target in reach, the preferred range of 4 squares, `HealingRangeSquares`, then total defense), so with no foe in reach it takes total defense where it stands instead of reaching the hurt ally (AI-063, the open part; in the batch 7 soak, docs/TESTING.md 3.5, the AI-run cleric moved on 387 of its 414 turns, 298 of them Healing turns with the hurt ally out of reach; in the batch 13 midpoint soak it took total defense on 23 turns, 15 of them in seed 3). No database NPC uses this profile. In play only DMG Cleric spawns get it (`DungeonEncounterSpawner`), and those have no spells (ENC-021), so they take the PhysicalAttack branch. With spells it is reached by the scenario harness, which gives it to AI-run party clerics and druids (`Tests/Scenarios/AiProfileForClass.cs`), and by Cleric and Adept definitions built by `QuickSpawnSystem` through `NPCTemplateAIConfigurator.GetProfileArchetypeForClass` (called only by tests).
 
-### 5.7 `GameManager.AI_SummonedCreature` (NPCTurns.cs:79)
+### 5.7 `GameManager.AI_SummonedCreature` (NPCTurns.cs:86)
 
 Reached only by non-controllable summons: a summon follows its caster's control since batch 11 step 27 (`SpawnSummonedCreature`), so an NPC's summon and an AI-run party member's come here, while a player-controlled caster's summon is controllable and gets PC turns; swarm summons go to the swarm routine first. Target by `SummonCommand` (AttackNearest / ProtectCaster; ProtectCaster is effectively unreachable, CRE-032). Retreat at ≤30% HP (not a withdraw) if a move action is left. Advance if a move action is left, re-target. Then `NPCPerformAttack` (a templated summon declares its smite there, like any creature, 5.9) with a trip-only per-step evaluation for `HasTripAttack` summons: the trip replaces one step of the shared melee sequence at that step's BAB and the remaining steps attack (CMB-102; contradicts the Animal profile's "free trip on hit only"). Never casts or breathes; ignores behaviour and profile routing.
 
 ### 5.8 Search, Turned, grapple-restricted
 
-- `ExecuteSearchTurnWhenNoTargets` (322): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
-- `ExecuteTurnedTurn`: flee one move from the turner, or cower when cornered (Cowering until its next turn); since batch 12 step 7 it runs for every turned creature, and also as a turned PC's forced turn (3.2).
-- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1637): see 8.8.
+- `ExecuteSearchTurnWhenNoTargets` (559): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
+- `ExecuteTurnedTurn`: flee from the turner through the one flight search (`FrightenedBehaviorController.Flee`: a grapple escape first, then a withdraw, else a run, else a move action), or cower when cornered (Cowering until its next turn); since batch 12 step 7 it runs for every turned creature, and also as a turned PC's forced turn (3.2).
+- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:2340): see 8.6.
 
 ### 5.9 How attacks resolve: `GameManager.NPCPerformAttack` (NPCTurns.cs)
 
