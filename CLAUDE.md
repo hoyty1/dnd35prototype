@@ -6,7 +6,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 
 ## Project
 
-- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 675 `.cs` files in `Assets/Scripts`, mostly global namespace.
+- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 870 `.cs` files in `Assets/Scripts`, mostly global namespace.
 - One scene, `Assets/Scenes/MainScene.unity`; `SceneBootstrap.Awake` (`Assets/Scripts/_Core/SceneBootstrap.cs`) builds grid, characters, UI and `GameManager` at runtime. No prefabs, no saves.
 - Written mostly by earlier AI agents; maintained by Claude for the owner, hoyty1.
 - **Goal (owner, 2026-10-03):** play as close to the 3.5e core rules (PHB/DMG/MM) as possible. Battles are randomized encounters based on the DMG random encounter rules. Between battles you manage the party by PHB/DMG rules. Enemy AI needs much more depth because the combat option space is vast. Follow RAW; no house rules (owner, 2026-10-09; owner interpretations of RAW silences in `docs/systems/RULES_COVERAGE.md` 4.1).
@@ -44,7 +44,7 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 | `_Core/` | `GameManager.cs` (about 11.5K lines) + 16 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
 | `Combat/` | `Actions/` (the action catalog, batch 13: `ActionCatalog`, `ActionIds`, executors; runners in `_Core/GameManager.ActionRunner.cs`), `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
 | `Spell/` | `Data/`, `Database/`, `Casting/` (SpellCaster), `Components/` (StatusEffectManager, MetamagicData); GameManager partials in `Resolution/`, `Special/`, `Domain/` |
-| `Character/` | `Controller/CharacterController.cs` (about 12K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
+| `Character/` | `Controller/CharacterController.cs` (about 16K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
 | `Equipment/` | `Items/` (ItemData, ItemDatabase, ItemIDs, ScrollData, WandData), `Inventory/`, `Store/`, enchantments, rings, rods, staves, wondrous |
 | `Services/` | MonoBehaviour services on GameManager (Turn, Input, Movement, Condition, AI, CombatFlow, Economy, DispelMagic) + static helpers |
 | `AI/`, `UI/`, `Encounters/`, `Grid/` | AI profiles; code-built UI; DMG tables and spawner; square grid ("Hex" names are legacy) |
@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 71 files in 8 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
+1. **GameManager**: singleton `partial class`, 75 files in 8 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`); each cast's state is its own `SpellCastRequest`/`CastContext` on a cast stack; the old `_pending*` spell names are read-only views of the current cast's request (`Spell/Resolution/GameManager.CastContext.cs`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId**: single-target `TryResolve<Name>SpellEffect` handlers sit in a SpellId registry (`GameManager.SpellHandlerRegistry.cs`); area handlers sit in an area registry in the same file (`BuildAreaHandlers`, the generic loop as fallback); unclaimed single-target spells fall to `ApplySpellBuff`.
@@ -93,7 +93,7 @@ Where to look first:
 - Magic strings fail silently: case-sensitive `HasFeat` (CHR-030), duplicate NPC ids (CRE-022), unknown preset ids (ENC-012), sources matched by name (CORE-017).
 - Wand charges (ITM-034) and enhancement (ITM-035) are stored twice; update both.
 - `IsPC` means controllable (CORE-014); use `controller.IsDead` (CHR-031); never assign `Stats.Level` (CHR-034); HD-gated rules read `Stats.GetHitDice()`, not `Level`, and class BAB, hit die and HP go through `ClassProgression` (CHR-071, CHR-002); the positional `CharacterStats` constructor takes WIS before INT (CHR-032).
-- 20 test files reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
+- 42 test files reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
 - `_npcAIBehaviors` is index-parallel to `NPCs` (AI-015).
 - Enemy pool and party slots are reused: new per-creature state on `CharacterController` (a field, a component, a link) must also be cleared in `ResetForNewCreature` or `GameManager.ResetCharacterSlotForSpawn` (CRE-046); a party slot that gets a new character calls `ResetPCSlotForNewCharacter` before `Init`.
 - Never run scenarios in a Play session that ran static suites; `ScenarioHooks` must stay null outside the harness.
