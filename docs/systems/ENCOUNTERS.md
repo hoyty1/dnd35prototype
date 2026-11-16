@@ -138,7 +138,7 @@ Annotations are parsed, then dropped when `EncounterCreatureEntry` is built. Tag
 
 ### 3.5 Name resolution
 
-`DungeonEncounterTableData.BuildCreatureFromGroup` resolves the race for NPC groups and the creature name otherwise, through `ResolveCreatureName` (DungeonEncounterTableData.cs:313):
+`DungeonEncounterTableData.BuildCreatureFromGroup` resolves the race for NPC groups and the creature name otherwise, through `ResolveCreatureName` (DungeonEncounterTableData.cs:314):
 
 1. Exact key in `_creatureNameMap` (case-insensitive dictionary).
 2. Lowercased key.
@@ -154,7 +154,7 @@ Failure modes:
 
 ### 3.6 Class levels and templates
 
-For NPC groups, `EncounterCreatureEntry.TemplateClass` / `TemplateLevel` come from the regex. `DungeonEncounterSpawner.BuildSpawnDefinition` clones the base definition, then calls `CreatureClassEngine.ApplyClassToDefinition` with `ClassRegistry.GetClass(TemplateClass)` and renames the creature "Base Class Level". Points to know:
+For NPC groups, `EncounterCreatureEntry.TemplateClass` / `TemplateLevel` come from the regex. `DungeonEncounterSpawner.BuildSpawnDefinition` clones the base definition, then calls `CreatureClassEngine.ApplyEncounterClassLevel` (which calls `ApplyClassToDefinition` for the missing levels) with `ClassRegistry.GetClass(TemplateClass)` and `EncounterCreatureEntry.Advancement`, and renames the creature "Base Class Level". Points to know:
 
 - `ApplyClassToDefinition` adds class HD, HP and CR; at spawn BAB and base saves are the racial HD by the creature type plus the class levels by the class table (CRE-004, fixed 2026-10-08; MM p.290). Since 2026-10-14 it also sets the ability scores and the maximized Hit Die by `EncounterCreatureEntry.Advancement` (delegated RAW readings, CRE-058, RULES_COVERAGE 4.1): a row labelled "NPC" (`TryParseNpcEntry`, `TryParseDominatedNpc`) is an elite DMG chapter 4 NPC, a half-dragon or comma row (`TryParseHalfDragon`, `TryParseSpecialCommaClass`, `TryParseSpecialCommaLevel`) names an MM sample: a base that is the sample gets nothing added, any other base gets the levels by the MM p.294 rule the samples follow and keeps its alignment; the hard-coded fallback marks its hobgoblin fighter 5 and lizardfolk druid 5 rows elite and its ogre barbarian 4 row a sample, and its human monk 5 and paladin 5 rows spawn `human_monk_5` and `human_paladin_5`, the DMG p.118 samples. A humanoid base with 1 HD or less (goblin, orc, hobgoblin and kobold warriors, human commoner) exchanges its Hit Die for the class (MM p.290, p.310), so "orc barbarian 2" is 2 HD, not warrior 1 plus barbarian 2. A row names the creature's level in the class, so a base that already has levels in that class gets only the missing ones (`CreatureClassEngine.ApplyEncounterClassLevel`). No feats, skills, ability increases, spells or gear come with the class (CRE-058); NPC gear by level (DMG ch.4) is not modelled.
 - `ghost` and `vampire` are the MM samples, human fighter 5s under the template (MM p.117, p.250: 5d12 HD, 32 hp, BAB +5, base saves +4/+1/+1), and the DMG p.97 rows "1 ghost, 5th-level fighter" and "1 vampire, 5th-level fighter" (CR 7) name exactly those, so they spawn them unchanged (fixed 2026-10-08 with CRE-004; before, the rows stacked fighter levels on the stat blocks, to about 10 and 12 HD). There are no ghost or vampire templates to put on other bases or class levels (plan item 7), and the vampire's other stats still differ from the MM (CRE-030, CRE-047, tactics/CREATURES_L5-8.md).
