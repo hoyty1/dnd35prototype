@@ -40,17 +40,17 @@ Contents:
 
 - Every non-controllable combatant (enemy NPCs, enemy-side summons, AI-controlled swarms) runs `AIService.ExecuteNPCTurn`, a coroutine that applies a fixed chain of gates and then hands the turn to one of six hand-written routines: AggressiveMelee, RangedKiter, DefensiveMelee, Dragon, Swarm, Healer, plus a separate summon routine in `GameManager`.
 - It picks a target by scoring every visible enemy (profile score plus a large visibility term), moves with a single move action to the best-scoring reachable cell, then charges, maneuvers, or makes a single or full attack.
-- It can charge (with pounce), trip, disarm, grapple (including a weighted-random in-grapple routine), coup de grace, take a 5-foot step in two narrow cases, withdraw when badly hurt (DefensiveMelee only), fire breath weapons with real cone/line positioning (Dragon profile only), emit auras, cast single-target spells (Healer, Dragon and RangedKiter routines only), track invisible enemies by last-known position and Listen checks, and follow forced behaviour for Confused, Charmed and Frightened.
+- It can charge (with pounce), trip, disarm, grapple (including a weighted-random in-grapple routine), coup de grace, take a 5-foot step in two narrow cases, withdraw when badly hurt (DefensiveMelee only), fire breath weapons with real cone/line positioning (Dragon profile only), emit auras, cast spells, single-target, area and summon (the Healer, Dragon and RangedKiter routines, and the melee routines first since batch 13 step 8, AI-002), track invisible enemies by last-known position and Listen checks, and follow forced behaviour for Confused, Charmed and Frightened.
 
 **Biggest limitations.**
 
-1. **Narrow action set.** No double move, run, total defense (except the cornered panicked creature's, batch 13 step 4), ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another and waking an ally (catalog executors the AI can run since batch 13 step 13, D6, but never chooses; batch 14), dropping prone or crawling (catalog executors the AI can run since batch 13 step 12, D5, but never chooses; batch 14), weapon switching, item use, the activated domain powers (a catalog executor the AI can run since batch 13 step 16 but never chooses; batch 14), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Class abilities the AI does use: Flurry of Blows (CHR-003), Smite, Lay on Hands and Wild Shape (CHR-020, 2026-10-14), bardic music (CHR-026, 2026-10-15), and since batch 13 step 16 (2026-10-29) turn undead and rage (11.8.7; design choice C6: turn when its best check could affect the nearest undead, rage at turn start with a foe within reach or charge range). No PC-only catalog entry is left: every action the PC panel offers runs through a shared executor the AI runner can reach.
-2. **Asymmetries that favour NPCs.** Since batch 13 step 18 (2026-10-30, D11) the breath weapon is a standard action for every breather, and the breath, spittle, engulf and ranged specials are shared catalog entries a controllable creature can take too (AI-040 fixed; the triggers and auras are CRE-039); since batch 12 step 10 every save of either side goes through one roll (`SaveRollRules`: natural 1 and 20, Luck, countersong) and a monster's ranged touch attack uses the spell ranged touch terms (AI-006 fixed); since batch 11 step 13 a silenced NPC, like a PC, cannot cast a verbal spell (the cast core's Legality stage, and the AI's spell choice skips such a spell). Damage from spells, breath and specials is shared since 2026-10-09 (`GameManager.DealDamage`, SPL-004). Casting (7.6), movement and maneuver attacks of opportunity (4.5) use the same helpers for PCs and NPCs.
+1. **Narrow action set.** No double move, run, total defense (except the cornered panicked creature's, batch 13 step 4), ready, delay, Power Attack, Combat Expertise, Aid Another and waking an ally (catalog executors the AI can run since batch 13 step 13, D6, but never chooses; batch 14), dropping prone or crawling (catalog executors the AI can run since batch 13 step 12, D5, but never chooses; batch 14), weapon switching, item use, the activated domain powers (a catalog executor the AI can run since batch 13 step 16 but never chooses; batch 14), or the other options of section 9. Since batch 11 steps 25 and 28, batch 12 step 18 and batch 12 step 24 it does use area spells (`AreaAimSearch`), metamagic (`AiMetamagicPlanner`), two-weapon fighting and the spontaneous cure/inflict conversion (`AiConversionPlanner`). Class abilities the AI does use: Flurry of Blows (CHR-003), Smite, Lay on Hands and Wild Shape (CHR-020, 2026-10-14), bardic music (CHR-026, 2026-10-15), and since batch 13 step 16 (2026-10-29) turn undead and rage (11.8.7; design choice C6: turn when its best check could affect the nearest undead, rage at turn start with a foe within reach or charge range). No PC-only catalog entry is left: every action the PC panel offers runs through a shared executor the AI runner can reach.
+2. **Asymmetries that favour NPCs.** Since batch 13 step 18 (2026-10-30, D11) the breath weapon is a standard action for every breather, and the breath, spittle, engulf and ranged specials are shared catalog entries a controllable creature can take too (AI-040 fixed; the triggers and auras are shared too since batch 13 step 19, CRE-039 fixed); since batch 12 step 10 every save of either side goes through one roll (`SaveRollRules`: natural 1 and 20, Luck, countersong) and a monster's ranged touch attack uses the spell ranged touch terms (AI-006 fixed); since batch 11 step 13 a silenced NPC, like a PC, cannot cast a verbal spell (the cast core's Legality stage, and the AI's spell choice skips such a spell). Damage from spells, breath and specials is shared since 2026-10-09 (`GameManager.DealDamage`, SPL-004). Casting (7.6), movement and maneuver attacks of opportunity (4.5) use the same helpers for PCs and NPCs.
 3. **Asymmetries that cripple NPCs.** Prone NPCs, charmed ones included, stand at turn start, and since batch 13 step 12 (2026-10-29, D5, CMB-074 fixed) a prone confused one stands when its roll lets it act and it cannot already attack the nearest creature from the ground, and when it rolls flee (revised in the step 12 review); the AI never chooses to crawl (batch 14). Since batch 12 step 7 (2026-10-28, decision D4) panicked and turned NPCs flee, pinned ones try to escape and nauseated ones take their single move action, as PCs do. Breath weapons fire only for the Dragon profile (AI-033); they recharge as their MM entries say since batch 12 step 6 (D14). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
 4. **No decision layer.** Each routine is a fixed script. There is no comparison of the expected value of a spell, a breath, a full attack or a maneuver; `SelectBestAction` computes six results but its callers act only on `Charge` (AI-027). Profiles that set Trip trip every standing target in reach with their first attack, with no odds check (AI-035); a per-turn stopgap (AI-060) only stops them chaining maneuvers or retrying a failed one.
 5. **No group play.** Every NPC scores alone. There is no focus fire, flank pairing, protection of casters, morale or retreat policy (AI-010).
 
-**Mental model.** Think of an NPC's AI as three stacked layers. The **turn pipeline** (`ExecuteNPCTurn`) owns the order of operations and the condition takeovers. The **tactical routine** (chosen by `NPCAIBehavior`, the profile class, or the summon/swarm status) owns the shape of the turn: approach-then-hit, cast-then-kite, breathe-then-retreat. The **profile** (`AIProfile` subclass chosen by `NPCAIProfileArchetype`) only answers questions the routine asks: how good is this target, should I charge, which maneuver, which spell. Spell choice is a fourth, mostly independent scorer (`AISpellcastingStrategist`). Most resolution (attacks, breath, casting) is done by `GameManager` partials that `AIService` reaches through about 40 `*ForAI` wrappers. To change *what* an NPC can do you usually edit a routine and a `GameManager` executor; to change *how it chooses* you edit a profile or the strategist.
+**Mental model.** Think of an NPC's AI as three stacked layers. The **turn pipeline** (`ExecuteNPCTurn`) owns the order of operations and the condition takeovers. The **tactical routine** (chosen by `NPCAIBehavior`, the profile class, or the summon/swarm status) owns the shape of the turn: approach-then-hit, cast-then-kite, breathe-then-retreat. The **profile** (`AIProfile` subclass chosen by `NPCAIProfileArchetype`) only answers questions the routine asks: how good is this target, should I charge, which maneuver, which spell. Spell choice is a fourth, mostly independent scorer (`AISpellcastingStrategist`). Most resolution (attacks, breath, casting) is done by `GameManager` partials that `AIService` reaches through about 50 `*ForAI` wrappers. To change *what* an NPC can do you usually edit a routine and a `GameManager` executor; to change *how it chooses* you edit a profile or the strategist.
 
 ## 2. Architecture
 
@@ -58,13 +58,13 @@ Contents:
 
 | Layer | Selected by | Code | Decides |
 |---|---|---|---|
-| Turn pipeline | always | `AIService.ExecuteNPCTurn` (Services/AIService.cs:48) | gate order, condition takeovers, routing |
-| Condition controllers | active condition | Combat/Behaviors/{Confused,Charmed,Fascinated,Frightened}BehaviorController.cs | the whole turn while the condition lasts |
+| Turn pipeline | always | `AIService.ExecuteNPCTurn` (Services/AIService.cs:129) | gate order, condition takeovers, routing |
+| Condition controllers | active condition | Combat/Behaviors/{Confused,Charmed,Fascinated,Frightened,Suggested}BehaviorController.cs | the whole turn while the condition lasts |
 | Tactical routine | `NPCAIBehavior`, profile class, `CombatStyle`, summon/swarm status | `AIService.Execute*Turn`; `GameManager.AI_SummonedCreature`; `GameManager.AI_GrappleRestrictedTurn` | turn shape: move, charge, cast, attack, retreat |
-| Profile ("brain") | `NPCAIProfileArchetype` via `GameManager.BuildRuntimeAIProfile` | AI/AIProfile.cs, AI/Profiles/*.cs (19 concrete classes) | target score, charge, maneuver, coup de grace, AoO tolerance, preferred range, spell score |
+| Profile ("brain") | `NPCAIProfileArchetype` via `GameManager.BuildRuntimeAIProfile` | AI/AIProfile.cs, AI/Profiles/*.cs (20 concrete classes) | target score, charge, maneuver, coup de grace, AoO tolerance, preferred range, spell score |
 | Spell strategist | always, when casting | AI/AISpellcastingStrategist.cs (static) | spell score terms, spell target, defensive-cast decision |
 | Perception | always | `CharacterController.CanSee`/`GetMissChance`; AI/LastKnownPositionTracker.cs | what counts as visible; last-known squares; Listen pinpointing |
-| Executors | called by routines | `GameManager` partials (`NPCPerformAttack`, `TryNPCPerformSpellCast`, `NPCExecuteCharge`, `NPCExecuteBreathWeaponForAI`, `TryNPCSpecialAttackIfBeneficial`, movement); action cost of attacks and attack-substitute maneuvers through the per-creature attack sequence (`CharacterController.TryCommitAttack`, `ManeuverActionCost`); the NPC melee attack steps through it (`PerformNPCMeleeAttackSequence`, per-step maneuver from `AIService.PerformMeleeAttackActionWithManeuvers`, CMB-102) | rules resolution |
+| Executors | called by routines | `GameManager` partials (`NPCPerformAttack`, `TryNPCPerformSpellCast`, `NPCExecuteCharge`, `NPCExecuteBreathWeaponForAI`, `TryNPCSpecialAttackIfBeneficial`, movement); action cost of attacks and attack-substitute maneuvers through the per-creature attack sequence (`CharacterController.TryCommitAttack`, `ManeuverActionCost`); the NPC melee attack steps through it (`NPCAttackSequence` into `GameManager.RunAttackSequence`, per-step maneuver from `AIService.CreateMeleeStepManeuverEvaluator`, passed in by `PerformMeleeAttackActionWithManeuvers`, CMB-102) | rules resolution |
 
 ### 2.2 Diagram
 
@@ -79,7 +79,7 @@ Contents:
  GameManager.SingleNPCTurnFromInitiative
           |-- ShouldSkipTurnDueToHPState (DeniesAllActions, D4)? --> log, NextInitiativeTurn
           |-- BeginActingTurn (perception, every actor since batch 12 step 8; Turn Undead
-          |                       proximity; compulsion pass -> npc.CurrentTurnStart)
+          |                       proximity; the bearer's aura; compulsion pass -> npc.CurrentTurnStart)
           v
  AIService.ExecuteNPCTurn
    Confused / Charmed / Suggested ----> BehaviorController (whole turn; charmed stands up first, confused before attacking a nearest creature it does not threaten)
@@ -90,9 +90,10 @@ Contents:
    SelectBestTarget ----------------------------+--> profile.ScoreTarget / GetTargetPriority
    (none -> search move)                        +--> perception terms, LastKnownPositionTracker
    Grappling -> TryGrappledSpellcastForAI (a weaker or pinned caster casts what the grapple allows) else AI_GrappleRestrictedTurn (a pinned NPC: the escape options only)
-   Aura (free) ; free-action ranged special
+   free-action ranged special (the aura fires earlier, in BeginActingTurn, for every bearer, since batch 13 step 19)
    Resilient Sphere -> end
-   Lay on Hands (paladin; AIProfile.ChooseLayOnHandsTarget) -> end
+   Lay on Hands (paladin; AIProfile.ChooseLayOnHandsTarget) -> end ; Turn Undead (TryNPCTurnUndeadTurnForAI) -> end
+   (not a summon) a held touch charge (TryDeliverHeldChargeTurn) ; bardic music -> end ; TryMaintainConcentrationTurn -> end ; Wild Shape (then move, or melee in the form)
    route:  SwarmAI -> ExecuteSwarmTurn
            summon  -> GameManager.AI_SummonedCreature
            Healer  -> heal/buff via strategist, else Kiter/Melee
@@ -114,25 +115,25 @@ Contents:
 
 | File | Lines | Contents |
 |---|---|---|
-| Services/AIService.cs | 3,504 | Pipeline, all routines except summon and grapple, targeting, movement scoring, maneuver gate, spell selection glue, auras, specials, swarm damage (AI-020) |
-| _Core/GameManager.NPCTurns.cs | 1,863 | `SingleNPCTurnFromInitiative` 35, `AI_SummonedCreature` 79, `TryNPCSpecialAttackIfBeneficial` 306, the AI's attack-sequence choices `ChooseNextAttackStepForAI` and `NPCAttackSequence` (the executor is `_Core/GameManager.AttackCore.cs`), `TryNPCPerformSpellCast` 951, bombardier spray 1188, `NPCPerformAttack` 1285, breath 1651, frightful presence 1791 |
-| _Core/GameManager.cs | 11,516 | `OnTurnStarted` 3764, `ShouldSkipTurnDueToHPState` 3909, `NextInitiativeTurn` 3948, the `*ForAI` block 10879-11036 |
-| _Core/GameManager.NPCSetup.cs | 924 | `SetupEnemyEncounter` (adds `_npcAIBehaviors` 179), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile` 864 |
-| _Core/GameManager.CombatActions.cs | | the PC move `ExecuteMovement` (the move entry since batch 13 step 9; the AI's moves run `ExecuteMoveAction` in Combat/Actions/Executors/GameManager.MoveAction.cs), shared AoO helpers `ResolveMovementAoOsBeforeStep`/`ExecutePathWithMovementAoOs`/`ResolveManeuverInitiationAoOs` 720-935, Wall of Ice AI helpers 2636-2670 |
+| Services/AIService.cs | 4,560 | Pipeline, all routines except summon and grapple, targeting, movement scoring, maneuver gate, spell selection glue, auras, specials, swarm damage (AI-020) |
+| _Core/GameManager.NPCTurns.cs | 1,563 | `SingleNPCTurnFromInitiative` 35, `AI_SummonedCreature` 86, `TryNPCSpecialAttackIfBeneficial` 278, the AI's attack-sequence choices `ChooseNextAttackStepForAI` and `NPCAttackSequence` (the executor is `_Core/GameManager.AttackCore.cs`), `TryNPCPerformSpellCast` 883, `NPCPerformAttack` 1034, breath 1368 (the bombardier spray is `TryBombardierAcidSprayReaction` in `_Core/GameManager.AttackedReactions.cs`; frightful presence is `TriggerFrightfulPresence` in `Combat/Special/GameManager.MonsterTriggers.cs`) |
+| _Core/GameManager.cs | 11,516 | `OnTurnStarted` 3700, `ShouldSkipTurnDueToHPState` 3901, `NextInitiativeTurn` 3932, the `*ForAI` block 11133-11397 |
+| _Core/GameManager.NPCSetup.cs | 1,319 | `SetupEnemyEncounter` (adds `_npcAIBehaviors` 172, 281, 307), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile` 1218 |
+| _Core/GameManager.CombatActions.cs | | the PC move `ExecuteMovement` (the move entry since batch 13 step 9; the AI's moves run `ExecuteMoveAction` in Combat/Actions/Executors/GameManager.MoveAction.cs), shared AoO helpers `ResolveMovementAoOsBeforeStep`/`ExecutePathWithMovementAoOs`/`ResolveManeuverInitiationAoOs` 776-939, Wall of Ice AI helpers 2371-2419 |
 | Combat/Maneuvers/SupportActions.cs, ChargeCore.cs | | `CanChargeTarget` and `NPCExecuteCharge` (wrappers); `CanCharge`, `ExecuteCharge(ChargeRequest, ChargeOutcome)` (ChargeCore.cs) |
-| Combat/Maneuvers/GrappleSystem.cs | | `AI_GrappleRestrictedTurn` 1633, `ChooseNPCGrappleAction` 1747 |
-| Combat/Behaviors/*.cs | 1,047 | The four condition controllers |
+| Combat/Maneuvers/GrappleSystem.cs | | `AI_GrappleRestrictedTurn` 2340, `ChooseNPCGrappleAction` 2530 |
+| Combat/Behaviors/*.cs | 1,866 | The five condition controllers (Confused, Charmed, Fascinated, Frightened, Suggested) and the shared `TurnCompulsion` and `FlightRules` |
 | AI/AIProfile.cs, AI/AIBehaviorData.cs, AI/SpellcasterAIBehaviorData.cs | | Profile base class and its data types |
-| AI/Profiles/*.cs | | 19 concrete profiles; AI/Custom/CustomAIExample.cs is an unwired sample (AI-029) |
+| AI/Profiles/*.cs | | 20 concrete profiles; AI/Custom/CustomAIExample.cs is an unwired sample (AI-029) |
 | AI/AISpellcastingStrategist.cs | 1,546 | Spell scoring, spell targeting, defensive-cast estimate |
 | AI/Spellcasting/*.cs | | The cast core's AI side (batch 11): `AiCastDecider` (the AI's cast choices), `AiCastChoiceHeuristics`, `AiSpellCandidates` (the ordered retries), `AreaAimSearch` (area aims, 7.8), `AiMetamagicPlanner` (metamagic candidates and their value, 7.10) |
 | AI/SpellCategoryClassifier.cs | | Rewrites `SpellData.EffectType` at SpellDatabase init |
-| AI/LastKnownPositionTracker.cs | 307 | Last-known squares, Listen and See Invisibility pinpointing |
+| AI/LastKnownPositionTracker.cs | 395 | Last-known squares, Listen and See Invisibility pinpointing |
 | AI/AIManeuverTurnMemory.cs | | The per-creature, per-turn maneuver memory of the AI-060 stopgap (`CharacterController.AIManeuverMemory`) |
 | AI/NPCTemplateAIConfigurator.cs, AI/AIConsumableManager.cs | | Reachable only from tests (AI-009, CRE-020) |
-| Character/Creatures/NPCDatabase.cs | | `NPCDefinition.AIBehavior` 626, `AIProfileArchetype` 627, `AITargetPriority` 629, `UseCoupDeGrace` 631; enums `NPCAIProfileArchetype` 777, `NPCAIBehavior` 808 |
+| Character/Creatures/NPCDatabase.cs | | `NPCDefinition.AIBehavior` 895, `AIProfileArchetype` 896, `AITargetPriority` 898, `UseCoupDeGrace` 900; enums `NPCAIProfileArchetype` 1087, `NPCAIBehavior` 1118 |
 
-`AI/README.md` is stale; do not trust it.
+Batch 13 added `AI/AiAttackGuard.cs` (the attack guard, AI-075), `AI/AiOutOfReach.cs` (the out-of-reach alternatives, section 5.10), `AI/AiWeaponFallback.cs` (draws a usable weapon when it holds none, AI-073) and `AI/Knowledge/*.cs` (knowledge facts and queries); batch 12 step 24 added `AI/Spellcasting/AiConversionPlanner.cs` (spontaneous conversion candidates, CHR-070). There is no `AI/README.md` any more (deleted in d0c2c41a).
 
 ### 2.4 Where configuration comes from
 
