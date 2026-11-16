@@ -139,7 +139,7 @@ Contents:
 Per-NPC AI state lives in three places:
 
 - `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def, stats)` (the type from `RuntimeAIProfileTypeFor`, batch 13 step 8), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
-- `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015, CRE-006).
+- `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015).
 - One `AIProfile` instance per creature from `GameManager.CreateRuntimeAIProfile<T>()` (`AIProfile.CreateRuntime<T>()`: `CreateInstance`, then the virtual `ApplyRuntimeDefaults`, which writes the type's tuning and its `ProfileName`), tracked so that the GameManager destroys it: a replaced profile at once, a reused slot's old one at the respawn, a summon's once it is despawned (the despawn loops and the combat reset; batch 13 step 2, AI-017). `OnEnable` writes no tuning, so a profile `.asset` would keep its Inspector values; there are no profile `.asset` files. A profile may hold per-turn state (the dragon's breath plan) because no two creatures share an instance; the scenario harness and the static suites call `AIProfile.CreateRuntime` directly.
 
 Writers of the AI fields besides the database files:
@@ -701,7 +701,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 
-From other files: CMB-022 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-027, SPL-041, SPL-047, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
+From other files: CMB-022 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-027, SPL-041, SPL-047, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
 
 ### 10.2 Issues found while writing this doc
 
@@ -790,7 +790,7 @@ Add a static `Get<X>Score` to `AISpellcastingStrategist` and sum it in `ScoreSpe
 
 ### 11.7 Pitfalls
 
-- `_npcAIBehaviors` is index-parallel to `NPCs`; summons append and remove (AI-015, CRE-006).
+- `_npcAIBehaviors` is index-parallel to `NPCs`; summons append and remove (AI-015).
 - Every movement yield can kill the mover; re-check HP.
 - `StopAllCoroutines` on encounter reset kills AI mid-turn (CORE-013); turn advancement is re-entrant (CORE-012).
 - `SelectBestTarget` has side effects (ward saves, Listen, tracker writes); do not call it speculatively in a loop without accepting them.
