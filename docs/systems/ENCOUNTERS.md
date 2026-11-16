@@ -11,16 +11,16 @@ Related docs: [../architecture/ai-encounters-ui.md](../architecture/ai-encounter
 ## 1. The loop at a glance
 
 ```
-GameManager.PromptEncounterSelection                       _Core/GameManager.cs:785
+GameManager.PromptEncounterSelection                       _Core/GameManager.cs:761
   EncounterSelectionUI.Open(presets, onSelect, onStartRandomEncounter, onCancel, party levels)
-    preset card        -> onSelect(presetId)       -> ApplyEncounterPreset       GameManager.cs:1769
+    preset card        -> onSelect(presetId)       -> ApplyEncounterPreset       GameManager.cs:1772
     "Random Encounter" -> RandomEncounterGeneratorUI -> RandomEncounterSystem.Generate
     "DMG Tables"       -> DungeonEncounterGeneratorUI -> DungeonEncounterTableManager.GenerateRandomEncounter
                           -> DungeonEncounterSpawner.PrepareEncounter (spawn_* ids)
     "Custom Encounter" -> CustomEncounterBuilderUI
-                       (the last three) -> onStartRandomEncounter(ids, generated) -> ApplyRandomEncounter   GameManager.cs:1690
-  SetupEnemyEncounter(ids)                                  _Core/GameManager.NPCSetup.cs:128
-  OpenPreCombatHubPhase (stash, store, spell prep, crafting, Start Encounter)   GameManager.cs:1403
+                       (the last three) -> onStartRandomEncounter(ids, generated) -> ApplyRandomEncounter   GameManager.cs:1693
+  SetupEnemyEncounter(ids)                                  _Core/GameManager.NPCSetup.cs:129
+  OpenPreCombatHubPhase (stash, store, spell prep, crafting, Start Encounter)   GameManager.cs:1406
   ... combat ...
   BeginPostCombatLootCollection                             _Core/GameManager.LootCollection.cs:25
     GeneratePostCombatTreasure (EL -> DMG Table 3-5), coins auto-collected, LootCollectionUI
