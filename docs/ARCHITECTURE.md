@@ -329,11 +329,11 @@ The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatS
 
 **Namespaces.** Almost all code is in the global namespace. The exceptions are:
 
-- `DND35e.Identifiers` (13 files): `SpellNames`, `SpellID`, `ItemIDs`, `ItemID`, `RingNames`, `WondrousItemNames`, `GameConstants`, `IdentifierExtensions` and a few enums. 238 files import it.
-- `DND35.AI`, `DND35.AI.Profiles` and `DND35.AI.Custom` (23 files).
+- `DND35e.Identifiers` (13 files): `SpellNames`, `SpellID`, `ItemIDs`, `ItemID`, `RingNames`, `WondrousItemNames`, `GameConstants`, `IdentifierExtensions` and a few enums. 302 files import it.
+- `DND35.AI`, `DND35.AI.Profiles`, `DND35.AI.Custom` and `DND35.AI.Knowledge` (31 files; `Knowledge` is the 5 files in `AI/Knowledge/`).
 - `DND35e.Treasure` (5 files).
 - `DND35.Magic` (`CounterspellData`).
-- `Tests.*` (98 files).
+- `Tests.*` (200 files).
 
 Name clashes to know about: `CharacterController` shadows `UnityEngine.CharacterController` (it resolves only because global-namespace types win over `using UnityEngine`); the global `SaveType` clashes with `SavingThrowResolver.SaveType`; the global `DamageType` and `DND35e.Identifiers.DamageType` have different ordinals.
 
@@ -350,10 +350,10 @@ The enums `SpellID` and `ItemID` exist but are rarely used.
 **Never mutate templates.** Database entries are shared reference objects. Clone before you modify:
 
 - items: `ItemDatabase.CloneItem`;
-- spells: `SpellData.Clone()`, as used by `MetamagicModifier`;
+- spells: `SpellData.Clone()`, as used by `SpellCastRequest.CloneForCast` and `AiMetamagicPlanner`;
 - NPC definitions: `NPCDefinition.Clone()`, as used by templates and `DungeonEncounterSpawner`.
 
-There is one deliberate exception. `SpellCategoryClassifier.ReclassifyAll`, called from `SpellDatabase.cs:75`, rewrites `SpellData.EffectType` globally when the spell database initialises; see [Spell data model](architecture/spells.md#spell-data-model).
+There is one deliberate exception. `SpellCategoryClassifier.ReclassifyAll`, called from `SpellDatabase.cs:80`, rewrites `SpellData.EffectType` globally when the spell database initialises; see [Spell data model](architecture/spells.md#spell-data-model).
 
 **UI built in code.** There are no prefabs. Each UI class builds itself through `BuildUI(canvas)`, `EnsureBuilt()` or `UIFactory` helpers. Phase transitions are callback-driven: `Open(onSelect, onBack, onStart, onClosed, ...)`. How panels are hosted (eager vs lazy) is described in [UI: built entirely in code](architecture/ai-encounters-ui.md#ui-built-entirely-in-code).
 
@@ -364,7 +364,7 @@ There is one deliberate exception. `SpellCategoryClassifier.ReclassifyAll`, call
 - `[CombatPhase]`
 - `[Initiative]`
 - `[TurnService][Flow]`
-- `[VictoryCheck]`
+- `[CombatEnd]`
 - `[LootFlow]`
 - `[CombatReset]`
 - `[TestPanel]`
@@ -372,25 +372,25 @@ There is one deliberate exception. `SpellCategoryClassifier.ReclassifyAll`, call
 
 **Dice.** Three random sources coexist, all backed by `UnityEngine.Random`, with no seeding hook in game code (some tests call `Random.InitState`). Every `DiceRoller` die and every `DiceService` die (min 1) is drawn first and then passed through the inert test filter `ScenarioHooks.FilterRoll`, which returns it unchanged in normal play; raw `Random.Range` sites bypass it (TST-033):
 
-- `DiceRoller` (Utilities): about 155 referencing lines, none in tests.
-- `DiceService` (Services): about 130 referencing lines (about 120 outside tests), adds an optional context label.
-- Raw `Random.Range`: about 60 non-test lines outside the two dice helpers.
+- `DiceRoller` (Utilities): about 77 referencing lines, none in test code (one comment).
+- `DiceService` (Services): about 150 referencing lines (about 130 outside tests), adds an optional context label.
+- Raw `Random.Range`: about 45 non-test lines outside the two dice helpers (`AttackCalculator` weapon damage dice are filtered through `ScenarioHooks.FilterRoll` too).
 
 The two `Roll` methods mean different things. `DiceRoller.Roll(2, 6)` is 2d6, while `DiceService.Roll(2, 6)` is one roll in the range 2..6; use `DiceService.RollMultiple(count, sides)` for NdS.
 
 **Accessor wrapper families.** Services reach private GameManager state through public wrappers instead of direct field access:
 
-- `Combat_*` (59 members in `_Core/GameManager.CombatFlowAccessors.cs`), used by `CombatFlowService`, `ActionButtonPanel`, `CharmedBehaviorController` and `FireShieldReactionEffect`.
-- Public `*ForAI` methods, used mainly by `AIService`, also by the `AIProfile` subclasses and the Confused/Charmed/Fascinated/Frightened behavior controllers. 44 are in `GameManager.cs` (re-counted 2026-10-29, after batch 13 step 2 deleted three uncalled ones, AI-053), most in one block near the end of the file; the others are in the partials (CombatActions, NPCTurns, FlamingSphere, MirrorImage and more).
-- One-line delegates kept for backward compatibility, e.g. `GameManager.DispelCounterspell.cs` and `IsEnemyTeam`/`IsAllyTeam` (`GameManager.cs:677-682`).
+- `Combat_*` (45 members in `_Core/GameManager.CombatFlowAccessors.cs`), used by `CombatFlowService`, `ActionButtonPanel`, `AttackSequence`, `AttackIntent`, the action-catalog executors (`DefenseExecutors`, `GameManager.ActionCores`) and a few spell partials.
+- Public `*ForAI` methods, used mainly by `AIService`, also by the `AIProfile` subclasses and the Confused/Charmed/Fascinated/Frightened behavior controllers. 42 are in `GameManager.cs` (re-counted 2026-11-16, after batch 13 step 2 deleted three uncalled ones, AI-053), most in one block near the end of the file; the others are in the partials (CombatActions, NPCTurns, FlamingSphere, the Maneuvers and Special systems and more).
+- One-line delegates kept for backward compatibility, e.g. `GameManager.DispelCounterspell.cs` and `IsEnemyTeam`/`IsAllyTeam` (`GameManager.cs:666-671`).
 
 A new AI need normally means adding a new `*ForAI` wrapper.
 
-**Identity.** `IsPC(c)` means `c.IsControllable` (`GameManager.cs:670`), not team membership. Use `TeamUtility.IsEnemy`/`IsAlly` for sides.
+**Identity.** `IsPC(c)` means `c.IsControllable` (`GameManager.cs:659`), not team membership. Use `TeamUtility.IsEnemy`/`IsAlly` for sides.
 
 **How to find things.**
 
-- GameManager members: `grep -rn "void MethodName" Assets/Scripts`. Never assume a method is missing because `GameManager.cs` lacks it; 51 other files declare the class.
+- GameManager members: `grep -rn "void MethodName" Assets/Scripts`. Never assume a method is missing because `GameManager.cs` lacks it; 74 other files declare the class.
 - Button handlers: `grep -rn "On.*ButtonPressed" Assets/Scripts`. Most are bound in `SceneBootstrap.WireButtons`; a few are called from `ActionButtonPanel` and `CombatUI`.
-- Before renaming a private GameManager method, grep `Assets/Scripts/Tests`. Tests reach private members by name through reflection: 19 test files make about 60 GetMethod/GetField/GetProperty calls (recount before relying on it: `grep -rE "\.(GetMethod|GetField|GetProperty)\(" Assets/Scripts/Tests`). A rename breaks them with no compile error.
+- Before renaming a private GameManager method, grep `Assets/Scripts/Tests`. Tests reach private members by name through reflection: 42 test files make about 150 GetMethod/GetField/GetProperty calls (recount before relying on it: `grep -rE "\.(GetMethod|GetField|GetProperty)\(" Assets/Scripts/Tests`). A rename breaks them with no compile error.
 - Tests are static classes with `RunAll()`, except three MonoBehaviour suites (`FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`) that run from `Start` but are attached to no scene. There is no NUnit, no Unity Test Framework package and no asmdef, so they compile into the game assembly. No game code calls `RunAll()`; the editor-only `Tests.Runner.StaticSuiteRunner` (Tools > DND Tests, or `RunFromCommand` through the Unity MCP) runs them against `tools/tests/static-suites.json`. See [TESTING.md](TESTING.md).
