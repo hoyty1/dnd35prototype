@@ -261,62 +261,62 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 ### Folder map of Assets/Scripts
 
-There are 675 `.cs` files (about 305K lines, recounted 2026-10-07). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
+There are 872 `.cs` files (about 417K lines, recounted 2026-11-16). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
 
 ```
 Assets/Scripts/
-  _Core/ (22)            GameManager.cs + 15 GameManager.*.cs partials (ScenarioHarness is editor-only),
+  _Core/ (23)            GameManager.cs + 16 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
-  AI/ (10)               AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,
+  AI/ (13)               AISpellcastingStrategist, AiAttackGuard, AiOutOfReach, AiWeaponFallback, LastKnownPositionTracker, SpellCategoryClassifier,
                          AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
                          AIConsumableManager, AIBehaviorData,
-                         SpellcasterAIBehaviorData, NPCTemplateAIConfigurator (+ README.md)
+                         SpellcasterAIBehaviorData, NPCTemplateAIConfigurator
     Knowledge/ (5)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags
-    Spellcasting/ (3)    AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
-    Profiles/ (19)       AIProfile subclasses (namespace DND35.AI.Profiles)
+    Spellcasting/ (6)    AiConversionPlanner, AiMetamagicPlanner, AreaAimSearch, AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
+    Profiles/ (20)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile
   Character/
-    Controller/ (2)      CharacterController (12,261 lines, not partial), CharacterEquipment
-    Stats/ (8)           CharacterStats, Alignment, HPState, conditions/tags
-    Classes/ (9) + Bard, Druid, NPC, Paladin, Ranger, Shared   class definitions
-    Creatures/ (35)      NPCDatabase + NPCDatabase_* partials (letters plus Dragons, Lycanthropes,
+    Controller/ (2)      CharacterController (16,387 lines, not partial), CharacterEquipment
+    Stats/ (11)          CharacterStats, Alignment, HPState, conditions/tags
+    Classes/ (10) + Bard, Druid, NPC, Paladin, Ranger, Shared   class definitions
+    Creatures/ (36)      NPCDatabase + NPCDatabase_* partials (letters plus Dragons, Lycanthropes,
                          Skeletons, Zombies) and a few creature-data helpers
     Templates/ (14)      creature templates (skeleton, zombie, lycanthrope, NPC templates)
-    CreatureClass/ (5), Familiar/ (1), Feats/ (3), Progression/ (3), Races/ (2),
+    CreatureClass/ (5), Familiar/ (1), Feats/ (3), Progression/ (3), Races/ (3),
     Religion/ (4), Skills/ (2), Specialization/ (1)
   Combat/
-    Core/ (17)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
+    Core/ (26)           AttackCalculator, AttackSequence, AttackLegality, CleaveRules, TurnDurations, WardSaveLedger, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
                          DamageModel, BullRushRules, PerceptionRules (turn-start Listen check, every actor, CMB-094),
                          dormant CombatStateMachine/InitiativeSystem
-    Conditions/ (11), Behaviors/ (4), Maneuvers/ (9), Special/ (3), Reactions/ (3),
+    Actions/ (25: the action catalog, ActionCatalog, ActionIds, ActionLegality and Executors/ with 13 files, batch 13), Conditions/ (12), Behaviors/ (7), Maneuvers/ (9), Special/ (8), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
   Spell/ (1: BonusType)
-    Data/ (8)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...
+    Data/ (9)            SpellData, SpellID, SpellNames, SpellSlot, SpellSchool, ...
     Database/ (25)       SpellDatabase + 23 SpellDatabase_<letter> partials (A..Z, some letters
                          absent) + SpontaneousCastingType
-    Casting/ (12) + Core/ (13: SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
+    Casting/ (15) + Core/ (16: BlinkCastRules, ConcentrationRules, SpellComponentRules, SpellSaveRules, SpellCastRequest, CastContext, CastSource, CastChoices, CastAim, ICastDecider,
                          UiCastDecider, CastResourceSnapshot, CastStageTrace, CastActionRules (HeldChargeDeliveryRules),
                          CastComponentRules, CasterLevelRules), Components/ (7), Effects/ (1: EffectService)
-    Resolution/ (26), Special/ (10), Domain/ (3)  mostly GameManager partials (Special/ also MirrorImageRules)
+    Resolution/ (29), Special/ (10), Domain/ (3)  mostly GameManager partials (Special/ also MirrorImageRules)
     AreaEffects/ (32), StatusEffects/ (28)
   Equipment/             Items/ (9), Inventory/ (10), Weapons/ (18), Armor/ (10), Rings/ (7),
                          Rods/ (5), Staves/ (3), Wondrous/ (4), SpecificItems/ (4), Enchantments/ (7),
                          Materials/ (1), SpellStorage/ (3), Effects/ (1), Store/ (3: StoreInventory, StoreUI, StoreSelling)
-                         (root also holds legacy design .md files)
-  UI/                    Common/ (8), Combat/ (12), CharacterCreation/ (6), CharacterSheet/ (5),
+                         (no .md files remain under Assets/Scripts)
+  UI/                    Common/ (8), Combat/ (11), CharacterCreation/ (7), CharacterSheet/ (5),
                          Inventory/ (3), Spells/ (6), Encounter/ (6), Crafting/ (1), Wish/ (1)
-  Services/ (16)         see Service layer
+  Services/ (15)         see Service layer
   Encounters/ (14)       DMG dungeon tables, CSV parser, spawner, random encounter system,
                          EncounterSpawnPlacement (spawn squares, ENC-001), GameManager.DungeonEncounters partial
   Crafting/ (10)         item creation feats and workshop logic
   TreasureGenerator/ (7) DMG treasure (5 files in namespace DND35e.Treasure) + global TreasureItemConverter, TreasureUI
   Effects/ (5)           diseases and poisons (not spell effects)
-  Grid/ (4)              SquareGrid, SquareCell, SquareGridUtils, PathPreview
+  Grid/ (5)              SquareGrid, SquareCell, SquareGridUtils, PathPreview, MovementTerrain
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (123)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+  Tests/ (203)           static RunAll() suites in 14 domain subfolders, shared test helpers in Utilities/, plus Runner/ (StaticSuiteRunner)
                          and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks, steps,
                          expectations, fast mode, session guard, fresh-session batch driver, soak statistics,
                          Catalog/ of smoke, rules and soak definitions); ScenarioHooks (in _Core/) is null in
