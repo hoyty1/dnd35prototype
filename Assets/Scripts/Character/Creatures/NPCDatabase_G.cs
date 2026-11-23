@@ -1362,4 +1362,54 @@ public static partial class NPCDatabase
         });
     }
 
+    /// <summary>
+    /// Goblin Adept (CR 1/3), a batch 14 test creature (docs/designs/personalities_batch14.md step 4; registered by
+    /// <see cref="RegisterPersonalityTestCreatures"/>; no DMG table maps to it). The MM goblin (MM p.133-134: most goblin
+    /// spellcasters are adepts; goblins are cowardly by nature) with Adept 1 in place of Warrior 1: the MM goblin's
+    /// nonelite array arranged for an adept (Wis 13, Con 12, Dex 11, Int 10, Str 9, Cha 8; DMG p.110), then the goblin's
+    /// -2 Str, +2 Dex, -2 Cha. Adept d6 Hit Die, 1d6+1 = 4 hp (MM averages). An adept is proficient with simple weapons
+    /// and no armor or shield (DMG p.107): a morningstar and a sling. No spells until batch 15 (CHR-024, ENC-021): it
+    /// spawns without spellcasting and warns (CRE-062), and the Healer profile has nothing to cast. Archetype Healer,
+    /// behaviour RangedKiter, personality Cowardly:0.6,Healer:0.4 (the validator also warns that Healer has no spell).
+    /// </summary>
+    private static void RegisterGoblinAdept()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "goblin_adept",
+            Name = "Goblin Adept",
+            ChallengeRating = "1/3", // goblins with NPC class levels: character level -2 (MM p.134), as the 1st-level warrior
+            Level = 1,
+            CharacterClass = "Adept",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // usually neutral evil (MM p.133)
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 7, DEX = 13, CON = 12, WIS = 13, INT = 10, CHA = 6,
+            BaseSpeed = 6, // 30 ft.
+            BaseHitDieHP = 4, // 1d6+1
+            CreatureTags = new List<string> { "Goblinoid", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string>
+            {
+                "Darkvision 60 ft",
+                "Usually neutral evil",
+                "Adept 1: no spells until batch 15 (CHR-024, ENC-021)"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SLING, EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.AMMO_SLING_BULLET },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Healer,
+            AIPersonality = "Cowardly:0.6,Healer:0.4",
+            SpriteColor = new Color(0.5f, 0.72f, 0.36f, 1f),
+            PanelColor = new Color(0.33f, 0.1f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.45f, 0.45f),
+            Description = "Goblin Adept (CR 1/3). Batch 14 personality test creature: a cowardly goblin healer with morningstar and sling. MM 3.5e p.133-134, DMG p.107."
+        });
+    }
 }

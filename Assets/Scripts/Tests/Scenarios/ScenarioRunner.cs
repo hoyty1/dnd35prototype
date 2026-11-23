@@ -25,6 +25,11 @@ namespace Tests.Scenarios
         public float WallCapSeconds = DefaultWallCapSeconds;
         /// <summary>True when the options set wallCap (it then overrides a definition's own cap).</summary>
         public bool WallCapSet;
+        /// <summary>
+        /// difficulty=easy|normal|hard: the AI difficulty of every job whose scenario does not pin one
+        /// (ScenarioBuilder.AiDifficulty wins); null is Normal (batch 14 step 4, C11).
+        /// </summary>
+        public AIService.AIDifficultyLevel? Difficulty;
 
         public const float DefaultWallCapSeconds = 120f;
 
@@ -71,6 +76,15 @@ namespace Tests.Scenarios
                         o.WallCapSeconds = wc;
                         o.WallCapSet = true;
                         break;
+                    case "difficulty":
+                        switch (val.ToLowerInvariant())
+                        {
+                            case "easy": o.Difficulty = AIService.AIDifficultyLevel.Easy; break;
+                            case "normal": o.Difficulty = AIService.AIDifficultyLevel.Normal; break;
+                            case "hard": o.Difficulty = AIService.AIDifficultyLevel.Hard; break;
+                            default: error = "difficulty must be easy, normal or hard"; return null;
+                        }
+                        break;
                     default:
                         error = "unknown option '" + key + "'";
                         return null;
@@ -82,7 +96,8 @@ namespace Tests.Scenarios
         public override string ToString()
             => "mode=" + Mode + (MaxRounds.HasValue ? ";maxRounds=" + MaxRounds : "") + ";repeat=" + Repeat
                + (Sweep > 0 ? ";sweep=" + Sweep : "") + (RecordDice ? ";record=dice" : "") + (Keep ? ";keep" : "")
-               + (WallCapSet ? ";wallCap=" + WallCapSeconds.ToString(CultureInfo.InvariantCulture) : "");
+               + (WallCapSet ? ";wallCap=" + WallCapSeconds.ToString(CultureInfo.InvariantCulture) : "")
+               + (Difficulty.HasValue ? ";difficulty=" + Difficulty.Value.ToString().ToLowerInvariant() : "");
     }
 
     /// <summary>The result of one job, as written to summary.json.</summary>
@@ -175,6 +190,8 @@ namespace Tests.Scenarios
         public int MaxRounds;
         public float WallCapSeconds;
         public RunOptions Options;
+        /// <summary>The job's AI difficulty: the scenario's pin, else the run's difficulty= option, else Normal (batch 14 step 4).</summary>
+        public AIService.AIDifficultyLevel Difficulty => Def?.AiDifficulty ?? Options?.Difficulty ?? AIService.AIDifficultyLevel.Normal;
         public ScenarioRunner Runner;
         public GameManager Gm;
         public ScenarioContext Ctx;
@@ -414,6 +431,8 @@ namespace Tests.Scenarios
         private bool _randomSaved;
         private HPCalculationMode _savedHpMode;
         private bool _hpModeSaved;
+        private AIService _difficultyService;
+        private AIService.AIDifficultyLevel? _savedDifficultyOverride;
         private Application.LogCallback _logHandler;
 
         /// <summary>True while a run is going (StaticSuiteRunner refuses to start then: it would clear the hooks mid-job).</summary>
@@ -1106,6 +1125,16 @@ namespace Tests.Scenarios
             _hpModeSaved = true;
             GameSettings.Instance.hpCalculationMode = HPCalculationMode.Average;
 
+            // AI difficulty (batch 14 step 4, C11): the scenario's own, else the run option's, else Normal, so a job never
+            // reads the editor's setting. Only a personality reads it.
+            AIService difficultyService = gm.GetComponent<AIService>();
+            if (difficultyService != null)
+            {
+                _savedDifficultyOverride = difficultyService.DifficultyOverride; // null: the live game setting
+                _difficultyService = difficultyService;
+                difficultyService.Difficulty = job.Difficulty;
+            }
+
             // Per-job actors, drawn first after seeding so the same seed gives the same actors.
             if (def.GenerateActors != null)
             {
@@ -1240,6 +1269,8 @@ namespace Tests.Scenarios
                 }
                 if (!string.IsNullOrEmpty(spec.PriorityTarget))
                     c.PriorityTargetName = job.Ctx.Actors[spec.PriorityTarget].Stats.CharacterName;
+                if (spec.PersonalitySet)
+                    ApplyPersonality(job, spec, c);
                 spec.Tweak?.Invoke(c);
             }
             def.OnSetup?.Invoke(job.Ctx);
@@ -1311,6 +1342,30 @@ namespace Tests.Scenarios
                 job.Trace.Emit("generated").Set("info", job.Generated.Info);
             foreach (ActorSpec spec in def.Actors)
                 job.Trace.EmitActor(spec.Key, job.Ctx.Actors[spec.Key], spec);
+            // Only a non-default difficulty or a personality warning adds a note, so a scenario with neither keeps its hash.
+            if (job.Difficulty != AIService.AIDifficultyLevel.Normal)
+                job.Ctx.Note("ai difficulty " + job.Difficulty);
+            foreach (string warning in job.Ctx.PersonalityWarnings)
+                job.Ctx.Note("personality warning: " + warning);
+        }
+
+        /// <summary>
+        /// Gives <paramref name="c"/> the personality of <paramref name="spec"/> (ActorSpec.Personality; batch 14 step 4),
+        /// replacing the one its definition built; an empty spec removes it (a "-plain" twin). Validated as a definition's
+        /// is (PersonalityFactory, with the spawn's own spells test, GameManager.HasCastableSpellForPersonality); its warning is logged and kept in ScenarioContext.PersonalityWarnings, and each becomes
+        /// a trace note once the trace is installed.
+        /// </summary>
+        private static void ApplyPersonality(ScenarioJob job, ActorSpec spec, CharacterController c)
+        {
+            string owner = spec.Source != null && !string.IsNullOrEmpty(spec.Source.NpcId) ? spec.Source.NpcId + " (" + spec.Key + ")" : spec.Key;
+            c.Personality = DND35.AI.Personality.PersonalityFactory.Create(spec.Personality, c.Stats, owner,
+                warning =>
+                {
+                    job.Ctx.PersonalityWarnings.Add(warning);
+                    Debug.LogWarning(warning);
+                },
+                hasCastableSpell: GameManager.HasCastableSpellForPersonality(
+                    spec.Source != null && spec.Source.Kind == ActorSourceKind.Npc ? NPCDatabase.Get(spec.Source.NpcId) : null, c));
         }
 
         private bool IsProfileInUse(DND35.AI.AIProfile profile)
@@ -1552,6 +1607,7 @@ namespace Tests.Scenarios
                     kv.Key.ConfigureTeamControl(kv.Value.team, kv.Value.controllable);
                     kv.Key.aiProfile = kv.Value.profile;
                     kv.Key.PriorityTargetName = null;
+                    kv.Key.Personality = null; // a harness personality never outlives its job (batch 14 step 4)
                 }
                 catch (Exception ex)
                 {
@@ -1578,6 +1634,12 @@ namespace Tests.Scenarios
                 try { GameSettings.Instance.hpCalculationMode = _savedHpMode; }
                 catch (Exception ex) { job.Notes.Add("restore HP mode: " + ex.Message); }
                 _hpModeSaved = false;
+            }
+            if (_difficultyService != null)
+            {
+                try { _difficultyService.DifficultyOverride = _savedDifficultyOverride; }
+                catch (Exception ex) { job.Notes.Add("restore AI difficulty: " + ex.Message); }
+                _difficultyService = null;
             }
             try { ScenarioFastMode.Restore(); }
             catch (Exception ex) { job.Notes.Add("restore fast mode: " + ex.Message); }

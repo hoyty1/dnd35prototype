@@ -42,7 +42,8 @@ namespace Tests.Scenarios
         /// Starts a run of the catalog scenarios matching <paramref name="filter"/>.
         /// Seeds: "1", "1-5", "1,3,7" (mixed is fine). Options: "key=value;..." with mode=fast|watch, maxRounds=N,
         /// repeat=N (compares the trace hash of each repetition per seed), sweep=N (seeds 1..N, aggregated per id),
-        /// record=dice, keep (stop after the first job and skip its cleanup so a human can look), wallCap=seconds.
+        /// record=dice, keep (stop after the first job and skip its cleanup so a human can look), wallCap=seconds,
+        /// difficulty=easy|normal|hard (the AI difficulty of jobs whose scenario pins none; default Normal; batch 14 step 4).
         /// </summary>
         public static string Start(string filter, string seeds = "1", string options = "")
         {

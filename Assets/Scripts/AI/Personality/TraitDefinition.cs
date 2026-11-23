@@ -177,8 +177,9 @@ namespace DND35.AI.Personality
         /// <summary>A standing foe is in the creature's reach.</summary>
         public bool StandingThreatInReach;
         /// <summary>
-        /// The AI difficulty. AiBlend fills a null one from <see cref="AiBlend.SettingsDifficulty"/> (the game setting;
-        /// Normal until step 4 wires AIService.Difficulty), so a caller that leaves it unset still honours Easy. Read
+        /// The AI difficulty. AiBlend fills a null one from <see cref="AiBlend.SettingsDifficulty"/>, which
+        /// AIService.Initialize points at AIService.Difficulty (GameSettings.aiDifficulty, default Normal; batch 14 step 4),
+        /// so a caller that leaves it unset still honours Easy. Read
         /// directly by PersonalityProfile.Judge, a null is Normal.
         /// </summary>
         public AIService.AIDifficultyLevel? Difficulty;
@@ -216,6 +217,11 @@ namespace DND35.AI.Personality
         public IReadOnlyList<RoleDesire> RoleDesires { get => _roleDesires; init => _roleDesires = Freeze(value); }
         /// <summary>Mindless: removes every other trait (design 4.1).</summary>
         public bool ExclusiveLock { get; init; }
+        /// <summary>
+        /// Caster, Healer: the trait's routine needs a castable spell. On a creature with none the validator warns and
+        /// keeps the trait, which still scores targets (C1; such a creature acts on it once ENC-021 gives it spells).
+        /// </summary>
+        public bool NeedsSpells { get; init; }
 
         /// <summary>This trait's opinion on <paramref name="decision"/> in <paramref name="ctx"/>: its first row for the decision, or Neutral.</summary>
         public Opinion OpinionOn(BoolDecision decision, in JudgeContext ctx)

@@ -30,6 +30,8 @@ namespace DND35.AI.Personality
     /// <item>drops an unknown id, and a trait whose minimum tier is above the creature's;</item>
     /// <item>applies the Mindless lock: a kept ExclusiveLock trait removes every other trait;</item>
     /// <item>warns on an alignment mismatch and keeps the trait (owner, 2026-10-30: alignment only warns);</item>
+    /// <item>when the caller says the creature has no castable spell, warns on a Caster or Healer trait
+    /// (TraitDefinition.NeedsSpells) and keeps it: it still scores targets (C1; batch 14 step 4);</item>
     /// <item>scales the weights to 1 when they sum above 1; a shortfall is kept (C2: it belongs to the Role).</item>
     /// </list>
     /// Pure: it logs nothing; <see cref="PersonalityFactory"/> writes the problems as one warning per definition.
@@ -39,7 +41,8 @@ namespace DND35.AI.Personality
         private static readonly char[] EntrySeparators = { ',', ';' };
         private static readonly char[] WeightSeparators = { ':', '=' };
 
-        public static PersonalityValidation Validate(string spec, CognitionTier tier, Alignment alignment)
+        /// <param name="hasCastableSpell">False: the creature has no castable spell (the spells check of C1); null: unknown, no check.</param>
+        public static PersonalityValidation Validate(string spec, CognitionTier tier, Alignment alignment, bool? hasCastableSpell = null)
         {
             var result = new PersonalityValidation();
             if (string.IsNullOrWhiteSpace(spec))
@@ -88,6 +91,8 @@ namespace DND35.AI.Personality
 
             ApplyExclusiveLock(result);
             WarnAlignment(result, alignment);
+            if (hasCastableSpell == false)
+                WarnNoSpells(result);
             ScaleAboveOne(result);
             return result;
         }
@@ -115,6 +120,13 @@ namespace DND35.AI.Personality
                 if (!Fits(t.Trait.Alignment, alignment))
                     result.Problems.Add(t.Trait.Id + " hints at " + t.Trait.Alignment + " but the creature is "
                                         + AlignmentHelper.GetAbbreviation(alignment) + " (kept: alignment only warns)");
+        }
+
+        private static void WarnNoSpells(PersonalityValidation result)
+        {
+            foreach (TraitWeight t in result.Traits)
+                if (t.Trait.NeedsSpells)
+                    result.Problems.Add(t.Trait.Id + " needs a castable spell and the creature has none (kept: it scores targets only; ENC-021)");
         }
 
         /// <summary>True when <paramref name="alignment"/> fits <paramref name="hint"/> (None fits everything).</summary>

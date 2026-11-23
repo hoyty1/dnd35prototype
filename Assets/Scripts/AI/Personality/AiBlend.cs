@@ -36,9 +36,9 @@ namespace DND35.AI.Personality
         public const float OutOfReachDesireGain = 2f;
 
         /// <summary>
-        /// The game's AI difficulty, read when a JudgeContext leaves Difficulty null (C11, Q6). Step 4 points it at
-        /// AIService.Difficulty (GameSettings.aiDifficulty); null means the setting's default, Normal. A test that sets it
-        /// restores it.
+        /// The game's AI difficulty, read when a JudgeContext leaves Difficulty null (C11, Q6). AIService.Initialize points
+        /// it at AIService.Difficulty (its harness override, else GameSettings.aiDifficulty read live; batch 14 step 4) and Cleanup clears it; null
+        /// (edit mode, no GameManager) means the setting's default, Normal. A test that sets it restores it.
         /// </summary>
         public static Func<AIService.AIDifficultyLevel> SettingsDifficulty { get; set; }
 

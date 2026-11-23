@@ -40,6 +40,10 @@ public static class PersonalityBlendTests
         _failed = 0;
         Debug.Log("====== PERSONALITY BLEND TESTS (batch 14 step 3) ======");
 
+        // In Play mode AIService points the source at its Difficulty (batch 14 step 4): the suite runs with no source and
+        // gives the live one back afterwards.
+        Func<AIService.AIDifficultyLevel> liveSource = AiBlend.SettingsDifficulty;
+        AiBlend.SettingsDifficulty = null;
         try
         {
             TestSingleTraitEqualsTrait();
@@ -59,7 +63,7 @@ public static class PersonalityBlendTests
         }
         finally
         {
-            AiBlend.SettingsDifficulty = null;
+            AiBlend.SettingsDifficulty = liveSource;
             AiDecisionTrace.OverrideEnabled(null);
             AiDecisionTrace.Clear();
         }

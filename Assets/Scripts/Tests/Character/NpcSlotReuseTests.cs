@@ -54,6 +54,7 @@ public static class NpcSlotReuseTests
             TestTotalDefenseClearedOnRespawn();
             TestRetrievedItemClearedOnRespawn();
             TestDamageMemoryClearedOnRespawn();
+            TestPersonalityClearedOnRespawn();
         }
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -611,6 +612,34 @@ public static class NpcSlotReuseTests
         {
             Cleanup(slot);
             Cleanup(partner);
+        }
+    }
+
+    /// <summary>
+    /// Batch 14 step 4 (CRE-046): the slot's personality is built from the new creature's definition: an orc sadist's
+    /// traits (Sadistic .7, Berserker .3) are gone when the slot gets a plain orc warrior, and come back with the next
+    /// orc sadist.
+    /// </summary>
+    private static void TestPersonalityClearedOnRespawn()
+    {
+        CharacterController slot = NewController("CRE046_PersonalitySlot");
+        try
+        {
+            Spawn(slot, Def("orc_sadist"), SlotPos);
+            DND35.AI.Personality.PersonalityProfile p = slot.Personality;
+            Assert(p != null && Mathf.Abs(p.WeightOf("Sadistic") - 0.7f) < 1e-4f && Mathf.Abs(p.WeightOf("Berserker") - 0.3f) < 1e-4f,
+                "batch 14 step 4: an orc sadist spawns with Sadistic .7 and Berserker .3");
+
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            Assert(slot.Personality == null, "CRE-046, batch 14 step 4: the slot's next creature, a plain orc warrior, has no personality");
+
+            Spawn(slot, Def("orc_sadist"), SlotPos);
+            Assert(slot.Personality != null && slot.Personality != p,
+                "batch 14 step 4: the next orc sadist in the slot gets its own new personality");
+        }
+        finally
+        {
+            Cleanup(slot);
         }
     }
 

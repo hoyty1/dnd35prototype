@@ -324,6 +324,15 @@ public class CharacterController : MonoBehaviour
     [Tooltip("Optional AI profile used by AIService for NPC decision making")]
     public AIProfile aiProfile;
 
+    /// <summary>
+    /// The creature's weighted personality traits (batch 14 step 4; docs/designs/personalities_batch14.md), or null: a
+    /// creature with no traits plays as its Role (<see cref="aiProfile"/>) alone. Built from NPCDefinition.AIPersonality by
+    /// GameManager.InitializeNPCFromDefinition (DND35.AI.Personality.PersonalityFactory); a party member has none unless
+    /// the scenario harness gives it one (C12). An AI scorer, never a rule. Cleared by <see cref="ResetForNewCreature"/>
+    /// (CRE-046).
+    /// </summary>
+    public DND35.AI.Personality.PersonalityProfile Personality { get; set; }
+
     [HideInInspector] public bool? EnemyUseCoupDeGraceOverride;
 
     /// <summary>
@@ -5101,6 +5110,7 @@ public class CharacterController : MonoBehaviour
         _currentHPState = HPState.Healthy;
 
         aiProfile = null;
+        Personality = null; // batch 14 step 4: no traits of the old creature (CRE-046)
         EnemyUseCoupDeGraceOverride = null;
         PriorityTargetName = null;
         AIControl = DND35.AI.Knowledge.AIControlFlags.None;

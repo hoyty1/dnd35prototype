@@ -58,6 +58,9 @@ public static partial class NPCDatabase
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
 
+        // The batch 14 personality test creatures, last so every earlier entry keeps its enumeration order.
+        RegisterPersonalityTestCreatures();
+
         Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
     }
 
@@ -114,6 +117,9 @@ public static partial class NPCDatabase
             new EncounterPreset("charm_person_test", "💞 Charm Person Test", "Wizard enchanter scenario: humanoid target (4 HD) with nearby hostiles to validate humanoid-only targeting, threatened +5 Will save bonus, charm AI non-hostility, and healing support behavior.", new List<string> { "human_cleric", "orc_berserker" }),
             new EncounterPreset("sleep_spell_test", "💤 Sleep Spell Test", "Wizard Sleep validation: mixed-HD enemies to test 4d4 pool, lowest-HD-first targeting, 4 HD cap immunity, wake-on-damage, and Aid Another wake ally flow.", new List<string> { "skeleton_archer", "goblin_warchief", "orc_berserker", "human_cleric" }),
             new EncounterPreset("mirror_image_test", "🪞 Mirror Image Test Arena", "Level 5 wizard duel sandbox with four shortbow goblins on cardinal points to validate the random figure pick per attack, image destruction and the real caster being struck.", new List<string> { "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin" }),
+            new EncounterPreset("ai_personality_test", "🧪 AI Personality Test", "Batch 14 personality creatures: a cowardly goblin healer, a sadistic orc and a smart hobgoblin captain.", new List<string> { "goblin_adept", "orc_sadist", "hobgoblin_captain" }),
+            new EncounterPreset("ai_sadist_fallen", "🧪 AI Sadist Test", "Two sadistic orcs (Sadistic .7, Berserker .3). Their coup de grace on a downed party member (Normal difficulty and above, never on Easy) is wired in batch 14 step 5; until then they fight as plain orc warriors.", new List<string> { "orc_sadist", "orc_sadist" }),
+            new EncounterPreset("ai_captain_focus", "🧪 AI Captain Focus Test", "A smart hobgoblin captain (Smart .5) with two goblins. Its preference for the soft, wounded target is wired in batch 14 step 5; until then it fights as a plain hobgoblin fighter.", new List<string> { "hobgoblin_captain", "goblin", "goblin" }),
             new EncounterPreset("xp_levelup_test", "🎯 XP Level-Up Test", "1× XP Piñata Goblin (CR 15) for guaranteed level-up validation. Instant-kill target with oversized XP reward (~3,300 XP each for a level 3 party of 4).", new List<string> { "xp_pinata_goblin" }),
             new EncounterPreset("creature_showcase", "🕷️ Creature Showcase - Animals & Vermin", "Showcase encounter covering newly implemented Monster Manual animals, vermin, and viper variants.", new List<string> { "dog", "owl", "badger", "monkey", "dire_rat", "raven", "hawk", "giant_fire_beetle", "monstrous_centipede_medium", "monstrous_scorpion_medium", "monstrous_spider_medium", "viper_medium" }),
             new EncounterPreset("mephit_swarm", "🌪️ Mephit Menagerie", "Mixed mephit encounter: air, fire, ice, and earth mephits with varied breath weapons and spell-like abilities.", new List<string> { "air_mephit", "fire_mephit", "ice_mephit", "earth_mephit" }),
@@ -207,6 +213,19 @@ public static partial class NPCDatabase
         RegisterTargetDummy();
         RegisterMirrorImageTestGoblin();
         RegisterXPPinataGoblin();
+    }
+
+    /// <summary>
+    /// The three creatures that carry personality traits in batch 14 (docs/designs/personalities_batch14.md step 4, Q7
+    /// default: no other creature gets traits): goblin_adept (Cowardly:0.6,Healer:0.4), orc_sadist (Sadistic:0.7,
+    /// Berserker:0.3) and hobgoblin_captain (Smart:0.5). No DMG random encounter table maps to them; the encounter presets
+    /// ai_personality_test, ai_sadist_fallen and ai_captain_focus use them.
+    /// </summary>
+    private static void RegisterPersonalityTestCreatures()
+    {
+        RegisterGoblinAdept();
+        RegisterOrcSadist();
+        RegisterHobgoblinCaptain();
     }
 
     private static void Register(NPCDefinition def)
@@ -898,6 +917,14 @@ public class NPCDefinition
     public string AITargetPriority;
     // null = use AI profile default, true/false = force this individual NPC behavior.
     public bool? UseCoupDeGrace;
+    /// <summary>
+    /// Optional weighted personality traits, "Id:weight" entries split by ',' (for example "Cowardly:0.6,Healer:0.4";
+    /// batch 14 step 4, docs/designs/personalities_batch14.md). Null or empty: the creature plays as its Role alone.
+    /// GameManager.InitializeNPCFromDefinition builds CharacterController.Personality from it through
+    /// DND35.AI.Personality.PersonalityFactory. An AI choice, never a rule. Copied by <see cref="Clone"/> (an immutable
+    /// string) and by each in-place template's CopyDefinitionFields (CRE-023).
+    /// </summary>
+    public string AIPersonality;
 
     // Visuals
     public Color SpriteColor = Color.white;

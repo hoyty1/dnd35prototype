@@ -109,6 +109,10 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.BakedTemplateIds = source.BakedTemplateIds;
         target.ChallengeRating = source.ChallengeRating;
 
+        // AI personality spec (batch 14 step 4, CRE-023): kept from the base; the template attaches no trait, and a
+        // mindless result drops every trait above its tier when the personality is built (C13)
+        target.AIPersonality = source.AIPersonality;
+
         // Feats (skeleton clears these)
         target.Feats = source.Feats;
         target.BonusFeats = source.BonusFeats;

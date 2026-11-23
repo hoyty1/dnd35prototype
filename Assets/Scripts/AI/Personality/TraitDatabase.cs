@@ -128,6 +128,7 @@ namespace DND35.AI.Personality
                 {
                     Id = Caster,
                     MinTier = CognitionTier.Low,
+                    NeedsSpells = true,
                     RiskAversion = 0.7f,
                     Target = new[]
                     {
@@ -146,6 +147,7 @@ namespace DND35.AI.Personality
                 {
                     Id = Healer,
                     MinTier = CognitionTier.Low,
+                    NeedsSpells = true,
                     RiskAversion = 0.3f,
                     Target = new[]
                     {

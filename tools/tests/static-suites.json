@@ -180,7 +180,29 @@
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 14 step 3 (added 2026-11-23; C2-C8, design 4.2, 4.5, 8): PersonalityProfile and AiBlend on fixed views. One trait at 1.0 equals the trait; the orc's folded weights (design 4.5) and the linear term, bounded by 20; design 4.5's fighter (+6.0), wizard and cleric terms; the .5 quorum plus or minus epsilon, an exact Forbid/Insist tie falling to legacy, the legacy fallback inside plus or minus .15, the data override, the conditions, Easy skipping the sadistic coup de grace (Hard equals Normal), partial weights; the AoO price per verdict and the flat 1000 penalty; RA and rho (adept .72 and 1.264, orc .12); the out-of-reach order by RoleDesire; RoleShift; null personality returns every legacy argument; one trace row per member with an actor. 109/109 in its second Play pass (20261123T173503Z-play; the first failed a test bug, a zero-tolerance comparison, fixed in the suite). Review rework (2026-11-23): +10, a null difficulty read from AiBlend.SettingsDifficulty (an Easy setting skips the sadistic Insist; an explicit context difficulty wins; no source is Normal), an unnamed role flag abstains in RoleShift (Berserker withdraw -.8, so total defense stays before a withdraw), the trace row says it read the setting, HasOpenTurn, and ScoreTarget and AoOCost with trace off write no row but return their values; 119/119 (20261123T175045Z-play)."
+      "notes": "Batch 14 step 3 (added 2026-11-23; C2-C8, design 4.2, 4.5, 8): PersonalityProfile and AiBlend on fixed views. One trait at 1.0 equals the trait; the orc's folded weights (design 4.5) and the linear term, bounded by 20; design 4.5's fighter (+6.0), wizard and cleric terms; the .5 quorum plus or minus epsilon, an exact Forbid/Insist tie falling to legacy, the legacy fallback inside plus or minus .15, the data override, the conditions, Easy skipping the sadistic coup de grace (Hard equals Normal), partial weights; the AoO price per verdict and the flat 1000 penalty; RA and rho (adept .72 and 1.264, orc .12); the out-of-reach order by RoleDesire; RoleShift; null personality returns every legacy argument; one trace row per member with an actor. 109/109 in its second Play pass (20261123T173503Z-play; the first failed a test bug, a zero-tolerance comparison, fixed in the suite). Review rework (2026-11-23): +10, a null difficulty read from AiBlend.SettingsDifficulty (an Easy setting skips the sadistic Insist; an explicit context difficulty wins; no source is Normal), an unnamed role flag abstains in RoleShift (Berserker withdraw -.8, so total defense stays before a withdraw), the trace row says it read the setting, HasOpenTurn, and ScoreTarget and AoOCost with trace off write no row but return their values; 119/119 (20261123T175045Z-play). Batch 14 step 4 (2026-11-23): the suite saves AiBlend.SettingsDifficulty (in Play mode AIService's live source) at its start, runs with none and gives it back at its end, instead of leaving it null; count unchanged, 119/119 (20261123T190204Z-play)."
+    },
+    {
+      "type": "Tests.AI.PersonalityFactoryTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 33,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 4 (added 2026-11-23; C1, C11-C13, Q6 and Q7 defaults): only goblin_adept, orc_sadist and hobgoblin_captain carry an AIPersonality; their specs, Roles and rules data (the adept Adept 1 with no armor or shield, DMG p.107, 4 hp; the sadist the orc warrior's rules with its own lists; the captain Fighter 3, Int 13 Keen, four feats); the factory's personalities for them (the adept's Healer warns once with no castable spell and is kept, no warning with one; the captain's Smart at .5 keeps its shortfall); an empty spec gives none and no warning; Clone copies the spec; the three presets; the difficulty source: in Play mode AiBlend.SettingsDifficulty reads AIService.Difficulty and Easy blocks a Sadistic coup de grace, Normal takes it (edit mode: the same through a test source; same count). 32/32 in the edit pass 20261123T190033Z-edit (all=true) and the Play pass 20261123T190204Z-play. Review rework (2026-11-23): +1, with no harness override AIService.Difficulty follows a later GameSettings.aiDifficulty write (Play mode; edit mode: a Hard source takes the coup de grace, so the counts stay equal); 33/33 in the edit pass 20261123T192218Z-edit (all=true) and the Play pass 20261123T192357Z-play."
+    },
+    {
+      "type": "Tests.AI.PersonalityTemplateCopyTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 16,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 4 (added 2026-11-23; CRE-023, C13): AIPersonality survives the zombie, skeleton and werewolf ICreatureTemplate wrappers (CopyDefinitionFields) and CreatureTemplateRegistry.ApplyTemplatesClone, the database entry untouched; the orc sadist's zombie and skeleton (mindless) get no personality with one warning, its werewolf keeps Sadistic and Berserker. Definitions only. 16/16 in the edit pass 20261123T190033Z-edit (all=true) and the Play pass 20261123T190204Z-play; again 16/16 after the review rework (20261123T192218Z-edit, 20261123T192357Z-play)."
     },
     {
       "type": "Tests.AI.ConsiderationTests",
@@ -352,11 +374,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 69,
+      "passed": 72,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one. Batch 13 step 4 (2026-10-29, CMB-179): a respawned slot keeps no total defense; 57/57 (20261029T190209Z-play). Batch 13 step 7 (2026-10-29): +2, the adept's slot has the MagicMissileOnly AIControl flag and an orc warrior spawned into it has none (CRE-046). Batch 13 step 19 (5dafdd2, 2026-10-30): +4 unrecorded until batch 14 step 2, TestFrightfulPresenceImmunityForgottenWithSource (4 new asserts and one replaced). Batch 14 step 2 (2026-11-23): +3, the AI damage memory cleared on respawn and at the turn start (CRE-046); 68/68 (20261123T165901Z-play). Review rework (2026-11-23): +1, the turn start rolls the memory over (still known after one turn start, forgotten after the second); 69 is computed from the asserts, not yet measured (the Unity MCP call failed)."
+      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character (CMB-094: it keeps one cleared LastKnownPositionTracker); needs a scene GameManager. Batch 13 step 2 (2026-10-29, AI-017): a spawn gets a tracked runtime profile with its defaults and name, and a respawn destroys the old one. Batch 13 step 4 (2026-10-29, CMB-179): a respawned slot keeps no total defense; 57/57 (20261029T190209Z-play). Batch 13 step 7 (2026-10-29): +2, the adept's slot has the MagicMissileOnly AIControl flag and an orc warrior spawned into it has none (CRE-046). Batch 13 step 19 (5dafdd2, 2026-10-30): +4 unrecorded until batch 14 step 2, TestFrightfulPresenceImmunityForgottenWithSource (4 new asserts and one replaced). Batch 14 step 2 (2026-11-23): +3, the AI damage memory cleared on respawn and at the turn start (CRE-046); 68/68 (20261123T165901Z-play). Review rework (2026-11-23): +1, the turn start rolls the memory over (still known after one turn start, forgotten after the second); 69 is computed from the asserts, not yet measured (the Unity MCP call failed). Batch 14 step 4 (2026-11-23): +3, TestPersonalityClearedOnRespawn: an orc sadist's personality (Sadistic .7, Berserker .3) is gone when the slot gets a plain orc warrior and is built anew for the next orc sadist (CRE-046); 72/72 in the Play pass 20261123T190204Z-play."
     },
     {
       "type": "Tests.Character.NpcProficiencyTests",

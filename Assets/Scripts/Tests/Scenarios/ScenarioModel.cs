@@ -138,6 +138,13 @@ namespace Tests.Scenarios
         public string PriorityTarget;
         public List<KeyValuePair<CombatConditionType, int>> StartConditions = new List<KeyValuePair<CombatConditionType, int>>();
         public int? Hp;
+        /// <summary>
+        /// Batch 14 step 4: the actor's personality spec ("Smart:0.5"), applied after spawn and before <see cref="Tweak"/>
+        /// when <see cref="PersonalitySet"/>; it replaces the definition's (empty removes it: a "-plain" twin). A party
+        /// actor has none otherwise (C12).
+        /// </summary>
+        public string Personality;
+        public bool PersonalitySet;
         public Action<CharacterController> Tweak;
     }
 
@@ -252,6 +259,11 @@ namespace Tests.Scenarios
         public Func<ScenarioContext, GeneratedActors> GenerateActors;
         /// <summary>Wall-clock cap per job in seconds when the run options do not set wallCap (null: the 120 s default).</summary>
         public float? WallCapSeconds;
+        /// <summary>
+        /// The AI difficulty this scenario pins (batch 14 step 4, C11), over the run's difficulty= option; null takes the
+        /// option's, else Normal.
+        /// </summary>
+        public AIService.AIDifficultyLevel? AiDifficulty;
         /// <summary>
         /// How the runner answers a controllable actor's counter-trip prompt (PHB p.158, CMB-079), by actor key:
         /// true trips back, false declines. An actor not listed trips back.
@@ -472,6 +484,9 @@ namespace Tests.Scenarios
 
         /// <summary>Adds a 'note' event to the trace (scripts use it to mark steps).</summary>
         public void Note(string text) => Trace?.Emit("note").Set("text", text);
+
+        /// <summary>The warnings of the personalities the harness gave actors (ActorSpec.Personality), in order (batch 14 step 4).</summary>
+        public List<string> PersonalityWarnings { get; } = new List<string>();
     }
 
     /// <summary>Fluent builder: <c>Scenario.Define(id, title).Pc(...).Npc(...).Expect(...).Build()</c>.</summary>
@@ -493,6 +508,8 @@ namespace Tests.Scenarios
         public ScenarioBuilder GenerateActors(Func<ScenarioContext, GeneratedActors> generate) { _def.GenerateActors = generate; return this; }
         /// <summary>The wall-clock cap per job when the run options do not set wallCap.</summary>
         public ScenarioBuilder WallCap(float seconds) { _def.WallCapSeconds = seconds; return this; }
+        /// <summary>Pins the AI difficulty of every job of this scenario (batch 14 step 4, C11; over the difficulty= option).</summary>
+        public ScenarioBuilder AiDifficulty(AIService.AIDifficultyLevel level) { _def.AiDifficulty = level; return this; }
 
         /// <summary>A party (PC-slot) actor from a QuickStart or Stats source.</summary>
         public ScenarioBuilder Pc(string key, ActorSource source, int x, int y, Control control = Control.Ai)
@@ -525,6 +542,11 @@ namespace Tests.Scenarios
 
         public ScenarioBuilder Hp(string key, int hp) => With(key, a => a.Hp = hp);
         public ScenarioBuilder Tweak(string key, Action<CharacterController> tweak) => With(key, a => a.Tweak = tweak);
+        /// <summary>
+        /// Gives actor <paramref name="key"/> the personality <paramref name="spec"/> (batch 14 step 4; validated as a
+        /// definition's); an empty spec removes the definition's (a "-plain" twin). Applied just before the Tweak.
+        /// </summary>
+        public ScenarioBuilder Personality(string key, string spec) => With(key, a => { a.Personality = spec; a.PersonalitySet = true; });
         public ScenarioBuilder Profile(string key, Func<DND35.AI.AIProfile> profile) => With(key, a => a.Profile = profile);
         public ScenarioBuilder PriorityTarget(string key, string targetKey) => With(key, a => a.PriorityTarget = targetKey);
 

@@ -33,7 +33,33 @@ public class AIService : MonoBehaviour
 
     private GameManager _gameManager;
 
-    [SerializeField] private AIDifficultyLevel _difficulty = AIDifficultyLevel.Normal;
+    private System.Func<AIDifficultyLevel> _difficultySource;
+
+    /// <summary>
+    /// An override of the game setting (batch 14 step 4): null reads GameSettings.aiDifficulty live. The scenario harness
+    /// sets it per job and gives the saved value (null included) back at teardown; nothing else writes it.
+    /// </summary>
+    public AIDifficultyLevel? DifficultyOverride { get; set; }
+
+    /// <summary>
+    /// The AI difficulty (batch 14 step 4, C11, Q6 default; AI-012): <see cref="DifficultyOverride"/> when set, else
+    /// GameSettings.aiDifficulty read live (default Normal; no menu writes it yet, and a future menu writes that field),
+    /// else Normal. Setting it sets the override. Read by the personality blend only, through
+    /// DND35.AI.Personality.AiBlend.SettingsDifficulty, which <see cref="Initialize"/> points here: Easy skips the opinion
+    /// rows marked MinDifficulty Normal (Sadistic's coup de grace Insist). A creature with no personality plays the same
+    /// at every difficulty; Hard equals Normal in batch 14.
+    /// </summary>
+    public AIDifficultyLevel Difficulty
+    {
+        get
+        {
+            if (DifficultyOverride.HasValue)
+                return DifficultyOverride.Value;
+            GameSettings settings = GameSettings.Instance;
+            return settings != null ? settings.aiDifficulty : AIDifficultyLevel.Normal;
+        }
+        set => DifficultyOverride = value;
+    }
 
     /// <summary>
     /// When on, every finished AI turn of <see cref="AiDecisionTrace"/> is also one collapsed "[AI-TRACE]" Debug.Log line
@@ -51,11 +77,18 @@ public class AIService : MonoBehaviour
     public void Initialize(GameManager gameManager)
     {
         _gameManager = gameManager;
+        // The personality blend reads the game's difficulty here (batch 14 step 4); read lazily, so GameSettings is
+        // only touched when a personality decides.
+        _difficultySource = () => Difficulty;
+        DND35.AI.Personality.AiBlend.SettingsDifficulty = _difficultySource;
     }
 
     public void Cleanup()
     {
         _gameManager = null;
+        if (_difficultySource != null && DND35.AI.Personality.AiBlend.SettingsDifficulty == _difficultySource)
+            DND35.AI.Personality.AiBlend.SettingsDifficulty = null;
+        _difficultySource = null;
     }
 
     /// <summary>

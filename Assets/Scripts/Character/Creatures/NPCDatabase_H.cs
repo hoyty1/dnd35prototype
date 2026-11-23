@@ -910,4 +910,57 @@ public static partial class NPCDatabase
         });
     }
 
+    /// <summary>
+    /// Hobgoblin Captain (CR 3), a batch 14 test creature (docs/designs/personalities_batch14.md step 4; registered by
+    /// <see cref="RegisterPersonalityTestCreatures"/>; no DMG table maps to it). The hobgoblin sergeant's kit (chainmail,
+    /// longsword, heavy steel shield) on a hobgoblin Fighter 3 (MM p.153: hobgoblin leaders tend to be fighters; a PC
+    /// class level replaces its 1 racial HD, so CR = character level): the elite array arranged for a fighter who needs
+    /// Int 13 for Combat Expertise (PHB p.92; Str 15, Con 14, Int 13, Dex 12, Wis 10, Cha 8; DMG p.110), then the
+    /// hobgoblin's +2 Dex, +2 Con; Int 13 is the Keen tier. Four feats (1st and 3rd level, fighter bonus feats at 1st and
+    /// 2nd; PHB p.37-38): Alertness, Combat Expertise, Weapon Focus (longsword), Improved Initiative. Hit points 10 + 2 x
+    /// 5.5 + 3 x 3 = 30 (an elite first die at its maximum, DMG p.110, CRE-058). Behaviour AggressiveMelee, because the
+    /// defensive routine swaps its target for the lowest-hp foe (AI-049). Personality Smart:0.5.
+    /// </summary>
+    private static void RegisterHobgoblinCaptain()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hobgoblin_captain",
+            Name = "Hobgoblin Captain",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Fighter",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulEvil, // usually lawful evil (MM p.153)
+            HitDice = 3,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 15, DEX = 14, CON = 16, WIS = 10, INT = 13, CHA = 8,
+            BAB = 3,
+            BaseSpeed = 6, // 30 ft.; the chainmail slows it to 20 ft. (PHB p.123, ITM-010)
+            BaseHitDieHP = 30,
+            FirstHitDieMaximized = true,
+            CreatureTags = new List<string> { "Humanoid", "Goblinoid" },
+            Feats = new List<string> { "Alertness", "Combat Expertise", "Weapon Focus", "Improved Initiative" },
+            WeaponFocusChoice = "Longsword",
+            SpecialAbilities = new List<string> { "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIPersonality = "Smart:0.5",
+            SpriteColor = new Color(0.82f, 0.45f, 0.25f, 1f),
+            PanelColor = new Color(0.15f, 0.15f, 0.3f, 0.85f),
+            NameColor = new Color(1f, 0.8f, 0.5f),
+            Description = "Hobgoblin Captain (CR 3). Batch 14 personality test creature: a smart hobgoblin fighter who picks its target. MM 3.5e p.153."
+        });
+    }
 }

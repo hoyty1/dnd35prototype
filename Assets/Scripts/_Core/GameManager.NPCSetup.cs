@@ -1149,6 +1149,12 @@ public partial class GameManager
         npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
         // The definition's control tags ("AI:MagicMissileOnly", ...) become the creature's AI switches (batch 13 step 7).
         npc.AIControl = DND35.AI.Knowledge.AIControlFlagRules.FromTags(stats.CreatureTags);
+        // The definition's weighted traits (batch 14 step 4): validated against the creature's cognition tier and
+        // alignment and its spells (HasCastableSpellForPersonality: the test that gave it spellcasting above, shared with
+        // the scenario harness), warned once per definition through Debug.LogWarning; null when the definition has none
+        // or none survives (the creature plays as its Role alone).
+        npc.Personality = DND35.AI.Personality.PersonalityFactory.Create(def.AIPersonality, stats, def.Id,
+            hasCastableSpell: HasCastableSpellForPersonality(def, npc));
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
@@ -1209,6 +1215,25 @@ public partial class GameManager
             return false;
         bool innate = !string.IsNullOrEmpty(def.InnateSpellcastingClass) && def.InnateCasterLevel > 0;
         return innate || (stats != null && stats.IsSpellcaster);
+    }
+
+    /// <summary>
+    /// The spells check of a personality (batch 14 step 4, design choice C1): whether <paramref name="c"/> has a castable
+    /// spell, so a Caster or Healer trait warns when it has none. A creature spawned from <paramref name="def"/> gives the
+    /// spawn's own test (the caster test and <see cref="DefinitionGivesSpells"/>, which decided whether it got
+    /// spellcasting), not the component, since a reused slot keeps an earlier creature's SpellcastingComponent. With no
+    /// definition (a party character) it is the caster test and a SpellcastingComponent with a known or prepared spell.
+    /// One test for the spawn and the scenario harness.
+    /// </summary>
+    internal static bool HasCastableSpellForPersonality(NPCDefinition def, CharacterController c)
+    {
+        CharacterStats stats = c != null ? c.Stats : null;
+        if (stats == null || !stats.IsSpellcaster)
+            return false;
+        if (def != null)
+            return DefinitionGivesSpells(def, stats);
+        SpellcastingComponent spells = c.Spellcasting;
+        return spells != null && (spells.KnownSpells.Count > 0 || spells.PreparedSpells.Count > 0);
     }
 
     /// <summary>

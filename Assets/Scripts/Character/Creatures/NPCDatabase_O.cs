@@ -339,4 +339,25 @@ public static partial class NPCDatabase
         });
     }
 
+    /// <summary>
+    /// Orc Sadist (CR 1/2), a batch 14 test creature (docs/designs/personalities_batch14.md step 4; registered by
+    /// <see cref="RegisterPersonalityTestCreatures"/>; no DMG table maps to it): <see cref="RegisterOrcWarrior"/>'s MM orc
+    /// (MM p.203) with the personality Sadistic:0.7,Berserker:0.3. Rules identical to the orc warrior.
+    /// </summary>
+    private static void RegisterOrcSadist()
+    {
+        NPCDefinition orc = _npcs.TryGetValue("orc_warrior", out NPCDefinition found) ? found : null;
+        if (orc == null)
+        {
+            // Loud, not silent: the presets and NpcSlotReuseTests name orc_sadist (an unknown id fails silently, ENC-012).
+            Debug.LogError("[NPCDatabase] orc_sadist: base orc_warrior missing, so orc_sadist is not registered");
+            return;
+        }
+        NPCDefinition sadist = orc.Clone();
+        sadist.Id = "orc_sadist";
+        sadist.Name = "Orc Sadist";
+        sadist.AIPersonality = "Sadistic:0.7,Berserker:0.3";
+        sadist.Description = "Orc Sadist (CR 1/2). Batch 14 personality test creature: the orc warrior with a sadistic, berserk streak. MM 3.5e p.203.";
+        Register(sadist);
+    }
 }

@@ -19,6 +19,11 @@ namespace Tests.Scenarios
     /// and a Magic Missile (SpellCaster.Cast, the per-target spell damage step), each remembered by its victim on its own
     /// next turn (the turn start rolls the memory over) and forgotten at the turn start after that. No AI reads the memory
     /// yet, so the step changes no other scenario's hash.</para>
+    /// <para>Step 4 (the personality data and the difficulty): rules/ai-personality-spawn, the three trait creatures
+    /// (goblin_adept, orc_sadist, hobgoblin_captain) spawn through the real spawn path with the personalities of their
+    /// definitions, a zombie given Smart:0.5 by the harness spawns with none and warns once (C13), and the AI-run party
+    /// member has none (C12), pinned to Normal; rules/ai-personality-spawn-easy pins Easy and checks that
+    /// the blend reads it. Nobody acts on a personality yet (step 5), so the step changes no other scenario's hash.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -27,6 +32,8 @@ namespace Tests.Scenarios
         {
             yield return S("ai-decision-records", AiDecisionRecords);
             yield return S("ai-damage-memory", AiDamageMemory);
+            yield return S("ai-personality-spawn", () => AiPersonalitySpawn(easy: false));
+            yield return S("ai-personality-spawn-easy", () => AiPersonalitySpawn(easy: true));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -201,6 +208,102 @@ namespace Tests.Scenarios
                 .Expect("Every memory check holds", Expect.AssertsPass())
                 .Expect("All seven checks ran", Expect.Count("assert", e => true, 7, 7))
                 .Build();
+        }
+
+        // ── rules/ai-personality-spawn (step 4) ─────────────────────
+
+        private static bool Near(float a, float b) => Math.Abs(a - b) < 1e-4f;
+
+        /// <summary>Notes and returns <paramref name="key"/>'s personality ("none" without one).</summary>
+        private static string NotePersonality(ScenarioContext ctx, string key)
+        {
+            DND35.AI.Personality.PersonalityProfile p = ctx.Get(key).Personality;
+            string text = p == null
+                ? "none"
+                : string.Join(",", p.Traits.Select(t => t.Trait.Id + ":" + t.Weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)))
+                  + " tier " + p.Tier;
+            ctx.Note("personality " + key + "=" + text);
+            return text;
+        }
+
+        private static AIService.AIDifficultyLevel? ServiceDifficulty(ScenarioContext ctx)
+        {
+            AIService ai = ctx.Gm != null ? ctx.Gm.GetComponent<AIService>() : null;
+            return ai != null ? ai.Difficulty : (AIService.AIDifficultyLevel?)null;
+        }
+
+        /// <summary>
+        /// The three batch 14 trait creatures and a zombie spawn far from an AI-run fighter; the fighter's only turn checks
+        /// them and passes, everyone else idles. Each trait creature has its definition's personality (goblin_adept
+        /// Cowardly .6 and Healer .4, an Adept 1 with no armor; orc_sadist Sadistic .7 and Berserker .3; hobgoblin_captain
+        /// Smart .5 at the Keen tier, a Fighter 3); the zombie, given Smart:0.5 by the harness, keeps none (mindless, C13)
+        /// and its one warning is a trace note; the party fighter has none (C12). The non-easy twin pins Normal; the
+        /// "-easy" twin pins Easy, and the blend reads it through AiBlend.SettingsDifficulty.
+        /// </summary>
+        private static ScenarioDef AiPersonalitySpawn(bool easy)
+        {
+            string id = easy ? "rules/ai-personality-spawn-easy" : "rules/ai-personality-spawn";
+            AIService.AIDifficultyLevel want = easy ? AIService.AIDifficultyLevel.Easy : AIService.AIDifficultyLevel.Normal;
+            ScenarioBuilder b = Rules(id, easy
+                    ? "The AI difficulty a scenario pins (Easy) reaches AIService.Difficulty and the personality blend (batch 14 step 4, AI-012)"
+                    : "The batch 14 trait creatures spawn with their personalities; a mindless zombie given one keeps none and warns (batch 14 step 4)")
+                .Covers("AI-012", "CRE-023", "CRE-046")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 2, 2, Control.Scripted)
+                .Npc("adept", "goblin_adept", 15, 15, Control.Idle)
+                .Npc("sadist", "orc_sadist", 17, 15, Control.Idle)
+                .Npc("captain", "hobgoblin_captain", 15, 17, Control.Idle)
+                .Npc("zombie", "zombie_shambler", 17, 17, Control.Idle)
+                .Personality("zombie", "Smart:0.5")
+                .Initiative("hero", "adept", "sadist", "captain", "zombie");
+            // Both twins pin their difficulty, so a run with difficulty=easy or hard cannot fail the Normal twin's checks;
+            // a Normal pin adds no note and the meta line does not carry it, so the hash is unchanged.
+            b.AiDifficulty(want);
+            b.Turn("hero", 1,
+                    Step.Assert("the goblin adept: Cowardly .6, Healer .4; Adept 1, no armor or shield", ctx =>
+                    {
+                        NotePersonality(ctx, "adept");
+                        CharacterController c = ctx.Get("adept");
+                        DND35.AI.Personality.PersonalityProfile p = c.Personality;
+                        return p != null && p.Traits.Count == 2 && Near(p.WeightOf("Cowardly"), 0.6f) && Near(p.WeightOf("Healer"), 0.4f)
+                               && c.Stats.GetClassLevel("Adept") == 1 && c.Stats.ArmorBonus == 0 && c.Stats.ShieldBonus == 0;
+                    }),
+                    Step.Assert("the orc sadist: Sadistic .7, Berserker .3", ctx =>
+                    {
+                        NotePersonality(ctx, "sadist");
+                        DND35.AI.Personality.PersonalityProfile p = ctx.Get("sadist").Personality;
+                        return p != null && p.Traits.Count == 2 && Near(p.WeightOf("Sadistic"), 0.7f) && Near(p.WeightOf("Berserker"), 0.3f);
+                    }),
+                    Step.Assert("the hobgoblin captain: Smart .5 at the Keen tier; Fighter 3", ctx =>
+                    {
+                        NotePersonality(ctx, "captain");
+                        CharacterController c = ctx.Get("captain");
+                        DND35.AI.Personality.PersonalityProfile p = c.Personality;
+                        return p != null && p.Traits.Count == 1 && Near(p.WeightOf("Smart"), 0.5f)
+                               && p.Tier == DND35.AI.Knowledge.CognitionTier.Keen && c.Stats.GetClassLevel("Fighter") == 3;
+                    }),
+                    Step.Assert("the zombie given Smart:0.5 keeps none and warned once; the party fighter has none", ctx =>
+                    {
+                        string zombie = NotePersonality(ctx, "zombie");
+                        string hero = NotePersonality(ctx, "hero");
+                        return zombie == "none" && hero == "none" && ctx.PersonalityWarnings.Count == 1
+                               && ctx.PersonalityWarnings[0].Contains("zombie_shambler") && ctx.PersonalityWarnings[0].Contains("Smart dropped");
+                    }),
+                    Step.Assert("the difficulty is " + want + " in AIService and in the personality blend", ctx =>
+                    {
+                        AIService.AIDifficultyLevel? service = ServiceDifficulty(ctx);
+                        Func<AIService.AIDifficultyLevel> source = DND35.AI.Personality.AiBlend.SettingsDifficulty;
+                        ctx.Note("difficulty service=" + service + " blend=" + (source != null ? source().ToString() : "unset"));
+                        return service == want && source != null && source() == want;
+                    }),
+                    Step.Pass())
+                .Expect("Every spawn check holds", Expect.AssertsPass())
+                .Expect("All five checks ran", Expect.Count("assert", e => true, 5, 5))
+                .Expect("The zombie's personality warning is one trace note", Expect.Count("note",
+                    e => (e.Str("text") ?? "").StartsWith("personality warning:", StringComparison.Ordinal), 1, 1))
+                .Expect(easy ? "The Easy pin is a trace note" : "The default difficulty adds no note", Expect.Count("note",
+                    e => (e.Str("text") ?? "").StartsWith("ai difficulty", StringComparison.Ordinal), easy ? 1 : 0, easy ? 1 : 0));
+            return b.Build();
         }
     }
 }
