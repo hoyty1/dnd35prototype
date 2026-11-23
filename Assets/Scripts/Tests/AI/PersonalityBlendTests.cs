@@ -24,6 +24,11 @@ namespace Tests.AI
 /// <item>A null difficulty is read from AiBlend.SettingsDifficulty (an unset Easy still blocks the sadistic row).</item>
 /// <item>No personality: every member returns its legacy argument; a member with an actor in an open turn writes one
 /// trace row, none with trace off.</item>
+/// <item>Batch 14 step 5: the layout of rules/ai-captain-focuses-softest, fixed here before the scenario (the plan's
+/// "Captain layout" risk): the Humanoid Role's score, worked from HumanoidAIProfile's terms, favours the near, healthy
+/// fighter, and Smart .5's term turns the captain to the soft, wounded wizard, each with a margin; the creature members
+/// with a personality (the sadist keeps downed foes and insists on a coup de grace at Normal, not on Easy, the data
+/// override wins; an IgnoreUnconscious For turns the retarget on, Forbid leaves the Role's answer; the summary row).</item>
 /// </list>
 /// Either mode (static data and fixed views).
 /// </summary>
@@ -60,6 +65,8 @@ public static class PersonalityBlendTests
             TestOutOfReachOrder();
             TestNullPersonality();
             TestTrace();
+            TestCaptainLayout();
+            TestCreatureMembers();
         }
         finally
         {
@@ -405,6 +412,142 @@ public static class PersonalityBlendTests
             "ScoreTarget and AoOCost with trace off write no row (a per-candidate site records one summary row itself)",
             rec2 != null ? rec2.Collapsed() : "no record");
         Assert(Near(silent, 10f + Orc.TargetTerm(view)) && price == 6f, "and still return their values");
+    }
+
+    // ── Batch 14 step 5 ─────────────────────────────────────────
+
+    /// <summary>
+    /// The Humanoid Role's target score as HumanoidAIProfile builds it on AIProfile.ScoreTarget (10; the fact tags,
+    /// unarmored +3 and heavy armor -2; wounded (1 - hp share) x 8; isolated +4, else -1.25 per ally beside the target;
+    /// melee proximity (6 - d) x .7), for the captain layout's two foes. A retune of those terms shows here.
+    /// </summary>
+    private static float HumanoidLegacy(bool unarmored, bool heavy, int hp, int maxHp, int alliesBeside, int distance)
+    {
+        float s = 10f + (unarmored ? 3f : 0f) - (heavy ? 2f : 0f);
+        s += (1f - Mathf.Clamp01((float)hp / maxHp)) * 8f;
+        s += alliesBeside == 0 ? 4f : -1.25f * alliesBeside;
+        s += Mathf.Max(0, 6 - distance) * 0.7f;
+        return s;
+    }
+
+    /// <summary>The trait term of <paramref name="view"/> with KillChance read at <paramref name="myExpectedDamage"/> (a stub view has no observer).</summary>
+    private static float TermWithKill(PersonalityProfile p, ITargetView view, float myExpectedDamage)
+    {
+        float sum = 0f;
+        foreach (ConsiderationId id in Enum.GetValues(typeof(ConsiderationId)))
+        {
+            float e = p.FoldedWeight(id);
+            if (e == 0f)
+                continue;
+            float v = id == ConsiderationId.KillChance ? Considerations.KillChance(view, myExpectedDamage) : Considerations.Evaluate(id, view);
+            sum += e * v;
+        }
+        return Mathf.Clamp(PersonalityProfile.K * sum, -PersonalityProfile.K, PersonalityProfile.K);
+    }
+
+    /// <summary>
+    /// rules/ai-captain-focuses-softest, fixed before the scenario: the hobgoblin captain (Smart .5, Keen) has in its reach
+    /// a Fighter 3 in medium armor at full hit points (30) with nobody beside it, and a wizard 2, unarmored, at 10 of 14 hit
+    /// points with two fighters beside it. The captain's longsword (+6, 1d8+2) expects about 5.2 damage a round against
+    /// the wizard's AC 11 and at most 4 against the fighter; the layout holds from 4 up. The plain captain takes the
+    /// fighter by more than 1; the Smart one takes the wizard by more than 1.
+    /// </summary>
+    private static void TestCaptainLayout()
+    {
+        PersonalityProfile smart = P("Smart:0.5", CognitionTier.Keen);
+        StubView fighter = new StubView().Armor(WornArmor.Medium).Band(WoundBand.Unhurt).Size(SizeCategory.Medium).Number(FactKey.Distance, 1)
+            .Number(FactKey.HpCurrent, 30).Flag(FactKey.Caster, false).Flag(FactKey.Healer, false).Flag(FactKey.FlankingNow, false)
+            .Flag(FactKey.Down, false).Flag(FactKey.Helpless, false).Flag(FactKey.WieldsMelee);
+        StubView wizard = new StubView().Armor(WornArmor.Unarmored).Band(WoundBand.Hurt).Size(SizeCategory.Medium).Number(FactKey.Distance, 1)
+            .Number(FactKey.HpCurrent, 10).Flag(FactKey.Caster).Flag(FactKey.Healer, false).Flag(FactKey.FlankingNow, false)
+            .Flag(FactKey.Down, false).Flag(FactKey.Helpless, false);
+
+        Assert(Near(TermWithKill(smart, wizard, 0f), smart.TargetTerm(wizard)) && Near(TermWithKill(smart, fighter, 0f), smart.TargetTerm(fighter)),
+            "the layout helper's term equals TargetTerm when no damage is expected (a stub view has no observer)");
+
+        float legacyFighter = HumanoidLegacy(unarmored: false, heavy: false, hp: 30, maxHp: 30, alliesBeside: 0, distance: 1);
+        float legacyWizard = HumanoidLegacy(unarmored: true, heavy: false, hp: 10, maxHp: 14, alliesBeside: 2, distance: 1);
+        Assert(legacyFighter - legacyWizard >= 1f, "the plain captain takes the fighter: the Role's 17.5 against the wizard's 16.3",
+            legacyFighter.ToString("0.00") + " vs " + legacyWizard.ToString("0.00"));
+
+        float fighterTerm = TermWithKill(smart, fighter, 4f);
+        bool smartWins = true;
+        var detail = new List<string>();
+        foreach (float dmg in new[] { 4f, 5.2f, 6.5f })
+        {
+            float wizardTotal = legacyWizard + TermWithKill(smart, wizard, dmg);
+            float fighterTotal = legacyFighter + fighterTerm;
+            detail.Add(dmg + ": " + wizardTotal.ToString("0.00") + " vs " + fighterTotal.ToString("0.00"));
+            smartWins &= wizardTotal - fighterTotal >= 1f;
+        }
+        Assert(smartWins, "the Smart captain takes the wizard by more than 1 at an expected 4 to 6.5 damage (KillChance and KnownCaster)",
+            string.Join("; ", detail));
+        Assert(Near(TermWithKill(smart, wizard, 5.2f), 20f * 0.5f * (0.45f * 0.52f + 0.15f)), "the wizard's Smart term at 5.2 damage: 10 x (.45 x .52 + .15) = 3.84");
+        Assert(fighterTerm < 0.5f, "the fighter's Smart term stays below .5 (30 hit points, no caster)", fighterTerm.ToString("0.000"));
+    }
+
+    /// <summary>The creature-based members of step 5 with a personality, on bare controllers (no stats: the vote context is the default).</summary>
+    private static void TestCreatureMembers()
+    {
+        var go = new GameObject("PersonalityBlendTests creature");
+        var other = new GameObject("PersonalityBlendTests target");
+        Func<AIService.AIDifficultyLevel> saved = AiBlend.SettingsDifficulty;
+        try
+        {
+            CharacterController self = go.AddComponent<CharacterController>();
+            CharacterController target = other.AddComponent<CharacterController>();
+
+            self.Personality = Orc;
+            Assert(!AiBlend.IgnoresUnconscious(self, true) && !AiBlend.IgnoresUnconscious(self, false),
+                "the sadistic orc never skips downed foes (Forbid .7 over the Role's yes)");
+            Assert(!AiBlend.Adaptive(self, false) && AiBlend.Adaptive(self, true),
+                "a Forbid on IgnoreUnconscious leaves the Role's retarget answer");
+            AiBlend.SettingsDifficulty = () => AIService.AIDifficultyLevel.Normal;
+            Assert(AiBlend.UsesCoupDeGrace(self, false, null), "at Normal the sadist takes a coup de grace the Role refuses (Insist .7)");
+            Assert(!AiBlend.UsesCoupDeGrace(self, false, false) && AiBlend.UsesCoupDeGrace(self, false, true), "the data override wins either way");
+            AiBlend.SettingsDifficulty = () => AIService.AIDifficultyLevel.Easy;
+            Assert(!AiBlend.UsesCoupDeGrace(self, false, null) && AiBlend.UsesCoupDeGrace(self, true, null),
+                "on Easy the sadistic row is skipped: the Role's answer stands (owner, 2026-10-30)");
+            AiBlend.SettingsDifficulty = null;
+            Assert(AiBlend.ScoreTarget(self, target, float.MinValue) == float.MinValue && AiBlend.ScoreTarget(self, null, 4f) == 4f,
+                "an invalid target stays invalid; no target keeps the legacy score");
+
+            self.Personality = PersonalityProfile.Build(new List<TraitWeight>
+            {
+                new TraitWeight(new TraitDefinition
+                {
+                    Id = "TestFinisher",
+                    Target = new[] { new TargetWeight(ConsiderationId.Proximity, 1f) },
+                    Opinions = new[] { new OpinionRule(BoolDecision.IgnoreUnconscious, Opinion.For) }
+                }, 1f)
+            }, CognitionTier.Average, "TestFinisher:1");
+            Assert(AiBlend.IgnoresUnconscious(self, false) && AiBlend.Adaptive(self, false),
+                "an IgnoreUnconscious For skips downed foes and turns the mid-sequence retarget on (the Role said no)");
+            self.Personality = Adept;
+            Assert(!AiBlend.Adaptive(self, false) && AiBlend.IgnoresUnconscious(self, true) && !AiBlend.IgnoresUnconscious(self, false),
+                "a personality with no IgnoreUnconscious opinion leaves both Role answers");
+
+            self.Personality = Orc;
+            AiDecisionTrace.OverrideEnabled(true);
+            AiDecisionTrace.Clear();
+            AiDecisionTrace.BeginTurn(self, "Orc", 1, "Humanoid", Orc.Describe());
+            Assert(AiBlend.TracesTargets(self), "TracesTargets with a personality and an open turn");
+            AiBlend.TraceTarget(self, "Target", "Soft Wizard", "Hero Fighter", 3.84f);
+            AiDecisionTrace.TurnRecord rec = AiDecisionTrace.EndTurn(self);
+            Assert(rec != null && rec.Decisions.Count == 1 && rec.Decisions[0].Site == "Personality.Target"
+                   && rec.Decisions[0].Verdict == "changed" && Near(rec.Decisions[0].Bonus, 3.84f),
+                "the target site's summary row: the blend's choice, the Role's choice and the chosen target's term",
+                rec != null ? rec.Collapsed() : "no record");
+            Assert(!AiBlend.TracesTargets(self), "no open turn: no summary row");
+        }
+        finally
+        {
+            AiBlend.SettingsDifficulty = saved;
+            AiDecisionTrace.OverrideEnabled(null);
+            AiDecisionTrace.Clear();
+            UnityEngine.Object.DestroyImmediate(go);
+            UnityEngine.Object.DestroyImmediate(other);
+        }
     }
 }
 }

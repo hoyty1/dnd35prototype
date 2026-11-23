@@ -58,7 +58,7 @@ public static class AiDecisionTrace
                 if (d.Verdict != "legacy")
                     sb.Append(" (legacy ").Append(d.Legacy ?? "-").Append(')');
                 if (d.Bonus != 0f)
-                    sb.Append(" +").Append(d.Bonus.ToString("0.##", CultureInfo.InvariantCulture));
+                    sb.Append(' ').Append(d.Bonus.ToString("+0.##;-0.##", CultureInfo.InvariantCulture));
                 if (!string.IsNullOrEmpty(d.Reason))
                     sb.Append(" [").Append(d.Reason).Append(']');
             }

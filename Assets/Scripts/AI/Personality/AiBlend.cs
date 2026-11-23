@@ -15,8 +15,8 @@ namespace DND35.AI.Personality
     /// <see cref="ScoreTarget"/> per candidate or <see cref="AoOCost"/> per movement option passes <c>trace: false</c> and
     /// records one summary row itself (the chosen target and its term; one AoO price per evaluation). A null
     /// JudgeContext.Difficulty is filled from <see cref="SettingsDifficulty"/>. AI choices, never rules: the caller
-    /// passes only options the rules cores allow. Steps 5 and 6 call these at the target, coup de grace, charge, movement
-    /// and out-of-reach sites.
+    /// passes only options the rules cores allow. Step 5 calls the creature members below at the target, ignore-downed,
+    /// adaptive retarget and coup de grace sites; step 6 calls the others at the charge, movement and out-of-reach sites.
     /// </summary>
     public static class AiBlend
     {
@@ -231,6 +231,109 @@ namespace DND35.AI.Personality
                 case OutOfReachAlternative.Withdraw: return ActionRoles.Retreat | ActionRoles.Escape;
                 case OutOfReachAlternative.TotalDefense: return ActionRoles.Defend;
                 default: return ActionRoles.None;
+            }
+        }
+
+        // ── Batch 14 step 5: the target sites (docs/designs/personalities_batch14.md "The blend") ──
+        // Each member below reads self.Personality and returns its legacy argument at once when it is null, before any
+        // view or vote context is built, so a creature with no traits pays nothing and plays exactly as before.
+
+        /// <summary>
+        /// The score of <paramref name="target"/> for <paramref name="self"/> at a per-candidate site (C4): the legacy
+        /// score plus the trait term of the target's knowledge view, with no trace row (the site records one summary row
+        /// with <see cref="TraceTarget"/>). The legacy score when <paramref name="self"/> has no personality.
+        /// </summary>
+        public static float ScoreTarget(CharacterController self, CharacterController target, float legacy)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null || target == null)
+                return legacy;
+            return ScoreTarget(p, legacy, KnowledgeService.ViewOf(self, target), self, trace: false);
+        }
+
+        /// <summary>True when <paramref name="self"/> has a personality and an open AI turn, so a site's summary row is kept.</summary>
+        public static bool TracesTargets(CharacterController self)
+            => self != null && self.Personality != null && Tracing(self);
+
+        /// <summary>
+        /// The one summary row of a per-candidate target site (<paramref name="site"/>): the blended choice, the choice the
+        /// legacy scores alone would have made, and the trait term of the chosen target. Written only when
+        /// <see cref="TracesTargets"/>; the caller builds the names only then.
+        /// </summary>
+        public static void TraceTarget(CharacterController self, string site, string chosen, string legacy, float term)
+        {
+            if (!TracesTargets(self))
+                return;
+            Trace(self, "Personality." + site, chosen, legacy, term, "trait term " + Fmt(term));
+        }
+
+        /// <summary>The same summary row with the two targets named by their character names ("none" for no target).</summary>
+        public static void TraceTarget(CharacterController self, string site, CharacterController chosen,
+            CharacterController legacy, float term)
+        {
+            if (!TracesTargets(self))
+                return;
+            TraceTarget(self, site, NameOf(chosen), NameOf(legacy), term);
+        }
+
+        private static string NameOf(CharacterController c)
+            => c == null ? "none" : c.Stats != null ? c.Stats.CharacterName : c.name;
+
+        /// <summary>
+        /// The ignore-downed test (C5, BoolDecision.IgnoreUnconscious) of <paramref name="self"/>: whether it skips foes
+        /// that are down (dying, stable or unconscious). <paramref name="legacy"/> is the Role's answer
+        /// (AIProfile.ShouldIgnoreUnconsciousTargets, or the site's own default); the traits' vote overrides it (Sadistic
+        /// forbids skipping them; Smart is for it while a standing foe is in reach). The caller keeps its own rules, such
+        /// as "only while a foe still stands".
+        /// </summary>
+        public static bool IgnoresUnconscious(CharacterController self, bool legacy)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null)
+                return legacy;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+                return Judge(p, BoolDecision.IgnoreUnconscious, legacy, SelfFacts.JudgeContextOf(self), actor: self);
+        }
+
+        /// <summary>
+        /// The mid-sequence retarget of <paramref name="self"/> (AIProfile.ShouldSwitchTargetsMidFullAttack): on when the
+        /// Role says so (<paramref name="legacy"/>), or when the traits' IgnoreUnconscious verdict is For or Insist, so a
+        /// creature whose traits skip a downed target does not stop its full attack on one (a Smart Humanoid with a
+        /// standing foe in reach). A Neutral, Against or Forbid verdict leaves the Role's answer.
+        /// </summary>
+        public static bool Adaptive(CharacterController self, bool legacy)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null || legacy)
+                return legacy;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+            {
+                JudgeContext c = WithDifficulty(SelfFacts.JudgeContextOf(self), out bool fromSettings);
+                JudgeResult r = p.Judge(BoolDecision.IgnoreUnconscious, c);
+                bool answer = r.Verdict == Verdict.For || r.Verdict == Verdict.Insist;
+                if (Tracing(self))
+                    Trace(self, "Personality.Adaptive", Yn(answer), Yn(legacy), r.Vote, Reason(r, fromSettings));
+                return answer;
+            }
+        }
+
+        /// <summary>
+        /// Whether <paramref name="self"/> takes a coup de grace (PHB p.153) the rules allow (C5, C11; the caller has
+        /// already checked GameManager.CanUseCoupDeGraceAttackOption or the adjacent helpless foes): the data override
+        /// (<paramref name="dataOverride"/>, CharacterController.EnemyUseCoupDeGraceOverride) wins; then the traits' vote
+        /// (a sadist insists at Normal difficulty and above and abstains on Easy, owner 2026-10-30; a healer is against);
+        /// then <paramref name="roleLegacy"/>, the Role's AIProfile.ShouldUseCoupDeGrace. With no personality, the override
+        /// else the Role's answer, as before. The caller computes <paramref name="roleLegacy"/> only when there is no override.
+        /// </summary>
+        public static bool UsesCoupDeGrace(CharacterController self, bool roleLegacy, bool? dataOverride)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null)
+                return dataOverride ?? roleLegacy;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+            {
+                JudgeContext ctx = dataOverride.HasValue ? default : SelfFacts.JudgeContextOf(self);
+                return Judge(p, BoolDecision.CoupDeGrace, roleLegacy, ctx, dataOverride, self);
             }
         }
 

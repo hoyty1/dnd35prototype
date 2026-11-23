@@ -286,18 +286,19 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// True when the NPC may coup de grace now: its profile (or override) allows it, a helpless enemy
-    /// is adjacent and the full-round action is free.
+    /// True when the NPC may coup de grace now: its choice allows it (AIService.UsesCoupDeGrace, the one copy of the
+    /// choice since batch 14 step 5: the data override, the traits, the profile), a helpless enemy is adjacent and the
+    /// full-round action is free.
     /// </summary>
     private bool HasNPCCoupDeGraceOption(CharacterController npc, List<CharacterController> coupTargets)
     {
-        bool profileAllowsCoupDeGrace = npc.EnemyUseCoupDeGraceOverride
-            ?? (npc.aiProfile != null && npc.aiProfile.ShouldUseCoupDeGrace(npc));
-        return profileAllowsCoupDeGrace
-            && coupTargets != null
+        // The rules part first, so the choice (and a personality's vote and trace row) runs only when a coup de grace
+        // is possible; the choice reads no state the checks change.
+        return coupTargets != null
             && coupTargets.Count > 0
             && npc.Actions != null
-            && npc.Actions.HasFullRoundAction;
+            && npc.Actions.HasFullRoundAction
+            && AIService.UsesCoupDeGrace(npc);
     }
 
     /// <summary>
@@ -613,7 +614,17 @@ public partial class GameManager
         CharacterController npc = req.Attacker;
         DND35.AI.AIProfile profile = req.Profile;
         AttackIntent intent = req.Intent;
-        bool adaptive = profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc);
+        // The Role's retarget and ignore-downed answers through the personality blend (batch 14 step 5): a creature whose
+        // traits skip a downed target also retargets (AiBlend.Adaptive), so its full attack does not stop on one. With no
+        // personality both are the profile's answers, as before. Both are asked lazily, at most once per step, and only
+        // when a retarget is considered (a slain or downed target, or one the step cannot attack), so a standing legal
+        // target casts no vote and writes no trace row.
+        bool? adaptiveAnswer = null;
+        bool Adaptive() => adaptiveAnswer ??= DND35.AI.Personality.AiBlend.Adaptive(npc,
+            profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc));
+        bool? ignoresDowned = null;
+        bool IgnoresDowned() => ignoresDowned ??= DND35.AI.Personality.AiBlend.IgnoresUnconscious(npc,
+            profile != null && profile.ShouldIgnoreUnconsciousTargets(npc));
         ItemData weapon = npc.GetEquippedMainWeapon();
         bool ranged = IsAttackModeRanged(npc, weapon, intent);
         // The next step's hand: a two-weapon intent's off-hand steps too (batch 12 step 18, AI-055; PHB p.160).
@@ -626,15 +637,15 @@ public partial class GameManager
         {
             if (current.Stats.IsDead)
             {
-                int remainingAfterKill = adaptive ? RemainingSteps(req, npc, ranged) : 0;
+                int remainingAfterKill = Adaptive() ? RemainingSteps(req, npc, ranged) : 0;
                 CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", remainingAfterKill > 0
                     ? $"{current.Stats.CharacterName} is defeated! {remainingAfterKill} attack(s) remaining."
                     : $"{current.Stats.CharacterName} has fallen, but the fight continues!"));
                 current = null;
             }
-            else if (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
+            else if (current.IsUnconscious && IgnoresDowned())
             {
-                if (adaptive && RemainingSteps(req, npc, ranged) > 0)
+                if (Adaptive() && RemainingSteps(req, npc, ranged) > 0)
                     CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{current.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target."));
                 current = null;
             }
@@ -660,13 +671,13 @@ public partial class GameManager
         bool needsNewTarget = current == null
             || current.Stats == null
             || current.Stats.IsDead
-            || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && current.IsUnconscious)
+            || (current.IsUnconscious && IgnoresDowned())
             || !legality.Ok;
         if (!needsNewTarget)
             return AttackStepChoice.At(current);
 
         // Without an adaptive profile the NPC attacks only its chosen target.
-        if (!adaptive)
+        if (!Adaptive())
         {
             string why = current == null || current.Stats == null || current.Stats.IsDead
                 ? "target is down"
@@ -684,7 +695,8 @@ public partial class GameManager
             return AttackStepChoice.At(inReachTarget);
         }
 
-        if (!ranged && profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
+        // A creature retargeting by its traits alone may have no profile: then it takes no 5-foot step.
+        if (!ranged && profile != null && profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
             && TryTakeFiveFootStepForAdaptiveFullAttack(npc, profile, out CharacterController steppedTarget))
         {
             state.Outcome.TargetSwitches++;
@@ -823,14 +835,18 @@ public partial class GameManager
                 hasConsciousEnemy = true;
         }
 
-        bool ignoreUnconscious = profile != null
-            && profile.ShouldIgnoreUnconsciousTargets(attacker)
-            && hasConsciousEnemy;
+        bool ignoreUnconscious = hasConsciousEnemy
+            && DND35.AI.Personality.AiBlend.IgnoresUnconscious(attacker, profile != null && profile.ShouldIgnoreUnconsciousTargets(attacker));
 
         Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(attacker.GridPosition);
         Vector2Int bestStep = attacker.GridPosition;
         CharacterController bestTarget = null;
         float bestScore = float.NegativeInfinity;
+        // With a personality, one Personality.FiveFootStep summary row (the blended and the legacy choice, the trait term).
+        bool tracePersonality = DND35.AI.Personality.AiBlend.TracesTargets(attacker);
+        CharacterController legacyBest = null;
+        float legacyBestScore = float.NegativeInfinity;
+        float bestTerm = 0f;
 
         for (int i = 0; i < neighbors.Length; i++)
         {
@@ -848,16 +864,32 @@ public partial class GameManager
                 if (!attacker.CanMeleeAttackDistance(distance, attacker.GetEquippedMainWeapon()))
                     continue;
 
-                float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+                // The trait term (batch 14 step 5, C4) reads the target from the attacker's square, not the step's.
+                float roleScore = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+                float blended = DND35.AI.Personality.AiBlend.ScoreTarget(attacker, candidate, roleScore);
+                float score = blended;
                 score -= distance * 0.25f;
                 if (score > bestScore)
                 {
                     bestScore = score;
                     bestStep = stepCell;
                     bestTarget = candidate;
+                    bestTerm = blended - roleScore;
+                }
+                if (tracePersonality)
+                {
+                    float legacyScore = roleScore;
+                    legacyScore -= distance * 0.25f;
+                    if (legacyScore > legacyBestScore)
+                    {
+                        legacyBestScore = legacyScore;
+                        legacyBest = candidate;
+                    }
                 }
             }
         }
+        if (tracePersonality)
+            DND35.AI.Personality.AiBlend.TraceTarget(attacker, "FiveFootStep", bestTarget, legacyBest, bestTerm);
 
         if (bestTarget == null)
             return false;

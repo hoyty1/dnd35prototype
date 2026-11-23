@@ -2381,22 +2381,39 @@ public class AIService : MonoBehaviour
                 hasConsciousEnemy = true;
         }
 
-        bool ignoreUnconscious = profile.ShouldIgnoreUnconsciousTargets(npc) && hasConsciousEnemy;
+        // The Role's ignore-downed answer through the personality blend (batch 14 step 5): the traits may overrule it.
+        bool ignoreUnconscious = hasConsciousEnemy
+            && DND35.AI.Personality.AiBlend.IgnoresUnconscious(npc, profile.ShouldIgnoreUnconsciousTargets(npc));
 
+        // With a personality, the trait term is added to the Role's score (C4) and the legacy choice is kept for the
+        // trace's summary row; without one, the score is the Role's alone.
+        bool tracePersonality = DND35.AI.Personality.AiBlend.TracesTargets(npc);
+        CharacterController legacyBest = null;
+        float legacyBestScore = float.NegativeInfinity;
+        float bestTerm = 0f;
         for (int i = 0; i < enemyCandidates.Count; i++)
         {
             CharacterController candidate = enemyCandidates[i];
             if (ignoreUnconscious && candidate.IsUnconscious)
                 continue;
 
-            float score = profile.ScoreTarget(candidate, npc);
-            score += GetPerceptionTargetingAdjustment(npc, candidate, profile);
+            float roleScore = profile.ScoreTarget(candidate, npc);
+            float perception = GetPerceptionTargetingAdjustment(npc, candidate, profile);
+            float score = DND35.AI.Personality.AiBlend.ScoreTarget(npc, candidate, roleScore) + perception;
             if (score > bestScore)
             {
                 bestScore = score;
                 best = candidate;
+                bestTerm = score - (roleScore + perception);
+            }
+            if (tracePersonality && roleScore + perception > legacyBestScore)
+            {
+                legacyBestScore = roleScore + perception;
+                legacyBest = candidate;
             }
         }
+        if (tracePersonality)
+            DND35.AI.Personality.AiBlend.TraceTarget(npc, "Target", TraceName(best), TraceName(legacyBest), bestTerm);
 
         if (best != null)
         {
@@ -2413,6 +2430,10 @@ public class AIService : MonoBehaviour
     {
         CharacterController best = null;
         float bestScore = float.NegativeInfinity;
+        bool tracePersonality = DND35.AI.Personality.AiBlend.TracesTargets(npc);
+        CharacterController legacyBest = null;
+        float legacyBestScore = float.NegativeInfinity;
+        float bestTerm = 0f;
 
         for (int i = 0; i < allCombatants.Count; i++)
         {
@@ -2422,14 +2443,24 @@ public class AIService : MonoBehaviour
             if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
-            float score = GetTargetPriority(npc, candidate);
-            score += GetPerceptionTargetingAdjustment(npc, candidate);
+            float rolePriority = GetTargetPriority(npc, candidate);
+            float perception = GetPerceptionTargetingAdjustment(npc, candidate);
+            // The trait term on the no-profile path too (batch 14 step 5, C4); the priority alone without a personality.
+            float score = DND35.AI.Personality.AiBlend.ScoreTarget(npc, candidate, rolePriority) + perception;
             if (score > bestScore)
             {
                 bestScore = score;
                 best = candidate;
+                bestTerm = score - (rolePriority + perception);
+            }
+            if (tracePersonality && rolePriority + perception > legacyBestScore)
+            {
+                legacyBestScore = rolePriority + perception;
+                legacyBest = candidate;
             }
         }
+        if (tracePersonality)
+            DND35.AI.Personality.AiBlend.TraceTarget(npc, "Target", TraceName(best), TraceName(legacyBest), bestTerm);
 
         if (best != null)
         {
@@ -2820,7 +2851,7 @@ public class AIService : MonoBehaviour
         AIProfile profile = GetProfile(npc);
         if (_gameManager != null
             && _gameManager.CanUseCoupDeGraceAttackOption(npc)
-            && ShouldNPCUseCoupDeGrace(npc, profile))
+            && UsesCoupDeGrace(npc))
         {
             return true;
         }
@@ -2937,7 +2968,7 @@ public class AIService : MonoBehaviour
         {
             coupDeGrace = _gameManager != null
                 && _gameManager.CanUseCoupDeGraceAttackOption(npc)
-                && ShouldNPCUseCoupDeGrace(npc, profile);
+                && UsesCoupDeGrace(npc);
         }
         if (coupDeGrace)
         {
@@ -3014,16 +3045,24 @@ public class AIService : MonoBehaviour
         return true;
     }
 
-    private static bool ShouldNPCUseCoupDeGrace(CharacterController npc, AIProfile profile)
+    /// <summary>
+    /// Whether the AI-run <paramref name="npc"/> takes a coup de grace (PHB p.153) when the rules allow one: the one copy
+    /// of the choice (batch 14 step 5 merged AIService.ShouldNPCUseCoupDeGrace and the test in
+    /// GameManager.HasNPCCoupDeGraceOption). The definition's data override (CharacterController.EnemyUseCoupDeGraceOverride)
+    /// wins, then the traits' vote (DND35.AI.Personality.AiBlend.UsesCoupDeGrace: a sadist insists at Normal difficulty
+    /// and above, never on Easy, owner 2026-10-30), then the Role (AIProfile.ShouldUseCoupDeGrace; no profile: no). A
+    /// choice only: the legality is the caller's (GameManager.CanUseCoupDeGraceAttackOption, or the adjacent helpless foes
+    /// and the full-round action).
+    /// </summary>
+    internal static bool UsesCoupDeGrace(CharacterController npc)
     {
         if (npc == null)
             return false;
 
-        if (npc.EnemyUseCoupDeGraceOverride.HasValue)
-            return npc.EnemyUseCoupDeGraceOverride.Value;
-
-        AIProfile resolvedProfile = profile ?? GetProfile(npc);
-        return resolvedProfile != null && resolvedProfile.ShouldUseCoupDeGrace(npc);
+        bool? dataOverride = npc.EnemyUseCoupDeGraceOverride;
+        AIProfile profile = GetProfile(npc);
+        bool roleLegacy = !dataOverride.HasValue && profile != null && profile.ShouldUseCoupDeGrace(npc);
+        return DND35.AI.Personality.AiBlend.UsesCoupDeGrace(npc, roleLegacy, dataOverride);
     }
 
     private static bool HasCastablePreparedSpells(CharacterController caster)
@@ -4157,9 +4196,8 @@ public class AIService : MonoBehaviour
                 hasConsciousEnemy = true;
         }
 
-        bool ignoreUnconscious = profile != null
-            && profile.ShouldIgnoreUnconsciousTargets(attacker)
-            && hasConsciousEnemy;
+        bool ignoreUnconscious = hasConsciousEnemy
+            && DND35.AI.Personality.AiBlend.IgnoresUnconscious(attacker, profile != null && profile.ShouldIgnoreUnconsciousTargets(attacker));
 
         var candidates = new List<CharacterController>();
         for (int i = 0; i < enemies.Count; i++)
@@ -4186,16 +4224,30 @@ public class AIService : MonoBehaviour
         // Fallback: profile-based scoring
         CharacterController best = null;
         float bestScore = float.NegativeInfinity;
+        // The trait term (batch 14 step 5, C4) and, with a personality, one Personality.AdaptiveTarget summary row.
+        bool tracePersonality = DND35.AI.Personality.AiBlend.TracesTargets(attacker);
+        CharacterController legacyBest = null;
+        float legacyBestScore = float.NegativeInfinity;
+        float bestTerm = 0f;
         for (int i = 0; i < candidates.Count; i++)
         {
             CharacterController candidate = candidates[i];
-            float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+            float roleScore = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+            float score = DND35.AI.Personality.AiBlend.ScoreTarget(attacker, candidate, roleScore);
             if (score > bestScore)
             {
                 bestScore = score;
                 best = candidate;
+                bestTerm = score - roleScore;
+            }
+            if (tracePersonality && roleScore > legacyBestScore)
+            {
+                legacyBestScore = roleScore;
+                legacyBest = candidate;
             }
         }
+        if (tracePersonality)
+            DND35.AI.Personality.AiBlend.TraceTarget(attacker, "AdaptiveTarget", best, legacyBest, bestTerm);
 
         return best;
     }

@@ -480,7 +480,9 @@ public partial class GameManager
     /// every creature in reach, and the AI never cleaves into a non-foe), the best by the attacker's profile target score
     /// (AIProfile.ScoreTarget) less the unrolled-ward penalty (AttackLegality.WardTargetScoreAdjustment), creatures still in
     /// the fight first; a foe already down only when it is the only kind left and the creature's profile does not ignore
-    /// downed targets (no profile: ignored). Null: no cleave.
+    /// downed targets (no profile: ignored). A personality (batch 14 step 5) may overrule the ignore-downed answer
+    /// (AiBlend.IgnoresUnconscious: a sadist keeps downed foes as candidates) and adds its trait term to each score
+    /// (AiBlend.ScoreTarget). Null: no cleave.
     /// </summary>
     internal CharacterController ChooseCleaveTargetForAI(CharacterController attacker, IList<CharacterController> candidates)
     {
@@ -491,22 +493,39 @@ public partial class GameManager
         for (int i = 0; i < candidates.Count; i++)
             if (candidates[i] != null && TeamUtility.IsEnemy(attacker, candidates[i]) && !CombatEndRules.IsOutOfFight(candidates[i]))
                 anyInFight = true;
-        bool ignoreDowned = anyInFight || profile == null || profile.ShouldIgnoreUnconsciousTargets(attacker);
+        bool ignoreDowned = DND35.AI.Personality.AiBlend.IgnoresUnconscious(attacker,
+            anyInFight || profile == null || profile.ShouldIgnoreUnconsciousTargets(attacker));
 
         CharacterController best = null;
         float bestScore = float.NegativeInfinity;
+        // With a personality, one Personality.Cleave summary row: the blended choice, the legacy one and its trait term.
+        bool tracePersonality = DND35.AI.Personality.AiBlend.TracesTargets(attacker);
+        CharacterController legacyBest = null;
+        float legacyBestScore = float.NegativeInfinity;
+        float bestTerm = 0f;
         for (int i = 0; i < candidates.Count; i++)
         {
             CharacterController c = candidates[i];
             if (c == null || !TeamUtility.IsEnemy(attacker, c) || (ignoreDowned && CombatEndRules.IsOutOfFight(c)))
                 continue;
-            float score = (profile != null ? profile.ScoreTarget(c, attacker) : 0f) + AttackLegality.WardTargetScoreAdjustment(attacker, c);
+            float roleScore = profile != null ? profile.ScoreTarget(c, attacker) : 0f;
+            float ward = AttackLegality.WardTargetScoreAdjustment(attacker, c);
+            float blended = DND35.AI.Personality.AiBlend.ScoreTarget(attacker, c, roleScore);
+            float score = blended + ward;
             if (score > bestScore)
             {
                 bestScore = score;
                 best = c;
+                bestTerm = blended - roleScore;
+            }
+            if (tracePersonality && roleScore + ward > legacyBestScore)
+            {
+                legacyBestScore = roleScore + ward;
+                legacyBest = c;
             }
         }
+        if (tracePersonality)
+            DND35.AI.Personality.AiBlend.TraceTarget(attacker, "Cleave", best, legacyBest, bestTerm);
         return best;
     }
 

@@ -24,6 +24,12 @@ namespace Tests.Scenarios
     /// definitions, a zombie given Smart:0.5 by the harness spawns with none and warns once (C13), and the AI-run party
     /// member has none (C12), pinned to Normal; rules/ai-personality-spawn-easy pins Easy and checks that
     /// the blend reads it. Nobody acts on a personality yet (step 5), so the step changes no other scenario's hash.</para>
+    /// <para>Step 5 (the blend at the target sites): rules/ai-captain-focuses-softest, the Smart hobgoblin captain takes the
+    /// soft, wounded wizard where its plain twin takes the near, healthy, armored fighter (the layout is pinned by
+    /// PersonalityBlendTests.TestCaptainLayout); rules/ai-sadist-coup-de-grace, the sadistic orc's coup de grace on a dying
+    /// PC at Normal, none on Easy (owner, 2026-10-30) and none from the plain orc; rules/ai-sadist-keeps-downed-target, a
+    /// sadistic dretch (an Animal Role, which skips downed foes) keeps hitting the PC it drops mid full attack where the
+    /// plain dretch shifts to the standing one. Every older scenario's creature has no traits, so its hash is unchanged.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -34,6 +40,13 @@ namespace Tests.Scenarios
             yield return S("ai-damage-memory", AiDamageMemory);
             yield return S("ai-personality-spawn", () => AiPersonalitySpawn(easy: false));
             yield return S("ai-personality-spawn-easy", () => AiPersonalitySpawn(easy: true));
+            yield return S("ai-captain-focuses-softest", () => AiCaptainFocusesSoftest(plain: false));
+            yield return S("ai-captain-focuses-softest-plain", () => AiCaptainFocusesSoftest(plain: true));
+            yield return S("ai-sadist-coup-de-grace", () => AiSadistCoupDeGrace(SadistTwin.Normal));
+            yield return S("ai-sadist-coup-de-grace-easy", () => AiSadistCoupDeGrace(SadistTwin.Easy));
+            yield return S("ai-sadist-coup-de-grace-plain", () => AiSadistCoupDeGrace(SadistTwin.Plain));
+            yield return S("ai-sadist-keeps-downed-target", () => AiSadistKeepsDownedTarget(plain: false));
+            yield return S("ai-sadist-keeps-downed-target-plain", () => AiSadistKeepsDownedTarget(plain: true));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -303,6 +316,175 @@ namespace Tests.Scenarios
                     e => (e.Str("text") ?? "").StartsWith("personality warning:", StringComparison.Ordinal), 1, 1))
                 .Expect(easy ? "The Easy pin is a trace note" : "The default difficulty adds no note", Expect.Count("note",
                     e => (e.Str("text") ?? "").StartsWith("ai difficulty", StringComparison.Ordinal), easy ? 1 : 0, easy ? 1 : 0));
+            return b.Build();
+        }
+
+        // ── Step 5: the blend at the target sites ──────────────────
+
+        /// <summary>Sets <paramref name="c"/>'s full and current hit points and its HP state (dying below 0).</summary>
+        private static void SetHp(CharacterController c, int max, int current)
+        {
+            c.Stats.AdjustMaxHP(max - c.Stats.TotalMaxHP);
+            c.Stats.CurrentHP = current;
+            c.SyncHPStateFromCurrentHP(emitLog: false);
+        }
+
+        /// <summary>The round-1 attacks (not AoOs) of <paramref name="by"/>, in order.</summary>
+        private static List<TraceEvent> FirstRoundAttacks(TraceView v, string by) => v.Attacks(by: by, aoo: false, round: 1);
+
+        /// <summary>The decision-trace rows of <paramref name="site"/> whose legacy value is <paramref name="legacy"/>, kept by the ring.</summary>
+        private static List<global::AiDecisionTrace.Decision> TraceRows(string site, string legacy)
+            => global::AiDecisionTrace.Ring.Concat(global::AiDecisionTrace.OpenRecords)
+                .SelectMany(t => t.Decisions)
+                .Where(d => d.Site == site && d.Legacy == legacy)
+                .ToList();
+
+        /// <summary>
+        /// The layout of PersonalityBlendTests.TestCaptainLayout, in a real fight: the hobgoblin captain (Humanoid Role,
+        /// Smart .5) stands between a healthy fighter in medium armor (Fighter 3, nobody beside it) and a wizard 2 at 10 of
+        /// 14 hit points with two fighters beside it, both in its reach. The Role's score (HumanoidAIProfile: unarmored,
+        /// wounded, isolated, near) favours the fighter by about 1.2; Smart's term (KillChance and KnownCaster, design 4.4)
+        /// adds about 3.8 to the wizard and 0.3 to the fighter. The Smart captain's first attack or maneuver (the Role
+        /// opens with a trip) goes to the wizard and the decision trace records the fighter as the legacy choice; the
+        /// "-plain" twin (personality dropped) goes for the fighter. Everyone but the captain idles; one round.
+        /// </summary>
+        private static ScenarioDef AiCaptainFocusesSoftest(bool plain)
+        {
+            string id = plain ? "rules/ai-captain-focuses-softest-plain" : "rules/ai-captain-focuses-softest";
+            string want = plain ? "fighter" : "wizard";
+            ScenarioBuilder b = Rules(id, plain
+                    ? "The plain hobgoblin captain (no traits) attacks the near, healthy, armored fighter: the Role's own target score (batch 14 step 5)"
+                    : "The Smart hobgoblin captain attacks the soft, wounded wizard the plain captain passes over: the trait term at the target score (batch 14 step 5, C4)")
+                .Covers("batch 14 step 5", "AI-058")
+                .MaxRounds(1)
+                .Npc("captain", "hobgoblin_captain", 10, 10, Control.Ai)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Hero Fighter", 3)), 9, 10, Control.Idle)
+                .Pc("wizard", ActorSource.Stats(() => Wizard("Soft Wizard", 2)), 11, 10, Control.Idle)
+                .Pc("ally1", ActorSource.Stats(() => RulesScenarios.Fighter("Ally North", 3)), 12, 9, Control.Idle)
+                .Pc("ally2", ActorSource.Stats(() => RulesScenarios.Fighter("Ally South", 3)), 12, 11, Control.Idle)
+                .Tweak("fighter", Sturdy)
+                .Tweak("wizard", c => SetHp(c, 14, 10))
+                .Tweak("ally1", Sturdy)
+                .Tweak("ally2", Sturdy)
+                .Initiative("captain", "fighter", "wizard", "ally1", "ally2");
+            if (plain)
+                b.Personality("captain", "");
+            // The Humanoid Role may open with a trip on its target (AttemptTrip; scored by odds from step 9), so the check reads
+            // the first attack or maneuver of the captain's turn.
+            b.Expect("The captain's first attack or maneuver goes to the " + want, v =>
+            {
+                TraceEvent first = v.Events.FirstOrDefault(e => e.Round == 1
+                    && ((e.Ev == "attack" && e.Str("attacker") == "captain" && !e.Bool("aoo"))
+                        || (e.Ev == "maneuver" && e.Str("by") == "captain" && !e.Bool("counter"))));
+                string at = first != null ? first.Ev + " at " + first.Str("target") : "no attack or maneuver";
+                return first != null && first.Str("target") == want ? ExpectResult.Pass(at, first.Seq) : ExpectResult.Fail(at);
+            });
+            if (!plain)
+                b.Expect("The decision trace records the fighter as the Role's choice and the wizard as the blend's", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("Personality.Target", "Hero Fighter");
+                    bool ok = rows.Any(d => d.Chosen == "Soft Wizard" && d.Bonus > 0f);
+                    return ok ? ExpectResult.Pass(rows.Count + " Personality.Target row(s): legacy Hero Fighter, chosen Soft Wizard")
+                              : ExpectResult.Fail(rows.Count + " Personality.Target row(s) with legacy Hero Fighter; none chose Soft Wizard");
+                });
+            return b.Build();
+        }
+
+        private enum SadistTwin { Normal, Easy, Plain }
+
+        /// <summary>
+        /// A sadistic orc (orc_sadist: Sadistic .7, Berserker .3; the Humanoid Role, which takes no coup de grace) stands
+        /// beside a dying wizard (-3 hit points, helpless, PHB p.145) with its full-round action; a sturdy fighter stands far
+        /// off, so the fight goes on. At Normal difficulty the trait's Insist takes the coup de grace (PHB p.153); on Easy the
+        /// row is skipped (owner, 2026-10-30) and the Role's no stands; the "-plain" twin (personality dropped) takes none.
+        /// The orc acts first; one round.
+        /// </summary>
+        private static ScenarioDef AiSadistCoupDeGrace(SadistTwin twin)
+        {
+            string id = "rules/ai-sadist-coup-de-grace" + (twin == SadistTwin.Easy ? "-easy" : twin == SadistTwin.Plain ? "-plain" : "");
+            bool wantsCoup = twin == SadistTwin.Normal;
+            ScenarioBuilder b = Rules(id, twin == SadistTwin.Normal
+                    ? "A sadistic orc takes a coup de grace on the dying PC beside it at Normal difficulty (batch 14 step 5; owner ruling 2026-10-30; PHB p.153)"
+                    : twin == SadistTwin.Easy
+                        ? "On Easy the sadistic orc takes no coup de grace: the trait's row is skipped and the Role's no stands (batch 14 step 5; owner ruling 2026-10-30)"
+                        : "The plain orc (no traits) takes no coup de grace on the dying PC beside it: the Humanoid Role's no (batch 14 step 5)")
+                .Covers("batch 14 step 5", "AI-012")
+                .MaxRounds(1)
+                .Npc("sadist", "orc_sadist", 10, 10, Control.Ai)
+                .Pc("fallen", ActorSource.Stats(() => Wizard("Fallen Wizard", 2)), 11, 10, Control.Idle)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Far Fighter", 3)), 2, 2, Control.Idle)
+                .Tweak("fallen", c => SetHp(c, 14, -3))
+                .Tweak("hero", Sturdy)
+                .Initiative("sadist", "fallen", "hero");
+            b.AiDifficulty(twin == SadistTwin.Easy ? AIService.AIDifficultyLevel.Easy : AIService.AIDifficultyLevel.Normal);
+            if (twin == SadistTwin.Plain)
+                b.Personality("sadist", "");
+            b.Expect("The wizard is dying (helpless) when the orc's turn starts", v =>
+            {
+                JsonObj snap = v.Snapshot("fallen", 1, "sadist");
+                object hp = snap != null ? snap.Get("hp") : null;
+                return hp is int h && h < 0 ? ExpectResult.Pass("hp " + h) : ExpectResult.Fail("hp " + (hp ?? "?"));
+            });
+            b.Expect(wantsCoup ? "The orc takes one coup de grace, on the wizard" : "The orc takes no coup de grace", v =>
+            {
+                List<TraceEvent> coups = v.Maneuvers("sadist", SpecialAttackType.CoupDeGrace);
+                if (!wantsCoup)
+                    return coups.Count == 0 ? ExpectResult.Pass("no coup de grace") : ExpectResult.Fail(coups.Count + " coup(s) de grace", coups[0].Seq);
+                return coups.Count == 1 && coups[0].Str("target") == "fallen"
+                    ? ExpectResult.Pass("coup de grace on fallen", coups[0].Seq)
+                    : ExpectResult.Fail(coups.Count + " coup(s) de grace" + (coups.Count > 0 ? ", first on " + coups[0].Str("target") : ""));
+            });
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A dretch given the Animal Role by the harness (it skips downed foes and retargets mid full attack, AnimalAIProfile,
+        /// and makes no trip; the spawn's Humanoid Role keeps downed foes, so it could not show the difference) full-attacks a
+        /// wizard at 1 hit point, every d20 a 19, so its first claw drops the wizard to dying; a sturdy fighter stands on its
+        /// other side. Its target is pinned to the wizard for the turn start (PriorityTarget), and its coup de grace is off
+        /// (the data override), so only the ignore-downed choice is tested. Given Sadistic .7 and Berserker .3, the
+        /// Sadistic Forbid keeps the downed wizard its target, so its second attack hits the wizard again; the "-plain"
+        /// twin (no traits) skips the downed wizard and shifts focus to the fighter. One round.
+        /// </summary>
+        private static ScenarioDef AiSadistKeepsDownedTarget(bool plain)
+        {
+            string id = plain ? "rules/ai-sadist-keeps-downed-target-plain" : "rules/ai-sadist-keeps-downed-target";
+            string want = plain ? "guard" : "victim";
+            ScenarioBuilder b = Rules(id, plain
+                    ? "The plain dretch (Animal Role) skips the PC it drops mid full attack and shifts focus to the standing one (batch 14 step 5)"
+                    : "A sadistic dretch keeps attacking the PC it drops mid full attack, where its Animal Role would skip it (batch 14 step 5, IgnoreUnconscious Forbid)")
+                .Covers("batch 14 step 5")
+                .MaxRounds(1)
+                .RecordDice()
+                .Force(20, 19, null, -1)
+                .Npc("dretch", "dretch", 10, 10, Control.Ai)
+                .Pc("victim", ActorSource.Stats(() => Wizard("Weak Wizard", 2)), 11, 10, Control.Idle)
+                .Pc("guard", ActorSource.Stats(() => RulesScenarios.Fighter("Guard Fighter", 3)), 9, 10, Control.Idle)
+                // The spawn gives the dretch the Humanoid Role (the Humanoid entry wins the dretch id collision, CRE-022), which
+                // keeps downed foes anyway; the Animal Role skips them.
+                .Profile("dretch", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.AnimalAIProfile>())
+                .PriorityTarget("dretch", "victim")
+                .Tweak("dretch", c => c.EnemyUseCoupDeGraceOverride = false)
+                .Tweak("victim", c => SetHp(c, 14, 1))
+                .Tweak("guard", Sturdy)
+                .Initiative("dretch", "victim", "guard");
+            if (!plain)
+                b.Personality("dretch", "Sadistic:0.7,Berserker:0.3");
+            b.Expect("The dretch full-attacks, its first attack at the wizard, who is dying after it", v =>
+            {
+                List<TraceEvent> attacks = FirstRoundAttacks(v, "dretch");
+                string first = attacks.Count > 0 ? attacks[0].Str("target") : "none";
+                bool dropped = v.Of("hp").Any(e => e.Str("actor") == "victim" && e.Get("new") is int n && n < 0);
+                return first == "victim" && attacks.Count >= 2 && dropped
+                    ? ExpectResult.Pass(attacks.Count + " attacks, first at victim", attacks[0].Seq)
+                    : ExpectResult.Fail(attacks.Count + " attacks, first at " + first);
+            });
+            b.Expect("The dretch's second attack goes to the " + want, v =>
+            {
+                List<TraceEvent> attacks = FirstRoundAttacks(v, "dretch");
+                string second = attacks.Count > 1 ? attacks[1].Str("target") : "none";
+                return second == want ? ExpectResult.Pass("second attack at " + second, attacks[1].Seq) : ExpectResult.Fail("second attack at " + second);
+            });
             return b.Build();
         }
     }

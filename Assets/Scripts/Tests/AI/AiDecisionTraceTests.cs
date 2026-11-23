@@ -149,6 +149,13 @@ public static class AiDecisionTraceTests
         string line = t.Collapsed();
         Assert(line == "[AI-TRACE] r3 Orc 1 (Aggressive; Cowardly:0.6) Target=Wizard (legacy Fighter) +12.5 [Cowardly]; Action=Attack",
             "Collapsed: one line with round, actor, Role, traits and decisions", line);
+
+        // A negative term (a disliked target, a Forbid vote) keeps its own sign (batch 14 step 5 review).
+        var n = new AiDecisionTrace.TurnRecord { Round = 1, Actor = "Orc 2", Role = "Humanoid" };
+        n.Decisions.Add(new AiDecisionTrace.Decision { Site = "Personality.Adaptive", Chosen = "no", Legacy = "no", Bonus = -0.7f });
+        string negative = n.Collapsed();
+        Assert(negative == "[AI-TRACE] r1 Orc 2 (Humanoid) Personality.Adaptive=no -0.7",
+            "Collapsed: a negative bonus is written with a minus sign, not +-", negative);
     }
 
     private static void TestHashUntouched()
