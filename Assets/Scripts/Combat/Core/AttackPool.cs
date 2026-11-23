@@ -262,7 +262,7 @@ public readonly struct ManeuverCost
 /// The one cost table of the combat maneuvers (batch 12 step 19, CMB-102): one row per <see cref="SpecialAttackType"/>,
 /// read by both sides. The PC wrapper (GameManager.ExecuteSpecialAttack, the Special Attack menu's availability
 /// GameManager.CanAffordManeuverForUi and CombatUI's buttons) and the NPC executor (GameManager.TryNPCSpecialAttackIfBeneficial,
-/// AIService.ShouldUseManeuver) build a ManeuverRequest whose cost comes from here, and the maneuver core
+/// whose choice is DND35.AI.AiManeuverChooser.Decide) build a ManeuverRequest whose cost comes from here, and the maneuver core
 /// (GameManager.ExecuteManeuver) pays it before the initiation AoOs.
 /// </summary>
 public static class ManeuverActionCost

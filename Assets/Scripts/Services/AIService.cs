@@ -26,6 +26,7 @@ public class AIService : MonoBehaviour
         Wait,
         Move,
         Attack,
+        /// <summary>Unused since batch 14 step 9: SelectBestAction no longer returns it (the maneuver choice is DND35.AI.AiManeuverChooser, AI-027).</summary>
         SpecialManeuver,
         Charge,
         Retreat
@@ -1527,7 +1528,8 @@ public class AIService : MonoBehaviour
         CharacterController attackTarget = SelectGuardPassingTarget(npc, attackPool);
         if (attackTarget != null)
         {
-            bool usedSpecial = ShouldUseManeuver(npc, attackTarget) && TryExecutePreferredManeuver(npc, attackTarget, profile);
+            // The one maneuver try in place of the whole attack (batch 14 step 9: the scorer decides it against the attack).
+            bool usedSpecial = TryExecuteChosenManeuver(npc, attackTarget, profile, wholeAttack: true);
             if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, attackTarget));
             else
@@ -2858,82 +2860,19 @@ public class AIService : MonoBehaviour
         return tripBack;
     }
 
+    /// <summary>
+    /// Whether the AI would replace <paramref name="npc"/>'s next attack step on <paramref name="target"/> with a maneuver
+    /// or a coup de grace: DND35.AI.AiManeuverChooser.Decide (batch 14 step 9: the Role proposes, the scorer decides against
+    /// the attack). A thin wrapper for the static suites; it executes nothing.
+    /// </summary>
     public bool ShouldUseManeuver(CharacterController npc, CharacterController target)
-    {
-        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc);
-        if (npc == null || target == null)
-            return false;
-
-        AIProfile profile = GetProfile(npc);
-        if (_gameManager != null
-            && _gameManager.CanUseCoupDeGraceAttackOption(npc)
-            && UsesCoupDeGrace(npc))
-        {
-            return true;
-        }
-
-        if (npc.IsGrappling())
-            return false;
-        // Trip, disarm, sunder and grapple need only the next attack step, iterative or natural
-        // (CMB-102); TryNPCSpecialAttackIfBeneficial enforces the exact cost of the chosen type.
-        if (!npc.Actions.HasStandardAction && !npc.CanCommitAttack(npc.GetManeuverSubstituteStepKind(), out _))
-            return false;
-
-        if (profile != null)
-        {
-            SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
-            if (preferred.HasValue)
-            {
-                if (!npc.CanPerformSpecialAttack(preferred.Value))
-                {
-                    Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} skips {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
-                    return false;
-                }
-
-                if (preferred.Value == SpecialAttackType.Trip)
-                    return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped()
-                        && npc.CanTrip(target, out _); // size, swarm, incorporeal (PHB p.158, CMB-079)
-
-                if (preferred.Value == SpecialAttackType.Disarm)
-                    return target.HasDisarmableWeaponEquipped();
-
-                if (preferred.Value == SpecialAttackType.Grapple)
-                    return profile.ShouldInitiateGrapple(npc, target);
-
-                if (preferred.Value == SpecialAttackType.Sunder)
-                    // PHB p.158, CMB-102, CMB-141; a sunder dealing nonlethal damage (an unarmed strike without Improved Unarmed Strike,
-                    // a weapon in nonlethal mode) cannot harm an object (PHB p.165), so the AI skips it.
-                    return target.HasSunderableItemEquipped() && npc.CanSunderWithAttack(-1, out _)
-                        && !npc.WouldSunderDealNonlethalDamage();
-
-                return true;
-            }
-
-            // Profile present but no preferred maneuver => obey profile and skip legacy fallback.
-            return false;
-        }
-
-        if (target.GetEquippedMainWeapon() != null
-            && npc.Stats.STRMod >= 3
-            && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
-            return true; // disarm preference
-        if (!target.Stats.IsProne
-            && npc.HasMeleeWeaponEquipped()
-            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip)
-            && npc.CanTrip(target, out _))
-            return true; // trip preference
-
-        return npc.Stats.STRMod >= 4
-            && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple);
-    }
+        => DND35.AI.AiManeuverChooser.Decide(npc, target, GetProfile(npc)).UsesManeuver;
 
     /// <summary>
     /// Attack action whose melee steps the AI may each replace with a maneuver (CMB-102): before every
-    /// step the usual maneuver evaluation runs (coup de grace, then the profile preference, then the
-    /// legacy chooser), limited by the per-turn stopgap in <see cref="TryExecutePreferredManeuver"/>
-    /// (AI-060): after a maneuver succeeds the remaining steps are attacks (a trip is followed by
-    /// attacks on the prone target), and a failed maneuver type is not retried against that target
-    /// that turn. Trip, disarm, sunder and grapple use that step at its BAB
+    /// step the maneuver choice runs (<see cref="CreateMeleeStepManeuverEvaluator"/>: a coup de grace,
+    /// else the Role's proposal when its odds and value beat the attack it replaces, batch 14 step 9;
+    /// AI-035, AI-060). Trip, disarm, sunder and grapple use that step at its BAB
     /// (ManeuverActionCost.ReplacesMeleeAttack); other maneuvers spend their own action and end it.
     /// </summary>
     private IEnumerator PerformMeleeAttackActionWithManeuvers(CharacterController npc, CharacterController target, AIProfile profile)
@@ -2956,109 +2895,38 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>
-    /// The per-step maneuver evaluation PerformMeleeAttackActionWithManeuvers hands to the NPC melee
-    /// sequence (GameManager.RunAttackSequence through NPCPerformAttack). Internal so the static suites can run the
-    /// real profile evaluation through the loop.
+    /// The per-step maneuver evaluation PerformMeleeAttackActionWithManeuvers hands to the NPC melee sequence
+    /// (GameManager.RunAttackSequence through NPCPerformAttack): DND35.AI.AiManeuverChooser.Decide, then the chosen maneuver
+    /// through the NPC executor. Inside the sequence's step hook (GameManager.ManeuverStepIntentForAI set) a maneuver
+    /// replaces one step; called outside it (NPCPerformAttack's one try before a ranged or thrown sequence) it replaces the
+    /// whole attack. Internal so the static suites can run the real evaluation through the loop.
     /// </summary>
     internal System.Func<CharacterController, CharacterController, bool> CreateMeleeStepManeuverEvaluator(AIProfile profile)
-        => (actor, stepTarget) => ShouldUseManeuver(actor, stepTarget) && TryExecutePreferredManeuver(actor, stepTarget, profile);
-
-    // STOPGAP (owner decision 2026-10-07, CMB-102 open item 7): the maneuver evaluation below re-runs
-    // before every attack step, so on its own it chains maneuvers (trip, then disarm, then grapple)
-    // and retries failed ones. Until it is replaced by weighted personality scoring in the AI profiles
-    // (AI-060; docs/designs/enemy_ai_knowledge_and_personalities.md, weighted personalities step), a
-    // per-creature, per-turn memory (CharacterController.AIManeuverMemory, cleared at turn start)
-    // limits it: once a maneuver succeeds, the AI makes no further maneuver that turn and attacks
-    // with the remaining steps; after a maneuver fails, it does not retry that type against that
-    // target that turn (it attacks instead, or uses another maneuver if the evaluation picks one).
-    // A grapple that took hold keeps its grapple-action handoff, and coup de grace, the profile
-    // preference order and the legacy chooser are unchanged. AI decision only, not a rule.
-    private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
-    {
-        if (npc == null || target == null)
-            return false;
-
-        // Only the choice is timed (batch 14 step 1); the maneuver's execution stays outside every timing scope.
-        bool coupDeGrace;
-        using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
-        {
-            coupDeGrace = _gameManager != null
-                && _gameManager.CanUseCoupDeGraceAttackOption(npc)
-                && UsesCoupDeGrace(npc);
-        }
-        if (coupDeGrace)
-        {
-            return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.CoupDeGrace);
-        }
-
-        if (profile != null)
-        {
-            SpecialAttackType? preferred;
-            bool blocked = false;
-            using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
-            {
-                preferred = profile.GetPreferredManeuver(npc, target);
-                if (preferred.HasValue)
-                {
-                    if (!npc.CanPerformSpecialAttack(preferred.Value))
-                    {
-                        Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} blocked from executing {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
-                        blocked = true;
-                    }
-                    else if (IsManeuverForbiddenByTurnStopgap(npc, target, preferred.Value))
-                    {
-                        blocked = true;
-                    }
-                }
-            }
-
-            if (preferred.HasValue)
-            {
-                if (blocked)
-                    return false;
-
-                bool acted = _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value, out bool succeeded);
-                if (acted)
-                    npc.AIManeuverMemory.Record(target, preferred.Value, succeeded);
-                return acted;
-            }
-
-            return false;
-        }
-
-        bool legacyForbidden;
-        using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
-        {
-            SpecialAttackType? legacyChoice = _gameManager.PeekNPCFallbackManeuverForAI(npc, target);
-            legacyForbidden = legacyChoice.HasValue && IsManeuverForbiddenByTurnStopgap(npc, target, legacyChoice.Value);
-        }
-        if (legacyForbidden)
-            return false;
-
-        bool legacyActed = _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target, out SpecialAttackType? attempted, out bool legacySucceeded);
-        if (legacyActed && attempted.HasValue)
-            npc.AIManeuverMemory.Record(target, attempted.Value, legacySucceeded);
-        return legacyActed;
-    }
+        => (actor, stepTarget) => TryExecuteChosenManeuver(actor, stepTarget, profile,
+            wholeAttack: _gameManager == null || _gameManager.ManeuverStepIntentForAI == null);
 
     /// <summary>
-    /// The AI-060 stopgap check (see the comment above <see cref="TryExecutePreferredManeuver"/>): true when the
-    /// creature's per-turn maneuver memory forbids <paramref name="type"/> against <paramref name="target"/>.
-    /// The grapple handoff does not pass through here: after a grapple takes hold,
-    /// GameManager.RunAttackSequence stops the step loop and NPCAttackSequence hands the
-    /// remaining steps to AI_GrappleRestrictedTurn as grapple actions, and the executor
-    /// (TryNPCSpecialAttackIfBeneficial) refuses every maneuver but coup de grace while grappling.
+    /// Batch 14 step 9 (AI-035, AI-060, AI-058, AI-025): the step's maneuver choice (DND35.AI.AiManeuverChooser.Decide: a
+    /// coup de grace, else the Role's proposal when it beats the attack it replaces by its odds and value) and its execution
+    /// (GameManager.TryNPCSpecialAttackByTypeForAI). True when a maneuver was made (its cost spent); false leaves the step an
+    /// attack. No per-turn memory: the AI-060 stopgap (AIManeuverTurnMemory) is gone, so each step is decided again.
     /// </summary>
-    private static bool IsManeuverForbiddenByTurnStopgap(CharacterController npc, CharacterController target, SpecialAttackType type)
+    private bool TryExecuteChosenManeuver(CharacterController npc, CharacterController target, AIProfile profile, bool wholeAttack)
     {
-        if (npc == null)
+        if (npc == null || target == null || _gameManager == null)
             return false;
 
-        if (!npc.AIManeuverMemory.Forbids(target, type, out string reason))
+        // Only the choice is timed (inside Decide); the maneuver's execution stays outside every timing scope.
+        DND35.AI.ManeuverDecision decision = DND35.AI.AiManeuverChooser.Decide(npc, target, profile, wholeAttack);
+        SpecialAttackType? chosen = decision.Chosen;
+        if (!chosen.HasValue)
             return false;
-
-        Debug.Log($"[AI][Maneuver] {npc.Stats?.CharacterName ?? "<unknown>"} skips {type} against {target?.Stats?.CharacterName ?? "<null>"}: {reason} (AI-060 stopgap); it attacks instead.");
-        return true;
+        if (_gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, chosen.Value))
+            return true;
+        // The executor refused the decided maneuver (its cost, reach or own gate): the step stays an attack, and the decision
+        // trace says so after the Decide row.
+        DND35.AI.AiManeuverChooser.TraceRefused(npc, chosen.Value);
+        return false;
     }
 
     /// <summary>
@@ -3758,12 +3626,10 @@ public class AIService : MonoBehaviour
         if (canCharge && prefersCharge)
             return AIActionType.Charge;
 
+        // In reach: an attack. Whether a step becomes a maneuver is decided per step by the attack sequence's evaluator
+        // (AiManeuverChooser, batch 14 step 9); no caller reads SpecialManeuver, so the choice is not made twice here.
         if (npc.IsTargetInCurrentWeaponRange(target))
-        {
-            if (ShouldUseManeuver(npc, target))
-                return AIActionType.SpecialManeuver;
             return AIActionType.Attack;
-        }
 
         if (distance > 1 && npc.Actions.HasMoveAction)
             return AIActionType.Move;

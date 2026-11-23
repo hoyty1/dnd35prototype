@@ -107,8 +107,8 @@ public static class GrappleDamageRulesTests
         TestNaturalSunderAtHasteStep();
         TestNaturalSecondaryGrapplePenaltyOnTouchOnly();
         TestNpcNaturalSequenceMakesOneSubstitute();
-        TestAiManeuverStopgapTripSucceedsThenAttacks();
-        TestAiManeuverStopgapFailedTripNotRetried();
+        TestAiManeuverScorerTripLandsThenAttacks();
+        TestAiManeuverScorerFailedTripDecidedAgain();
         TestHasteAddsOneNaturalAttackStep();
         TestHasteNaturalStepUsesChosenNaturalAttack();
         TestHasteNaturalFullAttackAddsOneAttack();
@@ -3253,11 +3253,12 @@ public static class GrappleDamageRulesTests
 
     private static void TestNpcNaturalSequenceMakesOneSubstitute()
     {
-        // AI limit pending AI-035: a Grappler-profile claw/claw/bite creature (the owlbear's profile)
-        // against a standing armed target prefers a trip before every step. With the trip's touch
-        // attack forced to a natural 1 the trip fails and the target stays standing; the NPC still
-        // makes only one substitute and rolls its other two natural attacks. Runs the real AIService
-        // evaluation through the NPC melee loop.
+        // The AI limit of one substitute per natural sequence (GameManager.RunAttackSequence, naturalSubstituteUsed; kept by
+        // batch 14 step 9's scorer, C9): a Grappler-profile claw/claw/bite creature (the owlbear's profile) against a
+        // standing armed target in heavy natural armor (AC 29, touch AC 11), whose trip the scorer prefers to a claw it would
+        // rarely land. With the trip's touch attack forced to a natural 1 the trip fails and the target stays standing; the
+        // NPC still makes only one substitute and rolls its other two natural attacks. Runs the real AIService evaluation
+        // through the NPC melee loop.
         GameManager gm = GameManager.Instance;
         AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
         if (gm == null || ai == null)
@@ -3285,9 +3286,13 @@ public static class GrappleDamageRulesTests
             target.GridPosition = new Vector2Int(21, 12);
             target.Stats.AdjustMaxHP(500);
             target.Stats.CurrentHP += 500;
+            target.Stats.NaturalArmorBonus = 18;
 
             Assert(profile.GetPreferredManeuver(npc, target) == SpecialAttackType.Trip,
                 "Grappler profile prefers a trip against a standing target");
+            DND35.AI.ManeuverDecision first = DND35.AI.AiManeuverChooser.Decide(npc, target, profile);
+            Assert(first.Chosen == SpecialAttackType.Trip,
+                $"the scorer takes the Grappler's trip in place of a claw that rarely lands ({first.Reason}; batch 14 step 9)");
 
             FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
             Assert(maneuvers == 1 && sequence.Attacks.Count == 2 && npc.ProgressiveAttackPool.MainHandStepsUsed == 3,
@@ -3307,23 +3312,22 @@ public static class GrappleDamageRulesTests
         }
     }
 
-    // ── AI maneuver stopgap (owner decision 2026-10-07, CMB-102 open item 7, AI-060) ──
-    // An AI decision limit, not a rule: once a maneuver succeeds the AI attacks with the remaining
-    // steps, and a failed maneuver type is not retried against the same target that turn. Both tests
-    // run the real AIService evaluation (CreateMeleeStepManeuverEvaluator) through the NPC melee loop,
-    // with a Humanoid profile (trip, then disarm an armed target) and with no profile (the legacy
-    // chooser: trip, then disarm at STR mod 3+, then grapple at STR mod 4+).
+    // ── AI maneuver scorer (batch 14 step 9; AI-035, AI-060; replaces the AI-060 stopgap of 2026-10-07) ──
+    // Each step is decided by DND35.AI.AiManeuverChooser.Decide: the Role's proposal against the attack it replaces, by
+    // odds and value, with no per-turn memory. Both tests run the real AIService evaluation (CreateMeleeStepManeuverEvaluator)
+    // through the NPC melee loop, with a Humanoid profile (trip, then disarm an armed target) and with no profile (the
+    // no-profile proposer: trip, then disarm at STR mod 3+, then grapple at STR mod 4+), and record the decision of each
+    // step (Decide is pure, so asking it again before the real evaluation gives the evaluation's own answer).
 
     /// <summary>
-    /// A BAB +11 fighter (+11/+6/+1, STR 26) with a longsword, AI-run, at (x, y). No Improved Trip on
-    /// purpose: its attack after a trip that lands (PHB p.96, CMB-079) would add an attack outside the
-    /// sequence, and these tests count only the iterative steps the AI chooses. The trip's attack of
-    /// opportunity (PHB p.158) is avoided on the target's side instead (<see cref="CreateArmedStopgapTarget"/>).
+    /// A BAB +11 fighter (+11/+6/+1, STR 26) with a longsword and Improved Trip (no AoO, +4 on the check, an attack
+    /// after a trip that lands, PHB p.96), AI-run, at (x, y): its trip is nearly sure.
     /// </summary>
     private static CharacterController CreateAiTripper(string name, DND35.AI.AIProfile profile, int x, int y)
     {
         CharacterController npc = CreateIterativeAttacker(name);
         npc.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        npc.Stats.Feats.Add("Improved Trip");
         npc.IsControllable = false;
         npc.aiProfile = profile;
         npc.GridPosition = new Vector2Int(x, y);
@@ -3331,27 +3335,41 @@ public static class GrappleDamageRulesTests
     }
 
     /// <summary>
-    /// A weak defender holding a longsword (so a disarm is on the table), 500 extra HP, at (x, y). It makes
-    /// no attacks of opportunity, so the AI tripper's trip provokes nothing without Improved Trip.
+    /// A weak defender (STR 6) holding a longsword (so a disarm is on the table), 500 extra HP, at (x, y), with natural
+    /// armor +18 (AC 29, touch AC 11): the tripper's swing hits on a 10 or better, a prone target's AC 25 on a 6, so
+    /// knocking it down is worth more than the swing it replaces. It makes no attacks of opportunity.
     /// </summary>
-    private static CharacterController CreateArmedStopgapTarget(string name, int x, int y)
+    private static CharacterController CreateArmoredScorerTarget(string name, int x, int y)
     {
         CharacterController target = CreateWeakDefender(name);
         target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
         target.GridPosition = new Vector2Int(x, y);
         target.Stats.AdjustMaxHP(500);
         target.Stats.CurrentHP += 500;
+        target.Stats.NaturalArmorBonus = 18;
         target.Stats.CanMakeAttacksOfOpportunity = false;
         return target;
     }
 
-    private static void TestAiManeuverStopgapTripSucceedsThenAttacks()
+    /// <summary>The real per-step evaluation, with each step's decision recorded first.</summary>
+    private static System.Func<CharacterController, CharacterController, bool> RecordingEvaluator(AIService ai, DND35.AI.AIProfile profile,
+        System.Collections.Generic.List<DND35.AI.ManeuverDecision> decisions)
+    {
+        System.Func<CharacterController, CharacterController, bool> real = ai.CreateMeleeStepManeuverEvaluator(profile);
+        return (actor, stepTarget) =>
+        {
+            decisions.Add(DND35.AI.AiManeuverChooser.Decide(actor, stepTarget, profile));
+            return real(actor, stepTarget);
+        };
+    }
+
+    private static void TestAiManeuverScorerTripLandsThenAttacks()
     {
         GameManager gm = GameManager.Instance;
         AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
         if (gm == null || ai == null)
         {
-            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver stopgap check needs Play mode");
+            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver scorer check needs Play mode");
             return;
         }
 
@@ -3373,40 +3391,38 @@ public static class GrappleDamageRulesTests
                 CharacterController npc = null;
                 CharacterController target = null;
                 DND35.AI.Profiles.HumanoidAIProfile profile = null;
-                string tag = withProfile ? " (Humanoid profile)" : " (no profile, legacy chooser)";
+                string tag = withProfile ? " (Humanoid profile)" : " (no profile)";
                 try
                 {
                     if (withProfile)
                         profile = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
-                    npc = CreateAiTripper(withProfile ? "StopgapTripHumanoid" : "StopgapTripLegacy", profile, 24, 4 + row);
-                    target = CreateArmedStopgapTarget(withProfile ? "StopgapTripHumanoidTarget" : "StopgapTripLegacyTarget", 25, 4 + row);
+                    npc = CreateAiTripper(withProfile ? "ScorerTripHumanoid" : "ScorerTripNoProfile", profile, 24, 4 + row);
+                    target = CreateArmoredScorerTarget(withProfile ? "ScorerTripHumanoidTarget" : "ScorerTripNoProfileTarget", 25, 4 + row);
                     row += 3;
                     maneuverTypes.Clear();
+                    var decisions = new System.Collections.Generic.List<DND35.AI.ManeuverDecision>();
 
-                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
+                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, RecordingEvaluator(ai, profile, decisions), out int maneuvers);
 
+                    Assert(decisions.Count == 3 && decisions[0].Kind == DND35.AI.ManeuverChoiceKind.Maneuver && decisions[0].Chosen == SpecialAttackType.Trip
+                        && decisions[0].Score.Net >= decisions[0].Score.Threshold,
+                        $"AI scorer: against the armored weakling the first step's trip beats the swing it replaces ({(decisions.Count > 0 ? decisions[0].Reason : "no decision")}; AI-035)" + tag);
                     Assert(maneuvers == 1 && maneuverTypes.Count == 1 && maneuverTypes[0] == SpecialAttackType.Trip
                         && target.HasCondition(CombatConditionType.Prone),
-                        $"AI stopgap: the first step is a trip that lands and no further maneuver follows (maneuvers {maneuvers}: {string.Join(", ", maneuverTypes)}; AI-060)" + tag);
-                    Assert(sequence.Attacks.Count == 2 && sequence.Attacks[0].BreakdownBAB == 6 && sequence.Attacks[1].BreakdownBAB == 1
+                        $"AI scorer: the trip lands and no further maneuver follows (maneuvers {maneuvers}: {string.Join(", ", maneuverTypes)})" + tag);
+                    Assert(decisions.Count == 3 && decisions[1].Kind == DND35.AI.ManeuverChoiceKind.Attack && decisions[1].Proposed == SpecialAttackType.Disarm
+                        && decisions[2].Kind == DND35.AI.ManeuverChoiceKind.Attack && decisions[2].Proposed == SpecialAttackType.Disarm,
+                        $"AI scorer: on the prone target the Role proposes a disarm, which loses to the attack at +6 and +1 ({(decisions.Count > 1 ? decisions[1].Reason : "no decision")}; AI-060: no turn memory decides it)" + tag);
+                    Assert(sequence.Attacks.Exists(a => a.BreakdownBAB == 6) && sequence.Attacks.Exists(a => a.BreakdownBAB == 1)
                         && npc.ProgressiveAttackPool.MainHandStepsUsed == 3,
-                        $"AI stopgap: after the trip succeeds the remaining steps are attacks at +6 and +1 on the prone target (attacks {sequence.Attacks.Count}; AI-060)" + tag);
+                        $"AI scorer: the remaining steps are attacks at +6 and +1 on the prone target (attacks {sequence.Attacks.Count})" + tag);
                     Assert(target.GetEquippedMainWeapon() != null,
-                        "AI stopgap: the armed target is not disarmed after the successful trip" + tag);
-
-                    // Control: without the stopgap the evaluation would pick another maneuver now.
-                    SpecialAttackType? wouldPick = withProfile ? profile.GetPreferredManeuver(npc, target) : gm.PeekNPCFallbackManeuverForAI(npc, target);
-                    Assert(wouldPick == SpecialAttackType.Disarm && npc.AIManeuverMemory.ManeuverSucceededThisTurn,
-                        $"AI stopgap control: the evaluation alone would now pick a disarm ({(wouldPick.HasValue ? wouldPick.Value.ToString() : "none")}); the turn memory holds the success" + tag);
-
-                    npc.StartNewTurn();
-                    Assert(!npc.AIManeuverMemory.ManeuverSucceededThisTurn,
-                        "AI stopgap: the turn memory is cleared at the creature's next turn start" + tag);
+                        "AI scorer: the armed target is not disarmed after the trip" + tag);
                 }
                 catch (System.Exception ex)
                 {
                     System.Exception inner = ex.InnerException ?? ex;
-                    Assert(false, $"AI maneuver stopgap (trip succeeds) check threw {inner.GetType().Name}: {inner.Message}" + tag);
+                    Assert(false, $"AI maneuver scorer (trip lands) check threw {inner.GetType().Name}: {inner.Message}" + tag);
                 }
                 finally
                 {
@@ -3423,13 +3439,13 @@ public static class GrappleDamageRulesTests
         }
     }
 
-    private static void TestAiManeuverStopgapFailedTripNotRetried()
+    private static void TestAiManeuverScorerFailedTripDecidedAgain()
     {
         GameManager gm = GameManager.Instance;
         AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
         if (gm == null || ai == null)
         {
-            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver stopgap check needs Play mode");
+            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver scorer check needs Play mode");
             return;
         }
 
@@ -3447,48 +3463,37 @@ public static class GrappleDamageRulesTests
             {
                 CharacterController npc = null;
                 CharacterController target = null;
-                CharacterController other = null;
                 DND35.AI.Profiles.HumanoidAIProfile profile = null;
-                string tag = withProfile ? " (Humanoid profile)" : " (no profile, legacy chooser)";
+                string tag = withProfile ? " (Humanoid profile)" : " (no profile)";
                 try
                 {
                     if (withProfile)
                         profile = DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
-                    npc = CreateAiTripper(withProfile ? "StopgapFailHumanoid" : "StopgapFailLegacy", profile, 28, 4 + row);
-                    target = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidTarget" : "StopgapFailLegacyTarget", 29, 4 + row);
-                    other = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidOther" : "StopgapFailLegacyOther", 29, 5 + row);
+                    npc = CreateAiTripper(withProfile ? "ScorerFailHumanoid" : "ScorerFailNoProfile", profile, 28, 4 + row);
+                    target = CreateArmoredScorerTarget(withProfile ? "ScorerFailHumanoidTarget" : "ScorerFailNoProfileTarget", 29, 4 + row);
                     row += 3;
                     maneuverTypes.Clear();
+                    var decisions = new System.Collections.Generic.List<DND35.AI.ManeuverDecision>();
 
-                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
+                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, RecordingEvaluator(ai, profile, decisions), out int maneuvers);
 
                     int trips = maneuverTypes.FindAll(t => t == SpecialAttackType.Trip).Count;
-                    Assert(trips == 1 && maneuvers == 1 && !target.HasCondition(CombatConditionType.Prone),
-                        $"AI stopgap: a failed trip is not retried against the same target that turn (trips {trips}, maneuvers {maneuvers}: {string.Join(", ", maneuverTypes)}; AI-060)" + tag);
-                    Assert(sequence.Attacks.Count == 2 && sequence.Attacks[0].BreakdownBAB == 6 && sequence.Attacks[1].BreakdownBAB == 1,
-                        $"AI stopgap: after the failed trip the remaining steps are attacks at +6 and +1 (attacks {sequence.Attacks.Count})" + tag);
-
-                    DND35.AI.AIManeuverTurnMemory memory = npc.AIManeuverMemory;
-                    Assert(memory.HasFailed(target, SpecialAttackType.Trip)
-                        && !memory.ManeuverSucceededThisTurn
-                        && memory.Forbids(target, SpecialAttackType.Trip, out _)
-                        && !memory.Forbids(target, SpecialAttackType.Disarm, out _)
-                        && !memory.Forbids(other, SpecialAttackType.Trip, out _)
-                        && !memory.Forbids(target, SpecialAttackType.CoupDeGrace, out _),
-                        "AI stopgap: the failure forbids only a trip against that target; a disarm of it, a trip of another target and a coup de grace stay open" + tag);
-
-                    npc.StartNewTurn();
-                    Assert(!npc.AIManeuverMemory.HasFailed(target, SpecialAttackType.Trip),
-                        "AI stopgap: the failed trip is forgotten at the creature's next turn start" + tag);
+                    int tripChoices = decisions.FindAll(d => d.Chosen == SpecialAttackType.Trip).Count;
+                    Assert(decisions.Count == 3 && npc.ProgressiveAttackPool.MainHandStepsUsed == 3 && !target.HasCondition(CombatConditionType.Prone),
+                        $"AI scorer: three steps, each decided before it is made; the target stays standing (decisions {decisions.Count})" + tag);
+                    Assert(decisions.Count >= 2 && decisions[0].Chosen == SpecialAttackType.Trip && decisions[1].Chosen == SpecialAttackType.Trip,
+                        $"AI scorer: after the first trip fails the second step is decided again and its trip still beats the +6 swing ({(decisions.Count > 1 ? decisions[1].Reason : "no decision")}; AI-060: no memory bars the retry)" + tag);
+                    Assert(trips == tripChoices && maneuvers == tripChoices && sequence.Attacks.Count == 3 - tripChoices,
+                        $"AI scorer: every step the scorer gave a trip was a trip, every other an attack (trips {trips}, choices {tripChoices}, attacks {sequence.Attacks.Count})" + tag);
                 }
                 catch (System.Exception ex)
                 {
                     System.Exception inner = ex.InnerException ?? ex;
-                    Assert(false, $"AI maneuver stopgap (trip fails) check threw {inner.GetType().Name}: {inner.Message}" + tag);
+                    Assert(false, $"AI maneuver scorer (trip fails) check threw {inner.GetType().Name}: {inner.Message}" + tag);
                 }
                 finally
                 {
-                    Cleanup(npc, target, other);
+                    Cleanup(npc, target);
                     if (profile != null)
                         Object.DestroyImmediate(profile);
                 }

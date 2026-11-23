@@ -790,8 +790,27 @@ namespace Tests.AI
                 attacker.aiProfile = profile;
                 defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
 
-                bool shouldUseManeuver = aiService.ShouldUseManeuver(attacker, defender);
-                Assert(shouldUseManeuver, "AIService reads profile and opts into maneuver usage");
+                // Batch 14 step 9: the profile proposes, the scorer decides (AiManeuverChooser): the AI's maneuver choice
+                // starts from the profile's preference, and ShouldUseManeuver is the scorer's verdict on it.
+                SpecialAttackType? preferred = profile.GetPreferredManeuver(attacker, defender);
+                DND35.AI.ManeuverDecision decision = DND35.AI.AiManeuverChooser.Decide(attacker, defender, profile);
+                Assert(preferred.HasValue && decision.Proposed == preferred,
+                    "AIService reads the profile: the maneuver the scorer weighs is the profile's preference",
+                    $"(preferred={preferred?.ToString() ?? "none"}, proposed={decision.Proposed?.ToString() ?? "none"})");
+                // The even pair (two Str 18 warriors 6 with longswords): the trip loses to the swing, and the wrapper says so.
+                Assert(decision.Kind == DND35.AI.ManeuverChoiceKind.Attack && !aiService.ShouldUseManeuver(attacker, defender),
+                    "An even match: the scorer keeps the attack over the profile's trip, and ShouldUseManeuver reports no maneuver",
+                    "(" + decision.Reason + ")");
+
+                // Heavy natural armor on the defender (its touch AC unchanged) and Improved Trip on the attacker (no AoO, the
+                // attack after a trip that lands, PHB p.96): the trip wins, and the wrapper reports it.
+                defender.Stats.NaturalArmorBonus = 12;
+                attacker.Stats.Feats.Add("Improved Trip");
+                DND35.AI.ManeuverDecision armored = DND35.AI.AiManeuverChooser.Decide(attacker, defender, profile);
+                Assert(armored.Kind == DND35.AI.ManeuverChoiceKind.Maneuver && armored.Chosen == SpecialAttackType.Trip
+                        && aiService.ShouldUseManeuver(attacker, defender),
+                    "Against heavy armor with Improved Trip the scorer takes the profile's trip, and ShouldUseManeuver reports it",
+                    "(" + armored.Reason + ")");
             }
             finally
             {

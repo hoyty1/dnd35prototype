@@ -240,8 +240,6 @@ namespace Tests.Scenarios
             yield return S("haste-weapon-full-attack-ui", HasteWeaponFullAttackUi);
             yield return S("charge-flanking-ui", ChargeFlankingUi);
             yield return S("bombardier-acid-spray", BombardierAcidSpray);
-            yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
-            yield return S("ai-maneuver-stopgap-trip-fail", () => AiManeuverStopgap(false));
             yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
             yield return S("stability-bullrush", () => StabilityCheck("rules/stability-bullrush", "A four-legged formian taskmaster resists a bull rush with +4 stability (PHB p.154, CMB-085)", "formian_taskmaster", SpecialAttackType.BullRushAttack, true));
             yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
@@ -1047,7 +1045,11 @@ namespace Tests.Scenarios
         /// +6 so it has +6/+1 iteratives, no typed steps) trips a Ui hero who makes no attacks of opportunity, so the trip
         /// provokes nothing without Improved Trip. The trip loses the opposed check, the NPC attack loop suspends while the
         /// hero's prompt is open, and the runner answers it (Trip Back, or Decline with <paramref name="tripBack"/> false).
-        /// The loop then resumes: the orc makes its remaining +1 iterative (not a second trip, AI-060) and its turn ends.
+        /// The loop then resumes: the orc makes its remaining +1 iterative and its turn ends. Since batch 14 step 9 the
+        /// maneuver scorer (AI-035) decides each step, so the hero is built for one trip and then a swing: natural armor +17
+        /// (AC 31, touch AC 11) leaves the orc's first swing (+11 in all) a natural 20 while a prone hero would be hit on a 16, so the first
+        /// step's trip is worth more than its swing; Str 3 makes the hero's own threat small, so at the last step, where only
+        /// that threat is left to gain, the swing wins (no turn memory decides it, AI-060).
         /// </summary>
         private static ScenarioDef CounterTripUiAi(bool tripBack)
         {
@@ -1055,12 +1057,12 @@ namespace Tests.Scenarios
                     tripBack
                         ? "An AI tripper's attack loop waits for the hero's counter-trip answer (Trip Back), then resumes (PHB p.158, CMB-079)"
                         : "An AI tripper's attack loop waits for the hero's counter-trip answer (Decline), then resumes (PHB p.158, CMB-079)")
-                .Covers("CMB-079", "PHB p.158", "PC_NPC_PARITY", "AI-060")
+                .Covers("CMB-079", "PHB p.158", "PC_NPC_PARITY", "AI-035")
                 .MaxRounds(1)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Ai)
                 .Profile("orc", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>())
-                .Tweak("hero", c => { StripOffHand(c); SturdyDummyWithoutAoO(c); })
+                .Tweak("hero", c => { StripOffHand(c); SturdyDummyWithoutAoO(c); c.Stats.STR = 3; c.Stats.NaturalArmorBonus += 17; })
                 .Tweak("orc", c => { SturdyDummy(c); c.Stats.BaseAttackBonusOverride = 6; })
                 .Initiative("orc", "hero")
                 .CounterTripAnswer("hero", tripBack)
@@ -1072,7 +1074,7 @@ namespace Tests.Scenarios
                 .Expect("The orc's turn is an AI turn", Expect.Controller("orc", "ai"))
                 .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
                 .Expect("The hero makes no AoO, so the trip provokes nothing (fixture check)", Expect.None("aoo", e => e.Str("by") == "hero"))
-                .Expect("The orc trips once and the trip fails; it is not retried (AI-060)", v =>
+                .Expect("The orc trips once and the trip fails; its last step is a swing (the scorer, AI-035)", v =>
                 {
                     List<TraceEvent> ms = v.Maneuvers("orc").Where(e => e.Round == 1 && !e.Bool("counter")).ToList();
                     if (ms.Count != 1) return ExpectResult.Fail(ms.Count + " maneuvers by the orc", ms.Select(e => e.Seq).ToArray());
@@ -4172,73 +4174,6 @@ namespace Tests.Scenarios
                         : ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
                 })
                 .Build();
-        }
-
-        // ── AI maneuver stopgap (owner decision 2026-10-07, CMB-102 open item 7, AI-060) ──
-
-        /// <summary>
-        /// An AI-run fighter 11 (+11/+6/+1, Humanoid profile: trip, then disarm an armed target) against a sturdy,
-        /// scripted orc holding a greataxe that makes no attacks of opportunity, so the trip provokes nothing (PHB
-        /// p.158) without the fighter needing Improved Trip. The feat is left out on purpose: its attack after a trip
-        /// that lands (PHB p.96, CMB-079) would add an attack to the count checked here. A trip that fails at the touch
-        /// attack gives no counter-trip (PHB p.158: only a lost opposed check does).
-        /// The AI chooses every step itself (no typed steps). With the trip forced to land, the stopgap makes the
-        /// remaining two steps attacks on the prone orc, where the evaluation alone would disarm next; with every
-        /// trip touch attack a natural 1, the failed trip is not retried and the remaining two steps are attacks.
-        /// An AI decision limit, not a rule (AI-060).
-        /// </summary>
-        private static ScenarioDef AiManeuverStopgap(bool tripLands)
-        {
-            ScenarioBuilder b = Rules(tripLands ? "rules/ai-maneuver-stopgap-trip" : "rules/ai-maneuver-stopgap-trip-fail",
-                    tripLands
-                        ? "AI stopgap: after its trip lands, an AI fighter attacks the prone target with its remaining iteratives (AI-060)"
-                        : "AI stopgap: after its trip fails, an AI fighter does not retry the trip that turn and attacks instead (AI-060)")
-                .Covers("CMB-102", "AI-060", "PHB p.141", "PHB p.158")
-                .MaxRounds(1)
-                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 11)), 10, 10, Control.Ai)
-                .Profile("fighter", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>())
-                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
-                .Tweak("fighter", StripOffHand)
-                .Tweak("orc", SturdyDummyWithoutAoO)
-                .Initiative("fighter", "orc")
-                .Turn("orc", 0, Step.Pass());
-            if (tripLands)
-                b.Force(20, 20, "Trip touch attack", -1)
-                 .Force(20, 18, "Trip Strength check", -1)
-                 .Force(20, 2, "Trip defense check", -1);
-            else
-                b.Force(20, 1, "Trip touch attack", -1);
-
-            b.Expect("The fighter's turn is an AI turn", Expect.Controller("fighter", "ai"))
-             .Expect("The orc makes no AoO, so the trip needs no Improved Trip (fixture check)", Expect.None("aoo", e => e.Str("by") == "orc"))
-             .Expect(tripLands
-                    ? "One maneuver in the turn: a trip that lands; no disarm or grapple follows (AI-060)"
-                    : "One maneuver in the turn: a trip that fails; it is not retried (AI-060)", v =>
-             {
-                 List<TraceEvent> ms = v.Maneuvers("fighter").Where(e => e.Round == 1).ToList();
-                 if (ms.Count == 0) return ExpectResult.Fail("no maneuver: the AI did not trip");
-                 TraceEvent first = ms[0];
-                 string kinds = string.Join(",", ms.Select(e => Convert.ToString(e.Get("type"))));
-                 if (ms.Count != 1) return ExpectResult.Fail(ms.Count + " maneuvers (" + kinds + ")", ms.Select(e => e.Seq).ToArray());
-                 if (!(first.Get("type") is SpecialAttackType t) || t != SpecialAttackType.Trip) return ExpectResult.Fail("first maneuver " + kinds, first.Seq);
-                 if (first.Bool("success") != tripLands) return ExpectResult.Fail("trip success " + first.Get("success"), first.Seq);
-                 bool prone = HasCond(v.Final("orc"), "Prone");
-                 return prone == tripLands
-                     ? ExpectResult.Pass("1 trip, success " + tripLands + ", orc prone " + prone, first.Seq)
-                     : ExpectResult.Fail("orc prone " + prone, first.Seq);
-             })
-             .Expect("The remaining two iteratives are attacks after the trip, 5 apart (+6, +1; PHB p.143)", v =>
-             {
-                 TraceEvent trip = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault(e => e.Round == 1);
-                 if (trip == null) return ExpectResult.Fail("no trip");
-                 List<TraceEvent> attacks = v.Attacks("fighter", "orc", false, 1);
-                 if (attacks.Count != 2) return ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
-                 if (attacks.Any(e => e.Seq < trip.Seq)) return ExpectResult.Fail("an attack came before the trip", trip.Seq);
-                 return attacks[0].Int("mod") - attacks[1].Int("mod") == 5
-                     ? ExpectResult.Pass("mods " + attacks[0].Int("mod") + ", " + attacks[1].Int("mod"), attacks[0].Seq, attacks[1].Seq)
-                     : ExpectResult.Fail("mods " + attacks[0].Int("mod") + ", " + attacks[1].Int("mod"), attacks[0].Seq, attacks[1].Seq);
-             });
-            return b.Build();
         }
 
         // ── Improved Grab size (CMB-126; MM p.310) ─────────────────────

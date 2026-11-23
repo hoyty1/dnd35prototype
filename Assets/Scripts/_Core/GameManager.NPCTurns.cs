@@ -275,45 +275,30 @@ public partial class GameManager
         }
     }
 
-    private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
-    {
-        return TryNPCSpecialAttackIfBeneficial(npc, target, null, out _, out _);
-    }
-
-    private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target, SpecialAttackType? forcedChoice)
-    {
-        return TryNPCSpecialAttackIfBeneficial(npc, target, forcedChoice, out _, out _);
-    }
-
     /// <summary>
-    /// True when the NPC may coup de grace now: its choice allows it (AIService.UsesCoupDeGrace, the one copy of the
-    /// choice since batch 14 step 5: the data override, the traits, the profile), a helpless enemy is adjacent and the
-    /// full-round action is free.
+    /// True when a coup de grace is possible for the NPC now by the rules: a helpless enemy is adjacent and the full-round
+    /// action is free (PHB p.153). The choice to take it is the caller's (AIService.UsesCoupDeGrace, asked once per step by
+    /// DND35.AI.AiManeuverChooser.Decide since batch 14 step 9, AI-025), so the executor does not ask it again.
     /// </summary>
-    private bool HasNPCCoupDeGraceOption(CharacterController npc, List<CharacterController> coupTargets)
+    private static bool HasNPCCoupDeGraceOption(CharacterController npc, List<CharacterController> coupTargets)
     {
-        // The rules part first, so the choice (and a personality's vote and trace row) runs only when a coup de grace
-        // is possible; the choice reads no state the checks change.
         return coupTargets != null
             && coupTargets.Count > 0
             && npc.Actions != null
-            && npc.Actions.HasFullRoundAction
-            && AIService.UsesCoupDeGrace(npc);
+            && npc.Actions.HasFullRoundAction;
     }
 
     /// <summary>
-    /// The maneuver the legacy chooser (an NPC with no AI profile) picks against
-    /// <paramref name="target"/>: coup de grace, else trip, else disarm (STR mod 3+), else grapple
-    /// (STR mod 4+, not with Improved Grab); null when none applies. A choice only: whether it can be
-    /// paid for now is checked by the executor (<c>TryNPCSpecialAttackIfBeneficial</c>).
+    /// The no-profile proposer (batch 14 step 9, AI-025: the one copy of the no-profile choice; AIService.ShouldUseManeuver's
+    /// gate and the stopgap's peek are gone): the maneuver an AI-run creature with no AI profile proposes against
+    /// <paramref name="target"/>: trip, else disarm (STR mod 3+), else grapple (STR mod 4+, not with Improved Grab); null when
+    /// none applies. A proposal only: DND35.AI.AiManeuverChooser scores it against the attack (a coup de grace is decided
+    /// there first), and whether it can be paid for now is checked by the executor (<c>TryNPCSpecialAttackIfBeneficial</c>).
     /// </summary>
-    private SpecialAttackType? ChooseNPCFallbackManeuver(CharacterController npc, CharacterController target, bool hasCoupOption)
+    private SpecialAttackType? ChooseNPCFallbackManeuver(CharacterController npc, CharacterController target)
     {
         if (npc == null || npc.Stats == null || target == null || target.Stats == null)
             return null;
-
-        if (hasCoupOption)
-            return SpecialAttackType.CoupDeGrace;
 
         if (!target.Stats.IsProne
             && npc.HasMeleeWeaponEquipped()
@@ -334,63 +319,43 @@ public partial class GameManager
         return null;
     }
 
-    /// <summary>The legacy chooser's pick (<see cref="ChooseNPCFallbackManeuver"/>) without acting, for the AI's stopgap check (AI-060).</summary>
-    private SpecialAttackType? PeekNPCFallbackManeuver(CharacterController npc, CharacterController target)
-    {
-        if (npc == null || target == null)
-            return null;
-
-        return ChooseNPCFallbackManeuver(npc, target, HasNPCCoupDeGraceOption(npc, GetAdjacentHelplessEnemiesForCoupDeGrace(npc)));
-    }
-
     /// <summary>
-    /// The NPC maneuver executor, the AI side of the maneuver core (batch 12 step 19, CMB-102): it picks the maneuver (the
-    /// forced one, else the legacy chooser) and builds the AI request (ManeuverRequest.ForAI: the AI decider, the item its
-    /// profile picks, D15, and the two-weapon state of the attack step it replaces), and the one executor
-    /// (ExecuteManeuver) does the rest, as for a PC: the legality, the cost of the table paid before the ward and the AoOs,
-    /// the resolution and its aftermath. Returns true when it acted (the cost was spent); then <paramref name="attempted"/>
-    /// is the maneuver type and <paramref name="succeeded"/> its result (false also when a ward save or an initiation AoO
-    /// foiled the attempt). Both outputs only report: the AI's stopgap maneuver memory (AIService, AI-060) reads them; no
-    /// rule does. A failed trip against a controllable defender may leave its counter-trip prompt open
-    /// (IsAwaitingCounterTripChoice); the NPC coroutines wait on it before the next step.
+    /// The NPC maneuver executor, the AI side of the maneuver core (batch 12 step 19, CMB-102): it takes the maneuver the AI
+    /// chose (DND35.AI.AiManeuverChooser, or a scripted step) and builds the AI request (ManeuverRequest.ForAI: the AI
+    /// decider, the item its profile picks, D15, and the two-weapon state of the attack step it replaces), and the one
+    /// executor (ExecuteManeuver) does the rest, as for a PC: the legality, the cost of the table paid before the ward and the
+    /// AoOs, the resolution and its aftermath. Returns true when it acted (the cost was spent); then
+    /// <paramref name="succeeded"/> is its result (false also when a ward save or an initiation AoO foiled the attempt), a
+    /// report only: no rule and no AI choice reads it. A coup de grace goes to the chosen target when it is helpless and
+    /// adjacent, else to the first such enemy. A failed trip against a controllable defender may leave its counter-trip
+    /// prompt open (IsAwaitingCounterTripChoice); the NPC coroutines wait on it before the next step.
     /// </summary>
     private bool TryNPCSpecialAttackIfBeneficial(
         CharacterController npc,
         CharacterController target,
-        SpecialAttackType? forcedChoice,
-        out SpecialAttackType? attempted,
+        SpecialAttackType choice,
         out bool succeeded)
     {
-        attempted = null;
         succeeded = false;
 
         if (npc == null || target == null)
             return false;
 
-        var coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
-        bool hasCoupOption = HasNPCCoupDeGraceOption(npc, coupTargets);
-
-        if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
+        if (npc.IsGrappling() && choice != SpecialAttackType.CoupDeGrace)
             return false;
 
-        SpecialAttackType? choice = forcedChoice;
-
-        if (choice.HasValue && !npc.CanPerformSpecialAttack(choice.Value))
+        if (!npc.CanPerformSpecialAttack(choice))
         {
             string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
-            Debug.Log($"[AI][SpecialAttack] {npcName} cannot perform forced {choice.Value} while in {npc.GetPrimaryWeaponType()} mode.");
+            Debug.Log($"[AI][SpecialAttack] {npcName} cannot perform forced {choice} while in {npc.GetPrimaryWeaponType()} mode.");
             return false;
         }
 
-        if (!choice.HasValue)
-            choice = ChooseNPCFallbackManeuver(npc, target, hasCoupOption);
 
-        if (choice == null)
-            return false;
-
-        if (choice.Value == SpecialAttackType.CoupDeGrace)
+        if (choice == SpecialAttackType.CoupDeGrace)
         {
-            if (!hasCoupOption)
+            List<CharacterController> coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
+            if (!HasNPCCoupDeGraceOption(npc, coupTargets))
                 return false;
 
             target = (target != null && coupTargets.Contains(target)) ? target : coupTargets[0];
@@ -398,16 +363,16 @@ public partial class GameManager
 
         // A charge bull rush is a charge, not an action here: it goes through
         // NPCExecuteChargeForAI(npc, target, bullRush: true), as the PC's goes through the charge mode.
-        if (choice.Value == SpecialAttackType.BullRushCharge)
+        if (choice == SpecialAttackType.BullRushCharge)
         {
             Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName}: BullRushCharge is resolved by the charge executor, not as a standing maneuver.");
             return false;
         }
 
-        ManeuverRequest req = ManeuverRequest.ForAI(this, npc, target, choice.Value, _maneuverStepIntent);
+        ManeuverRequest req = ManeuverRequest.ForAI(this, npc, target, choice, _maneuverStepIntent);
         // Through the catalog's maneuver entry (batch 13 step 6): its executor runs ExecuteManeuver and, with NoWait, returns
         // at once as before (a controllable defender's prompt settles later; the callers wait on it themselves).
-        ActionDefinition entry = ActionCatalog.ForManeuver(choice.Value);
+        ActionDefinition entry = ActionCatalog.ForManeuver(choice);
         ManeuverOutcome outcome;
         if (entry != null && entry.Executor is ManeuverActionExecutor)
         {
@@ -422,12 +387,12 @@ public partial class GameManager
             outcome = ExecuteManeuver(req, null);
         if (outcome.Kind == ManeuverOutcomeKind.Refused)
         {
-            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} on {target?.Stats?.CharacterName ?? "<null>"}: {outcome.Reason}");
+            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice} on {target?.Stats?.CharacterName ?? "<null>"}: {outcome.Reason}");
             return false;
         }
 
         UpdateAllStatsUI();
-        attempted = choice.Value;
+
         succeeded = outcome.Succeeded;
         return true;
     }

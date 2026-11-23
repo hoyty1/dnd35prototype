@@ -442,13 +442,6 @@ public class CharacterController : MonoBehaviour
     public AttackPool ProgressiveAttackPool { get; } = new AttackPool();
 
     /// <summary>
-    /// STOPGAP AI memory of this creature's own maneuvers this turn (owner decision 2026-10-07, AI-060):
-    /// read and written only by AIService's maneuver evaluation, cleared by <see cref="StartNewTurn"/>.
-    /// It limits AI choices only; no rule reads it. See <see cref="DND35.AI.AIManeuverTurnMemory"/>.
-    /// </summary>
-    public DND35.AI.AIManeuverTurnMemory AIManeuverMemory { get; } = new DND35.AI.AIManeuverTurnMemory();
-
-    /// <summary>
     /// Who hurt this creature since its previous turn started (batch 14 step 2; the knowledge facade's DamagedObserver
     /// fact). AI knowledge only: no rule reads it. Written by GameManager.OnAttackResolved, DealDamage and SpellCaster.Cast;
     /// rolled over by <see cref="StartNewTurn"/>, cleared by <see cref="ResetForNewCreature"/> and the encounter reset.
@@ -1543,7 +1536,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Sunder is a melee attack with a slashing or bludgeoning weapon (PHB p.158). The one legality check
-    /// for PCs and NPCs (the PC Sunder button, <c>AIService.ShouldUseManeuver</c>, the NPC executor and
+    /// for PCs and NPCs (the PC Sunder button, the AI proposer <c>DND35.AI.AiManeuverChooser.Propose</c>, the NPC executor and
     /// <see cref="ResolveSunder"/>), made before any attack step is spent:
     /// - a manufactured weapon in hand may sunder (its damage type is not checked yet, CMB-139);
     /// - a creature fighting with its natural attacks sunders with the natural attack the sunder replaces,
@@ -5072,7 +5065,6 @@ public class CharacterController : MonoBehaviour
         IsWithdrawing = false;
         Actions.Reset();
         ProgressiveAttackPool.Clear();
-        AIManeuverMemory.Clear();
         DamageMemory.Clear(); // batch 14 step 2: no damage memory of the old creature (CRE-046)
         ThreatSystem.ClearMovementOpportunities(this);
 
@@ -13299,7 +13291,6 @@ public class CharacterController : MonoBehaviour
         ProgressiveAttackPool.Clear();
         // A rake needs the creature to begin its turn grappling (MM p.314, CMB-144).
         ProgressiveAttackPool.MarkTurnStartedGrappling(IsGrappling());
-        AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
         DamageMemory.RollOver(); // "since my last turn": the window since its previous turn start stays (batch 14 step 2)
         ThreatSystem.ClearMovementOpportunities(this); // a new round of movement opportunities (PHB p.138, CMB-128)
         // Note: PowerAttackValue and the RapidShotEnabled toggle persist between turns (the creature's standing choices);

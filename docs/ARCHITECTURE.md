@@ -269,7 +269,7 @@ Assets/Scripts/
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
   AI/ (14)               AISpellcastingStrategist, AiAttackGuard, AiOutOfReach, AiWeaponFallback, LastKnownPositionTracker, SpellCategoryClassifier,
-                         AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap), AiDamageMemory (batch 14 step 2: who hurt a creature since its previous turn started),
+                         AIProfile base, NaturalAttackChoice, AiManeuverChooser (batch 14 step 9: the maneuver scorer), AiDamageMemory (batch 14 step 2: who hurt a creature since its previous turn started),
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator
     Debug/ (2)           AiDecisionTimer and AiDecisionTrace (batch 14 step 1, global namespace): the decision-time measurement and decision trace, editor and development builds only, outside every trace hash

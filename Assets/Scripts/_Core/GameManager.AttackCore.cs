@@ -183,7 +183,7 @@ public partial class GameManager
 
             // The AI's maneuver may replace this melee attack (CMB-102), at this step's bonus: the iterative BAB, or the BAB
             // of the natural attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312). In a natural sequence at most one
-            // substitute (an AI limit pending AI-035). A declared smite keeps the step an attack (SmiteRules, CHR-020).
+            // substitute (an AI limit kept by the batch 14 step 9 maneuver scorer, C9). A declared smite keeps the step an attack (SmiteRules, CHR-020).
             // The step's intent goes with the maneuver (its two-weapon state: the main-hand penalty, PHB p.160; batch 12 step 19).
             bool stepManeuvered = false;
             if (req.TryStepManeuver != null && !ranged && !aoo && !heldTouch && !charge && kind != AttackStepKind.OffHand

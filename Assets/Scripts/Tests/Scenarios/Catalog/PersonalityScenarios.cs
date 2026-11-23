@@ -37,6 +37,13 @@ namespace Tests.Scenarios
     /// odds (DND35.AI.Valuation.ManeuverOdds, the item the AI decider picks, the step's BAB), and the roll then adds exactly
     /// the terms the odds read (the shared GetDisarmCheckModifiers and sunder terms). No AI reads the odds yet (step 9), so
     /// the step changes no other scenario's hash.</para>
+    /// <para>Step 9 (maneuver versus attack by odds and value; AI-035, AI-060, AI-058): rules/ai-maneuver-trip-when-odds-good,
+    /// an AI fighter with Improved Trip trips an armored orc it rarely hits, then attacks it prone (the Role's disarm loses);
+    /// rules/ai-maneuver-trip-fail-redecided, its failed trip is decided again at the next step and tried again (no turn
+    /// memory); rules/ai-maneuver-attacks-when-odds-poor, a goblin swings at a stronger fighter instead of tripping it;
+    /// rules/ai-maneuver-skips-helpless, a goblin attacks a dying PC instead of tripping it. The expectations read the
+    /// scorer's "Maneuver" rows of the decision trace (outside the hash) besides the hashed maneuvers and attacks. The first
+    /// two replace rules/ai-maneuver-stopgap-trip and -trip-fail.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -68,6 +75,10 @@ namespace Tests.Scenarios
             yield return S("ai-berserker-approaches-first-plain", () => AiOutOfReachOrder(berserker: true, plain: true));
             yield return S("maneuver-odds-disarm", () => ManeuverOddsMatchRoll(SpecialAttackType.Disarm));
             yield return S("maneuver-odds-sunder", () => ManeuverOddsMatchRoll(SpecialAttackType.Sunder));
+            yield return S("ai-maneuver-trip-when-odds-good", () => AiManeuverTripOddsGood(tripLands: true));
+            yield return S("ai-maneuver-trip-fail-redecided", () => AiManeuverTripOddsGood(tripLands: false));
+            yield return S("ai-maneuver-attacks-when-odds-poor", AiManeuverAttacksWhenOddsPoor);
+            yield return S("ai-maneuver-skips-helpless", AiManeuverSkipsHelpless);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -83,7 +94,9 @@ namespace Tests.Scenarios
         /// <summary>
         /// An AI-run fighter and two goblins fight for two rounds, everyone sturdy so nobody drops. Each of the six AI turns
         /// has its decision-time record (AiDecisionTimer) and its decision-trace record (AiDecisionTrace), and every
-        /// decision is "legacy".
+        /// decision but the maneuver scorer's is "legacy": since batch 14 step 9 the "Maneuver" rows compare the scorer's
+        /// choice with the Role's proposal, which it is meant to overrule (here every goblin and the hero keep the swing
+        /// over the Role's trip, AI-035).
         /// </summary>
         private static ScenarioDef AiDecisionRecords()
         {
@@ -108,13 +121,22 @@ namespace Tests.Scenarios
                     string detail = aiTurns + " AI turns, " + timed + " timed, " + traced + " traced";
                     return aiTurns == 6 && timed == aiTurns && traced == aiTurns ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail);
                 })
-                .Expect("Target choices are recorded and every recorded decision is the Role's legacy choice", v =>
+                .Expect("Target choices are recorded and every recorded decision but the maneuver scorer's is the Role's legacy choice", v =>
                 {
                     IReadOnlyDictionary<string, int> counts = global::AiDecisionTrace.Counts;
                     counts.TryGetValue("Target: legacy", out int targets);
-                    int changed = counts.Where(kv => kv.Key.EndsWith(": changed", StringComparison.Ordinal)).Sum(kv => kv.Value);
+                    int changed = counts.Where(kv => kv.Key.EndsWith(": changed", StringComparison.Ordinal)
+                                                     && !kv.Key.StartsWith("Maneuver:", StringComparison.Ordinal)).Sum(kv => kv.Value);
                     string detail = (targets > 0 ? "target choices recorded" : "no target choice recorded") + ", " + changed + " changed";
                     return targets > 0 && changed == 0 ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail);
+                })
+                .Expect("Every maneuver scorer row keeps the swing over the Role's trip (AI-035)", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = global::AiDecisionTrace.Ring.Concat(global::AiDecisionTrace.OpenRecords)
+                        .Where(t => t.Round <= 2).SelectMany(t => t.Decisions).Where(d => d.Site == "Maneuver").ToList();
+                    bool ok = rows.Count > 0 && rows.All(d => d.Chosen == "Attack" && d.Legacy == "Trip");
+                    string detail = rows.Count + " Maneuver row(s): " + RowsText(rows);
+                    return ok ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail);
                 })
                 .Build();
         }
@@ -967,6 +989,208 @@ namespace Tests.Scenarios
                     return value;
             return int.MinValue;
         }
+
+        // ── Step 9: maneuver versus attack by odds and value (AI-035, AI-060, AI-058) ──
+
+        /// <summary>
+        /// The decision-trace rows of the "Maneuver" site (DND35.AI.AiManeuverChooser.Decide, one per decided step that had a
+        /// proposal or a coup de grace) of <paramref name="actorName"/>'s round-<paramref name="round"/> turn, in order.
+        /// </summary>
+        private static List<global::AiDecisionTrace.Decision> ManeuverRows(string actorName, int round)
+            => global::AiDecisionTrace.Ring.Concat(global::AiDecisionTrace.OpenRecords)
+                .Where(t => t.Round == round && t.Actor == actorName)
+                .SelectMany(t => t.Decisions)
+                .Where(d => d.Site == "Maneuver")
+                .ToList();
+
+        private static string RowsText(List<global::AiDecisionTrace.Decision> rows)
+            => rows.Count == 0 ? "no Maneuver row" : string.Join("; ", rows.Select(r => r.Chosen + " (proposal " + r.Legacy + ": " + r.Reason + ")"));
+
+        /// <summary>
+        /// An AI-run fighter 11 (Str 20: +16/+11/+6 with a longsword; Improved Trip: no AoO, +4 on the check and an attack
+        /// after a trip that lands, PHB p.96; the Humanoid Role, which proposes a trip, then a disarm of an armed target) beside
+        /// a sturdy, scripted orc holding a greataxe, given natural armor +17 (AC 30, touch AC 10) and no attacks of
+        /// opportunity; the fighter's own AC is raised by natural armor +10 so the orc's threat is small. A swing hits on a
+        /// 14 or better, a prone orc on a 10, while the trip is nearly sure, so the scorer trips with the first step
+        /// (batch 14 step 9, C9). With the trip forced to land, the remaining steps are attacks on the prone orc: no trip is
+        /// proposed against a prone target, and the disarm the Role proposes instead is worth less than the swing (the orc's
+        /// threat is small). With every trip touch attack a natural 1 (<paramref name="tripLands"/> false), each step is
+        /// decided again with no turn memory (AI-060's stopgap is gone): the failed trip still beats the +11 swing, so the
+        /// second step trips again. Rewritten from rules/ai-maneuver-stopgap-trip and -trip-fail (2026-10-07).
+        /// </summary>
+        private static ScenarioDef AiManeuverTripOddsGood(bool tripLands)
+        {
+            string id = tripLands ? "rules/ai-maneuver-trip-when-odds-good" : "rules/ai-maneuver-trip-fail-redecided";
+            ScenarioBuilder b = Rules(id, tripLands
+                    ? "An AI fighter with Improved Trip trips an armored orc it rarely hits, then attacks the prone orc (batch 14 step 9, AI-035)"
+                    : "After its trip fails, an AI fighter decides the next step again and trips again: no turn memory (batch 14 step 9, AI-060)")
+                .Covers("AI-035", "AI-060", "CMB-102", "batch 14 step 9", "PHB p.96", "PHB p.158")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Fighter", 11, "Improved Trip")), 10, 10, Control.Ai)
+                .Profile("fighter", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>())
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("fighter", c =>
+                {
+                    RulesScenarios.StripOffHand(c);
+                    c.Stats.STR = 20;
+                    c.Stats.NaturalArmorBonus += 10;
+                })
+                .Tweak("orc", c =>
+                {
+                    Sturdy(c);
+                    c.Stats.CanMakeAttacksOfOpportunity = false;
+                    c.Stats.NaturalArmorBonus += 17;
+                })
+                .Initiative("fighter", "orc")
+                .Turn("orc", 0, Step.Pass());
+            if (tripLands)
+                b.Force(20, 20, "Trip touch attack", -1)
+                 .Force(20, 18, "Trip Strength check", -1)
+                 .Force(20, 2, "Trip defense check", -1);
+            else
+                b.Force(20, 1, "Trip touch attack", -1);
+
+            b.Expect("The fighter's turn is an AI turn and the orc makes no AoO (fixture checks)", Expect.All(
+                Expect.Controller("fighter", "ai"),
+                Expect.None("aoo", e => e.Str("by") == "orc")));
+            if (tripLands)
+            {
+                b.Expect("One maneuver in the turn: a trip that lands with the first step; no disarm or grapple follows", v =>
+                {
+                    List<TraceEvent> ms = v.Maneuvers("fighter").Where(e => e.Round == 1).ToList();
+                    string kinds = string.Join(",", ms.Select(e => Convert.ToString(e.Get("type"))));
+                    if (ms.Count != 1) return ExpectResult.Fail(ms.Count + " maneuvers (" + kinds + ")", ms.Select(e => e.Seq).ToArray());
+                    TraceEvent trip = ms[0];
+                    if (!(trip.Get("type") is SpecialAttackType t) || t != SpecialAttackType.Trip || !trip.Bool("success"))
+                        return ExpectResult.Fail("first maneuver " + kinds + ", success " + trip.Get("success"), trip.Seq);
+                    if (v.Attacks("fighter", "orc", false, 1).Any(e => e.Seq < trip.Seq))
+                        return ExpectResult.Fail("an attack came before the trip", trip.Seq);
+                    return HasCond(v.Final("orc"), "Prone") ? ExpectResult.Pass("trip lands, orc prone", trip.Seq) : ExpectResult.Fail("orc not prone", trip.Seq);
+                });
+                b.Expect("The last two attacks are the remaining iteratives, 5 apart (+11, +6; PHB p.143)", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("fighter", "orc", false, 1);
+                    if (attacks.Count < 2) return ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
+                    TraceEvent a = attacks[attacks.Count - 2], z = attacks[attacks.Count - 1];
+                    return a.Int("mod") - z.Int("mod") == 5
+                        ? ExpectResult.Pass(attacks.Count + " attacks, last mods " + a.Int("mod") + ", " + z.Int("mod"), a.Seq, z.Seq)
+                        : ExpectResult.Fail("last mods " + a.Int("mod") + ", " + z.Int("mod"), a.Seq, z.Seq);
+                });
+                b.Expect("The scorer's rows: a trip first, then the attack over the Role's disarm on the prone orc", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = ManeuverRows("Fighter", 1);
+                    bool ok = rows.Count == 3 && rows[0].Chosen == "Trip" && rows[1].Chosen == "Attack" && rows[1].Legacy == "Disarm"
+                              && rows[2].Chosen == "Attack" && rows[2].Legacy == "Disarm";
+                    return ok ? ExpectResult.Pass(RowsText(rows)) : ExpectResult.Fail(RowsText(rows));
+                });
+            }
+            else
+            {
+                b.Expect("The first two steps are trips that fail: the second is decided again, not barred (no turn memory)", v =>
+                {
+                    List<TraceEvent> ms = v.Maneuvers("fighter", SpecialAttackType.Trip).Where(e => e.Round == 1).ToList();
+                    if (ms.Count < 2) return ExpectResult.Fail(ms.Count + " trip(s)", ms.Select(e => e.Seq).ToArray());
+                    if (ms.Any(e => e.Bool("success"))) return ExpectResult.Fail("a trip succeeded", ms.Select(e => e.Seq).ToArray());
+                    List<TraceEvent> attacks = v.Attacks("fighter", "orc", false, 1);
+                    if (attacks.Any(e => e.Seq < ms[1].Seq)) return ExpectResult.Fail("an attack came between the trips", ms[1].Seq);
+                    return HasCond(v.Final("orc"), "Prone")
+                        ? ExpectResult.Fail("orc prone", ms[0].Seq)
+                        : ExpectResult.Pass(ms.Count + " failed trips, " + attacks.Count + " attack(s)", ms[0].Seq, ms[1].Seq);
+                });
+                b.Expect("The scorer's rows: each step decided, the first two trips", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = ManeuverRows("Fighter", 1);
+                    bool ok = rows.Count == 3 && rows[0].Chosen == "Trip" && rows[1].Chosen == "Trip" && rows.All(r => r.Legacy == "Trip");
+                    return ok ? ExpectResult.Pass(RowsText(rows)) : ExpectResult.Fail(RowsText(rows));
+                });
+            }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// An AI-run goblin (Small, Str 11, BAB +1; its spawn's Humanoid Role proposes a trip) beside a sturdy fighter 3
+        /// (Str 16). Its trip would hit the fighter's touch AC about half the time and win the opposed check (+0, -4 for its
+        /// size, against the fighter's +3, PHB p.158) about one time in six, and the fighter's AoO would be paid first: the
+        /// scorer keeps the swing (the plan's example; batch 14 step 9, AI-035). Before step 9 the goblin tripped. One round.
+        /// </summary>
+        private static ScenarioDef AiManeuverAttacksWhenOddsPoor()
+        {
+            return Rules("rules/ai-maneuver-attacks-when-odds-poor",
+                    "An AI goblin swings at a stronger fighter instead of trying a trip it would rarely win (batch 14 step 9, AI-035)")
+                .Covers("AI-035", "batch 14 step 9", "PHB p.158")
+                .MaxRounds(1)
+                .Npc("gob", "goblin", 10, 10, Control.Ai)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Fighter", 3)), 11, 10, Control.Idle)
+                .Tweak("fighter", Sturdy)
+                .Initiative("gob", "fighter")
+                .Expect("The goblin runs the Humanoid Role (fixture check)", v =>
+                {
+                    TraceEvent actor = v.Of("actor").FirstOrDefault(e => e.Str("key") == "gob");
+                    string profile = actor != null ? actor.Str("profile") : null;
+                    return profile == "HumanoidAIProfile" ? ExpectResult.Pass(profile) : ExpectResult.Fail("profile " + (profile ?? "none"));
+                })
+                .Expect("The goblin makes no maneuver and attacks the fighter", v =>
+                {
+                    List<TraceEvent> ms = v.Maneuvers("gob").Where(e => e.Round == 1).ToList();
+                    if (ms.Count > 0) return ExpectResult.Fail(ms.Count + " maneuver(s), first " + ms[0].Get("type"), ms[0].Seq);
+                    List<TraceEvent> attacks = v.Attacks("gob", "fighter", false, 1);
+                    return attacks.Count > 0 ? ExpectResult.Pass(attacks.Count + " attack(s)", attacks[0].Seq) : ExpectResult.Fail("no attack");
+                })
+                .Expect("The scorer's row: the Role's trip proposal loses to the attack", v =>
+                {
+                    TraceEvent actor = v.Of("actor").FirstOrDefault(e => e.Str("key") == "gob");
+                    List<global::AiDecisionTrace.Decision> rows = ManeuverRows(actor != null ? actor.Str("name") : "Goblin", 1);
+                    return rows.Count > 0 && rows[0].Chosen == "Attack" && rows[0].Legacy == "Trip"
+                        ? ExpectResult.Pass(RowsText(rows)) : ExpectResult.Fail(RowsText(rows));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// An AI-run goblin (the Humanoid Role, which keeps downed foes and proposes a trip; its coup de grace turned off by
+        /// the data override, so only the maneuver choice is tested) beside a dying wizard (-3 hit points: helpless, PHB p.145),
+        /// its target pinned to the wizard; a sturdy fighter stands far off. A helpless target gets the attack, never a trip,
+        /// disarm or grapple (AI-058; batch 14 step 9): before step 9 the plain orc of rules/ai-sadist-coup-de-grace-plain
+        /// tripped such a wizard. One round.
+        /// </summary>
+        private static ScenarioDef AiManeuverSkipsHelpless()
+        {
+            return Rules("rules/ai-maneuver-skips-helpless",
+                    "An AI goblin attacks the dying PC beside it instead of tripping it: no maneuver on a helpless target (batch 14 step 9, AI-058)")
+                .Covers("AI-058", "batch 14 step 9", "PHB p.145", "PHB p.153")
+                .MaxRounds(1)
+                .Npc("gob", "goblin", 10, 10, Control.Ai)
+                .Pc("fallen", ActorSource.Stats(() => Wizard("Fallen Wizard", 2)), 11, 10, Control.Idle)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Far Fighter", 3)), 2, 2, Control.Idle)
+                .PriorityTarget("gob", "fallen")
+                .Tweak("gob", c => c.EnemyUseCoupDeGraceOverride = false)
+                .Tweak("fallen", c => SetHp(c, 14, -3))
+                .Tweak("hero", Sturdy)
+                .Initiative("gob", "fallen", "hero")
+                .Expect("The wizard is dying (helpless) when the goblin's turn starts", v =>
+                {
+                    JsonObj snap = v.Snapshot("fallen", 1, "gob");
+                    object hp = snap != null ? snap.Get("hp") : null;
+                    return hp is int h && h < 0 ? ExpectResult.Pass("hp " + h) : ExpectResult.Fail("hp " + (hp ?? "?"));
+                })
+                .Expect("The goblin makes no maneuver and attacks the wizard", v =>
+                {
+                    List<TraceEvent> ms = v.Maneuvers("gob").Where(e => e.Round == 1).ToList();
+                    if (ms.Count > 0) return ExpectResult.Fail(ms.Count + " maneuver(s), first " + ms[0].Get("type") + " on " + ms[0].Str("target"), ms[0].Seq);
+                    List<TraceEvent> attacks = v.Attacks("gob", "fallen", false, 1);
+                    return attacks.Count > 0 ? ExpectResult.Pass(attacks.Count + " attack(s) on the wizard", attacks[0].Seq) : ExpectResult.Fail("no attack on the wizard");
+                })
+                .Expect("The scorer's row: the Role's proposal is set aside because the target is helpless", v =>
+                {
+                    TraceEvent actor = v.Of("actor").FirstOrDefault(e => e.Str("key") == "gob");
+                    List<global::AiDecisionTrace.Decision> rows = ManeuverRows(actor != null ? actor.Str("name") : "Goblin", 1);
+                    return rows.Count > 0 && rows[0].Chosen == "Attack" && (rows[0].Reason ?? "").Contains("AI-058")
+                        ? ExpectResult.Pass(RowsText(rows)) : ExpectResult.Fail(RowsText(rows));
+                })
+                .Build();
+        }
+
+        private static bool HasCond(JsonObj snap, string cond) => snap != null && snap.Get("conds") is List<string> l && l.Contains(cond);
     }
 }
 #endif
