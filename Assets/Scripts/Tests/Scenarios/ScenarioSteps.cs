@@ -746,6 +746,13 @@ namespace Tests.Scenarios
                 CharacterController target = s.Target != null ? job.Ctx.Get(s.Target) : null;
                 ActionEconomy act = a.Actions;
 
+                // The step's actions are probes (batch 14 step 10, AI-080): a scripted step may try a refused action on
+                // purpose, so the legal set's shadow record counts it apart from an AI-run pick. Restored in the finally,
+                // so a step that throws leaves no probe actor set (and cleared at each job's start and end, should a
+                // stopped coroutine skip the finally).
+                ActionContext.ProbeScope probeScope = ActionContext.BeginProbe(a);
+                try
+                {
                 switch (s.Kind)
                 {
                     case StepKind.Move:
@@ -1061,6 +1068,11 @@ namespace Tests.Scenarios
                         ok = false;
                         note = s.Kind + " has no AI-path executor";
                         break;
+                }
+                }
+                finally
+                {
+                    probeScope.Dispose();
                 }
 
                 bool changed = Fingerprint(job, a) != before;

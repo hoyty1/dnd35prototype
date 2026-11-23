@@ -42,6 +42,10 @@ namespace Tests.Scenarios
     /// regular move at BAB +1; sheathing and picking up are move actions that provoke; readying a shield is a move action
     /// that does not; dropping is free. An archer with no arrows draws its melee weapon, the AI keeps its last melee weapon,
     /// and a panicked creature, PC or NPC, drops what it holds before it flees.
+    ///
+    /// Batch 14 step 10 (AI-080, docs/designs/personalities_batch14.md): an AI-run creature picks only actions inside its
+    /// legal set (AiLegal, ActorActionSet.AllowsNow): a nauseated one declares no attack and takes no total defense, so its
+    /// single move action is all it uses.
     /// </summary>
     public static class ActionCatalogScenarios
     {
@@ -120,6 +124,7 @@ namespace Tests.Scenarios
             yield return S("npc-keeps-last-melee-weapon-ai", NpcKeepsLastMeleeWeaponAi);
             yield return S("panicked-drops-held-ai", PanickedDropsHeldAi);
             yield return S("panicked-drops-held-pc", PanickedDropsHeldPc);
+            yield return S("ai-nauseated-moves-instead-of-attacking", AiNauseatedMovesInsteadOfAttacking);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("ActionCatalogScenarios rules/" + name, build);
@@ -2562,6 +2567,67 @@ namespace Tests.Scenarios
                 return drop.Seq < move.Seq ? ExpectResult.Pass("drop #" + drop.Seq + " before the move #" + move.Seq, drop.Seq, move.Seq)
                     : ExpectResult.Fail("the move came first", drop.Seq, move.Seq);
             };
+
+        // ── Batch 14 step 10: the AI picks inside the legal set (AI-080) ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Two nauseated AI goblins (PHB p.310: a single move action, unable to attack) and sturdy idle fighters. The first
+        /// goblin starts 3 squares from its fighter: it closes in with its move action and declares no attack on arrival.
+        /// The second starts adjacent to the other fighter: no attack, and no total defense (a standard action) from its
+        /// out-of-reach alternatives, which drop what the legal set refuses (AiOutOfReach, AiLegal). Before batch 14 step 10
+        /// both picked a refused attack ("cannot attack: Current condition prevents attacking", AI-080 kind 1). A Scripted
+        /// watcher acting last notes the legal set's shadow count of AI-run picks outside the set: 0.
+        /// </summary>
+        private static ScenarioDef AiNauseatedMovesInsteadOfAttacking()
+        {
+            return Rules("rules/ai-nauseated-moves-instead-of-attacking", "A nauseated AI creature uses its move and picks no attack or total defense it cannot take (PHB p.310; AI-080)")
+                .Covers("AI-080", "PHB p.310", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("gob", "goblin", 13, 10, Control.Ai)
+                .Npc("gob2", "goblin", 8, 16, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 10, Control.Idle)
+                .Tweak("hero", Sturdy)
+                .Pc("hero2", ActorSource.Stats(() => RulesScenarios.Fighter("Hero2", 3)), 7, 16, Control.Idle)
+                .Tweak("hero2", Sturdy)
+                .Pc("watcher", ActorSource.Stats(() => RulesScenarios.Fighter("Watcher", 1)), 2, 2, Control.Scripted)
+                .Tweak("watcher", Sturdy)
+                .StartCondition("gob", CombatConditionType.Nauseated, 3)
+                .StartCondition("gob2", CombatConditionType.Nauseated, 3)
+                .Initiative("gob", "gob2", "hero", "hero2", "watcher")
+                .Turn("watcher", 1, Step.Assert("the legal set's shadow after the goblins' turns", ctx =>
+                {
+                    ctx.Note(NotePrefix + "b14s10.airun=" + global::ActionSetShadow.AiRunTotal);
+                    return true;
+                }))
+                .Expect("The goblins' turns are AI turns", Expect.All(Expect.Controller("gob", "ai"), Expect.Controller("gob2", "ai")))
+                .Expect("The far goblin closes in with its move action in round 1", v =>
+                    v.Moves("gob", 1).Count > 0 ? ExpectResult.Pass(v.Moves("gob", 1).Count + " move segment(s)") : ExpectResult.Fail("no goblin move in round 1"))
+                .Expect("Neither goblin attacks", Expect.All(
+                    Expect.None("attack", e => e.Str("attacker") == "gob"),
+                    Expect.None("attack", e => e.Str("attacker") == "gob2")))
+                .Expect("No refused attack is declared (AI-080 kind 1)", NoLog("cannot attack|makes no attack", "refused-attack"))
+                .Expect("No total defense is taken (a standard action, PHB p.142)", NoLog("takes total defense", "total defense"))
+                .Expect("Neither goblin spends a standard or full-round action", v =>
+                {
+                    foreach (string key in new[] { "gob", "gob2" })
+                    {
+                        TraceEvent end = v.Of("turn_end").FirstOrDefault(e => e.Str("actor") == key && e.Round == 1);
+                        if (end == null) return ExpectResult.Fail("no " + key + " turn_end in round 1");
+                        if (!(end.Get("econ") is JsonObj econ)) return ExpectResult.Inconclusive("no action-economy record");
+                        bool std = econ.Get("std") is bool st && st, full = econ.Get("full") is bool f && f;
+                        if (std || full) return ExpectResult.Fail(key + ": standard " + std + ", full " + full, end.Seq);
+                    }
+                    return ExpectResult.Pass("no standard or full-round action");
+                })
+                .Expect("No AI-run pick falls outside the legal set (ActionSetShadow)", v =>
+                {
+                    TraceEvent n = v.Of("note").LastOrDefault(e => (e.Str("text") ?? "").StartsWith(NotePrefix + "b14s10.airun=", StringComparison.Ordinal));
+                    if (n == null) return ExpectResult.Inconclusive("no watcher note");
+                    string got = n.Str("text").Substring((NotePrefix + "b14s10.airun=").Length);
+                    return got == "0" ? ExpectResult.Pass("0 AI-run picks", n.Seq) : ExpectResult.Fail(got + " AI-run pick(s)", n.Seq);
+                })
+                .Build();
+        }
     }
 }
 #endif

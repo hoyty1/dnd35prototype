@@ -33,7 +33,8 @@ public sealed class AiOutOfReachOutcome
 ///   attack as above; skipped when the weapon cannot shoot at all (no ammunition), since closing in cannot help;
 /// - Withdraw: the withdraw away from the focus target (AIService.EvaluateWithdrawRetreatDestination; PHB p.143);
 /// - TotalDefense: total defense (PHB p.142, D2).
-/// A move to the creature's own square is no move. Before the list, a crossbow that is not loaded and can be reloaded
+/// An alternative whose catalog entry the creature may not take now (AiLegal.CanUse: ActorActionSet.AllowsNow, batch 14
+/// step 10, AI-080) is dropped before it is tried. A move to the creature's own square is no move. Before the list, a crossbow that is not loaded and can be reloaded
 /// at all this turn (with a bolt to load: ReloadRules, PHB p.113-114) is reloaded through the catalog's reload entry
 /// (batch 13 step 12, D4: the PC Reload button's executor, provoking as loading does, PHB p.115, p.99); the list then
 /// runs with what the load left (AI-057: a free Rapid Reload load leaves the whole turn, a move-action load the
@@ -88,11 +89,19 @@ public static class AiOutOfReach
                 yield break;
 
             OutOfReachAlternative alternative = alternatives[i];
+            // An alternative whose catalog entry the creature may not take now is dropped before it is tried (batch 14
+            // step 10, AI-080): the AI picks nothing its core would refuse (a nauseated creature's total defense).
+            string entry = EntryOf(alternative);
+            if (entry != null && !AiLegal.CanUse(npc, entry, gm))
+            {
+                Debug.Log($"[AI][OutOfReach] {name}: {alternative} dropped: {ActorActionSet.CheckNow(gm, npc, entry).Reason}");
+                continue;
+            }
             switch (alternative)
             {
                 case OutOfReachAlternative.AttackOtherTarget:
                 {
-                    CharacterController other = CanAttackNow(npc) ? ai.SelectGuardPassingTarget(npc, null, allowThrow) : null;
+                    CharacterController other = ai.SelectGuardPassingTarget(npc, null, allowThrow); // null when no attack is allowed now
                     if (other == null)
                         break;
                     var attack = new ActionOutcome();
@@ -107,7 +116,7 @@ public static class AiOutOfReach
                 case OutOfReachAlternative.PreferredRange:
                 case OutOfReachAlternative.Approach:
                 {
-                    if (focus == null || focus.Stats == null || !CanMove(npc))
+                    if (focus == null || focus.Stats == null || !AiLegal.CanMoveNow(npc, gm))
                         break;
                     if (alternative == OutOfReachAlternative.Approach && !weaponCanShoot)
                         break;
@@ -135,7 +144,7 @@ public static class AiOutOfReach
                     yield return new WaitForSeconds(0.5f);
 
                     // AI-045: the move may have brought a target into reach or range; the standard action left attacks it.
-                    if (Over(gm, npc) || !CanAttackNow(npc))
+                    if (Over(gm, npc) || !AiLegal.CanAttackNow(npc, gm))
                         yield break;
                     CharacterController reached = ai.SelectGuardPassingTarget(npc, null, allowThrow);
                     if (reached != null)
@@ -149,9 +158,8 @@ public static class AiOutOfReach
 
                 case OutOfReachAlternative.Withdraw:
                 {
-                    if (focus == null || focus.Stats == null || npc.Actions == null
-                        || !MovementService.CanStartMovement(npc, MovementService.WithdrawKindFor(npc)).Ok)
-                        break;
+                    if (focus == null || focus.Stats == null || npc.Actions == null)
+                        break; // the withdraw entry's legality (MovementService.CanStartMovement of the withdraw kind) was read above
                     SquareCell cell = ai.EvaluateWithdrawRetreatDestination(npc, focus.GridPosition);
                     if (cell == null || cell.Coords == npc.GridPosition)
                         break;
@@ -232,12 +240,23 @@ public static class AiOutOfReach
         yield return gm.RunAIAction(ActionContext.For(id, npc, ActorSource.AI, target), outcome);
     }
 
-    private static bool CanAttackNow(CharacterController npc)
-        => npc.CanTakeTurnActions() && npc.Actions != null
-           && (ActionCosts.CanAfford(npc, ActionCostType.Standard) || npc.ProgressiveAttackPool.HasStartedAttacking);
-
-    private static bool CanMove(CharacterController npc)
-        => npc.Actions != null && npc.Actions.HasMoveAction && MovementService.CanStartMovement(npc, MoveKind.Move).Ok;
+    /// <summary>
+    /// The catalog entry an alternative takes (its legality is read before it is tried): another target's attack (the
+    /// attack entry; a full attack only when the full-round action is free, so the attack entry's answer covers both), the
+    /// move of an approach, the withdraw, total defense.
+    /// </summary>
+    internal static string EntryOf(OutOfReachAlternative alternative)
+    {
+        switch (alternative)
+        {
+            case OutOfReachAlternative.AttackOtherTarget: return ActionIds.Attack;
+            case OutOfReachAlternative.PreferredRange:
+            case OutOfReachAlternative.Approach: return ActionIds.Move;
+            case OutOfReachAlternative.Withdraw: return ActionIds.Withdraw;
+            case OutOfReachAlternative.TotalDefense: return ActionIds.TotalDefense;
+            default: return null;
+        }
+    }
 
     private static bool Over(GameManager gm, CharacterController npc)
         => gm.CurrentPhase == GameManager.TurnPhase.CombatOver || npc.Stats == null || !npc.CanTakeTurnActions();

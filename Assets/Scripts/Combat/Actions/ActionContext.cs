@@ -48,6 +48,44 @@ public sealed class ActionContext
     /// </summary>
     public bool NoWait;
 
+    /// <summary>
+    /// A probe (batch 14 step 10, AI-080): a scenario's fixture tries this action, perhaps refused on purpose, to check a
+    /// rule. Read by the legal set's shadow record only (<see cref="ActionSetShadow"/>, which counts probes apart from
+    /// AI-run picks); it changes nothing in the run. A scripted step's actions are probes through <see cref="ProbeScope"/>.
+    /// </summary>
+    public bool Probe;
+
+    /// <summary>
+    /// The actor whose scripted scenario step is running (the harness's ScriptedSteps.RunAi sets it through
+    /// <see cref="BeginProbe"/> around each step): its actions are probes, whatever *ForAI wrapper builds their context.
+    /// Null outside the harness, as ScenarioHooks are.
+    /// </summary>
+    public static CharacterController ProbeActor { get; private set; }
+
+    /// <summary>Whether <paramref name="ctx"/> is a probe: its own flag, or an action of the running scripted step's actor.</summary>
+    public static bool IsProbe(ActionContext ctx)
+        => ctx != null && (ctx.Probe || (ProbeActor != null && ctx.Actor == ProbeActor));
+
+    /// <summary>Marks <paramref name="actor"/>'s actions as probes until the scope is disposed (the previous actor comes back).</summary>
+    public static ProbeScope BeginProbe(CharacterController actor) => new ProbeScope(actor);
+
+    /// <summary>Clears the probe actor (the harness, at a job's start and end).</summary>
+    public static void ClearProbe() => ProbeActor = null;
+
+    /// <summary>The scope of <see cref="BeginProbe"/>.</summary>
+    public readonly struct ProbeScope : IDisposable
+    {
+        private readonly CharacterController _previous;
+
+        internal ProbeScope(CharacterController actor)
+        {
+            _previous = ProbeActor;
+            ProbeActor = actor;
+        }
+
+        public void Dispose() => ProbeActor = _previous;
+    }
+
     public static ActionContext For(string id, CharacterController actor, ActorSource source, CharacterController target = null)
     {
         return new ActionContext

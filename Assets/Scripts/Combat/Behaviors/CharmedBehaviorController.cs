@@ -147,8 +147,9 @@ public sealed class CharmedBehaviorController
         }
 
         // Only an attack the AI attack guard allows (batch 13 step 5, D1: reach, range, ammunition; C1: melee reach for a
-        // throwable weapon, as before step 5).
-        if (actor.Actions.HasStandardAction && AiAttackGuard.Passes(actor, hostileToCaster, allowThrow: false))
+        // throwable weapon, as before step 5), with an attack left to declare (the attack entry's legality,
+        // AiLegal.CanAttackNow; batch 14 step 10, AI-080).
+        if (AiLegal.CanAttackNow(actor, gameManager) && AiAttackGuard.Passes(actor, hostileToCaster, allowThrow: false))
             yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, hostileToCaster));
     }
 

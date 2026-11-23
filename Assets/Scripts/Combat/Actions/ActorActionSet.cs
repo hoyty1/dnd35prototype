@@ -81,6 +81,28 @@ public sealed class ActorActionSet
         return set;
     }
 
+    /// <summary>
+    /// Whether <paramref name="actor"/> has the action <paramref name="id"/> and may take it now, with no target yet: the
+    /// answer of <see cref="Allows"/> on a full <see cref="Build"/>, read for the one entry only (batch 14 step 10, AI-080):
+    /// the entry the actor has (ActionDefinition.IsAvailableTo), its executor's CanStart (today's legality), then the
+    /// turn's <see cref="CompulsionFilter"/>. Pure, as Build is. The AI's reads go through AiLegal.
+    /// </summary>
+    public static bool AllowsNow(GameManager gm, CharacterController actor, string id) => CheckNow(gm, actor, id).Ok;
+
+    /// <summary>The legality <see cref="AllowsNow"/> reads (the refusal with its bar when it is false).</summary>
+    public static Legality CheckNow(GameManager gm, CharacterController actor, string id)
+    {
+        ActionDefinition d = ActionCatalog.Get(id);
+        if (d == null)
+            return Legality.Refused(LegalityBar.Other, "no catalog action " + id);
+        if (actor == null || actor.Stats == null)
+            return Legality.Refused(LegalityBar.Target, "no actor");
+        if (!d.IsAvailableTo(actor))
+            return Legality.Refused(LegalityBar.Other, actor.Stats.CharacterName + " does not have " + d.Name);
+        Legality legality = TodayLegality(gm, d, actor);
+        return legality.Ok ? CompulsionFilter(d, actor) : legality;
+    }
+
     /// <summary>The option of <paramref name="id"/>, or null when the actor does not have that action.</summary>
     public ActionOption Get(string id) => id != null && _byId.TryGetValue(id, out ActionOption o) ? o : null;
 
@@ -252,6 +274,9 @@ public sealed class ActorActionSet
 /// scenario harness's fast mode filters Log-level lines out (ScenarioFastMode), so the harness reads this sink instead.
 /// ScenarioRunner clears it when a job starts and writes it into the job's result and summary.json ("actionSet"), outside
 /// the trace hash. Off in a player build that is not a development build (<see cref="Enabled"/>), where nothing reads it.
+/// Since batch 14 step 10 (AI-080) it counts two kinds apart: an AI-run pick (an AI routine chose it) and a probe (a
+/// scenario's scripted step or fixture that tries a refused action on purpose, <see cref="ActionContext.IsProbe"/>);
+/// the AI-run count is the one that should be 0.
 /// </summary>
 public static class ActionSetShadow
 {
@@ -259,35 +284,77 @@ public static class ActionSetShadow
     public const int MaxLines = 20;
 
     private static readonly Dictionary<string, int> _counts = new Dictionary<string, int>(System.StringComparer.Ordinal);
+    private static readonly Dictionary<string, int> _aiRunCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
+    private static readonly Dictionary<string, int> _probeCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
     private static readonly List<string> _lines = new List<string>();
+    private static readonly List<string> _aiRunLines = new List<string>();
 
     /// <summary>Whether RunAIAction builds the set at all: in the editor and in development builds only.</summary>
     public static bool Enabled => UnityEngine.Application.isEditor || UnityEngine.Debug.isDebugBuild;
 
-    /// <summary>Disagreements recorded since the last <see cref="Clear"/>.</summary>
+    /// <summary>Disagreements recorded since the last <see cref="Clear"/>, both kinds.</summary>
     public static int Total { get; private set; }
 
-    /// <summary>The distinct disagreements ("actionId: bar: reason") and how often each came up.</summary>
+    /// <summary>The AI-run disagreements of <see cref="Total"/> (an AI routine's pick).</summary>
+    public static int AiRunTotal { get; private set; }
+
+    /// <summary>The probe disagreements of <see cref="Total"/> (a scripted step or fixture's pick, refused on purpose).</summary>
+    public static int ProbeTotal { get; private set; }
+
+    /// <summary>The distinct disagreements ("actionId: bar: reason") and how often each came up, both kinds.</summary>
     public static IReadOnlyDictionary<string, int> Counts => _counts;
 
-    /// <summary>The first <see cref="MaxLines"/> disagreements, with their actors.</summary>
+    /// <summary>The distinct AI-run disagreements and their counts.</summary>
+    public static IReadOnlyDictionary<string, int> AiRunCounts => _aiRunCounts;
+
+    /// <summary>The distinct probe disagreements and their counts.</summary>
+    public static IReadOnlyDictionary<string, int> ProbeCounts => _probeCounts;
+
+    /// <summary>The first <see cref="MaxLines"/> disagreements, with their actors (a probe's line ends " (probe)").</summary>
     public static IReadOnlyList<string> Lines => _lines;
+
+    /// <summary>
+    /// The first <see cref="MaxLines"/> AI-run disagreements, with their actors, kept apart so that probes filling
+    /// <see cref="Lines"/> never hide the actor of an AI-run pick.
+    /// </summary>
+    public static IReadOnlyList<string> AiRunLines => _aiRunLines;
 
     public static void Clear()
     {
         _counts.Clear();
+        _aiRunCounts.Clear();
+        _probeCounts.Clear();
         _lines.Clear();
+        _aiRunLines.Clear();
         Total = 0;
+        AiRunTotal = 0;
+        ProbeTotal = 0;
     }
 
-    /// <summary>Records one pick outside the legal set (or a set that threw, <paramref name="bar"/> "Error").</summary>
-    public static void Record(string actorName, string actionId, string bar, string reason)
+    /// <summary>
+    /// Records one pick outside the legal set (or a set that threw, <paramref name="bar"/> "Error"); <paramref name="probe"/>
+    /// marks a scripted step's or fixture's pick (<see cref="ActionContext.IsProbe"/>).
+    /// </summary>
+    public static void Record(string actorName, string actionId, string bar, string reason, bool probe = false)
     {
         Total++;
+        if (probe)
+            ProbeTotal++;
+        else
+            AiRunTotal++;
         string key = (actionId ?? "?") + ": " + (bar ?? "?") + ": " + (reason ?? string.Empty);
-        _counts.TryGetValue(key, out int n);
-        _counts[key] = n + 1;
+        Bump(_counts, key);
+        Bump(probe ? _probeCounts : _aiRunCounts, key);
+        string line = (actorName ?? "?") + " picked " + key + (probe ? " (probe)" : string.Empty);
         if (_lines.Count < MaxLines)
-            _lines.Add((actorName ?? "?") + " picked " + key);
+            _lines.Add(line);
+        if (!probe && _aiRunLines.Count < MaxLines)
+            _aiRunLines.Add(line);
+    }
+
+    private static void Bump(Dictionary<string, int> counts, string key)
+    {
+        counts.TryGetValue(key, out int n);
+        counts[key] = n + 1;
     }
 }

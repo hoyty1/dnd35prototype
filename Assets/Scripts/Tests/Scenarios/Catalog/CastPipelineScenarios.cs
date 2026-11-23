@@ -77,6 +77,7 @@ namespace Tests.Scenarios
             yield return S("cast-ai-spiritual-weapon", AiSpiritualWeapon);
             yield return S("npc-dimension-door", NpcDimensionDoor);
             yield return S("npc-summon-monster", NpcSummonMonster);
+            yield return S("ai-summon-nauseated-no-attack", AiSummonNauseatedNoAttack);
             yield return S("npc-held-touch", NpcHeldTouch);
             yield return S("npc-hold-charge-approach", NpcHoldChargeApproach);
             yield return S("ui-touch-miss-holds-charge", UiTouchMissHoldsCharge);
@@ -3026,6 +3027,63 @@ namespace Tests.Scenarios
                     FactsAre(("summon.aiChoice", true), ("summon.besideHero", true), ("summon.team", "Enemy"), ("summon.controllable", false), ("summon.caster", true)))
                 .Expect("Pinned (SPL-164, SPL-162): today the cast resolves in the casting turn and the creature joins the initiative right after the cleric, acting before the hero; RAW it appears just before the cleric's next turn and acts at once",
                     FactsAre(("summon.afterCaster", true), ("summon.acted", true)))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-080 (batch 14 step 10 review): the summoned creature's AI routine (GameManager.AI_SummonedCreature) asks the
+        /// legal set before its attack and its moves (AiLegal.CanAttackNow, CanMoveNow). The Scripted cleric of
+        /// rules/npc-summon-monster summons a creature beside the hero, then nauseates it (PHB p.310: unable to attack, a
+        /// single move action); on its turn, right after the cleric's, the summon declares no attack and logs no refused one
+        /// (before the gate it picked the attack and the core refused it: "cannot attack: Current condition prevents
+        /// attacking", an AI-run shadow pick). The hero, acting next, notes the legal set's shadow count of AI-run picks: 0.
+        /// </summary>
+        private static ScenarioDef AiSummonNauseatedNoAttack()
+        {
+            return Rules("rules/ai-summon-nauseated-no-attack", "A nauseated AI-run summon declares no attack it cannot take (PHB p.310; AI-080)")
+                .Covers("AI-080", "PHB p.310", "PHB p.285", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Wizard("Summon Target", 1)), 10, 10, Control.Scripted)
+                .Npc("cleric", "human_cleric", 6, 10, Control.Scripted)
+                .Tweak("cleric", c => Prepare(c, 2, SpellNames.SUMMON_MONSTER_2))
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero")
+                .Turn("cleric", 1,
+                    Step.Cast(SpellNames.SUMMON_MONSTER_2, "hero"),
+                    Step.Assert("the summon is nauseated", ctx =>
+                    {
+                        List<CharacterController> summons = LivingSummons();
+                        if (summons.Count == 0)
+                            return true;
+                        CharacterController m = summons[0];
+                        ctx.Gm.ApplyCondition(m, CombatConditionType.Nauseated, 3, ctx.Get("cleric"));
+                        Fact(ctx, "summon.nauseated", m.HasCondition(CombatConditionType.Nauseated));
+                        Fact(ctx, "summon.besideHero", CasterLevelRules.DistanceToTarget(m, ctx.Get("hero")) <= 1);
+                        Fact(ctx, "summon.name", m.Stats.CharacterName);
+                        Numbers(ctx)["hp|hero"] = ctx.Get("hero").Stats.CurrentHP;
+                        return true;
+                    }))
+                .Turn("hero", 1, Step.Assert("after the summon's turn", ctx =>
+                {
+                    List<CharacterController> summons = LivingSummons();
+                    if (summons.Count > 0)
+                    {
+                        ActionEconomy a = summons[0].Actions;
+                        Fact(ctx, "summon.stdLeft", a.StandardActionUsed == false && a.FullRoundActionUsed == false);
+                    }
+                    Fact(ctx, "hero.unhurt", Numbers(ctx).TryGetValue("hp|hero", out int hp) && ctx.Get("hero").Stats.CurrentHP == hp);
+                    Fact(ctx, "b14s10.airun", global::ActionSetShadow.AiRunTotal);
+                    return true;
+                }))
+                .Expect("One creature is summoned beside the hero and nauseated", FactsAre(("summon.nauseated", true), ("summon.besideHero", true)))
+                .Expect("The nauseated summon spends no standard or full-round action and the hero is unhurt",
+                    FactsAre(("summon.stdLeft", true), ("hero.unhurt", true)))
+                .Expect("No refused attack is declared (AI-080 kind 1)", v =>
+                {
+                    List<TraceEvent> lines = v.Log("cannot attack|makes no attack");
+                    return lines.Count == 0 ? ExpectResult.Pass("no refused-attack line") : ExpectResult.Fail(lines.Count + " refused-attack line(s)", lines.Select(e => e.Seq).ToArray());
+                })
+                .Expect("No AI-run pick falls outside the legal set (ActionSetShadow)", FactIs("b14s10.airun", 0))
                 .Build();
         }
 

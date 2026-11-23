@@ -55,6 +55,7 @@ namespace Tests.Scenarios
             yield return S("frightful-presence-on-maneuver-ai", FrightfulPresenceOnManeuverAi);
             yield return S("gibbering-hits-allies-ai", GibberingHitsAlliesAi);
             yield return S("aura-on-compelled-turn-ai", AuraOnCompelledTurnAi);
+            yield return S("ai-spittle-gated-when-move-only", AiSpittleGatedWhenMoveOnly);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("MonsterAbilityScenarios rules/" + name, build);
@@ -171,6 +172,8 @@ namespace Tests.Scenarios
                 .Expect("Its breath turn ends with its standard action spent (MM p.69, p.306; AI-040)", StandardSpent("dragon", 1, true))
                 .Expect("The nauseated dragon, with only a move action, does not breathe (PHB p.311)", v =>
                     v.Log("Sick Dragon unleashes").Count == 0 ? ExpectResult.Pass("no breath") : ExpectResult.Fail("it breathed"))
+                .Expect("Nor does it declare an attack it cannot take (batch 14 step 10, AI-080)", v =>
+                    v.Log("Sick Dragon (cannot attack|makes no attack)").Count == 0 ? ExpectResult.Pass("no refusal line") : ExpectResult.Fail("a refused-attack line"))
                 .Build();
         }
 
@@ -361,7 +364,8 @@ namespace Tests.Scenarios
         /// <summary>
         /// Two nauseated gibbering mouthers (PHB p.311: unable to attack, a single move action) beside idle fighters within
         /// 30 ft: the Scripted one's spittle entry is refused (the shared actor bar, on the AI runner), and the AI-run one
-        /// spits at no one. The spittle's free cost does not lift the bar: it is a ranged touch attack (MM p.126).
+        /// spits at no one. The spittle's free cost does not lift the bar: it is a ranged touch attack (MM p.126). Since batch 14 step
+        /// 10 (AI-080) the AI-run one picks no spittle, engulf or weapon attack at all (AiLegal), so no refusal is logged.
         /// </summary>
         private static ScenarioDef SpittleNauseatedAi()
         {
@@ -383,6 +387,55 @@ namespace Tests.Scenarios
                 .Expect("The nauseated Scripted mouther's spittle is refused (PHB p.311)", Expect.StepStatus("mouther", 1, "MonsterAbility", 0, "refused"))
                 .Expect("Neither nauseated mouther spits", v =>
                     v.Log("Sick (AI )?Mouther uses Spittle").Count == 0 ? ExpectResult.Pass("no spittle") : ExpectResult.Fail(v.Log("Sick (AI )?Mouther uses Spittle").Count + " spittle line(s)"))
+                .Expect("The AI-run mouther declares no attack it cannot take (batch 14 step 10, AI-080)", v =>
+                    v.Log("Sick AI Mouther (cannot attack|makes no attack)").Count == 0 ? ExpectResult.Pass("no refusal line") : ExpectResult.Fail("a refused-attack line"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Batch 14 step 10 (AI-080 kinds 11 and 12): the AI asks the legal set before a monster ability. A nauseated AI
+        /// gibbering mouther (PHB p.310: unable to attack, a single move action plus free actions) beside a sturdy idle
+        /// fighter picks no free spittle (the turn-start gate and TryExecuteRangedSpecialAttack read the spittle entry, AiLegal.CanUse),
+        /// no engulf and no weapon attack; a healthy AI mouther, the positive control, still spits once. Before the step
+        /// the sick one picked them and each core refused it. The discriminating check is the shadow note: a Scripted
+        /// watcher acting last notes the legal set's shadow count of AI-run picks outside the set, 0. The log checks on
+        /// spittle and engulf are smoke checks only (the cores refused before they log, with or without the gate), and the
+        /// engulf gate itself is unreachable here (the null attack target comes first); ActionCatalogTests checks it. The heroes are immune to mind-affecting effects
+        /// and so are the mouthers (<see cref="SturdyMindImmune"/>), so the gibbering moves nobody.
+        /// </summary>
+        private static ScenarioDef AiSpittleGatedWhenMoveOnly()
+        {
+            return Rules("rules/ai-spittle-gated-when-move-only", "A nauseated AI mouther picks no spittle, engulf or attack it cannot take (PHB p.310; MM p.126; AI-080)")
+                .Covers("AI-080", "D11", "MM p.126", "PHB p.310", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("sick", "gibbering_mouther", 12, 10, Control.Ai)
+                .Tweak("sick", c => { SturdyMindImmune(c); c.Stats.CharacterName = "Sick Mouther"; })
+                .StartCondition("sick", CombatConditionType.Nauseated, 3)
+                .Npc("well", "gibbering_mouther", 12, 17, Control.Ai)
+                .Tweak("well", c => { SturdyMindImmune(c); c.Stats.CharacterName = "Well Mouther"; })
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 5)), 11, 10, Control.Idle)
+                .Tweak("hero", SturdyMindImmune)
+                .Pc("hero2", ActorSource.Stats(() => RulesScenarios.Fighter("Hero2", 5)), 9, 17, Control.Idle)
+                .Tweak("hero2", SturdyMindImmune)
+                .Pc("watcher", ActorSource.Stats(() => RulesScenarios.Fighter("Watcher", 1)), 2, 2, Control.Scripted)
+                .Tweak("watcher", SturdyMindImmune)
+                .Initiative("sick", "well", "hero", "hero2", "watcher")
+                .Turn("watcher", 1, Step.Assert("the legal set's shadow after the mouthers' turns", ctx =>
+                {
+                    Note(ctx, "airun", global::ActionSetShadow.AiRunTotal);
+                    return true;
+                }))
+                .Expect("The mouthers' turns are AI turns", Expect.All(Expect.Controller("sick", "ai"), Expect.Controller("well", "ai")))
+                .Expect("The nauseated mouther spits at no one (smoke check)", LogCount("Sick Mouther uses Spittle", 1, 0))
+                .Expect("The nauseated mouther attempts no engulf (smoke check)", LogCount("Sick Mouther attempts to engulf", 1, 0))
+                .Expect("The nauseated mouther declares no attack and logs no refused one", v =>
+                {
+                    if (v.Attacks("sick").Count > 0) return ExpectResult.Fail("it attacked", v.Attacks("sick")[0].Seq);
+                    int n = v.Log("Sick Mouther (cannot attack|makes no attack)").Count;
+                    return n == 0 ? ExpectResult.Pass("no attack, no refusal line") : ExpectResult.Fail(n + " refused-attack line(s)");
+                })
+                .Expect("The healthy mouther still spits once (positive control, MM p.126)", LogCount("Well Mouther uses Spittle against", 1, 1))
+                .Expect("No AI-run pick falls outside the legal set (ActionSetShadow)", Fact("airun", "0"))
                 .Build();
         }
 

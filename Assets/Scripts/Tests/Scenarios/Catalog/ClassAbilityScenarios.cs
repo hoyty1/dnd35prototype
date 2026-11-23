@@ -83,6 +83,13 @@ namespace Tests.Scenarios
 
         private static void Note(ScenarioContext ctx, string key, object value) => ctx.Note(NotePrefix + key + "=" + value);
 
+        /// <summary>A fixture's attempt that checks a refusal: a probe, counted apart from AI-run picks by the legal set's shadow (AI-080).</summary>
+        private static ActionContext Probe(ActionContext ctx)
+        {
+            ctx.Probe = true;
+            return ctx;
+        }
+
         /// <summary>The last note of <paramref name="key"/> is <paramref name="want"/>.</summary>
         private static Func<TraceView, ExpectResult> Fact(string key, string want)
             => v =>
@@ -427,7 +434,7 @@ namespace Tests.Scenarios
                         st.RemoveCondition(CombatConditionType.Fatigued);
                         string refusal = RageActionExecutor.RefusalOf(barb, out LegalityBar bar);
                         Note(ctx, "second.refusal", refusal != null && refusal.Contains("already raged") ? "already raged/" + bar : (refusal ?? "allowed"));
-                        ActionOutcome o = ctx.Gm.RunAIActionNow(ActionContext.For(ActionIds.Rage, barb, global::ActorSource.AI));
+                        ActionOutcome o = ctx.Gm.RunAIActionNow(Probe(ActionContext.For(ActionIds.Rage, barb, global::ActorSource.AI)));
                         Note(ctx, "second.performed", o.Performed);
                         Note(ctx, "second.raging", st.IsRaging);
                         return true;
@@ -462,7 +469,7 @@ namespace Tests.Scenarios
                     CharacterController barb = ctx.Get("barb");
                     string refusal = RageActionExecutor.RefusalOf(barb, out LegalityBar bar);
                     Note(ctx, "offturn.refusal", refusal != null && refusal.Contains("own turn") ? "own turn/" + bar : (refusal ?? "allowed"));
-                    ActionOutcome o = ctx.Gm.RunAIActionNow(ActionContext.For(ActionIds.Rage, barb, global::ActorSource.AI));
+                    ActionOutcome o = ctx.Gm.RunAIActionNow(Probe(ActionContext.For(ActionIds.Rage, barb, global::ActorSource.AI)));
                     Note(ctx, "offturn.performed", o.Performed);
                     Note(ctx, "offturn.raging", barb.Stats.IsRaging);
                     return true;

@@ -128,11 +128,16 @@ namespace Tests.Scenarios
         public JsonObj Generated;
         /// <summary>
         /// The legal set's shadow record (batch 13 step 6, C8; global::ActionSetShadow): AI picks run outside the actor's
-        /// legal set during this job. Outside the trace hash; 0 when there were none.
+        /// legal set during this job. Outside the trace hash; 0 when there were none. Split since batch 14 step 10 (AI-080)
+        /// into AI-run picks and probes (a scripted step's or fixture's pick, refused on purpose; ActionContext.IsProbe).
         /// </summary>
         public int ActionSetTotal;
+        public int ActionSetAiRun;
+        public int ActionSetProbe;
         public Dictionary<string, int> ActionSetCounts;
+        public Dictionary<string, int> ActionSetAiRunCounts;
         public List<string> ActionSetLines;
+        public List<string> ActionSetAiRunLines;
         /// <summary>
         /// The AI decision time of this job (batch 14 step 1, global::AiDecisionTimer): {turns, p50, p95, max, over50,
         /// warmup} in milliseconds and the time per bucket, or null when no AI turn ran. Outside the trace hash.
@@ -169,8 +174,13 @@ namespace Tests.Scenarios
                 var counts = new JsonObj();
                 foreach (KeyValuePair<string, int> kv in ActionSetCounts)
                     counts.Set(kv.Key, kv.Value);
-                o.Set("actionSet", new JsonObj().Set("total", ActionSetTotal).Set("distinct", ActionSetCounts.Count)
-                    .Set("counts", counts).Set("lines", ActionSetLines));
+                var aiRunCounts = new JsonObj();
+                if (ActionSetAiRunCounts != null)
+                    foreach (KeyValuePair<string, int> kv in ActionSetAiRunCounts)
+                        aiRunCounts.Set(kv.Key, kv.Value);
+                o.Set("actionSet", new JsonObj().Set("total", ActionSetTotal).Set("aiRun", ActionSetAiRun).Set("probe", ActionSetProbe)
+                    .Set("distinct", ActionSetCounts.Count).Set("counts", counts).Set("aiRunCounts", aiRunCounts).Set("lines", ActionSetLines)
+                    .Set("aiRunLines", ActionSetAiRunLines ?? new List<string>()));
             }
             if (AiTiming != null)
                 o.Set("aiTiming", AiTiming);
@@ -811,6 +821,7 @@ namespace Tests.Scenarios
 
             // d-g. Seed, spawn, control, hooks (the legal set's shadow record starts empty for each job)
             global::ActionSetShadow.Clear();
+            global::ActionContext.ClearProbe();
             // The AI decision time and decision trace start empty too (batch 14 step 1; outside the trace hash).
             global::AiDecisionTimer.Reset();
             global::AiDecisionTrace.Clear();
@@ -1515,11 +1526,18 @@ namespace Tests.Scenarios
                 result.Soak = SoakStats.ForJob(trace.Events, job.Outcome, result.Rounds);
             List<string> lines = trace.HashLines();
             result.Hash = ScenarioTrace.Hash(lines);
+            global::ActionContext.ClearProbe();
             result.ActionSetTotal = global::ActionSetShadow.Total;
+            result.ActionSetAiRun = global::ActionSetShadow.AiRunTotal;
+            result.ActionSetProbe = global::ActionSetShadow.ProbeTotal;
             result.ActionSetCounts = new Dictionary<string, int>(global::ActionSetShadow.Counts.Count, StringComparer.Ordinal);
             foreach (KeyValuePair<string, int> kv in global::ActionSetShadow.Counts)
                 result.ActionSetCounts[kv.Key] = kv.Value;
+            result.ActionSetAiRunCounts = new Dictionary<string, int>(global::ActionSetShadow.AiRunCounts.Count, StringComparer.Ordinal);
+            foreach (KeyValuePair<string, int> kv in global::ActionSetShadow.AiRunCounts)
+                result.ActionSetAiRunCounts[kv.Key] = kv.Value;
             result.ActionSetLines = new List<string>(global::ActionSetShadow.Lines);
+            result.ActionSetAiRunLines = new List<string>(global::ActionSetShadow.AiRunLines);
             RecordAiTiming(job, result);
             RecordAiTrace(result);
 
@@ -1811,19 +1829,26 @@ namespace Tests.Scenarios
         /// <summary>
         /// The run's legal-set shadow record (batch 13 step 6, C8): the picks outside the legal set summed over the jobs,
         /// with each distinct "actionId: bar: reason" and the jobs it came up in. The regressions read this count (fast
-        /// mode drops the "[ActionSet]" Debug.Log lines). Outside every trace hash.
+        /// mode drops the "[ActionSet]" Debug.Log lines). Outside every trace hash. Since batch 14 step 10 (AI-080) the
+        /// AI-run picks and the probes (scripted steps and fixtures) are counted apart: "aiRun" and "aiRunJobs" are the count
+        /// that should be 0, "probe" the picks refused on purpose; each distinct entry has its "aiRun" picks too.
         /// </summary>
         private JsonObj ActionSetSummary()
         {
             var distinct = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var aiRunOf = new Dictionary<string, int>(StringComparer.Ordinal);
             var jobsOf = new Dictionary<string, int>(StringComparer.Ordinal);
-            int total = 0, jobs = 0;
+            int total = 0, aiRun = 0, probe = 0, jobs = 0, aiRunJobs = 0;
             foreach (JobResult r in Results)
             {
                 if (r.ActionSetTotal <= 0 || r.ActionSetCounts == null)
                     continue;
                 total += r.ActionSetTotal;
+                aiRun += r.ActionSetAiRun;
+                probe += r.ActionSetProbe;
                 jobs++;
+                if (r.ActionSetAiRun > 0)
+                    aiRunJobs++;
                 foreach (KeyValuePair<string, int> kv in r.ActionSetCounts)
                 {
                     distinct.TryGetValue(kv.Key, out int n);
@@ -1831,11 +1856,21 @@ namespace Tests.Scenarios
                     jobsOf.TryGetValue(kv.Key, out int j);
                     jobsOf[kv.Key] = j + 1;
                 }
+                if (r.ActionSetAiRunCounts != null)
+                    foreach (KeyValuePair<string, int> kv in r.ActionSetAiRunCounts)
+                    {
+                        aiRunOf.TryGetValue(kv.Key, out int a);
+                        aiRunOf[kv.Key] = a + kv.Value;
+                    }
             }
             var counts = new JsonObj();
             foreach (KeyValuePair<string, int> kv in distinct)
-                counts.Set(kv.Key, new JsonObj().Set("picks", kv.Value).Set("jobs", jobsOf[kv.Key]));
-            return new JsonObj().Set("total", total).Set("distinct", distinct.Count).Set("jobs", jobs).Set("counts", counts);
+            {
+                aiRunOf.TryGetValue(kv.Key, out int a);
+                counts.Set(kv.Key, new JsonObj().Set("picks", kv.Value).Set("aiRun", a).Set("jobs", jobsOf[kv.Key]));
+            }
+            return new JsonObj().Set("total", total).Set("aiRun", aiRun).Set("probe", probe).Set("distinct", distinct.Count)
+                .Set("jobs", jobs).Set("aiRunJobs", aiRunJobs).Set("counts", counts);
         }
 
         internal void WriteStatus(bool force)

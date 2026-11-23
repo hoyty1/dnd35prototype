@@ -414,7 +414,11 @@ public class AIService : MonoBehaviour
         if (npc.HasRangedSpecialAttack)
         {
             RangedSpecialAttackDefinition freeAttack = npc.GetRangedSpecialAttackDefinition();
-            if (freeAttack != null && freeAttack.IsFreeAction && npc.IsRangedSpecialAttackReady)
+            // The spittle entry's legality first (batch 14 step 10, AI-080): a nauseated mouther is unable to attack (PHB
+            // p.310; free actions remain, but the spittle is a ranged touch attack, MM p.126), so it picks no spittle its core
+            // would refuse.
+            if (freeAttack != null && freeAttack.IsFreeAction && npc.IsRangedSpecialAttackReady
+                && AiLegal.CanUse(npc, ActionIds.Spittle, _gameManager))
             {
                 CharacterController spittleTarget = FindClosestEnemyInRange(npc, freeAttack.RangeFeet);
                 if (spittleTarget != null)
@@ -816,7 +820,7 @@ public class AIService : MonoBehaviour
     /// </summary>
     private IEnumerator MoveTowardTargetAfterStandardAction(CharacterController npc)
     {
-        if (CombatEnded() || npc == null || npc.Stats == null || !npc.CanTakeTurnActions() || npc.Actions == null || !npc.Actions.HasMoveAction)
+        if (CombatEnded() || npc == null || npc.Stats == null || !npc.CanTakeTurnActions() || npc.Actions == null || !AiLegal.CanMoveNow(npc, _gameManager))
             yield break;
         if (npc.Stats.MovementBlockedByCondition)
             yield break;
@@ -918,7 +922,7 @@ public class AIService : MonoBehaviour
 
         // Moving needs the move action (AI-034): after a search move the NPC does not move again.
         bool triedApproach = false;
-        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
+        if (!npc.IsTargetInCurrentWeaponRange(target) && AiLegal.CanMoveNow(npc, _gameManager))
         {
             triedApproach = true;
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
@@ -1156,7 +1160,7 @@ public class AIService : MonoBehaviour
                 // Only when the standard action is left after the move: a creature limited to a single action (disabled,
                 // staggered, slowed; ActionEconomy.SingleActionOnly) would spend its turn on the move and could not
                 // breathe (batch 13 step 18 review), so it weighs the breath from where it stands.
-                if (bp.RequiresMove && npc.Actions.HasMoveAction && !npc.Actions.SingleActionOnly)
+                if (bp.RequiresMove && AiLegal.CanMoveNow(npc, _gameManager) && !npc.Actions.SingleActionOnly)
                 {
                     Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} moving from {npc.GridPosition} → {bp.Position} " +
                               $"for breath weapon ({bp.EnemyHits} targets)");
@@ -1307,7 +1311,7 @@ public class AIService : MonoBehaviour
 
         // Move toward target if not in range (priority 3: movement evaluator respects AoO avoidance).
         // Needs the move action (AI-034): a breath-positioning move already spent it.
-        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
+        if (!npc.IsTargetInCurrentWeaponRange(target) && AiLegal.CanMoveNow(npc, _gameManager))
         {
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, dragonProfile);
             if (bestCell != null)
@@ -1386,7 +1390,8 @@ public class AIService : MonoBehaviour
             // The blind attack is declared only when the attack guard allows it (D1: reach, range, ammunition); otherwise the
             // routine searches by moving, below.
             Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
-            bool blindAttackAllowed = AiAttackGuard.Passes(npc, closestPC);
+            // And only with an attack left to declare (AiLegal.CanAttackNow; batch 14 step 10, AI-080).
+            bool blindAttackAllowed = AiLegal.CanAttackNow(npc, _gameManager) && AiAttackGuard.Passes(npc, closestPC);
             if (blindAttackAllowed && tracker.IsPinpointedThisRound(closestPC))
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position."));
             else if (blindAttackAllowed && lastKnown.HasValue)
@@ -1798,7 +1803,7 @@ public class AIService : MonoBehaviour
 
         // Moving needs the move action (AI-034).
         bool triedApproach = false;
-        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
+        if (!npc.IsTargetInCurrentWeaponRange(target) && AiLegal.CanMoveNow(npc, _gameManager))
         {
             triedApproach = true;
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
@@ -1882,7 +1887,7 @@ public class AIService : MonoBehaviour
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{swarm.Stats.CharacterName} is uncontrolled and attacks ally {target.Stats.CharacterName}!"));
         }
 
-        if (!swarm.IsTargetInCurrentWeaponRange(target) && swarm.Actions.HasMoveAction)
+        if (!swarm.IsTargetInCurrentWeaponRange(target) && AiLegal.CanMoveNow(swarm, _gameManager))
         {
             var swarmMove = new MoveAttempt();
             yield return _gameManager.StartCoroutine(
@@ -2241,11 +2246,15 @@ public class AIService : MonoBehaviour
     /// profile's choice (<see cref="SelectBestTarget"/>) among the enemies that pass the attack guard (AiAttackGuard: the
     /// direct-attack legality with reach and range, ammunition, a loaded or reloadable crossbow), or null when none does.
     /// With <paramref name="allowThrow"/> false (the melee routines, C1) a throwable melee weapon counts its melee reach
-    /// only (AiAttackGuard.IntentFor), so a melee creature never picks a far foe to throw its weapon at.
+    /// only (AiAttackGuard.IntentFor), so a melee creature never picks a far foe to throw its weapon at. Null as well when
+    /// the creature may declare no attack now (AiLegal.CanAttackNow: no attack action left, a nauseated or slowed turn;
+    /// batch 14 step 10, AI-080), so the routine goes on to its out-of-reach alternatives instead of a refused attack.
     /// </summary>
     public CharacterController SelectGuardPassingTarget(CharacterController npc, List<CharacterController> allCombatants = null, bool allowThrow = true)
     {
         if (npc == null || _gameManager == null)
+            return null;
+        if (!AiLegal.CanAttackNow(npc, _gameManager))
             return null;
         return SelectBestTarget(npc, allCombatants ?? _gameManager.GetAllCharactersForAI(), c => AiAttackGuard.Passes(npc, c, allowThrow));
     }
@@ -3160,7 +3169,7 @@ public class AIService : MonoBehaviour
         if (_gameManager == null || caster == null || spell == null || !spell.IsMeleeTouchSpell()
             || !AISpellcastingStrategist.IsEnemyTargetedSpell(spell) || AISpellcastingStrategist.IsAllyTargetedSpell(spell))
             return null;
-        if (caster.Actions == null || !caster.Actions.HasMoveAction)
+        if (!AiLegal.CanMoveNow(caster, _gameManager))
             return null;
         // The cast must leave the move that approaches (PHB p.141: the move comes before, between or after the cast and
         // the touch): a spontaneous metamagic cast takes the full round (PHB p.88), so no hold is planned for it (batch 11
@@ -3246,7 +3255,7 @@ public class AIService : MonoBehaviour
             }
         }
 
-        if (target == null && npc.Actions != null && npc.Actions.HasMoveAction && reachable.Count > 0)
+        if (target == null && AiLegal.CanMoveNow(npc, _gameManager) && reachable.Count > 0)
         {
             reachable.Sort((a, b) =>
             {
@@ -4164,6 +4173,10 @@ public class AIService : MonoBehaviour
         // Through the catalog's ranged special or spittle entry (batch 13 step 6), whose executor runs the core below.
         RangedSpecialAttackDefinition definition = npc.GetRangedSpecialAttackDefinition();
         string id = definition != null && definition.IsFreeAction ? ActionIds.Spittle : ActionIds.RangedSpecial;
+        // The entry's legality first (batch 14 step 10, AI-080), for every caller (the turn-start spittle and the ranged
+        // special before or after the move): a pick its core would refuse is no pick.
+        if (!AiLegal.CanUse(npc, id, _gameManager))
+            return false;
         return _gameManager.RunAIActionNow(ActionContext.For(id, npc, ActorSource.AI, target)).Performed;
     }
 
@@ -4304,6 +4317,10 @@ public class AIService : MonoBehaviour
     public bool TryExecuteEngulf(CharacterController npc, CharacterController target)
     {
         if (_gameManager == null || npc == null || target == null || npc.Stats == null)
+            return false;
+        // The engulf entry's legality first (batch 14 step 10, AI-080): no standard action (a nauseated engulfer has a
+        // single move action only, PHB p.310), no pick.
+        if (!AiLegal.CanUse(npc, ActionIds.Engulf, _gameManager))
             return false;
         // Through the catalog's engulf entry (batch 13 step 6), whose executor runs the core below.
         return _gameManager.RunAIActionNow(ActionContext.For(ActionIds.Engulf, npc, ActorSource.AI, target)).Performed;

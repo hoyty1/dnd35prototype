@@ -1002,6 +1002,17 @@ public static class ActionCatalogTests
         return stack.Count == 0;
     }
 
+    /// <summary>Every entry: <see cref="ActorActionSet.AllowsNow"/> answers as the full set's Allows (batch 14 step 10, AI-080).</summary>
+    private static void TestAllowsNowMatchesBuild(GameManager gm, CharacterController actor, string label)
+    {
+        ActorActionSet set = ActorActionSet.Build(gm, actor, ActorSource.AI);
+        var mismatches = new List<string>();
+        foreach (ActionDefinition d in ActionCatalog.All)
+            if (ActorActionSet.AllowsNow(gm, actor, d.Id) != set.Allows(d.Id))
+                mismatches.Add(d.Id);
+        Assert(mismatches.Count == 0, "AllowsNow agrees with Build + Allows on every entry (" + label + ")", string.Join(", ", mismatches));
+    }
+
     private static void TestRunnerRefusalsInPlay()
     {
         GameManager gm = GameManager.Instance;
@@ -1047,7 +1058,84 @@ public static class ActionCatalogTests
             Assert(ActionSetShadow.Total == 1 && ActionSetShadow.Lines.Count == 1 && ActionSetShadow.Lines[0].Contains(ActionIds.Attack + ": Compulsion"),
                 "The shadow check records a turned creature's attack as one Compulsion entry (PHB p.159, D15)",
                 string.Join(" | ", ActionSetShadow.Lines));
+            Assert(ActionSetShadow.AiRunTotal == 1 && ActionSetShadow.ProbeTotal == 0 && ActionSetShadow.AiRunCounts.Count == 1
+                   && ActionSetShadow.ProbeCounts.Count == 0,
+                "A pick with no probe mark counts as AI-run (batch 14 step 10, AI-080)",
+                $"aiRun={ActionSetShadow.AiRunTotal} probe={ActionSetShadow.ProbeTotal}");
             ActionSetShadow.Clear();
+
+            // AI-080 (batch 14 step 10): a probe (a fixture's flag, or a scripted step's actor through BeginProbe) is
+            // counted apart from an AI-run pick, and the scope restores the previous actor.
+            ActionContext probeCtx = ActionContext.For(ActionIds.StandUp, actor, ActorSource.AI);
+            probeCtx.Probe = true;
+            gm.ActionSetShadowCheck(probeCtx);
+            using (ActionContext.BeginProbe(actor))
+            {
+                Assert(ActionContext.ProbeActor == actor && ActionContext.IsProbe(ActionContext.For(ActionIds.Attack, actor, ActorSource.AI)),
+                    "Inside BeginProbe the actor's contexts are probes");
+                gm.ActionSetShadowCheck(ActionContext.For(ActionIds.StandUp, actor, ActorSource.AI));
+            }
+            Assert(ActionContext.ProbeActor == null && !ActionContext.IsProbe(ActionContext.For(ActionIds.Attack, actor, ActorSource.AI)),
+                "The probe scope restores the previous probe actor (none)");
+            Assert(ActionSetShadow.Total == 2 && ActionSetShadow.ProbeTotal == 2 && ActionSetShadow.AiRunTotal == 0
+                   && ActionSetShadow.ProbeCounts.Count == 1 && ActionSetShadow.AiRunCounts.Count == 0
+                   && ActionSetShadow.Lines.Count == 2 && ActionSetShadow.Lines[0].EndsWith(" (probe)"),
+                "Probe picks (the flag and the scope) are counted apart from AI-run picks and their lines are marked",
+                string.Join(" | ", ActionSetShadow.Lines));
+            ActionSetShadow.Clear();
+            ActionContext.ClearProbe();
+
+            // ActorActionSet.AllowsNow reads one entry as Build + Allows would (batch 14 step 10, AI-080), and AiLegal reads it.
+            TestAllowsNowMatchesBuild(gm, actor, "fresh turn");
+            actor.Actions.UseStandardAction();
+            TestAllowsNowMatchesBuild(gm, actor, "standard action spent");
+            Assert(!AiLegal.CanAttackNow(actor, gm) && AiLegal.CanMoveNow(actor, gm),
+                "With the standard action spent the AI may move but declares no attack (PHB p.139)");
+            actor.Actions.UseMoveAction();
+            TestAllowsNowMatchesBuild(gm, actor, "both actions spent");
+            Assert(!AiLegal.CanAttackNow(actor, gm) && !AiLegal.CanMoveNow(actor, gm) && !AiLegal.CanUse(actor, ActionIds.TotalDefense, gm),
+                "With both actions spent the AI may neither attack, move nor take total defense");
+            actor.Actions.Reset();
+            actor.CurrentTurnStart.Compulsion = new TurnCompulsion { Turned = true };
+            TestAllowsNowMatchesBuild(gm, actor, "turned");
+            Assert(!AiLegal.CanAttackNow(actor, gm) && AiLegal.CanMoveNow(actor, gm),
+                "A turned creature may move (its flight) but not attack (the compulsion filter, PHB p.159, D15)");
+            actor.CurrentTurnStart.Clear();
+            Assert(!ActorActionSet.AllowsNow(gm, actor, "no_such_action") && !ActorActionSet.AllowsNow(gm, null, ActionIds.Attack)
+                   && !ActorActionSet.AllowsNow(gm, actor, ActionIds.Spittle),
+                "AllowsNow refuses an unknown entry, no actor, and an entry the actor does not have (a fighter's spittle)");
+
+            // AI-080 kinds 11 and 12 (batch 14 step 10, review): a nauseated engulfer (a single move action, PHB p.310) picks
+            // no engulf and no ranged special; TryExecuteEngulf and TryExecuteRangedSpecialAttack ask the legal set before
+            // the runner, so the shadow records no AI-run pick (before the gate each reached RunAIActionNow and the core
+            // refused it, one AI-run shadow entry apiece).
+            AIService aiService = gm.GetComponent<AIService>();
+            var preyGo = new GameObject("ActionCatalogTest_EngulfPrey");
+            try
+            {
+                CharacterController prey = BareController(preyGo, "ACT_EngulfPrey");
+                prey.GridPosition = actor.GridPosition + Vector2Int.right;
+                actor.ConfigureEngulf(new EngulfDefinition());
+                actor.Actions.Reset();
+                actor.Actions.MoveActionOnly = true;
+                ActionSetShadow.Clear();
+                bool engulfed = aiService != null && aiService.TryExecuteEngulf(actor, prey);
+                bool specialed = aiService != null && aiService.TryExecuteRangedSpecialAttack(actor, prey);
+                Assert(aiService != null && !engulfed && !specialed && !AiLegal.CanUse(actor, ActionIds.Engulf, gm)
+                       && ActionSetShadow.AiRunTotal == 0 && ActionSetShadow.Total == 0,
+                    "A nauseated engulfer's AI picks no engulf or ranged special: the legal set refuses both before the runner (AI-080 kinds 11, 12)",
+                    $"ai={(aiService != null)} engulfed={engulfed} special={specialed} aiRun={ActionSetShadow.AiRunTotal} | {string.Join(" | ", ActionSetShadow.Lines)}");
+                actor.Actions.MoveActionOnly = false;
+                Assert(AiLegal.CanUse(actor, ActionIds.Engulf, gm),
+                    "Without the nausea the engulf entry is allowed (positive control)");
+            }
+            finally
+            {
+                actor.ConfigureEngulf(null);
+                actor.Actions.Reset();
+                ActionSetShadow.Clear();
+                UnityEngine.Object.DestroyImmediate(preyGo);
+            }
 
             var provoke = new ActionOutcome();
             drained = Drain(gm.ResolveActionProvocation(actor, AoOProvokingAction.DrinkPotion, ActionDeciders.For(actor, ActorSource.Ui), provoke));

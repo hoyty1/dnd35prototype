@@ -111,6 +111,10 @@ namespace Tests.Scenarios
                 .Expect("The goblin makes no attack and casts nothing", Expect.All(
                     Expect.None("attack", e => e.Str("attacker") == "gob"),
                     Expect.None("cast", e => e.Str("by") == "gob")))
+                // Batch 14 step 10 (AI-080): the AI declares no attack it cannot take (AiLegal.CanAttackNow), so the old
+                // refusal line is gone.
+                .Expect("It declares no refused attack (AI-080)", v =>
+                    v.Log("Goblin (cannot attack|makes no attack)").Count == 0 ? ExpectResult.Pass("no refusal line") : ExpectResult.Fail("a refused-attack line"))
                 .Expect("The goblin's turn used its move action only", v =>
                 {
                     TraceEvent end = v.Of("turn_end").FirstOrDefault(e => e.Str("actor") == "gob" && e.Round == 1);

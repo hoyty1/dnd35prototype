@@ -107,7 +107,7 @@ public partial class GameManager
 
         bool lowHP = summon.Stats != null && summon.Stats.TotalMaxHP > 0 && summon.Stats.CurrentHP <= Mathf.CeilToInt(summon.Stats.TotalMaxHP * 0.30f);
 
-        if (lowHP && _aiService != null && summon.Actions.HasMoveAction)
+        if (lowHP && _aiService != null && AiLegal.CanMoveNow(summon, this))
         {
             SquareCell retreat = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: true);
             if (retreat != null && retreat.Coords != summon.GridPosition)
@@ -132,7 +132,7 @@ public partial class GameManager
             }
         }
 
-        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction && _aiService != null)
+        if (!summon.IsTargetInCurrentWeaponRange(target) && AiLegal.CanMoveNow(summon, this) && _aiService != null)
         {
             SquareCell bestCell = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: false, target);
             if (bestCell != null)
@@ -168,8 +168,9 @@ public partial class GameManager
             yield break;
 
         // Only a target the attack guard allows (batch 13 step 5, D1: reach, range, ammunition; C1: melee reach for a
-        // throwable weapon, as before step 5).
-        if (target.Stats.IsDead || !AiAttackGuard.Passes(summon, target, allowThrow: false))
+        // throwable weapon, as before step 5), and only with an attack left to declare (AiLegal.CanAttackNow: a nauseated
+        // summon declares none, PHB p.310; batch 14 step 10, AI-080).
+        if (target.Stats.IsDead || !AiLegal.CanAttackNow(summon, this) || !AiAttackGuard.Passes(summon, target, allowThrow: false))
             yield break;
 
         // A templated summon's smite is declared by the shared NPC attack sequence below (NPCPerformAttack ->

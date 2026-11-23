@@ -92,6 +92,14 @@ public sealed class ConfusedBehaviorController
                 bool casterThere = decision.PreferredTarget != null
                     && decision.PreferredTarget.Stats != null
                     && !decision.PreferredTarget.Stats.IsDead;
+                // No attack left to declare (AiLegal.CanAttackNow: the attack entry's legality, e.g. a nauseated creature
+                // is unable to attack, PHB p.310; batch 14 step 10, AI-080): no attack on the caster and no self-attack.
+                // PHB p.212 has it close with the caster then; that move is AI-043's fix, as for the out-of-reach caster.
+                if (!AiLegal.CanAttackNow(actor, gameManager))
+                {
+                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} lashes out at {casterName} but cannot attack this turn."));
+                    yield break;
+                }
                 // The AI attack guard (batch 13 step 5, D1), melee reach for a throwable weapon (C1).
                 Legality onCaster = casterThere
                     ? AiAttackGuard.Check(actor, decision.PreferredTarget, allowThrow: false)
@@ -186,10 +194,10 @@ public sealed class ConfusedBehaviorController
                         }
                     }
 
-                    // The AI attack guard (batch 13 step 5, D1; C1: melee reach), and an attack action left: a creature that
-                    // stood up and then closed in with its converted standard action declares no attack (PHB p.139, p.143).
-                    if (AiAttackGuard.Passes(actor, target, allowThrow: false)
-                        && (ActionCosts.CanAfford(actor, ActionCostType.Standard) || actor.ProgressiveAttackPool.HasStartedAttacking))
+                    // The AI attack guard (batch 13 step 5, D1; C1: melee reach), and an attack action left (the attack entry's
+                    // legality, AiLegal.CanAttackNow; batch 14 step 10, AI-080): a creature that stood up and then closed in
+                    // with its converted standard action, or a nauseated one, declares no attack (PHB p.139, p.143, p.310).
+                    if (AiAttackGuard.Passes(actor, target, allowThrow: false) && AiLegal.CanAttackNow(actor, gameManager))
                     {
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} attacks the nearest creature ({target.Stats.CharacterName})!"));
                         yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, target));

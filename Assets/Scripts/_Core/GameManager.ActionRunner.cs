@@ -316,7 +316,9 @@ public partial class GameManager
     /// Nothing reads the set's answer yet: the pick runs either way. The set is pure (no dice, no log, no state change); a
     /// throw while building it is recorded and ignored, so the shadow can never change a turn. Each disagreement also goes
     /// to <see cref="ActionSetShadow"/>, which the scenario harness writes into its results (fast mode drops Log-level
-    /// lines). Skipped where <see cref="ActionSetShadow.Enabled"/> is false (a release player build).
+    /// lines). Skipped where <see cref="ActionSetShadow.Enabled"/> is false (a release player build). A probe's pick (a
+    /// scenario's scripted step or fixture, <see cref="ActionContext.IsProbe"/>) is counted apart from an AI-run pick
+    /// (batch 14 step 10, AI-080).
     /// </summary>
     internal void ActionSetShadowCheck(ActionContext ctx)
     {
@@ -329,14 +331,15 @@ public partial class GameManager
             Legality legal = set.Check(ctx.Definition.Id, ctx);
             if (!legal.Ok)
             {
-                ActionSetShadow.Record(ctx.Actor.Stats.CharacterName, ctx.Definition.Id, legal.Bar.ToString(), legal.Reason);
-                Debug.Log($"[ActionSet] {ctx.Actor.Stats.CharacterName} picked {ctx.Definition.Id} outside the legal set: {legal.Reason} ({legal.Bar})");
+                bool probe = ActionContext.IsProbe(ctx);
+                ActionSetShadow.Record(ctx.Actor.Stats.CharacterName, ctx.Definition.Id, legal.Bar.ToString(), legal.Reason, probe);
+                Debug.Log($"[ActionSet] {ctx.Actor.Stats.CharacterName} picked {ctx.Definition.Id} outside the legal set: {legal.Reason} ({legal.Bar}){(probe ? " (probe)" : string.Empty)}");
             }
         }
         catch (System.Exception ex)
         {
             ActionSetShadow.Record(ctx.Actor != null && ctx.Actor.Stats != null ? ctx.Actor.Stats.CharacterName : "?",
-                ctx.Definition != null ? ctx.Definition.Id : "?", "Error", ex.GetType().Name + ": " + ex.Message);
+                ctx.Definition != null ? ctx.Definition.Id : "?", "Error", ex.GetType().Name + ": " + ex.Message, ActionContext.IsProbe(ctx));
             Debug.Log($"[ActionSet] the legal set of {DescribeAction(ctx)} could not be built: {ex.GetType().Name}: {ex.Message}");
         }
     }

@@ -231,6 +231,22 @@ public static class ActionPanelParityTests
             }
             Completed.Add(fixture);
             Assert(compared > 0, fixture + ": the panel set states for the mapped buttons", compared.ToString());
+
+            // The AI's one-entry reads (batch 14 step 10, AI-080): AllowsNow agrees with the full set on every entry, and
+            // AiLegal's attack and move reads with the attack and move entries (the move also needs the move action itself).
+            var allowsNowMismatch = new List<string>();
+            foreach (ActionDefinition d in ActionCatalog.All)
+                if (ActorActionSet.AllowsNow(GameManager.Instance, actor, d.Id) != set.Allows(d.Id))
+                    allowsNowMismatch.Add(d.Id);
+            Assert(allowsNowMismatch.Count == 0, fixture + ": ActorActionSet.AllowsNow agrees with the set's Allows on every entry",
+                string.Join(", ", allowsNowMismatch));
+            bool moveNow = set.Allows(ActionIds.Move) && actor.Actions != null && actor.Actions.HasMoveAction;
+            Assert(AiLegal.CanAttackNow(actor) == set.Allows(ActionIds.Attack) && AiLegal.CanMoveNow(actor) == moveNow,
+                fixture + ": AiLegal.CanAttackNow and CanMoveNow read the attack and move entries",
+                $"attack {AiLegal.CanAttackNow(actor)}/{set.Allows(ActionIds.Attack)} move {AiLegal.CanMoveNow(actor)}/{moveNow}");
+            if (fixture == "nauseated")
+                Assert(!AiLegal.CanAttackNow(actor) && AiLegal.CanMoveNow(actor),
+                    "nauseated: the AI declares no attack but may move (PHB p.310: a single move action)");
             Assert(unexpected.Count == 0, fixture + ": every panel/set disagreement is a known, tagged mismatch",
                 string.Join(" | ", unexpected));
         }
