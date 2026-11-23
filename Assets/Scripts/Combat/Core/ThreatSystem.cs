@@ -83,6 +83,14 @@ public static class ThreatSystem
     /// <param name="character">The threatening character.</param>
     /// <returns>Set of grid coordinates that this character threatens.</returns>
     public static HashSet<Vector2Int> GetThreatenedSquares(CharacterController character)
+        => GetThreatenedSquares(character, log: true);
+
+    /// <summary>
+    /// <see cref="GetThreatenedSquares(CharacterController)"/>, with its diagnostic Debug.Log lines only when
+    /// <paramref name="log"/> is true. The AI knowledge facts (KnowledgeFacts, batch 14 step 2) pass false: they ask per
+    /// candidate target on every decision, and a Console line each time would cost decision time.
+    /// </summary>
+    public static HashSet<Vector2Int> GetThreatenedSquares(CharacterController character, bool log)
     {
         var threatened = new HashSet<Vector2Int>();
         if (character == null || character.Stats == null || character.Stats.IsDead) return threatened;
@@ -94,7 +102,7 @@ public static class ThreatSystem
         // ============================================================
         if (!character.HasMeleeWeaponEquipped())
         {
-            Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} has NO melee weapon — threatens 0 squares (ranged only)");
+            if (log) Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} has NO melee weapon — threatens 0 squares (ranged only)");
             return threatened;
         }
 
@@ -106,7 +114,7 @@ public static class ThreatSystem
                 ConditionDefinition def = ConditionRules.GetDefinition(activeType);
                 if (def.PreventsThreatening)
                 {
-                    if (activeType == CombatConditionType.Grappled)
+                    if (log && activeType == CombatConditionType.Grappled)
                         Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} is grappled and threatens 0 squares.");
                     return threatened;
                 }
@@ -150,7 +158,7 @@ public static class ThreatSystem
         }
 
         Vector2Int basePos = character.GridPosition;
-        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from footprint base ({basePos.x},{basePos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
+        if (log) Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from footprint base ({basePos.x},{basePos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
         return threatened;
     }
 
@@ -280,38 +288,9 @@ public static class ThreatSystem
         return hitChance * averageDamage;
     }
 
+    /// <summary>The average damage of one hit of the attacker's main attack (DND35.AI.Valuation.AttackValue.AverageMeleeDamage, batch 14 step 2).</summary>
     private static float EstimateAverageMeleeDamage(CharacterController attacker)
-    {
-        if (attacker == null || attacker.Stats == null)
-            return 0f;
-
-        ItemData weapon = attacker.GetEquippedMainWeapon();
-        if (weapon != null && weapon.IsWeapon)
-        {
-            // The dice the attack code rolls for the wielder's size (DMG Tables 2-2 and 2-3).
-            attacker.GetScaledWeaponDamageDice(weapon, out int count, out int dice);
-            float diceAverage = count > 0 && dice > 0
-                ? count * (dice + 1) * 0.5f
-                : 2.5f;
-
-            float damageBonus = weapon.BonusDamage;
-            if (weapon.WeaponCat == WeaponCategory.Melee || weapon.IsThrown)
-                damageBonus += attacker.Stats.STRMod;
-
-            return Mathf.Max(1f, diceAverage + damageBonus);
-        }
-
-        // Natural attack (size-scaled, with its own Strength multiple) or unarmed strike (size- and monk-scaled).
-        NaturalAttackDefinition natural = attacker.Stats.GetPrimaryNaturalAttack();
-        if (natural != null)
-        {
-            attacker.Stats.GetScaledNaturalAttackDamage(natural, out int naturalCount, out int naturalDice);
-            return Mathf.Max(1f, naturalCount * (naturalDice + 1) * 0.5f + attacker.Stats.GetNaturalAttackDamageBonus(natural));
-        }
-
-        var unarmed = attacker.GetUnarmedDamage();
-        return Mathf.Max(1f, unarmed.damageCount * (unarmed.damageDice + 1) * 0.5f + unarmed.bonusDamage + attacker.Stats.STRMod);
-    }
+        => DND35.AI.Valuation.AttackValue.AverageMeleeDamage(attacker);
 
     // ========================================================================
     // AoO USAGE TRACKING

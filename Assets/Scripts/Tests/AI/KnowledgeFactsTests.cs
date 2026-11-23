@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DND35.AI;
 using DND35.AI.Knowledge;
+using DND35.AI.Valuation;
 using Tests.Utilities;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -53,6 +54,7 @@ public static class KnowledgeFactsTests
             TestOmniscientViewOfCreature(made);
             TestControlFlags();
             TestMindAffectingImmunityScore(made);
+            TestBatch14Facts(made);
         }
         finally
         {
@@ -319,6 +321,179 @@ public static class KnowledgeFactsTests
         float humanScore = (float)score.Invoke(null, new object[] { caster, human, charm });
         Assert(plantScore <= -50f && humanScore == 0f, "a mind-affecting spell scores -50 against an intelligent plant, 0 against a humanoid",
             "plant " + plantScore + " humanoid " + humanScore);
+    }
+
+    private static void EquipLongsword(CharacterController c)
+    {
+        InventoryComponent inv = c.GetComponent<InventoryComponent>();
+#pragma warning disable CS0618 // the longsword's string id
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.LONGSWORD), EquipSlot.RightHand);
+#pragma warning restore CS0618
+        inv.CharacterInventory.RecalculateStats();
+    }
+
+    private static CharacterController Place(List<CharacterController> made, string name, string cls, CharacterTeam team, int x, int y, bool sword = true)
+    {
+        CharacterController c = TestHelpers.CreateCharacter(name: name, characterClass: cls, level: 3, gridPosition: new Vector2Int(x, y));
+        made.Add(c);
+        c.SetTeam(team);
+        TestHelpers.SetGridPosition(c, x, y);
+        if (sword)
+            EquipLongsword(c);
+        return c;
+    }
+
+    /// <summary>
+    /// Batch 14 step 2 (docs/designs/personalities_batch14.md, "New facts"): the 16 facts the personality considerations
+    /// read, from the omniscient provider at Confirmed, on creatures placed off the scene's grid with a roster of their
+    /// own (OmniscientKnowledgeProvider(roster)). Dying is Down and Helpless, dead is Down but not Helpless, prone is
+    /// neither, and a disabled creature at 0 hit points has the Down wound band but is not Down (it still acts, PHB
+    /// p.145). The damage memory survives the observer's next turn start (roll-over) and is forgotten at the one after.
+    /// </summary>
+    private static void TestBatch14Facts(List<CharacterController> made)
+    {
+        // Observer O (enemy team) at (100,100); subject S (player team) east of it at (101,100); O's ally A on S's far
+        // side at (102,100), so O and A flank S (PHB p.153); S's ally F two squares from S at (101,102); a cleric C of
+        // the player team far away.
+        CharacterController o = Place(made, "KF14 Observer", "Fighter", CharacterTeam.Enemy, 100, 100);
+        CharacterController s = Place(made, "KF14 Subject", "Fighter", CharacterTeam.Player, 101, 100);
+        CharacterController a = Place(made, "KF14 Ally", "Fighter", CharacterTeam.Enemy, 102, 100);
+        CharacterController f = Place(made, "KF14 OtherFoe", "Fighter", CharacterTeam.Player, 101, 102, sword: false);
+        CharacterController cleric = Place(made, "KF14 Cleric", "Cleric", CharacterTeam.Player, 110, 110, sword: false);
+        var roster = new List<CharacterController> { o, s, a, f, cleric };
+        var provider = new OmniscientKnowledgeProvider(() => roster);
+        ITargetView view = provider.GetView(o, s);
+
+        FactKey[] newKeys =
+        {
+            FactKey.Down, FactKey.Helpless, FactKey.Fleeing, FactKey.Healer, FactKey.Distance, FactKey.ThreatensObserver,
+            FactKey.ThreatensAllyInNeed, FactKey.EngagedByAlly, FactKey.FoesNear, FactKey.FlankingNow, FactKey.DamagedObserver,
+            FactKey.AcEstimate, FactKey.TouchAcEstimate, FactKey.HpCurrent, FactKey.HpMax, FactKey.ThreatPerRound
+        };
+        var notConfirmed = new List<string>();
+        foreach (FactKey k in newKeys)
+            if (view.Get(k).Level != KnowledgeLevel.Confirmed)
+                notConfirmed.Add(k.ToString());
+        Assert(newKeys.Length == 16 && notConfirmed.Count == 0, "the omniscient view gives each of the 16 new facts at Confirmed", string.Join(", ", notConfirmed));
+        Assert((int)FactKey.Mindless == 13 && (int)FactKey.Down == 14, "the new keys are appended: the batch 13 keys keep their numbers");
+
+        ITargetView noObserver = provider.GetView(null, s);
+        Assert(!noObserver.Get(FactKey.Distance).IsKnown && !noObserver.Get(FactKey.ThreatPerRound).IsKnown
+            && !noObserver.Get(FactKey.DamagedObserver).IsKnown && noObserver.Get(FactKey.HpMax).IsKnown,
+            "the relational facts need an observer (Unknown without one); the subject's own facts do not");
+
+        // Standing, unhurt.
+        Assert(!view.Get(FactKey.Down).Flag && !view.Get(FactKey.Helpless).Flag && !view.Get(FactKey.Fleeing).Flag,
+            "a standing creature is not Down, Helpless or Fleeing");
+        Assert(view.Get(FactKey.HpCurrent).Number == s.Stats.CurrentHP && view.Get(FactKey.HpMax).Number == s.Stats.TotalMaxHP
+            && view.Get(FactKey.AcEstimate).Number == s.Stats.ArmorClass && view.Get(FactKey.TouchAcEstimate).Number == s.Stats.TouchArmorClass,
+            "HpCurrent, HpMax, AcEstimate and TouchAcEstimate read the subject's hit points, AC and touch AC");
+
+        // Distance (PHB p.147: the second diagonal counts 2).
+        Assert(view.Get(FactKey.Distance).Number == 1 && provider.GetView(o, f).Get(FactKey.Distance).Number == 2
+            && provider.GetView(o, cleric).Get(FactKey.Distance).Number == 15,
+            "Distance counts squares with PHB diagonals (adjacent 1; 1 across and 2 up is 2; 10 by 10 is 15)",
+            view.Get(FactKey.Distance) + " / " + provider.GetView(o, f).Get(FactKey.Distance) + " / " + provider.GetView(o, cleric).Get(FactKey.Distance));
+
+        // Threat and position.
+        Assert(view.Get(FactKey.ThreatensObserver).Flag && !provider.GetView(o, cleric).Get(FactKey.ThreatensObserver).Flag
+            && !provider.GetView(o, a).Get(FactKey.ThreatensObserver).Flag,
+            "ThreatensObserver: an adjacent armed foe threatens the observer; a far one does not, nor an ally");
+        Assert(view.Get(FactKey.EngagedByAlly).Flag && !provider.GetView(o, cleric).Get(FactKey.EngagedByAlly).Flag,
+            "EngagedByAlly: the observer's ally is adjacent to the subject, not to the far cleric");
+        Assert(view.Get(FactKey.FlankingNow).Flag && !provider.GetView(o, f).Get(FactKey.FlankingNow).Flag,
+            "FlankingNow: the observer and its ally on opposite sides flank the subject (PHB p.153); not a foe out of reach");
+        Assert(view.Get(FactKey.FoesNear).Number == 1 && provider.GetView(o, cleric).Get(FactKey.FoesNear).Number == 0,
+            "FoesNear counts the other foes within 2 squares of the subject (1 near the subject, 0 near the far cleric)",
+            view.Get(FactKey.FoesNear).ToString());
+
+        Assert(!view.Get(FactKey.ThreatensAllyInNeed).Flag, "ThreatensAllyInNeed: no ally of the observer is below 70% hit points");
+        int full = a.Stats.TotalMaxHP;
+        a.Stats.CurrentHP = Mathf.Max(1, (full * 7 - 1) / 10);
+        Assert(a.Stats.CurrentHP * 10 < full * 7 && view.Get(FactKey.ThreatensAllyInNeed).Flag
+            && !provider.GetView(o, cleric).Get(FactKey.ThreatensAllyInNeed).Flag,
+            "ThreatensAllyInNeed: the subject threatens the observer's ally below 70% hit points; the far cleric does not",
+            a.Stats.CurrentHP + "/" + full);
+        a.Stats.CurrentHP = full;
+
+        // Healer.
+        Assert(provider.GetView(o, cleric).Get(FactKey.Healer).Flag && !view.Get(FactKey.Healer).Flag,
+            "Healer: a cleric is a healer, a fighter with no healing spell is not");
+
+        // Damage memory.
+        Assert(!view.Get(FactKey.DamagedObserver).Flag, "DamagedObserver: nothing remembered yet");
+        o.DamageMemory.Record(o, s, 4);
+        o.DamageMemory.Record(o, s, 2);
+        o.DamageMemory.Record(o, o, 9);
+        Assert(view.Get(FactKey.DamagedObserver).Flag && view.Get(FactKey.DamagedObserver).Number == 6
+            && !provider.GetView(o, a).Get(FactKey.DamagedObserver).Flag && o.DamageMemory.Count == 1,
+            "DamagedObserver: the subject hurt the observer for 4 + 2 since its last turn; its own damage is not remembered");
+        o.StartNewTurn();
+        Assert(view.Get(FactKey.DamagedObserver).Number == 6 && o.DamageMemory.Count == 1,
+            "DamagedObserver: still remembered on the observer's next turn (the turn start rolls the memory over)");
+        o.DamageMemory.Record(o, s, 1);
+        Assert(view.Get(FactKey.DamagedObserver).Number == 7 && o.DamageMemory.Count == 1,
+            "DamagedObserver: the damage of both windows adds up for one source");
+        o.StartNewTurn();
+        Assert(view.Get(FactKey.DamagedObserver).Number == 1, "DamagedObserver: the window before the previous turn start is forgotten");
+        o.StartNewTurn();
+        Assert(!view.Get(FactKey.DamagedObserver).Flag && o.DamageMemory.Count == 0,
+            "DamagedObserver: forgotten once two turn starts passed with no new damage");
+        if (GameManager.Instance != null)
+        {
+            DamagePacket packet = DamagePackets.Supernatural("KnowledgeFactsTests", DamageType.Untyped);
+            packet.SourceCreature = s;
+            int hpBefore = o.Stats.CurrentHP;
+            DamageResolutionResult dealt = GameManager.Instance.DealDamage(o, 3, packet);
+            Assert(dealt.FinalDamage == 3 && view.Get(FactKey.DamagedObserver).Number == 3,
+                "DamagedObserver: GameManager.DealDamage records the packet's source creature with the damage taken", dealt.FinalDamage + " taken");
+            o.Stats.CurrentHP = hpBefore;
+            o.DamageMemory.Clear();
+        }
+        else
+            Assert(false, "a scene GameManager for the DealDamage writer");
+
+        // ThreatPerRound.
+        FactValue threat = view.Get(FactKey.ThreatPerRound);
+        float expected = AttackValue.ExpectedRoundDamage(s, o.Stats.ArmorClass);
+        Assert(threat.Amount > 0f && Mathf.Approximately(threat.Amount, expected) && threat.Number == Mathf.RoundToInt(expected),
+            "ThreatPerRound is the subject's expected round damage against the observer's AC", threat + " expected " + expected);
+
+        // Fleeing.
+        s.IsWithdrawing = true;
+        Assert(view.Get(FactKey.Fleeing).Flag, "Fleeing: a withdrawing creature (PHB p.143)");
+        s.IsWithdrawing = false;
+        s.ApplyCondition(CombatConditionType.Frightened, 3, "KnowledgeFactsTests");
+        Assert(view.Get(FactKey.Fleeing).Flag, "Fleeing: a frightened creature (DMG p.301)");
+        s.RemoveCondition(CombatConditionType.Frightened);
+        Assert(!view.Get(FactKey.Fleeing).Flag, "Fleeing: no longer, once the fear is gone");
+
+        // Prone is not Down.
+        s.ApplyCondition(CombatConditionType.Prone, 3, "KnowledgeFactsTests");
+        Assert(s.HasCondition(CombatConditionType.Prone) && !view.Get(FactKey.Down).Flag && !view.Get(FactKey.Helpless).Flag,
+            "prone is not Down and not Helpless");
+        s.RemoveCondition(CombatConditionType.Prone);
+
+        // Disabled at 0: the Down wound band, but not Down.
+        s.Stats.CurrentHP = 0;
+        Assert(view.Get(FactKey.WoundBand).Text == "Down" && !view.Get(FactKey.Down).Flag,
+            "a disabled creature at 0 hit points has the Down wound band but is not Down (it still acts, PHB p.145)",
+            s.CurrentHPState.ToString());
+
+        // Dying is Down and Helpless, and threatens nothing a round.
+        s.Stats.CurrentHP = -3;
+        Assert(s.IsUnconscious && view.Get(FactKey.Down).Flag && view.Get(FactKey.Helpless).Flag,
+            "dying is Down and Helpless (PHB p.145, p.153)", s.CurrentHPState.ToString());
+        Assert(view.Get(FactKey.ThreatPerRound).IsKnown && view.Get(FactKey.ThreatPerRound).Amount == 0f,
+            "ThreatPerRound is 0 for a creature that cannot act");
+        Assert(provider.GetView(o, f).Get(FactKey.FoesNear).Number == 1,
+            "a dying foe still counts among the foes near another (FoesNear counts every foe not dead)");
+
+        // Dead is Down (CharacterController.IsUnconscious) but not Helpless (no coup de grace on the dead).
+        s.Stats.CurrentHP = -10;
+        Assert(s.IsDead && view.Get(FactKey.Down).Flag && !view.Get(FactKey.Helpless).Flag,
+            "dead is Down but not Helpless", s.CurrentHPState.ToString());
+        s.Stats.CurrentHP = s.Stats.TotalMaxHP;
     }
 
     private static void TestControlFlags()

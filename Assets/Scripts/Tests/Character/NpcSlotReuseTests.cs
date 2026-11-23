@@ -53,6 +53,7 @@ public static class NpcSlotReuseTests
             TestReusedSlotDestroysOldProfile();
             TestTotalDefenseClearedOnRespawn();
             TestRetrievedItemClearedOnRespawn();
+            TestDamageMemoryClearedOnRespawn();
         }
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
@@ -576,6 +577,40 @@ public static class NpcSlotReuseTests
         finally
         {
             Cleanup(slot);
+        }
+    }
+
+    /// <summary>
+    /// Batch 14 step 2 (CRE-046): the AI damage memory (who hurt this creature since its previous turn started) is
+    /// cleared when the slot gets a new creature; a turn start rolls it over, so it lasts until the second turn start.
+    /// </summary>
+    private static void TestDamageMemoryClearedOnRespawn()
+    {
+        CharacterController slot = NewController("CRE046_DamageMemorySlot");
+        CharacterController partner = NewController("CRE046_DamageMemoryPartner");
+        try
+        {
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            Spawn(partner, Def("orc_warrior"), PartnerPos);
+            slot.DamageMemory.Record(slot, partner, 5);
+            Assert(slot.DamageMemory.WasDamagedBy(partner) && slot.DamageMemory.DamageFrom(partner) == 5,
+                "batch 14 control: the old orc remembers 5 damage from its partner");
+
+            Spawn(slot, Def("orc_warrior"), SlotPos);
+            Assert(slot.DamageMemory.Count == 0 && !slot.DamageMemory.WasDamagedBy(partner),
+                "CRE-046, batch 14 step 2: the respawned slot remembers no damage");
+
+            slot.DamageMemory.Record(slot, partner, 3);
+            slot.StartNewTurn();
+            Assert(slot.DamageMemory.WasDamagedBy(partner) && slot.DamageMemory.DamageFrom(partner) == 3,
+                "batch 14 step 2: the damage memory survives the creature's next turn start (roll-over)");
+            slot.StartNewTurn();
+            Assert(slot.DamageMemory.Count == 0, "batch 14 step 2: the damage memory is forgotten at the second turn start");
+        }
+        finally
+        {
+            Cleanup(slot);
+            Cleanup(partner);
         }
     }
 

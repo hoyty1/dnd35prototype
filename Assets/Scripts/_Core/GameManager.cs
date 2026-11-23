@@ -1092,8 +1092,12 @@ public partial class GameManager : MonoBehaviour
         ClearAttackedReactions();
 
         // Nor an item retrieved into a hand (D7, batch 13 step 14): the next fight starts with it stowed.
+        // Nor an AI damage memory (batch 14 step 2): it names creatures of the fight that ended.
         foreach (CharacterController c in GetAllCharacters())
+        {
             c?.ClearRetrievedItem();
+            c?.DamageMemory.Clear();
+        }
 
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();

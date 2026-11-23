@@ -68,8 +68,9 @@ public partial class GameManager
             // 2. Thrown drop and ammunition.
             RunPostAttackThrownAndAmmo(res);
 
-            // 3. Concentration, once per damaging hit.
+            // 3. Concentration, once per damaging hit; the target's AI damage memory (batch 14 step 2: no log, no dice).
             RunPostAttackConcentration(res);
+            RecordAttackDamageMemory(res);
 
             // 4. Melee reactions.
             RunPostAttackReactions(res);
@@ -279,6 +280,22 @@ public partial class GameManager
             CombatResult r = res.Results[i];
             if (r != null && r.Hit && r.TotalDamage > 0)
                 CheckConcentrationOnDamage(res.Target, r.TotalDamage);
+        }
+    }
+
+    /// <summary>
+    /// The target remembers the attacker for each hit of the step that dealt damage after mitigation
+    /// (CharacterController.DamageMemory, batch 14 step 2): AI knowledge, no rule, no log and no dice.
+    /// </summary>
+    private static void RecordAttackDamageMemory(AttackResolution res)
+    {
+        if (res.Target == null)
+            return;
+        for (int i = 0; i < res.Results.Count; i++)
+        {
+            CombatResult r = res.Results[i];
+            if (r != null && r.Hit && r.TotalDamage > 0)
+                res.Target.DamageMemory.Record(res.Target, res.Attacker, r.TotalDamage);
         }
     }
 

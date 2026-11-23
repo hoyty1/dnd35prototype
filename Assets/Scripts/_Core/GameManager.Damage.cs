@@ -29,6 +29,9 @@ public partial class GameManager
         // reaction comes once the effect resolved (held while a cast, an attack hook, a maneuver or a multi-victim effect
         // is still resolving).
         CharacterController source = packet != null && packet.SourceCreature != null ? packet.SourceCreature : ResolvingCast?.Request.Caster;
+        // The target's AI damage memory (batch 14 step 2): AI knowledge only, no log and no dice.
+        if (result.FinalDamage > 0 && target != null)
+            target.DamageMemory.Record(target, source, result.FinalDamage);
         if (result.FinalDamage > 0 && source != null && target != null && source != target && TeamUtility.IsEnemy(source, target))
             NotifyAttackedOrDisturbed(target, source);
         FlushAttackedReactions();

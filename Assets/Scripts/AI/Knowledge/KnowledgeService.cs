@@ -48,24 +48,53 @@ namespace DND35.AI.Knowledge
 
     /// <summary>
     /// The truth about every creature, at <see cref="KnowledgeLevel.Confirmed"/>: the provider until batch 17. Facts are
-    /// computed when asked, from the subject's live state (stats, hands, armor slot, conditions), so a view never goes
-    /// stale and asking for one fact costs nothing for the others.
+    /// computed when asked, from the subject's live state (stats, hands, armor slot, conditions) and, for the relational
+    /// facts of batch 14 step 2 (Distance to ThreatPerRound), the observer's state and the fight's creatures, so a view
+    /// never goes stale and asking for one fact costs nothing for the others. A view reads the fight's creatures once
+    /// (on its first relational fact) and keeps that list: take a view per decision and never keep one across turns.
     /// </summary>
     public sealed class OmniscientKnowledgeProvider : IKnowledgeProvider
     {
         public static readonly OmniscientKnowledgeProvider Instance = new OmniscientKnowledgeProvider();
 
-        public ITargetView GetView(CharacterController observer, CharacterController subject) => new TruthView(observer, subject);
+        private readonly Func<List<CharacterController>> _roster;
+
+        /// <summary>
+        /// The omniscient provider. <paramref name="roster"/> gives the creatures of the fight for the relational facts
+        /// (ThreatensAllyInNeed, EngagedByAlly, FoesNear, FlankingNow); null reads the scene's combatants
+        /// (GameManager.GetAllCharactersForAI), and none without a GameManager. A static suite passes its own creatures.
+        /// </summary>
+        public OmniscientKnowledgeProvider(Func<List<CharacterController>> roster = null)
+        {
+            _roster = roster;
+        }
+
+        public ITargetView GetView(CharacterController observer, CharacterController subject) => new TruthView(this, observer, subject);
+
+        private List<CharacterController> Roster()
+        {
+            if (_roster != null)
+                return _roster() ?? new List<CharacterController>();
+            GameManager gm = GameManager.Instance;
+            return gm != null ? gm.GetAllCharactersForAI() : new List<CharacterController>();
+        }
 
         private sealed class TruthView : ITargetView
         {
             private const KnowledgeLevel L = KnowledgeLevel.Confirmed;
 
+            private readonly OmniscientKnowledgeProvider _provider;
+            private List<CharacterController> _roster;
+
+            /// <summary>The fight's creatures, read once per view (a view lives for one decision).</summary>
+            private List<CharacterController> Roster => _roster ??= _provider.Roster();
+
             public CharacterController Observer { get; }
             public CharacterController Subject { get; }
 
-            public TruthView(CharacterController observer, CharacterController subject)
+            public TruthView(OmniscientKnowledgeProvider provider, CharacterController observer, CharacterController subject)
             {
+                _provider = provider;
                 Observer = observer;
                 Subject = subject;
             }
@@ -113,8 +142,59 @@ namespace DND35.AI.Knowledge
                         return FactValue.Of(L, s.Spellcasting != null || st.IsSpellcaster);
                     case FactKey.Mindless:
                         return FactValue.Of(L, st.IsMindless);
+                    // Batch 14 step 2: the facts of the personality considerations.
+                    case FactKey.Down:
+                        return FactValue.Of(L, s.IsUnconscious);
+                    case FactKey.Helpless:
+                        return FactValue.Of(L, s.IsHelplessForCoupDeGrace());
+                    case FactKey.Fleeing:
+                        return FactValue.Of(L, KnowledgeFacts.IsFleeing(s));
+                    case FactKey.Healer:
+                        return FactValue.Of(L, KnowledgeFacts.IsHealer(s));
+                    case FactKey.AcEstimate:
+                        return FactValue.OfNumber(L, st.ArmorClass);
+                    case FactKey.TouchAcEstimate:
+                        return FactValue.OfNumber(L, st.TouchArmorClass);
+                    case FactKey.HpCurrent:
+                        return FactValue.OfNumber(L, st.CurrentHP);
+                    case FactKey.HpMax:
+                        return FactValue.OfNumber(L, st.TotalMaxHP);
                     default:
-                        return FactValue.Unknown; // Subtype and Condition hold several values: Has
+                        return GetRelational(key, s); // Subtype and Condition hold several values: Has
+                }
+            }
+
+            /// <summary>The facts about the subject relative to the observer: Unknown without an observer.</summary>
+            private FactValue GetRelational(FactKey key, CharacterController s)
+            {
+                CharacterController o = Observer;
+                if (o == null || o.Stats == null)
+                    return FactValue.Unknown;
+                switch (key)
+                {
+                    case FactKey.Distance:
+                        return FactValue.OfNumber(L, o.GetMinimumDistanceToTarget(s, chebyshev: false));
+                    case FactKey.ThreatensObserver:
+                        return FactValue.Of(L, s.Team != o.Team && KnowledgeFacts.ThreatensSpaceOf(s, o)); // as ThreatSystem.GetThreateningEnemies
+                    case FactKey.ThreatensAllyInNeed:
+                        return FactValue.Of(L, s.Team != o.Team && KnowledgeFacts.ThreatensAllyInNeed(o, s, Roster));
+                    case FactKey.EngagedByAlly:
+                        return FactValue.Of(L, KnowledgeFacts.EngagedByAlly(o, s, Roster));
+                    case FactKey.FoesNear:
+                        return FactValue.OfNumber(L, KnowledgeFacts.FoesNear(o, s, Roster));
+                    case FactKey.FlankingNow:
+                        return FactValue.Of(L, CombatUtils.IsAttackerFlanking(o, s, Roster, out _));
+                    case FactKey.DamagedObserver:
+                    {
+                        int damage = o.DamageMemory.DamageFrom(s);
+                        return new FactValue(L, damage > 0, damage, damage > 0 ? "true" : "false");
+                    }
+                    case FactKey.ThreatPerRound:
+                        return FactValue.OfAmount(L, KnowledgeFacts.CanAttackThisRound(s)
+                            ? DND35.AI.Valuation.AttackValue.ExpectedRoundDamage(s, o.Stats.ArmorClass)
+                            : 0f);
+                    default:
+                        return FactValue.Unknown;
                 }
             }
 

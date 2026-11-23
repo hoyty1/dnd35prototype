@@ -268,12 +268,13 @@ Assets/Scripts/
   _Core/ (23)            GameManager.cs + 16 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
-  AI/ (13)               AISpellcastingStrategist, AiAttackGuard, AiOutOfReach, AiWeaponFallback, LastKnownPositionTracker, SpellCategoryClassifier,
-                         AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
+  AI/ (14)               AISpellcastingStrategist, AiAttackGuard, AiOutOfReach, AiWeaponFallback, LastKnownPositionTracker, SpellCategoryClassifier,
+                         AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap), AiDamageMemory (batch 14 step 2: who hurt a creature since its previous turn started),
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator
     Debug/ (2)           AiDecisionTimer and AiDecisionTrace (batch 14 step 1, global namespace): the decision-time measurement and decision trace, editor and development builds only, outside every trace hash
-    Knowledge/ (5)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags
+    Knowledge/ (5)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue; batch 14 step 2 added 16 keys), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags
+    Valuation/ (1)       AttackValue (batch 14 step 2, namespace DND35.AI.Valuation): the AI's hit chance and expected damage estimates
     Spellcasting/ (6)    AiConversionPlanner, AiMetamagicPlanner, AreaAimSearch, AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
     Profiles/ (20)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile

@@ -567,6 +567,10 @@ public static class SpellCaster
             result.ImmunityPrevented = mitigation.ImmunityTriggered;
             result.MitigationSummary = mitigation.GetMitigationSummary();
             result.DamageDealt = mitigation.FinalDamage;
+            // The target's AI damage memory (batch 14 step 2): this per-target spell damage step (single-target casts, the
+            // generic area loop, Sound Burst, Flaming Sphere impacts) skips GameManager.DealDamage.
+            if (targetController != null && mitigation.FinalDamage > 0)
+                targetController.DamageMemory.Record(targetController, casterController, mitigation.FinalDamage);
 
             result.TargetHPAfter = targetStats.CurrentHP;
             result.TargetKilled = targetStats.IsDead;

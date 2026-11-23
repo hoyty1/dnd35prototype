@@ -1,6 +1,6 @@
 # Batch 14: weighted personalities
 
-> Status (2026-11-23): step 1 built (the decision trace and timer, the harness timing and the soak baseline in `docs/TESTING.md` 3.5; AI-083 and AI-084 filed); steps 2-15 not built. Plan of 2026-11-15: Queue `_work/queue_b14_workflow.js` generated, not launched; the owner launches it. Read-only design pass: three code mappers on master f8eaac5 (the code is unchanged at 1fa6706), two competing designs, and a judge pass that checked the key claims in the code and in the books. Nothing here was compiled, run or verified in Play mode. Line numbers are anchors from f8eaac5: they drift, so anchor on the member names. Paths are under `Assets/Scripts/` unless they start with `docs/`. AIS = `Services/AIService.cs`, NPT = `_Core/GameManager.NPCTurns.cs`, PROF = `AI/AIProfile.cs`, OOR = `AI/AiOutOfReach.cs`, ATK = `_Core/GameManager.AttackCore.cs`.
+> Status (2026-11-23): step 1 built (the decision trace and timer, the harness timing and the soak baseline in `docs/TESTING.md` 3.5; AI-083 and AI-084 filed); step 2 built (the 16 facts, `AttackValue`, `AiDamageMemory` with a third writer, `SpellCaster.Cast`, the per-target spell damage step that skips `DealDamage`, and a turn-start roll-over instead of a clear; AI-085 filed for the damage paths none of the three writers sees; `rules/ai-damage-memory`); steps 3-15 not built. Plan of 2026-11-15: Queue `_work/queue_b14_workflow.js` generated, not launched; the owner launches it. Read-only design pass: three code mappers on master f8eaac5 (the code is unchanged at 1fa6706), two competing designs, and a judge pass that checked the key claims in the code and in the books. Nothing here was compiled, run or verified in Play mode. Line numbers are anchors from f8eaac5: they drift, so anchor on the member names. Paths are under `Assets/Scripts/` unless they start with `docs/`. AIS = `Services/AIService.cs`, NPT = `_Core/GameManager.NPCTurns.cs`, PROF = `AI/AIProfile.cs`, OOR = `AI/AiOutOfReach.cs`, ATK = `_Core/GameManager.AttackCore.cs`.
 
 ## Summary
 
@@ -389,6 +389,7 @@ IDs: none. Neutral (writers with no consumer yet).
 1. The 16 `FactKey`s and their `TruthView.Get` cases (`AI/Knowledge/KnowledgeService.cs`), with helpers in `KnowledgeFacts`.
 2. Extract `AttackValue`; the private statics delegate to it with the same formula.
 3. Add `AiDamageMemory`. Its writers are `GameManager.OnAttackResolved` and `DealDamage`, with no log and no dice. It is cleared in the `ResetForNewCreature` AI block and at the creature's turn start.
+   As built (2026-11-23): the turn start rolls the memory over instead of clearing it (`AiDamageMemory.RollOver` in `CharacterController.StartNewTurn`): it keeps two windows, since the previous turn start and since the latest, and reads both. A clear there would leave the creature's own decision with only the damage of its current turn, so HurtMe would always be 0; the roll-over also keeps the ongoing damage dealt at the turn start (Melf's Acid Arrow) before `StartNewTurn`. `SpellCaster.Cast` is a third writer, and the encounter reset also clears it.
 
 Tests:
 - extend `KnowledgeFactsTests`: each key; dying is Down, prone is not;

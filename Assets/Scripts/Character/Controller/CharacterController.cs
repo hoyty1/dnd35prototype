@@ -440,6 +440,14 @@ public class CharacterController : MonoBehaviour
     public DND35.AI.AIManeuverTurnMemory AIManeuverMemory { get; } = new DND35.AI.AIManeuverTurnMemory();
 
     /// <summary>
+    /// Who hurt this creature since its previous turn started (batch 14 step 2; the knowledge facade's DamagedObserver
+    /// fact). AI knowledge only: no rule reads it. Written by GameManager.OnAttackResolved, DealDamage and SpellCaster.Cast;
+    /// rolled over by <see cref="StartNewTurn"/>, cleared by <see cref="ResetForNewCreature"/> and the encounter reset.
+    /// See <see cref="DND35.AI.AiDamageMemory"/>.
+    /// </summary>
+    public DND35.AI.AiDamageMemory DamageMemory { get; } = new DND35.AI.AiDamageMemory();
+
+    /// <summary>
     /// The opponents whose movement opportunity against this creature already came this round (PHB p.138,
     /// owner ruling 2026-10-08, CMB-128). Read and written only through ThreatSystem.HasHadMovementOpportunity,
     /// RecordMovementOpportunity and ClearMovementOpportunities; cleared by <see cref="StartNewTurn"/>.
@@ -5056,6 +5064,7 @@ public class CharacterController : MonoBehaviour
         Actions.Reset();
         ProgressiveAttackPool.Clear();
         AIManeuverMemory.Clear();
+        DamageMemory.Clear(); // batch 14 step 2: no damage memory of the old creature (CRE-046)
         ThreatSystem.ClearMovementOpportunities(this);
 
         // Feat toggles and the attack damage mode.
@@ -13237,6 +13246,7 @@ public class CharacterController : MonoBehaviour
         // A rake needs the creature to begin its turn grappling (MM p.314, CMB-144).
         ProgressiveAttackPool.MarkTurnStartedGrappling(IsGrappling());
         AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
+        DamageMemory.RollOver(); // "since my last turn": the window since its previous turn start stays (batch 14 step 2)
         ThreatSystem.ClearMovementOpportunities(this); // a new round of movement opportunities (PHB p.138, CMB-128)
         // Note: PowerAttackValue and the RapidShotEnabled toggle persist between turns (the creature's standing choices);
         // a Rapid Shot declaration is per turn (AttackPool.IsRapidShot, cleared above with the pool; D9)

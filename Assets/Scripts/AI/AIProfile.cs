@@ -880,17 +880,14 @@ namespace DND35.AI
             return twoWeapons > plain;
         }
 
-        /// <summary>The average damage of one hit with <paramref name="weapon"/> (dice at the wielder's size, the Strength share, its flat bonus): an AI estimate.</summary>
+        /// <summary>The average damage of one hit with <paramref name="weapon"/> (dice at the wielder's size, the Strength share, its flat bonus): an AI estimate
+        /// (<see cref="DND35.AI.Valuation.AttackValue.AverageWeaponDamage"/>, batch 14 step 2).</summary>
         private static float AverageWeaponDamage(CharacterController self, ItemData weapon, bool offHand)
-        {
-            self.GetScaledWeaponDamageDice(weapon, out int count, out int dice);
-            float average = Mathf.Max(1, count) * (dice + 1) / 2f + self.Stats.GetWeaponDamageModifier(weapon, offHand) + weapon.BonusDamage;
-            return Mathf.Max(1f, average);
-        }
+            => DND35.AI.Valuation.AttackValue.AverageWeaponDamage(self, weapon, offHand);
 
-        // d20 + modifier against AC: a natural 1 misses and a natural 20 hits (PHB p.134).
+        // d20 + modifier against AC: a natural 1 misses and a natural 20 hits (PHB p.134); AttackValue.HitChance (batch 14 step 2).
         private static float HitChance(int attackModifier, int targetAC)
-            => Mathf.Clamp((21 + attackModifier - targetAC) / 20f, 0.05f, 0.95f);
+            => DND35.AI.Valuation.AttackValue.HitChance(attackModifier, targetAC);
 
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
