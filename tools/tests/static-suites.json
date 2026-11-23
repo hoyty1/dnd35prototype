@@ -60,6 +60,28 @@
       "notes": ""
     },
     {
+      "type": "Tests.AI.AiDecisionTimerTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 32,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 1 (owner request 2026-10-30, the AI decision-time budget; added 2026-11-23): AiDecisionTimer on a fake clock. Exclusive nesting (an inner scope stops the outer clock; an actor-less scope charges the innermost scope's turn), turns keyed by actor across a re-entrant turn (CORE-012), a scope for an actor with no open turn charging no turn, stale and flushed turns closed as unclosed, a cancelled (scripted) turn dropped, a scope inert after a reset, the timed enumerable timing the walk but not the consumer, the disabled no-op, nearest-rank percentiles and the 50 ms count. Static state only."
+    },
+    {
+      "type": "Tests.AI.AiDecisionTraceTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 19,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 1 (added 2026-11-23): the AI decision trace v1. One record per turn keyed by actor, decisions outside an open turn dropped, counts per site and verdict, the ring of the last 50 turns (oldest first), Drain emptying the ring but not the counts, a cancelled (scripted) turn dropped, the collapsed [AI-TRACE] line, a ScenarioTrace's HashLines and hash untouched by recorded turns with AIService.TraceEnabled on, and the disabled no-op. Static state only."
+    },
+    {
       "type": "Tests.AI.AIProfileFrameworkTests",
       "needs": "play",
       "skip": "",

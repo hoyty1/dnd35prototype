@@ -261,7 +261,7 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 ### Folder map of Assets/Scripts
 
-There are 872 `.cs` files (about 417K lines, recounted 2026-11-16). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
+There are 877 `.cs` files (872 recounted 2026-11-16, about 417K lines; batch 14 step 1 added 5 on 2026-11-23). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
 
 ```
 Assets/Scripts/
@@ -272,6 +272,7 @@ Assets/Scripts/
                          AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator
+    Debug/ (2)           AiDecisionTimer and AiDecisionTrace (batch 14 step 1, global namespace): the decision-time measurement and decision trace, editor and development builds only, outside every trace hash
     Knowledge/ (5)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags
     Spellcasting/ (6)    AiConversionPlanner, AiMetamagicPlanner, AreaAimSearch, AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
     Profiles/ (20)       AIProfile subclasses (namespace DND35.AI.Profiles)

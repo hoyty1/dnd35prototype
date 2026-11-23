@@ -36,6 +36,13 @@ public class AIService : MonoBehaviour
     [SerializeField] private AIDifficultyLevel _difficulty = AIDifficultyLevel.Normal;
 
     /// <summary>
+    /// When on, every finished AI turn of <see cref="AiDecisionTrace"/> is also one collapsed "[AI-TRACE]" Debug.Log line
+    /// (batch 14 step 1). Off by default; the trace's ring and counts are kept either way in the editor and development
+    /// builds. Never a combat-log line, so no scenario trace hash sees it.
+    /// </summary>
+    public static bool TraceEnabled { get; set; }
+
+    /// <summary>
     /// The creatures that cast and held a touch charge this turn to move and touch (a HoldCharge candidate, batch 11 step
     /// 27), with the foe they meant to touch: the turn's end moves them into reach and delivers it.
     /// </summary>
@@ -131,6 +138,7 @@ public class AIService : MonoBehaviour
         if (npc != null)
         {
             _heldChargePlans.Remove(npc);
+            BeginDecisionRecords(npc);
         }
 
         yield return _gameManager != null ? _gameManager.StartCoroutine(ExecuteNPCTurnBody(npc, behavior)) : null;
@@ -141,7 +149,32 @@ public class AIService : MonoBehaviour
             if (!CombatEnded() && npc.Stats != null && npc.CanTakeTurnActions())
                 yield return _gameManager.StartCoroutine(TryDeliverHeldChargeTurn(npc, plannedTarget));
         }
+
+        if (npc != null)
+        {
+            AiDecisionTimer.EndTurn(npc);
+            AiDecisionTrace.EndTurn(npc);
+        }
     }
+
+    /// <summary>
+    /// Opens the turn's decision-time record and decision-trace record (batch 14 step 1), keyed by the actor so re-entrant
+    /// turns (CORE-012) do not mix. Reads only; a no-op outside the editor and development builds.
+    /// </summary>
+    private void BeginDecisionRecords(CharacterController npc)
+    {
+        if (!AiDecisionTimer.Enabled && !AiDecisionTrace.Enabled)
+            return;
+        string name = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+        int round = _gameManager != null ? _gameManager.CurrentRound : 0;
+        AiDecisionTimer.BeginTurn(npc, name, round);
+        AIProfile profile = GetProfile(npc);
+        AiDecisionTrace.BeginTurn(npc, name, round, profile != null ? profile.ProfileName : "none", string.Empty);
+    }
+
+    /// <summary>The trace's name for a chosen creature (batch 14 step 1).</summary>
+    private static string TraceName(CharacterController c)
+        => c == null ? "none" : c.Stats != null ? c.Stats.CharacterName : c.name;
 
     private IEnumerator ExecuteNPCTurnBody(CharacterController npc, NPCAIBehavior behavior)
     {
@@ -223,6 +256,9 @@ public class AIService : MonoBehaviour
         IEnumerator scripted = ScenarioHooks.ScriptedTurn?.Invoke(npc);
         if (scripted != null)
         {
+            // A scripted turn makes no AI decision: it is not an AI turn sample (batch 14 step 1).
+            AiDecisionTimer.CancelTurn(npc);
+            AiDecisionTrace.CancelTurn(npc);
             yield return _gameManager.StartCoroutine(scripted);
             yield break;
         }
@@ -2063,6 +2099,19 @@ public class AIService : MonoBehaviour
     /// </summary>
     public CharacterController SelectBestTarget(CharacterController npc, List<CharacterController> allCombatants, Func<CharacterController, bool> filter = null)
     {
+        // Decision time and trace (batch 14 step 1): timed and recorded only, the choice is unchanged.
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Target, npc);
+        CharacterController chosen = SelectBestTargetBody(npc, allCombatants, filter);
+        if (npc != null && AiDecisionTrace.Enabled)
+        {
+            string name = TraceName(chosen);
+            AiDecisionTrace.Record(npc, "Target", name, name, 0f, filter != null ? "filtered" : null);
+        }
+        return chosen;
+    }
+
+    private CharacterController SelectBestTargetBody(CharacterController npc, List<CharacterController> allCombatants, Func<CharacterController, bool> filter)
+    {
         if (npc == null || allCombatants == null)
             return null;
 
@@ -2579,6 +2628,7 @@ public class AIService : MonoBehaviour
     /// </summary>
     public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null)
     {
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Movement, mover);
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
             return null;
 
@@ -2730,6 +2780,7 @@ public class AIService : MonoBehaviour
 
     public bool ShouldUseManeuver(CharacterController npc, CharacterController target)
     {
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc);
         if (npc == null || target == null)
             return false;
 
@@ -2847,25 +2898,43 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null)
             return false;
 
-        if (_gameManager != null
-            && _gameManager.CanUseCoupDeGraceAttackOption(npc)
-            && ShouldNPCUseCoupDeGrace(npc, profile))
+        // Only the choice is timed (batch 14 step 1); the maneuver's execution stays outside every timing scope.
+        bool coupDeGrace;
+        using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
+        {
+            coupDeGrace = _gameManager != null
+                && _gameManager.CanUseCoupDeGraceAttackOption(npc)
+                && ShouldNPCUseCoupDeGrace(npc, profile);
+        }
+        if (coupDeGrace)
         {
             return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.CoupDeGrace);
         }
 
         if (profile != null)
         {
-            SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
+            SpecialAttackType? preferred;
+            bool blocked = false;
+            using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
+            {
+                preferred = profile.GetPreferredManeuver(npc, target);
+                if (preferred.HasValue)
+                {
+                    if (!npc.CanPerformSpecialAttack(preferred.Value))
+                    {
+                        Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} blocked from executing {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
+                        blocked = true;
+                    }
+                    else if (IsManeuverForbiddenByTurnStopgap(npc, target, preferred.Value))
+                    {
+                        blocked = true;
+                    }
+                }
+            }
+
             if (preferred.HasValue)
             {
-                if (!npc.CanPerformSpecialAttack(preferred.Value))
-                {
-                    Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} blocked from executing {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
-                    return false;
-                }
-
-                if (IsManeuverForbiddenByTurnStopgap(npc, target, preferred.Value))
+                if (blocked)
                     return false;
 
                 bool acted = _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value, out bool succeeded);
@@ -2877,8 +2946,13 @@ public class AIService : MonoBehaviour
             return false;
         }
 
-        SpecialAttackType? legacyChoice = _gameManager.PeekNPCFallbackManeuverForAI(npc, target);
-        if (legacyChoice.HasValue && IsManeuverForbiddenByTurnStopgap(npc, target, legacyChoice.Value))
+        bool legacyForbidden;
+        using (AiDecisionTimer.Open(AiTimeBucket.Maneuver, npc))
+        {
+            SpecialAttackType? legacyChoice = _gameManager.PeekNPCFallbackManeuverForAI(npc, target);
+            legacyForbidden = legacyChoice.HasValue && IsManeuverForbiddenByTurnStopgap(npc, target, legacyChoice.Value);
+        }
+        if (legacyForbidden)
             return false;
 
         bool legacyActed = _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target, out SpecialAttackType? attempted, out bool legacySucceeded);
@@ -3062,6 +3136,10 @@ public class AIService : MonoBehaviour
     /// too risky to cast while threatened, or with no legal target, is left out (with a log line).
     /// </summary>
     private IEnumerable<AiSpellCandidate> RankedSpellCandidates(CharacterController caster, CharacterController fallbackTarget, List<AiScoredSpell> scored)
+        // Each step of the walk is timed (batch 14 step 1); the consumer's cast between two candidates is not.
+        => AiDecisionTimer.Timed(RankedSpellCandidatesBody(caster, fallbackTarget, scored), AiTimeBucket.Spell, caster);
+
+    private IEnumerable<AiSpellCandidate> RankedSpellCandidatesBody(CharacterController caster, CharacterController fallbackTarget, List<AiScoredSpell> scored)
     {
         List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
         for (int i = 0; i < scored.Count; i++)
@@ -3377,6 +3455,7 @@ public class AIService : MonoBehaviour
     private List<AiScoredSpell> ScoreCastableSpells(CharacterController caster, CharacterController target,
         Func<SpellData, bool> allow, float minScore, bool logAreaSkips = false)
     {
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Spell, caster);
         var result = new List<AiScoredSpell>();
         if (caster == null || caster.Stats == null)
             return result;
@@ -3557,6 +3636,19 @@ public class AIService : MonoBehaviour
 
     public AIActionType SelectBestAction(CharacterController npc, CharacterController target, bool preferAggression)
     {
+        // Decision time and trace (batch 14 step 1): timed and recorded only, the choice is unchanged.
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Action, npc);
+        AIActionType chosen = SelectBestActionBody(npc, target, preferAggression);
+        if (npc != null && AiDecisionTrace.Enabled)
+        {
+            string name = chosen.ToString();
+            AiDecisionTrace.Record(npc, "Action", name, name, 0f, preferAggression ? "aggressive" : null);
+        }
+        return chosen;
+    }
+
+    private AIActionType SelectBestActionBody(CharacterController npc, CharacterController target, bool preferAggression)
+    {
         if (npc == null || target == null)
             return AIActionType.Wait;
 
@@ -3590,6 +3682,7 @@ public class AIService : MonoBehaviour
 
     private CharacterController SelectLowestHPEnemy(CharacterController npc)
     {
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Target, npc);
         List<CharacterController> all = _gameManager.GetAllCharactersForAI();
         CharacterController weakest = null;
         int lowestHP = int.MaxValue;
@@ -4006,6 +4099,7 @@ public class AIService : MonoBehaviour
         bool requireInRange,
         Func<CharacterController, bool> inRange = null)
     {
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Target, attacker);
         if (attacker == null || attacker.Stats == null)
             return null;
 

@@ -322,6 +322,7 @@ public partial class GameManager
     {
         if (!ActionSetShadow.Enabled)
             return;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.LegalSet, ctx.Actor);
         try
         {
             ActorActionSet set = ActorActionSet.Build(this, ctx.Actor, ActorSource.AI);

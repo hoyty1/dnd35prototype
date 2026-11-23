@@ -118,6 +118,20 @@ namespace Tests.Scenarios
         public int ActionSetTotal;
         public Dictionary<string, int> ActionSetCounts;
         public List<string> ActionSetLines;
+        /// <summary>
+        /// The AI decision time of this job (batch 14 step 1, global::AiDecisionTimer): {turns, p50, p95, max, over50,
+        /// warmup} in milliseconds and the time per bucket, or null when no AI turn ran. Outside the trace hash.
+        /// </summary>
+        public JsonObj AiTiming;
+        /// <summary>The job's AI turns for ai-timing.tsv and the run's timing summary (not serialized per job).</summary>
+        internal List<SoakStats.TimingRow> AiTurns;
+        /// <summary>The job's decision time charged to no open turn (AiDecisionTimer.OutsideMs summed over the buckets).</summary>
+        internal double AiOutsideMs;
+        /// <summary>
+        /// The job's decision trace (batch 14 step 1, global::AiDecisionTrace): {turns, counts per "site: verdict", the
+        /// collapsed lines of the ring's last turns}, or null when no AI turn was traced. Outside the trace hash.
+        /// </summary>
+        public JsonObj AiTrace;
 
         public JsonObj ToJson()
         {
@@ -143,6 +157,10 @@ namespace Tests.Scenarios
                 o.Set("actionSet", new JsonObj().Set("total", ActionSetTotal).Set("distinct", ActionSetCounts.Count)
                     .Set("counts", counts).Set("lines", ActionSetLines));
             }
+            if (AiTiming != null)
+                o.Set("aiTiming", AiTiming);
+            if (AiTrace != null)
+                o.Set("aiTrace", AiTrace);
             return o;
         }
     }
@@ -195,6 +213,11 @@ namespace Tests.Scenarios
         public int[] LogPanelOver;
         /// <summary>Sweeps that found a leak before the trace was written. Emitted as 'log-leak' events after the verdict event, so no other event's seq moves.</summary>
         public readonly List<LogLeakFind> LogLeakFinds = new List<LogLeakFind>();
+        /// <summary>
+        /// The first job of this Play session whose AI turns ran decision code (JIT and first-use costs): its AI decision time is
+        /// warm-up. Set by RecordAiTiming at the job's end (a job that ends before any AI turn passes the warm-up on).
+        /// </summary>
+        public bool WarmUp;
 
         public bool Decided => Outcome != Outcome.None;
 
@@ -343,6 +366,8 @@ namespace Tests.Scenarios
         internal static ScenarioRunner Instance;
         /// <summary>Jobs that started a fight in this domain (this Play session); the static-suite runner warns when it runs after them (docs/TESTING.md 2.6).</summary>
         internal static int JobsStartedThisDomain;
+        /// <summary>A job of this domain (this Play session) has recorded an AI turn, so the warm-up job is taken.</summary>
+        private static bool _aiWarmUpTaken;
         /// <summary>Raised once when a run finishes normally (after its summary is written; not on an interruption).</summary>
         internal static event Action<ScenarioRunner> RunEnded;
         internal static bool SessionDirty;
@@ -767,6 +792,9 @@ namespace Tests.Scenarios
 
             // d-g. Seed, spawn, control, hooks (the legal set's shadow record starts empty for each job)
             global::ActionSetShadow.Clear();
+            // The AI decision time and decision trace start empty too (batch 14 step 1; outside the trace hash).
+            global::AiDecisionTimer.Reset();
+            global::AiDecisionTrace.Clear();
             if (!job.Decided)
                 TryRun(job, "setup", () => Setup(job, gm));
 
@@ -1437,6 +1465,8 @@ namespace Tests.Scenarios
             foreach (KeyValuePair<string, int> kv in global::ActionSetShadow.Counts)
                 result.ActionSetCounts[kv.Key] = kv.Value;
             result.ActionSetLines = new List<string>(global::ActionSetShadow.Lines);
+            RecordAiTiming(job, result);
+            RecordAiTrace(result);
 
             string slug = Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "");
             string path = Path.Combine(RunDir, slug + ".jsonl");
@@ -1570,6 +1600,77 @@ namespace Tests.Scenarios
             {
                 job.Notes.Add("caststages write: " + ex.Message);
             }
+        }
+
+        /// <summary>Turns over the decision-time budget named one by one in a job's notes; the rest are counted.</summary>
+        public const int MaxAiTimingNotes = 5;
+
+        /// <summary>
+        /// The job's AI decision time (batch 14 step 1, docs/TESTING.md 3.5): the timer's turns (an open turn, whose
+        /// coroutine the job's end stopped, is closed as unclosed) into <see cref="JobResult.AiTiming"/> and the rows of
+        /// ai-timing.tsv. A turn whose decisions took more than <see cref="global::AiDecisionTimer.WarnMs"/> is a Notes
+        /// warning, never a Fail; nothing here reaches the trace or its hash.
+        /// </summary>
+        private static void RecordAiTiming(ScenarioJob job, JobResult result)
+        {
+            global::AiDecisionTimer.FlushOpenTurns();
+            IReadOnlyList<global::AiDecisionTimer.TurnSample> turns = global::AiDecisionTimer.Completed;
+            // Time a scope charged to no open turn (a decision made outside ExecuteNPCTurn's records): reported, never hidden.
+            var outside = new JsonObj();
+            double outsideTotal = 0.0;
+            foreach (AiTimeBucket b in (AiTimeBucket[])Enum.GetValues(typeof(AiTimeBucket)))
+            {
+                double ms = global::AiDecisionTimer.OutsideMs(b);
+                outside.Set(b.ToString(), ms);
+                outsideTotal += ms;
+            }
+            result.AiOutsideMs = outsideTotal;
+            if (turns.Count == 0 && outsideTotal <= 0.0)
+                return;
+            // The warm-up is the first job of the session whose AI turns ran decision code (a turn with time above 0), not
+            // merely the first to start a fight: a job that ends before any decision (smoke/boot's 0 ms unclosed turn, soak
+            // seeds 24 and 36) passes it on.
+            if (!_aiWarmUpTaken && turns.Any(t => t.Ticks > 0))
+            {
+                job.WarmUp = true;
+                _aiWarmUpTaken = true;
+            }
+            result.AiTurns = SoakStats.RowsFor(result.Id, result.Seed, result.Rep, job.WarmUp, turns);
+            result.AiTiming = SoakStats.JobTiming(result.AiTurns, job.WarmUp);
+            result.AiTiming.Set("outsideMs", outside);
+            if (global::AiDecisionTimer.Dropped > 0)
+                result.AiTiming.Set("dropped", global::AiDecisionTimer.Dropped);
+            int over = 0;
+            foreach (SoakStats.TimingRow r in result.AiTurns)
+            {
+                if (r.Ms <= global::AiDecisionTimer.WarnMs)
+                    continue;
+                over++;
+                if (over <= MaxAiTimingNotes)
+                    result.Notes.Add("ai-timing warning: " + r.Actor + "'s round " + r.Round + " decisions took "
+                        + r.Ms.ToString("0.#", CultureInfo.InvariantCulture) + " ms, over the "
+                        + global::AiDecisionTimer.WarnMs.ToString("0", CultureInfo.InvariantCulture) + " ms budget"
+                        + (job.WarmUp ? " (warm-up job)" : "") + "; a warning, never a Fail");
+            }
+            if (over > MaxAiTimingNotes)
+                result.Notes.Add("ai-timing warning: " + (over - MaxAiTimingNotes) + " more turns over the budget");
+        }
+
+        /// <summary>
+        /// The job's decision trace (batch 14 step 1) into <see cref="JobResult.AiTrace"/>: the turns recorded, the counts
+        /// per "site: verdict" and the collapsed lines of the ring (its last <see cref="global::AiDecisionTrace.RingSize"/>
+        /// turns). The trace's Debug.Log lines are dropped under the harness's fast mode, so summary.json is where to read
+        /// it; nothing here reaches the trace or its hash.
+        /// </summary>
+        private static void RecordAiTrace(JobResult result)
+        {
+            if (global::AiDecisionTrace.TurnsRecorded == 0)
+                return;
+            var counts = new JsonObj();
+            foreach (KeyValuePair<string, int> kv in global::AiDecisionTrace.Counts.OrderBy(k => k.Key, StringComparer.Ordinal))
+                counts.Set(kv.Key, kv.Value);
+            List<string> lines = global::AiDecisionTrace.Ring.Select(t => t.Collapsed()).ToList();
+            result.AiTrace = new JsonObj().Set("turns", global::AiDecisionTrace.TurnsRecorded).Set("counts", counts).Set("lines", lines);
         }
 
         /// <summary>The per-job cast-stage side file (Logs/Scenarios/&lt;runId&gt;/&lt;jobId&gt;/caststages.jsonl).</summary>
@@ -1769,6 +1870,17 @@ namespace Tests.Scenarios
                 catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] soak rows: " + ex.Message); }
             }
             s.Set("actionSet", ActionSetSummary());
+            // The AI decision time over the run (batch 14 step 1): the whole-run summary without the warm-up job, and
+            // ai-timing.tsv, one line per AI turn. Outside every trace hash.
+            List<SoakStats.TimingRow> aiTurns = Results.Where(r => r.AiTurns != null).SelectMany(r => r.AiTurns).ToList();
+            JsonObj runTiming = SoakStats.TimingSummary(aiTurns);
+            runTiming.Set("outsideMs", Results.Sum(r => r.AiOutsideMs));
+            s.Set("aiTiming", runTiming);
+            if (aiTurns.Count > 0)
+            {
+                try { SoakStats.WriteTimingRows(RunDir, aiTurns); }
+                catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] ai timing rows: " + ex.Message); }
+            }
             s.Set("results", Results.Select(r => r.ToJson()).ToList());
             SummaryJson = Json.Serialize(s);
             try
