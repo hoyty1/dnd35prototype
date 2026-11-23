@@ -273,7 +273,28 @@ public static class ThreatSystem
         return totalExpectedDamage;
     }
 
-    private static float EstimateExpectedAoODamage(CharacterController threatener, CharacterController target)
+    /// <summary>
+    /// The AI's estimate of the damage one AoO by <paramref name="threatener"/> deals <paramref name="target"/>: its hit
+    /// chance (<see cref="EstimateAoOHitChance"/>) times the average of one hit of its main attack. An estimate for
+    /// choosing, never a rule. Internal since batch 14 step 8: the AI's maneuver odds (DND35.AI.Valuation.ManeuverOdds)
+    /// price the AoOs a maneuver provokes with it.
+    /// </summary>
+    internal static float EstimateExpectedAoODamage(CharacterController threatener, CharacterController target)
+    {
+        if (threatener == null || threatener.Stats == null || target == null || target.Stats == null)
+            return 0f;
+
+        float hitChance = EstimateAoOHitChance(threatener, target);
+        float averageDamage = EstimateAverageMeleeDamage(threatener);
+
+        return hitChance * averageDamage;
+    }
+
+    /// <summary>
+    /// The AI's estimate of the chance that one AoO by <paramref name="threatener"/> hits <paramref name="target"/>: its
+    /// melee attack bonus against the target's AC, a natural 1 and 20 kept (0.05 to 0.95). 0 without both creatures.
+    /// </summary>
+    internal static float EstimateAoOHitChance(CharacterController threatener, CharacterController target)
     {
         if (threatener == null || threatener.Stats == null || target == null || target.Stats == null)
             return 0f;
@@ -282,10 +303,7 @@ public static class ThreatSystem
         int targetArmorClass = target.Stats.GetArmorClass();
 
         // d20 chance approximation. Clamp to preserve natural 1/20-style floor/ceiling behavior.
-        float hitChance = Mathf.Clamp((21f + meleeAttackBonus - targetArmorClass) / 20f, 0.05f, 0.95f);
-        float averageDamage = EstimateAverageMeleeDamage(threatener);
-
-        return hitChance * averageDamage;
+        return Mathf.Clamp((21f + meleeAttackBonus - targetArmorClass) / 20f, 0.05f, 0.95f);
     }
 
     /// <summary>The average damage of one hit of the attacker's main attack (DND35.AI.Valuation.AttackValue.AverageMeleeDamage, batch 14 step 2).</summary>
@@ -1037,20 +1055,18 @@ public static class ThreatSystem
     /// </summary>
     public static bool DoesManeuverAoODisruptAttempt(SpecialAttackType type, CombatResult aooResult)
     {
-        if (aooResult == null || !aooResult.Hit)
+        if (aooResult == null || !aooResult.Hit || !CanManeuverAoOHitDisruptAttempt(type))
             return false;
 
-        switch (type)
-        {
-            case SpecialAttackType.Grapple:
-            case SpecialAttackType.Sunder:
-                return true;
-            case SpecialAttackType.Disarm:
-                return aooResult.TotalDamage > 0;
-            default:
-                return false;
-        }
+        return type != SpecialAttackType.Disarm || aooResult.TotalDamage > 0;
     }
+
+    /// <summary>
+    /// The maneuvers an initiation AoO that hits can stop (<see cref="DoesManeuverAoODisruptAttempt"/>): Grapple and Sunder
+    /// on a hit, Disarm on a hit that deals damage. The AI's odds read it (DND35.AI.Valuation.ManeuverOdds, batch 14 step 8).
+    /// </summary>
+    internal static bool CanManeuverAoOHitDisruptAttempt(SpecialAttackType type)
+        => type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder || type == SpecialAttackType.Disarm;
 
     public static string GetManeuverAoOLabel(SpecialAttackType type)
     {

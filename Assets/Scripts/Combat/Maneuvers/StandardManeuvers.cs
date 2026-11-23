@@ -388,6 +388,17 @@ public partial class GameManager
 
     private int GetManeuverNaturalAttackIndex(CharacterController attacker) => GetManeuverNaturalAttackIndex(attacker, out _);
 
+    /// <summary>
+    /// The natural attack <paramref name="attacker"/>'s next maneuver step would give up, before anything is committed: what
+    /// TryCommitMainHandManeuverStep records (a sunder's natural attack that can sunder, else the next unused
+    /// one); -1 for a creature that does not fight with its natural attacks, or a natural sunder that cannot be made. The
+    /// AI's odds price the grapple check and the sunder attack with it (batch 14 step 8). Pure.
+    /// </summary>
+    internal int GetManeuverNaturalAttackIndexForAI(CharacterController attacker, bool forSunder)
+        => forSunder && IsNaturalManeuverAttacker(attacker)
+            ? GetManeuverSunderNaturalAttackIndex(attacker, out _)
+            : GetManeuverNaturalAttackIndex(attacker, out _);
+
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel, bool iterativeOnly = false)
     {
         if (attacker == null || attacker.Actions == null)
@@ -412,6 +423,16 @@ public partial class GameManager
     }
 
     private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker, bool iterativeOnly = false, bool grappleAction = false)
+        => GetManeuverStepBab(attacker, UiManeuverIntent(attacker), iterativeOnly, grappleAction);
+
+    /// <summary>
+    /// The BAB a maneuver that replaces <paramref name="attacker"/>'s next main-hand attack step rolls at, before anything
+    /// is committed: the step's iterative BAB, or the BAB of the natural attack it would replace (PHB p.141 Table 8-2 note 7,
+    /// MM p.312), plus the main-hand two-weapon penalty when <paramref name="intent"/> fights with two weapons (PHB p.160).
+    /// 0 when no step is left. The PC menu reads it with the UI's intent (GetCurrentMainHandManeuverAttackBonusForUI), the
+    /// AI's odds with the step hook's (<see cref="ManeuverStepIntentForAI"/>; batch 14 step 8).
+    /// </summary>
+    internal int GetManeuverStepBab(CharacterController attacker, AttackIntent intent, bool iterativeOnly = false, bool grappleAction = false)
     {
         if (attacker == null || attacker.Stats == null)
             return 0;
@@ -426,7 +447,7 @@ public partial class GameManager
         // A grapple action while grappling never takes the two-weapon penalty: a grappler cannot attack with two weapons
         // (PHB p.156), and the grapple turn pays without an intent for every creature.
         if (!grappleAction && GetManeuverStepKind(attacker, iterativeOnly) == AttackStepKind.MainHand)
-            bab += TwoWeaponMainHandPenalty(attacker, UiManeuverIntent(attacker));
+            bab += TwoWeaponMainHandPenalty(attacker, intent);
         return bab;
     }
 

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DND35.AI;
+using DND35.AI.Valuation;
 using SpellNames = DND35e.Identifiers.SpellNames;
 
 namespace Tests.Scenarios
@@ -31,6 +32,11 @@ namespace Tests.Scenarios
     /// PC at Normal, none on Easy (owner, 2026-10-30) and none from the plain orc; rules/ai-sadist-keeps-downed-target, a
     /// sadistic dretch (an Animal Role, which skips downed foes) keeps hitting the PC it drops mid full attack where the
     /// plain dretch shifts to the standing one. Every older scenario's creature has no traits, so its hash is unchanged.</para>
+    /// <para>Step 8 (the maneuver odds, a pure refactor): rules/maneuver-odds-disarm and rules/maneuver-odds-sunder, a
+    /// Scripted fighter's disarm and sunder of an orc (forced 20 against 1): right before the maneuver a step notes the AI's
+    /// odds (DND35.AI.Valuation.ManeuverOdds, the item the AI decider picks, the step's BAB), and the roll then adds exactly
+    /// the terms the odds read (the shared GetDisarmCheckModifiers and sunder terms). No AI reads the odds yet (step 9), so
+    /// the step changes no other scenario's hash.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -60,6 +66,8 @@ namespace Tests.Scenarios
             yield return S("ai-cowardly-caster-defends-before-approach-plain", () => AiOutOfReachOrder(berserker: false, plain: true));
             yield return S("ai-berserker-approaches-first", () => AiOutOfReachOrder(berserker: true, plain: false));
             yield return S("ai-berserker-approaches-first-plain", () => AiOutOfReachOrder(berserker: true, plain: true));
+            yield return S("maneuver-odds-disarm", () => ManeuverOddsMatchRoll(SpecialAttackType.Disarm));
+            yield return S("maneuver-odds-sunder", () => ManeuverOddsMatchRoll(SpecialAttackType.Sunder));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -870,6 +878,94 @@ namespace Tests.Scenarios
                         : MissingRow("Personality.OutOfReach", rows.Count, "changing " + roleOrder);
                 });
             return b.Build();
+        }
+
+        // ── Step 8: the maneuver odds read the roll's terms ─────────────
+
+        /// <summary>
+        /// Batch 14 step 8 (PHB p.155, p.158; D6): a Scripted fighter 6 disarms or sunders an orc that makes no AoO, with the
+        /// opposed rolls forced to 20 against 1. Right before the maneuver a step computes the AI's odds for the same attempt
+        /// (the item the AI decider picks, AiManeuverDecider.ChooseItem; the step's BAB, ManeuverOdds.StepBab) and notes the
+        /// terms they read (TargetNumbers.TryDisarm or TrySunder). The maneuver event then shows the roll added exactly those
+        /// terms to each d20, and the forced dice win.
+        /// </summary>
+        private static ScenarioDef ManeuverOddsMatchRoll(SpecialAttackType type)
+        {
+            bool sunder = type == SpecialAttackType.Sunder;
+            string id = sunder ? "rules/maneuver-odds-sunder" : "rules/maneuver-odds-disarm";
+            string title = sunder
+                ? "A sunder rolls the terms the AI's maneuver odds read (PHB p.158; batch 14 step 8)"
+                : "A disarm rolls the terms the AI's maneuver odds read (PHB p.155; batch 14 step 8)";
+            string notePrefix = "maneuver-odds " + type + " ";
+            return Rules(id, title)
+                .Covers("AI-035", "batch 14 step 8", sunder ? "PHB p.158" : "PHB p.155")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Fighter", 6)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("fighter", RulesScenarios.StripOffHand)
+                .Tweak("orc", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Initiative("fighter", "orc")
+                .Force(20, 20, sunder ? "Sunder attack roll" : "Disarm attack roll")
+                .Force(20, 1, sunder ? "Sunder defense roll" : "Disarm defense roll")
+                .Turn("fighter", 1, Step.Assert("the AI's odds for the attempt are computed", ctx => NoteManeuverOdds(ctx, type, notePrefix)),
+                    Step.Maneuver(type, "orc"))
+                .Turn("orc", 1, Step.Pass())
+                .Expect("The odds step holds and the maneuver step is done", Expect.All(
+                    Expect.AssertsPass(),
+                    Expect.StepStatus("fighter", 1, "Maneuver", 0, "done")))
+                .Expect("The roll adds exactly the terms the odds read to each d20, and the forced 20 against 1 wins", v =>
+                {
+                    TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(notePrefix, StringComparison.Ordinal));
+                    TraceEvent m = v.Maneuvers("fighter", type).FirstOrDefault();
+                    if (note == null) return ExpectResult.Fail("no odds note");
+                    if (m == null) return ExpectResult.Fail("no " + type, note.Seq);
+                    int atk = NoteInt(note.Str("text"), "atk"), def = NoteInt(note.Str("text"), "def");
+                    int rolledAtk = m.Int("check") - m.Int("checkRoll"), rolledDef = m.Int("opposed") - m.Int("opposedRoll");
+                    bool same = rolledAtk == atk && rolledDef == def;
+                    return same && m.Bool("success") && m.Int("checkRoll") == 20 && m.Int("opposedRoll") == 1
+                        ? ExpectResult.Pass("odds +" + atk + " against +" + def + ", rolled the same", note.Seq, m.Seq)
+                        : ExpectResult.Fail("odds " + atk + "/" + def + ", rolled " + rolledAtk + "/" + rolledDef + ", success " + m.Get("success"), note.Seq, m.Seq);
+                })
+                .Build();
+        }
+
+        private static bool NoteManeuverOdds(ScenarioContext ctx, SpecialAttackType type, string notePrefix)
+        {
+            CharacterController fighter = ctx.Get("fighter");
+            CharacterController orc = ctx.Get("orc");
+            if (fighter == null || orc == null)
+                return false;
+            EquipSlot? slot = null;
+            AiManeuverDecider.Instance.ChooseItem(ctx.Gm, fighter, orc, type, s => slot = s);
+            int bab = ManeuverOdds.StepBab(fighter);
+            bool got;
+            int atk, def;
+            if (type == SpecialAttackType.Sunder)
+            {
+                got = TargetNumbers.TrySunder(fighter, orc, slot, bab, out CharacterController.SunderCheckModifiers m);
+                atk = m.AttackerModifier;
+                def = m.DefenderModifier;
+            }
+            else
+            {
+                got = TargetNumbers.TryDisarm(fighter, orc, slot, bab, out CharacterController.DisarmCheckModifiers m);
+                atk = m.AttackerModifier;
+                def = m.DefenderModifier;
+            }
+            ManeuverOddsEstimate odds = ManeuverOdds.Estimate(fighter, orc, type, bab, slot);
+            ctx.Note(notePrefix + "bab=" + bab + " atk=" + atk + " def=" + def + " provokers=" + odds.Provokers
+                + " success=" + odds.SuccessChance.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture));
+            return got && odds.Supported && odds.CanSucceed && odds.Provokers == 0;
+        }
+
+        private static int NoteInt(string text, string key)
+        {
+            if (string.IsNullOrEmpty(text))
+                return int.MinValue;
+            foreach (string part in text.Split(' '))
+                if (part.StartsWith(key + "=", StringComparison.Ordinal) && int.TryParse(part.Substring(key.Length + 1), out int value))
+                    return value;
+            return int.MinValue;
         }
     }
 }

@@ -11286,16 +11286,34 @@ public class CharacterController : MonoBehaviour
         // A grapple check is BAB + Str + the special size modifier + effects that name grapple checks (PHB p.155-156;
         // owner interpretation 2026-10-11, CMB-130). It is not an attack roll, so condition attack modifiers (Grappled, Pinned,
         // Shaken, Prone...) and Haste's attack bonus do not apply.
+        AddGrappleCheckMiscModifiers(context, result.AddMiscModifier, logGreasedArmor: true);
+
+        if (additionalModifier != 0)
+            result.AddMiscModifier(additionalModifier, string.IsNullOrEmpty(additionalModifierLabel) ? "Additional modifiers" : additionalModifierLabel);
+
+        result.Total = result.BaseRoll + result.BaseAttackBonus + result.StrengthModifier + result.SizeModifier + result.MiscModifier;
+        return result;
+    }
+
+    /// <summary>
+    /// The grapple check's terms past BAB, Strength and the special size modifier (PHB p.155-156), in the order the check's
+    /// breakdown lists them: Improved Grapple +4, the Improved Grab one-part hold -20 (MM p.310), the nonlethal Improved Grab
+    /// hold damage on this check, and Greased armor for <paramref name="context"/> (PHB p.237). The one list
+    /// <see cref="RollGrappleCheck"/> and the grapple-start modifiers (<see cref="GetGrappleCheckModifierToStart"/>,
+    /// <see cref="GetGrappleCheckModifierToResistStart"/>; batch 14 step 8) read.
+    /// </summary>
+    private void AddGrappleCheckMiscModifiers(GrappleCheckContext context, Action<int, string> add, bool logGreasedArmor = false)
+    {
         if (Stats != null && Stats.HasFeat("Improved Grapple"))
-            result.AddMiscModifier(4, "Improved Grapple feat");
+            add(4, "Improved Grapple feat");
 
         int holdPenalty = GetImprovedGrabHoldGrappleCheckPenalty();
         if (holdPenalty != 0)
-            result.AddMiscModifier(holdPenalty, "Improved Grab hold with one body part (MM p.310)");
+            add(holdPenalty, "Improved Grab hold with one body part (MM p.310)");
 
         // Nonlethal Improved Grab hold damage on this check (ResolveGrappleAction; delegated RAW reading 2026-10-14).
         if (_improvedGrabCheckModifier != 0)
-            result.AddMiscModifier(_improvedGrabCheckModifier, _improvedGrabCheckModifierLabel ?? "Nonlethal Improved Grab damage");
+            add(_improvedGrabCheckModifier, _improvedGrabCheckModifierLabel ?? "Nonlethal Improved Grab damage");
 
         int greasedArmorBonus = GetGreasedArmorGrappleBonus(context);
         if (greasedArmorBonus > 0)
@@ -11317,16 +11335,42 @@ public class CharacterController : MonoBehaviour
                     break;
             }
 
-            result.AddMiscModifier(greasedArmorBonus, label);
-            Debug.Log($"[GrappleSystem][GreasedArmor] {result.CharacterName} gains {greasedArmorBonus:+#;-#;0} on grapple check ({context}).");
+            add(greasedArmorBonus, label);
+            if (logGreasedArmor)
+                Debug.Log($"[GrappleSystem][GreasedArmor] {(Stats != null ? Stats.CharacterName : name)} gains {greasedArmorBonus:+#;-#;0} on grapple check ({context}).");
         }
-
-        if (additionalModifier != 0)
-            result.AddMiscModifier(additionalModifier, string.IsNullOrEmpty(additionalModifierLabel) ? "Additional modifiers" : additionalModifierLabel);
-
-        result.Total = result.BaseRoll + result.BaseAttackBonus + result.StrengthModifier + result.SizeModifier + result.MiscModifier;
-        return result;
     }
+
+    private int GetGrappleCheckModifier(int? baseAttackBonusOverride, GrappleCheckContext context)
+    {
+        int misc = 0;
+        AddGrappleCheckMiscModifiers(context, (value, _) => misc += value);
+        return (baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0))
+            + (Stats != null ? Stats.STRMod : 0)
+            + GetGrappleSizeModifier()
+            + misc;
+    }
+
+    /// <summary>
+    /// The modifier of the opposed grapple check this creature makes to start a grapple at
+    /// <paramref name="baseAttackBonusOverride"/> (ResolveGrapple's attacker check, PHB p.156 step 3): the same terms as
+    /// <see cref="RollGrappleCheck"/> (batch 14 step 8, for the AI's odds).
+    /// </summary>
+    public int GetGrappleCheckModifierToStart(int? baseAttackBonusOverride = null)
+        => GetGrappleCheckModifier(baseAttackBonusOverride, GrappleCheckContext.Standard);
+
+    /// <summary>
+    /// The modifier of the opposed grapple check this creature makes against a grapple started on it (ResolveGrapple's
+    /// defender check, its Greased armor's resist bonus included; PHB p.156, p.237): the same terms as
+    /// <see cref="RollGrappleCheck"/> (batch 14 step 8, for the AI's odds).
+    /// </summary>
+    public int GetGrappleCheckModifierToResistStart()
+        => GetGrappleCheckModifier(null, GrappleCheckContext.ResistGrapple);
+
+    /// <summary>A hold by this creature automatically fails against <paramref name="target"/>: it is two or more size categories larger (PHB p.156 step 3).</summary>
+    public bool GrappleHoldFailsBySize(CharacterController target)
+        => target != null && target.Stats != null && Stats != null
+            && (int)target.Stats.CurrentSizeCategory - (int)Stats.CurrentSizeCategory >= 2;
 
     private void AttachAttackBuffDebuffBreakdown(CombatResult result)
     {
@@ -13545,6 +13589,33 @@ public class CharacterController : MonoBehaviour
         return bab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + FlurryAttackRollPenalty;
     }
 
+    /// <summary>
+    /// The whole modifier of the melee touch attack that starts a trip or a grapple against <paramref name="target"/>
+    /// (PHB p.155-156, p.158): <see cref="GetManeuverMeleeTouchAttackModifier"/> plus this creature's racial attack bonus
+    /// against the target's kind (PHB p.15, p.17; CHR-019). The one formula ResolveTrip, ResolveGrapple and the AI's
+    /// odds (DND35.AI.Valuation.ManeuverOdds, batch 14 step 8) read.
+    /// </summary>
+    public int GetManeuverTouchAttackModifierAgainst(CharacterController target, int? baseAttackBonusOverride = null)
+    {
+        if (Stats == null)
+            return 0;
+        return GetManeuverMeleeTouchAttackModifier(baseAttackBonusOverride)
+            + (target != null && target.Stats != null ? RacialTraitRules.AttackBonusAgainst(Stats, target.Stats) : 0);
+    }
+
+    /// <summary>
+    /// This creature's touch AC against a maneuver's touch attack by <paramref name="attacker"/>: its full touch AC
+    /// (deflection, dodge, conditions; CMB-014) plus its racial dodge bonus against the attacker's kind (PHB p.15, p.17;
+    /// CHR-019). Shared by ResolveTrip, ResolveGrapple and the AI's odds (batch 14 step 8).
+    /// </summary>
+    public int GetManeuverTouchArmorClassAgainst(CharacterController attacker)
+    {
+        if (Stats == null)
+            return 0;
+        return Stats.TouchArmorClass
+            + (attacker != null && attacker.Stats != null ? RacialTraitRules.KindDodgeACBonusAgainst(Stats, attacker.Stats) : 0);
+    }
+
     /// <summary>A natural 20 always hits and a natural 1 always misses (PHB p.134).</summary>
     public static bool IsManeuverTouchAttackHit(int naturalRoll, int total, int touchArmorClass)
     {
@@ -14146,9 +14217,9 @@ public class CharacterController : MonoBehaviour
         {
             int touchRoll = DiceService.D20("Trip touch attack");
             // Racial attack bonus against the target's kind and its racial dodge against giants apply (CHR-019).
-            int touchModifier = GetManeuverMeleeTouchAttackModifier(attackBonusOverride) + RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
+            int touchModifier = GetManeuverTouchAttackModifierAgainst(target, attackBonusOverride);
             int touchTotal = touchRoll + touchModifier;
-            int touchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, Stats);
+            int touchAC = target.GetManeuverTouchArmorClassAgainst(this);
             bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
             touchLine = $"Touch attack: d20 {touchRoll} {CharacterStats.FormatMod(touchModifier)} = {touchTotal} vs touch AC {touchAC}"
                 + (touchRoll >= 20 ? " (natural 20)" : touchRoll <= 1 ? " (natural 1)" : string.Empty)
@@ -14219,8 +14290,8 @@ public class CharacterController : MonoBehaviour
 
         ItemData attackerHeldWeapon = attackerWeaponOverride ?? GetEquippedMainWeapon();
 
-        bool defenderHasLockedGauntlet = HasLockedGauntletEquipped(target);
-        int defenderLockedGauntletBonus = defenderHasLockedGauntlet ? 10 : 0;
+        int defenderLockedGauntletBonus = GetDisarmLockedGauntletResistBonus(target);
+        bool defenderHasLockedGauntlet = defenderLockedGauntletBonus != 0;
 
         DisarmCheckResult primaryCheck = RollDisarmCheck(
             this,
@@ -14282,8 +14353,8 @@ public class CharacterController : MonoBehaviour
             else if (TryGetDisarmTargetHeldItem(this, null, out ItemData counterTargetHeldItem, out EquipSlot counterTargetSlot))
             {
                 ItemData counterAttackerHeldWeapon = target.GetEquippedMainWeapon();
-                bool counterDefenderHasLockedGauntlet = HasLockedGauntletEquipped(this);
-                int counterDefenderLockedBonus = counterDefenderHasLockedGauntlet ? 10 : 0;
+                int counterDefenderLockedBonus = GetDisarmLockedGauntletResistBonus(this);
+                bool counterDefenderHasLockedGauntlet = counterDefenderLockedBonus != 0;
 
                 DisarmCheckResult counterCheck = RollDisarmCheck(
                     target,
@@ -14366,11 +14437,20 @@ public class CharacterController : MonoBehaviour
     /// the touch attack only (owner ruling 2026-10-08, CMB-102). Never above the creature's full BAB.
     /// </summary>
     public int GetGrappleCheckBabAfterTouchAttack(int touchAttackBab, bool touchAttackBabFromStep)
+        => GetGrappleCheckBabAfterTouchAttack(touchAttackBab, touchAttackBabFromStep, ProgressiveAttackPool.LastSubstituteNaturalAttackIndex);
+
+    /// <summary>
+    /// <see cref="GetGrappleCheckBabAfterTouchAttack(int, bool)"/> for a grapple that replaces natural attack
+    /// <paramref name="naturalAttackIndex"/>: the AI's odds price a step before it is committed, so they name the natural
+    /// attack the step would give up (GameManager.GetManeuverNaturalAttackIndexForAI) instead of the last one recorded
+    /// (batch 14 step 8).
+    /// </summary>
+    public int GetGrappleCheckBabAfterTouchAttack(int touchAttackBab, bool touchAttackBabFromStep, int naturalAttackIndex)
     {
         if (!touchAttackBabFromStep || Stats == null || GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
             return touchAttackBab;
 
-        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(ProgressiveAttackPool.LastSubstituteNaturalAttackIndex);
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex);
         int secondaryPenalty = natural != null ? Stats.GetNaturalAttackSequencePenalty(natural) : 0;
         if (secondaryPenalty >= 0)
             return touchAttackBab;
@@ -14452,9 +14532,9 @@ public class CharacterController : MonoBehaviour
         // The touch attack is an attack roll: racial bonuses against the target's kind apply, and so does the target's
         // racial dodge against giants (PHB p.15, p.17; CHR-019).
         int touchRacial = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
-        int touchTotal = touchRoll + GetManeuverMeleeTouchAttackModifier(attackBab) + touchRacial;
+        int touchTotal = touchRoll + GetManeuverTouchAttackModifierAgainst(target, attackBab);
         // Full touch AC (deflection, dodge, conditions...) and natural 20/1 (CMB-014).
-        int touchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, Stats);
+        int touchAC = target.GetManeuverTouchArmorClassAgainst(this);
         bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
 
         var touchBuilder = new StringBuilder();
@@ -14505,7 +14585,7 @@ public class CharacterController : MonoBehaviour
 
         // PHB p.156 step 3: the hold automatically fails against a target two or more size
         // categories larger.
-        bool targetTooLarge = (int)target.Stats.CurrentSizeCategory - (int)Stats.CurrentSizeCategory >= 2;
+        bool targetTooLarge = GrappleHoldFailsBySize(target);
         bool success = !targetTooLarge && DoesAttackerWinGrappleCheck(attackerCheck, defenderCheck);
         string grapplePositioningLog = string.Empty;
         if (success)
@@ -14754,110 +14834,43 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        // The weapon or natural attack the sunder is made with (CanSunderWithAttack). A natural-attack
-        // creature uses the natural attack the sunder replaced (recorded by TryCommitManeuverSubstituteStep),
-        // or, when no substitute step was committed, the one at its current step (CMB-102).
-        ItemData attackerWeapon = attackerWeaponOverride;
-        NaturalAttackDefinition sunderNatural = null;
-        if (attackerWeapon == null)
+        // The weapon or natural attack the sunder is made with (TryResolveSunderAttack, CanSunderWithAttack).
+        if (!TryResolveSunderAttack(attackerWeaponOverride, out ItemData attackerWeapon, out NaturalAttackDefinition sunderNatural,
+                out string noSunderWeaponReason))
         {
-            int naturalIndex = -1;
-            if (GetEquippedMainWeapon() == null && UsesInnateNaturalAttackSequence())
+            return new SpecialAttackResult
             {
-                naturalIndex = ProgressiveAttackPool.LastSubstituteNaturalAttackIndex >= 0
-                    ? ProgressiveAttackPool.LastSubstituteNaturalAttackIndex
-                    : GetSunderNaturalAttackIndexForStep(ProgressiveAttackPool.MainHandStepsUsed);
-                if (naturalIndex < 0)
-                    naturalIndex = GetFirstSunderCapableNaturalAttackIndex();
-            }
-
-            if (!CanSunderWithAttack(naturalIndex, out string noSunderWeaponReason))
-            {
-                return new SpecialAttackResult
-                {
-                    ManeuverName = "Sunder",
-                    Success = false,
-                    Log = noSunderWeaponReason
-                };
-            }
-
-            attackerWeapon = GetEquippedMainWeapon();
-            if (attackerWeapon == null && UsesInnateNaturalAttackSequence())
-                sunderNatural = Stats.GetNaturalAttackAtSequenceIndex(naturalIndex);
-            if (attackerWeapon == null && sunderNatural == null && UsesInnateNaturalAttackSequence())
-            {
-                return new SpecialAttackResult
-                {
-                    ManeuverName = "Sunder",
-                    Success = false,
-                    Log = $"{Stats.CharacterName} has no weapon or natural attack that can sunder."
-                };
-            }
+                ManeuverName = "Sunder",
+                Success = false,
+                Log = noSunderWeaponReason
+            };
         }
 
-        // An unarmed strike (owner interpretation 2026-10-11, CMB-141): no weapon in hand and no natural sequence, or
-        // an "Unarmed Strike" the creature lists as a natural attack (no shipped entry since CRE-042). A light weapon on the opposed
-        // roll (PHB p.158; PHB p.116 Table 7-5).
-        bool unarmedSunder = attackerWeapon == null && (sunderNatural == null || sunderNatural.IsUnarmedStrike);
-        // The attack's damage mode, the same one an attack with this weapon or unarmed strike would use: a plain
-        // unarmed strike deals nonlethal damage unless the creature has Improved Unarmed Strike (or a gauntlet) or
-        // takes -4 for lethal damage (PHB p.139); a nonlethal weapon (sap, whip) takes -4 for lethal damage and a
-        // lethal weapon -4 for nonlethal (PHB p.146). The opposed roll is an attack roll (PHB p.158), so that -4
-        // applies to it, and objects are immune to nonlethal damage (PHB p.165), so a nonlethal sunder that wins
-        // deals the item nothing. A natural attack, a natural "Unarmed Strike" included, is always lethal.
+        // The terms of both opposed attack rolls (PHB p.158), shared with the AI's odds (GetSunderCheckModifiers, batch 14
+        // step 8): pure reads, taken before the item's durability is set up and before the dice, as they always were.
+        SunderCheckModifiers m = GetSunderCheckModifiers(target, targetItem, attackerWeapon, sunderNatural, iterativeAttackBonusOverride);
+        bool unarmedSunder = m.Unarmed;
         DamageModeAttackProfile sunderDamageMode = GetSunderDamageModeProfile(attackerWeapon, sunderNatural);
 
         targetItem.EnsureDurabilityInitialized();
 
         int attackRoll = DiceService.D20("Sunder attack roll");
         int defenseRoll = DiceService.D20("Sunder defense roll");
-        int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
-        int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
-        // PHB p.158 Step 2: each side rolls with its own weapon, +4 for a two-handed one and -4 for a light
-        // one, and the larger combatant gets +4 per size category of difference: the size term compares the
-        // combatants (PHB p.158; recorded 2026-10-11, CMB-141). The defender rolls with the targeted weapon, or, when a
-        // shield or armor is targeted (worn armor should not be a target at all, CMB-166), with the weapon it holds:
-        // the main-hand weapon first, else a weapon held in the off hand (GetSunderDefenderWeapon). The targeted shield
-        // is never its weapon. With no weapon in hand it rolls with a true natural weapon (0) or its unarmed strike, a
-        // light weapon (-4), an "Unarmed Strike" listed as a natural attack included (delegated RAW reading 2026-10-14,
-        // CMB-165). A natural weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for
-        // disarm and owner interpretation 2026-10-11 for sunder, CMB-141); the attacker's unarmed strike is a light
-        // weapon, -4 (owner interpretation 2026-10-11, CMB-141).
-        int handednessBonus = unarmedSunder
-            ? UnarmedStrikeSunderHandednessModifier
-            : sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon);
-        int damageModePenalty = sunderDamageMode.AttackPenalty;
-        int sizeBonus = GetLargerCombatantSizeBonus(this, target);
-        ItemData defenderWeapon = GetSunderDefenderWeapon(target, targetItem);
-        int defenderHandednessBonus = GetSunderDefenderHandednessModifier(target, defenderWeapon, out string defenderHandednessLabel);
-        int defenderSizeBonus = GetLargerCombatantSizeBonus(target, this);
-        // Both rolls are opposed attack rolls (PHB p.158), so each side's racial attack bonus against the other's kind
-        // applies (PHB p.15, p.17; CHR-019).
-        int racialBonus = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
-        int defenderRacialBonus = RacialTraitRules.AttackBonusAgainst(target.Stats, Stats);
-        // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
-        int flurryPenalty = FlurryAttackRollPenalty;
-        int defenderFlurryPenalty = target.FlurryAttackRollPenalty;
+        int attackBab = m.AttackerBab;
+        int improvedSunderBonus = m.ImprovedSunder;
+        int handednessBonus = m.Handedness;
+        int damageModePenalty = m.DamageModePenalty;
+        int sizeBonus = m.SizeDifference;
+        int defenderHandednessBonus = m.DefenderHandedness;
+        string defenderHandednessLabel = m.DefenderHandednessLabel;
+        int defenderSizeBonus = m.DefenderSizeDifference;
+        int racialBonus = m.Racial;
+        int defenderRacialBonus = m.DefenderRacial;
+        int flurryPenalty = m.Flurry;
+        int defenderFlurryPenalty = m.DefenderFlurry;
 
-        int attackTotal = attackRoll + flurryPenalty
-            + attackBab
-            + Stats.STRMod
-            + Stats.SizeModifier
-            + Stats.ConditionAttackPenalty
-            + improvedSunderBonus
-            + handednessBonus
-            + damageModePenalty
-            + sizeBonus
-            + racialBonus;
-
-        int defenseTotal = defenseRoll + defenderFlurryPenalty
-            + target.Stats.BaseAttackBonus
-            + target.Stats.STRMod
-            + target.Stats.SizeModifier
-            + target.Stats.ConditionAttackPenalty
-            + defenderHandednessBonus
-            + defenderSizeBonus
-            + defenderRacialBonus;
+        int attackTotal = attackRoll + m.AttackerModifier;
+        int defenseTotal = defenseRoll + m.DefenderModifier;
 
         var logLines = new List<string>();
         string handLabel = usedOffHand ? "Off-Hand" : "Main Hand";
@@ -15003,6 +15016,178 @@ public class CharacterController : MonoBehaviour
             DamageDealt = effectiveDamage,
             Log = string.Join("\n", logLines)
         };
+    }
+
+    /// <summary>
+    /// The weapon or natural attack a sunder by this creature is made with: <paramref name="attackerWeaponOverride"/> (the
+    /// hand the cost paid, GameManager.TryConsumeSunderAttackAction), else its main-hand weapon, else the natural attack
+    /// the sunder replaced (recorded by TryCommitManeuverSubstituteStep) or, when no substitute step was committed, the one
+    /// at its current step (CMB-102); null for both is an unarmed strike. False, with the log line, when it has nothing
+    /// that can sunder (<see cref="CanSunderWithAttack"/>, PHB p.158). Pure. Shared by ResolveSunder and the AI's odds
+    /// (<see cref="TryGetSunderCheckModifiersAgainst"/>, batch 14 step 8), which price a step before it is committed and so
+    /// name the natural attack it would give up (<paramref name="naturalAttackIndexOverride"/>, 0 or more; it wins over the
+    /// last one recorded).
+    /// </summary>
+    private bool TryResolveSunderAttack(ItemData attackerWeaponOverride, out ItemData attackerWeapon, out NaturalAttackDefinition sunderNatural,
+        out string failReason, int naturalAttackIndexOverride = -1)
+    {
+        attackerWeapon = attackerWeaponOverride;
+        sunderNatural = null;
+        failReason = string.Empty;
+        if (attackerWeapon != null)
+            return true;
+
+        int naturalIndex = -1;
+        if (GetEquippedMainWeapon() == null && UsesInnateNaturalAttackSequence())
+        {
+            naturalIndex = naturalAttackIndexOverride >= 0
+                ? naturalAttackIndexOverride
+                : ProgressiveAttackPool.LastSubstituteNaturalAttackIndex >= 0
+                    ? ProgressiveAttackPool.LastSubstituteNaturalAttackIndex
+                    : GetSunderNaturalAttackIndexForStep(ProgressiveAttackPool.MainHandStepsUsed);
+            if (naturalIndex < 0)
+                naturalIndex = GetFirstSunderCapableNaturalAttackIndex();
+        }
+
+        if (!CanSunderWithAttack(naturalIndex, out failReason))
+            return false;
+
+        attackerWeapon = GetEquippedMainWeapon();
+        if (attackerWeapon == null && UsesInnateNaturalAttackSequence())
+            sunderNatural = Stats.GetNaturalAttackAtSequenceIndex(naturalIndex);
+        if (attackerWeapon == null && sunderNatural == null && UsesInnateNaturalAttackSequence())
+        {
+            failReason = $"{Stats.CharacterName} has no weapon or natural attack that can sunder.";
+            return false;
+        }
+
+        failReason = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// Every term of the two opposed attack rolls of a sunder (PHB p.158), without the d20s: the one formula ResolveSunder
+    /// rolls and the AI's odds (DND35.AI.Valuation.ManeuverOdds, batch 14 step 8) estimate. The attacker wins when its total
+    /// is at least the defender's (ResolveSunder's comparison).
+    /// </summary>
+    public struct SunderCheckModifiers
+    {
+        /// <summary>An unarmed strike (owner interpretation 2026-10-11, CMB-141).</summary>
+        public bool Unarmed;
+        /// <summary>The sunder deals nonlethal damage, so a won roll deals the item nothing (PHB p.165).</summary>
+        public bool DealsNonlethalDamage;
+        public int AttackerBab;
+        public int AttackerStr;
+        public int AttackerSize;
+        public int AttackerCondition;
+        public int ImprovedSunder;
+        public int Handedness;
+        public int DamageModePenalty;
+        public int SizeDifference;
+        public int Racial;
+        public int Flurry;
+        public ItemData DefenderWeapon;
+        public string DefenderHandednessLabel;
+        public int DefenderBab;
+        public int DefenderStr;
+        public int DefenderSize;
+        public int DefenderCondition;
+        public int DefenderHandedness;
+        public int DefenderSizeDifference;
+        public int DefenderRacial;
+        public int DefenderFlurry;
+
+        public int AttackerModifier => Flurry + AttackerBab + AttackerStr + AttackerSize + AttackerCondition + ImprovedSunder
+            + Handedness + DamageModePenalty + SizeDifference + Racial;
+
+        public int DefenderModifier => DefenderFlurry + DefenderBab + DefenderStr + DefenderSize + DefenderCondition
+            + DefenderHandedness + DefenderSizeDifference + DefenderRacial;
+    }
+
+    /// <summary>
+    /// The terms of a sunder by this creature with <paramref name="attackerWeapon"/> or <paramref name="sunderNatural"/>
+    /// (both null: its unarmed strike) against <paramref name="target"/>'s <paramref name="targetItem"/>, at
+    /// <paramref name="attackBonusOverride"/> (the step's BAB) or its full BAB (PHB p.158). Pure: no dice.
+    /// </summary>
+    private SunderCheckModifiers GetSunderCheckModifiers(CharacterController target, ItemData targetItem, ItemData attackerWeapon,
+        NaturalAttackDefinition sunderNatural, int? attackBonusOverride)
+    {
+        // An unarmed strike (owner interpretation 2026-10-11, CMB-141): no weapon in hand and no natural sequence, or
+        // an "Unarmed Strike" the creature lists as a natural attack (no shipped entry since CRE-042). A light weapon on the opposed
+        // roll (PHB p.158; PHB p.116 Table 7-5).
+        bool unarmedSunder = attackerWeapon == null && (sunderNatural == null || sunderNatural.IsUnarmedStrike);
+        // The attack's damage mode, the same one an attack with this weapon or unarmed strike would use: a plain
+        // unarmed strike deals nonlethal damage unless the creature has Improved Unarmed Strike (or a gauntlet) or
+        // takes -4 for lethal damage (PHB p.139); a nonlethal weapon (sap, whip) takes -4 for lethal damage and a
+        // lethal weapon -4 for nonlethal (PHB p.146). The opposed roll is an attack roll (PHB p.158), so that -4
+        // applies to it, and objects are immune to nonlethal damage (PHB p.165), so a nonlethal sunder that wins
+        // deals the item nothing. A natural attack, a natural "Unarmed Strike" included, is always lethal.
+        DamageModeAttackProfile sunderDamageMode = GetSunderDamageModeProfile(attackerWeapon, sunderNatural);
+
+        // PHB p.158 Step 2: each side rolls with its own weapon, +4 for a two-handed one and -4 for a light
+        // one, and the larger combatant gets +4 per size category of difference: the size term compares the
+        // combatants (PHB p.158; recorded 2026-10-11, CMB-141). The defender rolls with the targeted weapon, or, when a
+        // shield or armor is targeted (worn armor should not be a target at all, CMB-166), with the weapon it holds:
+        // the main-hand weapon first, else a weapon held in the off hand (GetSunderDefenderWeapon). The targeted shield
+        // is never its weapon. With no weapon in hand it rolls with a true natural weapon (0) or its unarmed strike, a
+        // light weapon (-4), an "Unarmed Strike" listed as a natural attack included (delegated RAW reading 2026-10-14,
+        // CMB-165). A natural weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for
+        // disarm and owner interpretation 2026-10-11 for sunder, CMB-141); the attacker's unarmed strike is a light
+        // weapon, -4 (owner interpretation 2026-10-11, CMB-141).
+        ItemData defenderWeapon = GetSunderDefenderWeapon(target, targetItem);
+        int defenderHandednessBonus = GetSunderDefenderHandednessModifier(target, defenderWeapon, out string defenderHandednessLabel);
+        return new SunderCheckModifiers
+        {
+            Unarmed = unarmedSunder,
+            DealsNonlethalDamage = sunderDamageMode.DealNonlethalDamage,
+            AttackerBab = attackBonusOverride ?? Stats.BaseAttackBonus,
+            AttackerStr = Stats.STRMod,
+            AttackerSize = Stats.SizeModifier,
+            AttackerCondition = Stats.ConditionAttackPenalty,
+            ImprovedSunder = Stats.HasFeat("Improved Sunder") ? 4 : 0,
+            Handedness = unarmedSunder
+                ? UnarmedStrikeSunderHandednessModifier
+                : sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon),
+            DamageModePenalty = sunderDamageMode.AttackPenalty,
+            SizeDifference = GetLargerCombatantSizeBonus(this, target),
+            // Both rolls are opposed attack rolls (PHB p.158), so each side's racial attack bonus against the other's kind
+            // applies (PHB p.15, p.17; CHR-019).
+            Racial = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats),
+            // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
+            Flurry = FlurryAttackRollPenalty,
+            DefenderWeapon = defenderWeapon,
+            DefenderHandednessLabel = defenderHandednessLabel,
+            DefenderBab = target.Stats.BaseAttackBonus,
+            DefenderStr = target.Stats.STRMod,
+            DefenderSize = target.Stats.SizeModifier,
+            DefenderCondition = target.Stats.ConditionAttackPenalty,
+            DefenderHandedness = defenderHandednessBonus,
+            DefenderSizeDifference = GetLargerCombatantSizeBonus(target, this),
+            DefenderRacial = RacialTraitRules.AttackBonusAgainst(target.Stats, Stats),
+            DefenderFlurry = target.FlurryAttackRollPenalty,
+        };
+    }
+
+    /// <summary>
+    /// The terms of a sunder by this creature against the item of <paramref name="target"/> that ResolveSunder would aim at
+    /// (<paramref name="targetSlot"/>, else the default), with <paramref name="attackerWeaponOverride"/> or what it would
+    /// sunder with (<see cref="TryResolveSunderAttack"/>), at <paramref name="attackBonusOverride"/> or its full BAB; false
+    /// when the target has nothing to sunder or this creature nothing to sunder with (the attempt fails at once). A natural
+    /// attacker sunders with <paramref name="naturalAttackIndex"/> when it is 0 or more (the one the step would give up,
+    /// GameManager.GetManeuverNaturalAttackIndexForAI), else the last one recorded. Pure. Batch 14 step 8 (the AI's odds).
+    /// </summary>
+    public bool TryGetSunderCheckModifiersAgainst(CharacterController target, EquipSlot? targetSlot, int? attackBonusOverride,
+        out SunderCheckModifiers modifiers, ItemData attackerWeaponOverride = null, int naturalAttackIndex = -1)
+    {
+        modifiers = default(SunderCheckModifiers);
+        if (Stats == null || target == null || target.Stats == null)
+            return false;
+        if (!TryGetSunderTargetItem(target, targetSlot, out ItemData targetItem, out _, out _))
+            return false;
+        if (!TryResolveSunderAttack(attackerWeaponOverride, out ItemData attackerWeapon, out NaturalAttackDefinition sunderNatural, out _, naturalAttackIndex))
+            return false;
+        modifiers = GetSunderCheckModifiers(target, targetItem, attackerWeapon, sunderNatural, attackBonusOverride);
+        return true;
     }
 
     private static string GetSunderTargetDisplayLabel(SunderTargetKind kind, ItemData item)
@@ -15623,6 +15808,124 @@ public class CharacterController : MonoBehaviour
     private static bool DisarmerCatchesWeapon(CharacterController disarmer, ItemData disarmerHeldWeapon)
         => disarmerHeldWeapon == null && (disarmer == null || !disarmer.FightsWithNaturalWeapons());
 
+    /// <summary>
+    /// Every term of the two opposed attack rolls of a disarm (PHB p.155), without the d20s: the one formula
+    /// <see cref="RollDisarmCheck"/> rolls and the AI's odds (DND35.AI.Valuation.ManeuverOdds, batch 14 step 8) estimate.
+    /// <see cref="AttackerModifier"/> and <see cref="DefenderModifier"/> are the sums each d20 is added to.
+    /// </summary>
+    public struct DisarmCheckModifiers
+    {
+        public bool AttackerUsesNaturalWeapon;
+        /// <summary>The BAB the attacker rolls at (the step's, two-weapon penalty included, or its full BAB).</summary>
+        public int AttackerBab;
+        public int AttackerStr;
+        public int AttackerSize;
+        public int AttackerCondition;
+        public int AttackerHeldItem;
+        public int AttackerSizeDifference;
+        public int AttackerImprovedDisarm;
+        public int AttackerRacial;
+        public int AttackerFlurry;
+        public int DefenderBab;
+        public int DefenderStr;
+        public int DefenderSize;
+        public int DefenderCondition;
+        public int DefenderHeldItem;
+        public int DefenderNonMeleeHeldItem;
+        public int DefenderSizeDifference;
+        /// <summary>Always 0: Improved Disarm helps only the creature making the attempt (PHB p.95, CMB-014).</summary>
+        public int DefenderImprovedDisarm;
+        /// <summary>A locked gauntlet's +10 against being disarmed.</summary>
+        public int DefenderSpecialResist;
+        public int DefenderRacial;
+        public int DefenderFlurry;
+
+        public int AttackerModifier => AttackerBab + AttackerStr + AttackerSize + AttackerCondition
+            + AttackerHeldItem + AttackerSizeDifference + AttackerImprovedDisarm + AttackerRacial + AttackerFlurry;
+
+        public int DefenderModifier => DefenderBab + DefenderStr + DefenderSize + DefenderCondition
+            + DefenderHeldItem + DefenderNonMeleeHeldItem + DefenderSizeDifference + DefenderImprovedDisarm + DefenderSpecialResist
+            + DefenderRacial + DefenderFlurry;
+    }
+
+    /// <summary>
+    /// The terms of a disarm by <paramref name="attacker"/> (holding <paramref name="attackerHeldItem"/>; null: its natural
+    /// weapon or unarmed strike) against <paramref name="defender"/>'s <paramref name="defenderHeldItem"/> (PHB p.155).
+    /// Pure: no dice. <see cref="RollDisarmCheck"/> rolls exactly these.
+    /// </summary>
+    public static DisarmCheckModifiers GetDisarmCheckModifiers(
+        CharacterController attacker,
+        CharacterController defender,
+        ItemData attackerHeldItem,
+        ItemData defenderHeldItem,
+        int defenderSpecialResistBonus,
+        int? attackerBaseAttackBonusOverride = null)
+    {
+        // An unarmed strike counts as a light weapon (-4, PHB p.155), also when an NPC lists it as a natural
+        // attack (the monks; FightsWithNaturalWeapons). A natural weapon is not an unarmed strike (MM p.312:
+        // armed); it counts as a one-handed weapon of the creature's own size, so it gets neither the
+        // two-handed +4 nor the light -4 (owner ruling 2026-10-08, CMB-102). The larger combatant gets +4 per
+        // size category of difference (PHB p.155); the smaller one takes no penalty. The size term compares the
+        // combatants, as PHB p.155 and p.158 do (rules as written, recorded 2026-10-11, CMB-141; the 2026-10-08 disarm ruling
+        // worded it as the two items, which is the same while each weapon is its wielder's size, ITM-071).
+        bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.FightsWithNaturalWeapons();
+        return new DisarmCheckModifiers
+        {
+            AttackerUsesNaturalWeapon = attackerUsesNaturalWeapon,
+            AttackerBab = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus,
+            AttackerStr = attacker.Stats.STRMod,
+            AttackerSize = attacker.Stats.SizeModifier,
+            AttackerCondition = attacker.Stats.ConditionAttackPenalty,
+            AttackerHeldItem = attackerUsesNaturalWeapon
+                ? NaturalWeaponDisarmHandednessModifier
+                : GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true),
+            AttackerSizeDifference = GetLargerCombatantSizeBonus(attacker, defender),
+            AttackerImprovedDisarm = attacker.Stats.HasFeat("Improved Disarm") ? 4 : 0,
+            // Both rolls are opposed attack rolls (PHB p.155), so each side's racial attack bonus against the other's kind
+            // applies (dwarf +1 against orcs and goblinoids, gnome +1 against kobolds and goblinoids; PHB p.15, p.17; CHR-019).
+            AttackerRacial = RacialTraitRules.AttackBonusAgainst(attacker.Stats, defender.Stats),
+            // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
+            AttackerFlurry = attacker.FlurryAttackRollPenalty,
+            DefenderBab = defender.Stats.BaseAttackBonus,
+            DefenderStr = defender.Stats.STRMod,
+            DefenderSize = defender.Stats.SizeModifier,
+            DefenderCondition = defender.Stats.ConditionAttackPenalty,
+            DefenderHeldItem = GetDisarmHeldItemModifier(defenderHeldItem, treatUnarmedAsLight: false),
+            DefenderNonMeleeHeldItem = GetDisarmNonMeleeHeldItemPenalty(defenderHeldItem),
+            DefenderSizeDifference = GetLargerCombatantSizeBonus(defender, attacker),
+            // Improved Disarm helps only the creature making the disarm attempt (PHB p.95), so the
+            // defender never adds it here; a counter-disarm swaps the roles (CMB-014).
+            DefenderImprovedDisarm = 0,
+            DefenderSpecialResist = defenderSpecialResistBonus,
+            DefenderRacial = RacialTraitRules.AttackBonusAgainst(defender.Stats, attacker.Stats),
+            DefenderFlurry = defender.FlurryAttackRollPenalty,
+        };
+    }
+
+    /// <summary>A locked gauntlet gives +10 against being disarmed: the defender's special resist term of the disarm roll.</summary>
+    private static int GetDisarmLockedGauntletResistBonus(CharacterController defender)
+        => HasLockedGauntletEquipped(defender) ? 10 : 0;
+
+    /// <summary>
+    /// The terms of a disarm by this creature, with <paramref name="attackerWeaponOverride"/> (the hand the cost paid, as
+    /// ResolveDisarm takes it) or its main-hand weapon (null: a natural weapon or its unarmed strike), against the held item of <paramref name="target"/> that ResolveDisarm would aim at (<paramref name="preferredTargetSlot"/>,
+    /// else the default), its locked gauntlet included; false when the target holds nothing to disarm (the attempt fails
+    /// at once). Pure. ResolveDisarm's counter-disarm is <c>target.TryGetDisarmCheckModifiersAgainst(this, null, null, ...)</c>.
+    /// Batch 14 step 8 (the AI's odds).
+    /// </summary>
+    public bool TryGetDisarmCheckModifiersAgainst(CharacterController target, EquipSlot? preferredTargetSlot, int? attackBonusOverride,
+        out DisarmCheckModifiers modifiers, ItemData attackerWeaponOverride = null)
+    {
+        modifiers = default(DisarmCheckModifiers);
+        if (Stats == null || target == null || target.Stats == null)
+            return false;
+        if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out _))
+            return false;
+        modifiers = GetDisarmCheckModifiers(this, target, attackerWeaponOverride ?? GetEquippedMainWeapon(), targetHeldItem,
+            GetDisarmLockedGauntletResistBonus(target), attackBonusOverride);
+        return true;
+    }
+
     private static DisarmCheckResult RollDisarmCheck(
         CharacterController attacker,
         CharacterController defender,
@@ -15634,50 +15937,20 @@ public class CharacterController : MonoBehaviour
         int? attackerBaseAttackBonusOverride = null,
         int attackerDualWieldPenaltyForLog = 0)
     {
-        // An unarmed strike counts as a light weapon (-4, PHB p.155), also when an NPC lists it as a natural
-        // attack (the monks; FightsWithNaturalWeapons). A natural weapon is not an unarmed strike (MM p.312:
-        // armed); it counts as a one-handed weapon of the creature's own size, so it gets neither the
-        // two-handed +4 nor the light -4 (owner ruling 2026-10-08, CMB-102). The larger combatant gets +4 per
-        // size category of difference (PHB p.155); the smaller one takes no penalty. The size term compares the
-        // combatants, as PHB p.155 and p.158 do (rules as written, recorded 2026-10-11, CMB-141; the 2026-10-08 disarm ruling
-        // worded it as the two items, which is the same while each weapon is its wielder's size, ITM-071).
-        bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.FightsWithNaturalWeapons();
-        int atkHeldItemMod = attackerUsesNaturalWeapon
-            ? NaturalWeaponDisarmHandednessModifier
-            : GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
-        int atkSizeDiffMod = GetLargerCombatantSizeBonus(attacker, defender);
-        int atkImprovedDisarmMod = attacker.Stats.HasFeat("Improved Disarm") ? 4 : 0;
-
-        int defHeldItemMod = GetDisarmHeldItemModifier(defenderHeldItem, treatUnarmedAsLight: false);
-        int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(defenderHeldItem);
-        int defSizeDiffMod = GetLargerCombatantSizeBonus(defender, attacker);
-        // Improved Disarm helps only the creature making the disarm attempt (PHB p.95), so the
-        // defender never adds it here; a counter-disarm swaps the roles (CMB-014).
-        const int defImprovedDisarmMod = 0;
+        // The terms (PHB p.155) are pure reads, shared with the AI's odds (GetDisarmCheckModifiers, batch 14 step 8).
+        DisarmCheckModifiers m = GetDisarmCheckModifiers(attacker, defender, attackerHeldItem, defenderHeldItem,
+            defenderSpecialResistBonus, attackerBaseAttackBonusOverride);
 
         int atkRoll = DiceService.D20("Disarm attack roll");
         int defRoll = DiceService.D20("Disarm defense roll");
 
-        int attackerBaseAttackBonusUsed = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus;
         int attackerBaseAttackBonusRaw = attacker.Stats.BaseAttackBonus;
-        int attackerIterativeAdjustment = attackerBaseAttackBonusUsed - attackerBaseAttackBonusRaw - attackerDualWieldPenaltyForLog;
+        int attackerIterativeAdjustment = m.AttackerBab - attackerBaseAttackBonusRaw - attackerDualWieldPenaltyForLog;
 
-        // Both rolls are opposed attack rolls (PHB p.155), so each side's racial attack bonus against the other's kind
-        // applies (dwarf +1 against orcs and goblinoids, gnome +1 against kobolds and goblinoids; PHB p.15, p.17; CHR-019).
-        int atkRacialMod = RacialTraitRules.AttackBonusAgainst(attacker.Stats, defender.Stats);
-        int defRacialMod = RacialTraitRules.AttackBonusAgainst(defender.Stats, attacker.Stats);
+        int atkTotal = atkRoll + m.AttackerModifier;
+        int defTotal = defRoll + m.DefenderModifier;
 
-        // The flurry penalty on either side's opposed attack roll while its flurry lasts (PHB p.40; CHR-003).
-        int atkFlurryMod = attacker.FlurryAttackRollPenalty;
-        int defFlurryMod = defender.FlurryAttackRollPenalty;
-
-        int atkTotal = atkRoll + attackerBaseAttackBonusUsed + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
-                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod + atkRacialMod + atkFlurryMod;
-        int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
-                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus + defRacialMod
-                       + defFlurryMod;
-
-        string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : attackerUsesNaturalWeapon ? "Natural weapon" : "Unarmed Strike";
+        string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : m.AttackerUsesNaturalWeapon ? "Natural weapon" : "Unarmed Strike";
         string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
 
         string atkBreakdown = BuildDisarmDetailedRollSection(
@@ -15686,35 +15959,35 @@ public class CharacterController : MonoBehaviour
             baseAttackBonus: attackerBaseAttackBonusRaw,
             iterativeAdjustment: attackerIterativeAdjustment,
             dualWieldPenalty: attackerDualWieldPenaltyForLog,
-            strengthModifier: attacker.Stats.STRMod,
-            sizeModifier: attacker.Stats.SizeModifier,
-            conditionModifier: attacker.Stats.ConditionAttackPenalty,
-            weaponModifier: atkHeldItemMod,
-            sizeDifferenceModifier: atkSizeDiffMod,
+            strengthModifier: m.AttackerStr,
+            sizeModifier: m.AttackerSize,
+            conditionModifier: m.AttackerCondition,
+            weaponModifier: m.AttackerHeldItem,
+            sizeDifferenceModifier: m.AttackerSizeDifference,
             nonMeleePenalty: 0,
-            improvedDisarmModifier: atkImprovedDisarmMod,
-            racialModifier: atkRacialMod,
-            specialModifier: atkFlurryMod,
-            specialModifierLabel: atkFlurryMod != 0 ? "Flurry of Blows" : string.Empty,
+            improvedDisarmModifier: m.AttackerImprovedDisarm,
+            racialModifier: m.AttackerRacial,
+            specialModifier: m.AttackerFlurry,
+            specialModifierLabel: m.AttackerFlurry != 0 ? "Flurry of Blows" : string.Empty,
             heldItemLabel: attackerHeldLabel,
             total: atkTotal);
 
         string defBreakdown = BuildDisarmDetailedRollSection(
             title: "Defender Roll:",
             d20Roll: defRoll,
-            baseAttackBonus: defender.Stats.BaseAttackBonus,
+            baseAttackBonus: m.DefenderBab,
             iterativeAdjustment: 0,
             dualWieldPenalty: 0,
-            strengthModifier: defender.Stats.STRMod,
-            sizeModifier: defender.Stats.SizeModifier,
-            conditionModifier: defender.Stats.ConditionAttackPenalty,
-            weaponModifier: defHeldItemMod,
-            sizeDifferenceModifier: defSizeDiffMod,
-            nonMeleePenalty: defNonMeleeHeldItemPenalty,
-            improvedDisarmModifier: defImprovedDisarmMod,
-            racialModifier: defRacialMod,
-            specialModifier: defenderSpecialResistBonus + defFlurryMod,
-            specialModifierLabel: defFlurryMod == 0 ? lockedGauntletReason
+            strengthModifier: m.DefenderStr,
+            sizeModifier: m.DefenderSize,
+            conditionModifier: m.DefenderCondition,
+            weaponModifier: m.DefenderHeldItem,
+            sizeDifferenceModifier: m.DefenderSizeDifference,
+            nonMeleePenalty: m.DefenderNonMeleeHeldItem,
+            improvedDisarmModifier: m.DefenderImprovedDisarm,
+            racialModifier: m.DefenderRacial,
+            specialModifier: defenderSpecialResistBonus + m.DefenderFlurry,
+            specialModifierLabel: m.DefenderFlurry == 0 ? lockedGauntletReason
                 : string.IsNullOrEmpty(lockedGauntletReason) ? "Flurry of Blows" : lockedGauntletReason + ", Flurry of Blows",
             heldItemLabel: defenderHeldLabel,
             total: defTotal);

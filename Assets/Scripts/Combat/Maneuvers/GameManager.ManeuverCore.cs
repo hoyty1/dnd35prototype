@@ -25,6 +25,13 @@ public partial class GameManager
     private AttackIntent _maneuverStepIntent;
 
     /// <summary>
+    /// The intent of the attack step the AI's step hook is deciding on (<see cref="_maneuverStepIntent"/>; null outside the
+    /// hook): the AI's odds read its two-weapon state for the step's BAB (<see cref="GetManeuverStepBab"/>; batch 14 step 8,
+    /// DND35.AI.Valuation.ManeuverOdds). A read only; RunAttackSequence alone sets it.
+    /// </summary>
+    internal AttackIntent ManeuverStepIntentForAI => _maneuverStepIntent;
+
+    /// <summary>
     /// May <paramref name="req"/>'s attacker start its maneuver now? Pure: no dice, nothing spent. The Improved Grab hold bar
     /// (MM p.310, CMB-163), the bull rush and trip limits (CanBullRush, CanTrip; PHB p.154, p.158), the direct-attack gate
     /// for the maneuvers made against an opponent in reach (AttackLegality.CanDirectlyAttack with DirectAttackKind.Maneuver:

@@ -139,6 +139,17 @@
       "notes": "Batch 14 step 2 (added 2026-11-23): AttackValue (AI/Valuation), the AI's hit chance and damage estimates extracted from AIProfile.HitChance and AverageWeaponDamage and ThreatSystem.EstimateAverageMeleeDamage: each member equals the formula it replaced (copied in the suite as it stood at de36b83) on a grid of modifiers and ACs and on live creatures (a longsword in either hand, a longbow, a natural bite, an unarmed strike), and the delegating members give the same values (reflection, TST-006); ExpectedRoundDamage sums the iterative steps (BAB +6: +6/+1, PHB p.143) and the natural attacks by count with the secondary -5 (MM p.312). Play mode (CharacterController.Init, TST-009). 16/16 in its first Play pass (20261123T165901Z-play)."
     },
     {
+      "type": "Tests.AI.ManeuverOddsTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 35,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 8 (AI-035 groundwork; added 2026-11-23): ManeuverOdds and TargetNumbers (AI/Valuation), the AI's odds of a trip, grapple, disarm or sunder. The exact touch and at-least helpers; the trip estimate against 3000 real seeded trips each (an even and a lopsided pair, success and touch rates within 0.03, the counter-trip odds); disarm, sunder and grapple by identity with the modifiers the rolls add (CharacterController.RollDisarmCheck through reflection, TST-006; the shared GetDisarmCheckModifiers and GetSunderCheckModifiers; real disarms, sunders and grapples against seeded dice (Random.InitState; Random.state restored); an off-hand disarm priced with the off-hand item; a grapple in place of a secondary claw priced before the step is committed, its check without the -5, equal to the real check after the commit, CMB-102); the counter-disarm and Improved Disarm; an AoO that deals damage cancels a disarm and one that deals none does not (PHB p.155), the provoker odds and a trip's NotFoiled 1; ManeuverOdds.StepBab equals GameManager.GetManeuverStepBab and the UI step BAB. Play mode (CharacterController.Init, TST-009); saves and restores Random.state. 35/35 in its first Play pass (20261123T214238Z-play). Review rework (2026-11-23): +5 (the off-hand disarm, the natural secondary grapple, the grapple miss branch asserted); the grapple pairs are released and taken off the scene grid before they are destroyed; 40/40 (20261123T215624Z-play)."
+    },
+    {
       "type": "Tests.AI.KnowledgeFactsTests",
       "needs": "play",
       "skip": "",
@@ -231,11 +242,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 11,
+      "passed": 12,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 14 step 3 (added 2026-11-23; the plan's 'New facts', design 8): no file under Assets/Scripts/AI/Personality or AI/Valuation dereferences a target or a view's Subject into .Stats, .GridPosition, .HasCondition or .Is* (SelfFacts.cs and TargetNumbers.cs skipped; comments and strings ignored); the matcher checked on sample lines first. Reads the source files. 11/11 in its first Play pass (20261123T173503Z-play; 8 files). Review rework (2026-11-23): any other read of a view's Subject is flagged too (an alias such as var s = view.Subject, Subject.Team, Subject passed on), except Subject.name and a null comparison; the matcher samples grew, the count did not; 11/11 (20261123T175045Z-play)."
+      "notes": "Batch 14 step 3 (added 2026-11-23; the plan's 'New facts', design 8): no file under Assets/Scripts/AI/Personality or AI/Valuation dereferences a target or a view's Subject into .Stats, .GridPosition, .HasCondition or .Is* (SelfFacts.cs and TargetNumbers.cs skipped; comments and strings ignored); the matcher checked on sample lines first. Reads the source files. 11/11 in its first Play pass (20261123T173503Z-play; 8 files). Review rework (2026-11-23): any other read of a view's Subject is flagged too (an alias such as var s = view.Subject, Subject.Team, Subject passed on), except Subject.name and a null comparison; the matcher samples grew, the count did not; 11/11 (20261123T175045Z-play). Batch 14 step 8 (2026-11-23): +1, the new AI/Valuation/ManeuverOdds.cs is scanned and passes (TargetNumbers.cs, the [KnowledgeLegacy] choke point, stays skipped); 12/12 (20261123T214238Z-play)."
     },
     {
       "type": "Tests.AI.AreaAimSearchTests",
