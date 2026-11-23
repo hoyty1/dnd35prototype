@@ -91,6 +91,12 @@ public static class AiDecisionTrace
     /// <summary>Turns open now.</summary>
     public static int OpenTurns => _open.Count;
 
+    /// <summary>
+    /// True when <paramref name="actor"/> has an open turn, so a <see cref="Record"/> would keep a row: a caller gates on
+    /// it before it formats a row's strings (AiBlend, batch 14 step 3). False when the trace is off.
+    /// </summary>
+    public static bool HasOpenTurn(object actor) => actor != null && _open.ContainsKey(actor);
+
     /// <summary>The turn records open now (read only).</summary>
     public static IEnumerable<TurnRecord> OpenRecords => _open.Values;
 

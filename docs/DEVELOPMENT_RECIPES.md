@@ -25,7 +25,7 @@ Step-by-step procedures for the common changes in this project: which files to t
 ## Contents
 
 - Magic: [Add a spell (data)](#add-a-spell-data) · [Implement a single-target, touch or self spell effect](#implement-a-single-target-touch-or-self-spell-effect) · [Implement an area spell](#implement-an-area-spell) · [Make NPCs cast a spell, and test a spell](#make-npcs-cast-a-spell-and-test-a-spell) · [Add a metamagic feat](#add-a-metamagic-feat)
-- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a combat-log message](#add-a-combat-log-message)
+- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a trait](#add-a-trait) · [Add a combat-log message](#add-a-combat-log-message)
 - Items and economy: [Add a mundane weapon, armor or shield](#add-a-mundane-weapon-armor-or-shield) · [Add a weapon or armor special ability](#add-a-weapon-or-armor-special-ability) · [Add a wondrous item](#add-a-wondrous-item) · [Add a ring](#add-a-ring) · [Add a rod](#add-a-rod) · [Add a staff](#add-a-staff) · [Add a scroll, potion or wand](#add-a-scroll-potion-or-wand) · [Add an item to the store](#add-an-item-to-the-store) · [Make an item craftable](#make-an-item-craftable)
 - Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Add a combat scenario](#add-a-combat-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
 - UI: [Add a combat action button](#add-a-combat-action-button) · [Add a UI panel](#add-a-ui-panel)
@@ -296,6 +296,26 @@ Pitfalls:
 - Per-creature state the executor keeps on `CharacterController` must be cleared on slot reuse (CRE-046).
 - A coroutine that waits on a callback core re-checks `CurrentPhase == CombatOver` in its loop.
 - `ActorSource` stays `{Ui, AI}` (C7); in harness code write `global::ActorSource`, because `Tests.Scenarios.ActorSource` hides it.
+
+## Add a trait
+
+Use for a new enemy personality trait (an AI scorer, never a routine and never a rule). The design is `docs/designs/enemy_ai_knowledge_and_personalities.md` 4; the batch 14 plan is `docs/designs/personalities_batch14.md` (C2-C8); the code is `Assets/Scripts/AI/Personality/` ([AI.md 6.7](systems/AI.md)).
+
+1. **Row.** Add one `TraitDefinition` to `TraitDatabase.Init` (`AI/Personality/TraitDatabase.cs`) and an id constant beside the others:
+   - `MinTier` (`CognitionTier`: the least Intelligence that can reason this way), `Alignment` (a hint that only warns), `RiskAversion` (0.5 is neutral; the lerp clamps it to [0, 1]);
+   - `Target`: weights on `ConsiderationId` values whose absolute values sum to 1;
+   - `Opinions`: at most one `OpinionRule` per `BoolDecision`, with a condition from the closed `OpinionCondition` set and an `Otherwise`, and a `MinDifficulty` when an easier game should skip it;
+   - `RoleDesires` (single `ActionRoles` flags: Attack, Approach, Retreat, Defend, Support, Heal, each in [-1, 1]), `PreferredRangeAdjust`, and `ExclusiveLock` only for a trait that replaces all others (Mindless).
+   Keep the row to what the batch reads (C3): a column no code reads is a silent no-op. The members are init-only (set them in the object initializer; the shared row cannot be changed later), and a RoleDesire on a combined or unknown flag is logged as an error by `TraitDatabase.Init` and ignored by `PersonalityProfile`.
+2. **A new consideration** is a new `ConsiderationId` value appended at the end (the values index the folded weights) and a case in `Considerations.Evaluate` that reads the target only through the `ITargetView` (a `FactKey`; add the fact to `OmniscientKnowledgeProvider.TruthView` first). It returns a value in [0, 1] and 0 for an Unknown fact. Never read `.Stats`, `.GridPosition`, `.HasCondition` or `.Is*` of a target or a Subject: `OmniscienceLintTests` fails.
+3. **A new condition or decision** is a new `OpinionCondition` (read from `JudgeContext`, filled by the caller from the creature's own state) or `BoolDecision` value, and the site that asks `AiBlend.Judge` for it.
+4. **Data.** A creature gets the trait through its definition's spec string (`NPCDefinition.AIPersonality` from batch 14 step 4: `Cowardly:0.6,Healer:0.4`); `PersonalityFactory.Create` validates it and logs one `[Personality]` warning per definition for an unknown id, a trait below the creature's tier, the Mindless lock, an alignment mismatch or a sum above 1.
+5. **Tests.** Pin every number of the row in `TraitDatabaseTests`, add the trait's votes and terms to `PersonalityBlendTests` (and a consideration's values to `ConsiderationTests`), and update their `tools/tests/static-suites.json` counts. The five suites are `needs: either`, which the edit pass skips (it still prints verdict OK), so run them in the Play pass of a Play session (docs/TESTING.md 3, mode gating): `Tests.Runner.StaticSuiteRunner.RunFromCommand("filter=TraitDatabaseTests,PersonalityValidatorTests,PersonalityBlendTests,ConsiderationTests,OmniscienceLintTests")`; results go to `Logs/TestRunner/static-play.txt`. A creature that carries the trait needs a scenario with a `-plain` twin that drops it.
+
+Pitfalls:
+- A trait with no RoleDesire and no opinion still moves targets; a trait whose weights do not sum to 1 skews the term. `TraitDatabaseTests` checks the sums.
+- Weights are the given ones (C2): `Smart:0.5` is Smart at half strength, and the quorum of .5 counts given weights, so a trait at .4 never vetoes alone.
+- No personality code reads `IsPC`, `IsControllable` or `ActivePC` (C12); an AI-run party member with a spec plays by the same rows.
 
 ## Add a combat-log message
 

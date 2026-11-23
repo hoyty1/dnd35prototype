@@ -273,8 +273,9 @@ Assets/Scripts/
                          AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator
     Debug/ (2)           AiDecisionTimer and AiDecisionTrace (batch 14 step 1, global namespace): the decision-time measurement and decision trace, editor and development builds only, outside every trace hash
-    Knowledge/ (5)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue; batch 14 step 2 added 16 keys), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags
+    Knowledge/ (6)       target facts for AI scoring (batch 13 step 7, namespace DND35.AI.Knowledge): KnowledgeTypes (FactKey, KnowledgeLevel, WoundBand, FactValue; batch 14 step 2 added 16 keys), KnowledgeService (ITargetView, IKnowledgeProvider, OmniscientKnowledgeProvider), KnowledgeFacts, FactQuery, AIControlFlags, CognitionTier (batch 14 step 3: Mindless to Brilliant from Intelligence)
     Valuation/ (1)       AttackValue (batch 14 step 2, namespace DND35.AI.Valuation): the AI's hit chance and expected damage estimates
+    Personality/ (7)     weighted personality traits (batch 14 step 3, namespace DND35.AI.Personality; no caller until step 4): TraitDefinition, TraitDatabase (the seven starter traits), Considerations, PersonalityProfile, PersonalityValidator, PersonalityFactory, AiBlend
     Spellcasting/ (6)    AiConversionPlanner, AiMetamagicPlanner, AreaAimSearch, AiCastDecider (the NPC cast's choices, batch 11), AiCastChoiceHeuristics (its energy, shield and weapon picks, step 22), AiSpellCandidates (the ordered retries, step 22)
     Profiles/ (20)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile
@@ -332,10 +333,11 @@ The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatS
 **Namespaces.** Almost all code is in the global namespace. The exceptions are:
 
 - `DND35e.Identifiers` (13 files): `SpellNames`, `SpellID`, `ItemIDs`, `ItemID`, `RingNames`, `WondrousItemNames`, `GameConstants`, `IdentifierExtensions` and a few enums. 302 files import it.
-- `DND35.AI`, `DND35.AI.Profiles`, `DND35.AI.Custom` and `DND35.AI.Knowledge` (31 files; `Knowledge` is the 5 files in `AI/Knowledge/`).
+- `DND35.AI`, `DND35.AI.Profiles`, `DND35.AI.Custom` and `DND35.AI.Knowledge` (33 files; `Knowledge` is the 6 files in `AI/Knowledge/`), `DND35.AI.Valuation` (1 file) and `DND35.AI.Personality` (7 files, `AI/Personality/`).
 - `DND35e.Treasure` (5 files).
 - `DND35.Magic` (`CounterspellData`).
-- `Tests.*` (200 files).
+- `System.Runtime.CompilerServices.IsExternalInit` (`_Core/IsExternalInit.cs`, batch 14 step 3): the internal marker type C# 9 `init` accessors need, which Unity's .NET Standard 2.1 profile lacks; the read-only trait rows of `AI/Personality/` use it.
+- `Tests.*` (209 files).
 
 Name clashes to know about: `CharacterController` shadows `UnityEngine.CharacterController` (it resolves only because global-namespace types win over `using UnityEngine`); the global `SaveType` clashes with `SavingThrowResolver.SaveType`; the global `DamageType` and `DND35e.Identifiers.DamageType` have different ordinals.
 

@@ -147,7 +147,62 @@
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 13 step 7 (AI-078, AI-021; added 2026-10-29): the typed target facts AI scoring reads. Every TagPriority string of every AIProfile type parses into a FactQuery; matching is whole (Elf is not Half-Elf); HP State: Staggered reads the BadlyHurt wound band (PHB p.313), Disabled and Dying stay hit point states; the wound bands; the omniscient view of a live creature (creature type spellings normalized, a mindless creature not undead, MM p.313); a swappable KnowledgeService.Provider; the control tags' AIControlFlags. Play mode (CharacterController.Init, TST-009). Batch 14 step 2 (2026-11-23): +26, the 16 new facts at Confirmed on creatures with their own roster (OmniscientKnowledgeProvider(roster)): the keys appended, the relational facts Unknown without an observer, Distance with PHB p.147 diagonals, ThreatensObserver, EngagedByAlly, FlankingNow (PHB p.153), FoesNear, ThreatensAllyInNeed below 70%, Healer, DamagedObserver from the damage memory (GameManager.DealDamage writes it), ThreatPerRound (0 when the creature cannot act), Fleeing (withdrawing, frightened), prone neither Down nor Helpless, a disabled creature at 0 hp with the Down wound band but not Down, dying Down and Helpless; 71/71 (20261123T165901Z-play). Review rework (2026-11-23): +4, StartNewTurn rolls the memory over (still known at the next turn start, the two windows add up, forgotten after two turn starts with no new damage) and a dead subject is Down but not Helpless; 75 is computed from the asserts, not yet measured (the Unity MCP call failed)."
+      "notes": "Batch 13 step 7 (AI-078, AI-021; added 2026-10-29): the typed target facts AI scoring reads. Every TagPriority string of every AIProfile type parses into a FactQuery; matching is whole (Elf is not Half-Elf); HP State: Staggered reads the BadlyHurt wound band (PHB p.313), Disabled and Dying stay hit point states; the wound bands; the omniscient view of a live creature (creature type spellings normalized, a mindless creature not undead, MM p.313); a swappable KnowledgeService.Provider; the control tags' AIControlFlags. Play mode (CharacterController.Init, TST-009). Batch 14 step 2 (2026-11-23): +26, the 16 new facts at Confirmed on creatures with their own roster (OmniscientKnowledgeProvider(roster)): the keys appended, the relational facts Unknown without an observer, Distance with PHB p.147 diagonals, ThreatensObserver, EngagedByAlly, FlankingNow (PHB p.153), FoesNear, ThreatensAllyInNeed below 70%, Healer, DamagedObserver from the damage memory (GameManager.DealDamage writes it), ThreatPerRound (0 when the creature cannot act), Fleeing (withdrawing, frightened), prone neither Down nor Helpless, a disabled creature at 0 hp with the Down wound band but not Down, dying Down and Helpless; 71/71 (20261123T165901Z-play). Review rework (2026-11-23): +4, StartNewTurn rolls the memory over (still known at the next turn start, the two windows add up, forgotten after two turn starts with no new damage) and a dead subject is Down but not Helpless; 75 is computed from the asserts, not yet measured (the Unity MCP call failed). Measured 75/75 in the batch 14 step 3 Play pass (20261123T173503Z-play)."
+    },
+    {
+      "type": "Tests.AI.TraitDatabaseTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 59,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 3 (added 2026-11-23; docs/designs/personalities_batch14.md 'The seven starter traits', design 4.4): pins every number of the seven starter rows of TraitDatabase (Sadistic, Cowardly, Smart, Caster, Healer, Berserker, Mindless): minimum tier, RiskAversion, alignment hint, target weights, opinions with their conditions, else-opinions and the Normal mark on Sadistic's coup de grace Insist, Cowardly's +2 range for Ranged or casting Roles, the RoleDesire column and the Mindless lock; target weights sum to 1 in absolute value; ids case-insensitive and shared. Static data. 53/53 in its first Play pass (20261123T173503Z-play). Review rework (2026-11-23): +6, the shared rows are read-only (no public field or setter on TraitDefinition and OpinionRule, init only; the lists and TraitDatabase.All are read-only wrappers; a row copies the array it is given), every RoleDesire maps to one role bit and RoleBits covers ActionRoles; 59/59 (20261123T175045Z-play)."
+    },
+    {
+      "type": "Tests.AI.PersonalityValidatorTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 40,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 3 (added 2026-11-23): CognitionTier from Intelligence (none Mindless, 0-2 Animal, 3-7 Low, 8-12 Average, 13-16 Keen, 17+ Brilliant) and from bare CharacterStats; PersonalityValidator and PersonalityFactory: Smart on a mindless creature dropped leaving a null personality with one warning; 'Mindless, Smart:0.5' keeps only Mindless; Smart on Int 7 dropped; Sadistic on a lawful good creature only warns (owner, 2026-10-30); unknown ids, bad weights and repeats dropped, all problems in one warning per definition; a sum above 1 scaled, a shortfall kept (C2); separators and a bare id. No creature. 36/36 in its first Play pass (20261123T173503Z-play). Review rework (2026-11-23): +4, the default sink (no warn delegate) logs one Debug.LogWarning per owner id, spec, tier and alignment (a variant at another tier warns for itself, two specs with no owner id each warn) and ResetWarnings forgets them; counted through a wrapped Debug.unityLogger.logHandler, since the runner swaps the handler; 40/40 (20261123T175045Z-play)."
+    },
+    {
+      "type": "Tests.AI.PersonalityBlendTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 119,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 3 (added 2026-11-23; C2-C8, design 4.2, 4.5, 8): PersonalityProfile and AiBlend on fixed views. One trait at 1.0 equals the trait; the orc's folded weights (design 4.5) and the linear term, bounded by 20; design 4.5's fighter (+6.0), wizard and cleric terms; the .5 quorum plus or minus epsilon, an exact Forbid/Insist tie falling to legacy, the legacy fallback inside plus or minus .15, the data override, the conditions, Easy skipping the sadistic coup de grace (Hard equals Normal), partial weights; the AoO price per verdict and the flat 1000 penalty; RA and rho (adept .72 and 1.264, orc .12); the out-of-reach order by RoleDesire; RoleShift; null personality returns every legacy argument; one trace row per member with an actor. 109/109 in its second Play pass (20261123T173503Z-play; the first failed a test bug, a zero-tolerance comparison, fixed in the suite). Review rework (2026-11-23): +10, a null difficulty read from AiBlend.SettingsDifficulty (an Easy setting skips the sadistic Insist; an explicit context difficulty wins; no source is Normal), an unnamed role flag abstains in RoleShift (Berserker withdraw -.8, so total defense stays before a withdraw), the trace row says it read the setting, HasOpenTurn, and ScoreTarget and AoOCost with trace off write no row but return their values; 119/119 (20261123T175045Z-play)."
+    },
+    {
+      "type": "Tests.AI.ConsiderationTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 58,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 3 (added 2026-11-23; the plan's 'Considerations'): the 16 target considerations on fixed views (StubView): 0 for an Unknown fact, every value in [0, 1]; WoundSeverity bands (a standing creature at 0 hp 1, a downed one 0), Softness by armor (another category .5), KillChance (clamp01(damage / hp) x 1 for a caster or healer, .6 otherwise, 0 when Down), Proximity (12 - d) / 11, Clustered min(FoesNear, 3) / 3, LooksDangerous by size, armor and a melee weapon, the flag considerations. No creature. 58/58 in its first Play pass (20261123T173503Z-play)."
+    },
+    {
+      "type": "Tests.AI.OmniscienceLintTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 11,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 14 step 3 (added 2026-11-23; the plan's 'New facts', design 8): no file under Assets/Scripts/AI/Personality or AI/Valuation dereferences a target or a view's Subject into .Stats, .GridPosition, .HasCondition or .Is* (SelfFacts.cs and TargetNumbers.cs skipped; comments and strings ignored); the matcher checked on sample lines first. Reads the source files. 11/11 in its first Play pass (20261123T173503Z-play; 8 files). Review rework (2026-11-23): any other read of a view's Subject is flagged too (an alias such as var s = view.Subject, Subject.Team, Subject passed on), except Subject.name and a null comparison; the matcher samples grew, the count did not; 11/11 (20261123T175045Z-play)."
     },
     {
       "type": "Tests.AI.AreaAimSearchTests",
