@@ -39,7 +39,8 @@ public sealed class AiOutOfReachOutcome
 /// runs with what the load left (AI-057: a free Rapid Reload load leaves the whole turn, a move-action load the
 /// standard action), and ends at once when the load left no standard action. <paramref name="allowThrow"/> is the calling routine's guard: false for the melee routines, whose "another
 /// target" and attack after a move count a throwable weapon's melee reach only (AiAttackGuard.IntentFor). An AI choice,
-/// not a rule: batch 14 re-weights the list, batch 22 replaces it with the evaluator.
+/// not a rule: batch 14 step 6 re-weights the list by the traits' RoleDesire (AiBlend.OrderOutOfReach: the same entries,
+/// perhaps in another order; the Role's list for a creature with no traits), batch 22 replaces it with the evaluator.
 /// </summary>
 public static class AiOutOfReach
 {
@@ -67,9 +68,12 @@ public static class AiOutOfReach
         }
 
         AIProfile profile = npc.aiProfile;
-        IReadOnlyList<OutOfReachAlternative> alternatives = profile != null
+        IReadOnlyList<OutOfReachAlternative> roleList = profile != null
             ? profile.GetOutOfReachAlternatives(npc)
             : AIProfile.DefaultOutOfReachAlternatives(npc, styleWithoutProfile, castingProfile: false);
+        // The Role's list, re-weighted by the traits' RoleDesire (batch 14 step 6, C8): the same entries, perhaps in another
+        // order; the Role's list itself for a creature with no traits.
+        IReadOnlyList<OutOfReachAlternative> alternatives = DND35.AI.Personality.AiBlend.OrderOutOfReach(npc, roleList);
         if (alternatives == null || alternatives.Count == 0)
             yield break;
         if (focus == null || focus.Stats == null || focus.Stats.IsDead)
@@ -182,17 +186,26 @@ public static class AiOutOfReach
     /// unarmed or natural attacks the farthest distance the creature can attack at, so a reach weapon stops at its reach,
     /// outside its dead zone (PHB p.112, p.137). A throwable melee weapon (a dagger) counts as a ranged one, five
     /// increments (PHB p.134), when the routine allows throws (<paramref name="allowThrow"/>: the kiter) and the creature
-    /// fights from range (a Ranged profile or a casting one, C1), so a caster with a dagger stays at throwing range.
+    /// fights from range (a Ranged profile or a casting one, C1), so a caster with a dagger stays at throwing range. A
+    /// profile's preferred range (a cap) includes the traits' range adjust (AiBlend.PreferredRange, batch 14 step 6).
     /// </summary>
     public static int ApproachRangeSquares(CharacterController npc, bool allowThrow = false)
     {
         if (npc == null || npc.Stats == null)
             return 1;
         ItemData weapon = npc.GetEquippedMainWeapon();
-        int preferred = npc.aiProfile != null && npc.aiProfile.Movement != null ? npc.aiProfile.Movement.PreferredRangeSquares : 0;
+        int rolePreferred = npc.aiProfile != null && npc.aiProfile.Movement != null ? npc.aiProfile.Movement.PreferredRangeSquares : 0;
+        // A preferred range of 0 means "no cap"; a real one is adjusted by the traits (batch 14 step 6, C3: Cowardly +2 on a
+        // Ranged, Mixed or casting Role), so a cowardly archer stops farther out. Asked only by the two branches that read
+        // it, so a melee approach writes no Personality.PreferredRange row for a range it never uses.
+        int Preferred() => rolePreferred > 0
+            ? Mathf.Max(1, DND35.AI.Personality.AiBlend.PreferredRange(npc, rolePreferred,
+                DND35.AI.Personality.AiBlend.IsRangedOrCastingRole(npc.aiProfile)))
+            : 0;
         if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.RangeIncrement > 0)
         {
             int max = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, weapon.IsThrown);
+            int preferred = Preferred();
             return preferred > 0 ? Mathf.Min(preferred, max) : max;
         }
         bool fightsFromRange = npc.aiProfile != null
@@ -201,6 +214,7 @@ public static class AiOutOfReach
             && GameManager.IsThrowableWeapon(weapon, meleeOnly: true))
         {
             int max = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, true);
+            int preferred = Preferred();
             return preferred > 0 ? Mathf.Min(preferred, max) : max;
         }
 

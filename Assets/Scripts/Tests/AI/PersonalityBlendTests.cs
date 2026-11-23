@@ -29,6 +29,8 @@ namespace Tests.AI
 /// fighter, and Smart .5's term turns the captain to the soft, wounded wizard, each with a margin; the creature members
 /// with a personality (the sadist keeps downed foes and insists on a coup de grace at Normal, not on Easy, the data
 /// override wins; an IgnoreUnconscious For turns the retarget on, Forbid leaves the Role's answer; the summary row).</item>
+/// <item>Batch 14 step 6: the movement members with a personality (charge, AoO price, range adjust, keep-away distance,
+/// risk factor) and the out-of-reach orders of the step's two scenarios.</item>
 /// </list>
 /// Either mode (static data and fixed views).
 /// </summary>
@@ -67,6 +69,7 @@ public static class PersonalityBlendTests
             TestTrace();
             TestCaptainLayout();
             TestCreatureMembers();
+            TestMovementMembers();
         }
         finally
         {
@@ -375,8 +378,8 @@ public static class PersonalityBlendTests
         Assert(AiBlend.Judge(null, BoolDecision.CoupDeGrace, true, Normal, dataOverride: false),
             "no personality: the legacy answer as given (the legacy sites apply the override themselves)");
         Assert(AiBlend.AoOCost(null, 1000f, Ctx(WoundBand.Hurt)) == 1000f && AiBlend.AoOCost(null, 2f, Normal) == 2f, "no personality: the legacy AoO price");
-        Assert(AiBlend.RiskToleranceFactor(null, 1.3f) == 1.3f, "no personality: the legacy risk multiplier");
-        Assert(ReferenceEquals(AiBlend.OrderOutOfReach(null, list), list), "no personality: the Role's list itself");
+        Assert(AiBlend.RiskToleranceFactor((PersonalityProfile)null, 1.3f) == 1.3f, "no personality: the legacy risk multiplier");
+        Assert(ReferenceEquals(AiBlend.OrderOutOfReach((PersonalityProfile)null, list), list), "no personality: the Role's list itself");
         Assert(AiBlend.ScoreTarget(null, 12.5f, view) == 12.5f, "no personality: the legacy target score");
         Assert(Near(AiBlend.ScoreTarget(Orc, 12.5f, view), 12.5f + Orc.TargetTerm(view)), "a personality adds its term to the legacy score");
         Assert(AiBlend.ScoreTarget(Orc, float.MinValue, view) == float.MinValue, "an invalid target stays invalid");
@@ -547,6 +550,102 @@ public static class PersonalityBlendTests
             AiDecisionTrace.Clear();
             UnityEngine.Object.DestroyImmediate(go);
             UnityEngine.Object.DestroyImmediate(other);
+        }
+    }
+
+    /// <summary>
+    /// Batch 14 step 6: the creature members of the movement and out-of-reach sites with a personality, on a bare
+    /// controller (no stats: the vote context is the default, Unhurt and unthreatened). The charge vote; the AoO price by
+    /// verdict; the range adjust (Cowardly +2 on a Ranged, Mixed or casting Role only, never weighted); the keep-away
+    /// distance; the risk factor; the out-of-reach orders of the step's two scenarios; one trace row per member call.
+    /// </summary>
+    private static void TestMovementMembers()
+    {
+        var go = new GameObject("PersonalityBlendTests mover");
+        var made = new List<AIProfile>();
+        try
+        {
+            CharacterController self = go.AddComponent<CharacterController>();
+
+            self.Personality = Adept;
+            Assert(!AiBlend.PrefersCharge(self, true), "the adept refuses a legal charge the Role takes (Cowardly .6 Forbid, a quorum)");
+            self.Personality = P("Cowardly:0.4,Smart:0.4");
+            Assert(!AiBlend.PrefersCharge(self, true), "Cowardly below the quorum still votes the charge down (v -.8)");
+            self.Personality = Orc;
+            Assert(AiBlend.PrefersCharge(self, false), "the orc's Berserker .3 Insist, below the quorum, still votes a charge in (v +.6)");
+            self.Personality = P("Healer:1");
+            Assert(!AiBlend.PrefersCharge(self, true), "a Healer is against a charge");
+            self.Personality = P("Smart:1");
+            Assert(AiBlend.PrefersCharge(self, true) && !AiBlend.PrefersCharge(self, false), "a trait with no charge opinion leaves the Role's answer");
+
+            self.Personality = Adept;
+            Assert(AiBlend.AoOCost(self, 2f) == 6f && AiBlend.AoOCost(self, 1000f) == 1000f,
+                "an unhurt cowardly creature prices a provoker at least 6 (Against): a Berserk Role's 2 becomes 6, an avoiding Role's 1000 stays");
+            self.Personality = P("Berserker:0.6");
+            Assert(AiBlend.AoOCost(self, 1000f) == 2f && AiBlend.AoOCost(self, 2f) == 2f,
+                "a berserker prices a provoker at most 2 (For): a Humanoid Role's 1000 becomes 2");
+            Assert(Near(AiBlend.RiskToleranceFactor(self, 1f), 2f - Mathf.Lerp(0.4f, 1.6f, 0.6f * -0.3f + 0.4f * 0.5f)),
+                "the creature's risk factor is its profile's (2 - rho)");
+
+            self.Personality = Adept;
+            Assert(Adept.RangeAdjust(true) == 2 && Adept.RangeAdjust(false) == 0,
+                "the adept's range adjust: Cowardly's +2 in full at weight .6 (never averaged), on a Ranged, Mixed or casting Role only");
+            Assert(P("Cowardly:0.2").RangeAdjust(true) == 2 && Orc.RangeAdjust(true) == 0, "any weight gives the full adjust; a trait without one adds 0");
+            Assert(AiBlend.PreferredRange(self, 4, true) == 6 && AiBlend.PreferredRange(self, 4, false) == 4 && AiBlend.PreferredRange(self, 0, true) == 2,
+                "the preferred range: the Healer Role's 4 becomes 6; a melee Role keeps its range");
+            Assert(AiBlend.KeepAwayDistance(self, AiBlend.LegacyKeepAwaySquares, true) == 4 && AiBlend.KeepAwayDistance(self, AiBlend.LegacyKeepAwaySquares, false) == 2,
+                "the cowardly kiter backs off from a foe within 4 squares, not 2, on a Ranged or casting Role; on a melee Role it keeps 2");
+            self.Personality = Orc;
+            Assert(AiBlend.KeepAwayDistance(self, 2, true) == 2 && AiBlend.PreferredRange(self, 6, true) == 6, "no range adjust: the legacy ranges");
+
+            AIProfile humanoid = AIProfile.CreateRuntime<DND35.AI.Profiles.HumanoidAIProfile>();
+            AIProfile ranged = AIProfile.CreateRuntime<DND35.AI.Profiles.RangedAIProfile>();
+            AIProfile healer = AIProfile.CreateRuntime<DND35.AI.Profiles.HealerAIProfile>();
+            AIProfile meleeCaster = AIProfile.CreateRuntime<DND35.AI.Profiles.SpellcasterAIProfile>();
+            meleeCaster.CombatStyle = CombatStyle.Melee;
+            made.Add(humanoid);
+            made.Add(ranged);
+            made.Add(healer);
+            made.Add(meleeCaster);
+            Assert(!AiBlend.IsRangedOrCastingRole(humanoid) && AiBlend.IsRangedOrCastingRole(ranged) && AiBlend.IsRangedOrCastingRole(healer)
+                   && AiBlend.IsRangedOrCastingRole(meleeCaster) && !AiBlend.IsRangedOrCastingRole(null),
+                "Ranged and casting Roles fight from range (a casting Role of melee style too); a Humanoid Role and no Role do not");
+
+            var coward = new[] { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Approach, OutOfReachAlternative.TotalDefense };
+            self.Personality = Adept;
+            IReadOnlyList<OutOfReachAlternative> c = AiBlend.OrderOutOfReach(self, coward);
+            Assert(c.SequenceEqual(new[] { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.TotalDefense, OutOfReachAlternative.Approach }),
+                "rules/ai-cowardly-caster-defends-before-approach: the adept puts total defense (-1.32) before the approach (-1.6)", string.Join(">", c));
+            var berserk = new[] { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.TotalDefense, OutOfReachAlternative.Approach };
+            self.Personality = P("Berserker:0.6");
+            IReadOnlyList<OutOfReachAlternative> d = AiBlend.OrderOutOfReach(self, berserk);
+            Assert(d.SequenceEqual(new[] { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Approach, OutOfReachAlternative.TotalDefense }),
+                "rules/ai-berserker-approaches-first: Berserker .6 puts the approach (-1.28) before total defense (-1.72)", string.Join(">", d));
+
+            AiDecisionTrace.OverrideEnabled(true);
+            AiDecisionTrace.Clear();
+            self.Personality = Adept;
+            AiDecisionTrace.BeginTurn(self, "Adept", 1, "Healer", Adept.Describe());
+            AiBlend.PrefersCharge(self, true);
+            AiBlend.AoOCost(self, 2f);
+            AiBlend.KeepAwayDistance(self, 2, true);
+            AiBlend.PreferredRange(self, 4, true);
+            AiBlend.PreferredRange(self, 4, false);
+            AiBlend.RiskToleranceFactor(self, 1f);
+            AiBlend.OrderOutOfReach(self, coward);
+            AiDecisionTrace.TurnRecord rec = AiDecisionTrace.EndTurn(self);
+            string sites = rec != null ? string.Join(",", rec.Decisions.Select(x => x.Site)) : "no record";
+            Assert(sites == "Personality.Charge,Personality.AoOCost,Personality.KeepAway,Personality.PreferredRange,Personality.RiskTolerance,Personality.OutOfReach",
+                "one trace row per member call; an unchanged range (a melee Role) writes none", sites);
+        }
+        finally
+        {
+            AiDecisionTrace.OverrideEnabled(null);
+            AiDecisionTrace.Clear();
+            foreach (AIProfile p in made)
+                if (p != null)
+                    UnityEngine.Object.DestroyImmediate(p);
+            UnityEngine.Object.DestroyImmediate(go);
         }
     }
 }

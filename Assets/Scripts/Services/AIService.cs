@@ -1456,7 +1456,11 @@ public class AIService : MonoBehaviour
         int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
         // No movement after a 5-foot step (PHB p.144): the shared legality refuses it (MovementService.CanStartMovement).
         bool canMoveNow = npc.Actions.HasMoveAction && MovementService.CanStartMovement(npc, MoveKind.Move).Ok;
-        bool shouldRetreatForDistance = distToClosestPC <= 2 && canMoveNow && !tookTacticalStep;
+        // The keep-away distance (2 squares), widened by the traits' range adjust (batch 14 step 6, C3: Cowardly +2); the
+        // Ranged-or-casting-only adjust applies only when the creature's Role is one (a melee Role reaches the kiter too).
+        int keepAway = DND35.AI.Personality.AiBlend.KeepAwayDistance(npc, DND35.AI.Personality.AiBlend.LegacyKeepAwaySquares,
+            DND35.AI.Personality.AiBlend.IsRangedOrCastingRole(profile));
+        bool shouldRetreatForDistance = distToClosestPC <= keepAway && canMoveNow && !tookTacticalStep;
         bool shouldRetreatForRisk = avoidAoORisk && riskIsTooHigh && canMoveNow && !tookTacticalStep;
         // AI-039 (batch 13 step 5): a kiter backs off only when it can still fight from range: a ranged attack the guard
         // allows on some enemy (a bow with arrows, a thrown weapon), or a castable spell with range beyond touch. Without
@@ -1620,8 +1624,13 @@ public class AIService : MonoBehaviour
         else
             tolerancePercent = 0.05f;
 
-        if (profile != null)
-            tolerancePercent *= Mathf.Clamp(profile.GetRangedAoORiskToleranceMultiplier(), 0.25f, 2f);
+        // The Role's multiplier, times 2 - rho for a creature with traits (batch 14 step 6, C7); the clamp stays. A creature
+        // with neither a Role nor traits keeps the base tolerance.
+        if (profile != null || npc.Personality != null)
+        {
+            float roleMultiplier = profile != null ? profile.GetRangedAoORiskToleranceMultiplier() : 1f;
+            tolerancePercent *= Mathf.Clamp(DND35.AI.Personality.AiBlend.RiskToleranceFactor(npc, roleMultiplier), 0.25f, 2f);
+        }
 
         // Accept slightly higher risk for kill opportunities/high-value enemy casters.
         if (target != null && target.Stats != null)
@@ -2706,16 +2715,23 @@ public class AIService : MonoBehaviour
         SquareCell bestCell = null;
         float bestScore = float.NegativeInfinity;
 
+        // The Role's preferred range, adjusted by the traits (batch 14 step 6, C3: Cowardly +2 on a Ranged, Mixed or casting
+        // Role); an override (the approach to the weapon's reach or range) is the caller's and stays as given.
         int preferredRange = preferredRangeOverride.HasValue
             ? Mathf.Max(0, preferredRangeOverride.Value)
             : profile != null && profile.Movement != null
-                ? Mathf.Max(0, profile.Movement.PreferredRangeSquares)
+                ? Mathf.Max(0, DND35.AI.Personality.AiBlend.PreferredRange(mover, profile.Movement.PreferredRangeSquares,
+                    DND35.AI.Personality.AiBlend.IsRangedOrCastingRole(profile)))
                 : 1;
 
         bool avoidAoOs = profile != null
             && profile.Movement != null
             && profile.Movement.AvoidAoOs
             && !profile.ShouldIgnoreAoO(mover);
+        // The price per provoker of a path that provokes (C6): the Role's (1000, a flat cost, when it avoids AoOs; else 2),
+        // priced by the traits' ProvokeAoO vote (batch 14 step 6); AiBlend.AoOPenalty turns it into the path's penalty.
+        float aooPrice = DND35.AI.Personality.AiBlend.AoOCost(mover,
+            avoidAoOs ? DND35.AI.Personality.AiBlend.AoOForbidPrice : DND35.AI.Personality.AiBlend.AoOForCeiling);
         bool seekFlanking = profile == null || profile.Movement == null || profile.Movement.SeekFlanking;
 
         for (int i = 0; i < moveCells.Count; i++)
@@ -2765,7 +2781,7 @@ public class AIService : MonoBehaviour
             }
 
             if (pathResult.ProvokesAoOs)
-                score += avoidAoOs ? -1000f : -2f * pathResult.ProvokedAoOs.Count;
+                score -= DND35.AI.Personality.AiBlend.AoOPenalty(aooPrice, pathResult.ProvokedAoOs.Count);
 
             if (score > bestScore)
             {
@@ -3730,13 +3746,16 @@ public class AIService : MonoBehaviour
 
         AIProfile profile = GetProfile(npc);
         bool profilePrefersCharge = profile == null || profile.ShouldPreferCharge(npc, target, distance, preferAggression);
+        // The traits vote on a legal charge only (batch 14 step 6, C5: the rules gate first): Cowardly and Caster forbid
+        // it, a Healer is against it, a Berserker insists; with no traits the Role's answer stands.
+        bool prefersCharge = canCharge ? DND35.AI.Personality.AiBlend.PrefersCharge(npc, profilePrefersCharge) : profilePrefersCharge;
 
-        Debug.Log($"[AI SelectBestAction] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={distance}, canCharge={canCharge}, profilePrefersCharge={profilePrefersCharge}, hpPct={hpPercent:F2}");
+        Debug.Log($"[AI SelectBestAction] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={distance}, canCharge={canCharge}, profilePrefersCharge={profilePrefersCharge}, prefersCharge={prefersCharge}, hpPct={hpPercent:F2}");
 
         if (!preferAggression && hpPercent < 0.30f && npc.Actions.HasMoveAction)
             return AIActionType.Retreat;
 
-        if (canCharge && profilePrefersCharge)
+        if (canCharge && prefersCharge)
             return AIActionType.Charge;
 
         if (npc.IsTargetInCurrentWeaponRange(target))

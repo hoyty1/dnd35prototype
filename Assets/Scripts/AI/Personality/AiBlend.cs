@@ -337,6 +337,107 @@ namespace DND35.AI.Personality
             }
         }
 
+        // ── Batch 14 step 6: the movement sites and the out-of-reach order (docs/designs/personalities_batch14.md "The blend") ──
+        // As above: each member returns its legacy argument at once when self.Personality is null.
+
+        /// <summary>The kiter's legacy keep-away distance: it backs off from a foe within 2 squares (AIService.ExecuteRangedKiterTurn).</summary>
+        public const int LegacyKeepAwaySquares = 2;
+
+        /// <summary>
+        /// Whether <paramref name="self"/> charges (C5, BoolDecision.Charge) when the rules allow it (the caller has checked
+        /// AIService.ShouldNPCCharge): <paramref name="legacy"/> is the Role's AIProfile.ShouldPreferCharge; the traits' vote
+        /// overrides it (Cowardly and Caster forbid a charge, a Healer is against it, a Berserker insists).
+        /// </summary>
+        public static bool PrefersCharge(CharacterController self, bool legacy)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null)
+                return legacy;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+                return Judge(p, BoolDecision.Charge, legacy, SelfFacts.JudgeContextOf(self), actor: self);
+        }
+
+        /// <summary>
+        /// The per-provoker price of a path that provokes attacks of opportunity for <paramref name="self"/> (C6, see the
+        /// profile overload): <paramref name="legacyPrice"/> is the Role's (1000 when it avoids AoOs, else 2,
+        /// AIService.EvaluateMovementOptions). The vote reads the creature's own wound band (Cowardly forbids a provoking
+        /// path once Hurt). One trace row per call, so the site calls it once per evaluation, not per square.
+        /// </summary>
+        public static float AoOCost(CharacterController self, float legacyPrice)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null)
+                return legacyPrice;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+                return AoOCost(p, legacyPrice, SelfFacts.JudgeContextOf(self), self);
+        }
+
+        /// <summary>
+        /// C7: the ranged-AoO risk tolerance multiplier of <paramref name="self"/>: <paramref name="legacyMultiplier"/> (the
+        /// Role's GetRangedAoORiskToleranceMultiplier, 1 without a Role) times 2 - rho. The caller keeps its clamp.
+        /// </summary>
+        public static float RiskToleranceFactor(CharacterController self, float legacyMultiplier)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            return p == null ? legacyMultiplier : RiskToleranceFactor(p, legacyMultiplier, self);
+        }
+
+        /// <summary>
+        /// True when <paramref name="profile"/> is a Role that fights from range: a Ranged or Mixed combat style, or a
+        /// casting profile. Cowardly's range adjust applies only to such a Role (TraitDefinition.RangeAdjustOnlyRangedOrCasting).
+        /// False without a Role.
+        /// </summary>
+        public static bool IsRangedOrCastingRole(AIProfile profile)
+            => profile != null && (profile.CombatStyle == CombatStyle.Ranged || profile.CombatStyle == CombatStyle.Mixed || profile.IsCastingProfile);
+
+        /// <summary>
+        /// The preferred range of <paramref name="self"/> in squares (C3): <paramref name="legacy"/> (the Role's
+        /// Movement.PreferredRangeSquares) plus the traits' PersonalityProfile.RangeAdjust, at least 0;
+        /// <paramref name="rangedOrCastingRole"/> says whether a range adjust that applies only to a Ranged, Mixed or
+        /// casting Role counts (<see cref="IsRangedOrCastingRole"/>). The legacy range when the traits change nothing.
+        /// </summary>
+        public static int PreferredRange(CharacterController self, int legacy, bool rangedOrCastingRole)
+            => AdjustRange(self, legacy, rangedOrCastingRole, "Personality.PreferredRange");
+
+        /// <summary>
+        /// The kiter's keep-away distance for <paramref name="self"/> (C3): it backs off from a foe within this many squares.
+        /// <paramref name="legacy"/> (<see cref="LegacyKeepAwaySquares"/>) plus the traits' range adjust, at least 1.
+        /// <paramref name="rangedOrCastingRole"/> is the creature's Role (<see cref="IsRangedOrCastingRole"/>), as at the other
+        /// range sites: a melee Role reaches the kiter too (RunsRangedRoutine for a creature with ranged means, a Healer's
+        /// ranged attack), and a Ranged-or-casting-only adjust (Cowardly +2) does not apply to it.
+        /// </summary>
+        public static int KeepAwayDistance(CharacterController self, int legacy, bool rangedOrCastingRole)
+            => AdjustRange(self, legacy, rangedOrCastingRole, "Personality.KeepAway", minimum: 1);
+
+        private static int AdjustRange(CharacterController self, int legacy, bool rangedOrCastingRole, string site, int minimum = 0)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            if (p == null)
+                return legacy;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, self))
+            {
+                int adjust = p.RangeAdjust(rangedOrCastingRole);
+                if (adjust == 0)
+                    return legacy;
+                int range = Mathf.Max(minimum, legacy + adjust);
+                if (Tracing(self))
+                    Trace(self, site, range.ToString(CultureInfo.InvariantCulture), legacy.ToString(CultureInfo.InvariantCulture), range - legacy,
+                        "range adjust " + adjust.ToString("+0;-0", CultureInfo.InvariantCulture) + (rangedOrCastingRole ? "" : ", melee Role"));
+                return range;
+            }
+        }
+
+        /// <summary>
+        /// The out-of-reach list of <paramref name="self"/> (C8, see the profile overload): the Role's list
+        /// (<paramref name="roleList"/>, AIProfile.GetOutOfReachAlternatives) re-weighted by the traits' RoleDesire; the
+        /// Role's list itself with no personality.
+        /// </summary>
+        public static IReadOnlyList<OutOfReachAlternative> OrderOutOfReach(CharacterController self, IReadOnlyList<OutOfReachAlternative> roleList)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            return p == null ? roleList : OrderOutOfReach(p, roleList, self);
+        }
+
         /// <summary>
         /// <paramref name="ctx"/> with a null Difficulty filled from <see cref="SettingsDifficulty"/> (Normal when unset);
         /// <paramref name="fromSettings"/> says it was filled.

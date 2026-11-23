@@ -460,6 +460,33 @@ namespace Tests.AI
                 Assert(daggerList == rangedList && throwApproach == expectedThrow && meleeApproach == 1,
                     "C1: an evoker with a dagger uses the ranged list and approaches to throwing range, not into melee",
                     daggerList + " throw=" + throwApproach + " (expected " + expectedThrow + ") melee=" + meleeApproach);
+
+                // Batch 14 step 6: the list and the approach range go through the personality blend. With no traits they are
+                // the Role's own; Cowardly's +2 widens the evoker's preferred range (a cap on the throwing range), and the
+                // cowardly order lifts the preferred range over another target (C3, C8).
+                IReadOnlyList<OutOfReachAlternative> roleList = humanoid.GetOutOfReachAlternatives(staff);
+                Assert(ReferenceEquals(DND35.AI.Personality.AiBlend.OrderOutOfReach(staff, roleList), roleList),
+                    "step 6: a creature with no traits keeps its Role's out-of-reach list (the same instance)");
+                int cowardThrow;
+                string cowardOrder;
+                int expectedCoward = preferred > 0 ? Mathf.Min(preferred + 2, 10) : 10;
+                // The shared dagger fixture gets its traits back off even when a call throws, so no later check sees them.
+                dagger.Personality = DND35.AI.Personality.PersonalityFactory.Create("Cowardly:0.6", DND35.AI.Knowledge.CognitionTier.Average,
+                    Alignment.None, "oor_test", _ => { });
+                try
+                {
+                    cowardThrow = AiOutOfReach.ApproachRangeSquares(dagger, allowThrow: true);
+                    cowardOrder = string.Join(",", DND35.AI.Personality.AiBlend.OrderOutOfReach(dagger, evoker.GetOutOfReachAlternatives(dagger)));
+                }
+                finally
+                {
+                    dagger.Personality = null;
+                }
+                Assert(cowardThrow == expectedCoward && AiOutOfReach.ApproachRangeSquares(dagger, allowThrow: true) == expectedThrow,
+                    "step 6: a cowardly evoker's approach stops at its preferred range plus 2 (capped by the throwing range); without traits, as before",
+                    "coward=" + cowardThrow + " (expected " + expectedCoward + ")");
+                Assert(cowardOrder == OutOfReachAlternative.PreferredRange + "," + OutOfReachAlternative.AttackOtherTarget + "," + OutOfReachAlternative.Approach,
+                    "step 6: the cowardly evoker's list puts its preferred range first", cowardOrder);
             }
             finally
             {
@@ -1850,6 +1877,14 @@ namespace Tests.AI
                 Assert(caster < ranged,
                     "Spellcaster profile is more conservative than ranged profile for AoO risk",
                     $"(ranged={ranged:F2}, caster={caster:F2})");
+                // Batch 14 step 6 (C7): the multiplier goes through the personality blend; with no traits it is the Role's.
+                Assert(DND35.AI.Personality.AiBlend.RiskToleranceFactor((CharacterController)null, ranged) == ranged
+                       && DND35.AI.Personality.AiBlend.RiskToleranceFactor((CharacterController)null, caster) == caster,
+                    "step 6: a creature with no traits keeps its Role's risk multiplier");
+                DND35.AI.Personality.PersonalityProfile coward = DND35.AI.Personality.PersonalityFactory.Create("Cowardly:1",
+                    DND35.AI.Knowledge.CognitionTier.Average, Alignment.None, "risk_test", _ => { });
+                Assert(DND35.AI.Personality.AiBlend.RiskToleranceFactor(coward, ranged) < ranged,
+                    "step 6: a cowardly creature tolerates less ranged-AoO risk than its Role (times 2 - rho, rho 1.6)");
             }
             finally
             {

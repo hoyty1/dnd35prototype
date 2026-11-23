@@ -10,8 +10,10 @@ namespace Tests.AI
 {
 /// <summary>
 /// Batch 14 step 5 (docs/designs/personalities_batch14.md "The blend": each member returns its legacy argument when the
-/// personality is null): every AiBlend member, the profile-based ones and the creature-based ones the target sites call
-/// (ScoreTarget, IgnoresUnconscious, Adaptive, UsesCoupDeGrace, TracesTargets), returns its legacy argument for a creature
+/// personality is null): every AiBlend member, the profile-based ones, the creature-based ones the target sites call
+/// (ScoreTarget, IgnoresUnconscious, Adaptive, UsesCoupDeGrace, TracesTargets) and those the movement and out-of-reach sites
+/// call (step 6: PrefersCharge, AoOCost, RiskToleranceFactor, PreferredRange, KeepAwayDistance, OrderOutOfReach; the path
+/// penalty equals the old one), returns its legacy argument for a creature
 /// with no traits (and for no creature), for both values of each boolean and several scores, and writes no decision-trace
 /// row though the creature's AI turn is open. AIService.UsesCoupDeGrace, the merged copy of the two coup de grace choices,
 /// equals the old formula (the data override, else the profile's ShouldUseCoupDeGrace, else no) for every combination.
@@ -27,7 +29,7 @@ public static class AiBlendPassThroughTests
     {
         _passed = 0;
         _failed = 0;
-        Debug.Log("====== AI BLEND PASS-THROUGH TESTS (batch 14 step 5) ======");
+        Debug.Log("====== AI BLEND PASS-THROUGH TESTS (batch 14 steps 5-6) ======");
 
         var go = new GameObject("AiBlendPassThroughTests creature");
         var other = new GameObject("AiBlendPassThroughTests target");
@@ -100,13 +102,13 @@ public static class AiBlendPassThroughTests
         foreach (float price in new[] { 0f, 1f, 2f, 6f, 1000f })
             prices &= AiBlend.AoOCost(null, price, ctx) == price;
         foreach (float m in new[] { 0.25f, 1f, 1.5f })
-            risks &= AiBlend.RiskToleranceFactor(null, m) == m;
+            risks &= AiBlend.RiskToleranceFactor((PersonalityProfile)null, m) == m;
         var list = new[] { OutOfReachAlternative.PreferredRange, OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Withdraw };
         Assert(scores, "ScoreTarget(null profile) returns every legacy score, invalid ones included");
         Assert(judges, "Judge(null profile) returns the legacy answer for every decision, with or without a data override");
         Assert(prices, "AoOCost(null profile) returns the legacy price");
         Assert(risks, "RiskToleranceFactor(null profile) returns the legacy multiplier");
-        Assert(ReferenceEquals(AiBlend.OrderOutOfReach(null, list), list), "OrderOutOfReach(null profile) returns the Role's list itself");
+        Assert(ReferenceEquals(AiBlend.OrderOutOfReach((PersonalityProfile)null, list), list), "OrderOutOfReach(null profile) returns the Role's list itself");
     }
 
     /// <summary>The members the target sites call, for a creature with no traits.</summary>
@@ -136,13 +138,38 @@ public static class AiBlendPassThroughTests
         Assert(coup, "UsesCoupDeGrace(creature with no traits): the data override, else the Role's answer");
         Assert(!AiBlend.TracesTargets(self), "TracesTargets is false for a creature with no traits (no summary row is built)");
         AiBlend.TraceTarget(self, "Target", "a", "b", 3f);
+
+        // Step 6: the movement sites and the out-of-reach order.
+        bool charge = true, prices = true, risks = true, ranges = true;
+        foreach (bool legacy in Bools)
+            charge &= AiBlend.PrefersCharge(self, legacy) == legacy;
+        foreach (float price in new[] { 0f, 2f, 6f, 1000f })
+            prices &= AiBlend.AoOCost(self, price) == price;
+        foreach (float m in new[] { 0.25f, 1f, 1.5f })
+            risks &= AiBlend.RiskToleranceFactor(self, m) == m;
+        foreach (int r in new[] { 0, 1, 2, 4, 6, 8 })
+            foreach (bool rangedRole in Bools)
+                ranges &= AiBlend.PreferredRange(self, r, rangedRole) == r && AiBlend.KeepAwayDistance(self, r, rangedRole) == r;
+        var list = new[] { OutOfReachAlternative.AttackOtherTarget, OutOfReachAlternative.Approach, OutOfReachAlternative.TotalDefense };
+        Assert(charge, "PrefersCharge(creature with no traits) returns the Role's answer");
+        Assert(prices, "AoOCost(creature with no traits) returns the Role's price");
+        Assert(risks, "RiskToleranceFactor(creature with no traits) returns the Role's multiplier");
+        Assert(ranges, "PreferredRange and KeepAwayDistance(creature with no traits) return the legacy range, for either Role kind");
+        Assert(ReferenceEquals(AiBlend.OrderOutOfReach(self, list), list), "OrderOutOfReach(creature with no traits) returns the Role's list itself");
+        Assert(AiBlend.KeepAwayDistance(self, AiBlend.LegacyKeepAwaySquares, true) == 2, "the kiter's keep-away distance stays 2 squares");
+        Assert(AiBlend.AoOPenalty(AiBlend.AoOForbidPrice, 1) == 1000f && AiBlend.AoOPenalty(AiBlend.AoOForbidPrice, 3) == 1000f
+               && AiBlend.AoOPenalty(AiBlend.AoOForCeiling, 3) == 6f && AiBlend.AoOPenalty(AiBlend.AoOForCeiling, 0) == 0f,
+            "the path penalty equals the old one: a flat 1000 when the Role avoids AoOs, else 2 per provoker");
     }
 
     /// <summary>No creature at all: the same pass-through.</summary>
     private static void TestNoCreature(CharacterController target)
     {
         Assert(AiBlend.ScoreTarget((CharacterController)null, target, 7f) == 7f && AiBlend.IgnoresUnconscious(null, true)
-               && !AiBlend.Adaptive(null, false) && AiBlend.UsesCoupDeGrace(null, true, null) && !AiBlend.TracesTargets(null),
+               && !AiBlend.Adaptive(null, false) && AiBlend.UsesCoupDeGrace(null, true, null) && !AiBlend.TracesTargets(null)
+               && AiBlend.PrefersCharge(null, true) && !AiBlend.PrefersCharge(null, false) && AiBlend.AoOCost((CharacterController)null, 2f) == 2f
+               && AiBlend.RiskToleranceFactor((CharacterController)null, 1.5f) == 1.5f && AiBlend.PreferredRange(null, 4, true) == 4
+               && AiBlend.KeepAwayDistance(null, 2, true) == 2 && AiBlend.OrderOutOfReach((CharacterController)null, null) == null,
             "with no creature every member returns its legacy argument");
     }
 

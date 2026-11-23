@@ -243,6 +243,21 @@ namespace DND35.AI.Personality
             return best;
         }
 
+        /// <summary>
+        /// The traits' change to the Role's preferred range in squares (C3; batch 14 step 6): the sum of each trait's
+        /// PreferredRangeAdjust, not scaled by its weight (design 4.2: a range is adjusted by traits, never averaged, since
+        /// a weighted range strands a reach-1 creature between two distances). A trait whose adjust applies only to a
+        /// Ranged, Mixed or casting Role (Cowardly +2) counts only when <paramref name="rangedOrCastingRole"/>.
+        /// </summary>
+        public int RangeAdjust(bool rangedOrCastingRole)
+        {
+            int sum = 0;
+            foreach (TraitWeight tw in _traits)
+                if (!tw.Trait.RangeAdjustOnlyRangedOrCasting || rangedOrCastingRole)
+                    sum += tw.Trait.PreferredRangeAdjust;
+            return sum;
+        }
+
         /// <summary>True when <paramref name="role"/> is one ActionRoles flag that a RoleDesire can name (TraitDatabase checks its rows).</summary>
         public static bool IsSingleRole(ActionRoles role) => BitOf(role) >= 0;
 
