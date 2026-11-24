@@ -386,6 +386,13 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// True while the escape-square selection (PHB p.156-157; D10) is open: the UI decider's answer to
+    /// <see cref="PromptGrappleEscapeSquare"/>, waiting on a click. Not listed by <see cref="Harness_PendingPrompt"/>,
+    /// whose null answer the Ui steps read as "settled".
+    /// </summary>
+    internal bool Harness_IsEscapeSquareSelectionOpen() => _isFreeAdjacentGrappleMoveSelection;
+
+    /// <summary>
     /// Leaves a target or destination selection and returns to the action menu, as cancelling a
     /// selection does (ShowActionChoices). Used when a scripted UI click picked no valid square.
     /// </summary>

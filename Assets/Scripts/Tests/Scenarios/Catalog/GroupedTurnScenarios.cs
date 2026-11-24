@@ -16,6 +16,8 @@ namespace Tests.Scenarios
     /// grid, NPCs, the summon lists and the initiative order at once, its despawn line before the next creature's turn,
     /// while its view plays the fade; a summon slain on its own turn does not cost the next creature its turn; the Lesser
     /// Globe centre is read from the caster's grid square, not its token (following the caster is current behaviour, SPL-335).
+    /// Step 5 (CMB-308): a forced PC turn's grapple escape takes the AI decider's escape square and opens no square selection
+    /// (batch 13 C7).
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -33,6 +35,7 @@ namespace Tests.Scenarios
             yield return S("summon-slain-on-own-turn-next-still-acts", SummonSlainOnOwnTurnNextStillActs);
             yield return S("summon-slain-off-its-move-next-still-acts", SummonSlainOffItsMoveNextStillActs);
             yield return S("lesser-globe-follows-caster-grid", LesserGlobeFollowsCasterGrid);
+            yield return S("panicked-grappled-pc-escape-square-ai", PanickedGrappledPcEscapeSquareAi);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -666,6 +669,78 @@ namespace Tests.Scenarios
                     }),
                     Step.EndTurn())
                 .Expect("The globe centre checks hold", Expect.AssertsPass())
+                .Build();
+        }
+
+        // ── Step 5: the escape square of a forced grappling PC (batch 13 C7) ─────────────
+
+        private const string EscapeSquarePromptLine = @"finishes the escape by moving to an adjacent square \(PHB p\.156\): choose one";
+
+        /// <summary>
+        /// A forced PC turn is AI-decided (batch 13 C7), the escape square of its grapple escape included (PHB p.156-157;
+        /// D10). The Scripted grapple-drill orc grapples the Ui hero in round 1 (it moves into the hero's square, 10,10) and
+        /// panics it (the harness stand-in for a failed save). On its forced turn the panicked hero flees by escaping the
+        /// grapple (FrightenedBehaviorController.Flee, GameManager.RunGrappleEscapeForFlight; checks forced) and moves into
+        /// the square its AI decider picks, AIProfile.DefaultChooseGrappleEscapeSquare (fewest threats, then nearest able
+        /// ally, then lowest x and y): the orc in the shared square threatens every escape square and the guard at (8,10) adds
+        /// a second threat on the west ones, which only reinforces the pick; the ally distance decides it, the east squares
+        /// (11,*) being 2 from the ally at (13,10), and the y tie-break gives (11,9).
+        /// No square selection opens. Before the fix the escape asked ManeuverDeciders.For(hero) with no source, and the Ui
+        /// decider opened the selection on the forced turn.
+        /// </summary>
+        private static ScenarioDef PanickedGrappledPcEscapeSquareAi()
+        {
+            var aiSquare = new Vector2Int(11, 9);
+            return Rules("rules/panicked-grappled-pc-escape-square-ai", "A panicked grappling PC's escape square is the AI decider's, with no square prompt (PHB p.156-157, p.311; batch 13 C7)")
+                .Covers("grouped AI turns step 5", "CMB-308", "D10", "C7", "PHB p.156", "PHB p.157", "PHB p.311", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 6)), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Ally", 6)), 13, 10, Control.Scripted)
+                .Npc("guard", "orc_berserker", 8, 10, Control.Idle)
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("ally", c => { RulesScenarios.StripOffHand(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("orc", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("guard", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Initiative("orc", "hero", "ally", "guard")
+                .RecordDice()
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Turn("orc", 1, Step.Maneuver(SpecialAttackType.Grapple, "hero"),
+                    Step.Assert("the orc panics the grappled hero (fixture)", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        ctx.Gm.ApplyCondition(hero, CombatConditionType.Panicked, 3, ctx.Get("orc"), sourceCategory: "Harness");
+                        return hero.HasCondition(CombatConditionType.Panicked) && hero.IsGrappling();
+                    }))
+                .Turn("ally", 1, Step.Assert("after the hero's forced turn no escape-square selection is open and the hero is free", ctx =>
+                {
+                    CharacterController hero = ctx.Get("hero");
+                    bool open = ctx.Gm.Harness_IsEscapeSquareSelectionOpen();
+                    ctx.Note("escape square: selection open " + open + ", hero at " + hero.GridPosition + ", grappling " + hero.IsGrappling());
+                    return !open && !hero.IsGrappling();
+                }), Step.Pass())
+                .Expect("The hero is panicked and grappling at its round-1 turn", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 1, "hero");
+                    if (h == null) return ExpectResult.Fail("no hero snapshot at its round-1 turn");
+                    bool gr = h.Get("gr") is bool g && g;
+                    bool panicked = v.Conds("hero", CombatConditionType.Panicked).Any(e => e.Bool("added"));
+                    return gr && panicked ? ExpectResult.Pass("panicked, grappling") : ExpectResult.Fail("panicked " + panicked + ", grappling " + gr);
+                })
+                .Expect("No escape-square selection opens (the forced turn's decider is the AI's, batch 13 C7)", Expect.None("log",
+                    e => System.Text.RegularExpressions.Regex.IsMatch(e.Str("text") ?? "", EscapeSquarePromptLine)))
+                .Expect("The hero's escape move goes to the AI decider's square, (11,9)", v =>
+                {
+                    TraceEvent line = v.Log(@"^Hero moves to \(\d+,\d+\) \(free action after ending grapple\)").FirstOrDefault(e => e.Round == 1);
+                    if (line == null) return ExpectResult.Fail("no escape move in round 1");
+                    string want = "Hero moves to (" + aiSquare.x + "," + aiSquare.y + ")";
+                    return (line.Str("text") ?? "").Contains(want) ? ExpectResult.Pass(want, line.Seq) : ExpectResult.Fail(line.Str("text"), line.Seq);
+                })
+                .Expect("The no-prompt checks hold", Expect.AssertsPass())
                 .Build();
         }
 

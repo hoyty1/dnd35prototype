@@ -448,16 +448,18 @@ public partial class GameManager
     /// selection started (the caller waits for the click); otherwise <paramref name="autoMove"/>, when not null, is the
     /// automatic move the caller must run (an NPC, or a creature that cannot choose now): the AI yields it, the PC flow
     /// runs it before its after-attack delay. <paramref name="formerOpponent"/> is the creature the escaper was grappling
-    /// with, which gets no AoO for the move (owner interpretation 2026-10-11, CMB-152).
+    /// with, which gets no AoO for the move (owner interpretation 2026-10-11, CMB-152). <paramref name="source"/> fixes the
+    /// escaper's decider as <see cref="ManeuverDeciders.For"/> does: the AI grapple turn passes <see cref="ActorSource.AI"/>
+    /// (the NPC path and a forced PC turn's flight, batch 13 C7, CMB-308); the PC grapple menu passes null.
     /// </summary>
     private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result,
-        CharacterController formerOpponent, out IEnumerator autoMove)
+        CharacterController formerOpponent, ActorSource? source, out IEnumerator autoMove)
     {
         autoMove = null;
         if (!DidActorEndGrappleAndGainFreeAdjacentMove(actor, actionType, result))
             return false;
 
-        return OfferFreeAdjacentMovement(actor, formerOpponent, out autoMove);
+        return OfferFreeAdjacentMovement(actor, formerOpponent, source, out autoMove);
     }
 
     /// <summary>The creature <paramref name="actor"/> grapples (or, held by a one-body-part hold, its holder), or null.</summary>
@@ -470,7 +472,7 @@ public partial class GameManager
         return actor.IsHeldByImprovedGrabHold(out CharacterController holder) ? holder : null;
     }
 
-    private bool OfferFreeAdjacentMovement(CharacterController actor, CharacterController formerOpponent, out IEnumerator autoMove)
+    private bool OfferFreeAdjacentMovement(CharacterController actor, CharacterController formerOpponent, ActorSource? source, out IEnumerator autoMove)
     {
         autoMove = null;
         if (actor == null || actor.Stats == null || actor.Stats.IsDead || Grid == null)
@@ -487,10 +489,12 @@ public partial class GameManager
         // selection on the creature's own PC turn (answered by the click; it cannot be cancelled while a square is free,
         // RefuseToSkipEscapeMove), the AI by its profile (AIProfile.ChooseGrappleEscapeSquare) at once. No random pick. The
         // escape ends with the move (PHB p.156), so a null answer with squares free takes the default stopgap square.
+        // The caller's source picks the decider: an AI-decided turn (the NPC path, a forced PC turn) never opens the
+        // selection (batch 13 C7, CMB-308).
         bool waiting = true;
         bool answeredNow = false;
         Vector2Int? pickedNow = null;
-        ManeuverDeciders.For(actor).ChooseEscapeSquare(this, actor, validSquares, formerOpponent, square =>
+        ManeuverDeciders.For(actor, source).ChooseEscapeSquare(this, actor, validSquares, formerOpponent, square =>
         {
             if (waiting)
             {
@@ -2159,7 +2163,8 @@ public partial class GameManager
             return;
         }
 
-        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result, formerOpponent, out IEnumerator autoMove))
+        // The PC grapple menu's flow: the actor's own decider (no source), as StartGrappleMoveChoice(uiFlow: true).
+        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result, formerOpponent, null, out IEnumerator autoMove))
             return;
 
         float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
@@ -2469,8 +2474,10 @@ public partial class GameManager
                     yield break;
             }
 
-            // The escape move resolves its AoOs (third parties only, CMB-152) before the turn goes on.
-            if (!TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result, opponent, out IEnumerator escapeMove) && escapeMove != null)
+            // The escape move resolves its AoOs (third parties only, CMB-152) before the turn goes on. The square is the AI
+            // decider's: this turn is AI-decided for every creature on it, a forced PC turn's flight included (batch 13 C7,
+            // CMB-308), so no selection opens.
+            if (!TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result, opponent, ActorSource.AI, out IEnumerator escapeMove) && escapeMove != null)
             {
                 yield return StartCoroutine(escapeMove);
                 if (CurrentPhase == TurnPhase.CombatOver || ThreatSystem.IsMoverIncapacitated(npc))
