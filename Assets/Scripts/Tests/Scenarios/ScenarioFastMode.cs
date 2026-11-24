@@ -36,7 +36,7 @@ namespace Tests.Scenarios
         private static bool _probeOwnsMode;
         private static string _modeBeforeProbe;
 
-        /// <summary>The mode last applied ("fast", "watch"), or null when the settings are the saved ones.</summary>
+        /// <summary>The mode last applied ("fast", "fine", "watch"), or null when the settings are the saved ones.</summary>
         public static string CurrentMode { get; private set; }
 
         /// <summary>True while settings saved by <see cref="Apply"/> are waiting to be restored.</summary>
@@ -44,16 +44,20 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// "fast": timeScale 30, captureFramerate 30, maximumDeltaTime 1, uncapped frame rate,
-        /// run in background, logs below Warning filtered, dice logging off.
+        /// run in background, logs below Warning filtered, dice logging off: 1 s of game time per frame.
+        /// "fine" (grouped AI turns step 6): fast mode at timeScale 3, so 0.1 s of game time per frame: a 0.6 s wait is
+        /// 6 frames at AI speed 1x and 2 at 4x (fast mode makes both 1 frame). Equal trace hashes across AI speeds in this
+        /// mode prove that frame counts feed no rule (docs/TESTING.md 3.4); the runner gives its jobs 5 times the
+        /// wall-clock cap (RunOptions.FineWallCapFactor).
         /// "watch": real time (timeScale 1, captureFramerate 0) with run in background, and every other
         /// setting back to its saved value, so [Tag] diagnostics and dice logging show again.
         /// Any other mode is refused (returns false, nothing changes).
         /// </summary>
         public static bool Apply(string mode)
         {
-            if (mode != "fast" && mode != "watch")
+            if (mode != "fast" && mode != "fine" && mode != "watch")
             {
-                Debug.LogError("[ScenarioFastMode] Unknown mode '" + mode + "'; use \"fast\" or \"watch\".");
+                Debug.LogError("[ScenarioFastMode] Unknown mode '" + mode + "'; use \"fast\", \"fine\" or \"watch\".");
                 return false;
             }
 
@@ -86,13 +90,13 @@ namespace Tests.Scenarios
             }
 
             Time.captureFramerate = 30;
-            Time.timeScale = 30f;
+            Time.timeScale = mode == "fine" ? 3f : 30f;
             Time.maximumDeltaTime = 1f;
             Application.targetFrameRate = -1;
             Application.runInBackground = true;
             Debug.unityLogger.filterLogType = LogType.Warning;
             DiceService.EnableLogging = false;
-            CurrentMode = "fast";
+            CurrentMode = mode;
             return true;
         }
 
@@ -156,8 +160,8 @@ namespace Tests.Scenarios
             _probe = null;
             if (_probeOwnsMode)
                 Restore();
-            else if (_modeBeforeProbe == "watch")
-                Apply("watch");
+            else if (_modeBeforeProbe == "watch" || _modeBeforeProbe == "fine")
+                Apply(_modeBeforeProbe);
             _probeOwnsMode = false;
             _modeBeforeProbe = null;
             return json;

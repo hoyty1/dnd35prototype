@@ -339,7 +339,7 @@ Pitfalls:
 ## Add a combat wait
 
 1. A presentation pause in a combat coroutine (after an attack, a move, an AoO, a log line the player should read) is `yield return CombatPacing.Wait(seconds);` with the seconds the site needs (a constant or a variable the caller chooses; the service multiplies, it never chooses). Never `new WaitForSeconds` in game code (nor `new WaitForSecondsRealtime`, nor a target-typed `WaitForSeconds w = new(...)`): `Tests.Combat.CombatPacingTests` scans `Assets/Scripts` without `Tests/` (comments and string literals stripped) and fails on one outside `Combat/Pacing/CombatPacing.cs` and `CombatPacing.ExemptWaitSites`.
-2. A movement tween reads `CombatPacing.StepSeconds(secondsPerStep)` (as `CharacterController.MoveAlongPath` does).
+2. A movement tween reads `CombatPacing.StepSeconds(secondsPerStep)` (as `CharacterController.MoveAlongPath` does). Never apply the AI speed yourself: the service divides by `GameSettings.aiTurnSpeed` while `CombatPacing.Kind` is Ai (grouped AI turns step 6, C2), so the same wait runs at 1x on a player-run turn. A new path that starts an AI-decided turn calls `TurnControl.AiTurnStarting(actor)` right before it starts the turn's coroutine, and a new place that hands control to the player goes through `ShowActionChoices` (its `TurnControl.PlayerControlReturned`); only `TurnControl` writes the kind (`CombatPacingTests.TestPcHandOffWaitsStayAtOneX` scans for it).
 3. A wait that is not pacing (an animation that polls state, a debug check) stays `new WaitForSeconds` and gets a row in `CombatPacing.ExemptWaitSites` (file, method, number of waits); the scan checks each exempt method holds exactly that many and its file no other.
 4. Rules never wait on time: a rule that must happen later is anchored on the initiative order (`Combat/Core/TurnDurations.cs`), never on a wait, `Time.deltaTime` or a token tween (grouped AI turns steps 2 and 4).
 
@@ -348,6 +348,7 @@ Files: `Combat/Pacing/CombatPacing.cs`, `Combat/Pacing/TurnControl.cs`, `Tests/C
 Pitfalls:
 - `CombatPacing.Wait` returns a `WaitForSeconds`, never an `IEnumerator`: `GameManager.RunAIActionNow` drains any `IEnumerator` in place, so a wait helper returning one (or a `WaitUntil`) would change the synchronous AI actions.
 - Keep a wait exactly where it is in its coroutine when you move code: the scenario trace hashes do not see the seconds, but the frame structure (the area trackers' `Update`, the Stalemate halt, `SkipChainRunaway`) depends on each yield.
+- A wait's length must never decide a rule: the harness checks it by running the same jobs at `aiSpeed=1` and `aiSpeed=4` in `mode=fine` (0.1 s of game time per frame) and comparing the hashes (docs/TESTING.md 3.4); a difference is a hidden frame or time rule to file and fix, never to allowlist.
 
 # Items and economy
 

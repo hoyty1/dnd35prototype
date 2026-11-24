@@ -179,6 +179,9 @@ public class CombatUI : MonoBehaviour
     public ResizableWindow CombatLogResizable;
     public ResizableWindow ActionWindowResizable;
     public Button ResetUILayoutButton;
+    /// <summary>The combat HUD's "AI speed" button on the combat log's title bar (grouped AI turns step 6): cycles GameSettings.aiTurnSpeed.</summary>
+    public Button AiSpeedButton;
+    public Text AiSpeedLabel;
     public Vector2 DefaultCombatLogWindowPosition;
     public Vector2 DefaultCombatLogWindowSize;
     public Vector2 DefaultActionWindowPosition;
@@ -450,6 +453,13 @@ public class CombatUI : MonoBehaviour
     public bool IsDisguiseSelfRaceSelectorOpen()
     {
         return _disguiseSelfRaceSelector != null && _disguiseSelfRaceSelector.IsOpen;
+    }
+
+    /// <summary>Shows the AI turn speed in force on the "AI speed" button (GameSettings.CurrentAiTurnSpeed).</summary>
+    public void RefreshAiSpeedButton()
+    {
+        if (AiSpeedLabel != null)
+            AiSpeedLabel.text = GameSettings.AiTurnSpeedLabel(GameSettings.CurrentAiTurnSpeed);
     }
 
     public void ResetFloatingWindowLayout()

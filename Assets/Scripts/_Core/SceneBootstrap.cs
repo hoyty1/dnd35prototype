@@ -569,6 +569,38 @@ public class SceneBootstrap : MonoBehaviour
             "ui_window_combat_log",
             lsRT);
 
+        // The "AI speed" button (grouped AI turns step 6, Q4): on the combat log's title bar, which stays shown during AI
+        // turns, so the speed can change while the AI acts. Wired in WireButtons. It sits inside the 22 px title bar but
+        // clear of the ResizableWindow handles added below (the 8 px top edge and the 16 px top-right corner), which become
+        // later siblings and would otherwise draw over it and take its clicks.
+        GameObject aiSpeedGO = new GameObject("AiSpeedButton");
+        aiSpeedGO.transform.SetParent(logSection.transform, false);
+        RectTransform aiSpeedRT = aiSpeedGO.AddComponent<RectTransform>();
+        aiSpeedRT.anchorMin = new Vector2(1f, 1f);
+        aiSpeedRT.anchorMax = new Vector2(1f, 1f);
+        aiSpeedRT.pivot = new Vector2(1f, 1f);
+        aiSpeedRT.anchoredPosition = new Vector2(-20f, -8f);
+        aiSpeedRT.sizeDelta = new Vector2(70f, 13f);
+
+        Image aiSpeedImage = aiSpeedGO.AddComponent<Image>();
+        Color aiSpeedColor = new Color(0.2f, 0.28f, 0.4f, 0.95f);
+        aiSpeedImage.color = aiSpeedColor;
+
+        Button aiSpeedButton = aiSpeedGO.AddComponent<Button>();
+        ColorBlock aiSpeedColors = aiSpeedButton.colors;
+        aiSpeedColors.normalColor = aiSpeedColor;
+        aiSpeedColors.highlightedColor = aiSpeedColor * 1.15f;
+        aiSpeedColors.pressedColor = aiSpeedColor * 0.85f;
+        aiSpeedButton.colors = aiSpeedColors;
+        combatUI.AiSpeedButton = aiSpeedButton;
+
+        Text aiSpeedLabel = CreateText(aiSpeedGO.transform, "AiSpeedLabel",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            GameSettings.AiTurnSpeedLabel(GameSettings.CurrentAiTurnSpeed), 10, new Color(0.9f, 0.95f, 1f), TextAnchor.MiddleCenter);
+        aiSpeedLabel.raycastTarget = false;
+        combatUI.AiSpeedLabel = aiSpeedLabel;
+
         // --- Scroll Area (holds ScrollRect) ---
         GameObject scrollArea = new GameObject("CombatLogScrollArea");
         scrollArea.transform.SetParent(logSection.transform, false);
@@ -1240,6 +1272,13 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
+
+        if (ui.AiSpeedButton != null)
+        {
+            ui.AiSpeedButton.onClick.RemoveAllListeners();
+            ui.AiSpeedButton.onClick.AddListener(DebugCommands.CycleAiTurnSpeed);
+            ui.RefreshAiSpeedButton();
+        }
 
         if (ui.ResetUILayoutButton != null)
         {

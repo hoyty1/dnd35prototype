@@ -102,6 +102,7 @@ To update, run `git pull` and reopen Unity.
 | 0-9 / Esc in the bull rush prompt | 0 pushes 5 ft and stays, N moves with the target and pushes it N squares / Esc pushes 5 ft and stays |
 | **F12** | Spell Testing Panel: cast spells directly with metamagic toggles, a +4 casting-stat boost and a temporary caster setup (`UI/Spells/SpellTestingPanel.cs`, `_Core/GameManager.TestPanel.cs`) |
 | **Left Ctrl+H** | Cycle the level-up HP mode Roll > Average > Maximum (`Utilities/DebugCommands.cs`; legacy input only) |
+| **AI speed** button (combat log title bar), **Left Ctrl+J** | Cycle the AI turn speed 1x > 1.5x > 2x > 3x > 4x (default 2x, this session only): AI-decided turns, forced PC turns included, play faster; player-run turns stay at 1x (`GameSettings.aiTurnSpeed`, `Utilities/DebugCommands.cs`) |
 
 Test encounter presets: in encounter selection, 22 preset IDs (for example `grapple_test` or `sleep_spell_test`; all end in `_test` except `obscuring_mist_ranged_only`) are matched in `GameManager.ApplyEncounterPreset` and run a matching `Configure*TestParty` method in `_Core/GameManager.TestConfigs.cs`. That method replaces the party with a scenario setup. Other test-like presets (such as `test_2_goblins` or `xp_levelup_test`) only change the enemies. The crafting workshop also has a DEBUG toggle that makes crafting free and instant and allows every spell.
 

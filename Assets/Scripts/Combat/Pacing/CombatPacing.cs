@@ -14,9 +14,13 @@ public enum PaceKind
 /// constant or the caller's variable: the service multiplies, it never chooses), and every movement step tween reads
 /// <see cref="StepSeconds"/>. Pacing is presentation only: no rules outcome, die roll or trace event may depend on it.
 ///
-/// This step builds the Live branch only, with <see cref="Speed"/> fixed at 1, so every call returns exactly the object
-/// the site built before (a PURE refactor: identical trace hashes and frames). The AI speed factor (step 6) and the
-/// recording of a group (stage 2) come later.
+/// Live branch (steps 1 and 6): with the Player kind every call returns exactly the object the site built before (a
+/// new WaitForSeconds of the caller's seconds, the caller's step seconds); with the Ai kind, from an AI-decided turn's
+/// mark until control returns to the player (design choice C2), the seconds are divided by the AI speed factor
+/// (<see cref="Speed"/>, GameSettings.aiTurnSpeed). PC-turn pacing (AfterAttackDelay, DelayedEndActivePCTurn,
+/// ReturnToActionChoicesAfterDelay, PromptFullAttackStep, an NPC's AoO dwell during the PC's walk) runs under the
+/// Player kind, so it stays at 1x. The factor is NEUTRAL: every scenario trace hash is identical at any speed, in the
+/// harness's fast and fine modes (docs/TESTING.md 3.4). The recording of a group (stage 2) comes later.
 ///
 /// <see cref="Wait"/> always returns a <see cref="WaitForSeconds"/>, never an IEnumerator, a CustomYieldInstruction or
 /// null: GameManager.RunAIActionNow drains any IEnumerator it is handed in place (and InlineAction passes a leaf yield
@@ -35,7 +39,7 @@ public static class CombatPacing
 
     /// <summary>
     /// Every Play session starts with the Player kind, even without a domain reload (Enter Play Mode Options) or after
-    /// Play was left in the middle of an AI turn, so the step 6 speed factor never inherits a stale kind.
+    /// Play was left in the middle of an AI turn, so the speed factor never inherits a stale kind.
     /// </summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
@@ -43,25 +47,40 @@ public static class CombatPacing
         Kind = PaceKind.Player;
     }
 
-    /// <summary>The AI speed factor. Fixed at 1 until grouped AI turns step 6 reads GameSettings.aiTurnSpeed.</summary>
-    public static float Speed => 1f;
+    /// <summary>
+    /// The AI speed factor (grouped AI turns step 6): GameSettings.aiTurnSpeed (1, 1.5, 2, 3 or 4; default 2x, Q4), read
+    /// live, so a change applies to the next wait. It scales a wait or a step only while <see cref="Kind"/> is Ai.
+    /// </summary>
+    public static float Speed => GameSettings.CurrentAiTurnSpeed;
 
     /// <summary>
-    /// The pause of <paramref name="seconds"/> seconds that a combat coroutine yields. Live, speed 1: a new
-    /// WaitForSeconds of exactly the caller's seconds, as the site built itself before.
+    /// The pure pacing rule: <paramref name="seconds"/> under the Player kind (or at a speed of 1 or less, a guard), and
+    /// <paramref name="seconds"/> / <paramref name="speed"/> under the Ai kind.
+    /// </summary>
+    public static float Scaled(float seconds, PaceKind kind, float speed)
+    {
+        if (kind != PaceKind.Ai || !(speed > 1f))
+            return seconds;
+        return seconds / speed;
+    }
+
+    /// <summary>
+    /// The pause of <paramref name="seconds"/> seconds that a combat coroutine yields: a new WaitForSeconds of the
+    /// caller's seconds under the Player kind (as the site built itself before), of seconds / <see cref="Speed"/> under
+    /// the Ai kind.
     /// </summary>
     public static WaitForSeconds Wait(float seconds)
     {
-        return new WaitForSeconds(seconds);
+        return new WaitForSeconds(Scaled(seconds, Kind, Speed));
     }
 
     /// <summary>
     /// The seconds one movement step tweens for (CharacterController.MoveAlongPath, which still clamps the result to
-    /// 0.01 s). Live, speed 1: the caller's value.
+    /// 0.01 s): the caller's value under the Player kind, the value / <see cref="Speed"/> under the Ai kind.
     /// </summary>
     public static float StepSeconds(float secondsPerStep)
     {
-        return secondsPerStep;
+        return Scaled(secondsPerStep, Kind, Speed);
     }
 
     /// <summary>

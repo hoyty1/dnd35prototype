@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -12,9 +13,16 @@ namespace Tests.Combat
 /// <summary>
 /// The pacing service of grouped AI turns (step 1, owner request 2026-10-30; docs/designs/grouped_ai_turns.md "The pacing
 /// service and the speed factor"): CombatPacing and the TurnControl marks.
-/// - Live, speed 1: Wait returns a WaitForSeconds of exactly the caller's seconds, a new one per call, never an
+/// - Live, Player kind: Wait returns a WaitForSeconds of exactly the caller's seconds, a new one per call, never an
 ///   IEnumerator, a CustomYieldInstruction or null (RunAIActionNow drains any IEnumerator in place), and its declared
-///   return type is WaitForSeconds; StepSeconds returns the caller's value; Speed is 1;
+///   return type is WaitForSeconds; StepSeconds returns the caller's value;
+/// - the AI speed factor (step 6, C2, Q4): Speed reads GameSettings.aiTurnSpeed (1, 1.5, 2, 3, 4; default 2x; a value
+///   off the list reads as the default; no settings object reads as the default and none is created); under the Ai kind
+///   Wait and StepSeconds divide by it, under the Player kind they never do; a forced PC turn's mark (AiTurnStarting)
+///   switches the factor on and the control return in ShowActionChoices (PlayerControlReturned) switches it off; the PC
+///   hand-off waits (AfterAttackDelay, DelayedEndActivePCTurn, ReturnToActionChoicesAfterDelay, PromptFullAttackStep)
+///   are plain CombatPacing waits with no mark of their own, and only TurnControl writes the kind, so they stay at 1x on
+///   a player-run turn; MoveAlongPath's 0.01 s step floor holds at 4x; the HUD cycle order;
 /// - GameManager.InlineAction passes a CombatPacing.Wait leaf through unchanged (the same object, no extra frame);
 /// - the marks set only the pacing kind (AiTurnStarting Ai; PlayerControlReturned and CombatEnded Player; PromptOpened
 ///   leaves it);
@@ -44,6 +52,11 @@ public static class CombatPacingTests
         Run(TestLiveWait);
         Run(TestWaitIsLeaf);
         Run(TestStepSecondsAndSpeed);
+        Run(TestScaledRule);
+        Run(TestSpeedChoices);
+        Run(TestSpeedReadsSettings);
+        Run(TestMarksSwitchFactor);
+        Run(TestPcHandOffWaitsStayAtOneX);
         Run(TestInlineActionPassesPacingWait);
         Run(TestMarksSetKind);
         Run(TestNoRawWaitsInGameCode);
@@ -62,14 +75,23 @@ public static class CombatPacingTests
         if (SecondsField == null)
             return;
 
-        float variable = 0.8f; // a site's variable (ChargeCore's AoODelay, the crawl's aooWait)
-        foreach (float s in new[] { 0f, 0.2f, 0.35f, 0.5f, 1.0f, 2.0f, variable })
+        PaceKind saved = CombatPacing.Kind;
+        try
         {
-            WaitForSeconds w = CombatPacing.Wait(s);
-            Assert(w != null && (float)SecondsField.GetValue(w) == s,
-                $"Wait({s}) is a WaitForSeconds of exactly {s} s", w == null ? "null" : SecondsField.GetValue(w).ToString());
+            CombatPacing.Kind = PaceKind.Player;
+            float variable = 0.8f; // a site's variable (ChargeCore's AoODelay, the crawl's aooWait)
+            foreach (float s in new[] { 0f, 0.2f, 0.35f, 0.5f, 1.0f, 2.0f, variable })
+            {
+                WaitForSeconds w = CombatPacing.Wait(s);
+                Assert(w != null && (float)SecondsField.GetValue(w) == s,
+                    $"Player kind: Wait({s}) is a WaitForSeconds of exactly {s} s", w == null ? "null" : SecondsField.GetValue(w).ToString());
+            }
+            Assert(!ReferenceEquals(CombatPacing.Wait(0.5f), CombatPacing.Wait(0.5f)), "Live Wait builds a new WaitForSeconds per call, as the sites did");
         }
-        Assert(!ReferenceEquals(CombatPacing.Wait(0.5f), CombatPacing.Wait(0.5f)), "Live Wait builds a new WaitForSeconds per call, as the sites did");
+        finally
+        {
+            CombatPacing.Kind = saved;
+        }
     }
 
     private static void TestWaitIsLeaf()
@@ -86,24 +108,226 @@ public static class CombatPacingTests
 
     private static void TestStepSecondsAndSpeed()
     {
-        Assert(CombatPacing.Speed == 1f, "Speed is fixed at 1 (step 6 reads GameSettings.aiTurnSpeed)", CombatPacing.Speed.ToString());
-        foreach (float x in new[] { 0f, 0.005f, 0.12f, 0.2f, 1f })
-            Assert(CombatPacing.StepSeconds(x) == x, $"StepSeconds({x}) is the caller's value", CombatPacing.StepSeconds(x).ToString());
-
+        Assert(CombatPacing.Speed == GameSettings.CurrentAiTurnSpeed, "Speed reads GameSettings.aiTurnSpeed (step 6)",
+            CombatPacing.Speed + " vs " + GameSettings.CurrentAiTurnSpeed);
         PaceKind saved = CombatPacing.Kind;
         try
         {
-            foreach (PaceKind k in new[] { PaceKind.Player, PaceKind.Ai })
-            {
-                CombatPacing.Kind = k;
-                Assert(CombatPacing.StepSeconds(0.2f) == 0.2f && (float)SecondsField.GetValue(CombatPacing.Wait(0.6f)) == 0.6f,
-                    $"Speed 1: the {k} kind keeps every wait and step at the caller's seconds");
-            }
+            CombatPacing.Kind = PaceKind.Player;
+            foreach (float x in new[] { 0f, 0.005f, 0.12f, 0.2f, 1f })
+                Assert(CombatPacing.StepSeconds(x) == x, $"Player kind: StepSeconds({x}) is the caller's value", CombatPacing.StepSeconds(x).ToString());
         }
         finally
         {
             CombatPacing.Kind = saved;
         }
+    }
+
+    /// <summary>The pure rule: the Player kind never scales; the Ai kind divides by the speed; speed 1 is the identity.</summary>
+    private static void TestScaledRule()
+    {
+        foreach (float speed in GameSettings.AiTurnSpeedChoices)
+            foreach (float x in new[] { 0f, 0.2f, 0.6f, 1.0f, 2.0f })
+            {
+                Assert(CombatPacing.Scaled(x, PaceKind.Player, speed) == x, $"Player kind at {speed}x: {x} s stays {x} s (C2)");
+                Assert(Near(CombatPacing.Scaled(x, PaceKind.Ai, speed), x / speed), $"Ai kind at {speed}x: {x} s becomes {x / speed} s",
+                    CombatPacing.Scaled(x, PaceKind.Ai, speed).ToString());
+            }
+        Assert(CombatPacing.Scaled(0.6f, PaceKind.Ai, 0f) == 0.6f && CombatPacing.Scaled(0.6f, PaceKind.Ai, float.NaN) == 0.6f
+                && CombatPacing.Scaled(0.6f, PaceKind.Ai, 0.5f) == 0.6f,
+            "A speed of 1 or less (or not a number) never lengthens or breaks a wait");
+    }
+
+    /// <summary>The choices, the default and the HUD cycle order (Q4).</summary>
+    private static void TestSpeedChoices()
+    {
+        string choices = string.Join(",", GameSettings.AiTurnSpeedChoices.Select(c => c.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Assert(choices == "1,1.5,2,3,4", "The AI speed choices are 1, 1.5, 2, 3 and 4x (Q4)", choices);
+        Assert(GameSettings.DefaultAiTurnSpeed == 2f, "The default AI speed is 2x (Q4)");
+        float s = 1f;
+        var order = new List<string>();
+        for (int i = 0; i < 6; i++)
+        {
+            s = GameSettings.NextAiTurnSpeed(s);
+            order.Add(s.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        Assert(string.Join(",", order) == "1.5,2,3,4,1,1.5", "The HUD button cycles 1 -> 1.5 -> 2 -> 3 -> 4 -> 1", string.Join(",", order));
+        Assert(GameSettings.NextAiTurnSpeed(7f) == GameSettings.DefaultAiTurnSpeed, "A speed off the list cycles to the default");
+        Assert(GameSettings.AiTurnSpeedLabel(1.5f) == "AI 1.5x" && GameSettings.AiTurnSpeedLabel(2f) == "AI 2x", "The HUD label reads 'AI 1.5x', 'AI 2x'");
+    }
+
+    private static readonly FieldInfo SettingsInstanceField =
+        typeof(GameSettings).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
+
+    /// <summary>
+    /// Runs <paramref name="body"/> with a settings object in force: the live one in Play mode (its speed restored after),
+    /// a hidden temporary one in edit mode (the static instance put back, the object destroyed), so no scene object is made.
+    /// </summary>
+    private static void WithSettings(Action<GameSettings> body)
+    {
+        if (Application.isPlaying)
+        {
+            GameSettings live = GameSettings.Instance;
+            float savedSpeed = live.aiTurnSpeed;
+            try { body(live); }
+            finally { live.aiTurnSpeed = savedSpeed; }
+            return;
+        }
+
+        object savedInstance = SettingsInstanceField.GetValue(null);
+        var go = new GameObject("CombatPacingTests.GameSettings") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            GameSettings temp = go.AddComponent<GameSettings>();
+            SettingsInstanceField.SetValue(null, temp);
+            body(temp);
+        }
+        finally
+        {
+            SettingsInstanceField.SetValue(null, savedInstance);
+            UnityEngine.Object.DestroyImmediate(go);
+        }
+    }
+
+    private static float WaitSeconds(float seconds) => (float)SecondsField.GetValue(CombatPacing.Wait(seconds));
+
+    /// <summary>Float equality to a millionth (a quotient stored as a float can differ from one kept in a register).</summary>
+    private static bool Near(float a, float b) => Mathf.Abs(a - b) <= 1e-6f;
+
+    private static void TestSpeedReadsSettings()
+    {
+        Assert(SettingsInstanceField != null, "GameSettings keeps its instance in _instance (read by reflection)");
+        if (SettingsInstanceField == null || SecondsField == null)
+            return;
+
+        // Edit mode: no settings object reads as the default and none is created. Play mode: the live object (the
+        // same assertion count either way).
+        object savedInstance = SettingsInstanceField.GetValue(null);
+        if (!Application.isPlaying)
+        {
+            try
+            {
+                SettingsInstanceField.SetValue(null, null);
+                Assert(GameSettings.CurrentAiTurnSpeed == GameSettings.DefaultAiTurnSpeed && SettingsInstanceField.GetValue(null) == null,
+                    "With no settings object the speed is the default, and reading it creates none");
+            }
+            finally
+            {
+                SettingsInstanceField.SetValue(null, savedInstance);
+            }
+        }
+        else
+        {
+            Assert(GameSettings.Instance != null && CombatPacing.Speed == GameSettings.CurrentAiTurnSpeed,
+                "Play mode: the speed is the live settings object's");
+        }
+
+        PaceKind savedKind = CombatPacing.Kind;
+        try
+        {
+            WithSettings(settings =>
+            {
+                foreach (float speed in GameSettings.AiTurnSpeedChoices)
+                {
+                    settings.aiTurnSpeed = speed;
+                    Assert(CombatPacing.Speed == speed, $"Speed reads aiTurnSpeed {speed}", CombatPacing.Speed.ToString());
+                    CombatPacing.Kind = PaceKind.Ai;
+                    float wait = WaitSeconds(0.6f);
+                    Assert(Near(wait, 0.6f / speed) && Near(CombatPacing.StepSeconds(0.2f), 0.2f / speed),
+                        $"Ai kind at {speed}x: Wait(0.6) is {0.6f / speed} s and StepSeconds(0.2) {0.2f / speed} s", wait + ", " + CombatPacing.StepSeconds(0.2f));
+                    CombatPacing.Kind = PaceKind.Player;
+                    wait = WaitSeconds(0.6f);
+                    Assert(wait == 0.6f && CombatPacing.StepSeconds(0.2f) == 0.2f, $"Player kind at {speed}x: Wait(0.6) and StepSeconds(0.2) stay at 1x",
+                        wait + ", " + CombatPacing.StepSeconds(0.2f));
+                }
+
+                settings.aiTurnSpeed = 7f;
+                Assert(CombatPacing.Speed == GameSettings.DefaultAiTurnSpeed, "A speed off the list reads as the default", CombatPacing.Speed.ToString());
+
+                settings.aiTurnSpeed = 4f;
+                CombatPacing.Kind = PaceKind.Ai;
+                Assert(Mathf.Max(0.01f, CombatPacing.StepSeconds(0.02f)) == 0.01f && Near(Mathf.Max(0.01f, CombatPacing.StepSeconds(0.2f)), 0.05f),
+                    "The step floor: at 4x a 0.02 s step clamps to MoveAlongPath's 0.01 s, a 0.2 s step is 0.05 s");
+                settings.aiTurnSpeed = 1f;
+                Assert(CombatPacing.StepSeconds(0.2f) == 0.2f && WaitSeconds(0.6f) == 0.6f,
+                    "At 1x (the harness default) the Ai kind keeps every wait and step at the caller's seconds");
+            });
+        }
+        finally
+        {
+            CombatPacing.Kind = savedKind;
+        }
+    }
+
+    /// <summary>
+    /// The marks switch the factor: an NPC turn's or a forced PC turn's AiTurnStarting (BeginForcedPCTurn marks the PC
+    /// itself, TestMarkSites) turns it on, ShowActionChoices' PlayerControlReturned turns it off, and CombatEnded too.
+    /// </summary>
+    private static void TestMarksSwitchFactor()
+    {
+        if (SecondsField == null)
+            return;
+        PaceKind savedKind = CombatPacing.Kind;
+        try
+        {
+            WithSettings(settings =>
+            {
+                settings.aiTurnSpeed = 4f;
+                CombatPacing.Kind = PaceKind.Player;
+                TurnControl.AiTurnStarting(null); // BeginForcedPCTurn's mark: a forced PC turn counts as Ai (C2)
+                Assert(CombatPacing.Kind == PaceKind.Ai && Near(WaitSeconds(0.6f), 0.15f),
+                    "After an AI-decided turn's mark (a forced PC turn's included) a 0.6 s wait at 4x is 0.15 s");
+                TurnControl.PromptOpened();
+                Assert(Near(WaitSeconds(0.6f), 0.15f), "A prompt leaves the factor on until control returns (C2)");
+                TurnControl.PlayerControlReturned(null); // ShowActionChoices' mark
+                Assert(CombatPacing.Kind == PaceKind.Player && WaitSeconds(0.6f) == 0.6f,
+                    "After ShowActionChoices' control return the kind is Player and a 0.6 s wait is 0.6 s at 4x");
+                TurnControl.AiTurnStarting(null);
+                TurnControl.CombatEnded();
+                Assert(WaitSeconds(0.6f) == 0.6f, "After the combat end the factor is off");
+            });
+        }
+        finally
+        {
+            CombatPacing.Kind = savedKind;
+        }
+    }
+
+    /// <summary>
+    /// The PC hand-off waits run on a player-run turn, after ShowActionChoices set the Player kind, and nothing in them
+    /// or anywhere but TurnControl sets the kind, so they stay at 1x: each is a CombatPacing wait of its own seconds, with
+    /// no mark and no scaling of its own.
+    /// </summary>
+    private static void TestPcHandOffWaitsStayAtOneX()
+    {
+        string root = Path.Combine(Application.dataPath, "Scripts");
+        string actions = StripComments(Path.Combine(root, "_Core/GameManager.CombatActions.cs"));
+        foreach (string method in new[] { "AfterAttackDelay", "DelayedEndActivePCTurn", "ReturnToActionChoicesAfterDelay", "PromptFullAttackStep" })
+        {
+            string body = MethodBody(actions, method);
+            Assert(body != null, method + " is found in GameManager.CombatActions.cs");
+            if (body == null)
+                continue;
+            if (method != "PromptFullAttackStep")
+                Assert(Regex.IsMatch(body, @"CombatPacing\.Wait\(delay\)"), method + " waits CombatPacing.Wait(delay), its caller's seconds");
+            Assert(!body.Contains("TurnControl.") && !Regex.IsMatch(body, @"CombatPacing\.(?:Kind|Speed|Scaled)\b") && !body.Contains("aiTurnSpeed"),
+                method + " sets no kind and scales nothing itself, so on a player-run turn it stays at 1x");
+        }
+
+        string testsDir = Path.GetFullPath(Path.Combine(root, "Tests")) + Path.DirectorySeparatorChar;
+        var writers = new List<string>();
+        foreach (string file in Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            string full = Path.GetFullPath(file);
+            if (full.StartsWith(testsDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+            string src = StripComments(full);
+            if (Regex.IsMatch(src, @"\bCombatPacing\.Kind\s*=[^=]") || Regex.IsMatch(src, @"\.aiTurnSpeed\s*=[^=]"))
+                writers.Add(full.Substring(Path.GetFullPath(root).Length + 1).Replace('\\', '/'));
+        }
+        writers.Sort(StringComparer.Ordinal);
+        Assert(string.Join(",", writers) == "Combat/Pacing/TurnControl.cs",
+            "Only TurnControl writes the pacing kind, and no game code writes another object's aiTurnSpeed", string.Join(", ", writers));
     }
 
     private static void TestInlineActionPassesPacingWait()

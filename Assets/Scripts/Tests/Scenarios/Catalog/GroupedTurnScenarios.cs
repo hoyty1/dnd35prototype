@@ -17,7 +17,9 @@ namespace Tests.Scenarios
     /// while its view plays the fade; a summon slain on its own turn does not cost the next creature its turn; the Lesser
     /// Globe centre is read from the caster's grid square, not its token (following the caster is current behaviour, SPL-335).
     /// Step 5 (CMB-308): a forced PC turn's grapple escape takes the AI decider's escape square and opens no square selection
-    /// (batch 13 C7).
+    /// (batch 13 C7). Step 6: the AI speed factor follows the turn kind: Ai on an NPC's, a Scripted ally's and a forced PC
+    /// turn, Player on a player-run turn from its menu on, through its attack hand-off (C2); the trace is the same at any
+    /// aiSpeed= (the scenario notes no speed).
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -36,6 +38,7 @@ namespace Tests.Scenarios
             yield return S("summon-slain-off-its-move-next-still-acts", SummonSlainOffItsMoveNextStillActs);
             yield return S("lesser-globe-follows-caster-grid", LesserGlobeFollowsCasterGrid);
             yield return S("panicked-grappled-pc-escape-square-ai", PanickedGrappledPcEscapeSquareAi);
+            yield return S("ai-speed-pacing-kind-follows-turns", AiSpeedPacingKindFollowsTurns);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -742,6 +745,137 @@ namespace Tests.Scenarios
                 })
                 .Expect("The no-prompt checks hold", Expect.AssertsPass())
                 .Build();
+        }
+
+        // ── Step 6: the AI speed factor follows the turn kind (C2) ─────────────
+
+        /// <summary>
+        /// The pacing kind that switches the AI speed factor on (CombatPacing.Kind, grouped AI turns step 6, C2), read at
+        /// each step: Ai on the Scripted orc's turn (the NPC path) and the Scripted ally's (a party member on the NPC path);
+        /// Player on the Ui hero's turn once its menu shows, and Player on every hero log line of its attack, which is the
+        /// kind in force when AfterAttackDelay starts (nothing writes the kind between the attack's last line and that
+        /// wait), so the hand-off wait runs at 1x. In round 2 a Ui lead acts just before the hero, so its ShowActionChoices
+        /// leaves the kind at Player; the ally has panicked the hero (PHB p.311), and a log watcher started on the lead's
+        /// turn must find the hero's forced flight paced as Ai from its first Ai line on (no Player line after it), which
+        /// only BeginForcedPCTurn's mark can give. The notes name kinds, never the speed, so the trace is the same at any
+        /// aiSpeed= (the step's equality runs).
+        /// </summary>
+        private static ScenarioDef AiSpeedPacingKindFollowsTurns()
+        {
+            var start = new Vector2Int(10, 10);
+            return Rules("rules/ai-speed-pacing-kind-follows-turns", "The AI speed factor follows the turn kind: AI-decided turns, forced PC turns included, but not a player-run turn (grouped AI turns step 6, C2)")
+                .Covers("grouped AI turns step 6", "C2", "Q4", "PHB p.311", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Pc("lead", ActorSource.Stats(() => RulesScenarios.Fighter("Pacing Lead", 3)), 16, 14, Control.Ui)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Paced Hero", 3)), start.x, start.y, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Paced Ally", 3)), 10, 14, Control.Scripted)
+                .Tweak("lead", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("ally", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Tweak("orc", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Initiative("orc", "lead", "hero", "ally")
+                .OnSetup(ctx => PacingKindWatch.Stop())
+                .Turn("orc", 1, KindIs(PaceKind.Ai, "the Scripted orc's turn (the NPC path)"), Step.Pass())
+                .Turn("lead", 1, Step.EndTurn())
+                .Turn("hero", 1,
+                    KindIs(PaceKind.Player, "the Ui hero's turn once its menu shows (ShowActionChoices)"),
+                    Step.Assert("watch the kind of every log line of the hero's attack", ctx =>
+                    {
+                        PacingKindWatch.Start();
+                        return true;
+                    }),
+                    Step.Attack("orc"),
+                    Step.Assert("every hero log line of the attack, the kind AfterAttackDelay starts under, was paced as Player", ctx =>
+                    {
+                        PacingKindWatch w = PacingKindWatch.Stop();
+                        CharacterController hero = ctx.Get("hero");
+                        List<PacingKindWatch.Line> lines = w != null ? w.Logs.Where(l => l.Actor == hero).ToList() : new List<PacingKindWatch.Line>();
+                        int notPlayer = lines.Count(l => l.Kind != PaceKind.Player);
+                        ctx.Note("attack: " + lines.Count + " lines, " + notPlayer + " not Player");
+                        return lines.Count > 0 && notPlayer == 0;
+                    }),
+                    KindIs(PaceKind.Player, "the Ui hero's turn after its attack's hand-off (ShowActionChoices again)"),
+                    Step.EndTurn())
+                .Turn("ally", 1,
+                    KindIs(PaceKind.Ai, "the Scripted ally's turn (a party member on the NPC path)"),
+                    Step.Assert("the ally panics the hero (fixture)", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        ctx.Gm.ApplyCondition(hero, CombatConditionType.Panicked, 3, ctx.Get("orc"), sourceCategory: "Harness");
+                        return hero.HasCondition(CombatConditionType.Panicked);
+                    }),
+                    Step.Pass())
+                .Turn("orc", 2, KindIs(PaceKind.Ai, "the orc's round-2 turn"), Step.Pass())
+                .Turn("lead", 2,
+                    Step.Assert("the Ui lead's round-2 turn is Player (ShowActionChoices); watch the kind of every log line", ctx =>
+                    {
+                        PacingKindWatch.Start();
+                        return CombatPacing.Kind == PaceKind.Player;
+                    }),
+                    Step.EndTurn())
+                .Turn("ally", 2,
+                    Step.Assert("the hero's forced flight was paced as Ai from its first Ai line on, and the hero fled", ctx =>
+                    {
+                        PacingKindWatch w = PacingKindWatch.Stop();
+                        CharacterController hero = ctx.Get("hero");
+                        List<PacingKindWatch.Line> lines = w != null ? w.Logs.Where(l => l.Actor == hero).ToList() : new List<PacingKindWatch.Line>();
+                        int firstAi = lines.FindIndex(l => l.Kind == PaceKind.Ai);
+                        int playerAfter = firstAi < 0 ? 0 : lines.Skip(firstAi).Count(l => l.Kind != PaceKind.Ai);
+                        int ai = lines.Count(l => l.Kind == PaceKind.Ai);
+                        bool fled = hero.GridPosition != start;
+                        ctx.Note("forced flight: " + lines.Count + " lines, " + ai + " Ai, " + playerAfter + " not Ai after the first Ai, fled " + fled);
+                        return ai > 0 && playerAfter == 0 && fled;
+                    }),
+                    Step.Pass())
+                .Expect("The pacing kind follows every turn", Expect.AssertsPass())
+                .Build();
+        }
+
+        private static Step KindIs(PaceKind kind, string when)
+            => Step.Assert("the pacing kind is " + kind + " on " + when, ctx => CombatPacing.Kind == kind);
+
+        /// <summary>
+        /// Records the pacing kind and the creature whose turn it is with every combat log line, by chaining the trace's
+        /// CombatLog hook; Stop puts it back. The scenario's OnSetup stops a watcher an aborted job left behind.
+        /// </summary>
+        private sealed class PacingKindWatch
+        {
+            public struct Line
+            {
+                public PaceKind Kind;
+                public CharacterController Actor;
+            }
+
+            private static PacingKindWatch _current;
+
+            public readonly List<Line> Logs = new List<Line>();
+            private Action<string> _prevLog, _log;
+
+            public static void Start()
+            {
+                Stop();
+                var w = new PacingKindWatch();
+                w._prevLog = ScenarioHooks.CombatLog;
+                w._log = ScenarioHooks.Safe<string>("pacing-kind-watch.log", text =>
+                {
+                    w._prevLog?.Invoke(text);
+                    GameManager gm = GameManager.Instance;
+                    w.Logs.Add(new Line { Kind = CombatPacing.Kind, Actor = gm != null ? gm.CurrentCharacter : null });
+                });
+                ScenarioHooks.CombatLog = w._log;
+                _current = w;
+            }
+
+            public static PacingKindWatch Stop()
+            {
+                PacingKindWatch w = _current;
+                _current = null;
+                if (w == null)
+                    return null;
+                if (ScenarioHooks.CombatLog == w._log) ScenarioHooks.CombatLog = w._prevLog;
+                return w;
+            }
         }
 
         private static bool ViewsMirror(ScenarioContext ctx, string when, params string[] names)

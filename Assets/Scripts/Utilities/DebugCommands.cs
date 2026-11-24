@@ -3,6 +3,8 @@ using UnityEngine;
 /// <summary>
 /// Debug-only keyboard helpers.
 /// Ctrl+H cycles HP calculation mode: Roll -> Average -> Maximum.
+/// Ctrl+J cycles the AI turn speed (GameSettings.aiTurnSpeed: 1, 1.5, 2, 3, 4x), as the combat HUD's "AI speed" button
+/// does (grouped AI turns step 6).
 /// </summary>
 public class DebugCommands : MonoBehaviour
 {
@@ -25,7 +27,25 @@ public class DebugCommands : MonoBehaviour
         {
             CycleHPMode();
         }
+        if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.J))
+        {
+            CycleAiTurnSpeed();
+        }
 #endif
+    }
+
+    /// <summary>Steps the AI turn speed to its next choice and refreshes the HUD button's label.</summary>
+    public static void CycleAiTurnSpeed()
+    {
+        GameSettings settings = GameSettings.Instance;
+        if (settings == null)
+            return;
+
+        float speed = settings.CycleAiTurnSpeed();
+        CombatUI ui = GameManager.Instance != null ? GameManager.Instance.CombatUI : null;
+        if (ui != null)
+            ui.RefreshAiSpeedButton();
+        Debug.Log("[Debug] AI turn speed: " + GameSettings.AiTurnSpeedLabel(speed));
     }
 
     private static void CycleHPMode()

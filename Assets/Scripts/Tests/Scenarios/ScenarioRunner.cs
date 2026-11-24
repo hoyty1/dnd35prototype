@@ -30,8 +30,21 @@ namespace Tests.Scenarios
         /// (ScenarioBuilder.AiDifficulty wins); null is Normal (batch 14 step 4, C11).
         /// </summary>
         public AIService.AIDifficultyLevel? Difficulty;
+        /// <summary>
+        /// aiSpeed=1|1.5|2|3|4: GameSettings.aiTurnSpeed for every job (grouped AI turns step 6); default 1, so a run's
+        /// pacing does not follow the play default (2x). Saved and restored around each job beside hpCalculationMode. The
+        /// speed is presentation only: every trace hash must be the same at any speed (docs/TESTING.md 3.4).
+        /// </summary>
+        public float AiSpeed = 1f;
 
         public const float DefaultWallCapSeconds = 120f;
+
+        /// <summary>
+        /// mode=fine runs with a tenth of fast mode's game time per frame (timeScale 3 against 30); frame-bound work does
+        /// not slow down, so a job's default wall-clock cap is 5 times its usual one, not 10 (step 6). An explicit wallCap=
+        /// is used as given.
+        /// </summary>
+        public const float FineWallCapFactor = 5f;
 
         public static RunOptions Parse(string text, out string error)
         {
@@ -50,7 +63,7 @@ namespace Tests.Scenarios
                 switch (key)
                 {
                     case "mode":
-                        if (val != "fast" && val != "watch") { error = "mode must be fast or watch"; return null; }
+                        if (val != "fast" && val != "watch" && val != "fine") { error = "mode must be fast, watch or fine"; return null; }
                         o.Mode = val;
                         break;
                     case "maxrounds":
@@ -85,6 +98,11 @@ namespace Tests.Scenarios
                             default: error = "difficulty must be easy, normal or hard"; return null;
                         }
                         break;
+                    case "aispeed":
+                        if (!float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out float sp) || !GameSettings.IsAiTurnSpeedChoice(sp))
+                        { error = "aiSpeed must be 1, 1.5, 2, 3 or 4"; return null; }
+                        o.AiSpeed = sp;
+                        break;
                     default:
                         error = "unknown option '" + key + "'";
                         return null;
@@ -97,7 +115,8 @@ namespace Tests.Scenarios
             => "mode=" + Mode + (MaxRounds.HasValue ? ";maxRounds=" + MaxRounds : "") + ";repeat=" + Repeat
                + (Sweep > 0 ? ";sweep=" + Sweep : "") + (RecordDice ? ";record=dice" : "") + (Keep ? ";keep" : "")
                + (WallCapSet ? ";wallCap=" + WallCapSeconds.ToString(CultureInfo.InvariantCulture) : "")
-               + (Difficulty.HasValue ? ";difficulty=" + Difficulty.Value.ToString().ToLowerInvariant() : "");
+               + (Difficulty.HasValue ? ";difficulty=" + Difficulty.Value.ToString().ToLowerInvariant() : "")
+               + (AiSpeed != 1f ? ";aiSpeed=" + AiSpeed.ToString(CultureInfo.InvariantCulture) : "");
     }
 
     /// <summary>The result of one job, as written to summary.json.</summary>
@@ -470,6 +489,8 @@ namespace Tests.Scenarios
         private bool _randomSaved;
         private HPCalculationMode _savedHpMode;
         private bool _hpModeSaved;
+        private float _savedAiSpeed;
+        private bool _aiSpeedSaved;
         private AIService _difficultyService;
         private AIService.AIDifficultyLevel? _savedDifficultyOverride;
         private Application.LogCallback _logHandler;
@@ -509,7 +530,10 @@ namespace Tests.Scenarios
                             Rep = rep,
                             Index = index++,
                             MaxRounds = options.MaxRounds ?? def.MaxRounds,
-                            WallCapSeconds = options.WallCapSet ? options.WallCapSeconds : def.WallCapSeconds ?? options.WallCapSeconds,
+                            WallCapSeconds = options.WallCapSet
+                                ? options.WallCapSeconds
+                                : (def.WallCapSeconds ?? options.WallCapSeconds)
+                                  * (options.Mode == "fine" ? RunOptions.FineWallCapFactor : 1f),
                             Options = options,
                             Runner = this
                         });
@@ -1192,6 +1216,11 @@ namespace Tests.Scenarios
             _savedHpMode = GameSettings.Instance.hpCalculationMode;
             _hpModeSaved = true;
             GameSettings.Instance.hpCalculationMode = HPCalculationMode.Average;
+            // AI turn speed (grouped AI turns step 6): the run's aiSpeed= (default 1), never the play default.
+            _savedAiSpeed = GameSettings.Instance.aiTurnSpeed;
+            _aiSpeedSaved = true;
+            GameSettings.Instance.aiTurnSpeed = job.Options.AiSpeed;
+            if (gm.CombatUI != null) gm.CombatUI.RefreshAiSpeedButton();
 
             // AI difficulty (batch 14 step 4, C11): the scenario's own, else the run option's, else Normal, so a job never
             // reads the editor's setting. Only a personality reads it.
@@ -1719,6 +1748,17 @@ namespace Tests.Scenarios
                 try { GameSettings.Instance.hpCalculationMode = _savedHpMode; }
                 catch (Exception ex) { job.Notes.Add("restore HP mode: " + ex.Message); }
                 _hpModeSaved = false;
+            }
+            if (_aiSpeedSaved)
+            {
+                try
+                {
+                    GameSettings.Instance.aiTurnSpeed = _savedAiSpeed;
+                    CombatUI hud = GameManager.Instance != null ? GameManager.Instance.CombatUI : null;
+                    if (hud != null) hud.RefreshAiSpeedButton();
+                }
+                catch (Exception ex) { job.Notes.Add("restore AI speed: " + ex.Message); }
+                _aiSpeedSaved = false;
             }
             if (_difficultyService != null)
             {

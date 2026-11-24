@@ -1,8 +1,9 @@
 /// <summary>
 /// The presentation-only turn marks of grouped AI turns (docs/designs/grouped_ai_turns.md "The group"; owner request
 /// 2026-10-30). They sit on the turn paths PCs and NPCs already share and decide no rule: no mark reads IsControllable,
-/// rolls a die or changes the turn chain (CORE-012 re-entrancy included). In step 1 each mark only sets
-/// <see cref="CombatPacing.Kind"/>; the group itself (open, close, the window cap) comes with stage 2.
+/// rolls a die or changes the turn chain (CORE-012 re-entrancy included). In stage 1 each mark only sets
+/// <see cref="CombatPacing.Kind"/>, which switches the AI speed factor (step 6) on and off; the group itself (open,
+/// close, the window cap) comes with stage 2.
 /// </summary>
 public static class TurnControl
 {
