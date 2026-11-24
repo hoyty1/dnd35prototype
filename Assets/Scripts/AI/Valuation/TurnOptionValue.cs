@@ -113,7 +113,9 @@ namespace DND35.AI.Valuation
 
         /// <summary>
         /// What one foe can do next round, read once: the squares it threatens, its melee reach, its move and its ranged
-        /// weapon's range. A foe that cannot attack this round (KnowledgeFacts.CanAttackThisRound) reaches nothing.
+        /// weapon's range. A foe that cannot attack this round (KnowledgeFacts.CanAttackThisRound) reaches nothing. Its
+        /// state (alive, move, the charge's conditions) and the subject's (alive) are read through the [KnowledgeLegacy]
+        /// choke point TargetNumbers (AI-089), so the omniscience lint holds this file to the knowledge facade.
         /// </summary>
         public sealed class FoeReach
         {
@@ -136,22 +138,19 @@ namespace DND35.AI.Valuation
             public FoeReach(CharacterController foe)
             {
                 Foe = foe;
-                CanAttack = foe != null && foe.Stats != null && !foe.Stats.IsDead && KnowledgeFacts.CanAttackThisRound(foe);
+                CanAttack = TargetNumbers.Alive(foe) && KnowledgeFacts.CanAttackThisRound(foe);
                 if (!CanAttack)
                     return;
                 _threatened = ThreatSystem.GetThreatenedSquares(foe, log: false);
                 _meleeReach = Mathf.Max(1, foe.GetMeleeMaxAttackDistance());
-                _move = Mathf.Max(0, foe.Stats.MoveRange);
+                _move = Mathf.Max(0, TargetNumbers.MoveSquares(foe));
                 ItemData weapon = foe.GetEquippedMainWeapon();
                 if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.RangeIncrement > 0
                     && AiAttackGuard.CheckWeapon(foe, null).Ok)
                     _rangedSquares = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, weapon.IsThrown);
-                CanChargeNextRound = _move > 0 && foe.HasMeleeWeaponEquipped()
-                    && !foe.HasCondition(CombatConditionType.Prone) && !foe.IsGrappling()
-                    && !foe.Stats.IsFatiguedOrExhausted && !foe.HasCondition(CombatConditionType.Entangled)
-                    && (foe.Actions == null || !foe.Actions.MoveActionOnly);
+                CanChargeNextRound = _move > 0 && TargetNumbers.ChargeConditionsMet(foe);
                 if (CanChargeNextRound)
-                    _chargeSquares = foe.Actions != null && foe.Actions.SingleActionOnly ? _move : 2 * _move;
+                    _chargeSquares = TargetNumbers.SingleActionOnly(foe) ? _move : 2 * _move;
             }
 
             /// <summary>It threatens <paramref name="square"/> now.</summary>
@@ -181,7 +180,7 @@ namespace DND35.AI.Valuation
             /// <summary>How it can attack <paramref name="subject"/> next round (<see cref="ReachKind"/>).</summary>
             public ReachKind ReachOf(CharacterController subject)
             {
-                if (!CanAttack || subject == null || subject == Foe || subject.Stats == null || subject.Stats.IsDead)
+                if (!CanAttack || subject == null || subject == Foe || !TargetNumbers.Alive(subject))
                     return ReachKind.None;
                 List<Vector2Int> squares = subject.GetOccupiedSquares();
                 for (int i = 0; i < squares.Count; i++)

@@ -4,14 +4,17 @@ using DND35.AI.Knowledge;
 namespace DND35.AI.Valuation
 {
     /// <summary>
-    /// The one place the AI's valuations read another creature's check modifiers, maneuver numbers and AoO estimates (batch 14 step 8,
+    /// The one place the AI's valuations read another creature's check modifiers, maneuver numbers, AoO estimates and the
+    /// state behind a foe's next-round reach (alive, move, the charge's conditions; AI-089) (batch 14 step 8,
     /// docs/designs/personalities_batch14.md "AI/Valuation"): the true values, straight from the shared rules getters the
     /// maneuver cores roll with, so an estimate never drifts from the roll. It is the [KnowledgeLegacy] choke point until
     /// batch 17 (fair sight) decides what an observer may know of them (a foe's Strength, feats and held items); the
     /// omniscience lint (OmniscienceLintTests) skips this file and holds every other file under AI/Valuation and
-    /// AI/Personality to the knowledge facade. Pure reads: no dice, nothing changed.
+    /// AI/Personality to the knowledge facade. Name no member here Stats, GridPosition, HasCondition or Is*: the lint's target
+    /// pattern (target*) matches the class name itself, so a call such as TargetNumbers.IsAlive(foe) is flagged in every
+    /// caller. Pure reads: no dice, nothing changed.
     /// </summary>
-    [KnowledgeLegacy("a target's check modifiers are read true until batch 17 gates them by what the observer knows")]
+    [KnowledgeLegacy("a target's check modifiers, AoO estimates and the state behind a foe's next-round reach are read true until batch 17 gates them by what the observer knows")]
     public static class TargetNumbers
     {
         /// <summary>The whole modifier of <paramref name="self"/>'s maneuver touch attack on <paramref name="target"/> at <paramref name="bab"/> (its racial bonus against the target's kind included).</summary>
@@ -29,6 +32,34 @@ namespace DND35.AI.Valuation
         /// </summary>
         public static int CurrentHitPoints(CharacterController target)
             => target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
+
+        /// <summary>
+        /// <paramref name="target"/> is a living creature: it has stats and is not dead (CharacterStats.IsDead), read true
+        /// (false without a creature). The foe-reach estimate (TurnOptionValue.FoeReach, batch 14 step 13) reads it for the
+        /// foe and for the creature it could attack; moved here by AI-089 so the valuation reads no foe past this choke point.
+        /// </summary>
+        public static bool Alive(CharacterController target)
+            => target != null && target.Stats != null && !target.Stats.IsDead;
+
+        /// <summary><paramref name="target"/>'s move in squares this round (CharacterStats.MoveRange: 0 when a condition blocks movement), read true (0 without stats; AI-089).</summary>
+        public static int MoveSquares(CharacterController target)
+            => target != null && target.Stats != null ? target.Stats.MoveRange : 0;
+
+        /// <summary>
+        /// The creature-side conditions of <paramref name="target"/>'s charge next round (GameManager.CanCharge's legality
+        /// read ahead, PHB p.154; TurnOptionValue.FoeReach.CanChargeNextRound): a melee attack to make (a melee weapon, or
+        /// unarmed: CharacterController.HasMeleeWeaponEquipped), standing, not grappling, not fatigued, exhausted or
+        /// entangled, and not limited to a move action. Read true, in that order (AI-089); the caller checks the move.
+        /// </summary>
+        public static bool ChargeConditionsMet(CharacterController target)
+            => target != null && target.Stats != null && target.HasMeleeWeaponEquipped()
+               && !target.HasCondition(CombatConditionType.Prone) && !target.IsGrappling()
+               && !target.Stats.IsFatiguedOrExhausted && !target.HasCondition(CombatConditionType.Entangled)
+               && (target.Actions == null || !target.Actions.MoveActionOnly);
+
+        /// <summary><paramref name="target"/> may take only a single move or standard action this round (its action economy's SingleActionOnly; AI-089).</summary>
+        public static bool SingleActionOnly(CharacterController target)
+            => target != null && target.Actions != null && target.Actions.SingleActionOnly;
 
         /// <summary><paramref name="target"/>'s modifier to resist a trip: the better of Strength and Dexterity, size, stability (PHB p.158).</summary>
         public static int TripResistModifier(CharacterController target)

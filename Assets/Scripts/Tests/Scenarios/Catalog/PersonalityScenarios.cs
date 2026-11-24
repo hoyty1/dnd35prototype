@@ -138,6 +138,7 @@ namespace Tests.Scenarios
             yield return S("ai-total-defense-only-when-reachable", () => AiTotalDefenseOnlyWhenReachable(19));
             yield return S("ai-total-defense-only-when-reachable-reachable", () => AiTotalDefenseOnlyWhenReachable(7));
             yield return S("ai-total-defense-only-when-reachable-charge", () => AiTotalDefenseOnlyWhenReachable(11));
+            yield return S("ai-total-defense-only-when-reachable-charge-prone", () => AiTotalDefenseOnlyWhenReachable(11, heroProne: true));
             yield return S("ai-prone-caster-stays-prone", () => AiProneCasterStaysProne(18));
             yield return S("ai-prone-caster-stays-prone-archer-close", () => AiProneCasterStaysProne(12));
             yield return S("ai-prone-melee-stands", AiProneMeleeStands);
@@ -1977,13 +1978,18 @@ namespace Tests.Scenarios
         /// even by a charge (twice its speed, PHB p.154), so it takes no total defense (before the step it stood in total
         /// defense against nobody); in the "-reachable" twin the fighter stands 5 squares off, within a move and its reach,
         /// and in the "-charge" twin 9 squares off, beyond one move but within a charge (batch 14 step 13 review): it takes
-        /// total defense in both (PHB p.142).
+        /// total defense in both (PHB p.142). In the "-charge-prone" twin (<paramref name="heroProne"/>, AI-089) the fighter 9
+        /// squares off starts prone: standing up is a move action and a charge a full-round action (PHB p.141, p.154), so it
+        /// cannot charge next round (TargetNumbers.ChargeConditionsMet, read by TurnOptionValue.FoeReach) and the adept takes
+        /// no total defense.
         /// </summary>
-        private static ScenarioDef AiTotalDefenseOnlyWhenReachable(int heroX)
+        private static ScenarioDef AiTotalDefenseOnlyWhenReachable(int heroX, bool heroProne = false)
         {
-            bool reachable = heroX != 19;
-            string id = "rules/ai-total-defense-only-when-reachable" + (heroX == 7 ? "-reachable" : heroX == 11 ? "-charge" : "");
-            ScenarioBuilder b = Rules(id, heroX == 11
+            bool reachable = heroX != 19 && !heroProne;
+            string id = "rules/ai-total-defense-only-when-reachable" + (heroX == 7 ? "-reachable" : heroX == 11 ? "-charge" : "") + (heroProne ? "-prone" : "");
+            ScenarioBuilder b = Rules(id, heroProne
+                    ? "Out of reach, an AI creature whose only foe in charge range is prone takes no total defense (PHB p.142, p.154, AI-089)"
+                    : heroX == 11
                     ? "Out of reach, an AI creature a foe can charge takes total defense (PHB p.142, p.154, AI-063)"
                     : reachable
                     ? "Out of reach, an AI creature a foe can reach takes total defense (PHB p.142, AI-063)"
@@ -1996,6 +2002,8 @@ namespace Tests.Scenarios
                 .Tweak("npc", c => { Sturdy(c); MorningstarOnly(c); })
                 .Tweak("hero", Sturdy)
                 .Initiative("npc", "hero");
+            if (heroProne)
+                b.StartCondition("hero", CombatConditionType.Prone, -1).Covers("AI-089", "PHB p.141");
             b.Personality("npc", "");
             ExpectNoCast(b, "npc");
             return b

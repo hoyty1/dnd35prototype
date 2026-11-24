@@ -18,7 +18,8 @@ namespace Tests.AI
 /// where it is made. The creature's own state goes through names that hold the observer (self, me, observer, npc,
 /// actor) and view.Observer; a new identifier that holds a target must match the target pattern above (TargetName), or
 /// the lint cannot see it. It skips SelfFacts.cs (the creature's own state) and TargetNumbers.cs (the one
-/// [KnowledgeLegacy] choke point until batch 17), and ignores comments and strings. The matcher is checked on sample
+/// [KnowledgeLegacy] choke point until batch 17; since TargetName matches the class name, a TargetNumbers member named
+/// Stats, GridPosition, HasCondition or Is* is flagged in every caller), and ignores comments and strings. The matcher is checked on sample
 /// lines first. Either mode (reads the source files).
 /// </summary>
 public static class OmniscienceLintTests
