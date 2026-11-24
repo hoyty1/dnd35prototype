@@ -680,7 +680,12 @@ public partial class GameManager
         // The AI may smite with the charge's attack (or a pounce's first attack), as a PC may declare its smite before
         // charging (SmiteRules, CHR-020). A bull rush on a charge makes no attack, so it declares nothing.
         if (!req.FromUi)
+        {
             TryNPCDeclareSmite(charger, target);
+            // A cleric's feat of strength (free, PHB p.188) and Destruction smite (PHB p.186) ride on the charge's attack the
+            // same way (batch 14 step 14, C14).
+            TryNPCDomainPowerForAI(charger, DND35.AI.DomainPowerSite.ChargeAttack, target);
+        }
         o.SmiteDeclared = charger.Stats.DeclaredSmite != SmiteSource.None;
 
         // A pounce rides on the charge: MM p.313 lets the creature follow any charge with a full attack, and a partial

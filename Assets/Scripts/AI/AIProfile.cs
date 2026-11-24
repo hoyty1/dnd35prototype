@@ -449,6 +449,38 @@ namespace DND35.AI
             return ProneStartChoice.StayProne;
         }
 
+        /// <summary>
+        /// AI choice, not a rule (batch 14 step 14, batch 13's C5 leftover, D7, design choices C8 and C14; game direction the
+        /// owner may overrule): which activated domain power an AI-run cleric <paramref name="self"/> uses at
+        /// <see cref="DomainPowerContext.Site"/>, if any: the Strength domain's feat of strength (PHB p.188), the Destruction
+        /// domain's smite or the Death domain's touch (PHB p.186). The rules are the PC button's (DomainPowerActionExecutor).
+        /// GameManager.TryNPCDomainPowerForAI asks again after a feat of strength, so the touch or the attack that follows
+        /// gets its bonus. <see cref="DefaultChooseDomainPower"/>. No trait tilts it: each power is weighed against the attack
+        /// it rides on or replaces, and both are Attack-role actions, so RoleDesire(Attack) would scale both sides alike.
+        /// </summary>
+        public virtual DomainPowerChoice ChooseDomainPower(CharacterController self, in DomainPowerContext ctx)
+            => DefaultChooseDomainPower(ctx);
+
+        /// <summary>
+        /// The default (the plan's "Leftover hooks", C14), also used for creatures without a profile, in this order:
+        /// - Strength when the creature makes melee attacks this turn (a free action that lasts the round);
+        /// - Death when its value, P(touch) x P(sum of level d6 >= current hit points) x those hit points, beats S, the
+        ///   attack it replaces;
+        /// - Destruction on the first melee swing when its gain, HitChance(mod + 4) x (D + level) - HitChance(mod) x D,
+        ///   beats 0;
+        /// - otherwise none.
+        /// </summary>
+        public static DomainPowerChoice DefaultChooseDomainPower(in DomainPowerContext ctx)
+        {
+            if (ctx.StrengthOpen && ctx.WillMakeMeleeAttacks)
+                return DomainPowerChoice.Strength;
+            if (ctx.DeathOpen && ctx.DeathTouchValue > ctx.AttackValue)
+                return DomainPowerChoice.Death;
+            if (ctx.DestructionOpen && ctx.SmiteGain > 0f)
+                return DomainPowerChoice.Destruction;
+            return DomainPowerChoice.None;
+        }
+
         /// <summary>True for the Roles that keep their distance after a standard action (C8): a Ranged Role or a casting one.</summary>
         public static bool KeepsDistanceRole(in AfterStandardActionContext ctx)
             => ctx.Style == CombatStyle.Ranged || ctx.CastingRole;

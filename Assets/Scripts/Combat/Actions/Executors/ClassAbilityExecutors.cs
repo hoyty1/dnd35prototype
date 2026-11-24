@@ -133,9 +133,12 @@ public sealed class RageActionExecutor : IActionExecutor
 /// turn-undead core with every affected undead destroyed; a <see cref="TurnUndeadRequest"/> as for turn undead), Travel,
 /// Luck (arms the reroll), Plant and the elemental domains (their turning, a standard action). CanStart: some power is
 /// left (GameManager.GetAvailableDomainPowers); CanExecute adds the domain's own use (CanActivateDomainPower), the
-/// standard action where the power takes one, and the Death touch's target (living, within natural reach: a melee touch
-/// attack, AttackLegality.IsInReachOrRange). The PC's button and the AI (RunAIAction; the
-/// AI's own choice is batch 14's) run it alike.
+/// standard action where the power takes one, and the Death touch's target (a living creature, PHB p.186,
+/// GameManager.DeathTouchTargetValid, past every direct-attack gate of a melee touch attack: AttackLegality.Check with
+/// AttackLegalityChecks.All). The core ends the cleric's invisibility and wards and rolls the target's ward save as every
+/// attack does (GameManager.ActivateDeathTouch). The PC's button and the AI (RunAIAction) run it alike; the AI
+/// chooses Strength, Destruction and Death (AIProfile.ChooseDomainPower through GameManager.TryNPCDomainPowerForAI, batch
+/// 14 step 14, C14); the other powers, Sun's greater turning included, only the PC's button and menus take.
 /// </summary>
 public sealed class DomainPowerActionExecutor : IActionExecutor
 {
@@ -194,9 +197,15 @@ public sealed class DomainPowerActionExecutor : IActionExecutor
             Legality live = ExecutorUtil.LiveTarget(ctx.Target);
             if (!live.Ok)
                 return live;
-            // The death touch is a melee touch attack (PHB p.187): the target must be within natural reach.
-            if (!AttackLegality.IsInReachOrRange(ctx.Actor, ctx.Target, DirectAttackKind.Touch, null, out string reachReason))
-                return Legality.Refused(LegalityBar.Target, reachReason);
+            // The death touch is a melee touch attack on a living creature (PHB p.186): an undead or a construct is no
+            // target (GameManager.DeathTouchTargetValid), and the direct attack's gates apply as for every attack (the
+            // resilient sphere, the charm link, the Improved Grab hold bar, natural reach, a ward save already failed;
+            // AttackLegality, batch 14 step 14 review), for the PC's button and the AI alike.
+            if (!GameManager.DeathTouchTargetValid(ctx.Target, out string invalid))
+                return Legality.Refused(LegalityBar.Target, invalid);
+            Legality gate = AttackLegality.Check(ctx.Actor, ctx.Target, DirectAttackKind.Touch, null, AttackLegalityChecks.All);
+            if (!gate.Ok)
+                return gate.Bar == LegalityBar.Other ? Legality.Refused(LegalityBar.Target, gate.Reason) : gate;
         }
         return Legality.Allowed();
     }

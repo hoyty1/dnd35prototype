@@ -72,6 +72,16 @@ namespace Tests.Scenarios
     /// the move after its cast; rules/ai-prone-melee-stands, a prone melee goblin stands as before;
     /// rules/ai-prone-healer-stands-to-cure, a prone Healer whose cure needs a step stands and cures. The expectations read the
     /// "MeleeTurnOption" and "ProneStart" rows of the decision trace besides the hashed aid, attacks, casts and conditions.</para>
+    /// <para>Step 14 (domain powers; batch 13's C5 leftover, D7, C14): the DMG sample cleric given domains by Tweak, its slots
+    /// spent so it fights in melee. rules/ai-cleric-strength-before-full-attack, a Strength cleric beside the fighter performs
+    /// its feat of strength before its melee attack and attacks with it (the "-charge" twin uses it before its charge's
+    /// attack, the "-far" twin, nobody in reach this turn, keeps it);
+    /// rules/ai-cleric-death-touch-low-hp-foe, a Death cleric touches the fighter at 10 hit points instead of attacking (the
+    /// "-healthy-foe-attacks" twin attacks a sturdy fighter, the "-ends-invisibility" twin, an invisible cleric under
+    /// Sanctuary, becomes visible and loses its Sanctuary by the touch, the "-sanctuary-save" twin loses the touch and its
+    /// standard action, not the day's use, to the fighter's Sanctuary); rules/ai-cleric-destruction-smite-first-swing, a Destruction
+    /// cleric smites with its first swing, once. The expectations read the "DomainPower" rows of the decision trace besides
+    /// the hashed log lines and attacks.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -132,6 +142,14 @@ namespace Tests.Scenarios
             yield return S("ai-prone-caster-stays-prone-archer-close", () => AiProneCasterStaysProne(12));
             yield return S("ai-prone-melee-stands", AiProneMeleeStands);
             yield return S("ai-prone-healer-stands-to-cure", AiProneHealerStandsToCure);
+            yield return S("ai-cleric-strength-before-full-attack", () => AiClericStrengthBeforeFullAttack(StrengthTwin.Adjacent));
+            yield return S("ai-cleric-strength-before-full-attack-charge", () => AiClericStrengthBeforeFullAttack(StrengthTwin.Charge));
+            yield return S("ai-cleric-strength-before-full-attack-far", () => AiClericStrengthBeforeFullAttack(StrengthTwin.Far));
+            yield return S("ai-cleric-death-touch-low-hp-foe", () => AiClericDeathTouch(lowHp: true));
+            yield return S("ai-cleric-death-touch-healthy-foe-attacks", () => AiClericDeathTouch(lowHp: false));
+            yield return S("ai-cleric-death-touch-ends-invisibility", () => AiClericDeathTouchAttackRules(sanctuaryOnFoe: false));
+            yield return S("ai-cleric-death-touch-sanctuary-save", () => AiClericDeathTouchAttackRules(sanctuaryOnFoe: true));
+            yield return S("ai-cleric-destruction-smite-first-swing", AiClericDestructionSmiteFirstSwing);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -2069,6 +2087,329 @@ namespace Tests.Scenarios
         }
 
         private static bool HasCond(JsonObj snap, string cond) => snap != null && snap.Get("conds") is List<string> l && l.Contains(cond);
+
+        // ── Batch 14 step 14: domain powers (batch 13's C5 leftover; D7, C14) ──
+
+        /// <summary>One "DomainPower" decision-trace row (AIService.ChooseDomainPowerForAI) chose <paramref name="chosen"/>, its reason holding <paramref name="reasonPart"/> when given.</summary>
+        private static Func<TraceView, ExpectResult> DomainPowerRow(string chosen, string reasonPart = null)
+            => v =>
+            {
+                List<global::AiDecisionTrace.Decision> rows = TraceRows("DomainPower");
+                global::AiDecisionTrace.Decision hit = rows.FirstOrDefault(d => d.Chosen == chosen && (reasonPart == null || (d.Reason ?? "").Contains(reasonPart)));
+                return hit != null
+                    ? ExpectResult.Pass(rows.Count + " DomainPower row(s), one " + chosen + " [" + hit.Reason + "]")
+                    : rows.Count > 0
+                        ? ExpectResult.Fail("chose " + string.Join(", ", rows.Select(r => r.Chosen + " [" + r.Reason + "]")))
+                        : MissingRow("DomainPower", 0, "chose " + chosen);
+            };
+
+        /// <summary>The "b14s14 " notes of the trace.</summary>
+        private static List<string> DomainNotes(TraceView v)
+            => v.Of("note").Select(e => e.Str("text") ?? "").Where(t => t.StartsWith("b14s14 ", StringComparison.Ordinal)).ToList();
+
+        /// <summary>
+        /// The domain-power layout: the DMG p.114 sample cleric (human_cleric, cleric 5, Humanoid Role on the defensive melee
+        /// routine, heavy mace) with <paramref name="domains"/> in place of Healing and Protection and every spell slot spent,
+        /// so it fights in melee instead of casting first; a fighter 3 that only idles (or, Scripted, only notes) at (<paramref name="heroX"/>, 10). The cleric acts
+        /// first. A creature given domains by Tweak (C14: no shipped NPC has an activated domain power).
+        /// </summary>
+        private static ScenarioBuilder DomainLayout(string id, string title, int heroX, int rounds, Control heroControl, params string[] domains)
+        {
+            return Rules(id, title)
+                .Covers("batch 13 C5", "D7", "C14", "batch 14 step 14", "PC_NPC_PARITY")
+                .MaxRounds(rounds)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), heroX, 10, heroControl)
+                .Tweak("cleric", c =>
+                {
+                    Sturdy(c);
+                    OnlySlots(c);
+                    c.Stats.ChosenDomains = new List<string>(domains);
+                })
+                .Initiative("cleric", "hero");
+        }
+
+        /// <summary>Which twin of the feat-of-strength scenario: the fighter beside the cleric, 7 squares off (a charge), or out of its reach.</summary>
+        private enum StrengthTwin { Adjacent, Charge, Far }
+
+        /// <summary>
+        /// D7 (PHB p.188; batch 14 step 14, C14): a Strength-domain cleric 5 beside the idle fighter will make melee attacks
+        /// this turn, so it performs its feat of strength where its melee attack is certain, before the attack (a free action:
+        /// +5 enhancement to Strength, 12 to 17, for 1 round; the turn start asks only a grappling cleric, batch 14 step 14
+        /// review) and then makes its attack with the bonus. The fighter's turn notes the day's use and the cleric's
+        /// Strength modifier (+3). The "-charge" twin puts the fighter 8 squares off: the cleric threatens nobody at its turn
+        /// start, then charges (PHB p.154), and the feat of strength rides on the charge's attack (the ChargeAttack site). The
+        /// "-far" twin slows the cleric to 5 ft: it can reach nobody this turn, makes no melee attack and keeps the power.
+        /// </summary>
+        private static ScenarioDef AiClericStrengthBeforeFullAttack(StrengthTwin twin)
+        {
+            bool adjacent = twin == StrengthTwin.Adjacent;
+            string id = "rules/ai-cleric-strength-before-full-attack" + (twin == StrengthTwin.Charge ? "-charge" : twin == StrengthTwin.Far ? "-far" : "");
+            string title = twin == StrengthTwin.Far
+                ? "An AI Strength cleric that makes no melee attack this turn keeps its feat of strength (PHB p.188, D7)"
+                : twin == StrengthTwin.Charge
+                    ? "An AI Strength cleric performs its feat of strength before its charge's attack (PHB p.188, p.154, D7)"
+                    : "An AI Strength cleric performs its feat of strength before it attacks in melee (PHB p.188, D7)";
+            ScenarioBuilder b = DomainLayout(id, title, adjacent ? 11 : 18, 1, Control.Scripted, "Strength", "Good")
+                .Tweak("hero", Sturdy)
+                .Turn("hero", 1, Step.Assert("the cleric's feat of strength at the fighter's turn", ctx =>
+                {
+                    CharacterStats st = ctx.Get("cleric").Stats;
+                    ctx.Note("b14s14 str.uses=" + st.StrengthDomainUsesToday);
+                    ctx.Note("b14s14 str.mod=" + st.STRMod);
+                    return true;
+                }), Step.Pass());
+            if (twin == StrengthTwin.Far)
+                return b
+                    .Tweak("cleric", c =>
+                    {
+                        Sturdy(c);
+                        OnlySlots(c);
+                        c.Stats.ChosenDomains = new List<string> { "Strength", "Good" };
+                        c.Stats.BaseSpeed = 1;
+                    })
+                    .Expect("No feat of strength in round 1", v => v.Log("activates Feat of Strength").Count == 0
+                        ? ExpectResult.Pass("kept") : ExpectResult.Fail("used"))
+                    .Expect("The day's use is kept and Strength is 12 (+1)", v =>
+                    {
+                        List<string> notes = DomainNotes(v);
+                        return notes.Contains("b14s14 str.uses=0") && notes.Contains("b14s14 str.mod=1")
+                            ? ExpectResult.Pass(string.Join("; ", notes)) : ExpectResult.Fail(string.Join("; ", notes));
+                    })
+                    .Expect("The cleric makes no attack in round 1", v =>
+                    {
+                        List<TraceEvent> attacks = FirstRoundAttacks(v, "cleric");
+                        return attacks.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(attacks.Count + " attack(s)", attacks[0].Seq);
+                    })
+                    .Build();
+            if (!adjacent)
+                b = b.Expect("The cleric charges the fighter", v => v.Log("charges Hero").Count == 1 ? ExpectResult.Pass("charged") : ExpectResult.Fail("no charge"))
+                    .Expect("The decision trace records Strength at the charge's attack", DomainPowerRow("Strength", "site=ChargeAttack"));
+            else
+                b = b.Expect("The decision trace records Strength where the melee attack is certain (the melee attack or the first swing, not the turn start)", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("DomainPower").Where(d => d.Chosen == "Strength").ToList();
+                    if (rows.Count != 1)
+                        return ExpectResult.Fail(rows.Count + " Strength row(s)");
+                    string reason = rows[0].Reason ?? "";
+                    return reason.Contains("site=MeleeAttack") || reason.Contains("site=Smite")
+                        ? ExpectResult.Pass(reason) : ExpectResult.Fail(reason);
+                });
+            return b
+                .Expect("Round 1: the feat of strength comes before the cleric's first attack", v =>
+                {
+                    List<TraceEvent> feat = v.Log("activates Feat of Strength");
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "cleric");
+                    if (feat.Count != 1)
+                        return ExpectResult.Fail(feat.Count + " feat of strength line(s)");
+                    if (attacks.Count == 0)
+                        return ExpectResult.Fail("no attack");
+                    return v.Before(feat[0].Seq, attacks[0].Seq) ? ExpectResult.Pass("feat then attack") : ExpectResult.Fail("attack first", attacks[0].Seq);
+                })
+                .Expect("One use spent; Strength 17 (+3) through the fighter's turn", v =>
+                {
+                    List<string> notes = DomainNotes(v);
+                    return notes.Contains("b14s14 str.uses=1") && notes.Contains("b14s14 str.mod=3")
+                        ? ExpectResult.Pass(string.Join("; ", notes)) : ExpectResult.Fail(string.Join("; ", notes));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// D7 (PHB p.186; batch 14 step 14, C14): a Death-domain cleric 5 beside the idle fighter at 10 hit points. Its touch
+        /// (+4 against touch AC 11, 0.7) slays when 5d6 reach 10 (0.98), worth about 6.9 hit points against its mace's 2 or
+        /// so, so the touch replaces the attack: one Death Touch line, no weapon attack, and on a hit the fighter is slain (or
+        /// the 5d6 fall short), on a miss nothing happens. The "-healthy-foe-attacks" twin makes the fighter sturdy (over 300
+        /// hit points): the touch is worth next to nothing and the cleric attacks with its mace instead.
+        /// </summary>
+        private static ScenarioDef AiClericDeathTouch(bool lowHp)
+        {
+            string id = lowHp ? "rules/ai-cleric-death-touch-low-hp-foe" : "rules/ai-cleric-death-touch-healthy-foe-attacks";
+            ScenarioBuilder b = DomainLayout(id, lowHp
+                    ? "An AI Death cleric touches a foe its death touch can slay instead of attacking (PHB p.186, D7)"
+                    : "An AI Death cleric attacks a healthy foe instead of wasting its death touch (PHB p.186, D7)",
+                    11, 1, Control.Idle, "Death", "Evil");
+            b = lowHp ? b.Hp("hero", 10) : b.Tweak("hero", Sturdy);
+            if (!lowHp)
+                return b
+                    .Expect("The decision trace records None with the touch open", DomainPowerRow("None", "death=True"))
+                    .Expect("No death touch", v => v.Log("with Death Touch").Count == 0 ? ExpectResult.Pass("none") : ExpectResult.Fail("touched"))
+                    .Expect("The cleric attacks the fighter in round 1", v =>
+                        FirstRoundAttacks(v, "cleric").Count >= 1 ? ExpectResult.Pass("attacked") : ExpectResult.Fail("no attack"))
+                    .Build();
+            return b
+                .Expect("The decision trace records Death at the melee attack", DomainPowerRow("Death", "site=MeleeAttack"))
+                .Expect("Round 1: one death touch on the fighter", v =>
+                    v.Log("reaches out with Death Touch against Hero").Count(e => e.Round == 1) == 1
+                        ? ExpectResult.Pass("touched") : ExpectResult.Fail(v.Log("Death Touch").Count + " death touch line(s)"))
+                .Expect("The cleric makes no weapon attack in round 1 (the touch took the standard action)", v =>
+                {
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "cleric");
+                    return attacks.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(attacks.Count + " attack(s)", attacks[0].Seq);
+                })
+                .Expect("A hit slays the fighter unless the dice fall short; a miss does nothing", v =>
+                {
+                    bool missed = v.Log("Melee Touch: .* MISS").Count == 1;
+                    bool slain = v.Log("Hero is slain!").Count == 1;
+                    bool shortFall = v.Log("Death Touch fails").Count == 1;
+                    return missed || slain || shortFall
+                        ? ExpectResult.Pass(missed ? "missed" : slain ? "slain" : "the dice fell short")
+                        : ExpectResult.Fail("no touch outcome line");
+                })
+                .Build();
+        }
+
+        /// <summary>Sanctuary on <paramref name="c"/> (DC <paramref name="dc"/>) with the effect and fields ApplySpellBuff sets (as AttackLegalityScenarios' fixture).</summary>
+        private static bool SanctuaryOn(CharacterController c, int dc)
+        {
+            StatusEffectManager sem = c.StatusEffectManager;
+            if (sem == null)
+            {
+                sem = c.gameObject.AddComponent<StatusEffectManager>();
+                sem.Init(c.Stats);
+            }
+            ActiveSpellEffect effect = sem.AddEffect(SpellDatabase.GetSpell(SpellNames.SANCTUARY).Clone(), c.Stats.CharacterName, 5);
+            if (effect == null)
+                return false;
+            c.Stats.SanctuaryActive = true;
+            c.Stats.SanctuaryDC = dc;
+            c.Stats.SanctuaryCasterLevel = 5;
+            c.Stats.ActiveSanctuaryEffect = effect;
+            return true;
+        }
+
+        /// <summary>Makes <paramref name="c"/> invisible with the tracked effect a cast would add (as PerceptionScenarios' fixture).</summary>
+        private static bool InvisibleOn(CharacterController c)
+        {
+            ActiveSpellEffect effect = c.StatusEffectManager != null
+                ? c.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.INVISIBILITY).Clone(), c.Stats.CharacterName, 10)
+                : null;
+            if (effect != null)
+                c.ApplyInvisibilityEffect(effect.RemainingRounds, c, isMoving: false);
+            return c.HasActiveInvisibilityEffect;
+        }
+
+        /// <summary>
+        /// The death touch is a melee touch attack (PHB p.186) and runs the stages every attack runs (batch 14 step 14
+        /// review): the fighter (10 hit points) acts first and, in its Scripted turn, sets the fixture. The
+        /// "-ends-invisibility" twin makes the cleric invisible and puts Sanctuary on it: its touch ends both (PHB p.245,
+        /// p.274), logged before the touch's roll. The "-sanctuary-save" twin puts Sanctuary (DC 15) on the fighter with every
+        /// Sanctuary save d20 forced to 2: the cleric's one Will save fails, so the touch is lost with its standard action, no
+        /// touch is rolled, no weapon attack follows, and the day's use is kept (D6's delegated reading); in round 2 the cleric
+        /// knows it cannot attack the fighter.
+        /// </summary>
+        private static ScenarioDef AiClericDeathTouchAttackRules(bool sanctuaryOnFoe)
+        {
+            string id = "rules/ai-cleric-death-touch-" + (sanctuaryOnFoe ? "sanctuary-save" : "ends-invisibility");
+            ScenarioBuilder b = DomainLayout(id, sanctuaryOnFoe
+                    ? "An AI Death cleric's touch on a sanctuaried foe rolls the Will save; a failure loses the touch, not the use (PHB p.186, p.274, D6)"
+                    : "An AI Death cleric's touch ends its invisibility and its Sanctuary, as any attack does (PHB p.186, p.245, p.274)",
+                    11, sanctuaryOnFoe ? 2 : 1, Control.Scripted, "Death", "Evil")
+                .Hp("hero", 10)
+                .Initiative("hero", "cleric");
+            if (!sanctuaryOnFoe)
+                return b
+                    .Turn("hero", 1, Step.Assert("the cleric invisible and under Sanctuary", ctx =>
+                    {
+                        CharacterController cleric = ctx.Get("cleric");
+                        ctx.Note("b14s14 fixture=" + (InvisibleOn(cleric) && SanctuaryOn(cleric, 15)));
+                        return true;
+                    }), Step.Pass())
+                    .Expect("The fixture is set", v => DomainNotes(v).Contains("b14s14 fixture=True")
+                        ? ExpectResult.Pass("invisible and warded") : ExpectResult.Fail(string.Join("; ", DomainNotes(v))))
+                    .Expect("The decision trace records Death at the melee attack", DomainPowerRow("Death", "site=MeleeAttack"))
+                    .Expect("Round 1: the touch ends the cleric's invisibility and Sanctuary before its roll", v =>
+                    {
+                        List<TraceEvent> touch = v.Log("Melee Touch: ");
+                        List<TraceEvent> invisible = v.Log("ends \\(attack action against Hero\\)");
+                        List<TraceEvent> sanctuary = v.Log("makes an attack .* Sanctuary ends");
+                        if (touch.Count != 1 || invisible.Count != 1 || sanctuary.Count != 1)
+                            return ExpectResult.Fail(touch.Count + " touch, " + invisible.Count + " invisibility and " + sanctuary.Count + " sanctuary line(s)");
+                        return v.Before(invisible[0].Seq, touch[0].Seq) && v.Before(sanctuary[0].Seq, touch[0].Seq)
+                            ? ExpectResult.Pass("visible and unwarded, then the touch") : ExpectResult.Fail("the touch came first", touch[0].Seq);
+                    })
+                    .Build();
+            return b
+                .Force(20, 2, "save vs Sanctuary", -1)
+                .Turn("hero", 1, Step.Assert("the fighter under Sanctuary", ctx =>
+                {
+                    ctx.Note("b14s14 fixture=" + SanctuaryOn(ctx.Get("hero"), 15));
+                    return true;
+                }), Step.Pass())
+                .Turn("hero", 2, Step.Assert("after the lost touch", ctx =>
+                {
+                    CharacterController cleric = ctx.Get("cleric");
+                    ctx.Note("b14s14 death.uses=" + cleric.Stats.DeathDomainUsesToday);
+                    ctx.Note("b14s14 known-failure=" + WardSaveLedger.HasKnownFailure(cleric, ctx.Get("hero")));
+                    return true;
+                }), Step.Pass())
+                .Expect("The fixture is set", v => DomainNotes(v).Contains("b14s14 fixture=True")
+                    ? ExpectResult.Pass("warded") : ExpectResult.Fail(string.Join("; ", DomainNotes(v))))
+                .Expect("The decision trace records Death at the melee attack", DomainPowerRow("Death", "site=MeleeAttack"))
+                .Expect("One Sanctuary save, failed: the touch is lost", v =>
+                    v.Log("cannot follow through against Hero").Count == 1
+                        ? ExpectResult.Pass("lost") : ExpectResult.Fail(v.Log("Sanctuary").Count + " Sanctuary line(s)"))
+                .Expect("No touch is rolled and no weapon attack follows in round 1", v =>
+                {
+                    int touches = v.Log("Melee Touch: ").Count;
+                    List<TraceEvent> attacks = v.Attacks(by: "cleric", aoo: false, round: 1);
+                    return touches == 0 && attacks.Count == 0
+                        ? ExpectResult.Pass("none") : ExpectResult.Fail(touches + " touch line(s), " + attacks.Count + " attack(s)");
+                })
+                .Expect("The day's use is kept and the cleric knows it cannot attack the fighter (D6)", v =>
+                {
+                    List<string> notes = DomainNotes(v);
+                    return notes.Contains("b14s14 death.uses=0") && notes.Contains("b14s14 known-failure=True")
+                        ? ExpectResult.Pass(string.Join("; ", notes)) : ExpectResult.Fail(string.Join("; ", notes));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// D7 (PHB p.186; batch 14 step 14, C14): a Destruction-domain cleric 5 beside the sturdy idle fighter declares its
+        /// smite before the first swing of round 1 (its gain, +4 and +5 damage on that swing, beats 0), once a day: round 2
+        /// has none. The round 1 attack's modifier is 4 above round 2's, the smite's damage term rides on it, and the fighter's
+        /// turn notes the day's use spent and the smite used up.
+        /// </summary>
+        private static ScenarioDef AiClericDestructionSmiteFirstSwing()
+        {
+            return DomainLayout("rules/ai-cleric-destruction-smite-first-swing",
+                    "An AI Destruction cleric smites with its first melee swing, once a day (PHB p.186, D7)", 11, 2, Control.Scripted, "Destruction", "Evil")
+                .Tweak("hero", Sturdy)
+                .Turn("hero", 1, Step.Assert("the smite at the fighter's turn", ctx =>
+                {
+                    CharacterStats st = ctx.Get("cleric").Stats;
+                    ctx.Note("b14s14 smite.uses=" + st.DestructionDomainUsesToday);
+                    ctx.Note("b14s14 smite.active=" + st.DestructionSmiteActive);
+                    return true;
+                }), Step.Pass())
+                .Expect("The decision trace records Destruction at the smite", DomainPowerRow("Destruction", "site=Smite"))
+                .Expect("One smite, in round 1, before the cleric's first attack", v =>
+                {
+                    List<TraceEvent> smites = v.Log("invokes Destruction Smite");
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "cleric");
+                    if (smites.Count != 1 || smites[0].Round != 1)
+                        return ExpectResult.Fail(smites.Count + " smite line(s)");
+                    return attacks.Count > 0 && v.Before(smites[0].Seq, attacks[0].Seq)
+                        ? ExpectResult.Pass("smite then attack") : ExpectResult.Fail("no attack after the smite");
+                })
+                .Expect("The smiting attack's modifier is 4 above the next round's", v =>
+                {
+                    List<TraceEvent> r1 = FirstRoundAttacks(v, "cleric");
+                    List<TraceEvent> r2 = v.Attacks(by: "cleric", aoo: false, round: 2);
+                    if (r1.Count == 0 || r2.Count == 0)
+                        return ExpectResult.Fail(r1.Count + " round 1 and " + r2.Count + " round 2 attack(s)");
+                    int diff = r1[0].Int("mod") - r2[0].Int("mod");
+                    return diff == 4 ? ExpectResult.Pass("+4") : ExpectResult.Fail("difference " + diff, r1[0].Seq);
+                })
+                .Expect("The day's use is spent and the smite used up by the attack", v =>
+                {
+                    List<string> notes = DomainNotes(v);
+                    return notes.Contains("b14s14 smite.uses=1") && notes.Contains("b14s14 smite.active=False")
+                        ? ExpectResult.Pass(string.Join("; ", notes)) : ExpectResult.Fail(string.Join("; ", notes));
+                })
+                .Build();
+        }
     }
 }
 #endif

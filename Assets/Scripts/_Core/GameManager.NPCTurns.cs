@@ -1166,7 +1166,13 @@ public partial class GameManager
         {
             // A smite rides on the sequence's first melee attack (SmiteRules, CHR-020); declared only with the target in reach.
             if (npc.IsTargetInCurrentWeaponRange(target))
+            {
                 TryNPCDeclareSmite(npc, target);
+                // The Destruction domain's smite (PHB p.186, D7, C14), declared before the first swing as a paladin's is, and
+                // the feat of strength (PHB p.188) if no earlier site used it (AIProfile.ChooseDomainPower at the smite site);
+                // only a cleric with the power left is asked.
+                TryNPCDomainPowerForAI(npc, DND35.AI.DomainPowerSite.Smite, target);
+            }
             TryNPCDeclareFlurryOfBlows(npc, target);
             // A flurry has no off-hand attacks (PHB p.40; CanCommitAttack): a two-weapon intent chosen before the flurry was
             // declared is rebuilt, so no flurry attack takes the two-weapon main-hand penalty.

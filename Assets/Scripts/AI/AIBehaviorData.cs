@@ -250,6 +250,86 @@ namespace DND35.AI
     }
 
     /// <summary>
+    /// Where the AI asks AIProfile.ChooseDomainPower (batch 14 step 14, batch 13's C5 leftover, decision D7, design choice
+    /// C14). Each site opens only the powers that fit it; the domain-power entry (DomainPowerActionExecutor) runs the
+    /// chosen one for an AI-run cleric as for the PC's button.
+    /// </summary>
+    public enum DomainPowerSite
+    {
+        /// <summary>The turn start, after the rage (GameManager.TryNPCRageForAI): the Strength domain's feat of strength, for a grappling creature only (its grapple checks; batch 14 step 14 review).</summary>
+        TurnStart,
+        /// <summary>An AI routine's melee attack action, before its first step (AIService.PerformMeleeAttackActionWithManeuvers): the feat of strength and the Death domain's touch.</summary>
+        MeleeAttack,
+        /// <summary>The smite declaration before a melee sequence, beside the paladin's smite (GameManager.TryNPCDeclareSmite in NPCPerformAttack): the feat of strength (if not used yet) and the Destruction domain's smite.</summary>
+        Smite,
+        /// <summary>The AI's own charge, at its smite declaration before the charge's attack (GameManager's charge core): the feat of strength and the smite (a charge's attack is no place for the touch, a standard action).</summary>
+        ChargeAttack
+    }
+
+    /// <summary>
+    /// The activated domain power an AI-run cleric uses now (batch 14 step 14, D7, C14): only Strength, Destruction and
+    /// Death get an AI choice. Each is once a day (PHB p.186, p.188). An AI choice, not a rule.
+    /// </summary>
+    public enum DomainPowerChoice
+    {
+        /// <summary>No domain power now.</summary>
+        None,
+        /// <summary>Feat of strength (PHB p.188): a free action, an enhancement bonus to Strength equal to the cleric level for 1 round.</summary>
+        Strength,
+        /// <summary>The smite (PHB p.186): declared before one melee attack, +4 on the attack roll and the cleric level on its damage.</summary>
+        Destruction,
+        /// <summary>The death touch (PHB p.186): a melee touch attack (a standard action, as a supernatural ability) on a living creature, which dies when 1d6 per cleric level reaches its current hit points.</summary>
+        Death
+    }
+
+    /// <summary>
+    /// The pure reads AIProfile.ChooseDomainPower decides on (batch 14 step 14, C8, C14), in expected hit points
+    /// (DND35.AI.Valuation.DomainPowerValue). AIService.BuildDomainPowerContext fills it for one site; a test may fill it
+    /// by hand. A power is open only when the cleric has it left, the entry would take it now (its executor's own check)
+    /// and the site fits it.
+    /// </summary>
+    public struct DomainPowerContext
+    {
+        /// <summary>The site that asks.</summary>
+        public DomainPowerSite Site;
+
+        /// <summary>The feat of strength is open (every site).</summary>
+        public bool StrengthOpen;
+        /// <summary>The creature makes melee attacks this turn: at the turn start only a grapple; at the melee attack, the first swing and the charge's attack, a target in its melee reach.</summary>
+        public bool WillMakeMeleeAttacks;
+
+        /// <summary>The smite is open (Smite and ChargeAttack: the first melee swing, the target in the weapon's reach).</summary>
+        public bool DestructionOpen;
+        /// <summary>The smite's gain on that swing: HitChance(mod + 4) x (D + level) - HitChance(mod) x D.</summary>
+        public float SmiteGain;
+
+        /// <summary>The death touch is open (MeleeAttack: the standard action left, no attack made yet, a living foe within natural reach).</summary>
+        public bool DeathOpen;
+        /// <summary>The best death touch: P(touch) x P(sum of level d6 >= its current hit points) x those hit points.</summary>
+        public float DeathTouchValue;
+        /// <summary>The foe of the best death touch.</summary>
+        public CharacterController DeathTarget;
+        /// <summary>S: the attack the touch would replace (the full attack's expected damage when the full-round action is free, else one attack's).</summary>
+        public float AttackValue;
+
+        /// <summary>Some power is open at this site.</summary>
+        public bool AnyOpen => StrengthOpen || DestructionOpen || DeathOpen;
+
+        /// <summary>Whether <paramref name="choice"/> may be chosen (None always).</summary>
+        public bool IsOpen(DomainPowerChoice choice)
+        {
+            switch (choice)
+            {
+                case DomainPowerChoice.None: return true;
+                case DomainPowerChoice.Strength: return StrengthOpen;
+                case DomainPowerChoice.Destruction: return DestructionOpen;
+                case DomainPowerChoice.Death: return DeathOpen;
+                default: return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Grapple posture for the AI profile.
     /// </summary>
     public enum GrappleBehavior

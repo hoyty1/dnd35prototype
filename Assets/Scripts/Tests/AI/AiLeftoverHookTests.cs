@@ -22,8 +22,13 @@ namespace Tests.AI
 /// 13 (AI-063, D3-D5, C8): the melee turn's option (TurnOptionValue's aid offense, aid defense and total defense formulas
 /// and their starter constants; AIProfile.DefaultChooseMeleeTurnOption: the attack unless an open alternative beats it by
 /// max(0.5, 0.15 S), total defense only when a foe can reach; AiBlend.MeleeTurn: Cowardly takes total defense, Berserker
-/// keeps the attack, Healer aids) and the prone start (AIProfile.DefaultChooseProneStart). Pure:
-/// contexts are filled by hand. Either mode.
+/// keeps the attack, Healer aids) and the prone start (AIProfile.DefaultChooseProneStart). Batch 14 step 14 (batch 13's C5
+/// leftover, D7, C14): the domain powers' values (DomainPowerValue: the exact kill chance of level d6, the death touch's
+/// P(touch) x P(kill) x hit points, the smite's gain) and AIProfile.DefaultChooseDomainPower (Strength when it makes melee
+/// attacks, Death when it beats S, Destruction when its gain beats 0), the shipped profiles' hook equal to it; after the
+/// step's review, the death touch's one formula (the shared melee touch modifier, a shaken cleric's -2, the living-target
+/// and death ward helpers), which creates two creatures and runs in the Play pass only. Otherwise pure: contexts are
+/// filled by hand. Either mode.
 /// </summary>
 public static class AiLeftoverHookTests
 {
@@ -45,6 +50,11 @@ public static class AiLeftoverHookTests
         TestMeleeTurnOptionDefault();
         TestMeleeTurnOptionTilt();
         TestProneStartDefault();
+        TestDomainPowerValues();
+        TestDomainPowerDefault();
+        // Creates two creatures: Play only (CharacterController.Init needs Awake, TST-009).
+        if (Application.isPlaying)
+            TestDeathTouchFormulaShaken();
 
         Debug.Log($"====== AI Leftover Hook Results: {_passed} passed, {_failed} failed ======");
     }
@@ -424,6 +434,137 @@ public static class AiLeftoverHookTests
         ExpectProne("a foe could reach it and a safe square is a crawl away", Prone(reachable: true, crawl: true), ProneStartChoice.Crawl);
         ExpectProne("a foe could reach it and no safe square", Prone(reachable: true), ProneStartChoice.StayProne);
         ExpectProne("nobody could reach it: no crawl", Prone(crawl: true), ProneStartChoice.StayProne);
+    }
+
+    private static void TestDomainPowerValues()
+    {
+        Assert(DND35.AI.Valuation.DomainPowerValue.SmiteAttackBonus == 4, "smite: +4 on the attack roll (PHB p.186)");
+        // The kill chance, added up exactly: 1d6 >= 4 is 1/2; 2d6 >= 7 is 21/36; 5d6 >= 18 is 1/2 (the mean is 17.5); 3d6 >= 18 is 1/216.
+        Assert(Near(DND35.AI.Valuation.DomainPowerValue.KillChance(1, 4), 0.5f)
+               && Near(DND35.AI.Valuation.DomainPowerValue.KillChance(2, 7), 21f / 36f)
+               && Near(DND35.AI.Valuation.DomainPowerValue.KillChance(5, 18), 0.5f)
+               && Near(DND35.AI.Valuation.DomainPowerValue.KillChance(3, 18), 1f / 216f),
+            "death touch: P(level d6 >= current hit points), exact",
+            DND35.AI.Valuation.DomainPowerValue.KillChance(5, 18).ToString("0.####"));
+        Assert(Near(DND35.AI.Valuation.DomainPowerValue.KillChance(5, 5), 1f) && Near(DND35.AI.Valuation.DomainPowerValue.KillChance(5, 31), 0f)
+               && Near(DND35.AI.Valuation.DomainPowerValue.KillChance(0, 1), 0f),
+            "death touch: certain at or below the dice count, impossible above six times it or with no dice");
+        // A cleric 5 touching at 75% a foe at 8 hit points: 5d6 < 8 only in 21 of 7776 rolls, so 0.75 x (1 - 21/7776) x 8 = 5.98.
+        float touch = DND35.AI.Valuation.DomainPowerValue.DeathTouch(0.75f, 5, 8);
+        Assert(Near(touch, 0.75f * (1f - 21f / 7776f) * 8f), "death touch value: P(touch) x P(kill) x current hit points", "got " + touch);
+        Assert(Near(DND35.AI.Valuation.DomainPowerValue.DeathTouch(0.75f, 5, 0), 0f) && DND35.AI.Valuation.DomainPowerValue.DeathTouch(0.95f, 5, 60) < 0.01f,
+            "death touch value: nothing on a creature at 0 hit points, next to nothing on a healthy one");
+        // Smite: +4 at AC 17 from +4 (0.6 against 0.4) with a 5.5 hit and cleric 5: 0.6 x 10.5 - 0.4 x 5.5 = 4.1.
+        float smite = DND35.AI.Valuation.DomainPowerValue.SmiteGain(4, 17, 5.5f, 5);
+        Assert(Near(smite, 4.1f), "smite gain: HitChance(mod + 4) x (D + level) - HitChance(mod) x D", "got " + smite);
+        Assert(DND35.AI.Valuation.DomainPowerValue.SmiteGain(0, 40, 5f, 3) > 0f && DND35.AI.Valuation.DomainPowerValue.SmiteGain(30, 10, 5f, 3) > 0f,
+            "smite gain: positive even when only a 20 hits or only a 1 misses (the level's damage)");
+    }
+
+    /// <summary>
+    /// The death touch's one formula (batch 14 step 14 review): GameManager.DeathTouchAttackModifier is the shared melee
+    /// touch modifier (CharacterController.GetManeuverTouchAttackModifierAgainst), so a shaken cleric's touch takes the -2
+    /// (PHB p.311), and the AI's estimate (TargetNumbers) reads the same numbers. Two test creatures, destroyed after.
+    /// </summary>
+    private static void TestDeathTouchFormulaShaken()
+    {
+        var made = new List<CharacterController>();
+        try
+        {
+            CharacterController cleric = Tests.Utilities.TestHelpers.CreateCharacter(name: "ALH Death Cleric", str: 14, dex: 10, bab: 3);
+            made.Add(cleric);
+            CharacterController foe = Tests.Utilities.TestHelpers.CreateCharacter(name: "ALH Touch Foe", str: 12, dex: 14, bab: 2);
+            made.Add(foe);
+            cleric.Stats.BaseAttackBonusOverride = 3;
+            int calm = GameManager.DeathTouchAttackModifier(cleric, foe);
+            Assert(calm == cleric.GetManeuverTouchAttackModifierAgainst(foe)
+                   && calm == DND35.AI.Valuation.TargetNumbers.TouchAttackModifier(cleric, foe, null)
+                   && GameManager.DeathTouchArmorClass(cleric, foe) == foe.GetManeuverTouchArmorClassAgainst(cleric)
+                   && GameManager.DeathTouchArmorClass(cleric, foe) == DND35.AI.Valuation.TargetNumbers.TouchArmorClass(cleric, foe),
+                "death touch: the core's modifier and touch AC are the shared melee touch formula the AI's estimate reads",
+                "mod " + calm + ", touch AC " + GameManager.DeathTouchArmorClass(cleric, foe));
+            cleric.ApplyConditionDirect(CombatConditionType.Shaken, 2, "ALH test");
+            int shaken = GameManager.DeathTouchAttackModifier(cleric, foe);
+            Assert(shaken == calm - 2, "death touch: a shaken cleric's touch takes -2 on the attack roll (PHB p.311)", "calm " + calm + ", shaken " + shaken);
+            Assert(GameManager.DeathTouchTargetValid(foe, out _) && !GameManager.DeathTouchTargetValid(null, out _),
+                "death touch: a living creature is a valid target, no creature is not");
+            foe.Stats.DeathWardActive = true;
+            Assert(GameManager.DeathTouchTargetValid(foe, out _) && GameManager.DeathWardBlocks(foe),
+                "death touch: death ward does not make the target invalid; it stops the death effect after the hit (PHB p.217)");
+            foe.Stats.DeathWardActive = false;
+        }
+        finally
+        {
+            foreach (CharacterController c in made)
+                if (c != null)
+                    Object.DestroyImmediate(c.gameObject);
+        }
+    }
+
+    private static DomainPowerContext Domain(DomainPowerSite site, bool strength = false, bool melee = false, float smite = -1f,
+        float death = -1f, float s = 0f)
+        => new DomainPowerContext
+        {
+            Site = site,
+            StrengthOpen = strength,
+            WillMakeMeleeAttacks = melee,
+            DestructionOpen = smite >= 0f,
+            SmiteGain = Mathf.Max(0f, smite),
+            DeathOpen = death >= 0f,
+            DeathTouchValue = Mathf.Max(0f, death),
+            AttackValue = s
+        };
+
+    private static void ExpectDomain(string name, DomainPowerContext ctx, DomainPowerChoice expected)
+    {
+        DomainPowerChoice got = AIProfile.DefaultChooseDomainPower(ctx);
+        Assert(got == expected, "domain power default: " + name + " -> " + expected, "got " + got);
+    }
+
+    private static void TestDomainPowerDefault()
+    {
+        ExpectDomain("nothing open", Domain(DomainPowerSite.TurnStart), DomainPowerChoice.None);
+        ExpectDomain("feat of strength when it makes melee attacks", Domain(DomainPowerSite.TurnStart, strength: true, melee: true), DomainPowerChoice.Strength);
+        ExpectDomain("no feat of strength on a turn without melee attacks", Domain(DomainPowerSite.TurnStart, strength: true), DomainPowerChoice.None);
+        ExpectDomain("feat of strength before the touch (it adds to the touch's attack)",
+            Domain(DomainPowerSite.MeleeAttack, strength: true, melee: true, death: 6f, s: 2f), DomainPowerChoice.Strength);
+        ExpectDomain("death touch when its value beats S", Domain(DomainPowerSite.MeleeAttack, death: 6f, s: 2.2f), DomainPowerChoice.Death);
+        ExpectDomain("the attack when S is worth more", Domain(DomainPowerSite.MeleeAttack, death: 2f, s: 2.2f), DomainPowerChoice.None);
+        ExpectDomain("the attack at a tie", Domain(DomainPowerSite.MeleeAttack, death: 2.2f, s: 2.2f), DomainPowerChoice.None);
+        ExpectDomain("smite when its gain beats 0", Domain(DomainPowerSite.Smite, smite: 4.1f), DomainPowerChoice.Destruction);
+        ExpectDomain("no smite without a gain", Domain(DomainPowerSite.Smite, smite: 0f), DomainPowerChoice.None);
+        Assert(Domain(DomainPowerSite.Smite, smite: 1f).IsOpen(DomainPowerChoice.Destruction) && !Domain(DomainPowerSite.Smite, smite: 1f).IsOpen(DomainPowerChoice.Death)
+               && Domain(DomainPowerSite.TurnStart).IsOpen(DomainPowerChoice.None) && !Domain(DomainPowerSite.TurnStart).AnyOpen,
+            "domain power context: only the open powers, None always");
+
+        var profiles = new List<AIProfile>();
+        try
+        {
+            profiles.Add(AIProfile.CreateRuntime<HumanoidAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<HealerAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<EvokerAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<DragonAIProfile>());
+            var contexts = new[]
+            {
+                Domain(DomainPowerSite.TurnStart, strength: true, melee: true),
+                Domain(DomainPowerSite.MeleeAttack, death: 6f, s: 2f),
+                Domain(DomainPowerSite.MeleeAttack, death: 1f, s: 2f),
+                Domain(DomainPowerSite.Smite, smite: 3f)
+            };
+            foreach (AIProfile p in profiles)
+            {
+                bool same = true;
+                foreach (DomainPowerContext c in contexts)
+                    same &= p.ChooseDomainPower(null, c) == AIProfile.DefaultChooseDomainPower(c);
+                Assert(same, p.GetType().Name + ".ChooseDomainPower equals the default");
+            }
+        }
+        finally
+        {
+            foreach (AIProfile p in profiles)
+                if (p != null)
+                    Object.DestroyImmediate(p);
+        }
     }
 }
 }

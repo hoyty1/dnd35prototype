@@ -22,6 +22,14 @@ namespace DND35.AI.Valuation
         public static int TouchArmorClass(CharacterController self, CharacterController target)
             => target != null ? target.GetManeuverTouchArmorClassAgainst(self) : 0;
 
+        /// <summary>
+        /// <paramref name="target"/>'s current hit points, read true (0 without a creature): the death touch's value needs
+        /// the number its 1d6 per cleric level must reach (PHB p.186; batch 14 step 14). The knowledge facade has only the
+        /// WoundBand, so batch 17 decides what an observer may know of the exact number (the plan's HpCurrent).
+        /// </summary>
+        public static int CurrentHitPoints(CharacterController target)
+            => target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
+
         /// <summary><paramref name="target"/>'s modifier to resist a trip: the better of Strength and Dexterity, size, stability (PHB p.158).</summary>
         public static int TripResistModifier(CharacterController target)
             => target != null ? target.GetTripOrOverrunDefenderCheckModifier() : 0;

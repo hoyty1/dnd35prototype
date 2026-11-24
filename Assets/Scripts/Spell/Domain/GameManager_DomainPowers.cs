@@ -277,34 +277,54 @@ public partial class GameManager
             return false;
         }
 
-        // Death effect: does not affect undead, constructs, or creatures immune to death effects
-        bool isUndead = SpellTargetingService.IsUndead(target);
-        bool isConstruct = SpellTargetingService.IsConstruct(target);
-        if (isUndead || isConstruct)
+        // The touch is made against a living creature (PHB p.186): an undead or a construct is no target, refused before
+        // anything is spent. A death ward does not make the target invalid; it only stops the death effect (below).
+        if (!DeathTouchTargetValid(target, out string invalid))
         {
-            string creatureType = isUndead ? "Undead" : "Construct";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects)."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Death Touch cannot target {target.Stats.CharacterName} ({invalid})."));
             return false;
         }
 
-        // Consume the ability
-        cleric.Stats.DeathDomainUsesToday++;
+        // A direct attack's gates, as every attack's (AttackLegality, batch 12 step 12): the resilient sphere, the charm
+        // link, the Improved Grab hold bar, natural reach, and a ward save already failed. The executor checks the same
+        // before any cost (DomainPowerActionExecutor.CanExecute); this keeps the core sound for any caller.
+        Legality gate = AttackLegality.Check(cleric, target, DirectAttackKind.Touch, null, AttackLegalityChecks.All);
+        if (!gate.Ok)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch on {target.Stats.CharacterName}: {gate.Reason}."));
+            return false;
+        }
 
-        // Consume standard action
+        // The standard action (a supernatural ability, PHB p.142), spent before the day's use so a creature without one
+        // keeps the use.
         if (!cleric.CommitStandardAction())
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch: standard action unavailable."));
             return false;
         }
 
+        // A melee touch attack is an attack: the cleric's own Sanctuary and Hide from Undead end (PHB p.274, p.241), and the
+        // target's ward rolls its one save now (WardSaveLedger, D6). A failed save loses the attempt and its standard action
+        // but not the day's use, since the touch was never made (the delegated RAW reading of D6, 2026-10-28, for a ranged
+        // special attack and a spell's slot, applied to the touch; batch 14 step 14 review).
+        CombatFlowService.BreakProtectiveWardsOnAttack(cleric);
+        if (AttackLegality.CommitWard(cleric, target, DirectAttackKind.Touch) == WardVerdict.Failed)
+            return true;
+
+        // Consume the ability
+        cleric.Stats.DeathDomainUsesToday++;
+
+        // Invisibility ends when the subject attacks any creature (PHB p.245; greater invisibility does not).
+        cleric.BreakInvisibility("attack action", target);
+
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int numDice = Mathf.Max(1, clericLevel); // 1d6 per cleric level, no cap
 
         // Melee touch attack
         int attackRoll = DiceRoller.D20();
-        int attackMod = CombatCalculationService.MeleeTouchAttackBonus(cleric.Stats) + RacialTraitRules.AttackBonusAgainst(cleric.Stats, target.Stats);
+        int attackMod = DeathTouchAttackModifier(cleric, target);
         int attackTotal = attackRoll + attackMod;
-        int targetTouchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, cleric.Stats); // CHR-019
+        int targetTouchAC = DeathTouchArmorClass(cleric, target);
         bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
 
         var sb = new StringBuilder();
@@ -315,6 +335,15 @@ public partial class GameManager
         {
             CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
             return true; // the touch was made (the use and the action are spent)
+        }
+
+        // Death ward (PHB p.217): immune to magical death effects, and a supernatural ability is magical, so the touch lands
+        // and has no effect (CRE-296 narrowed).
+        if (DeathWardBlocks(target))
+        {
+            sb.AppendLine($"   {target.Stats.CharacterName} is protected by death ward: Death Touch has no effect.");
+            CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+            return true;
         }
 
         // Roll 1d6 per cleric level
@@ -345,6 +374,97 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
         return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="target"/> is a creature the death touch may be made against (PHB p.186: "a living
+    /// creature"): not an undead or a construct (neither is living, and both are immune to death effects, MM p.317,
+    /// p.307). <paramref name="invalid"/> says why not. The touch's target rule, checked before any cost by the core and the
+    /// domain-power entry (DomainPowerActionExecutor.CanExecute), so the PC's button and the AI share it.
+    /// </summary>
+    public static bool DeathTouchTargetValid(CharacterController target, out string invalid)
+    {
+        invalid = null;
+        if (target == null || target.Stats == null)
+        {
+            invalid = "no creature";
+            return false;
+        }
+        bool isUndead = SpellTargetingService.IsUndead(target);
+        if (isUndead || SpellTargetingService.IsConstruct(target))
+        {
+            invalid = (isUndead ? "an undead" : "a construct") + " is not a living creature and is immune to death effects";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Whether death ward (PHB p.217: immune to magical death effects) stops <paramref name="target"/>'s death from the
+    /// touch (CRE-296). Read only after the touch hits: the use and the action are spent, and the touch has no effect.
+    /// </summary>
+    public static bool DeathWardBlocks(CharacterController target)
+        => target != null && target.Stats != null && target.Stats.DeathWardActive;
+
+    /// <summary>
+    /// The death touch's melee touch attack modifier on <paramref name="target"/> (PHB p.186, "using the rules for touch
+    /// spells"): the shared melee touch modifier (BAB, Strength, size and the attacker's condition penalties such as
+    /// shaken's -2, PHB p.311) and the racial bonus against its kind (CHR-019),
+    /// CharacterController.GetManeuverTouchAttackModifierAgainst, the trip's and grapple's touch formula. The one formula
+    /// of the core and of the AI's estimate (TargetNumbers.TouchAttackModifier).
+    /// </summary>
+    public static int DeathTouchAttackModifier(CharacterController cleric, CharacterController target)
+        => cleric != null ? cleric.GetManeuverTouchAttackModifierAgainst(target) : 0;
+
+    /// <summary><paramref name="target"/>'s touch AC against <paramref name="cleric"/>'s death touch (CharacterController.GetManeuverTouchArmorClassAgainst: its full touch AC and its dodge bonus against the cleric's kind, CHR-019).</summary>
+    public static int DeathTouchArmorClass(CharacterController cleric, CharacterController target)
+        => target != null ? target.GetManeuverTouchArmorClassAgainst(cleric) : 0;
+
+    // ==================== AI CHOICE (batch 14 step 14) ====================
+
+    /// <summary>The domains whose activated power the AI chooses (design choice C14): Strength, Destruction and Death.</summary>
+    internal static readonly string[] AiChosenDomains = { "Strength", "Destruction", "Death" };
+
+    /// <summary>Whether <paramref name="npc"/> is a cleric with one of <see cref="AiChosenDomains"/> whose power is left today.</summary>
+    internal bool HasAiDomainPowerLeft(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.Stats.IsCleric || npc.Stats.ChosenDomains == null)
+            return false;
+        for (int i = 0; i < AiChosenDomains.Length; i++)
+            if (npc.Stats.ChosenDomains.Contains(AiChosenDomains[i]) && CanActivateDomainPower(npc, AiChosenDomains[i], out _))
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The AI's domain power at <paramref name="site"/> (batch 14 step 14, batch 13's C5 leftover, D7, C14): the cleric's
+    /// AIProfile.ChooseDomainPower (the default without a profile) on AIService.BuildDomainPowerContext, run through the
+    /// domain-power entry with the domain as the Variant (RunAIActionNow; the executor the PC's button runs). After a feat
+    /// of strength it asks once more, so a touch or a smite at the same site gets the bonus. Returns the power used (Death
+    /// over the others: the touch took the standard action, and the caller makes no attack), or None. A creature that is
+    /// not a cleric with Strength, Destruction or Death left returns at once, so no other creature's turn changes.
+    /// </summary>
+    public DND35.AI.DomainPowerChoice TryNPCDomainPowerForAI(CharacterController npc, DND35.AI.DomainPowerSite site, CharacterController target = null)
+    {
+        if (_aiService == null || CurrentPhase == TurnPhase.CombatOver || !HasAiDomainPowerLeft(npc))
+            return DND35.AI.DomainPowerChoice.None;
+        DND35.AI.DomainPowerChoice used = DND35.AI.DomainPowerChoice.None;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            DND35.AI.DomainPowerChoice choice = _aiService.ChooseDomainPowerForAI(npc, site, target, out ActionContext action);
+            if (choice == DND35.AI.DomainPowerChoice.None || action == null)
+                break;
+            ActionOutcome outcome = RunAIActionNow(action);
+            if (!outcome.Performed)
+            {
+                Debug.Log($"[AI][DomainPower] {npc.Stats.CharacterName}: {choice} refused ({outcome.Refusal.Reason})");
+                break;
+            }
+            used = choice;
+            if (choice != DND35.AI.DomainPowerChoice.Strength || CurrentPhase == TurnPhase.CombatOver || !npc.CanTakeTurnActions())
+                break;
+        }
+        return used;
     }
 
     /// <summary>

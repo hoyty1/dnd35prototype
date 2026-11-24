@@ -37,10 +37,10 @@ Entries per section:
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 227 | 65 | 292 | CRE-311 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 18 | 17 | 35 | ENC-037 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 175 | 195 | 370 | ITM-449 |
-| [AI](issues/AI.md) | AI | 0 | 14 | 39 | 53 | AI-089 |
+| [AI](issues/AI.md) | AI | 0 | 14 | 41 | 55 | AI-091 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 809 | 715 | 1525 | |
+| **All** | | 1 | 809 | 717 | 1527 | |
 
 ## Top issues
 
@@ -49,3 +49,4 @@ The most impactful entries, mainly High, plus any regression from the latest bat
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
 | [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |
+| [AI-089](issues/AI.md) | Low | AI | Batch 14 regression: `TurnOptionValue.cs` (step 13) reads foes past the knowledge facade, so `OmniscienceLintTests` fails (the runner reports REGRESSION until fixed; fix before batch 14's final regression) | No |

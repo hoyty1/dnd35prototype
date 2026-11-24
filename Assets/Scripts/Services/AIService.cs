@@ -382,6 +382,13 @@ public class AIService : MonoBehaviour
         // PC's Rage button runs; the turn goes on.
         _gameManager.TryNPCRageForAI(npc);
 
+        // The Strength domain's feat of strength (PHB p.188, D7, C14): a free action that lasts the round. At the turn start
+        // only for a grappling cleric, whose grapple checks use Strength (PHB p.156); every other turn decides it where the
+        // melee attack is certain (the melee attack action, the first swing, the charge's attack; batch 14 step 14 review),
+        // so a turn that then aids, defends, cures or retreats does not waste the day's use. Only a cleric with Strength,
+        // Destruction or Death left gets this far into it.
+        _gameManager.TryNPCDomainPowerForAI(npc, DomainPowerSite.TurnStart);
+
         // An Improved Grab hold with one body part (MM p.310; CMB-148, CMB-149): the AI keeps holding while another foe is
         // within reach to fight; otherwise it lets go (a free action on its turn, delegated RAW reading 2026-10-14, CMB-163)
         // and acts normally. When to let go is an AI design item (AI-064).
@@ -1373,6 +1380,163 @@ public class AIService : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         if (!KeepsRoutineAfterAbility(npc))
             yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+    }
+
+    // ── Domain powers (batch 14 step 14, batch 13's C5 leftover; decision D7, design choices C8 and C14) ──
+
+    /// <summary>
+    /// Whether the domain-power entry would take <paramref name="domain"/> for <paramref name="npc"/> now (on
+    /// <paramref name="target"/> for the touch): the turn's compulsion filter (AiLegal.CanUse) and the executor's own check
+    /// (DomainPowerActionExecutor.CanExecute: the day's use, the standard action of the touch, a living target in natural
+    /// reach). Pure.
+    /// </summary>
+    private bool DomainPowerLegal(CharacterController npc, string domain, CharacterController target = null)
+    {
+        if (npc.Stats.ChosenDomains == null || !npc.Stats.ChosenDomains.Contains(domain) || !AiLegal.CanUse(npc, ActionIds.DomainPower, _gameManager))
+            return false;
+        ActionDefinition def = ActionCatalog.Get(ActionIds.DomainPower);
+        if (def == null || def.Executor == null)
+            return false;
+        ActionContext probe = ActionContext.For(ActionIds.DomainPower, npc, ActorSource.AI, target);
+        probe.Variant = domain;
+        return def.Executor.CanExecute(probe).Ok;
+    }
+
+    /// <summary>
+    /// The turn-start reading of "it will make melee attacks this turn" (C14, Strength): only a grappling creature, whose
+    /// grapple checks use Strength (PHB p.156) and which has no melee attack site of its own. Every other turn decides the
+    /// feat of strength where its melee attack is certain (DomainPowerSite.MeleeAttack, Smite, ChargeAttack; batch 14 step
+    /// 14 review), so a turn that aids another, defends, cures, retreats or casts first does not spend the day's use.
+    /// </summary>
+    private static bool WillMakeMeleeAttacksFromTurnStart(CharacterController npc)
+        => npc != null && npc.IsGrappling();
+
+    /// <summary>
+    /// The pure reads of AIProfile.ChooseDomainPower for <paramref name="npc"/> at <paramref name="site"/> (batch 14 step
+    /// 14, C8, C14; the values of DND35.AI.Valuation.DomainPowerValue), <paramref name="target"/> the routine's attack target:
+    /// <list type="bullet">
+    /// <item>TurnStart: the feat of strength, for a grappling creature only (WillMakeMeleeAttacksFromTurnStart);</item>
+    /// <item>MeleeAttack: the feat of strength (it is about to attack in melee), and the death touch on the foe with the
+    /// best value among those the domain-power entry would take (DomainPowerLegal: the executor's own check, a living
+    /// creature past every direct-attack gate, the same for the PC's button), with S the attack it would replace, only
+    /// while the standard action is left and no attack has been made. P(touch) is the core's formula (TargetNumbers'
+    /// touch modifier and touch AC, the [KnowledgeLegacy] choke point) and the foe's current hit points are read true
+    /// (TargetNumbers.CurrentHitPoints, until batch 17 hides them); an unrolled ward save and a death ward are not
+    /// known, so such a foe is touched and the core rolls the save or finds the ward;</item>
+    /// <item>Smite: the feat of strength and the smite, on the sequence's first swing with the target in the weapon's
+    /// reach, the smite's gain from the swing's modifier (the shared attack terms), the known AC and the weapon's average
+    /// hit;</item>
+    /// <item>ChargeAttack (the AI's own charge, at its smite declaration): the feat of strength and the smite, as above.</item>
+    /// </list>
+    /// No dice, nothing changed; ChooseDomainPowerForAI times it.
+    /// </summary>
+    internal DomainPowerContext BuildDomainPowerContext(CharacterController npc, DomainPowerSite site, CharacterController target)
+    {
+        var ctx = new DomainPowerContext { Site = site };
+        if (npc == null || npc.Stats == null || npc.Actions == null || npc.Stats.ChosenDomains == null || _gameManager == null)
+            return ctx;
+        bool targetInReach = target != null && target.Stats != null && !target.Stats.IsDead
+                             && !npc.IsEquippedWeaponRanged() && npc.IsTargetInCurrentWeaponRange(target);
+        int clericLevel = Mathf.Max(1, npc.Stats.GetClassLevel("Cleric"));
+
+        switch (site)
+        {
+            case DomainPowerSite.TurnStart:
+                ctx.StrengthOpen = DomainPowerLegal(npc, "Strength");
+                ctx.WillMakeMeleeAttacks = ctx.StrengthOpen && WillMakeMeleeAttacksFromTurnStart(npc);
+                break;
+
+            case DomainPowerSite.MeleeAttack:
+            {
+                ctx.StrengthOpen = DomainPowerLegal(npc, "Strength");
+                ctx.WillMakeMeleeAttacks = targetInReach;
+                if (!targetInReach || !npc.Actions.HasStandardAction || npc.ProgressiveAttackPool.HasStartedAttacking
+                    || !npc.Stats.ChosenDomains.Contains("Death"))
+                    break;
+                int targetAC = KnownAC(npc, target);
+                ctx.AttackValue = npc.Actions.HasFullRoundAction
+                    ? DND35.AI.Valuation.AttackValue.ExpectedRoundDamage(npc, targetAC)
+                    : DND35.AI.Valuation.TurnOptionValue.SingleAttackDamage(npc, targetAC);
+                List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+                for (int i = 0; i < all.Count; i++)
+                {
+                    CharacterController foe = all[i];
+                    if (foe == null || foe == npc || foe.Stats == null || foe.Stats.IsDead || foe.Stats.CurrentHP <= 0 || !_gameManager.IsEnemyTeamForAI(npc, foe))
+                        continue;
+                    if (!DomainPowerLegal(npc, "Death", foe))
+                        continue;
+                    float touch = DND35.AI.Valuation.AttackValue.HitChance(
+                        DND35.AI.Valuation.TargetNumbers.TouchAttackModifier(npc, foe, null),
+                        DND35.AI.Valuation.TargetNumbers.TouchArmorClass(npc, foe));
+                    float value = DND35.AI.Valuation.DomainPowerValue.DeathTouch(touch, clericLevel,
+                        DND35.AI.Valuation.TargetNumbers.CurrentHitPoints(foe));
+                    if (ctx.DeathTarget == null || value > ctx.DeathTouchValue)
+                    {
+                        ctx.DeathOpen = true;
+                        ctx.DeathTouchValue = value;
+                        ctx.DeathTarget = foe;
+                    }
+                }
+                break;
+            }
+
+            case DomainPowerSite.Smite:
+            case DomainPowerSite.ChargeAttack:
+            {
+                ctx.StrengthOpen = DomainPowerLegal(npc, "Strength");
+                ctx.WillMakeMeleeAttacks = targetInReach;
+                if (!targetInReach || npc.ProgressiveAttackPool.HasStartedAttacking || npc.Stats.DestructionSmiteActive
+                    || !DomainPowerLegal(npc, "Destruction"))
+                    break;
+                ctx.DestructionOpen = true;
+                ctx.SmiteGain = DND35.AI.Valuation.DomainPowerValue.SmiteGain(EstimatedMeleeModifier(npc, target), KnownAC(npc, target),
+                    DND35.AI.Valuation.AttackValue.AverageMeleeDamage(npc), clericLevel);
+                break;
+            }
+        }
+        return ctx;
+    }
+
+    /// <summary>
+    /// The domain power for <paramref name="npc"/> at <paramref name="site"/> (batch 14 step 14, D7, C14): the Role's
+    /// AIProfile.ChooseDomainPower (the default without a profile) on <see cref="BuildDomainPowerContext"/>; no trait tilt
+    /// (see the hook). For a power, <paramref name="action"/> is the domain-power entry with the domain as its Variant (and
+    /// the touch's target). One trace row "DomainPower" when a power is open (legacy None: before the step no AI used one).
+    /// The context and the choice are timed in the Action bucket (owner decision 2026-10-30), the trace text and the log
+    /// outside it. Synchronous: GameManager.TryNPCDomainPowerForAI runs the action.
+    /// </summary>
+    internal DomainPowerChoice ChooseDomainPowerForAI(CharacterController npc, DomainPowerSite site, CharacterController target, out ActionContext action)
+    {
+        action = null;
+        if (npc == null || npc.Stats == null || _gameManager == null)
+            return DomainPowerChoice.None;
+        DomainPowerContext ctx;
+        DomainPowerChoice choice;
+        using (AiDecisionTimer.Open(AiTimeBucket.Action, npc))
+        {
+            ctx = BuildDomainPowerContext(npc, site, target);
+            if (!ctx.AnyOpen)
+                return DomainPowerChoice.None;
+            AIProfile profile = GetProfile(npc);
+            choice = profile != null ? profile.ChooseDomainPower(npc, ctx) : AIProfile.DefaultChooseDomainPower(ctx);
+            if (!ctx.IsOpen(choice))
+                choice = DomainPowerChoice.None;
+        }
+        string values = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "site={0} strength={1}/{2} smite={3}:{4:0.##} death={5}:{6:0.##} on {7} S={8:0.##}",
+            site, ctx.StrengthOpen, ctx.WillMakeMeleeAttacks, ctx.DestructionOpen, ctx.SmiteGain,
+            ctx.DeathOpen, ctx.DeathTouchValue, TraceName(ctx.DeathTarget), ctx.AttackValue);
+        float bonus = choice == DomainPowerChoice.Death ? ctx.DeathTouchValue - ctx.AttackValue
+            : choice == DomainPowerChoice.Destruction ? ctx.SmiteGain : 0f;
+        if (AiDecisionTrace.HasOpenTurn(npc))
+            AiDecisionTrace.Record(npc, "DomainPower", choice.ToString(), DomainPowerChoice.None.ToString(), bonus, values);
+        Debug.Log($"[AI][DomainPower] {npc.Stats.CharacterName}: {choice} ({values})");
+        if (choice == DomainPowerChoice.None)
+            return choice;
+
+        action = ActionContext.For(ActionIds.DomainPower, npc, ActorSource.AI, choice == DomainPowerChoice.Death ? ctx.DeathTarget : null);
+        action.Variant = choice.ToString(); // "Strength", "Destruction" or "Death": the domain's name
+        return choice;
     }
 
     /// <summary>
@@ -3876,6 +4040,23 @@ public class AIService : MonoBehaviour
     /// </summary>
     private IEnumerator PerformMeleeAttackActionWithManeuvers(CharacterController npc, CharacterController target, AIProfile profile)
     {
+        // A cleric's domain powers before the attack (batch 14 step 14, D7, C14; AIProfile.ChooseDomainPower): the feat of
+        // strength (free) when not yet used, and the Death domain's touch, which takes the standard action in place of the
+        // attack (a supernatural ability, PHB p.142, p.186) when its value beats the attack's. After the touch the move left
+        // follows (D1), as after aid another.
+        DomainPowerChoice domainPower = _gameManager.TryNPCDomainPowerForAI(npc, DomainPowerSite.MeleeAttack, target);
+        if (domainPower == DomainPowerChoice.Death)
+        {
+            if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+                yield break;
+            yield return new WaitForSeconds(0.5f);
+            if (!KeepsRoutineAfterAbility(npc))
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+            yield break;
+        }
+        if (domainPower != DomainPowerChoice.None && (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions()))
+            yield break;
+
         // A feint before the attack (PHB p.155; a move action with Improved Feint, PHB p.95; CMB-102): an AI stopgap, by the
         // profile (AIProfile.ShouldFeint; by default a rogue with Improved Feint that makes one attack anyway). The feint is
         // the NPC row of the maneuver core (TryNPCSpecialAttackByTypeForAI, the PC's cost table).
