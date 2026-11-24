@@ -153,7 +153,8 @@ public static class CombatPacingTests
         }
         Assert(string.Join(",", order) == "1.5,2,3,4,1,1.5", "The HUD button cycles 1 -> 1.5 -> 2 -> 3 -> 4 -> 1", string.Join(",", order));
         Assert(GameSettings.NextAiTurnSpeed(7f) == GameSettings.DefaultAiTurnSpeed, "A speed off the list cycles to the default");
-        Assert(GameSettings.AiTurnSpeedLabel(1.5f) == "AI 1.5x" && GameSettings.AiTurnSpeedLabel(2f) == "AI 2x", "The HUD label reads 'AI 1.5x', 'AI 2x'");
+        Assert(GameSettings.AiTurnSpeedLabel(1f) == "AI Normal" && GameSettings.AiTurnSpeedLabel(1.5f) == "AI 1.5x" && GameSettings.AiTurnSpeedLabel(2f) == "AI 2x",
+            "The HUD label reads 'AI Normal' at 1x, then 'AI 1.5x', 'AI 2x'");
     }
 
     private static readonly FieldInfo SettingsInstanceField =

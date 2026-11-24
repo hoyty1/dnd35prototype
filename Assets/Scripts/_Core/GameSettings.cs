@@ -104,9 +104,9 @@ public class GameSettings : MonoBehaviour
         return aiTurnSpeed;
     }
 
-    /// <summary>The HUD label of a speed: "AI 1x", "AI 1.5x".</summary>
+    /// <summary>The HUD label of a speed: "AI Normal" at 1x (the player turns' own pace; owner, 2026-11-24), else "AI 1.5x", "AI 2x".</summary>
     public static string AiTurnSpeedLabel(float speed)
-        => "AI " + speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "x";
+        => speed == 1f ? "AI Normal" : "AI " + speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "x";
 
     private void Awake()
     {

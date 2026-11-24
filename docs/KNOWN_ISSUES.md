@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 17 | 14 | 31 | CORE-041 |
 | [Combat](issues/CMB.md) | CMB | 0 | 104 | 99 | 203 | CMB-309 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 11 | 12 | 23 | GRID-032 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 133 | 137 | 270 | SPL-337 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 0 | 133 | 136 | 269 | SPL-337 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 1 | 86 | 60 | 147 | CHR-191 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 227 | 66 | 293 | CRE-313 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 18 | 17 | 35 | ENC-037 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 0 | 14 | 43 | 57 | AI-096 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 44 | 56 | UI-058 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 809 | 722 | 1532 | |
+| **All** | | 1 | 809 | 721 | 1531 | |
 
 ## Top issues
 

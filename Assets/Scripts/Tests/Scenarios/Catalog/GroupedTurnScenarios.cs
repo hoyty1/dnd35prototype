@@ -15,7 +15,7 @@ namespace Tests.Scenarios
     /// through its mirror view (TokenView), which follows its model. Step 4 (CRE-312): a summon slain or expired leaves the
     /// grid, NPCs, the summon lists and the initiative order at once, its despawn line before the next creature's turn,
     /// while its view plays the fade; a summon slain on its own turn does not cost the next creature its turn; the Lesser
-    /// Globe centre is read from the caster's grid square, not its token (following the caster is current behaviour, SPL-335).
+    /// Globe is centred on the caster's grid square when cast, not its token, and stays there (PHB p.236, SPL-335).
     /// Step 5 (CMB-308): a forced PC turn's grapple escape takes the AI decider's escape square and opens no square selection
     /// (batch 13 C7). Step 6: the AI speed factor follows the turn kind: Ai on an NPC's, a Scripted ally's and a forced PC
     /// turn, Player on a player-run turn from its menu on, through its attack hand-off (C2); the trace is the same at any
@@ -36,7 +36,7 @@ namespace Tests.Scenarios
             yield return S("summon-expires-leaves-at-once", SummonExpiresLeavesAtOnce);
             yield return S("summon-slain-on-own-turn-next-still-acts", SummonSlainOnOwnTurnNextStillActs);
             yield return S("summon-slain-off-its-move-next-still-acts", SummonSlainOffItsMoveNextStillActs);
-            yield return S("lesser-globe-follows-caster-grid", LesserGlobeFollowsCasterGrid);
+            yield return S("lesser-globe-stays-put", LesserGlobeStaysPut);
             yield return S("panicked-grappled-pc-escape-square-ai", PanickedGrappledPcEscapeSquareAi);
             yield return S("ai-speed-pacing-kind-follows-turns", AiSpeedPacingKindFollowsTurns);
         }
@@ -621,18 +621,20 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// The Lesser Globe (PHB p.236) is centred on the caster; that it then follows the caster is current behaviour, not
-        /// RAW (PHB p.236 calls the sphere immobile; owner question SPL-335), and this scenario pins only where the centre
-        /// is read from. Its centre now comes from the caster's grid square (LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter), not from its token, which a step tween moves
-        /// at the speed of the pacing: at creation (the token pushed off its square first), after a move with the token
-        /// again off its square when the globe's Update runs, and in round 2 after OnRoundStart.
+        /// The Lesser Globe (PHB p.236) is centred on its caster when cast and is immobile: the caster can leave it and come
+        /// back (SPL-335, owner ruling 2026-11-24). Its centre comes from the caster's grid square
+        /// (LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter), not from its token, which a step tween moves at the
+        /// speed of the pacing (grouped AI turns step 4): at creation the token is pushed off its square first. The caster
+        /// then walks 3 squares east, out of the 10-ft radius; the globe's Update (run with the token again off its square)
+        /// and round 2's OnRoundStart leave the centre on the casting square, and the caster is no longer inside it.
         /// </summary>
-        private static ScenarioDef LesserGlobeFollowsCasterGrid()
+        private static ScenarioDef LesserGlobeStaysPut()
         {
-            return Rules("rules/lesser-globe-follows-caster-grid", "The Lesser Globe centre is read from the caster's grid square, not its token (grouped AI turns step 4; following the caster is current behaviour, SPL-335)")
+            var castSquare = new Vector2Int(5, 10);
+            return Rules("rules/lesser-globe-stays-put", "The Lesser Globe stays where it was cast, centred on the caster's square then, and the caster can walk out of it (PHB p.236; SPL-335)")
                 .Covers("grouped AI turns step 4", "CRE-312", "PHB p.236", "SPL-141", "SPL-335")
                 .MaxRounds(2)
-                .Pc("caster", ActorSource.Stats(() => Wizard("Globe Caster", 7)), 5, 10, Control.Scripted)
+                .Pc("caster", ActorSource.Stats(() => Wizard("Globe Caster", 7)), castSquare.x, castSquare.y, Control.Scripted)
                 .Npc("orc", "orc_warrior", 17, 17, Control.Idle)
                 .Initiative("caster", "orc")
                 .Turn("caster", 1,
@@ -647,32 +649,44 @@ namespace Tests.Scenarios
                             return raised && g != null;
                         })),
                     Step.Move(8, 10),
-                    Step.Assert("After the move, the globe's Update centres it on the new square while the token is off it", ctx =>
-                        ctx.Get("caster").GridPosition == new Vector2Int(8, 10)
-                        && GlobeOnSquareWhileTokenOff(ctx, "after the move", g =>
+                    Step.Assert("After the caster walks out, the globe's Update leaves it on the casting square and the caster is outside it", ctx =>
+                    {
+                        CharacterController c = ctx.Get("caster");
+                        LesserGlobeOfInvulnerabilityAreaEffect g = GlobeOf(c);
+                        if (c.GridPosition != new Vector2Int(8, 10) || g == null)
+                            return false;
+                        Vector3 token = c.transform.position;
+                        c.transform.position = SquareCentre(ctx, c) + new Vector3(0.6f, 0.3f, 0f);
+                        try
                         {
-                            if (g == null)
-                                return false;
                             System.Reflection.MethodInfo update = typeof(LesserGlobeOfInvulnerabilityAreaEffect).GetMethod("Update",
                                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
                             if (update == null)
                                 return false;
                             update.Invoke(g, null);
-                            return true;
-                        })),
+                        }
+                        finally
+                        {
+                            c.transform.position = token;
+                        }
+                        return GlobeStaysOn(ctx, g, castSquare, "after the move") && !g.IsCharacterInArea(c);
+                    }),
                     Step.EndTurn())
                 .Turn("caster", 2,
-                    Step.Assert("In round 2 (after OnRoundStart) the globe is still centred on the caster's square", ctx =>
-                    {
-                        CharacterController c = ctx.Get("caster");
-                        LesserGlobeOfInvulnerabilityAreaEffect g = GlobeOf(c);
-                        bool on = g != null && (g.CenterPosition - SquareCentre(ctx, c)).sqrMagnitude < 1e-8f;
-                        ctx.Note("globe round 2: " + (g != null ? g.CenterPosition.ToString("F3") : "none"));
-                        return on;
-                    }),
+                    Step.Assert("In round 2 (after OnRoundStart) the globe is still on the casting square", ctx =>
+                        GlobeStaysOn(ctx, GlobeOf(ctx.Get("caster")), castSquare, "round 2")),
                     Step.EndTurn())
                 .Expect("The globe centre checks hold", Expect.AssertsPass())
                 .Build();
+        }
+
+        /// <summary>True when <paramref name="g"/> is centred on <paramref name="square"/>'s centre (a Medium caster's square).</summary>
+        private static bool GlobeStaysOn(ScenarioContext ctx, LesserGlobeOfInvulnerabilityAreaEffect g, Vector2Int square, string when)
+        {
+            Vector3 centre = ctx.Gm.Grid.GetCenteredWorldPosition(square, 1);
+            bool on = g != null && (g.CenterPosition - centre).sqrMagnitude < 1e-8f;
+            ctx.Note("globe " + when + ": " + (g != null ? g.CenterPosition.ToString("F3") : "none") + ", casting square " + centre.ToString("F3"));
+            return on;
         }
 
         // ── Step 5: the escape square of a forced grappling PC (batch 13 C7) ─────────────

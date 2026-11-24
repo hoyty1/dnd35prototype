@@ -31,10 +31,9 @@ namespace Tests.Magic
 /// - a source scan that every PC tail ends a vacated player-run turn by reference (GameManager.IsVacatedPlayerTurn:
 ///   ShowActionChoices, EndCurrentTurn, AfterAttackDelay, DelayedEndActivePCTurn; IsCurrentTurnOf in the grapple moves)
 ///   and that the harness's summon removal marks the summon out of play;
-/// - the Lesser Globe centre (PHB p.236: centred on the caster; that it follows the caster is current behaviour,
-///   owner question SPL-335) comes from the caster's grid
-///   square (LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter), not from its token's transform, at creation and in
-///   Update and OnRoundStart (a source scan).
+/// - the Lesser Globe centre (PHB p.236: centred on the caster when cast, then immobile, SPL-335) comes from the caster's
+///   grid square (LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter), not from its token's transform, at creation, and
+///   Update and OnRoundStart never re-centre it (a source scan).
 /// Needs Play mode (CharacterController.Init needs Awake, TST-009; the despawn checks use the scene GameManager).
 /// </summary>
 public static class SummonDespawnTimingTests
@@ -597,8 +596,9 @@ public static class SummonDespawnTimingTests
         Assert(!globe.Contains("Caster.transform"), "LesserGlobeOfInvulnerabilityAreaEffect never reads its caster's transform");
         string update = Body(globe, "private void Update()") ?? "";
         string roundStart = Body(globe, "public override void OnRoundStart()") ?? "";
-        Assert(update.Contains("CasterCenter(Caster)") && roundStart.Contains("CasterCenter(Caster)"),
-            "Update and OnRoundStart take the centre from CasterCenter (the caster's grid square)");
+        Assert(update.Length > 0 && roundStart.Length > 0 && !update.Contains("CenterPosition =") && !roundStart.Contains("CenterPosition =")
+               && !update.Contains("CasterCenter(") && !roundStart.Contains("CasterCenter("),
+            "Update and OnRoundStart never re-centre the globe: it is immobile once cast (PHB p.236, SPL-335)");
         string spellsL = Body(Source("Spell/Resolution/GameManager_Spells_L.cs"), "TryResolveLesserGlobeSpellEffect(") ?? "";
         string phase1 = Regex.Replace(Source("Spell/Resolution/GameManager_Spells_Phase1.cs"), @"//[^\n]*", "");
         Assert(spellsL.Contains("LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter(caster)") && !spellsL.Contains("caster.transform.position"),

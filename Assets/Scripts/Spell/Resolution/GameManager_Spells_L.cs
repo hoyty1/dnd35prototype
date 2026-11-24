@@ -25,7 +25,7 @@ public partial class GameManager
     /// <summary>
     /// Resolves Lesser Globe of Invulnerability: creates a 10-ft radius emanation
     /// centered on the caster that blocks spell effects of 3rd level or lower.
-    /// The emanation moves with the caster (current behaviour; PHB p.236 calls it immobile, owner question SPL-335).
+    /// The globe is immobile once cast: the caster can leave it and come back (PHB p.236, SPL-335).
     /// PHB p.236
     /// </summary>
     private bool TryResolveLesserGlobeSpellEffect(
@@ -44,7 +44,7 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         // Create the area effect centred on the caster's space on the grid (PHB p.236: centred on the caster; grouped AI
-        // turns step 4). That it then follows the caster is current behaviour pending SPL-335.
+        // turns step 4). It stays there: the globe is immobile (SPL-335).
         Vector3 centerWorldPos = LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter(caster);
 
         GameObject globeObj = new GameObject("LesserGlobeOfInvulnerability_Area");
