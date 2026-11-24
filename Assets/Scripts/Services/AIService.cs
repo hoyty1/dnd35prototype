@@ -549,7 +549,14 @@ public class AIService : MonoBehaviour
             {
                 List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
                 bool hasCastableSpells = HasCastablePreparedSpells(npc);
-                HealerActionType actionType = healerProfile.DetermineActionPriority(npc, allCombatants, hasCastableSpells);
+                // Healing only with a castable cure (batch 14 step 12, AI-063): without one the healer fights instead.
+                bool hasCastableCure = hasCastableSpells && HealerAIProfile.HasCastableCure(npc, _gameManager);
+                HealerActionType actionType = healerProfile.DetermineActionPriority(npc, allCombatants, hasCastableSpells, hasCastableCure);
+                // One decision-trace row (outside the hash): the priority, its legacy the one before AI-063 (no cure test).
+                if (AiDecisionTrace.HasOpenTurn(npc))
+                    AiDecisionTrace.Record(npc, "HealerPriority", actionType.ToString(),
+                        healerProfile.DetermineActionPriority(npc, allCombatants, hasCastableSpells, hasCastableCure: true).ToString(), 0f,
+                        $"castableSpells={hasCastableSpells} castableCure={hasCastableCure}");
 
                 Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} action priority: {actionType}");
 
@@ -578,8 +585,24 @@ public class AIService : MonoBehaviour
                     if (healTarget != null && healTarget.Stats != null)
                     {
                         Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} targeting {healTarget.Stats.CharacterName} for healing.");
-                        // T1.1 FIX: Actually attempt to cast heal spell on the ally target
-                        bool healCasted = TryExecuteSpellcastAction(npc, healTarget);
+                        // The cure first (batch 14 step 12, AI-047): a Healing-effect spell on a hurt ally in reach.
+                        bool healCasted = TryExecuteSpellcastAction(npc, healTarget, IsHealingEffectSpell);
+                        if (!healCasted)
+                        {
+                            // No patient in reach: the Role's approach (AIProfile.ChooseHealerApproach, C8, Q8).
+                            var approach = new HealerApproachOutcome();
+                            yield return _gameManager.StartCoroutine(RunHealerApproach(npc, healerProfile, healTarget, approach));
+                            if (approach.TurnDone || CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+                                yield break;
+                            if (approach.Moved)
+                            {
+                                // The move is spent; the kiter uses the standard action that is left.
+                                yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+                                yield break;
+                            }
+                            // Today's turn: the spell walk over every castable spell.
+                            healCasted = TryExecuteSpellcastAction(npc, healTarget);
+                        }
                         if (healCasted)
                         {
                             Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully healed {healTarget.Stats.CharacterName}.");
@@ -1068,6 +1091,248 @@ public class AIService : MonoBehaviour
             }
         }
         return found && _gameManager.TryTakeFiveFootStepForAI(npc, best);
+    }
+
+    // ── The healer reaches its patient (batch 14 step 12, AI-047, AI-063; decision D1, design choice C8, owner question Q8) ──
+
+    /// <summary>
+    /// A spell that cures hit points (SpellDiceRules.CuresHitPoints: the cure ... wounds spells and Heal, PHB p.32), the
+    /// filter of the healer's first spell walk and of its cast after the approach (batch 14 step 12, AI-063).
+    /// </summary>
+    private static bool IsHealingEffectSpell(SpellData spell) => SpellDiceRules.CuresHitPoints(spell);
+
+    /// <summary>What <see cref="RunHealerApproach"/> did: whether it ended the healer's turn, or moved and left the standard action.</summary>
+    private sealed class HealerApproachOutcome
+    {
+        public bool TurnDone;
+        public bool Moved;
+    }
+
+    /// <summary>
+    /// The pure reads of AIProfile.ChooseHealerApproach for <paramref name="npc"/> and its <paramref name="patient"/>
+    /// (batch 14 step 12, C8):
+    /// - the price per provoker of a path that provokes (Q8, owner default 2026-10-30): the Role's (1000 when it avoids
+    ///   AoOs, as the Healer does; else 2), at most 6 (AiBlend.AoOAgainstFloor) when the patient is at or below the critical
+    ///   threshold (HealerAIProfile.IsCriticallyWounded, 25%), then the traits' ProvokeAoO vote (AiBlend.AoOCost: a Forbid
+    ///   is 1000 again, so a Cowardly healer that is hurt never provokes);
+    /// - the provokers a touch path may have (<see cref="MaxTouchPathProvokers"/>, delegated reading of Q8, 2026-11-23):
+    ///   the cure now is worth 6, so a path whose provokers times the price exceed 6 is refused;
+    /// - a square beside the patient (a touch spell's reach, PHB p.175) that a 5-foot step reaches (PHB p.144: no move
+    ///   this round, it provokes nothing), else that one move action reaches (GameManager.FindTouchApproachSquareForAI,
+    ///   each provoker priced as that many squares). Casting there provokes from every foe that threatens it (PHB p.141)
+    ///   unless the cure is cast defensively or quickened, and the AI declines a threatened cast it would not make
+    ///   defensively (AISpellcastingStrategist.EvaluateDefensiveCasting): so when no castable cure would be cast
+    ///   defensively (<see cref="CanCastCureWhileThreatened"/>) a threatened square is refused, else an unthreatened one
+    ///   comes first;
+    /// - else a move's destination closer to the patient (EvaluateMovementOptions toward a range of 1). That move touches
+    ///   no one this turn, so it keeps the Healer's own price, not the critical one: no provoking destination when that
+    ///   price forbids provoking.
+    /// The healer's own footprint and reach are not read yet (a Large healer is measured from its anchor square; AI-047).
+    /// </summary>
+    internal HealerApproachContext BuildHealerApproachContext(CharacterController npc, HealerAIProfile healer, CharacterController patient)
+    {
+        var ctx = new HealerApproachContext();
+        if (npc == null || npc.Stats == null || npc.Actions == null || _gameManager == null || _gameManager.Grid == null
+            || patient == null || patient == npc || patient.Stats == null || patient.Stats.IsDead)
+            return ctx;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Movement, npc);
+        ctx.HasPatient = true;
+        ctx.Distance = CasterLevelRules.DistanceToTarget(npc, patient);
+        ctx.PatientCritical = healer != null && healer.IsCriticallyWounded(patient);
+        AIProfile profile = GetProfile(npc);
+        float rolePrice = AvoidsAoOs(npc, profile) ? DND35.AI.Personality.AiBlend.AoOForbidPrice : DND35.AI.Personality.AiBlend.AoOForCeiling;
+        float touchRolePrice = ctx.PatientCritical ? Mathf.Min(rolePrice, DND35.AI.Personality.AiBlend.AoOAgainstFloor) : rolePrice;
+        ctx.AoOPrice = DND35.AI.Personality.AiBlend.AoOCost(npc, touchRolePrice);
+        if (ctx.Distance <= 1)
+            return ctx; // in reach already: the cure's failure is not the distance
+
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        bool castsWhenThreatened = CanCastCureWhileThreatened(npc);
+        Func<Vector2Int, bool> threatened = c => ThreatSystem.IsSquareThreatened(c, npc, all);
+
+        // A 5-foot step beside the patient.
+        if (_gameManager.CanTakeFiveFootStepForAI(npc))
+        {
+            Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(npc.GridPosition);
+            bool bestSafe = false;
+            for (int i = 0; i < neighbors.Length; i++)
+            {
+                Vector2Int c = neighbors[i];
+                if (TouchReachFrom(c, patient) > 1 || !_gameManager.CanTakeFiveFootStepToForAI(npc, c))
+                    continue;
+                bool safe = !threatened(c);
+                if (!safe && !castsWhenThreatened)
+                    continue;
+                if (!ctx.TouchSquare.HasValue || (safe && !bestSafe))
+                {
+                    ctx.TouchSquare = c;
+                    ctx.TouchByFiveFootStep = true;
+                    bestSafe = safe;
+                }
+            }
+            if (ctx.TouchSquare.HasValue)
+                return ctx;
+        }
+
+        if (!AiLegal.CanMoveNow(npc, _gameManager) || npc.Stats.MovementBlockedByCondition)
+            return ctx;
+        int maxProvokers = MaxTouchPathProvokers(ctx.AoOPrice);
+        float pricePerProvoker = maxProvokers == 0 ? 0f : ctx.AoOPrice;
+        ctx.TouchSquare = _gameManager.FindTouchApproachSquareForAI(npc, patient, maxProvokers, pricePerProvoker,
+            rejectSquare: castsWhenThreatened ? null : threatened,
+            preferSquare: castsWhenThreatened ? (Func<Vector2Int, bool>)(c => !threatened(c)) : null);
+        if (ctx.TouchSquare.HasValue)
+            return ctx;
+
+        // The partial approach touches no one this turn: the Healer's own price (the Role's, priced by the traits).
+        float partialPrice = ctx.PatientCritical ? DND35.AI.Personality.AiBlend.AoOCost(npc, rolePrice) : ctx.AoOPrice;
+        bool partialNeverProvokes = partialPrice >= DND35.AI.Personality.AiBlend.AoOForbidPrice;
+        SquareCell cell = EvaluateMovementOptions(npc, patient.GridPosition, retreat: false, targetCharacter: null, profile: profile,
+            preferredRangeOverride: 1, rejectProvokingPaths: partialNeverProvokes);
+        if (cell != null && cell.Coords != npc.GridPosition
+            && TouchReachFrom(cell.Coords, patient) < TouchReachFrom(npc.GridPosition, patient))
+            ctx.PartialSquare = cell.Coords;
+        return ctx;
+    }
+
+    /// <summary>
+    /// The provokers a healer's touch path may have at <paramref name="pricePerProvoker"/> (batch 14 step 12, delegated
+    /// reading of Q8, 2026-11-23): the cure now is worth AiBlend.AoOAgainstFloor (6), so provokers times the price may not
+    /// exceed it: one provoker at the critical price 6, three at 2, none at 1000 or more, any at a price of 0 or less.
+    /// </summary>
+    internal static int MaxTouchPathProvokers(float pricePerProvoker)
+    {
+        if (pricePerProvoker <= 0f)
+            return int.MaxValue;
+        if (pricePerProvoker >= DND35.AI.Personality.AiBlend.AoOForbidPrice)
+            return 0;
+        return Mathf.FloorToInt(DND35.AI.Personality.AiBlend.AoOAgainstFloor / pricePerProvoker + 0.0001f);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="npc"/> would cast one of its castable cures (HealerAIProfile.CastableCures) in a threatened
+    /// square without provoking (batch 14 step 12): a quickened cure (PHB p.98; CastActionRules.IsQuickened) or one the AI
+    /// casts defensively (AISpellcastingStrategist.ShouldCastDefensively, PHB p.140), as EvaluateDefensiveCasting decides.
+    /// </summary>
+    private bool CanCastCureWhileThreatened(CharacterController npc)
+    {
+        List<SpellData> cures = HealerAIProfile.CastableCures(npc, _gameManager);
+        for (int i = 0; i < cures.Count; i++)
+        {
+            SpellData cure = cures[i];
+            if (CastActionRules.IsQuickened(SpellCastRequest.AiMetamagicFor(cure), SpellCastRequest.AiSourceFor(npc, cure))
+                || AISpellcastingStrategist.ShouldCastDefensively(npc, cure))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>The distance in squares from <paramref name="cell"/> to the nearest square <paramref name="patient"/> occupies (1 is a touch's reach).</summary>
+    private static int TouchReachFrom(Vector2Int cell, CharacterController patient)
+    {
+        List<Vector2Int> squares = patient.GetOccupiedSquares();
+        if (squares == null || squares.Count == 0)
+            return SquareGridUtils.GetDistance(cell, patient.GridPosition);
+        int best = int.MaxValue;
+        for (int i = 0; i < squares.Count; i++)
+            best = Mathf.Min(best, SquareGridUtils.GetDistance(cell, squares[i]));
+        return best;
+    }
+
+    /// <summary>
+    /// The healer's approach after its cure found no patient in reach (batch 14 step 12, AI-047, AI-063; C8): the Role's
+    /// AIProfile.ChooseHealerApproach on <see cref="BuildHealerApproachContext"/>, tilted by the traits
+    /// (AiBlend.HealerApproach), one decision-trace row "HealerApproach". MoveAndCast takes the 5-foot step (through
+    /// GameManager.TryTakeFiveFootStepForAI) or the move (the catalog's move entry, RunAIAction) beside the patient, then
+    /// casts a cure in the same turn (PHB p.138, D1), which ends the turn; when the cure is then refused the kiter uses
+    /// the standard action. PartialApproach moves toward the patient and leaves the standard action to the kiter. Kiter
+    /// does nothing here: the caller runs today's turn.
+    /// </summary>
+    private IEnumerator RunHealerApproach(CharacterController npc, HealerAIProfile healer, CharacterController patient, HealerApproachOutcome outcome)
+    {
+        if (npc == null || npc.Stats == null || outcome == null)
+            yield break;
+        HealerApproachContext ctx = BuildHealerApproachContext(npc, healer, patient);
+        AIProfile profile = GetProfile(npc);
+        HealerApproachChoice roleChoice = profile != null
+            ? profile.ChooseHealerApproach(npc, ctx)
+            : AIProfile.DefaultChooseHealerApproach(ctx);
+        HealerApproachChoice choice = DND35.AI.Personality.AiBlend.HealerApproach(npc, roleChoice, ctx);
+        string name = npc.Stats.CharacterName;
+        string patientName = patient != null && patient.Stats != null ? patient.Stats.CharacterName : "?";
+        if (AiDecisionTrace.HasOpenTurn(npc))
+            AiDecisionTrace.Record(npc, "HealerApproach", choice.ToString(), roleChoice.ToString(), 0f,
+                ctx.HasPatient
+                    ? $"distance={ctx.Distance} critical={ctx.PatientCritical} aooPrice={ctx.AoOPrice:0.##} touch={(ctx.TouchSquare.HasValue ? (ctx.TouchByFiveFootStep ? "step" : "move") : "none")} partial={ctx.PartialSquare.HasValue}"
+                    : "no patient");
+        Debug.Log($"[AI][Healer] {name}: approach {choice} (Role {roleChoice}) to {patientName}; distance={ctx.Distance} critical={ctx.PatientCritical} aooPrice={ctx.AoOPrice:0.##} touch={ctx.TouchSquare} step={ctx.TouchByFiveFootStep} partial={ctx.PartialSquare}");
+
+        switch (choice)
+        {
+            case HealerApproachChoice.MoveAndCast:
+            {
+                if (!ctx.TouchSquare.HasValue)
+                    yield break;
+                if (ctx.TouchByFiveFootStep)
+                {
+                    if (!_gameManager.TryTakeFiveFootStepForAI(npc, ctx.TouchSquare.Value))
+                        yield break;
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} takes a 5-foot step to reach {patientName}."));
+                    yield return new WaitForSeconds(0.35f);
+                }
+                else
+                {
+                    ActionContext moveCtx = ActionContext.For(ActionIds.Move, npc, ActorSource.AI);
+                    moveCtx.Cell = ctx.TouchSquare.Value;
+                    var move = new ActionOutcome();
+                    yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(moveCtx, move));
+                    if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+                    {
+                        outcome.TurnDone = true;
+                        yield break;
+                    }
+                    if (!move.Performed)
+                        yield break; // refused, nothing spent: today's turn
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} moves to reach {patientName}."));
+                    yield return new WaitForSeconds(0.5f);
+                }
+                outcome.Moved = true;
+                if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+                {
+                    outcome.TurnDone = true;
+                    yield break;
+                }
+                if (TryExecuteSpellcastAction(npc, patient, IsHealingEffectSpell))
+                {
+                    Debug.Log($"[AI][Healer] {name} moved and healed {patientName}.");
+                    yield return new WaitForSeconds(0.5f);
+                    // A quickened cure keeps the standard action (PHB p.98): the kiter uses it.
+                    outcome.TurnDone = !KeepsRoutineAfterAbility(npc);
+                }
+                yield break;
+            }
+
+            case HealerApproachChoice.PartialApproach:
+            {
+                if (!ctx.PartialSquare.HasValue || !AiLegal.CanMoveNow(npc, _gameManager))
+                    yield break;
+                ActionContext moveCtx = ActionContext.For(ActionIds.Move, npc, ActorSource.AI);
+                moveCtx.Cell = ctx.PartialSquare.Value;
+                var move = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(moveCtx, move));
+                if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+                {
+                    outcome.TurnDone = true;
+                    yield break;
+                }
+                if (!move.Performed)
+                    yield break;
+                outcome.Moved = true;
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} moves toward {patientName} to heal them."));
+                yield return new WaitForSeconds(0.5f);
+                yield break;
+            }
+        }
     }
 
     /// <summary>The Role's legacy AoO avoidance (Movement.AvoidAoOs, unless the profile ignores AoOs now), as EvaluateMovementOptions reads it.</summary>
@@ -2977,9 +3242,11 @@ public class AIService : MonoBehaviour
     /// <paramref name="preferredRangeOverride"/>: the approach to the weapon's reach or range, AiOutOfReach), with a bonus
     /// for threatening and flanking <paramref name="targetCharacter"/> and a penalty for paths that provoke.
     /// <paramref name="rejectCell"/>, when given, rules a destination out (the move after a standard action refuses a
-    /// square that would end a turning, batch 14 step 11).
+    /// square that would end a turning, batch 14 step 11). <paramref name="rejectProvokingPaths"/> rules out a destination
+    /// whose path provokes (the healer's partial approach when its price forbids provoking, batch 14 step 12, Q8), tested
+    /// on the path the search computes anyway.
     /// </summary>
-    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null, Func<Vector2Int, bool> rejectCell = null)
+    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null, Func<Vector2Int, bool> rejectCell = null, bool rejectProvokingPaths = false)
     {
         using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Movement, mover);
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
@@ -3027,6 +3294,8 @@ public class AIService : MonoBehaviour
 
             AoOPathResult pathResult = _gameManager.FindPath(mover, cell.Coords, avoidThreats: false, maxRangeOverride: moverMoveRange);
             if (pathResult == null || pathResult.Path == null)
+                continue;
+            if (rejectProvokingPaths && pathResult.ProvokesAoOs)
                 continue;
 
             int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);

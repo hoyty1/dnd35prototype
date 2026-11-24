@@ -258,8 +258,16 @@ public partial class GameManager
     /// AIService.EvaluateMovementOptions), from which the target's nearest square is adjacent (the touch's reach,
     /// CasterLevelRules.InRange); the one with the shortest path, then the fewest attacks of opportunity. Null without a
     /// move action or such a square.
+    /// <paramref name="maxProvokedAoOs"/> refuses a path that provokes more attacks of opportunity (the healer's approach,
+    /// batch 14 step 12, Q8: 0 when its AoO price forbids provoking); <paramref name="aooPricePerProvoker"/> adds that many
+    /// squares to a path's length per provoker when choosing (the price of AiBlend.AoOCost). <paramref name="rejectSquare"/>
+    /// rules a destination out and <paramref name="preferSquare"/> ranks the destinations it accepts before the others
+    /// (the healer refuses, or ranks last, a square a foe threatens, where its cure would provoke, PHB p.141). The defaults
+    /// (no limit, no price, no filter) are the choice of the other callers, unchanged.
     /// </summary>
-    internal Vector2Int? FindTouchApproachSquareForAI(CharacterController caster, CharacterController target)
+    internal Vector2Int? FindTouchApproachSquareForAI(CharacterController caster, CharacterController target,
+        int maxProvokedAoOs = int.MaxValue, float aooPricePerProvoker = 0f,
+        System.Func<Vector2Int, bool> rejectSquare = null, System.Func<Vector2Int, bool> preferSquare = null)
     {
         if (caster == null || target == null || caster.Stats == null || Grid == null || caster.Actions == null || !caster.Actions.HasMoveAction)
             return null;
@@ -271,8 +279,9 @@ public partial class GameManager
         int size = caster.GetVisualSquaresOccupied();
         List<Vector2Int> targetSquares = target.GetOccupiedSquares();
         Vector2Int? best = null;
-        int bestLength = int.MaxValue;
+        float bestCost = float.MaxValue;
         int bestAoOs = int.MaxValue;
+        bool bestPreferred = false;
         foreach (SquareCell cell in Grid.GetCellsInRange(caster.GridPosition, moveRange))
         {
             if (cell == null || cell.Coords == caster.GridPosition)
@@ -291,15 +300,25 @@ public partial class GameManager
                 continue;
             if (!Grid.CanPlaceCreature(cell.Coords, size, caster))
                 continue;
+            if (rejectSquare != null && rejectSquare(cell.Coords))
+                continue;
             AoOPathResult path = FindPath(caster, cell.Coords, avoidThreats: false, maxRangeOverride: moveRange);
             if (path == null || path.Path == null || path.Path.Count == 0)
                 continue;
             int aoos = path.ProvokedAoOs != null ? path.ProvokedAoOs.Count : 0;
-            if (path.Path.Count < bestLength || (path.Path.Count == bestLength && aoos < bestAoOs))
+            if (aoos > maxProvokedAoOs)
+                continue;
+            float cost = path.Path.Count + Mathf.Max(0f, aooPricePerProvoker) * aoos;
+            bool preferred = preferSquare != null && preferSquare(cell.Coords);
+            bool better = best == null
+                || (preferred && !bestPreferred)
+                || (preferred == bestPreferred && (cost < bestCost || (cost == bestCost && aoos < bestAoOs)));
+            if (better)
             {
                 best = cell.Coords;
-                bestLength = path.Path.Count;
+                bestCost = cost;
                 bestAoOs = aoos;
+                bestPreferred = preferred;
             }
         }
         return best;

@@ -79,13 +79,20 @@ namespace DND35.AI.Profiles
             SpellSelection.UseUtilitySpells = true;
         }
 
-        public HealerActionType DetermineActionPriority(CharacterController healer, List<CharacterController> allCombatants, bool hasCastableSpells)
+        /// <summary>
+        /// The healer's turn priority: CriticalHealing or Healing when an ally (or the healer) it can cure is below
+        /// <see cref="HealingThreshold"/> and <paramref name="hasCastableCure"/> (a castable spell that cures hit points,
+        /// <see cref="HasCastableCure"/>; batch 14 step 12, AI-063: without one, a Healing turn found nothing to cast and fell
+        /// to the kiter's total defense); else Buffing when the party is healthy, OffensiveSpell with any castable spell,
+        /// else PhysicalAttack.
+        /// </summary>
+        public HealerActionType DetermineActionPriority(CharacterController healer, List<CharacterController> allCombatants, bool hasCastableSpells, bool hasCastableCure)
         {
             if (healer == null || healer.Stats == null)
                 return HealerActionType.PhysicalAttack;
 
             List<CharacterController> alliesNeedingHealing = GetAlliesNeedingHealing(healer, allCombatants);
-            if (alliesNeedingHealing.Count > 0)
+            if (alliesNeedingHealing.Count > 0 && hasCastableCure)
             {
                 bool hasCritical = alliesNeedingHealing.Any(IsCriticallyWounded);
                 return hasCritical ? HealerActionType.CriticalHealing : HealerActionType.Healing;
@@ -143,14 +150,18 @@ namespace DND35.AI.Profiles
             if (spell == null || caster == null)
                 return score;
 
-            HealerActionType actionType = DetermineActionPriority(caster, allCombatants, hasCastableSpells: true);
+            // The turn's own priority (AIService's Healer branch): Healing only with a castable cure (batch 14 step 12, AI-063).
+            HealerActionType actionType = DetermineActionPriority(caster, allCombatants, hasCastableSpells: true,
+                hasCastableCure: GetAlliesNeedingHealing(caster, allCombatants).Count == 0 || HasCastableCure(caster, gameManager));
             switch (actionType)
             {
+                // The bonus goes to a spell that cures hit points (SpellDiceRules.CuresHitPoints, PHB p.32), not to every
+                // Healing-effect spell: Remove Paralysis is no answer to a wounded ally (batch 14 step 12, AI-063).
                 case HealerActionType.CriticalHealing:
-                    return spell.EffectType == SpellEffectType.Healing ? score + 35f : score - 40f;
+                    return SpellDiceRules.CuresHitPoints(spell) ? score + 35f : score - 40f;
 
                 case HealerActionType.Healing:
-                    return spell.EffectType == SpellEffectType.Healing ? score + 25f : score - 25f;
+                    return SpellDiceRules.CuresHitPoints(spell) ? score + 25f : score - 25f;
 
                 case HealerActionType.Buffing:
                     if (spell.EffectType == SpellEffectType.Buff) return score + 20f;
@@ -214,7 +225,80 @@ namespace DND35.AI.Profiles
             return foundAnyAlly;
         }
 
-        private bool IsCriticallyWounded(CharacterController candidate)
+        /// <summary>
+        /// Whether <paramref name="healer"/> can cast a spell that cures hit points now (batch 14 step 12, AI-063):
+        /// <see cref="CastableCures"/> is not empty.
+        /// </summary>
+        public static bool HasCastableCure(CharacterController healer, GameManager gameManager)
+            => CastableCures(healer, gameManager).Count > 0;
+
+        /// <summary>
+        /// The spells that cure hit points (SpellDiceRules.CuresHitPoints: the cure ... wounds spells and Heal, PHB p.32,
+        /// p.239) that <paramref name="healer"/> can cast now (batch 14 step 12, AI-063): its castable prepared or known
+        /// spells (SpellcastingComponent.GetCastablePreparedSpells: a slot left, the form, the components), or a cure a
+        /// cleric converts a prepared spell into (PHB p.32; AiConversionPlanner, CHR-070), that the cast core's caster tests
+        /// let through (GameManager.CheckCasterLegalityForAI: the casting action, Silence, the metamagic; skipped without a
+        /// GameManager). Whether it has a target in reach is not asked. In Play mode the answer is kept for the frame while
+        /// the healer's castable spells, slots left and spontaneous casting stay the same (ScoreSpell asks once per scored
+        /// spell; a cast that spends a slot changes them), so a turn's scoring passes do not repeat the legality checks. Never null.
+        /// </summary>
+        public static List<SpellData> CastableCures(CharacterController healer, GameManager gameManager)
+        {
+            SpellcastingComponent sc = healer != null && healer.Stats != null ? healer.Spellcasting : null;
+            if (sc == null || !sc.CanCastSpells)
+                return new List<SpellData>();
+            List<SpellData> castable = sc.GetCastablePreparedSpells() ?? new List<SpellData>();
+            bool cache = Application.isPlaying;
+            int signature = cache ? CureCacheSignature(healer, sc, castable) : 0;
+            if (cache && _cureCacheHealer == healer && _cureCacheGameManager == gameManager
+                && _cureCacheFrame == Time.frameCount && _cureCacheSignature == signature && _cureCache != null)
+                return _cureCache;
+
+            var cures = new List<SpellData>();
+            for (int i = 0; i < castable.Count; i++)
+                if (IsCastableCure(healer, castable[i], gameManager))
+                    cures.Add(castable[i]);
+            List<SpellData> converted = AiConversionPlanner.Candidates(healer, castable);
+            if (converted != null)
+                for (int i = 0; i < converted.Count; i++)
+                    if (IsCastableCure(healer, converted[i], gameManager))
+                        cures.Add(converted[i]);
+
+            if (cache)
+            {
+                _cureCacheHealer = healer;
+                _cureCacheGameManager = gameManager;
+                _cureCacheFrame = Time.frameCount;
+                _cureCacheSignature = signature;
+                _cureCache = cures;
+            }
+            return cures;
+        }
+
+        private static CharacterController _cureCacheHealer;
+        private static GameManager _cureCacheGameManager;
+        private static int _cureCacheFrame = -1;
+        private static int _cureCacheSignature = -1;
+        private static List<SpellData> _cureCache;
+
+        /// <summary>What a cached <see cref="CastableCures"/> answer depends on that a cast or a conversion changes: the castable spells, the slots left, the spontaneous casting.</summary>
+        private static int CureCacheSignature(CharacterController healer, SpellcastingComponent sc, List<SpellData> castable)
+        {
+            int slotsLeft = 0;
+            if (sc.SpellSlots != null)
+                for (int i = 0; i < sc.SpellSlots.Count; i++)
+                    if (sc.SpellSlots[i] != null && sc.SpellSlots[i].CanCast)
+                        slotsLeft++;
+            int spontaneous = healer.Stats != null ? (int)healer.Stats.SpontaneousCasting : 0;
+            return castable.Count + 1000 * slotsLeft + 1000000 * spontaneous;
+        }
+
+        private static bool IsCastableCure(CharacterController healer, SpellData spell, GameManager gameManager)
+            => SpellDiceRules.CuresHitPoints(spell)
+               && (gameManager == null || gameManager.CheckCasterLegalityForAI(healer, spell) == null);
+
+        /// <summary>Whether <paramref name="candidate"/> is at or below <see cref="CriticalHealingThreshold"/> (Q8: a provoking path to it is priced 6 per provoker).</summary>
+        public bool IsCriticallyWounded(CharacterController candidate)
         {
             return candidate != null && GetHealthPercent(candidate) <= CriticalHealingThreshold;
         }

@@ -55,6 +55,14 @@ namespace Tests.Scenarios
     /// turned (PHB p.159); rules/ai-threatened-caster-steps-away, a threatened adept 5-foot steps out of the threat after
     /// its cast instead of walking off through the AoO (PHB p.144, AI-088). The expectations read the "AfterStandard" and "Personality.AfterStandard" rows of the decision trace (outside the
     /// hash) besides the hashed casts and moves.</para>
+    /// <para>Step 12 (the healer reaches its patient; AI-047, AI-063, Q8): rules/ai-healer-moves-to-touch-and-cures, a Healer-Role
+    /// cleric moves beside its wounded kobold 3 squares off and cures it in the same turn; rules/ai-healer-approaches-far-ally,
+    /// it moves toward a kobold beyond one move; rules/ai-healer-critical-provokes, it takes a fighter's attack of opportunity
+    /// to reach a kobold at 20% (a provoking path costs 6 per provoker for a critical patient); rules/ai-healer-hurt-ally-no-aoo,
+    /// it does not provoke for a kobold at 50%; rules/ai-healer-cowardly-skips-aoo-approach, a hurt Cowardly cleric never
+    /// provokes, even for the critical kobold; rules/ai-healer-no-spell-no-approach, the goblin adept, with no spells before
+    /// batch 15, makes no Healing turn and never approaches. The expectations read the "HealerApproach" rows of the decision
+    /// trace (outside the hash) besides the hashed moves, casts and AoOs.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -99,6 +107,12 @@ namespace Tests.Scenarios
             yield return S("ai-cowardly-casts-then-retreats-plain", () => AiCowardlyCastsThenRetreats(plain: true));
             yield return S("ai-cleric-move-keeps-turning", AiClericMoveKeepsTurning);
             yield return S("ai-threatened-caster-steps-away", AiThreatenedCasterStepsAway);
+            yield return S("ai-healer-moves-to-touch-and-cures", AiHealerMovesToTouchAndCures);
+            yield return S("ai-healer-approaches-far-ally", AiHealerApproachesFarAlly);
+            yield return S("ai-healer-critical-provokes", AiHealerCriticalProvokes);
+            yield return S("ai-healer-hurt-ally-no-aoo", AiHealerHurtAllyNoAoO);
+            yield return S("ai-healer-cowardly-skips-aoo-approach", AiHealerCowardlySkipsAoOApproach);
+            yield return S("ai-healer-no-spell-no-approach", AiHealerNoSpellNoApproach);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -1552,6 +1566,226 @@ namespace Tests.Scenarios
                 {
                     int d = FinalDistance(v, "adept", "fighter");
                     return d == 2 ? ExpectResult.Pass("distance 2") : ExpectResult.Fail("distance " + d);
+                })
+                .Build();
+        }
+
+        // ── Batch 14 step 12: the healer reaches its patient (AI-047, AI-063; D1, C8, Q8) ──
+
+        /// <summary>
+        /// Leaves the cleric <paramref name="c"/> only <paramref name="count"/> prepared Cure Light Wounds (PHB p.215): every
+        /// slot is spent, then that many regular 1st-level slots hold the cure again. Throws (the job ends SetupFailed) when
+        /// there are not enough such slots.
+        /// </summary>
+        private static void OnlyCures(CharacterController c, int count = 1)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting");
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null)
+                    slot.IsUsed = true;
+            int placed = 0;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (placed >= count)
+                    break;
+                if (slot == null || slot.Level != 1 || slot.IsDomainSlot)
+                    continue;
+                slot.PreparedSpell = SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS).Clone();
+                slot.IsUsed = false;
+                placed++;
+            }
+            if (placed < count)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has " + placed + " regular 1st-level slots, needs " + count);
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        /// <summary>One "HealerApproach" decision-trace row (AIService.RunHealerApproach) chose <paramref name="chosen"/>, its reason containing <paramref name="reasonPart"/> when given.</summary>
+        private static Func<TraceView, ExpectResult> HealerApproachRow(string chosen, string reasonPart = null)
+            => v =>
+            {
+                List<global::AiDecisionTrace.Decision> rows = TraceRows("HealerApproach");
+                return rows.Any(d => d.Chosen == chosen && (reasonPart == null || (d.Reason ?? "").Contains(reasonPart)))
+                    ? ExpectResult.Pass(rows.Count + " HealerApproach row(s), one " + chosen)
+                    : MissingRow("HealerApproach", rows.Count, "chose " + chosen + (reasonPart != null ? " with " + reasonPart : ""));
+            };
+
+        /// <summary>The round-1 Cure Light Wounds casts of <paramref name="by"/> on <paramref name="target"/>.</summary>
+        private static Func<TraceEvent, bool> CureOn(string by, string target)
+            => e => e.Str("by") == by && e.Str("target") == target && e.Round == 1 && e.Str("spell") == SpellNames.CURE_LIGHT_WOUNDS;
+
+        /// <summary>
+        /// The healer layout: an AI-run human cleric (Cleric 5, speed 20 ft., heavy mace) given the Healer Role and only one
+        /// Cure Light Wounds, its wounded kobold ally <paramref name="allyAt"/> (an idle 20-hp kobold at
+        /// <paramref name="allyHp"/> hp: 50% is a Healing turn, 20% a critical one, HealerAIProfile thresholds 70% and
+        /// 25%), and a sturdy idle fighter at <paramref name="heroAt"/> who acts first (an Idle actor still makes its
+        /// attacks of opportunity once it has acted). One round.
+        /// </summary>
+        private static ScenarioBuilder HealerLayout(string id, string title, (int x, int y) clericAt, (int x, int y) allyAt, int allyHp, (int x, int y) heroAt,
+            Action<CharacterController> clericTweak = null)
+        {
+            return Rules(id, title)
+                .Covers("AI-047", "AI-063", "PHB p.138", "PHB p.215", "batch 14 step 12")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), heroAt.x, heroAt.y, Control.Idle)
+                .Npc("cleric", "human_cleric", clericAt.x, clericAt.y, Control.Ai)
+                .Npc("kobold", "kobold_warrior", allyAt.x, allyAt.y, Control.Idle)
+                .Profile("cleric", () => DND35.AI.AIProfile.CreateRuntime<DND35.AI.Profiles.HealerAIProfile>())
+                .Tweak("cleric", c => { OnlyCures(c); Sturdy(c); clericTweak?.Invoke(c); })
+                .Tweak("kobold", c => SetHp(c, 20, allyHp))
+                .Tweak("hero", Sturdy)
+                .Initiative("hero", "cleric", "kobold");
+        }
+
+        /// <summary>
+        /// AI-047 (batch 14 step 12): the healer's kobold ally at half its hit points stands 3 squares off, out of the
+        /// cure's touch (PHB p.215) but within one move (20 ft.). The cleric moves beside it and cures it in the same turn
+        /// (PHB p.138: a move and a standard action). Before the step the cure found no target and the turn fell to the
+        /// kiter, which ended it in total defense where it stood (AI-063).
+        /// </summary>
+        private static ScenarioDef AiHealerMovesToTouchAndCures()
+        {
+            return HealerLayout("rules/ai-healer-moves-to-touch-and-cures",
+                    "An AI healer moves beside its wounded ally and cures it in the same turn (AI-047, PHB p.138)",
+                    (10, 10), (13, 10), 10, (10, 17))
+                .Expect("Round 1: it moves, then casts Cure Light Wounds on the kobold", v =>
+                {
+                    TraceEvent cast = v.Of("cast").FirstOrDefault(CureOn("cleric", "kobold"));
+                    if (cast == null)
+                        return ExpectResult.Fail("no cure on the kobold in round 1");
+                    TraceEvent move = v.Moves("cleric", 1).FirstOrDefault(e => e.Seq < cast.Seq);
+                    return move != null
+                        ? ExpectResult.Pass("move #" + move.Seq + ", then the cure #" + cast.Seq, move.Seq, cast.Seq)
+                        : ExpectResult.Fail("the cure #" + cast.Seq + " came without a move before it", cast.Seq);
+                })
+                .Expect("It ends beside the kobold", v =>
+                {
+                    int d = FinalDistance(v, "cleric", "kobold");
+                    return d == 1 ? ExpectResult.Pass("adjacent") : ExpectResult.Fail("distance " + d);
+                })
+                .Expect("The kobold is healed", v =>
+                    v.Of("hp").Any(e => e.Round == 1 && e.Str("actor") == "kobold" && e.Int("new") > e.Int("old"))
+                        ? ExpectResult.Pass("healed") : ExpectResult.Fail("no heal"))
+                .Expect("The decision trace records MoveAndCast", HealerApproachRow("MoveAndCast", "touch=move"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-047 (batch 14 step 12): the wounded kobold stands 12 squares off, beyond one move (4 squares). The cleric
+        /// moves toward it (a partial approach) and casts nothing; before the step it stood in total defense (AI-063).
+        /// </summary>
+        private static ScenarioDef AiHealerApproachesFarAlly()
+        {
+            return HealerLayout("rules/ai-healer-approaches-far-ally",
+                    "An AI healer moves toward a wounded ally beyond one move (AI-047)",
+                    (4, 10), (16, 10), 10, (4, 17))
+                .Expect("It casts no cure in round 1", Expect.Count("cast", e => e.Str("by") == "cleric" && e.Round == 1, 0, 0))
+                .Expect("It ends closer to the kobold than it started (12 squares)", v =>
+                {
+                    int d = FinalDistance(v, "cleric", "kobold");
+                    return d >= 0 && d < 12 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
+                })
+                .Expect("The decision trace records PartialApproach", HealerApproachRow("PartialApproach", "partial=True"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Q8 (owner default, batch 14 step 12): the fighter stands beside the cleric, and the kobold, 3 squares off, is at
+        /// 4 of 20 hit points (20%, at or below the critical 25%). Every move out of the fighter's reach provokes (PHB
+        /// p.137), and for a critical patient a provoking path costs 6 per provoker instead of the Healer's 1000: the cleric
+        /// takes the fighter's attack of opportunity, moves beside the kobold and cures it. The plain wound twin
+        /// (rules/ai-healer-hurt-ally-no-aoo) stays.
+        /// </summary>
+        private static ScenarioDef AiHealerCriticalProvokes()
+        {
+            return HealerLayout("rules/ai-healer-critical-provokes",
+                    "An AI healer provokes to reach a critically wounded ally and cures it (Q8, AI-047, PHB p.137)",
+                    (10, 10), (13, 10), 4, (9, 10))
+                .Covers("Q8")
+                .Expect("The fighter makes a movement attack of opportunity on the cleric", Expect.Count("aoo",
+                    e => e.Str("by") == "hero" && e.Str("target") == "cleric" && e.Str("trigger") != "spellcast" && e.Round == 1, 1, 9))
+                .Expect("The cleric casts Cure Light Wounds on the kobold", Expect.Count("cast", CureOn("cleric", "kobold"), 1, 1))
+                .Expect("The decision trace records MoveAndCast for a critical patient at 6 per provoker",
+                    HealerApproachRow("MoveAndCast", "critical=True aooPrice=6"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Q8 (batch 14 step 12): the layout of rules/ai-healer-critical-provokes with the kobold at half its hit points.
+        /// The Healer avoids provoking (Movement.AvoidAoOs) except for a critical patient, so it does not walk out of the
+        /// fighter's reach: no movement attack of opportunity, no cure; it keeps today's turn (the kiter).
+        /// </summary>
+        private static ScenarioDef AiHealerHurtAllyNoAoO()
+        {
+            return HealerLayout("rules/ai-healer-hurt-ally-no-aoo",
+                    "An AI healer does not provoke to reach an ally that is hurt but not critical (Q8)",
+                    (10, 10), (13, 10), 10, (9, 10))
+                .Covers("Q8")
+                .Expect("No movement attack of opportunity on the cleric", Expect.None("aoo", e => e.Str("target") == "cleric" && e.Str("trigger") != "spellcast"))
+                .Expect("It casts no cure on the kobold", Expect.Count("cast", CureOn("cleric", "kobold"), 0, 0))
+                .Expect("The decision trace records Kiter at the Healer's price", HealerApproachRow("Kiter", "aooPrice=1000"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Q8 with the traits (batch 14 step 12): the layout of rules/ai-healer-critical-provokes, the cleric given
+        /// Cowardly:1 and hurt (20 hit points below its full). Cowardly forbids a provoking path once hurt (AiBlend.AoOCost),
+        /// which overrides the critical patient's price: the cleric never provokes, casts no cure and keeps today's turn.
+        /// A hurt living healer cures itself first (its own square is in reach), so this cleric is made an undead, which a
+        /// cure would harm (PHB p.215; AISpellcastingStrategist.ScoreAllyTarget skips it): an intelligent undead priest.
+        /// </summary>
+        private static ScenarioDef AiHealerCowardlySkipsAoOApproach()
+        {
+            ScenarioBuilder b = HealerLayout("rules/ai-healer-cowardly-skips-aoo-approach",
+                    "A hurt Cowardly AI healer never provokes, even for a critically wounded ally (Q8, C6)",
+                    (10, 10), (13, 10), 4, (9, 10), c => { c.Stats.CreatureType = "Undead"; c.Stats.CurrentHP -= 20; })
+                .Covers("Q8", "C6");
+            b.Personality("cleric", "Cowardly:1");
+            return b
+                .Expect("No movement attack of opportunity on the cleric", Expect.None("aoo", e => e.Str("target") == "cleric" && e.Str("trigger") != "spellcast"))
+                .Expect("It casts no cure on the kobold", Expect.Count("cast", CureOn("cleric", "kobold"), 0, 0))
+                .Expect("The decision trace records Kiter at the Forbid price", HealerApproachRow("Kiter", "critical=True aooPrice=1000"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-047 (batch 14 step 12): the goblin adept (Healer Role, Cowardly:0.6,Healer:0.4) has no spells before batch 15
+        /// (CHR-024, ENC-021), so its wounded goblin ally 3 squares off makes no Healing turn (AI-063): no approach is
+        /// decided, it casts nothing and does not close on the ally.
+        /// </summary>
+        private static ScenarioDef AiHealerNoSpellNoApproach()
+        {
+            return Rules("rules/ai-healer-no-spell-no-approach", "A Healer-Role goblin adept without spells never approaches its wounded ally (AI-047, AI-063)")
+                .Covers("AI-047", "AI-063", "CHR-024", "batch 14 step 12")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 16, Control.Idle)
+                .Npc("adept", "goblin_adept", 10, 10, Control.Ai)
+                .Npc("gob", "goblin_warrior", 10, 7, Control.Idle)
+                .Tweak("adept", Sturdy)
+                .Tweak("gob", c => SetHp(c, 20, 8))
+                .Tweak("hero", Sturdy)
+                .Initiative("hero", "adept", "gob")
+                .Expect("Its priority is PhysicalAttack, not the legacy Healing (AI-063)", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("HealerPriority");
+                    if (rows.Count == 0)
+                        return MissingRow("HealerPriority", 0, "chose PhysicalAttack");
+                    global::AiDecisionTrace.Decision d = rows[0];
+                    return d.Chosen == "PhysicalAttack" && d.Legacy == "Healing"
+                        ? ExpectResult.Pass("PhysicalAttack (legacy Healing) [" + d.Reason + "]")
+                        : ExpectResult.Fail("chose " + d.Chosen + " (legacy " + d.Legacy + ") [" + d.Reason + "]");
+                })
+                .Expect("It decides no healer approach", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("HealerApproach");
+                    return rows.Count == 0 ? ExpectResult.Pass("no HealerApproach row") : ExpectResult.Fail(rows.Count + " HealerApproach row(s): " + rows[0].Chosen);
+                })
+                .Expect("It casts nothing", Expect.Count("cast", e => e.Str("by") == "adept", 0, 0))
+                .Expect("It does not close on the wounded goblin (3 squares)", v =>
+                {
+                    int d = FinalDistance(v, "adept", "gob");
+                    return d >= 3 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
                 })
                 .Build();
         }

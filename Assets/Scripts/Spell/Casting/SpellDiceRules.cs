@@ -370,6 +370,31 @@ public static class SpellDiceRules
         return spell.EffectType == SpellEffectType.Damage;
     }
 
+    /// <summary>
+    /// Whether <paramref name="spell"/> restores lost hit points: the cure ... wounds spells (a cure spell is any spell
+    /// with "cure" in its name, PHB p.32) and Heal (PHB p.239). The other Healing-effect spells (the restorations, the
+    /// remove-X spells, Make Whole, Stone to Flesh, Resurrection) restore no hit points, so the AI's healer does not count
+    /// them as a cure (batch 14 step 12, AI-063). A spell's clone (a scroll, a wand, a spontaneous conversion) keeps its
+    /// SpellId, so it is matched too.
+    /// </summary>
+    public static bool CuresHitPoints(SpellData spell)
+    {
+        if (spell == null || spell.EffectType != SpellEffectType.Healing)
+            return false;
+        switch (spell.SpellId)
+        {
+            case DND35e.Identifiers.SpellNames.CURE_MINOR_WOUNDS:
+            case DND35e.Identifiers.SpellNames.CURE_LIGHT_WOUNDS:
+            case DND35e.Identifiers.SpellNames.CURE_MODERATE_WOUNDS:
+            case DND35e.Identifiers.SpellNames.CURE_SERIOUS_WOUNDS:
+            case DND35e.Identifiers.SpellNames.CURE_CRITICAL_WOUNDS:
+            case DND35e.Identifiers.SpellNames.HEAL:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /// <summary>True when the spell would cure <paramref name="target"/>: a healing spell on a living target, or an inflict spell on an undead.</summary>
     public static bool Heals(SpellData spell, CharacterStats target)
     {

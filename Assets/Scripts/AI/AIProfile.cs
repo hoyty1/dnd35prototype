@@ -364,6 +364,30 @@ namespace DND35.AI
             return StandFirstIfProne(wish, ctx);
         }
 
+        /// <summary>
+        /// AI choice, not a rule (batch 14 step 12, AI-047, AI-063, design choice C8; game direction the owner may overrule):
+        /// what a Healer-Role creature <paramref name="self"/> does when its cure found no target in reach. AIService runs it
+        /// only on a Healing turn (HealerAIProfile.DetermineActionPriority: an ally needs healing and a cure is castable).
+        /// <see cref="DefaultChooseHealerApproach"/>; the traits tilt the answer (AiBlend.HealerApproach).
+        /// </summary>
+        public virtual HealerApproachChoice ChooseHealerApproach(CharacterController self, in HealerApproachContext ctx)
+            => DefaultChooseHealerApproach(ctx);
+
+        /// <summary>
+        /// The default (C8): move beside the patient and cure it in the same turn when a square beside it is reached this
+        /// turn (a 5-foot step, or one move action, PHB p.138, p.144); otherwise move toward it when a move gets closer;
+        /// otherwise today's turn (the spell walk, then the kiter). Which paths may provoke is already in the context
+        /// (HealerApproachContext.AoOPrice, Q8).
+        /// </summary>
+        public static HealerApproachChoice DefaultChooseHealerApproach(in HealerApproachContext ctx)
+        {
+            if (ctx.CanMoveAndCast)
+                return HealerApproachChoice.MoveAndCast;
+            if (ctx.CanApproachPartly)
+                return HealerApproachChoice.PartialApproach;
+            return HealerApproachChoice.Kiter;
+        }
+
         /// <summary>True for the Roles that keep their distance after a standard action (C8): a Ranged Role or a casting one.</summary>
         public static bool KeepsDistanceRole(in AfterStandardActionContext ctx)
             => ctx.Style == CombatStyle.Ranged || ctx.CastingRole;

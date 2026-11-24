@@ -506,6 +506,78 @@ namespace DND35.AI.Personality
             }
         }
 
+        // ── Batch 14 step 12: the healer reaches its patient (AI-047, AI-063, C8) ──
+
+        /// <summary>
+        /// The healer's approach to its patient (C8; AIProfile.ChooseHealerApproach), tilted by the traits' RoleDesire, as
+        /// <see cref="AfterStandardAction"/>: each open choice (Kiter always; MoveAndCast and PartialApproach when the
+        /// context allows them) scores 1 for the Role's pick, plus <see cref="AfterStandardDesireGain"/> times the desire
+        /// for its roles (MoveAndCast Heal; PartialApproach Heal or Approach, the larger; Kiter none), and only a strictly
+        /// higher score replaces the Role's pick. Which paths may provoke is not tilted here: the context's AoO price
+        /// already holds the traits' ProvokeAoO vote. The Role's choice itself with no personality. One trace row
+        /// "Personality.HealerApproach" when traced.
+        /// </summary>
+        public static HealerApproachChoice HealerApproach(PersonalityProfile p, HealerApproachChoice roleChoice,
+            in HealerApproachContext ctx, object actor = null)
+        {
+            if (p == null || !ctx.HasPatient)
+                return roleChoice;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, actor))
+            {
+                HealerApproachChoice best = roleChoice;
+                float roleScore = HealerApproachScore(p, roleChoice, roleChoice);
+                float bestScore = roleScore;
+                var order = new[] { HealerApproachChoice.Kiter, HealerApproachChoice.MoveAndCast, HealerApproachChoice.PartialApproach };
+                foreach (HealerApproachChoice c in order)
+                {
+                    if (c == roleChoice || !IsOpen(c, ctx))
+                        continue;
+                    float s = HealerApproachScore(p, c, roleChoice);
+                    if (s > bestScore)
+                    {
+                        best = c;
+                        bestScore = s;
+                    }
+                }
+                if (Tracing(actor))
+                    Trace(actor, "Personality.HealerApproach", best.ToString(), roleChoice.ToString(), bestScore - roleScore,
+                        best == roleChoice ? "Role choice kept" : "RoleDesire");
+                return best;
+            }
+        }
+
+        /// <summary>The creature overload: the Role's choice with no personality.</summary>
+        public static HealerApproachChoice HealerApproach(CharacterController self, HealerApproachChoice roleChoice, in HealerApproachContext ctx)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            return p == null ? roleChoice : HealerApproach(p, roleChoice, ctx, self);
+        }
+
+        /// <summary>What a healer's approach does for the creature, as the catalog's roles: MoveAndCast Heal, PartialApproach Heal and Approach, Kiter none.</summary>
+        public static ActionRoles RolesOf(HealerApproachChoice choice)
+        {
+            switch (choice)
+            {
+                case HealerApproachChoice.MoveAndCast: return ActionRoles.Heal;
+                case HealerApproachChoice.PartialApproach: return ActionRoles.Heal | ActionRoles.Approach;
+                default: return ActionRoles.None;
+            }
+        }
+
+        private static bool IsOpen(HealerApproachChoice c, in HealerApproachContext ctx)
+        {
+            switch (c)
+            {
+                case HealerApproachChoice.Kiter: return true;
+                case HealerApproachChoice.MoveAndCast: return ctx.CanMoveAndCast;
+                case HealerApproachChoice.PartialApproach: return ctx.CanApproachPartly;
+                default: return false;
+            }
+        }
+
+        private static float HealerApproachScore(PersonalityProfile p, HealerApproachChoice c, HealerApproachChoice roleChoice)
+            => (c == roleChoice ? 1f : 0f) + AfterStandardDesireGain * p.RoleShift(RolesOf(c));
+
         private static bool IsOpen(AfterStandardActionChoice c, in AfterStandardActionContext ctx)
         {
             switch (c)

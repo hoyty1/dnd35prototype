@@ -47,6 +47,9 @@ namespace Tests.AI
             TestAbjurerPrefersSingleTarget();
             TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
             TestHealerPrioritizesHealing();
+            TestHealerNeedsCastableCureToHeal();
+            TestHealerCastableCureDetection();
+            TestHealerApproachDefaults();
             TestHealerUsesBuffingWhenAlliesHealthy();
             TestHealerChoosesCriticalHealing();
             TestHealerChoosesMeleeWithHighACAndMeleeAB();
@@ -1352,7 +1355,7 @@ namespace Tests.AI
                 woundedAlly.Stats.CurrentHP = Mathf.CeilToInt(woundedAlly.Stats.TotalMaxHP * 0.30f);
 
                 var all = new List<CharacterController> { healer, woundedAlly };
-                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: true);
 
                 Assert(action == HealerActionType.Healing,
                     "Healer prioritizes healing for wounded ally",
@@ -1364,6 +1367,161 @@ namespace Tests.AI
                     woundedAlly != null ? woundedAlly.gameObject : null,
                     profile);
             }
+        }
+
+        /// <summary>
+        /// AI-063 (batch 14 step 12): a hurt ally makes a Healing turn only with a castable cure. Without one the healer
+        /// takes the next priority: an offensive spell when it holds any castable spell, else a physical attack (the
+        /// goblin adept, whose Adept spells wait for batch 15, CHR-024). HasCastableCure on real slots, a cleric's
+        /// conversion included (PHB p.32, CHR-070), is covered by rules/npc-cleric-converts-cure and rules/ai-healer-*.
+        /// </summary>
+        private static void TestHealerNeedsCastableCureToHeal()
+        {
+            HealerAIProfile profile = DND35.AI.AIProfile.CreateRuntime<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_NoCure", level: 5);
+            CharacterController woundedAlly = TestHelpers.CreateWarrior("Ally_WoundedNoCure", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                woundedAlly.IsPlayerControlled = true;
+                woundedAlly.Stats.CurrentHP = Mathf.CeilToInt(woundedAlly.Stats.TotalMaxHP * 0.30f);
+                var all = new List<CharacterController> { healer, woundedAlly };
+
+                HealerActionType withSpells = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: false);
+                Assert(withSpells == HealerActionType.OffensiveSpell,
+                    "Without a castable cure a hurt ally makes no Healing turn (castable spells: offensive)",
+                    $"(action={withSpells})");
+
+                HealerActionType noSpells = profile.DetermineActionPriority(healer, all, hasCastableSpells: false, hasCastableCure: false);
+                Assert(noSpells == HealerActionType.PhysicalAttack,
+                    "Without any castable spell a hurt ally makes no Healing turn (physical attack)",
+                    $"(action={noSpells})");
+
+                woundedAlly.Stats.CurrentHP = Mathf.CeilToInt(woundedAlly.Stats.TotalMaxHP * 0.15f);
+                HealerActionType critical = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: false);
+                Assert(critical == HealerActionType.OffensiveSpell,
+                    "Without a castable cure even a critical ally makes no CriticalHealing turn (castable spells: offensive)",
+                    $"(action={critical})");
+                HealerActionType criticalCure = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: true);
+                Assert(criticalCure == HealerActionType.CriticalHealing,
+                    "With a castable cure a critical ally makes a CriticalHealing turn",
+                    $"(action={criticalCure})");
+
+                Assert(!HealerAIProfile.HasCastableCure(null, null),
+                    "No healer has no castable cure", "");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    woundedAlly != null ? woundedAlly.gameObject : null,
+                    profile);
+            }
+        }
+
+        /// <summary>
+        /// AI-063 (batch 14 step 12): HealerAIProfile.HasCastableCure on a real cleric's slots. A cure is a spell that
+        /// restores hit points (SpellDiceRules.CuresHitPoints: the cure ... wounds spells and Heal, PHB p.32, p.239), not
+        /// every Healing-effect spell: Remove Paralysis restores none (PHB p.271). An unspent Cure Light Wounds is a cure; a
+        /// spent one is not; Remove Paralysis or Bless alone is not, unless the cleric converts it into a cure (PHB p.32;
+        /// AiConversionPlanner). No GameManager: the caster tests (CheckCasterLegalityForAI) are skipped.
+        /// </summary>
+        private static void TestHealerCastableCureDetection()
+        {
+            SpellData clw = SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS);
+            SpellData heal = SpellDatabase.GetSpell(SpellNames.HEAL);
+            SpellData removeParalysis = SpellDatabase.GetSpell(SpellNames.REMOVE_PARALYSIS);
+            SpellData lesserRestoration = SpellDatabase.GetSpell(SpellNames.LESSER_RESTORATION);
+            SpellData bless = SpellDatabase.GetSpell(SpellNames.BLESS);
+            Assert(SpellDiceRules.CuresHitPoints(clw) && SpellDiceRules.CuresHitPoints(heal),
+                "Cure Light Wounds and Heal cure hit points (PHB p.32, p.239)", "");
+            Assert(!SpellDiceRules.CuresHitPoints(removeParalysis) && !SpellDiceRules.CuresHitPoints(lesserRestoration)
+                   && !SpellDiceRules.CuresHitPoints(bless),
+                "Remove Paralysis, Lesser Restoration and Bless cure no hit points", "");
+            if (clw == null || removeParalysis == null || bless == null)
+            {
+                Assert(false, "The cure detection test spells exist", "");
+                return;
+            }
+
+            CharacterController cleric = TestHelpers.CreateCleric("Healer_CureSlots", level: 5);
+            try
+            {
+                SpellcastingComponent sc = cleric.Spellcasting;
+                if (sc == null || sc.SpellSlots == null || sc.SpellSlots.Count == 0)
+                {
+                    Assert(false, "A cleric 5 has spell slots", "");
+                    return;
+                }
+
+                // Every slot of level 1 and up holds the same spell; the orisons (level 0) hold Bless and are spent, so
+                // no prepared Cure Minor Wounds or orison conversion answers for the case.
+                void Fill(SpellData spell, bool used)
+                {
+                    for (int i = 0; i < sc.SpellSlots.Count; i++)
+                    {
+                        SpellSlot slot = sc.SpellSlots[i];
+                        if (slot == null)
+                            continue;
+                        slot.PreparedSpell = slot.Level == 0 ? bless.Clone() : spell.Clone();
+                        slot.IsUsed = used || slot.Level == 0;
+                    }
+                }
+
+                cleric.Stats.SpontaneousCasting = SpontaneousCastingType.None;
+                Fill(clw, used: false);
+                Assert(HealerAIProfile.HasCastableCure(cleric, null),
+                    "An unspent Cure Light Wounds is a castable cure", "");
+                Fill(clw, used: true);
+                Assert(!HealerAIProfile.HasCastableCure(cleric, null),
+                    "A spent Cure Light Wounds is no castable cure", "");
+                Fill(removeParalysis, used: false);
+                Assert(!HealerAIProfile.HasCastableCure(cleric, null),
+                    "Remove Paralysis alone is no castable cure (it restores no hit points)", "");
+                Fill(bless, used: false);
+                Assert(!HealerAIProfile.HasCastableCure(cleric, null),
+                    "Bless alone without spontaneous casting is no castable cure", "");
+                cleric.Stats.SpontaneousCasting = SpontaneousCastingType.Cure;
+                List<SpellData> cures = HealerAIProfile.CastableCures(cleric, null);
+                bool onlyHitPointCures = cures.Count > 0;
+                for (int i = 0; i < cures.Count; i++)
+                    onlyHitPointCures &= SpellDiceRules.CuresHitPoints(cures[i]);
+                Assert(onlyHitPointCures,
+                    "Bless with spontaneous cure casting converts into castable cures only (PHB p.32)",
+                    $"(cures={cures.Count})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(cleric != null ? cleric.gameObject : null);
+            }
+        }
+
+        /// <summary>
+        /// AI-047 (batch 14 step 12, C8): the healer's approach default. A square beside the patient this turn is a move and
+        /// a cure; else a square closer to it is a partial approach; else today's turn (the kiter). No patient is the kiter.
+        /// The traits' tilt (AiBlend.HealerApproach) keeps the Role's choice with no personality.
+        /// </summary>
+        private static void TestHealerApproachDefaults()
+        {
+            var touch = new HealerApproachContext { HasPatient = true, Distance = 3, AoOPrice = 1000f, TouchSquare = new Vector2Int(2, 0), PartialSquare = null };
+            var partial = new HealerApproachContext { HasPatient = true, Distance = 12, AoOPrice = 1000f, TouchSquare = null, PartialSquare = new Vector2Int(4, 0) };
+            var none = new HealerApproachContext { HasPatient = true, Distance = 3, AoOPrice = 1000f };
+            var noPatient = new HealerApproachContext { HasPatient = false, TouchSquare = new Vector2Int(1, 0) };
+
+            Assert(DND35.AI.AIProfile.DefaultChooseHealerApproach(touch) == HealerApproachChoice.MoveAndCast,
+                "A patient reached this turn: move and cure", "");
+            Assert(DND35.AI.AIProfile.DefaultChooseHealerApproach(partial) == HealerApproachChoice.PartialApproach,
+                "A patient beyond one move: a partial approach", "");
+            Assert(DND35.AI.AIProfile.DefaultChooseHealerApproach(none) == HealerApproachChoice.Kiter,
+                "No square beside or closer to the patient: today's kiter", "");
+            Assert(DND35.AI.AIProfile.DefaultChooseHealerApproach(noPatient) == HealerApproachChoice.Kiter,
+                "No patient: today's kiter", "");
+            Assert(DND35.AI.Personality.AiBlend.HealerApproach((DND35.AI.Personality.PersonalityProfile)null, HealerApproachChoice.MoveAndCast, touch) == HealerApproachChoice.MoveAndCast,
+                "No personality: the Role's choice", "");
+            // Q8 (delegated reading, 2026-11-23): the cure now is worth 6, so provokers times the price may not exceed 6.
+            Assert(AIService.MaxTouchPathProvokers(1000f) == 0 && AIService.MaxTouchPathProvokers(6f) == 1
+                   && AIService.MaxTouchPathProvokers(2f) == 3 && AIService.MaxTouchPathProvokers(0f) == int.MaxValue,
+                "A touch path's provokers: none at 1000, one at the critical 6, three at 2, any at 0", "");
         }
 
         private static void TestHealerUsesBuffingWhenAlliesHealthy()
@@ -1378,7 +1536,7 @@ namespace Tests.AI
                 healthyAlly.IsPlayerControlled = true;
 
                 var all = new List<CharacterController> { healer, healthyAlly };
-                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: true);
 
                 Assert(action == HealerActionType.Buffing,
                     "Healer chooses buffing when party is healthy",
@@ -1405,7 +1563,7 @@ namespace Tests.AI
                 criticalAlly.Stats.CurrentHP = Mathf.CeilToInt(criticalAlly.Stats.TotalMaxHP * 0.15f);
 
                 var all = new List<CharacterController> { healer, criticalAlly };
-                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: true);
 
                 Assert(action == HealerActionType.CriticalHealing,
                     "Healer chooses critical healing for emergency HP",
@@ -1822,7 +1980,7 @@ namespace Tests.AI
                 TestHelpers.SetGridPosition(undeadAlly, 1, 0);
 
                 var all = new List<CharacterController> { healer, undeadAlly };
-                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true, hasCastableCure: true);
                 Assert(action != HealerActionType.Healing && action != HealerActionType.CriticalHealing,
                     "Healer does not choose healing for a wounded undead ally",
                     $"(action={action})");

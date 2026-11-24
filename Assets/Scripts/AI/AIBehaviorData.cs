@@ -84,6 +84,55 @@ namespace DND35.AI
     }
 
     /// <summary>
+    /// What a Healer-Role creature does when its cure found no target in reach (batch 14 step 12, AI-047, AI-063; design
+    /// choice C8, owner question Q8): AIProfile.ChooseHealerApproach, tilted by the traits' RoleDesire
+    /// (AiBlend.HealerApproach). A turn is a standard and a move action in either order (PHB p.135, p.138, D1), so the
+    /// healer may move beside its patient and touch it with the cure in the same turn (a touch spell's range, PHB p.175). An
+    /// AI choice, not a rule; batch 22's evaluator replaces it.
+    /// </summary>
+    public enum HealerApproachChoice
+    {
+        /// <summary>Today's turn: the spell walk over every castable spell, then the ranged kiter.</summary>
+        Kiter,
+        /// <summary>A 5-foot step or a move beside the patient (HealerApproachContext.TouchSquare), then the cure.</summary>
+        MoveAndCast,
+        /// <summary>A move toward a patient no move reaches this turn (HealerApproachContext.PartialSquare), then the kiter's standard action.</summary>
+        PartialApproach
+    }
+
+    /// <summary>
+    /// The pure reads AIProfile.ChooseHealerApproach decides on (batch 14 step 12, C8). AIService builds it after the cure
+    /// found no target (AIService.BuildHealerApproachContext); a unit test may fill it by hand.
+    /// </summary>
+    public struct HealerApproachContext
+    {
+        /// <summary>The healer's cure has a patient other than itself (HealerAIProfile.GetPriorityHealTarget).</summary>
+        public bool HasPatient;
+        /// <summary>The patient is at or below the Role's critical threshold (HealerAIProfile.CriticalHealingThreshold, 25%).</summary>
+        public bool PatientCritical;
+        /// <summary>The healer's distance to the patient in squares, before any move.</summary>
+        public int Distance;
+        /// <summary>
+        /// The price per provoker of a path that provokes (C6, Q8): the Role's (1000 for a Healer, which avoids AoOs; at
+        /// most 6 for a critical patient), then the traits' ProvokeAoO vote (AiBlend.AoOCost). At 1000 or more no
+        /// approach provokes.
+        /// </summary>
+        public float AoOPrice;
+        /// <summary>A square beside the patient the healer reaches this turn within the AoO price, or null.</summary>
+        public Vector2Int? TouchSquare;
+        /// <summary>TouchSquare is reached by a 5-foot step (PHB p.144: it provokes nothing), not by a move action.</summary>
+        public bool TouchByFiveFootStep;
+        /// <summary>When no square beside the patient is reached: a move's destination closer to it, or null.</summary>
+        public Vector2Int? PartialSquare;
+
+        /// <summary>MoveAndCast is a choice: a square beside the patient is reached this turn.</summary>
+        public bool CanMoveAndCast => HasPatient && TouchSquare.HasValue;
+
+        /// <summary>PartialApproach is a choice: a move brings the healer closer to the patient.</summary>
+        public bool CanApproachPartly => HasPatient && PartialSquare.HasValue;
+    }
+
+    /// <summary>
     /// Grapple posture for the AI profile.
     /// </summary>
     public enum GrappleBehavior

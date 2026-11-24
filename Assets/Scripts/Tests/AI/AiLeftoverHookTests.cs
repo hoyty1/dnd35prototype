@@ -16,7 +16,10 @@ namespace Tests.AI
 /// creature that wants to move stands up instead, but a threatened one that wants distance stays down; otherwise it stays), the shipped profiles' hook equal to it, and the
 /// traits' tilt (AiBlend.AfterStandardAction): no personality keeps the Role's choice; Cowardly backs away where the Role
 /// would close in (Retreat .8 against Approach -.5) and Berserker closes in where the Role would back away (Approach .6
-/// against Retreat -.8), with the starter scores pinned. Pure: contexts are filled by hand. Either mode.
+/// against Retreat -.8), with the starter scores pinned. Batch 14 step 12 (AI-047, C8): the healer's approach
+/// (AIProfile.DefaultChooseHealerApproach, pinned in AIProfileFrameworkTests) and its tilt (AiBlend.HealerApproach): no
+/// personality and Cowardly keep the Role's choice, a Healer trait keeps a move-and-cure and a partial approach. Pure:
+/// contexts are filled by hand. Either mode.
 /// </summary>
 public static class AiLeftoverHookTests
 {
@@ -33,6 +36,7 @@ public static class AiLeftoverHookTests
         TestShippedProfilesUseTheDefault();
         TestNoPersonalityKeepsRole();
         TestCowardlyAndBerserkerReorder();
+        TestHealerApproachTilt();
 
         Debug.Log($"====== AI Leftover Hook Results: {_passed} passed, {_failed} failed ======");
     }
@@ -120,6 +124,41 @@ public static class AiLeftoverHookTests
                 if (p != null)
                     Object.DestroyImmediate(p);
         }
+    }
+
+    private static void TestHealerApproachTilt()
+    {
+        var touch = new HealerApproachContext { HasPatient = true, Distance = 3, AoOPrice = 1000f, TouchSquare = new Vector2Int(2, 0) };
+        var partial = new HealerApproachContext { HasPatient = true, Distance = 12, AoOPrice = 1000f, PartialSquare = new Vector2Int(4, 0) };
+        Assert(AIProfile.DefaultChooseHealerApproach(touch) == HealerApproachChoice.MoveAndCast
+               && AIProfile.DefaultChooseHealerApproach(partial) == HealerApproachChoice.PartialApproach,
+            "healer approach default: a touch square is MoveAndCast, a closer square PartialApproach");
+        Assert(AiBlend.HealerApproach((PersonalityProfile)null, HealerApproachChoice.MoveAndCast, touch) == HealerApproachChoice.MoveAndCast
+               && AiBlend.HealerApproach((CharacterController)null, HealerApproachChoice.PartialApproach, partial) == HealerApproachChoice.PartialApproach,
+            "healer approach: no personality keeps the Role's choice");
+        Assert(AiBlend.RolesOf(HealerApproachChoice.MoveAndCast) == ActionRoles.Heal
+               && AiBlend.RolesOf(HealerApproachChoice.PartialApproach) == (ActionRoles.Heal | ActionRoles.Approach)
+               && AiBlend.RolesOf(HealerApproachChoice.Kiter) == ActionRoles.None,
+            "healer approach roles: MoveAndCast Heal, PartialApproach Heal and Approach, Kiter none");
+
+        PersonalityProfile coward = P("Cowardly:1");
+        PersonalityProfile healer = P("Healer:1");
+        PersonalityProfile adept = P("Cowardly:0.6,Healer:0.4");
+        Assert(coward != null && healer != null && adept != null, "the healer test personalities build");
+        if (coward == null || healer == null || adept == null)
+            return;
+        // Cowardly names no Heal desire: MoveAndCast 1 against Kiter 0; PartialApproach 1 + 2 * -.5 = 0 ties Kiter 0.
+        Assert(AiBlend.HealerApproach(coward, HealerApproachChoice.MoveAndCast, touch) == HealerApproachChoice.MoveAndCast,
+            "Cowardly keeps the Role's move and cure");
+        Assert(AiBlend.HealerApproach(coward, HealerApproachChoice.PartialApproach, partial) == HealerApproachChoice.PartialApproach,
+            "Cowardly's partial approach ties the kiter, so the Role's choice is kept");
+        Assert(AiBlend.HealerApproach(healer, HealerApproachChoice.MoveAndCast, touch) == HealerApproachChoice.MoveAndCast
+               && AiBlend.HealerApproach(healer, HealerApproachChoice.PartialApproach, partial) == HealerApproachChoice.PartialApproach,
+            "Healer keeps both approaches (Heal .8)");
+        // The goblin adept's mix with a Role that kites (no approach open beyond it): the tilt opens no closed choice.
+        var none = new HealerApproachContext { HasPatient = true, Distance = 3, AoOPrice = 1000f };
+        Assert(AiBlend.HealerApproach(adept, HealerApproachChoice.Kiter, none) == HealerApproachChoice.Kiter,
+            "no square open: the adept's mix keeps the kiter");
     }
 
     private static PersonalityProfile P(string spec)

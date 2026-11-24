@@ -428,7 +428,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | AI-005 (fixed 2026-10-28) | Target choice no longer rolls: the Sanctuary save is rolled once per attacker and casting at the attack's commit and only predicted at selection (`WardSaveLedger`, batch 12 step 12), so cached decisions no longer flip within a turn (the Listen re-roll, AI-007, was fixed in batch 12 step 8). |
 | | AI-021 (fixed 2026-10-29) | Two position stores. Batch 13 step 7 left one, the `LastKnownPositionTracker`; the tag and store leak across encounters on reused slots was fixed on 2026-10-08 (CRE-046: `CharacterController.ResetForNewCreature`). |
 | Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |
-| | **AI-047** | The healer never moves to touch (the shaman example). |
+| | **AI-047** | The healer never moves to touch (the shaman example); since batch 14 step 12 (2026-11-23) a Healer Role moves to touch and cure a hurt ally, and only the touch buff is left. |
 | | **AI-010**, **CMB-075** | `FleeHealthThreshold` is unread, and the turn-skip gate pre-empts Panicked creatures. Withdraw needs both. |
 | | **AI-002** | Casters on melee routines never cast. |
 | | **ENC-021** | DMG casters have no spells, so the Healer and Caster traits cannot act. |
