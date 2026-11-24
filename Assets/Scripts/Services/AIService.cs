@@ -390,7 +390,11 @@ public class AIService : MonoBehaviour
             if (TryMaintainConcentrationTurn(npc, targetPC, grappling: true))
             {
                 yield return new WaitForSeconds(0.5f);
-                yield break;
+                if (!KeepsRoutineAfterAbility(npc))
+                {
+                    yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                    yield break;
+                }
             }
             // A grappler may cast a spell the grapple allows (PHB p.156; CMB-101): the cast candidates of the ordinary turn,
             // each through the shared cast legality (CheckLegalityForAI meets GrappleSpellcastRefusal), in place of its grapple
@@ -398,7 +402,11 @@ public class AIService : MonoBehaviour
             if (TryGrappledSpellcastForAI(npc, targetPC))
             {
                 yield return new WaitForSeconds(0.5f);
-                yield break;
+                if (!KeepsRoutineAfterAbility(npc))
+                {
+                    yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                    yield break;
+                }
             }
             yield return _gameManager.StartCoroutine(RunGrappleTurnForAI(npc));
             if (CombatEnded() || !CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
@@ -450,21 +458,29 @@ public class AIService : MonoBehaviour
         }
 
         // Lay on Hands (Su, PHB p.44): healing a hurt creature within touch, or destroying an undead foe the pool can
-        // finish, with the standard action, through the rules the PC button calls (LayOnHandsRules, CHR-020). The AI
-        // ends its turn after it (a simplification: it does not move afterwards).
+        // finish, with the standard action, through the rules the PC button calls (LayOnHandsRules, CHR-020). Its move
+        // action follows (UseMoveAfterStandardAction, batch 14 step 11, AI-077: a standard and a move action, PHB p.138).
         if (!isSummon && _gameManager.TryNPCLayOnHandsTurnForAI(npc))
         {
             yield return new WaitForSeconds(0.5f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                yield break;
+            }
         }
 
         // Turn undead (Su, PHB p.159): a cleric or paladin turns when a hostile turnable undead is within 60 ft with line of
         // effect and its best check could affect the nearest (design choice C6, AI-054), through the executor the PC's Turn
-        // Undead button runs (D9). The AI ends its turn after it (a simplification, as for lay on hands; AI-077).
+        // Undead button runs (D9). Its move action follows, as after lay on hands (batch 14 step 11, AI-077).
         if (!isSummon && _gameManager.TryNPCTurnUndeadTurnForAI(npc))
         {
             yield return new WaitForSeconds(0.5f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                yield break;
+            }
         }
 
         if (isSummon)
@@ -485,23 +501,31 @@ public class AIService : MonoBehaviour
         }
 
         // Bardic music (PHB p.29-30): a song, its concentration or a suggestion with the standard action, through the rules
-        // the PC Bardic Music button calls (BardicMusicRules, CHR-026), when AIProfile.ChooseBardicMusic picks one; the AI
-        // ends its turn after it (a simplification: it does not move afterwards). Stopping a song costs no action, and the
+        // the PC Bardic Music button calls (BardicMusicRules, CHR-026), when AIProfile.ChooseBardicMusic picks one; its move
+        // action follows (batch 14 step 11, AI-077). Stopping a song costs no action, and the
         // turn goes on (to cast while Inspire Courage lingers).
         if (_gameManager.TryNPCBardicMusicTurnForAI(npc))
         {
             yield return new WaitForSeconds(0.5f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                yield break;
+            }
         }
 
         // A maintained spell (PHB p.176): keeping it going is this turn's standard action, through the rule the PC's
         // Maintain button calls (ConcentrationRules, decision D2, SPL-153), when AIProfile.ShouldMaintainConcentration
-        // finds it worth more than the other standard action; the AI ends its turn after it (a simplification, as for
-        // bardic music: it does not move). Otherwise the turn goes on, and a cast or the end of the turn ends the spell.
+        // finds it worth more than the other standard action; its move action follows, as after a song (batch 14 step 11,
+        // AI-077). Otherwise the turn goes on, and a cast or the end of the turn ends the spell.
         if (TryMaintainConcentrationTurn(npc, targetPC))
         {
             yield return new WaitForSeconds(0.5f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
+                yield break;
+            }
         }
 
         // Wild Shape (Su, PHB p.37): the druid takes an animal form with its standard action, through the rules the PC
@@ -560,9 +584,18 @@ public class AIService : MonoBehaviour
                         {
                             Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully healed {healTarget.Stats.CharacterName}.");
                             yield return new WaitForSeconds(0.5f);
-                            yield break;
+                            // The move action after the cure (batch 14 step 11, AI-077); a quickened cure keeps the routine going.
+                            if (!KeepsRoutineAfterAbility(npc))
+                            {
+                                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, CombatStyle.Ranged));
+                                yield break;
+                            }
+                            Debug.Log($"[AI][Healer] {npc.Stats.CharacterName}: quickened or free cure, the routine continues with the ranged kiter.");
                         }
-                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} failed to heal — falling back to ranged kiter.");
+                        else
+                        {
+                            Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} failed to heal — falling back to ranged kiter.");
+                        }
                     }
                 }
 
@@ -574,7 +607,12 @@ public class AIService : MonoBehaviour
                     {
                         Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully cast buff spell.");
                         yield return new WaitForSeconds(0.5f);
-                        yield break;
+                        // The move action after the buff (batch 14 step 11, AI-077).
+                        if (!KeepsRoutineAfterAbility(npc))
+                        {
+                            yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, CombatStyle.Ranged));
+                            yield break;
+                        }
                     }
                 }
 
@@ -842,6 +880,204 @@ public class AIService : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
     }
 
+    // ── The move left after a standard-action ability (batch 14 step 11, AI-077; decision D1, design choice C8) ──
+
+    /// <summary>
+    /// True when the routine goes on after a standard-action ability: the creature can still act and its standard action
+    /// is left, because the cast was quickened or a free action (PHB p.98: a free action, one per round; D1). The routine
+    /// then takes its next step as if nothing had been spent; otherwise the site runs <see cref="UseMoveAfterStandardAction"/>.
+    /// A touch spell cast to hold its charge ends the routine even when quickened: the turn's delivery
+    /// (TryDeliverHeldChargeTurn, SPL-115) needs the move and standard actions, and another cast would dissipate the
+    /// charge (PHB p.176).
+    /// </summary>
+    private bool KeepsRoutineAfterAbility(CharacterController npc)
+        => !CombatEnded() && npc != null && npc.Stats != null && npc.CanTakeTurnActions() && npc.Actions != null
+           && npc.Actions.HasStandardAction && !_heldChargePlans.ContainsKey(npc);
+
+    /// <summary>
+    /// The pure reads of AIProfile.ChooseAfterStandardAction for <paramref name="npc"/> (batch 14 step 11, C8): whether it
+    /// may move (AiLegal.CanMoveNow; a prone creature, not grappling, the stand-up entry with its move action left),
+    /// whether <paramref name="focus"/> is out of the reach or range of the weapon in hand, whether a foe is within the
+    /// keep-away distance (the kiter's 2 squares, AiBlend.KeepAwayDistance) or threatens its square, and whether it can
+    /// still fight from range (AI-039). <paramref name="nearestFoe"/> is the closest living foe, whom a KeepDistance
+    /// backs away from. <paramref name="styleWithoutProfile"/> is the routine's style for a creature with no profile.
+    /// </summary>
+    internal AfterStandardActionContext BuildAfterStandardActionContext(CharacterController npc, CharacterController focus,
+        CombatStyle styleWithoutProfile, out CharacterController nearestFoe)
+    {
+        nearestFoe = null;
+        var ctx = new AfterStandardActionContext();
+        if (npc == null || npc.Stats == null || npc.Actions == null || _gameManager == null)
+            return ctx;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Action, npc);
+        AIProfile profile = GetProfile(npc);
+        ctx.Style = profile != null ? profile.CombatStyle : styleWithoutProfile;
+        ctx.CastingRole = profile != null && profile.IsCastingProfile;
+        ctx.Prone = npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling();
+        ctx.CanMove = ctx.Prone
+            ? npc.Actions.HasMoveAction && AiLegal.CanUse(npc, ActionIds.StandUp, _gameManager)
+            : AiLegal.CanMoveNow(npc, _gameManager) && !npc.Stats.MovementBlockedByCondition;
+        if (!ctx.CanMove)
+            return ctx;
+
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        ctx.FocusOutOfReach = focus != null && focus.Stats != null && !focus.IsDead && !npc.IsTargetInCurrentWeaponRange(focus)
+            // A focus the creature has turned is no approach target: approaching within 10 feet ends the turning (PHB p.159).
+            && !_gameManager.IsTurnedByForAI(focus, npc);
+        int keepAway = DND35.AI.Personality.AiBlend.KeepAwayDistance(npc, DND35.AI.Personality.AiBlend.LegacyKeepAwaySquares,
+            DND35.AI.Personality.AiBlend.IsRangedOrCastingRole(profile));
+        int nearest = int.MaxValue;
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController foe = all[i];
+            if (foe == null || foe == npc || foe.Stats == null || foe.IsDead || !foe.CanTakeTurnActions() || !_gameManager.IsEnemyTeamForAI(npc, foe))
+                continue;
+            int d = SquareGridUtils.GetDistance(npc.GridPosition, foe.GridPosition);
+            if (d < nearest)
+            {
+                nearest = d;
+                nearestFoe = foe;
+            }
+        }
+        ctx.FoeWithinKeepAway = nearestFoe != null && nearest <= keepAway;
+        ctx.Threatened = ThreatSystem.IsSquareThreatened(npc.GridPosition, npc, all);
+        if (ctx.FoeWithinKeepAway || ctx.Threatened)
+            ctx.CanFightFromRange = CanFightFromRange(npc, focus != null && !focus.IsDead ? focus : nearestFoe, all);
+        return ctx;
+    }
+
+    /// <summary>
+    /// The move action after a standard-action ability (batch 14 step 11, AI-077; D1, C8), which replaced the wait and the
+    /// end of the turn after a cast, a song, a maintained spell, Lay on Hands, Turn Undead and the healer's cure and buff:
+    /// the Role's AIProfile.ChooseAfterStandardAction (AIProfile.DefaultChooseAfterStandardAction without a profile),
+    /// tilted by the traits (AiBlend.AfterStandardAction). Approach moves to the reach or range of the weapon in hand from
+    /// <paramref name="focus"/> (AiOutOfReach.ApproachRangeSquares), KeepDistance away from the nearest foe, both chosen
+    /// by EvaluateMovementOptions (its paths priced by AiBlend.AoOCost) and run through the catalog's move entry
+    /// (RunAIAction), after AiLegal.CanMoveNow; StandUp runs the stand-up entry. A destination equal to the creature's own
+    /// square is no move. Called only when the standard action is spent (<see cref="KeepsRoutineAfterAbility"/>).
+    /// </summary>
+    private IEnumerator UseMoveAfterStandardAction(CharacterController npc, CharacterController focus, CombatStyle styleWithoutProfile)
+    {
+        if (CombatEnded() || npc == null || npc.Stats == null || !npc.CanTakeTurnActions() || npc.Actions == null)
+            yield break;
+        // A touch spell cast to hold its charge this turn keeps the move for its delivery (ExecuteNPCTurn's
+        // TryDeliverHeldChargeTurn moves into reach of the planned target and touches it, SPL-115).
+        if (_heldChargePlans.ContainsKey(npc))
+            yield break;
+
+        AfterStandardActionContext ctx = BuildAfterStandardActionContext(npc, focus, styleWithoutProfile, out CharacterController nearestFoe);
+        AIProfile profile = GetProfile(npc);
+        AfterStandardActionChoice roleChoice = profile != null
+            ? profile.ChooseAfterStandardAction(npc, ctx)
+            : AIProfile.DefaultChooseAfterStandardAction(ctx);
+        AfterStandardActionChoice choice = DND35.AI.Personality.AiBlend.AfterStandardAction(npc, roleChoice, ctx);
+        if (AiDecisionTrace.HasOpenTurn(npc))
+            AiDecisionTrace.Record(npc, "AfterStandard", choice.ToString(), roleChoice.ToString(), 0f,
+                ctx.CanMove ? $"outOfReach={ctx.FocusOutOfReach} near={ctx.FoeWithinKeepAway} threatened={ctx.Threatened}" : "no move");
+        string name = npc.Stats.CharacterName;
+        Debug.Log($"[AI][AfterStandard] {name}: {choice} (Role {roleChoice}; move={ctx.CanMove} prone={ctx.Prone} outOfReach={ctx.FocusOutOfReach} near={ctx.FoeWithinKeepAway} threatened={ctx.Threatened} ranged={ctx.CanFightFromRange})");
+
+        // Standing up from prone provokes from every threatener (PHB p.141, Table 8-2): a creature whose traits Forbid
+        // provoking stays down rather than stand into the AoOs (C6, the move's price by AiBlend.AoOCost).
+        if (choice == AfterStandardActionChoice.StandUp && ctx.Threatened
+            && DND35.AI.Personality.AiBlend.AoOCost(npc, AvoidsAoOs(npc, profile)
+                ? DND35.AI.Personality.AiBlend.AoOForbidPrice
+                : DND35.AI.Personality.AiBlend.AoOForCeiling) >= DND35.AI.Personality.AiBlend.AoOForbidPrice)
+        {
+            Debug.Log($"[AI][AfterStandard] {name} stays prone: standing up would provoke and it never provokes.");
+            yield break;
+        }
+
+        switch (choice)
+        {
+            case AfterStandardActionChoice.StandUp:
+            {
+                var stand = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(ActionContext.For(ActionIds.StandUp, npc, ActorSource.AI), stand));
+                yield break;
+            }
+
+            case AfterStandardActionChoice.Approach:
+            case AfterStandardActionChoice.KeepDistance:
+            {
+                bool approach = choice == AfterStandardActionChoice.Approach;
+                CharacterController from = approach ? focus : nearestFoe;
+                if (from == null || from.Stats == null || !AiLegal.CanMoveNow(npc, _gameManager))
+                    yield break;
+                // A move that ends within 10 feet of an undead this creature turned ends that turning (PHB p.159; the
+                // move's proximity check, CMB-262): such a destination is refused, so the move never undoes the turning.
+                Func<Vector2Int, bool> breaksTurning = c => _gameManager.WouldBreakTurningAtForAI(npc, c);
+                // A threatened creature backing away first tries a 5-foot step out of every threat (PHB p.144: it has not
+                // moved this round, and the step provokes no AoO), then the priced move (AI-088).
+                if (!approach && ctx.Threatened && TryFiveFootStepOutOfThreat(npc, from, breaksTurning))
+                {
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} takes a 5-foot step away from {from.Stats.CharacterName} to keep its distance."));
+                    yield return new WaitForSeconds(0.35f);
+                    yield break;
+                }
+                SquareCell cell = approach
+                    ? EvaluateMovementOptions(npc, from.GridPosition, retreat: false, from, profile, AiOutOfReach.ApproachRangeSquares(npc), breaksTurning)
+                    : EvaluateMovementOptions(npc, from.GridPosition, retreat: true, profile: profile, rejectCell: breaksTurning);
+                if (cell == null || cell.Coords == npc.GridPosition)
+                    yield break;
+                ActionContext moveCtx = ActionContext.For(ActionIds.Move, npc, ActorSource.AI);
+                moveCtx.Cell = cell.Coords;
+                var move = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(moveCtx, move));
+                if (CombatEnded() || !move.Performed || npc.Stats == null || !npc.CanTakeTurnActions())
+                    yield break;
+                _gameManager.CombatUI?.ShowCombatLog(approach
+                    ? CombatLogHelper.Info("", $"{name} advances toward {from.Stats.CharacterName}.")
+                    : CombatLogHelper.Info("", $"{name} backs away from {from.Stats.CharacterName} to keep its distance."));
+                yield return new WaitForSeconds(0.5f);
+                yield break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The 5-foot step of a threatened creature that keeps its distance after a standard action (batch 14 step 11, AI-088):
+    /// the adjacent square the step rule allows (CanTakeFiveFootStepToForAI: no move this round, PHB p.144), that no foe
+    /// threatens and that <paramref name="rejectCell"/> does not refuse, farthest from <paramref name="from"/>; taken
+    /// through the catalog's 5-foot step entry. False, and nothing spent, when there is none.
+    /// </summary>
+    private bool TryFiveFootStepOutOfThreat(CharacterController npc, CharacterController from, Func<Vector2Int, bool> rejectCell)
+    {
+        if (npc == null || from == null || _gameManager == null || _gameManager.Grid == null || !_gameManager.CanTakeFiveFootStepForAI(npc))
+            return false;
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        bool found = false;
+        Vector2Int best = npc.GridPosition;
+        int bestDist = int.MinValue;
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(npc.GridPosition);
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            Vector2Int candidate = neighbors[i];
+            if (!_gameManager.CanTakeFiveFootStepToForAI(npc, candidate))
+                continue;
+            if (rejectCell != null && rejectCell(candidate))
+                continue;
+            if (ThreatSystem.IsSquareThreatened(candidate, npc, all))
+                continue;
+            int d = SquareGridUtils.GetDistance(candidate, from.GridPosition);
+            if (d > bestDist)
+            {
+                bestDist = d;
+                best = candidate;
+                found = true;
+            }
+        }
+        return found && _gameManager.TryTakeFiveFootStepForAI(npc, best);
+    }
+
+    /// <summary>The Role's legacy AoO avoidance (Movement.AvoidAoOs, unless the profile ignores AoOs now), as EvaluateMovementOptions reads it.</summary>
+    private static bool AvoidsAoOs(CharacterController npc, AIProfile profile)
+        => profile != null && profile.Movement != null && profile.Movement.AvoidAoOs && !profile.ShouldIgnoreAoO(npc);
+
+    /// <summary>The routine style of a creature with no profile on the top-level sites (lay on hands, turn undead, bardic music, a maintained spell).</summary>
+    private static CombatStyle StyleWithoutProfile(NPCAIBehavior behavior)
+        => behavior == NPCAIBehavior.RangedKiter || behavior == NPCAIBehavior.Ranged ? CombatStyle.Ranged : CombatStyle.Melee;
+
     private IEnumerator ExecuteAggressiveMeleeTurn(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
@@ -889,13 +1125,18 @@ public class AIService : MonoBehaviour
         }
 
         // A melee caster casts first (batch 13 step 8, AI-002): the turn's spell through the catalog's cast entry, when
-        // the profile asks for it (AIProfile.ShouldTryCastBeforeMelee: a castable spell with a combat effect). The turn
-        // ends after a cast (design choice C4: the leftover move waits for batch 14, AI-077); a held touch charge is
-        // delivered by ExecuteNPCTurn. With no spell worth casting nothing is spent and the melee turn goes on.
+        // the profile asks for it (AIProfile.ShouldTryCastBeforeMelee: a castable spell with a combat effect). The move
+        // action follows the cast (batch 14 step 11, AI-077: AIProfile.ChooseAfterStandardAction, a melee Role closing on
+        // its target); a quickened cast keeps the melee turn going (PHB p.98); a held touch charge is delivered by
+        // ExecuteNPCTurn. With no spell worth casting nothing is spent and the melee turn goes on.
         if (TryCastBeforeMelee(npc, target, profile))
         {
             yield return new WaitForSeconds(0.8f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+                yield break;
+            }
         }
 
         // An overrun is a move through the target's space (PHB p.157; batch 12 step 20, D11), planned before the move and
@@ -1135,7 +1376,12 @@ public class AIService : MonoBehaviour
             {
                 Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} cast a spell (priority 1/2).");
                 yield return new WaitForSeconds(0.8f);
-                yield break;
+                // The move action after the cast (batch 14 step 11, AI-077); a quickened cast keeps the routine going.
+                if (!KeepsRoutineAfterAbility(npc))
+                {
+                    yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+                    yield break;
+                }
             }
         }
 
@@ -1424,10 +1670,16 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // The move action after the cast (batch 14 step 11, AI-077: a Ranged or casting Role keeps its distance); a
+        // quickened cast keeps the routine going (PHB p.98).
         if (TryExecuteSpellcastAction(npc, closestPC))
         {
             yield return new WaitForSeconds(0.8f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, closestPC, CombatStyle.Ranged));
+                yield break;
+            }
         }
 
         // A ranged weapon that cannot shoot (no ammunition, a crossbow it cannot reload in time; the attack guard, D1) fires
@@ -1520,10 +1772,16 @@ public class AIService : MonoBehaviour
         if (rangedTarget == null)
             yield break;
 
+        // After the move above, the move action is used only when it is still left (the routine's move was refused or
+        // not wanted), and a quickened cast keeps the routine going (batch 14 step 11, AI-077).
         if (TryExecuteSpellcastAction(npc, rangedTarget))
         {
             yield return new WaitForSeconds(0.8f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, rangedTarget, CombatStyle.Ranged));
+                yield break;
+            }
         }
 
         // The weapon attack goes only to a target the attack guard allows (batch 13 step 5, D1; AI-075): the reach or range
@@ -1754,7 +2012,12 @@ public class AIService : MonoBehaviour
             if (TryCastBeforeMelee(npc, target, profile))
             {
                 yield return new WaitForSeconds(0.8f);
-                yield break;
+                // The move action after the cast (batch 14 step 11, AI-077); a quickened cast keeps the routine going.
+                if (!KeepsRoutineAfterAbility(npc))
+                {
+                    yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+                    yield break;
+                }
             }
         }
 
@@ -1798,7 +2061,11 @@ public class AIService : MonoBehaviour
         if (!castFirstTried && TryCastBeforeMelee(npc, target, profile))
         {
             yield return new WaitForSeconds(0.8f);
-            yield break;
+            if (!KeepsRoutineAfterAbility(npc))
+            {
+                yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+                yield break;
+            }
         }
 
         // Moving needs the move action (AI-034).
@@ -2709,8 +2976,10 @@ public class AIService : MonoBehaviour
     /// retreat, else closest to the preferred range (the profile's Movement.PreferredRangeSquares, or
     /// <paramref name="preferredRangeOverride"/>: the approach to the weapon's reach or range, AiOutOfReach), with a bonus
     /// for threatening and flanking <paramref name="targetCharacter"/> and a penalty for paths that provoke.
+    /// <paramref name="rejectCell"/>, when given, rules a destination out (the move after a standard action refuses a
+    /// square that would end a turning, batch 14 step 11).
     /// </summary>
-    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null)
+    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null, int? preferredRangeOverride = null, Func<Vector2Int, bool> rejectCell = null)
     {
         using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Movement, mover);
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
@@ -2752,6 +3021,8 @@ public class AIService : MonoBehaviour
                 continue;
 
             if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover))
+                continue;
+            if (rejectCell != null && rejectCell(cell.Coords))
                 continue;
 
             AoOPathResult pathResult = _gameManager.FindPath(mover, cell.Coords, avoidThreats: false, maxRangeOverride: moverMoveRange);

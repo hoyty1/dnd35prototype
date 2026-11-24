@@ -438,6 +438,90 @@ namespace DND35.AI.Personality
             return p == null ? roleList : OrderOutOfReach(p, roleList, self);
         }
 
+        // ── Batch 14 step 11: the move left after a standard-action ability (AI-077, C8) ──
+
+        /// <summary>C8: how far one unit of RoleDesire moves a choice after a standard action (starter constant, as <see cref="OutOfReachDesireGain"/>).</summary>
+        public const float AfterStandardDesireGain = 2f;
+
+        /// <summary>
+        /// The move left after a standard action (C8; AIProfile.ChooseAfterStandardAction), tilted by the traits'
+        /// RoleDesire. The choices open in <paramref name="ctx"/> (Stay always; Approach when the focus is out of reach;
+        /// KeepDistance when a foe is close or threatens) each score 1 for the Role's pick, plus
+        /// <see cref="AfterStandardDesireGain"/> times the desire for Approach or Retreat (Stay counts 0; a threatened
+        /// creature's KeepDistance only while it can still fight from range, AI-039); a choice must beat
+        /// the Role's pick to replace it. A prone creature's move becomes StandUp, as in the default. The Role's choice
+        /// itself with no personality or no move to make. One trace row "Personality.AfterStandard" when traced.
+        /// </summary>
+        public static AfterStandardActionChoice AfterStandardAction(PersonalityProfile p, AfterStandardActionChoice roleChoice,
+            in AfterStandardActionContext ctx, object actor = null)
+        {
+            if (p == null || !ctx.CanMove)
+                return roleChoice;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, actor))
+            {
+                AfterStandardActionChoice roleWish = roleChoice;
+                if (roleWish == AfterStandardActionChoice.StandUp)
+                    roleWish = DND35.AI.AIProfile.KeepsDistanceRole(ctx) && ctx.CanKeepDistance && ctx.CanFightFromRange
+                        ? AfterStandardActionChoice.KeepDistance
+                        : AfterStandardActionChoice.Approach;
+
+                AfterStandardActionChoice best = roleWish;
+                float bestScore = AfterStandardScore(p, roleWish, roleWish);
+                var order = new[] { AfterStandardActionChoice.Stay, AfterStandardActionChoice.Approach, AfterStandardActionChoice.KeepDistance };
+                foreach (AfterStandardActionChoice c in order)
+                {
+                    if (c == roleWish || !IsOpen(c, ctx))
+                        continue;
+                    float s = AfterStandardScore(p, c, roleWish);
+                    if (s > bestScore)
+                    {
+                        best = c;
+                        bestScore = s;
+                    }
+                }
+                AfterStandardActionChoice result = DND35.AI.AIProfile.StandFirstIfProne(best, ctx);
+                if (Tracing(actor))
+                    Trace(actor, "Personality.AfterStandard", result.ToString(), roleChoice.ToString(), bestScore - AfterStandardScore(p, roleWish, roleWish),
+                        result == roleChoice ? "Role choice kept" : "RoleDesire");
+                return result;
+            }
+        }
+
+        /// <summary>The creature overload: the Role's choice with no personality.</summary>
+        public static AfterStandardActionChoice AfterStandardAction(CharacterController self, AfterStandardActionChoice roleChoice,
+            in AfterStandardActionContext ctx)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            return p == null ? roleChoice : AfterStandardAction(p, roleChoice, ctx, self);
+        }
+
+        /// <summary>What a choice after a standard action does for the creature, as the catalog's roles: Approach or Retreat; Stay none.</summary>
+        public static ActionRoles RolesOf(AfterStandardActionChoice choice)
+        {
+            switch (choice)
+            {
+                case AfterStandardActionChoice.Approach: return ActionRoles.Approach;
+                case AfterStandardActionChoice.KeepDistance: return ActionRoles.Retreat;
+                default: return ActionRoles.None;
+            }
+        }
+
+        private static bool IsOpen(AfterStandardActionChoice c, in AfterStandardActionContext ctx)
+        {
+            switch (c)
+            {
+                case AfterStandardActionChoice.Stay: return true;
+                case AfterStandardActionChoice.Approach: return ctx.CanApproach;
+                // AI-039, as the default and the kiter: a threatened creature backs away only while it can still fight
+                // from range (a trait may still widen the distance from a foe that is close but does not threaten).
+                case AfterStandardActionChoice.KeepDistance: return ctx.CanKeepDistance && (ctx.CanFightFromRange || !ctx.Threatened);
+                default: return false;
+            }
+        }
+
+        private static float AfterStandardScore(PersonalityProfile p, AfterStandardActionChoice c, AfterStandardActionChoice roleWish)
+            => (c == roleWish ? 1f : 0f) + AfterStandardDesireGain * p.RoleShift(RolesOf(c));
+
         /// <summary>
         /// <paramref name="ctx"/> with a null Difficulty filled from <see cref="SettingsDifficulty"/> (Normal when unset);
         /// <paramref name="fromSettings"/> says it was filled.

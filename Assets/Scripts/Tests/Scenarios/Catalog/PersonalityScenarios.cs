@@ -44,6 +44,17 @@ namespace Tests.Scenarios
     /// rules/ai-maneuver-skips-helpless, a goblin attacks a dying PC instead of tripping it. The expectations read the
     /// scorer's "Maneuver" rows of the decision trace (outside the hash) besides the hashed maneuvers and attacks. The first
     /// two replace rules/ai-maneuver-stopgap-trip and -trip-fail.</para>
+    /// <para>Step 11 (the move left after a standard-action ability; AI-077, D1, C8): rules/ai-kiter-casts-then-retreats, an
+    /// adept kiter casts at a fighter two squares off and then backs away; rules/ai-melee-caster-casts-then-closes, a cleric casts
+    /// first and then closes on a far hero without attacking (the move action is all it has left); rules/ai-quickened-cast-
+    /// continues-turn, an AI-run wizard's quickened Magic Missile (a free action, PHB p.98) leaves its standard action for a
+    /// second cast in the same round; rules/ai-fullround-cast-no-move, a Summon Monster I (a 1-round, full-round cast) leaves
+    /// no move; rules/ai-lay-on-hands-then-moves, a wounded paladin heals itself and then closes on the fighter;
+    /// rules/ai-cowardly-casts-then-retreats, a Cowardly cleric backs away after its cast where its -plain twin closes in;
+    /// rules/ai-cleric-move-keeps-turning, a cleric's move after its turning never ends within 10 feet of an undead it
+    /// turned (PHB p.159); rules/ai-threatened-caster-steps-away, a threatened adept 5-foot steps out of the threat after
+    /// its cast instead of walking off through the AoO (PHB p.144, AI-088). The expectations read the "AfterStandard" and "Personality.AfterStandard" rows of the decision trace (outside the
+    /// hash) besides the hashed casts and moves.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -79,6 +90,15 @@ namespace Tests.Scenarios
             yield return S("ai-maneuver-trip-fail-redecided", () => AiManeuverTripOddsGood(tripLands: false));
             yield return S("ai-maneuver-attacks-when-odds-poor", AiManeuverAttacksWhenOddsPoor);
             yield return S("ai-maneuver-skips-helpless", AiManeuverSkipsHelpless);
+            yield return S("ai-kiter-casts-then-retreats", AiKiterCastsThenRetreats);
+            yield return S("ai-melee-caster-casts-then-closes", AiMeleeCasterCastsThenCloses);
+            yield return S("ai-quickened-cast-continues-turn", AiQuickenedCastContinuesTurn);
+            yield return S("ai-fullround-cast-no-move", AiFullRoundCastNoMove);
+            yield return S("ai-lay-on-hands-then-moves", AiLayOnHandsThenMoves);
+            yield return S("ai-cowardly-casts-then-retreats", () => AiCowardlyCastsThenRetreats(plain: false));
+            yield return S("ai-cowardly-casts-then-retreats-plain", () => AiCowardlyCastsThenRetreats(plain: true));
+            yield return S("ai-cleric-move-keeps-turning", AiClericMoveKeepsTurning);
+            yield return S("ai-threatened-caster-steps-away", AiThreatenedCasterStepsAway);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -1186,6 +1206,352 @@ namespace Tests.Scenarios
                     List<global::AiDecisionTrace.Decision> rows = ManeuverRows(actor != null ? actor.Str("name") : "Goblin", 1);
                     return rows.Count > 0 && rows[0].Chosen == "Attack" && (rows[0].Reason ?? "").Contains("AI-058")
                         ? ExpectResult.Pass(RowsText(rows)) : ExpectResult.Fail(RowsText(rows));
+                })
+                .Build();
+        }
+
+        // ── Batch 14 step 11: the move left after a standard-action ability (AI-077; D1, C8) ──
+
+        /// <summary>The distance in squares between two actors at the end of the job, or -1.</summary>
+        private static int FinalDistance(TraceView v, string a, string b)
+        {
+            UnityEngine.Vector2Int? pa = Pos(v.Final(a));
+            UnityEngine.Vector2Int? pb = Pos(v.Final(b));
+            return pa.HasValue && pb.HasValue ? SquareGridUtils.GetDistance(pa.Value, pb.Value) : -1;
+        }
+
+        /// <summary>
+        /// In round 1, <paramref name="by"/> takes its ability (the first event <paramref name="ability"/> picks) and then
+        /// moves: a move event of its own after the ability's seq (PHB p.138: a standard and a move action in either order).
+        /// </summary>
+        private static Func<TraceView, ExpectResult> MovesAfter(string by, string what, Func<TraceView, TraceEvent> ability)
+            => v =>
+            {
+                TraceEvent a = ability(v);
+                if (a == null)
+                    return ExpectResult.Fail("no " + what + " in round 1");
+                TraceEvent move = v.Moves(by, 1).FirstOrDefault(e => e.Seq > a.Seq);
+                return move != null
+                    ? ExpectResult.Pass(what + " #" + a.Seq + ", then a move of " + move.Int("sq") + " square(s) #" + move.Seq, a.Seq, move.Seq)
+                    : ExpectResult.Fail(what + " #" + a.Seq + ", no move after it", a.Seq);
+            };
+
+        private static TraceEvent FirstCast(TraceView v, string by) => v.Of("cast").FirstOrDefault(e => e.Str("by") == by && e.Round == 1);
+
+        /// <summary>One "AfterStandard" decision-trace row (AIService.UseMoveAfterStandardAction) chose <paramref name="chosen"/>.</summary>
+        private static Func<TraceView, ExpectResult> AfterStandardRow(string chosen, string legacy = null)
+            => v =>
+            {
+                List<global::AiDecisionTrace.Decision> rows = TraceRows("AfterStandard");
+                return rows.Any(d => d.Chosen == chosen && (legacy == null || d.Legacy == legacy))
+                    ? ExpectResult.Pass(rows.Count + " AfterStandard row(s), one " + chosen)
+                    : MissingRow("AfterStandard", rows.Count, "chose " + chosen + (legacy != null ? " over " + legacy : ""));
+            };
+
+        /// <summary>
+        /// AI-077 (batch 14 step 11): the arcane missile adept (Evoker Role, the kiter) casts Magic Missile at an idle
+        /// fighter two squares off, then backs away with its move action (a casting Role keeps its distance from a foe
+        /// within the keep-away distance, AIProfile.DefaultChooseAfterStandardAction). Before the step its turn ended at
+        /// the cast, two squares from the fighter.
+        /// </summary>
+        private static ScenarioDef AiKiterCastsThenRetreats()
+        {
+            return Rules("rules/ai-kiter-casts-then-retreats", "An AI kiter casts, then backs away from the close foe with its move action (AI-077, PHB p.138)")
+                .Covers("AI-077", "PHB p.138", "batch 14 step 11")
+                .MaxRounds(1)
+                .Npc("adept", "arcane_missile_adept", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 12, 10, Control.Idle)
+                .Tweak("hero", Sturdy)
+                .Tweak("adept", Sturdy)
+                .Initiative("adept", "hero")
+                .Expect("Round 1: it casts, then moves", MovesAfter("adept", "cast", v => FirstCast(v, "adept")))
+                .Expect("It ends farther than 2 squares from the fighter", v =>
+                {
+                    int d = FinalDistance(v, "adept", "hero");
+                    return d > 2 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
+                })
+                .Expect("The decision trace records KeepDistance", AfterStandardRow("KeepDistance", "KeepDistance"))
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-077 (batch 14 step 11): the human cleric (Humanoid Role, the defensive melee routine) casts first (AI-002),
+        /// then closes on the idle fighter five squares off with its move action (a melee Role approaches a focus out of
+        /// reach). Before the step its turn ended at the cast.
+        /// </summary>
+        private static ScenarioDef AiMeleeCasterCastsThenCloses()
+        {
+            return Rules("rules/ai-melee-caster-casts-then-closes", "An AI melee caster casts, then closes on its target with its move action (AI-077, PHB p.138)")
+                .Covers("AI-077", "AI-002", "PHB p.138", "batch 14 step 11")
+                .MaxRounds(1)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 15, 10, Control.Idle)
+                .Tweak("cleric", Sturdy)
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero")
+                .Expect("Round 1: it casts, then moves", MovesAfter("cleric", "cast", v => FirstCast(v, "cleric")))
+                .Expect("It ends closer to the fighter than it started (5 squares)", v =>
+                {
+                    int d = FinalDistance(v, "cleric", "hero");
+                    return d >= 0 && d < 5 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
+                })
+                .Expect("It makes no attack in round 1 (the cast took the standard action)", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("cleric", null, false, 1);
+                    return attacks.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(attacks.Count + " attack(s)", attacks[0].Seq);
+                })
+                .Expect("The decision trace records Approach", AfterStandardRow("Approach", "Approach"))
+                .Build();
+        }
+
+        /// <summary>A Human neutral wizard: STR 10, DEX 12, CON 12, INT 16; Wizard kit (CastPipelineScenarios' fixture).</summary>
+        private static CharacterStats StepWizard(string name, int level, params string[] feats)
+        {
+            var s = new CharacterStats(
+                name: name, level: level, characterClass: "Wizard",
+                str: 10, dex: 12, con: 12, wis: 10, intelligence: 16, cha: 10,
+                bab: 0, armorBonus: 0, shieldBonus: 0,
+                damageDice: 6, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 6 * level, raceName: "Human");
+            s.CharacterAlignment = Alignment.TrueNeutral;
+            s.EnsureMulticlassDataInitialized();
+            foreach (string f in feats)
+                s.Feats.Add(f);
+            return s;
+        }
+
+        /// <summary>
+        /// Leaves <paramref name="c"/> only the given slots: each (level, spell, metamagic) is added prepared, every other
+        /// slot is marked used.
+        /// </summary>
+        private static void OnlySlots(CharacterController c, params (int level, string spellId, MetamagicData metamagic)[] slots)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting");
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null)
+                    slot.IsUsed = true;
+            foreach (var (level, spellId, metamagic) in slots)
+            {
+                var slot = new SpellSlot(level, false, "Wizard");
+                slot.PrepareWithMetamagic(SpellDatabase.GetSpell(spellId).Clone(), metamagic);
+                sc.SpellSlots.Add(slot);
+            }
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
+        /// <summary>
+        /// D1 (PHB p.98: a quickened spell is a free action, one per round): an AI-run wizard 9 with Quicken Spell, only a
+        /// quickened Magic Missile (a 5th-level slot) and a plain one (1st level), and a sturdy dummy nine squares off.
+        /// The quickened cast leaves the standard action, so the routine goes on (AIService.KeepsRoutineAfterAbility) and
+        /// the plain missile follows in the same turn. Before the step the turn ended at the first cast.
+        /// </summary>
+        private static ScenarioDef AiQuickenedCastContinuesTurn()
+        {
+            var quicken = new MetamagicData();
+            quicken.Toggle(MetamagicFeatId.QuickenSpell);
+            return Rules("rules/ai-quickened-cast-continues-turn", "An AI caster's quickened spell leaves its standard action, and the routine casts again (AI-077, PHB p.98)")
+                .Covers("AI-077", "PHB p.98", "batch 14 step 11")
+                .MaxRounds(1)
+                .Pc("wiz", ActorSource.Stats(() => StepWizard("Quick Wizard", 9, "Quicken Spell")), 3, 10, Control.Ai)
+                .Npc("dummy", "target_dummy", 12, 10, Control.Scripted)
+                .Tweak("wiz", c => OnlySlots(c, (5, SpellNames.MAGIC_MISSILE, quicken), (1, SpellNames.MAGIC_MISSILE, null)))
+                .Tweak("dummy", Sturdy)
+                .Initiative("wiz", "dummy")
+                .Turn("dummy", 1, Step.Assert("record", ctx =>
+                {
+                    SpellcastingComponent sc = ctx.Get("wiz").Spellcasting;
+                    ctx.Note("b14s11 quickened.used=" + sc.SpellSlots.Any(x => x != null && x.Level == 5 && x.HasMetamagic && x.IsUsed));
+                    ctx.Note("b14s11 plain.used=" + sc.SpellSlots.Any(x => x != null && x.Level == 1 && !x.HasMetamagic && x.IsUsed
+                        && x.PreparedSpell != null && x.PreparedSpell.SpellId == SpellNames.MAGIC_MISSILE));
+                    return true;
+                }))
+                .Expect("Round 1: two Magic Missiles", Expect.Count("cast", e => e.Str("by") == "wiz" && e.Round == 1 && e.Str("spell") == SpellNames.MAGIC_MISSILE, 2, 2))
+                .Expect("The quickened slot and the plain slot are both spent", v =>
+                {
+                    List<string> notes = v.Of("note").Select(e => e.Str("text") ?? "").Where(t => t.StartsWith("b14s11 ", StringComparison.Ordinal)).ToList();
+                    bool q = notes.Contains("b14s11 quickened.used=True");
+                    bool p = notes.Contains("b14s11 plain.used=True");
+                    return q && p ? ExpectResult.Pass("both spent") : ExpectResult.Fail(string.Join("; ", notes));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// D1 (a 1-round casting time is a full-round action, PHB p.139, and leaves no move): an AI-run wizard 3 with only
+        /// Summon Monster I (two slots) and an idle fighter two squares off. It summons, and does not move afterwards,
+        /// though a standard cast would have backed it away from the close foe (rules/ai-kiter-casts-then-retreats).
+        /// </summary>
+        private static ScenarioDef AiFullRoundCastNoMove()
+        {
+            return Rules("rules/ai-fullround-cast-no-move", "An AI caster's full-round summon leaves no move action, so it stays (AI-077, PHB p.139)")
+                .Covers("AI-077", "PHB p.139", "batch 14 step 11")
+                .MaxRounds(1)
+                .Pc("wiz", ActorSource.Stats(() => StepWizard("Summoning Wizard", 3)), 10, 10, Control.Ai)
+                .Npc("orc", "orc_warrior", 12, 10, Control.Idle)
+                .Tweak("wiz", c => { OnlySlots(c, (1, SpellNames.SUMMON_MONSTER_1, null), (1, SpellNames.SUMMON_MONSTER_1, null)); Sturdy(c); })
+                .Tweak("orc", Sturdy)
+                .Initiative("wiz", "orc")
+                .Expect("Round 1: it casts Summon Monster I", v =>
+                {
+                    TraceEvent c = FirstCast(v, "wiz");
+                    return c != null && c.Str("spell") == SpellNames.SUMMON_MONSTER_1
+                        ? ExpectResult.Pass("cast #" + c.Seq, c.Seq) : ExpectResult.Fail(c == null ? "no cast" : "cast " + c.Str("spell"));
+                })
+                .Expect("It does not move in round 1", v =>
+                {
+                    int moved = v.Moves("wiz", 1).Sum(e => e.Int("sq"));
+                    return moved == 0 ? ExpectResult.Pass("stayed") : ExpectResult.Fail("moved " + moved);
+                })
+                .Expect("The decision trace records Stay with no move left", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("AfterStandard");
+                    return rows.Any(d => d.Chosen == "Stay" && d.Reason == "no move")
+                        ? ExpectResult.Pass(rows.Count + " AfterStandard row(s), one Stay with no move")
+                        : MissingRow("AfterStandard", rows.Count, "Stay with no move");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-077 (batch 14 step 11): the paladin 3 at a third of its hit points lays on hands on itself for 6
+        /// (rules/paladin-lay-on-hands-ai's layout), then closes on the idle fighter six squares off with its move action.
+        /// </summary>
+        private static ScenarioDef AiLayOnHandsThenMoves()
+        {
+            return Rules("rules/ai-lay-on-hands-then-moves", "An AI paladin lays on hands, then closes on its foe with its move action (AI-077, PHB p.44, p.138)")
+                .Covers("AI-077", "PHB p.44", "PHB p.138", "batch 14 step 11")
+                .MaxRounds(1)
+                .Npc("pal", "human_paladin_3", 10, 10, Control.Ai)
+                .Pc("foe", ActorSource.Stats(() => RulesScenarios.Fighter("Foe", 4)), 16, 10, Control.Idle)
+                .Tweak("pal", c => c.Stats.CurrentHP = c.Stats.TotalMaxHP / 3)
+                .Tweak("foe", Sturdy)
+                .Initiative("pal", "foe")
+                .Expect("Round 1: it heals itself 6, then moves", MovesAfter("pal", "the +6 heal",
+                    v => v.Of("hp").FirstOrDefault(e => e.Round == 1 && e.Str("actor") == "pal" && e.Int("new") - e.Int("old") == 6)))
+                .Expect("It ends closer to the fighter than it started (6 squares)", v =>
+                {
+                    int d = FinalDistance(v, "pal", "foe");
+                    return d >= 0 && d < 6 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// C8 with the traits (batch 14 step 11): the human cleric with Cowardly:1 casts first, then backs away from the
+        /// idle fighter two squares off (Cowardly's Retreat .8 beats the Role's approach, AiBlend.AfterStandardAction);
+        /// the -plain twin closes in instead.
+        /// </summary>
+        private static ScenarioDef AiCowardlyCastsThenRetreats(bool plain)
+        {
+            string id = plain ? "rules/ai-cowardly-casts-then-retreats-plain" : "rules/ai-cowardly-casts-then-retreats";
+            ScenarioBuilder b = Rules(id, plain
+                    ? "The plain melee caster casts, then closes on the fighter two squares off (batch 14 step 11)"
+                    : "The cowardly melee caster casts, then backs away from the fighter two squares off (batch 14 step 11, C8)")
+                .Covers("AI-077", "PHB p.138", "batch 14 step 11")
+                .MaxRounds(1)
+                .Npc("cleric", "human_cleric", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 12, 10, Control.Idle)
+                .Tweak("cleric", Sturdy)
+                .Tweak("hero", Sturdy)
+                .Initiative("cleric", "hero");
+            b.Personality("cleric", plain ? "" : "Cowardly:1");
+            b.Expect("Round 1: it casts, then moves", MovesAfter("cleric", "cast", v => FirstCast(v, "cleric")));
+            if (plain)
+            {
+                b.Expect("It ends next to the fighter", v =>
+                {
+                    int d = FinalDistance(v, "cleric", "hero");
+                    return d == 1 ? ExpectResult.Pass("adjacent") : ExpectResult.Fail("distance " + d);
+                });
+                b.Expect("The decision trace records the Role's Approach", AfterStandardRow("Approach", "Approach"));
+            }
+            else
+            {
+                b.Expect("It ends farther than 2 squares from the fighter", v =>
+                {
+                    int d = FinalDistance(v, "cleric", "hero");
+                    return d > 2 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
+                });
+                b.Expect("The decision trace records KeepDistance over the Role's Approach", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("Personality.AfterStandard");
+                    return rows.Any(d => d.Chosen == "KeepDistance" && d.Legacy == "Approach")
+                        ? ExpectResult.Pass(rows.Count + " Personality.AfterStandard row(s): Approach -> KeepDistance")
+                        : MissingRow("Personality.AfterStandard", rows.Count, "KeepDistance over Approach");
+                });
+            }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// The review of batch 14 step 11 (AI-077, PHB p.159): an AI-run human cleric on the party's side, a goblin 3
+        /// squares off (its likely focus, out of reach) and two skeletons 4 squares off flanking the goblin. The forced
+        /// dice turn both skeletons; every square next to the goblin is within 10 feet of a skeleton, so the move after the
+        /// turning (AIService.UseMoveAfterStandardAction) refuses those squares and the turning holds through round 1
+        /// (GameManager.WouldBreakTurningAtForAI). Before the fix an approach toward another foe could end next to a turned
+        /// undead and break its turning in the cleric's own turn.
+        /// </summary>
+        private static ScenarioDef AiClericMoveKeepsTurning()
+        {
+            return Rules("rules/ai-cleric-move-keeps-turning", "An AI cleric's move after Turn Undead never ends within 10 feet of an undead it turned (AI-077, PHB p.159)")
+                .Covers("AI-077", "PHB p.159", "PHB p.138", "batch 14 step 11")
+                .MaxRounds(1)
+                .Npc("cleric", "human_cleric", 5, 10, Control.Ai, CharacterTeam.Player)
+                .Tweak("cleric", Sturdy)
+                .Npc("gob", "goblin", 8, 10, Control.Idle)
+                .Tweak("gob", Sturdy)
+                .Npc("skel1", "skeleton_warrior", 9, 9, Control.Ai)
+                .Npc("skel2", "skeleton_warrior", 9, 11, Control.Ai)
+                .Initiative("cleric", "gob", "skel1", "skel2")
+                .Force(20, 20, "Turning check").Force(6, 1, "Turning damage", 2)
+                .Expect("The cleric invokes Turn Undead in round 1", v =>
+                    v.Log("invokes Turn Undead").Any(e => e.Round == 1) ? ExpectResult.Pass("invoked") : ExpectResult.Fail("no turning"))
+                .Expect("Both skeletons are turned", v =>
+                {
+                    int n = new[] { "skel1", "skel2" }.Count(k => v.Conds(k, CombatConditionType.Turned).Any(e => e.Bool("added") && e.Round == 1));
+                    return n == 2 ? ExpectResult.Pass("2 turned") : ExpectResult.Fail(n + " turned");
+                })
+                .Expect("No turning ends in round 1 (the cleric's move does not come within 10 feet)", v =>
+                {
+                    TraceEvent ended = v.Conds(null, CombatConditionType.Turned).FirstOrDefault(e => !e.Bool("added") && e.Round == 1);
+                    return ended == null ? ExpectResult.Pass("the turning holds") : ExpectResult.Fail("a turning ended", ended.Seq);
+                })
+                .Expect("The move after the turning was decided (an AfterStandard row; Approach when the goblin is the focus)", v =>
+                {
+                    List<global::AiDecisionTrace.Decision> rows = TraceRows("AfterStandard");
+                    if (rows.Count == 0)
+                        return MissingRow("AfterStandard", 0, "a decision after the turning");
+                    return rows.Any(d => d.Chosen == "Approach")
+                        ? ExpectResult.Pass(rows.Count + " AfterStandard row(s), one Approach")
+                        : ExpectResult.Inconclusive("no Approach (the focus was not the goblin): " + string.Join(",", rows.Select(d => d.Chosen)));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-088 (the review of batch 14 step 11): the arcane missile adept next to an idle fighter (no reach) casts, then
+        /// keeps its distance with a 5-foot step out of the fighter's threat (PHB p.144: it has not moved this round, and the
+        /// step provokes nothing) instead of walking off through a movement AoO (PHB p.137).
+        /// </summary>
+        private static ScenarioDef AiThreatenedCasterStepsAway()
+        {
+            return Rules("rules/ai-threatened-caster-steps-away", "A threatened AI caster 5-foot steps out of the threat after its cast, provoking no movement AoO (AI-088, PHB p.144)")
+                .Covers("AI-088", "AI-077", "PHB p.144", "PHB p.137", "batch 14 step 11")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => RulesScenarios.Fighter("Fighter", 4)), 10, 10, Control.Idle)
+                .Tweak("fighter", Sturdy)
+                .Npc("adept", "arcane_missile_adept", 11, 10, Control.Ai)
+                .Tweak("adept", Sturdy)
+                .Initiative("adept", "fighter")
+                .Expect("Round 1: it casts", v => FirstCast(v, "adept") != null ? ExpectResult.Pass("cast") : ExpectResult.Fail("no cast"))
+                .Expect("The decision trace records KeepDistance", AfterStandardRow("KeepDistance"))
+                .Expect("No movement AoO against the adept", Expect.None("aoo", e => e.Str("target") == "adept" && e.Str("trigger") != "spellcast"))
+                .Expect("It ends out of the fighter's reach, one 5-foot step away", v =>
+                {
+                    int d = FinalDistance(v, "adept", "fighter");
+                    return d == 2 ? ExpectResult.Pass("distance 2") : ExpectResult.Fail("distance " + d);
                 })
                 .Build();
         }

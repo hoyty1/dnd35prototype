@@ -35,6 +35,55 @@ namespace DND35.AI
     }
 
     /// <summary>
+    /// What an AI-run creature does with the move action left after a standard action that is not an attack (a cast, a
+    /// song, a maintained spell, Lay on Hands, Turn Undead, the healer's cure or buff; batch 14 step 11, AI-077, design
+    /// choice C8): AIProfile.ChooseAfterStandardAction, tilted by the traits' RoleDesire (AiBlend.AfterStandardAction). A
+    /// turn is a standard and a move action in either order (PHB p.135, p.138, D1), and not moving is legal. An AI choice,
+    /// not a rule; batch 22's evaluator replaces it.
+    /// </summary>
+    public enum AfterStandardActionChoice
+    {
+        /// <summary>Spend nothing more this turn.</summary>
+        Stay,
+        /// <summary>Move toward the focus target, to the reach or range of the weapon in hand (the move entry).</summary>
+        Approach,
+        /// <summary>Move away from the nearest foe (the move entry, its path priced by AiBlend.AoOCost).</summary>
+        KeepDistance,
+        /// <summary>A prone creature that wants to move stands up with its move action instead (PHB p.141-142).</summary>
+        StandUp
+    }
+
+    /// <summary>
+    /// The pure reads AIProfile.ChooseAfterStandardAction decides on (batch 14 step 11, C8). AIService builds it after the
+    /// standard action; a unit test may fill it by hand.
+    /// </summary>
+    public struct AfterStandardActionContext
+    {
+        /// <summary>The creature may use its move action now (AiLegal.CanMoveNow; for a prone creature, the stand-up entry with a move action left).</summary>
+        public bool CanMove;
+        /// <summary>The creature is prone and not grappling, so any move it wants stands it up first (PHB p.141).</summary>
+        public bool Prone;
+        /// <summary>The routine's focus target is alive, not within the reach or range of the weapon in hand, and not an undead the creature has turned (approaching within 10 feet would end the turning, PHB p.159).</summary>
+        public bool FocusOutOfReach;
+        /// <summary>A foe is within the keep-away distance (AiBlend.KeepAwayDistance of the kiter's 2 squares).</summary>
+        public bool FoeWithinKeepAway;
+        /// <summary>A foe threatens the creature's square (ThreatSystem.IsSquareThreatened).</summary>
+        public bool Threatened;
+        /// <summary>The creature can still fight from range after backing off (AIService.CanFightFromRange, AI-039).</summary>
+        public bool CanFightFromRange;
+        /// <summary>The Role's combat style (the routine's without a profile).</summary>
+        public CombatStyle Style;
+        /// <summary>The Role is a casting profile (AIProfile.IsCastingProfile).</summary>
+        public bool CastingRole;
+
+        /// <summary>Approach is a choice: the focus is out of reach.</summary>
+        public bool CanApproach => CanMove && FocusOutOfReach;
+
+        /// <summary>KeepDistance is a choice: a foe is close or threatens the creature.</summary>
+        public bool CanKeepDistance => CanMove && (FoeWithinKeepAway || Threatened);
+    }
+
+    /// <summary>
     /// Grapple posture for the AI profile.
     /// </summary>
     public enum GrappleBehavior

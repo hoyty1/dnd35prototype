@@ -135,6 +135,40 @@ public partial class GameManager
         return recordedTurner != null && recordedTurner == candidateTurner;
     }
 
+    /// <summary>
+    /// True when <paramref name="undead"/> is turned by <paramref name="turner"/>, so the turner's approach within 10 feet
+    /// would end the turning (PHB p.159). The AI's move after a standard action reads it (batch 14 step 11, AI-077).
+    /// </summary>
+    internal bool IsTurnedByForAI(CharacterController undead, CharacterController turner)
+        => undead != null && undead.HasCondition(CombatConditionType.Turned) && IsTurnedBy(undead, turner);
+
+    /// <summary>
+    /// True when <paramref name="turner"/>, standing at <paramref name="cell"/>, would be within
+    /// TurnUndeadFearBreakDistanceSquares (10 feet) of a living undead it turned, so the proximity check that ends every
+    /// move (CheckTurnUndeadProximityBreakingForMover) would end that turning (PHB p.159; CMB-262 for the check's
+    /// over-breadth). The AI's move after a standard action refuses such a destination (batch 14 step 11, AI-077).
+    /// </summary>
+    internal bool WouldBreakTurningAtForAI(CharacterController turner, Vector2Int cell)
+    {
+        if (turner == null || _activeTurnUndeadTrackers.Count == 0)
+            return false;
+        List<Vector2Int> mine = turner.GetOccupiedSquares();
+        Vector2Int shift = cell - turner.GridPosition;
+        foreach (var kvp in _activeTurnUndeadTrackers)
+        {
+            CharacterController undead = kvp.Key;
+            if (undead == null || undead.Stats == null || undead.Stats.IsDead || kvp.Value == null || kvp.Value.Turner != turner
+                || !undead.HasCondition(CombatConditionType.Turned))
+                continue;
+            List<Vector2Int> theirs = undead.GetOccupiedSquares();
+            for (int i = 0; i < mine.Count; i++)
+                for (int j = 0; j < theirs.Count; j++)
+                    if (SquareGridUtils.GetChebyshevDistance(mine[i] + shift, theirs[j]) <= TurnUndeadFearBreakDistanceSquares)
+                        return true;
+        }
+        return false;
+    }
+
     private StatusEffect GetActiveTurnedCondition(CharacterController undead)
     {
         if (undead == null)

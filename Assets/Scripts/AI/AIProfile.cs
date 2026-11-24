@@ -327,6 +327,61 @@ namespace DND35.AI
             return style == CombatStyle.Ranged ? RangedAlternatives : MeleeAlternatives;
         }
 
+        /// <summary>
+        /// AI choice, not a rule (batch 14 step 11, AI-077, design choice C8; game direction the owner may overrule): what
+        /// <paramref name="self"/> does with the move action left after a standard action that is not an attack (a cast, a
+        /// song, a maintained spell, Lay on Hands, Turn Undead, the healer's cure or buff). A turn is a standard and a move
+        /// action in either order and not moving is legal (PHB p.135, p.138, decision D1). AIService runs it only when the
+        /// standard action is spent: a quickened or free cast (PHB p.98) keeps the routine going instead.
+        /// <see cref="DefaultChooseAfterStandardAction"/>; the traits tilt the answer (AiBlend.AfterStandardAction).
+        /// </summary>
+        public virtual AfterStandardActionChoice ChooseAfterStandardAction(CharacterController self, in AfterStandardActionContext ctx)
+            => DefaultChooseAfterStandardAction(ctx);
+
+        /// <summary>
+        /// The default, also used for creatures without a profile (C8):
+        /// - a Ranged or casting Role (AiBlend.IsRangedOrCastingRole without Mixed: a Mixed Role that does not cast, such as
+        ///   a dragon, fights in melee) keeps its distance when a foe is within the keep-away distance or threatens it and
+        ///   it can still fight from range (AI-039, as the kiter's retreat);
+        /// - a Melee or Mixed Role approaches a focus out of reach, as after a wild shape;
+        /// - otherwise it stays.
+        /// A prone creature that wants to move stands up instead (<see cref="StandFirstIfProne"/>).
+        /// </summary>
+        public static AfterStandardActionChoice DefaultChooseAfterStandardAction(in AfterStandardActionContext ctx)
+        {
+            if (!ctx.CanMove)
+                return AfterStandardActionChoice.Stay;
+            AfterStandardActionChoice wish = AfterStandardActionChoice.Stay;
+            if (KeepsDistanceRole(ctx))
+            {
+                if (ctx.CanKeepDistance && ctx.CanFightFromRange)
+                    wish = AfterStandardActionChoice.KeepDistance;
+            }
+            else if (ctx.CanApproach)
+            {
+                wish = AfterStandardActionChoice.Approach;
+            }
+            return StandFirstIfProne(wish, ctx);
+        }
+
+        /// <summary>True for the Roles that keep their distance after a standard action (C8): a Ranged Role or a casting one.</summary>
+        public static bool KeepsDistanceRole(in AfterStandardActionContext ctx)
+            => ctx.Style == CombatStyle.Ranged || ctx.CastingRole;
+
+        /// <summary>
+        /// A prone creature's move wish becomes standing up (PHB p.141-142: a prone creature cannot take ordinary movement).
+        /// A threatened prone creature that wants distance stays down instead: standing up provokes (PHB p.141, Table 8-2)
+        /// and gains it no distance this turn.
+        /// </summary>
+        public static AfterStandardActionChoice StandFirstIfProne(AfterStandardActionChoice wish, in AfterStandardActionContext ctx)
+        {
+            if (!ctx.Prone || (wish != AfterStandardActionChoice.Approach && wish != AfterStandardActionChoice.KeepDistance))
+                return wish;
+            if (wish == AfterStandardActionChoice.KeepDistance && ctx.Threatened)
+                return AfterStandardActionChoice.Stay;
+            return AfterStandardActionChoice.StandUp;
+        }
+
         /// <summary>A ranged weapon in hand that can shoot now (AiAttackGuard.CheckWeapon), or a throwable melee weapon (PHB p.113).</summary>
         public static bool HasUsableRangedWeapon(CharacterController self)
         {
