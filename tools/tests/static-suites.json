@@ -132,11 +132,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 16,
+      "passed": 24,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Batch 14 step 2 (added 2026-11-23): AttackValue (AI/Valuation), the AI's hit chance and damage estimates extracted from AIProfile.HitChance and AverageWeaponDamage and ThreatSystem.EstimateAverageMeleeDamage: each member equals the formula it replaced (copied in the suite as it stood at de36b83) on a grid of modifiers and ACs and on live creatures (a longsword in either hand, a longbow, a natural bite, an unarmed strike), and the delegating members give the same values (reflection, TST-006); ExpectedRoundDamage sums the iterative steps (BAB +6: +6/+1, PHB p.143) and the natural attacks by count with the secondary -5 (MM p.312). Play mode (CharacterController.Init, TST-009). 16/16 in its first Play pass (20261123T165901Z-play)."
+      "notes": "Batch 14 step 2 (added 2026-11-23): AttackValue (AI/Valuation), the AI's hit chance and damage estimates extracted from AIProfile.HitChance and AverageWeaponDamage and ThreatSystem.EstimateAverageMeleeDamage: each member equals the formula it replaced (copied in the suite as it stood at de36b83) on a grid of modifiers and ACs and on live creatures (a longsword in either hand, a longbow, a natural bite, an unarmed strike), and the delegating members give the same values (reflection, TST-006); ExpectedRoundDamage sums the iterative steps (BAB +6: +6/+1, PHB p.143) and the natural attacks by count with the secondary -5 (MM p.312). Play mode (CharacterController.Init, TST-009). 16/16 in its first Play pass (20261123T165901Z-play). AI-091 (2026-11-23): +8, TestDamageAfterReduction (ExpectedHitAfterReduction takes a flat reduction off each roll; MainHitDice; ExpectedRoundDamage, SingleAttackDamage and TurnOptionValue.AverageHitOn with a subject: unchanged without immunity, reduction or resistance, only the rolls above DR 10/silver for a plain longsword, raw with a silvered one, 0 on a swarm's weapon immunity, DR 5/- off each roll, a claw passing DR 5/bludgeoning as the attack path's no-weapon fallback does, CMB-140, CMB-220); 24/24 in the Play pass 20261124T042054Z-play."
     },
     {
       "type": "Tests.AI.ManeuverChooserTests",
@@ -1054,11 +1054,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 25,
+      "passed": 41,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "SPL-004 (2026-10-09): DamagePackets through ApplyIncomingDamage, CharacterStats only; also the generic SpellCaster.Cast branch (Fire Shield after a Reflex save, Searing Light skipped, SPL-124)."
+      "notes": "SPL-004 (2026-10-09): DamagePackets through ApplyIncomingDamage, CharacterStats only; also the generic SpellCaster.Cast branch (Fire Shield after a Reflex save, Searing Light skipped, SPL-124). AI-091 (2026-11-23): TestEstimateMatchesPipeline (CharacterStats.EstimateDamageAfterMitigation, FlatMitigationAgainst, PickDamageReduction, GetResistanceAgainst and IsDamageNegatedByImmunity agree with ApplyIncomingDamage on whole hits: DR 10/silver against plain, silvered and spell packets, fire resistance 5, a swarm's weapon immunity, a fire immunity, nothing without entries); 41/41 in the Play pass 20261124T042054Z-play."
     },
     {
       "type": "Tests.Combat.DazeMonsterAndHideousLaughterRulesTests",

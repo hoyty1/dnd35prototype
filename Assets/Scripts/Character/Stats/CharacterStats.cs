@@ -5354,6 +5354,194 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// The damage reduction that applies to a hit of <paramref name="packet"/> (<see cref="PickDamageReduction"/>): the
+    /// highest amount among the entries the packet does not bypass, and the flags the pipeline's Protection from Arrows
+    /// notes read.
+    /// </summary>
+    public struct DamageReductionPick
+    {
+        /// <summary>The highest applicable amount (0: none applies).</summary>
+        public int Amount;
+        /// <summary>That amount is a ranged-only entry (Protection from Arrows, PHB p.266).</summary>
+        public bool BestWasRangedOnly;
+        /// <summary>The creature has a ranged-only entry.</summary>
+        public bool HasRangedOnly;
+        /// <summary>A ranged-only entry was bypassed by the packet's tags.</summary>
+        public bool RangedOnlyBypassed;
+        /// <summary>A ranged-only entry was bypassed and the packet is magic.</summary>
+        public bool RangedOnlyBypassedByMagic;
+    }
+
+    /// <summary>
+    /// The damage reduction rule of <see cref="ApplyIncomingDamage"/> (MM p.307, DMG p.291), pure: DR
+    /// applies only to a weapon or natural attack (a ranged-only entry only to a ranged one), an entry is bypassed when the
+    /// packet carries any of its bypass tags (the weapon's material, magic, alignment or damage form), and the best
+    /// remaining amount applies (DRs do not stack). The pipeline and the AI's estimate (<see cref="EstimateDamageAfterMitigation"/>,
+    /// AI-091) both read it, so the estimate never drifts from the rule. Nothing changed.
+    /// </summary>
+    public DamageReductionPick PickDamageReduction(DamagePacket packet)
+    {
+        var pick = new DamageReductionPick();
+        if (packet == null || DamageReductions == null)
+            return pick;
+        bool sourceCountsAsWeapon = packet.Source == AttackSource.Weapon || packet.Source == AttackSource.Natural;
+        for (int i = 0; i < DamageReductions.Count; i++)
+        {
+            var dr = DamageReductions[i];
+            if (dr == null || dr.Amount <= 0) continue;
+
+            if (dr.AppliesToRangedOnly)
+            {
+                pick.HasRangedOnly = true;
+                if (!(packet.IsRanged && sourceCountsAsWeapon))
+                    continue;
+            }
+            else if (!sourceCountsAsWeapon)
+            {
+                continue;
+            }
+
+            bool bypassed = (dr.BypassAnyTag != DamageBypassTag.None) && ((packet.AttackTags & dr.BypassAnyTag) != 0);
+            if (dr.AppliesToRangedOnly && bypassed)
+            {
+                pick.RangedOnlyBypassed = true;
+                if ((packet.AttackTags & DamageBypassTag.Magic) != 0)
+                    pick.RangedOnlyBypassedByMagic = true;
+            }
+
+            if (!bypassed && dr.Amount > pick.Amount)
+            {
+                pick.Amount = dr.Amount;
+                pick.BestWasRangedOnly = dr.AppliesToRangedOnly;
+            }
+        }
+        return pick;
+    }
+
+    /// <summary>
+    /// The resistance rule of <see cref="ApplyIncomingDamage"/> (MM p.314), pure: the highest typed resistance among
+    /// <paramref name="types"/> (<see cref="DamageResistances"/>) or the Resist Energy spell's (PHB p.272), whichever is
+    /// higher. Read by the pipeline and the AI's estimate (<see cref="EstimateDamageAfterMitigation"/>, AI-091).
+    /// </summary>
+    public int GetResistanceAgainst(HashSet<DamageType> types, out int typedResistance, out int resistEnergyResistance,
+        out DamageType resistEnergyTypeMatched)
+    {
+        typedResistance = 0;
+        if (types != null && DamageResistances != null)
+        {
+            foreach (var type in types)
+            {
+                for (int i = 0; i < DamageResistances.Count; i++)
+                {
+                    var entry = DamageResistances[i];
+                    if (entry != null && entry.Type == type)
+                        typedResistance = Mathf.Max(typedResistance, entry.Amount);
+                }
+            }
+        }
+
+        resistEnergyResistance = GetResistEnergyResistanceForTypes(types, out resistEnergyTypeMatched);
+        return Mathf.Max(typedResistance, resistEnergyResistance);
+    }
+
+    /// <summary>
+    /// The swarm trait's weapon immunity rule of <see cref="ApplyIncomingDamage"/> (MM p.315-316), pure: a creature
+    /// immune to weapon damage takes none from a weapon packet unless the packet carries fire. Read by the pipeline and
+    /// the AI's estimate (<see cref="IsDamageNegatedByImmunity"/>, AI-091).
+    /// </summary>
+    public bool IsImmuneToWeaponPacket(DamagePacket packet)
+        => packet != null && Immunities != null && Immunities.immuneToWeaponDamage && packet.Source == AttackSource.Weapon
+           && (packet.Types == null || !packet.Types.Contains(DamageType.Fire));
+
+    /// <summary>
+    /// The typed immunity rule of <see cref="ApplyIncomingDamage"/>, pure: the first of <paramref name="types"/> this
+    /// creature is immune to (<see cref="DamageImmunities"/> or <see cref="CreatureImmunities.IsImmuneTo"/>); any match
+    /// negates the whole hit. Read by the pipeline and the AI's estimate (<see cref="IsDamageNegatedByImmunity"/>).
+    /// </summary>
+    public bool TryGetTypedImmunity(HashSet<DamageType> types, out DamageType immuneType)
+    {
+        immuneType = DamageType.Untyped;
+        if (types == null)
+            return false;
+        foreach (var type in types)
+        {
+            if ((DamageImmunities != null && DamageImmunities.Contains(type)) || (Immunities != null && Immunities.IsImmuneTo(type)))
+            {
+                immuneType = type;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The creature has any entry the AI's estimate reads (<see cref="DamageReductions"/>, <see cref="DamageResistances"/>,
+    /// an active Resist Energy, <see cref="DamageImmunities"/>, a typed or the swarm's weapon immunity in
+    /// <see cref="Immunities"/>), so <see cref="EstimateDamageAfterMitigation"/> or <see cref="FlatMitigationAgainst"/> may
+    /// take something off; without one every hit estimate is the raw value (AI-091).
+    /// </summary>
+    public bool HasDamageMitigation
+        => (DamageReductions != null && DamageReductions.Count > 0)
+           || (DamageResistances != null && DamageResistances.Count > 0)
+           || (ActiveResistEnergyEffects != null && ActiveResistEnergyEffects.Count > 0)
+           || (DamageImmunities != null && DamageImmunities.Count > 0)
+           || (Immunities != null && (Immunities.immuneToWeaponDamage || Immunities.immuneToFire || Immunities.immuneToCold
+               || Immunities.immuneToElectricity || Immunities.immuneToAcid || Immunities.immuneToSonic || Immunities.immuneToForce
+               || Immunities.immuneToPositive || Immunities.immuneToNegative));
+
+    /// <summary>
+    /// A hit of <paramref name="packet"/> does no damage to this creature by immunity: the swarm's weapon immunity
+    /// (<see cref="IsImmuneToWeaponPacket"/>) or a typed immunity (<see cref="TryGetTypedImmunity"/>), the pipeline's
+    /// steps 0 and 1. Pure; for the AI's estimate (AI-091).
+    /// </summary>
+    public bool IsDamageNegatedByImmunity(DamagePacket packet)
+        => packet != null && (IsImmuneToWeaponPacket(packet) || TryGetTypedImmunity(EstimateTypes(packet), out _));
+
+    /// <summary>
+    /// An estimate for the AI (AI-091; never a rule): the flat amount this creature takes off every hit of
+    /// <paramref name="packet"/>, its resistance (<see cref="GetResistanceAgainst"/>) plus its damage reduction
+    /// (<see cref="PickDamageReduction"/>, a ranged-only entry capped by Protection from Arrows' remaining pool); the
+    /// pipeline takes them off each hit in turn, each to a minimum of 0, so one hit of d points deals max(0, d - amount).
+    /// Immunity is separate (<see cref="IsDamageNegatedByImmunity"/>); Protection from Energy, Fire Shield, hardness and
+    /// the Stoneskin pool are left out. Pure: nothing changed, no pool spent.
+    /// </summary>
+    public int FlatMitigationAgainst(DamagePacket packet)
+    {
+        if (packet == null)
+            return 0;
+        int resistance = Mathf.Max(0, GetResistanceAgainst(EstimateTypes(packet), out _, out _, out _));
+        DamageReductionPick dr = PickDamageReduction(packet);
+        int amount = dr.Amount;
+        if (amount > 0 && dr.BestWasRangedOnly)
+        {
+            ProtectionFromArrowsEffectData protection = ActiveProtectionFromArrowsEffect;
+            amount = protection == null ? 0 : Mathf.Min(amount, protection.RemainingAbsorptionPool);
+        }
+        return resistance + Mathf.Max(0, amount);
+    }
+
+    /// <summary>
+    /// An estimate for the AI (AI-091; never a rule): one hit of <paramref name="hitDamage"/> points of
+    /// <paramref name="packet"/> after this creature's immunity (0), resistance and damage reduction
+    /// (<see cref="FlatMitigationAgainst"/>), at least 0; <paramref name="hitDamage"/> unchanged when nothing applies.
+    /// Exact for one whole hit (DamagePacketRulesTests pins it to the pipeline); for a hit's expected damage over its
+    /// dice, AttackValue.ExpectedHitAfterReduction reduces each roll instead. Pure.
+    /// </summary>
+    public float EstimateDamageAfterMitigation(float hitDamage, DamagePacket packet)
+    {
+        if (hitDamage <= 0f || packet == null)
+            return hitDamage;
+        if (IsDamageNegatedByImmunity(packet))
+            return 0f;
+        int amount = FlatMitigationAgainst(packet);
+        return amount > 0 ? Mathf.Max(0f, hitDamage - amount) : hitDamage;
+    }
+
+    /// <summary>The packet's types as the pipeline reads them (untyped when it has none).</summary>
+    private static HashSet<DamageType> EstimateTypes(DamagePacket packet)
+        => packet.Types != null && packet.Types.Count > 0 ? packet.Types : new HashSet<DamageType> { DamageType.Untyped };
+
+    /// <summary>
     /// Apply incoming damage through the full mitigation pipeline:
     /// immunity -> typed resistance -> DR (weapon damage only) -> HP/Temp HP.
     /// </summary>
@@ -5391,47 +5579,37 @@ public class CharacterStats
         // if the character is inside a sphere. The proper sphere-boundary check is done upstream.
 
         // Swarm trait immunity: weapon attacks do no damage unless the weapon attack is fire-based.
-        if (Immunities != null && Immunities.immuneToWeaponDamage && packet.Source == AttackSource.Weapon)
+        if (IsImmuneToWeaponPacket(packet))
         {
-            bool hasFireDamageType = packet.Types.Contains(DamageType.Fire);
-            if (!hasFireDamageType)
+            DamageType firstType = DamageType.Untyped;
+            foreach (DamageType type in packet.Types)
             {
-                DamageType firstType = DamageType.Untyped;
-                foreach (DamageType type in packet.Types)
-                {
-                    firstType = type;
-                    break;
-                }
-
-                result.ImmunityTriggered = true;
-                result.ImmunityType = firstType;
-                result.DamageAfterImmunity = 0;
-                result.DamageAfterResistance = 0;
-                result.FinalDamage = 0;
-                result.Notes.Add("Immune to weapon damage.");
-                TakeDamage(0);
-                return result;
+                firstType = type;
+                break;
             }
+
+            result.ImmunityTriggered = true;
+            result.ImmunityType = firstType;
+            result.DamageAfterImmunity = 0;
+            result.DamageAfterResistance = 0;
+            result.FinalDamage = 0;
+            result.Notes.Add("Immune to weapon damage.");
+            TakeDamage(0);
+            return result;
         }
 
         RecordEnergyDamageTaken(packet.Types);
 
         // 1) Immunity check: any matching type negates all damage
-        foreach (var type in packet.Types)
+        if (TryGetTypedImmunity(packet.Types, out DamageType immuneType))
         {
-            bool hasTypedImmunity = DamageImmunities.Contains(type)
-                || (Immunities != null && Immunities.IsImmuneTo(type));
-
-            if (hasTypedImmunity)
-            {
-                result.ImmunityTriggered = true;
-                result.ImmunityType = type;
-                result.DamageAfterImmunity = 0;
-                result.DamageAfterResistance = 0;
-                result.FinalDamage = 0;
-                TakeDamage(0);
-                return result;
-            }
+            result.ImmunityTriggered = true;
+            result.ImmunityType = immuneType;
+            result.DamageAfterImmunity = 0;
+            result.DamageAfterResistance = 0;
+            result.FinalDamage = 0;
+            TakeDamage(0);
+            return result;
         }
 
         // 2a) Protection from Energy: absorbs energy damage BEFORE resistance
@@ -5473,19 +5651,8 @@ public class CharacterStats
         // 2b) Resistance check: use highest resistance among matching damage types
         //     Applied to damage remaining AFTER Protection from Energy
         int damageForResistance = result.DamageAfterProtectionFromEnergy;
-        int typedResistance = 0;
-        foreach (var type in packet.Types)
-        {
-            for (int i = 0; i < DamageResistances.Count; i++)
-            {
-                var entry = DamageResistances[i];
-                if (entry != null && entry.Type == type)
-                    typedResistance = Mathf.Max(typedResistance, entry.Amount);
-            }
-        }
-
-        int resistEnergyResistance = GetResistEnergyResistanceForTypes(packet.Types, out DamageType resistEnergyTypeMatched);
-        int finalResistance = Mathf.Max(typedResistance, resistEnergyResistance);
+        int finalResistance = GetResistanceAgainst(packet.Types, out int typedResistance, out int resistEnergyResistance,
+            out DamageType resistEnergyTypeMatched);
 
         result.ResistanceApplied = Mathf.Min(damageForResistance, Mathf.Max(0, finalResistance));
         result.DamageAfterResistance = Mathf.Max(0, damageForResistance - result.ResistanceApplied);
@@ -5527,7 +5694,6 @@ public class CharacterStats
 
         // 3) DR check: applies only to physical weapon-like attacks (weapon or natural)
         int drApplied = 0;
-        bool sourceCountsAsWeapon = packet.Source == AttackSource.Weapon || packet.Source == AttackSource.Natural;
         bool hasRangedOnlyDr = false;
         bool bestDrWasRangedOnly = false;
         bool rangedOnlyDrBypassed = false;
@@ -5535,39 +5701,12 @@ public class CharacterStats
 
         if (result.DamageAfterResistance > 0)
         {
-            int bestApplicableDr = 0;
-            for (int i = 0; i < DamageReductions.Count; i++)
-            {
-                var dr = DamageReductions[i];
-                if (dr == null || dr.Amount <= 0) continue;
-
-                if (dr.AppliesToRangedOnly)
-                {
-                    hasRangedOnlyDr = true;
-                    if (!(packet.IsRanged && sourceCountsAsWeapon))
-                        continue;
-                }
-                else if (!sourceCountsAsWeapon)
-                {
-                    continue;
-                }
-
-                bool bypassed = (dr.BypassAnyTag != DamageBypassTag.None) && ((packet.AttackTags & dr.BypassAnyTag) != 0);
-                if (dr.AppliesToRangedOnly && bypassed)
-                {
-                    rangedOnlyDrBypassed = true;
-                    if ((packet.AttackTags & DamageBypassTag.Magic) != 0)
-                        rangedOnlyDrBypassedByMagic = true;
-                }
-
-                if (!bypassed && dr.Amount > bestApplicableDr)
-                {
-                    bestApplicableDr = dr.Amount;
-                    bestDrWasRangedOnly = dr.AppliesToRangedOnly;
-                }
-            }
-
-            drApplied = Mathf.Min(result.DamageAfterResistance, bestApplicableDr);
+            DamageReductionPick pick = PickDamageReduction(packet);
+            hasRangedOnlyDr = pick.HasRangedOnly;
+            bestDrWasRangedOnly = pick.BestWasRangedOnly;
+            rangedOnlyDrBypassed = pick.RangedOnlyBypassed;
+            rangedOnlyDrBypassedByMagic = pick.RangedOnlyBypassedByMagic;
+            drApplied = Mathf.Min(result.DamageAfterResistance, pick.Amount);
         }
 
         if (hasRangedOnlyDr && packet.IsRanged && packet.Source == AttackSource.Spell)

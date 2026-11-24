@@ -8,7 +8,9 @@ namespace Tests.Combat
 /// <see cref="CharacterStats.ApplyIncomingDamage"/>. RAW: damage reduction does not reduce energy damage, spells,
 /// spell-like or supernatural abilities (MM p.307), but does reduce a swarm's nonmagical attack (MM p.316); resistance
 /// to energy ignores its amount of each hit of that type (MM p.314); immunity negates it; Fire Shield halves the opposed
-/// energy and negates it on a successful Reflex save for half (PHB p.230). Stats only, no controllers or scene.
+/// energy and negates it on a successful Reflex save for half (PHB p.230). AI-091: the AI's estimate
+/// (<see cref="CharacterStats.EstimateDamageAfterMitigation"/>) reads the pipeline's own resistance and reduction rules and
+/// agrees with it on whole hits. Stats only, no controllers or scene.
 /// </summary>
 public static class DamagePacketRulesTests
 {
@@ -34,6 +36,7 @@ public static class DamagePacketRulesTests
         TestGenericSpellCastFireShieldReflexHalf();
         TestHandlerOwnedDamageSkipsGenericBranch();
         TestTemporaryHitPointsAbsorbFirst();
+        TestEstimateMatchesPipeline();
 
         Debug.Log($"====== Damage Packet Results: {_passed} passed, {_failed} failed ======");
     }
@@ -69,6 +72,69 @@ public static class DamagePacketRulesTests
         int before = target.CurrentHP;
         target.ApplyIncomingDamage(raw, packet);
         return before - target.CurrentHP;
+    }
+
+    /// <summary>
+    /// AI-091: the AI's estimate of a hit after resistance and damage reduction equals what the pipeline deals for whole
+    /// hits, through the same rules (PickDamageReduction, GetResistanceAgainst): DR 10/silver stops a plain piercing hit and
+    /// not a silvered one, takes 10 off a big hit, never applies to a spell; fire resistance 5 takes 5 off a fire bite and
+    /// nothing off a slash; a creature with neither leaves the hit unchanged, fractions included.
+    /// </summary>
+    private static void TestEstimateMatchesPipeline()
+    {
+        DamagePacket plain = DamagePackets.Weapon("Rapier", DamageType.Piercing);
+        DamagePacket silver = DamagePackets.Weapon("Silvered rapier", DamageType.Piercing, DamageBypassTag.Silver);
+        DamagePacket spell = DamagePackets.Spell("Magic Missile", DamageType.Force);
+        foreach (int hit in new[] { 4, 10, 14 })
+        {
+            foreach (DamagePacket packet in new[] { plain, silver, spell })
+            {
+                CharacterStats wolf = Target("Estimate DR target");
+                wolf.AddDamageReduction(10, DamageBypassTag.Silver);
+                float estimate = wolf.EstimateDamageAfterMitigation(hit, packet);
+                int dealt = Deal(wolf, hit, packet);
+                Assert(Mathf.Approximately(estimate, dealt), "Estimate equals the pipeline: " + hit + " " + packet.SourceName + " on DR 10/silver",
+                    "estimate " + estimate + " dealt " + dealt);
+            }
+        }
+        CharacterStats probe = Target("Estimate DR probe");
+        probe.AddDamageReduction(10, DamageBypassTag.Silver);
+        Assert(probe.EstimateDamageAfterMitigation(4.5f, plain) == 0f && probe.EstimateDamageAfterMitigation(4.5f, silver) == 4.5f
+               && probe.PickDamageReduction(plain).Amount == 10 && probe.PickDamageReduction(silver).Amount == 0,
+            "DR 10/silver stops a plain rapier's average hit and lets a silvered one through (MM p.307, DMG p.291)");
+
+        CharacterStats salamander = Target("Estimate resistance target");
+        salamander.AddDamageResistance(DamageType.Fire, 5);
+        DamagePacket fireBite = DamagePackets.CreatureAttack("Fire bite", DamageType.Fire);
+        DamagePacket slash = DamagePackets.Weapon("Longsword", DamageType.Slashing);
+        CharacterStats salamanderDealt = Target("Estimate resistance dealt");
+        salamanderDealt.AddDamageResistance(DamageType.Fire, 5);
+        Assert(Mathf.Approximately(salamander.EstimateDamageAfterMitigation(8f, fireBite), 3f) && Deal(salamanderDealt, 8, fireBite) == 3,
+            "Fire resistance 5 takes 5 off an 8-point fire hit in the estimate and the pipeline (MM p.314)");
+        Assert(salamander.EstimateDamageAfterMitigation(8f, slash) == 8f && salamander.GetResistanceAgainst(slash.Types, out _, out _, out _) == 0,
+            "Fire resistance takes nothing off a slashing hit");
+
+        Assert(probe.FlatMitigationAgainst(plain) == 10 && probe.FlatMitigationAgainst(silver) == 0 && salamander.FlatMitigationAgainst(fireBite) == 5,
+            "The flat amount taken off each hit is the resistance plus the reduction that applies");
+
+        CharacterStats swarm = Target("Estimate swarm");
+        swarm.Immunities = new CreatureImmunities { immuneToWeaponDamage = true };
+        DamagePacket flamingSlash = DamagePackets.Weapon("Flaming torch", DamageType.Fire);
+        CharacterStats swarmDealt = Target("Estimate swarm dealt");
+        swarmDealt.Immunities = new CreatureImmunities { immuneToWeaponDamage = true };
+        Assert(swarm.HasDamageMitigation && swarm.IsDamageNegatedByImmunity(slash) && swarm.EstimateDamageAfterMitigation(8f, slash) == 0f
+               && Deal(swarmDealt, 8, slash) == 0 && !swarm.IsDamageNegatedByImmunity(flamingSlash),
+            "A swarm's weapon immunity zeroes a weapon hit in the estimate and the pipeline, not a fire one (MM p.315-316)");
+
+        CharacterStats fireImmune = Target("Estimate fire immune");
+        fireImmune.DamageImmunities.Add(DamageType.Fire);
+        Assert(fireImmune.HasDamageMitigation && fireImmune.EstimateDamageAfterMitigation(8f, fireBite) == 0f
+               && fireImmune.EstimateDamageAfterMitigation(8f, slash) == 8f,
+            "A fire immunity zeroes a fire hit in the estimate and leaves a slash");
+
+        CharacterStats none = Target("Estimate none");
+        Assert(!none.HasDamageMitigation && none.EstimateDamageAfterMitigation(7.25f, plain) == 7.25f,
+            "Without immunity, reduction or resistance the estimate is the raw average");
     }
 
     private static void TestSpellIgnoresDamageReduction()

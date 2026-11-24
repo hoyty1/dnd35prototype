@@ -5,7 +5,8 @@ namespace DND35.AI.Valuation
 {
     /// <summary>
     /// The one place the AI's valuations read another creature's check modifiers, maneuver numbers, AoO estimates and the
-    /// state behind a foe's next-round reach (alive, move, the charge's conditions; AI-089) (batch 14 step 8,
+    /// state behind a foe's next-round reach (alive, move, the charge's conditions; AI-089) and a hit's damage after a
+    /// creature's damage reduction and resistance (HitAfterMitigation, AI-091) (batch 14 step 8,
     /// docs/designs/personalities_batch14.md "AI/Valuation"): the true values, straight from the shared rules getters the
     /// maneuver cores roll with, so an estimate never drifts from the roll. It is the [KnowledgeLegacy] choke point until
     /// batch 17 (fair sight) decides what an observer may know of them (a foe's Strength, feats and held items); the
@@ -14,7 +15,7 @@ namespace DND35.AI.Valuation
     /// pattern (target*) matches the class name itself, so a call such as TargetNumbers.IsAlive(foe) is flagged in every
     /// caller. Pure reads: no dice, nothing changed.
     /// </summary>
-    [KnowledgeLegacy("a target's check modifiers, AoO estimates and the state behind a foe's next-round reach are read true until batch 17 gates them by what the observer knows")]
+    [KnowledgeLegacy("a target's check modifiers, AoO estimates, the state behind a foe's next-round reach and a creature's damage reduction and resistance are read true until batch 17 gates them by what the observer knows")]
     public static class TargetNumbers
     {
         /// <summary>The whole modifier of <paramref name="self"/>'s maneuver touch attack on <paramref name="target"/> at <paramref name="bab"/> (its racial bonus against the target's kind included).</summary>
@@ -40,6 +41,31 @@ namespace DND35.AI.Valuation
         /// </summary>
         public static bool Alive(CharacterController target)
             => target != null && target.Stats != null && !target.Stats.IsDead;
+
+        /// <summary>
+        /// The expected damage of one hit of <paramref name="attacker"/> with <paramref name="weapon"/> (null: a natural
+        /// attack or the unarmed strike), <paramref name="count"/>d<paramref name="sides"/> + <paramref name="bonus"/>
+        /// (AttackValue.MainHitDice, NaturalHitDice), on <paramref name="subject"/> after its immunity, resistance and damage
+        /// reduction (AI-091): the attack path's own packet (CharacterController.BuildWeaponHitPacket: the weapon's damage
+        /// types, material, magic and alignment, DMG p.291) through the damage pipeline's own rules
+        /// (CharacterStats.IsDamageNegatedByImmunity, FlatMitigationAgainst: GetResistanceAgainst, PickDamageReduction; MM
+        /// p.307, p.314), the reduction taken off each roll (AttackValue.ExpectedHitAfterReduction). Read true, so batch 17
+        /// can gate what an observer knows of the subject's defenses. The raw average (AttackValue.AverageOfDice) without a
+        /// subject or when nothing of the subject's applies.
+        /// </summary>
+        public static float HitAfterMitigation(CharacterController attacker, CharacterController subject, int count, int sides,
+            int bonus, ItemData weapon, bool isRangedAttack)
+        {
+            float raw = AttackValue.AverageOfDice(count, sides, bonus);
+            if (attacker == null || subject == null || subject.Stats == null || !subject.Stats.HasDamageMitigation)
+                return raw;
+            DamagePacket packet = attacker.BuildWeaponHitPacket(weapon, isRangedAttack, nonlethal: false,
+                rawDamage: UnityEngine.Mathf.RoundToInt(raw), sourceName: "estimate");
+            if (subject.Stats.IsDamageNegatedByImmunity(packet))
+                return 0f;
+            int reduction = subject.Stats.FlatMitigationAgainst(packet);
+            return reduction <= 0 ? raw : AttackValue.ExpectedHitAfterReduction(count, sides, bonus, reduction);
+        }
 
         /// <summary><paramref name="target"/>'s move in squares this round (CharacterStats.MoveRange: 0 when a condition blocks movement), read true (0 without stats; AI-089).</summary>
         public static int MoveSquares(CharacterController target)

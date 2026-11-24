@@ -71,7 +71,11 @@ namespace Tests.Scenarios
     /// (and its "-archer-close" twin), a prone caster facing an archer stays down and casts, and is not stood up again by
     /// the move after its cast; rules/ai-prone-melee-stands, a prone melee goblin stands as before;
     /// rules/ai-prone-healer-stands-to-cure, a prone Healer whose cure needs a step stands and cures. The expectations read the
-    /// "MeleeTurnOption" and "ProneStart" rows of the decision trace besides the hashed aid, attacks, casts and conditions.</para>
+    /// "MeleeTurnOption" and "ProneStart" rows of the decision trace besides the hashed aid, attacks, casts and conditions.
+    /// After the batch 14 final regression (AI-091): rules/ai-total-defense-dr-foe-cannot-pass, a werewolf at 1 hit point
+    /// (DR 10/silver) beside a fighter whose plain rapier cannot pass the reduction (largest hit 9) attacks instead of taking
+    /// total defense (no roll of the fighter's gets through); its "-foe-passes" twin, the rapier silvered, keeps total
+    /// defense.</para>
     /// <para>Step 14 (domain powers; batch 13's C5 leftover, D7, C14): the DMG sample cleric given domains by Tweak, its slots
     /// spent so it fights in melee. rules/ai-cleric-strength-before-full-attack, a Strength cleric beside the fighter performs
     /// its feat of strength before its melee attack and attacks with it (the "-charge" twin uses it before its charge's
@@ -139,6 +143,8 @@ namespace Tests.Scenarios
             yield return S("ai-total-defense-only-when-reachable-reachable", () => AiTotalDefenseOnlyWhenReachable(7));
             yield return S("ai-total-defense-only-when-reachable-charge", () => AiTotalDefenseOnlyWhenReachable(11));
             yield return S("ai-total-defense-only-when-reachable-charge-prone", () => AiTotalDefenseOnlyWhenReachable(11, heroProne: true));
+            yield return S("ai-total-defense-dr-foe-cannot-pass", () => AiTotalDefenseDamageReduction(foePasses: false));
+            yield return S("ai-total-defense-dr-foe-passes", () => AiTotalDefenseDamageReduction(foePasses: true));
             yield return S("ai-prone-caster-stays-prone", () => AiProneCasterStaysProne(18));
             yield return S("ai-prone-caster-stays-prone-archer-close", () => AiProneCasterStaysProne(12));
             yield return S("ai-prone-melee-stands", AiProneMeleeStands);
@@ -2016,6 +2022,58 @@ namespace Tests.Scenarios
                 {
                     int moved = v.Moves("npc", 1).Sum(e => e.Int("sq"));
                     return moved == 0 ? ExpectResult.Pass("no move") : ExpectResult.Fail("moved " + moved);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-091 (after the batch 14 final regression; MM p.175, p.307, DMG p.291, PHB p.142): the batch 14 final soak's seed
+        /// 48 in one round. An AI werewolf (hybrid form, DR 10/silver, Berserk Role; +2 natural armor, AC 22) at 1 hit point
+        /// stands beside an idle fighter 3 (Str 16, +6 natural armor so that the werewolf's own attack is worth
+        /// little) with a rapier, 1d6+3 a hit (PHB p.113: one-handed, so Strength once), hitting AC 22 on a 16 or better, who
+        /// acts first. The melee turn values total defense from the fighter's next-round hits after the werewolf's own damage
+        /// reduction, taken off each roll (TurnOptionValue.AverageHitOn, FoeReach.DamageOn through
+        /// TargetNumbers.HitAfterMitigation). With a plain rapier (<paramref name="foePasses"/> false) no roll gets past the
+        /// reduction (a largest hit of 9 against DR 10; only a critical, which the AI's estimate leaves out, could), so
+        /// nothing is kept off, no drop weight applies, and the werewolf attacks. In the "-foe-passes" twin the rapier is
+        /// silvered (DMG p.283), the reduction does not apply, and the werewolf takes total defense: one average hit (6.5)
+        /// drops it and +4 AC keeps four fifths of the fighter's hits off. Before the fix the plain rapier was valued as the
+        /// silvered one, so the werewolf took total defense in both, as it did on 18 turns of the soak (a Stalemate at the
+        /// round cap).
+        /// </summary>
+        private static ScenarioDef AiTotalDefenseDamageReduction(bool foePasses)
+        {
+            string id = "rules/ai-total-defense-dr-foe-" + (foePasses ? "passes" : "cannot-pass");
+            ScenarioBuilder b = Rules(id, foePasses
+                    ? "A near-dropped AI creature with DR takes total defense against a foe whose weapon passes it (PHB p.142, AI-091)"
+                    : "A near-dropped AI creature with DR attacks a foe whose weapon cannot pass it (DMG p.291, AI-091)")
+                .Covers("AI-091", "MM p.175", "MM p.307", "DMG p.291", "PHB p.142", "batch 14 step 13")
+                .MaxRounds(1)
+                .Npc("wolf", "werewolf", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 11, 10, Control.Idle)
+                .Tweak("wolf", c => { c.Stats.NaturalArmorBonus += 2; SetHp(c, c.Stats.TotalMaxHP, 1); })
+                .Tweak("hero", c =>
+                {
+                    Sturdy(c);
+                    c.Stats.NaturalArmorBonus += 6;
+                    ItemData rapier = ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponRapier);
+                    rapier.IsSilvered = foePasses;
+                    Hold(c, rapier);
+                })
+                .Initiative("hero", "wolf");
+            return b
+                .Expect(foePasses ? "The decision trace records TotalDefense" : "The decision trace records Attack",
+                    MeleeTurnRow(foePasses ? "TotalDefense" : "Attack"))
+                .Expect(foePasses ? "The werewolf takes total defense" : "The werewolf takes no total defense", v =>
+                {
+                    int defense = v.Log("takes total defense").Count;
+                    return defense == (foePasses ? 1 : 0) ? ExpectResult.Pass(defense + " total defense") : ExpectResult.Fail(defense + " total defense");
+                })
+                .Expect(foePasses ? "The werewolf makes no attack in round 1" : "The werewolf attacks the fighter in round 1", v =>
+                {
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "wolf");
+                    bool ok = foePasses ? attacks.Count == 0 : attacks.Count >= 1;
+                    return ok ? ExpectResult.Pass(attacks.Count + " attack(s)") : ExpectResult.Fail(attacks.Count + " attack(s)");
                 })
                 .Build();
         }

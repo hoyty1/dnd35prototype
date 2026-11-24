@@ -37,10 +37,10 @@ Entries per section:
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 227 | 66 | 293 | CRE-312 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 18 | 17 | 35 | ENC-037 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 175 | 195 | 370 | ITM-449 |
-| [AI](issues/AI.md) | AI | 0 | 15 | 41 | 56 | AI-093 |
+| [AI](issues/AI.md) | AI | 0 | 14 | 43 | 57 | AI-095 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 43 | 55 | UI-057 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 810 | 718 | 1529 | |
+| **All** | | 1 | 809 | 720 | 1530 | |
 
 ## Top issues
 
@@ -49,4 +49,3 @@ The most impactful entries, mainly High, plus any regression from the latest bat
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
 | [CHR-020](issues/CHR.md) | High | CHR | The animal companion and wild empathy have no rules path; a few druid, ranger and bard features have nothing in play to act on | Yes |
-| [AI-091](issues/AI.md) | Med | AI | Batch 14 regression: the melee turn's total defense ignores damage reduction, so a near-dropped werewolf stood in total defense for 18 turns against a rogue that could not hurt it (soak seed 48 Stalemate, batch 14 final regression; fix before the grouped AI turns start) | Yes |

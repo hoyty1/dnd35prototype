@@ -1227,6 +1227,9 @@ public class AIService : MonoBehaviour
     /// <item>total defense, when its entry is legal now: the foes' next-round damage it takes away (+4 AC), and whether any
     /// foe can reach the creature.</item>
     /// </list>
+    /// Every foe hit in aid defense and total defense (the damage, the kept-off damage and the drop weight) is taken after
+    /// the defending creature's resistance and damage reduction against that foe's attack (TurnOptionValue.AverageHitOn,
+    /// FoeReach.DamageOn; AI-091); S and aid offense still read the raw hit (AI-093).
     /// Timed in the Action bucket; no dice, nothing changed.
     /// </summary>
     internal MeleeTurnOptionContext BuildMeleeTurnOptionContext(CharacterController npc, CharacterController target)
@@ -1254,7 +1257,6 @@ public class AIService : MonoBehaviour
                 if (!DND35.AI.Knowledge.KnowledgeFacts.ThreatensSpaceOf(npc, opponent))
                     continue;
                 int opponentAC = KnownAC(npc, opponent);
-                float opponentHit = DND35.AI.Valuation.AttackValue.AverageMeleeDamage(opponent);
                 for (int a = 0; a < side.Count; a++)
                 {
                     CharacterController ally = side[a];
@@ -1281,6 +1283,8 @@ public class AIService : MonoBehaviour
                     float share = DND35.AI.Valuation.TurnOptionValue.Share(reach, ally, side);
                     if (share <= 0f)
                         continue;
+                    // The opponent's hit on the ally, after the ally's resistance and damage reduction (AI-091).
+                    float opponentHit = DND35.AI.Valuation.TurnOptionValue.AverageHitOn(opponent, ally);
                     float defense = DND35.AI.Valuation.TurnOptionValue.AidDefense(aidModifier, EstimatedMeleeModifier(opponent, ally), ally.Stats.ArmorClass,
                         opponentHit, share, DND35.AI.Valuation.TurnOptionValue.DropWeightFor(opponentHit, ally.Stats.CurrentHP));
                     if (defense > bestDefense && _gameManager.GetAidAnotherTargetRefusal(npc, ally, opponent) == null)
@@ -1309,7 +1313,9 @@ public class AIService : MonoBehaviour
                 float share = DND35.AI.Valuation.TurnOptionValue.Share(reach, npc, side);
                 if (share <= 0f)
                     continue;
-                float hit = DND35.AI.Valuation.AttackValue.AverageMeleeDamage(reach.Foe);
+                // The foe's hits after the creature's own resistance and damage reduction (AI-091): a foe that cannot pass
+                // it neither drops the creature nor deals the damage total defense would keep off.
+                float hit = DND35.AI.Valuation.TurnOptionValue.AverageHitOn(reach.Foe, npc);
                 float atAC = reach.DamageOn(npc, ac);
                 incoming += atAC * share;
                 keptOff += DND35.AI.Valuation.TurnOptionValue.TotalDefensePart(atAC,

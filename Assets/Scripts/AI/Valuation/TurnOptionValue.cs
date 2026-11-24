@@ -21,7 +21,10 @@ namespace DND35.AI.Valuation
     /// A foe's share on a creature of the other side (<see cref="Share"/>) is the AI's guess at whom it attacks next round:
     /// among the creatures it threatens now when it threatens any (moving away from them provokes and loses its full
     /// attack), else among those it can reach this turn. The drop weight (<see cref="DropWeight"/>) doubles damage kept off a
-    /// creature that one average hit of the attacker would drop (current hit points at most that hit).
+    /// creature that one average hit of the attacker would drop (current hit points at most that hit). Every foe hit in
+    /// these values is taken after the creature's own immunity, resistance and damage reduction against that foe's attack,
+    /// off each roll (<see cref="AverageHitOn"/>, <see cref="FoeReach.DamageOn"/>; AI-091), so a foe none of whose rolls
+    /// gets past the reduction counts no damage and drops nobody, and one whose larger rolls get past counts only those.
     /// </summary>
     public static class TurnOptionValue
     {
@@ -81,15 +84,42 @@ namespace DND35.AI.Valuation
         /// The expected damage of one attack of <paramref name="attacker"/>'s main attack against <paramref name="targetAC"/>
         /// (a move and an attack): its ranged estimate with a ranged weapon in the main hand (unless <paramref name="meleeOnly"/>),
         /// else its melee estimate, plus <paramref name="extraBonus"/> (a charge's +2), times AttackValue.AverageMeleeDamage
-        /// (the weapon, the primary natural attack or the unarmed strike).
+        /// (the weapon, the primary natural attack or the unarmed strike), taken after <paramref name="subject"/>'s
+        /// immunity, resistance and damage reduction when a subject is given (<see cref="AverageHitOn"/>, AI-091).
         /// </summary>
-        public static float SingleAttackDamage(CharacterController attacker, int targetAC, int extraBonus = 0, bool meleeOnly = false)
+        public static float SingleAttackDamage(CharacterController attacker, int targetAC, int extraBonus = 0, bool meleeOnly = false,
+            CharacterController subject = null)
         {
             if (attacker == null || attacker.Stats == null)
                 return 0f;
             ItemData weapon = attacker.GetEquippedMainWeapon();
-            int bonus = !meleeOnly && weapon != null && weapon.IsWeapon && weapon.IsRangedWeapon ? attacker.Stats.GetRangedAttackBonus() : attacker.Stats.GetMeleeAttackBonus();
-            return AttackValue.HitChance(bonus + extraBonus, targetAC) * AttackValue.AverageMeleeDamage(attacker);
+            bool ranged = !meleeOnly && weapon != null && weapon.IsWeapon && weapon.IsRangedWeapon;
+            int bonus = ranged ? attacker.Stats.GetRangedAttackBonus() : attacker.Stats.GetMeleeAttackBonus();
+            return AttackValue.HitChance(bonus + extraBonus, targetAC) * HitOn(attacker, subject, weapon, ranged);
+        }
+
+        /// <summary>
+        /// The expected damage of one hit of <paramref name="attacker"/>'s main attack (AttackValue.MainHitDice, whose
+        /// average is AverageMeleeDamage) on <paramref name="subject"/>, after the subject's immunity, resistance and damage
+        /// reduction against that attack, off each roll (AI-091: TargetNumbers.HitAfterMitigation, the damage pipeline's
+        /// own rules; a ranged attack with a ranged weapon in the main hand). The drop weight and aid another's defense value
+        /// read it, so a foe none of whose rolls passes the creature's reduction counts no hit; the raw average without a
+        /// subject.
+        /// </summary>
+        public static float AverageHitOn(CharacterController attacker, CharacterController subject)
+        {
+            if (attacker == null || attacker.Stats == null)
+                return 0f;
+            ItemData weapon = attacker.GetEquippedMainWeapon();
+            return HitOn(attacker, subject, weapon, weapon != null && weapon.IsWeapon && weapon.IsRangedWeapon);
+        }
+
+        private static float HitOn(CharacterController attacker, CharacterController subject, ItemData weapon, bool ranged)
+        {
+            if (!AttackValue.MainHitDice(attacker, out int count, out int sides, out int bonus))
+                return 0f;
+            return TargetNumbers.HitAfterMitigation(attacker, subject, count, sides, bonus,
+                weapon != null && weapon.IsWeapon ? weapon : null, ranged);
         }
 
         /// <summary>How a foe can attack a creature next round.</summary>
@@ -192,18 +222,22 @@ namespace DND35.AI.Valuation
                 return MeleeReachKind(distance);
             }
 
-            /// <summary>Its expected damage on <paramref name="subject"/> at <paramref name="ac"/> next round: a full attack when it threatens or shoots it, one attack after a move, one at +2 after a charge, else 0.</summary>
+            /// <summary>
+            /// Its expected damage on <paramref name="subject"/> at <paramref name="ac"/> next round: a full attack when it
+            /// threatens or shoots it, one attack after a move, one at +2 after a charge, else 0; each hit after the
+            /// subject's resistance and damage reduction against it (AI-091).
+            /// </summary>
             public float DamageOn(CharacterController subject, int ac)
             {
                 switch (ReachOf(subject))
                 {
                     case ReachKind.Threatens:
                     case ReachKind.Ranged:
-                        return AttackValue.ExpectedRoundDamage(Foe, ac);
+                        return AttackValue.ExpectedRoundDamage(Foe, ac, subject);
                     case ReachKind.Move:
-                        return SingleAttackDamage(Foe, ac);
+                        return SingleAttackDamage(Foe, ac, subject: subject);
                     case ReachKind.Charge:
-                        return SingleAttackDamage(Foe, ac, ChargeAttackBonus, meleeOnly: true);
+                        return SingleAttackDamage(Foe, ac, ChargeAttackBonus, meleeOnly: true, subject: subject);
                     default:
                         return 0f;
                 }

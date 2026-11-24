@@ -8140,6 +8140,38 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// The damage packet of one weapon attack hit by this creature with <paramref name="weapon"/>: the weapon's damage
+    /// types, what it counts as against damage reduction (<see cref="GetWeaponAttackBypassTags"/>, with the ranged tag for
+    /// a ranged or thrown weapon) and <paramref name="isRangedAttack"/> for ranged-only reduction. With no weapon (a
+    /// natural attack or the unarmed strike) the hit is bludgeoning and counts as nothing else; that is the attack path's
+    /// known gap, not the rule (CMB-140: a natural weapon's own damage types; CMB-220: natural weapons that count as magic
+    /// or aligned), and the AI's estimate mirrors it on purpose. The attack path (PerformSingleAttackWithCritCore) and the
+    /// AI's estimate of a hit after the target's immunity, resistance and reduction (TargetNumbers.HitAfterMitigation,
+    /// AI-091) build it here; the coup de grace (ResolveCoupDeGrace's packet) still builds its own copy, never with the
+    /// ranged tag. Pure.
+    /// </summary>
+    public DamagePacket BuildWeaponHitPacket(ItemData weapon, bool isRangedAttack, bool nonlethal, int rawDamage, string sourceName)
+    {
+        var damageTypes = weapon != null
+            ? weapon.GetDamageTypes()
+            : new System.Collections.Generic.HashSet<DamageType> { DamageType.Bludgeoning };
+
+        DamageBypassTag attackTags = GetWeaponAttackBypassTags(weapon,
+            weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0));
+
+        return new DamagePacket
+        {
+            RawDamage = rawDamage,
+            Types = damageTypes,
+            AttackTags = attackTags,
+            IsRanged = isRangedAttack,
+            IsNonlethal = nonlethal,
+            Source = AttackSource.Weapon,
+            SourceName = sourceName,
+        };
+    }
+
+    /// <summary>
     /// What a hit with <paramref name="weapon"/> counts as against damage reduction: the weapon's own tags, ranged, the
     /// enchantment tags (holy counts as good, unholy as evil, ...) and Magic Stone on a sling (PHB p.251).
     /// </summary>
@@ -8987,24 +9019,10 @@ public class CharacterController : MonoBehaviour
             result.Damage = rawWeaponDamage;
             result.RawTotalDamage = rawTotalDamage;
 
-            // Build damage packet for DR/resistance/immunity resolution
-            var damageTypes = weapon != null
-                ? weapon.GetDamageTypes()
-                : new System.Collections.Generic.HashSet<DamageType> { DamageType.Bludgeoning };
-
-            DamageBypassTag attackTags = GetWeaponAttackBypassTags(weapon,
-                weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0));
-
-            var packet = new DamagePacket
-            {
-                RawDamage = rawTotalDamage,
-                Types = damageTypes,
-                AttackTags = attackTags,
-                IsRanged = result.IsRangedAttack,
-                IsNonlethal = dealNonlethalDamage,
-                Source = AttackSource.Weapon,
-                SourceName = string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName,
-            };
+            // Build damage packet for DR/resistance/immunity resolution (the AI's estimate builds the same one, AI-091)
+            DamagePacket packet = BuildWeaponHitPacket(weapon, result.IsRangedAttack, dealNonlethalDamage, rawTotalDamage,
+                string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName);
+            var damageTypes = packet.Types;
 
             DamageResolutionResult mitigation = target.Stats.ApplyIncomingDamage(rawTotalDamage, packet);
             result.FinalDamageDealt = mitigation.FinalDamage;
