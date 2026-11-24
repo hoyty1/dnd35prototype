@@ -1038,8 +1038,18 @@ namespace Tests.Runner
 
             var kept = new Dictionary<string, int>();
             var known = new Dictionary<string, int>();
+            var views = new List<TokenView>();
             foreach (GameObject go in created)
             {
+                // A token's mirror view (grouped AI turns step 3) is its model's shadow, not a leak of its own: the
+                // model is reported if it leaked, and the view follows it (handled after this loop).
+                TokenView view = go != null ? go.GetComponent<TokenView>() : null;
+                if (view != null)
+                {
+                    views.Add(view);
+                    continue;
+                }
+
                 string name = go.name;
                 if (KeptRootNames.Contains(name))
                 {
@@ -1058,6 +1068,15 @@ namespace Tests.Runner
                     try { Object.DestroyImmediate(go); }
                     catch (Exception) { /* already gone */ }
                 }
+            }
+            // A view whose model is gone (destroyed by the suite or above) is removed now; its own deferred Destroy
+            // would only run at the end of the frame.
+            foreach (TokenView view in views)
+            {
+                if (view == null || !cleanup || (view.Model != null && !view.IsReleased))
+                    continue;
+                try { Object.DestroyImmediate(view.gameObject); }
+                catch (Exception) { /* already gone */ }
             }
             foreach (KeyValuePair<string, int> e in kept)
                 result.singletonsCreated.Add(e.Value > 1 ? $"{e.Key} x{e.Value}" : e.Key);

@@ -2244,6 +2244,30 @@ public class CharacterController : MonoBehaviour
     private int _grappleDisplayPauseLocks;
     private bool _wasBlurVisualActive;
     private float _blurVisualTimeOffset;
+    private TokenView _view;
+
+    /// <summary>
+    /// The token's rendered mirror (grouped AI turns step 3, UI/Presentation/TokenView.cs): this GameObject's own
+    /// SpriteRenderer keeps every value the game writes but is not drawn (forceRenderingOff); the view, on its own root
+    /// GameObject, copies it every LateUpdate and carries the status icons and the summon visual. Null before Awake
+    /// (edit-mode test objects) and once the view followed this controller's destruction.
+    /// </summary>
+    public TokenView View => _view;
+
+    /// <summary>The summon aura, duration bar and badge of this creature, on its view; null when it has none.</summary>
+    public SummonedCreatureVisual SummonVisual => _view != null ? _view.SummonVisual : GetComponent<SummonedCreatureVisual>();
+
+    /// <summary>
+    /// The summon visual on this creature's view, added on first use (the summon spawn); on the controller itself only
+    /// when it has no view (no Awake ran).
+    /// </summary>
+    public SummonedCreatureVisual EnsureSummonVisual()
+    {
+        if (_view != null)
+            return _view.EnsureSummonVisual();
+        SummonedCreatureVisual visual = GetComponent<SummonedCreatureVisual>();
+        return visual != null ? visual : gameObject.AddComponent<SummonedCreatureVisual>();
+    }
 
     private const float GrappleAlternateVisibilitySeconds = 1f;
 
@@ -2447,6 +2471,10 @@ public class CharacterController : MonoBehaviour
         EnsureTags();
         EnsureStatusTagManager();
         _blurVisualTimeOffset = Random.Range(0f, Mathf.PI * 2f);
+        // The token renders through its mirror view (grouped AI turns step 3): created after the draw above, with no
+        // draw of its own, so the dice stream is unchanged; this renderer keeps its values but is no longer drawn.
+        _view = TokenView.Create(gameObject, _sr);
+        _sr.forceRenderingOff = true;
         _wasBlurVisualActive = HasActiveBlurEffect;
         RefreshInvisibilityVisual();
         RefreshAllTags();
@@ -4110,6 +4138,11 @@ public class CharacterController : MonoBehaviour
 
     private void OnDestroy()
     {
+        // The view follows this controller's destruction (grouped AI turns step 3), first, so that no fault in the
+        // cleanup below can leave it to the LateUpdate backstop.
+        if (_view != null)
+            _view.Release();
+
         if (Stats != null)
         {
             Stats.CurrentHPChanged -= OnCurrentHPChanged;
@@ -5135,6 +5168,9 @@ public class CharacterController : MonoBehaviour
                 continue;
             DestroyImmediate(c);
         }
+        // The old creature's summon visual lives on the view, not among the components above (grouped AI turns step 3).
+        if (_view != null)
+            _view.ClearSummonVisual();
 
         _statusEffectManager = null;
         _spellcastingComponent = null;

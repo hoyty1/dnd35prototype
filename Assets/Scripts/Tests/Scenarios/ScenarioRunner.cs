@@ -1094,6 +1094,34 @@ namespace Tests.Scenarios
                 if (!gm.PCs.Contains(cc))
                     problems.Add("live controller " + cc.name + " outside the party");
 
+            // Token views (grouped AI turns step 3): every controller has its own view, on its own root without a
+            // controller, every view shows its model and no view outlives its model. This coroutine resumes after Update
+            // and before LateUpdate, so a model changed earlier in this frame (a size animation, the grapple blink) is one
+            // copy ahead of its view: the check runs the view's own copy (SyncFromModel, what LateUpdate runs) first and
+            // then checks the wiring and the copy, so frame timing never marks a session dirty. The exact frame-by-frame
+            // copy is TokenViewTests' (it calls LateUpdate itself).
+            foreach (CharacterController cc in Object.FindObjectsByType<CharacterController>(FindObjectsInactive.Include))
+            {
+                string who = cc.name + (cc.Stats != null && !string.IsNullOrEmpty(cc.Stats.CharacterName) ? " (" + cc.Stats.CharacterName + ")" : "");
+                if (cc.View == null)
+                    problems.Add("controller " + who + " has no token view");
+                else if (cc.View.Model != cc.gameObject)
+                    problems.Add("controller " + who + "'s token view mirrors another object");
+                else if (cc.View.transform.parent != null || cc.View.GetComponentInChildren<CharacterController>(true) != null)
+                    problems.Add("controller " + who + "'s token view is not its own controller-free root");
+            }
+            foreach (TokenView view in TokenView.Live)
+            {
+                if (view.Model == null)
+                {
+                    problems.Add("token view " + view.Describe() + " outlived its model");
+                    continue;
+                }
+                view.SyncFromModel();
+                if (!view.IsSyncedWithModel(out string viewProblem))
+                    problems.Add("token view " + view.Describe() + " is not synced: " + viewProblem);
+            }
+
             if (AreaEffectManager.HasInstance && AreaEffectManager.Instance.GetActiveEffectCount() > 0)
                 problems.Add(AreaEffectManager.Instance.GetActiveEffectCount() + " active area effects");
 

@@ -252,9 +252,8 @@ public partial class GameManager
         else
             _summonedEnemies.Add(summon);
 
-        var summonVisual = summon.gameObject.GetComponent<SummonedCreatureVisual>();
-        if (summonVisual == null)
-            summonVisual = summon.gameObject.AddComponent<SummonedCreatureVisual>();
+        // The summon visual lives on the creature's mirror view (grouped AI turns step 3).
+        SummonedCreatureVisual summonVisual = summon.EnsureSummonVisual();
         summonVisual.Init(summon, isCelestial, isFiendish);
 
         return summon;
@@ -308,7 +307,7 @@ public partial class GameManager
 
         CharacterController cc = summon.Controller;
 
-        var summonVisual = cc.GetComponent<SummonedCreatureVisual>();
+        var summonVisual = cc.SummonVisual;
         if (summonVisual != null)
             yield return StartCoroutine(summonVisual.PlayDespawnEffect());
 
@@ -413,7 +412,7 @@ public partial class GameManager
                 }
             }
 
-            var visual = summon.Controller.GetComponent<SummonedCreatureVisual>();
+            var visual = summon.Controller.SummonVisual;
             if (visual != null)
                 visual.SetDuration(summon.RemainingRounds, summon.TotalDurationRounds);
 
@@ -545,7 +544,7 @@ public partial class GameManager
         };
         _activeSummons.Add(activeSummon);
 
-        var visual = summon.GetComponent<SummonedCreatureVisual>();
+        var visual = summon.SummonVisual;
         if (visual != null)
             visual.SetDuration(durationRounds, durationRounds);
     }

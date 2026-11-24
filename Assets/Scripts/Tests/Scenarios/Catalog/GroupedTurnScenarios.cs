@@ -10,7 +10,8 @@ namespace Tests.Scenarios
     /// Grouped AI turns (docs/designs/grouped_ai_turns.md). Step 2 (CMB-007): a poison's secondary save comes 10 rounds
     /// after exposure (DMG p.296: 1 minute; PHB p.138: 10 rounds), at the initiative count of the creature whose turn it was
     /// at exposure, whatever the real time; one still pending when the fight ends resolves at combat end, in initiative
-    /// order, after CombatOver and before the loot window (delegated RAW reading 2026-11-16).
+    /// order, after CombatOver and before the loot window (delegated RAW reading 2026-11-16). Step 3: every token renders
+    /// through its mirror view (TokenView), which follows its model.
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -22,6 +23,7 @@ namespace Tests.Scenarios
         {
             yield return S("poison-secondary-after-ten-rounds", PoisonSecondaryAfterTenRounds);
             yield return S("poison-secondary-pending-at-combat-end", PoisonSecondaryPendingAtCombatEnd);
+            yield return S("token-view-mirrors-tokens", TokenViewMirrorsTokens);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -158,6 +160,63 @@ namespace Tests.Scenarios
                     return fails == 2 ? ExpectResult.Pass(seen) : ExpectResult.Fail(fails + " forced-fail lines; " + seen);
                 })
                 .Build();
+        }
+
+        // ── Step 3: tokens render through a mirror view (presentation only) ─────────────
+
+        /// <summary>
+        /// Every combatant renders through its TokenView (UI/Presentation/TokenView.cs) in a real fight: its own root
+        /// GameObject, never a CharacterController (area tracking and the clean check find only the models), the model's
+        /// renderer not drawn, and the view at the model's square and sprite after the hero's move. Presentation only: the
+        /// fight's trace is that of any two-round walk, and the clean check after the job checks every view again. The
+        /// comparisons follow the view's own copy (SyncFromModel, what its LateUpdate runs), so they check the wiring and
+        /// the copy, not frame timing: grouped resolution (step 4) and run-ahead views (step 9) may run a move and the
+        /// next turn in one frame, and step 9's Held mode must revisit this scenario and the clean check's view sync.
+        /// </summary>
+        private static ScenarioDef TokenViewMirrorsTokens()
+        {
+            return Rules("rules/token-view-mirrors-tokens", "Every token renders through its mirror view, which follows its model (grouped AI turns step 3)")
+                .Covers("grouped AI turns step 3", "CRE-046", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Viewed Hero", 3)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 17, 10, Control.Idle)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("Each combatant has its own view, not a controller, and only the view is drawn", ctx =>
+                        ViewsMirror(ctx, "round 1", "hero", "orc")),
+                    Step.Move(12, 10),
+                    Step.EndTurn())
+                .Turn("hero", 2,
+                    Step.Assert("After the move the hero's view stands on the hero's new square", ctx =>
+                        ViewsMirror(ctx, "round 2", "hero", "orc")
+                        && (ctx.Get("hero").View.Body.position - ctx.Get("hero").transform.position).sqrMagnitude < 1e-8f
+                        && ctx.Get("hero").GridPosition == new Vector2Int(12, 10)),
+                    Step.EndTurn())
+                .Expect("The view checks hold", Expect.AssertsPass())
+                .Build();
+        }
+
+        private static bool ViewsMirror(ScenarioContext ctx, string when, params string[] names)
+        {
+            var problems = new List<string>();
+            foreach (string name in names)
+            {
+                CharacterController cc = ctx.Get(name);
+                TokenView view = cc != null ? cc.View : null;
+                SpriteRenderer model = cc != null ? cc.GetComponent<SpriteRenderer>() : null;
+                if (view == null) { problems.Add(name + ": no view"); continue; }
+                view.SyncFromModel();
+                if (view.gameObject == cc.gameObject || view.transform.parent != null) problems.Add(name + ": the view is not its own root");
+                if (view.GetComponentInChildren<CharacterController>(true) != null) problems.Add(name + ": the view carries a controller");
+                if (model == null || !model.forceRenderingOff) problems.Add(name + ": the model renderer is drawn");
+                if (view.Renderer == null || view.Renderer.forceRenderingOff) problems.Add(name + ": the view renderer is not drawn");
+                if (view.Renderer != null && model != null && view.Renderer.sprite != model.sprite) problems.Add(name + ": sprite differs");
+                if (view.Body.gameObject.activeSelf != cc.gameObject.activeInHierarchy) problems.Add(name + ": active state differs");
+                if ((view.Body.position - cc.transform.position).sqrMagnitude > 1e-8f) problems.Add(name + ": position " + view.Body.position + " vs " + cc.transform.position);
+                if (cc.transform.childCount != 0) problems.Add(name + ": " + cc.transform.childCount + " objects under the model");
+            }
+            ctx.Note("token views " + when + ": " + (problems.Count == 0 ? "ok" : string.Join("; ", problems)));
+            return problems.Count == 0;
         }
 
         /// <summary>

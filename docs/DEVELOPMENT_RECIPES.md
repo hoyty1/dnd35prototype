@@ -588,6 +588,7 @@ Pitfalls:
 - Import settings are not versioned (golden rule 6).
 - `Assets/StreamingAssets/CreatureTokens/` holds 278 PNGs extracted from the Monster Manual PDF (d17fd90). The loader was reverted (281dab7), nothing uses them, and the folder README documents a deleted API. This is copyrighted WotC artwork; ask the owner before wiring it in or shipping it.
 - Only the first 3 enemies have side panels (ENC-023); the enemy pool starts at 15 slots and grows with the encounter (ENC-001).
+- Tokens are drawn by their mirror view (`TokenView`, grouped AI turns step 3): set the sprite, colour and scale on the creature's own `SpriteRenderer` and transform as before (the view copies them every `LateUpdate`), but parent anything new that is shown on a token (a badge, an aura, a marker) to `controller.View.Body`, never to the creature's transform, and reach the summon visual through `CharacterController.SummonVisual` / `EnsureSummonVisual`. The creature's renderer has `forceRenderingOff`, so never read its `isVisible`.
 
 ## Add an encounter preset or test scenario
 

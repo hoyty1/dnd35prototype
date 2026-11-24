@@ -43,20 +43,38 @@ public class StatusEffectIndicator : MonoBehaviour
         if (_badgeSprite == null)
             _badgeSprite = CreateBadgeSprite();
 
-        if (_iconContainer == null)
-        {
-            GameObject container = new GameObject("StatusIconContainer");
-            _iconContainer = container.transform;
-            _iconContainer.SetParent(transform, false);
-            _iconContainer.localPosition = iconOffset;
-        }
+        EnsureContainer();
 
         StatusEffectTooltipUI.EnsureInstance();
     }
 
+    /// <summary>
+    /// The icon container, built on the token's mirror view (grouped AI turns step 3), which copies this token's
+    /// position, scale and active state; on the token itself only when it has no view. The container lives under
+    /// another root than this token, so it is rebuilt (with its icons) when that root went away without this token.
+    /// </summary>
+    private bool EnsureContainer()
+    {
+        if (_iconContainer != null)
+            return true;
+        if (_character == null)
+            return false;
+
+        Transform host = _character.View != null && _character.View.Body != null ? _character.View.Body : transform;
+        GameObject container = new GameObject("StatusIconContainer");
+        _iconContainer = container.transform;
+        _iconContainer.SetParent(host, false);
+        _iconContainer.localPosition = iconOffset;
+        _activeIcons.Clear();
+        _lastSignature = string.Empty;
+        return true;
+    }
+
     private void LateUpdate()
     {
-        if (_character == null || _character.Stats == null)
+        if (!EnsureContainer())
+            return;
+        if (_character.Stats == null)
             return;
 
         _iconContainer.localPosition = iconOffset;
@@ -77,6 +95,13 @@ public class StatusEffectIndicator : MonoBehaviour
     {
         if (StatusEffectTooltipUI.Instance != null)
             StatusEffectTooltipUI.Instance.HideTooltip();
+    }
+
+    private void OnDestroy()
+    {
+        // The container is on the view, not under this token, so it does not go with it on its own.
+        if (_iconContainer != null && _iconContainer.parent != transform)
+            Destroy(_iconContainer.gameObject);
     }
 
     private List<IconData> BuildIconData()

@@ -228,7 +228,8 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 | Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6537 |
 | Wish | UI/Wish/WishUI.cs | Eager | Spell/Resolution/GameManager_Spells_W.cs:1101, 1159 |
 | Character sheet with embedded inventory | UI/CharacterSheet/CharacterSheetUI.cs + UI/Inventory/InventoryUI.cs | Eager | C key |
-| Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:2426; GameManager.cs:621 |
+| Token views (the drawn token, status icons, summon visuals) | UI/Presentation/TokenView.cs (world-space mirror of each token, grouped AI turns step 3; [combat-and-grid.md](combat-and-grid.md) "Token views") | Per character, per Flaming Sphere | `CharacterController.Awake`; `FlamingSphereEntity.EnsureVisuals` |
+| Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites on the token's view), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:2426; GameManager.cs:621 |
 | Loot, XP, level-up | UI/Inventory/LootCollectionUI.cs, UI/Combat/CombatEndXPUI.cs, UI/CharacterSheet/LevelUpUI.cs | Eager / lazy / lazy | _Core/GameManager.LootCollection.cs: `BeginPostCombatLootCollection` (25), `ShowPostCombatXPFlow` (175), `ShowLevelUpUISequence` (354) |
 | Defeat screen | UI/Combat/CombatUI.cs (`ShowDefeatPanel`, `HideDefeatPanel`; built like `ShowConfirmationDialog`) | On defeat | _Core/GameManager.CombatEnd.cs: `ShowDefeatScreen`, `StartNewPartyAfterDefeat` (New Party -> `CharacterCreationUI.ReopenForNewParty`), `QuitAfterDefeat` |
 

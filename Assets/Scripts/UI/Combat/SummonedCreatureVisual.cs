@@ -4,6 +4,8 @@ using System.Collections;
 /// <summary>
 /// Visual treatment for summoned creatures.
 /// Adds summoned badge, aura, duration bar, and summon/despawn effects.
+/// Hosted on the creature's mirror view (TokenView.Body, grouped AI turns step 3), not on the creature's own
+/// GameObject; callers reach it through CharacterController.SummonVisual and EnsureSummonVisual.
 /// </summary>
 public class SummonedCreatureVisual : MonoBehaviour
 {
@@ -12,6 +14,7 @@ public class SummonedCreatureVisual : MonoBehaviour
     private SpriteRenderer _durationBgRenderer;
     private SpriteRenderer _durationFillRenderer;
     private TextMesh _badgeText;
+    private GameObject _flash;
 
     private Color _auraColor = new Color(0.2f, 0.85f, 1f, 0.45f);
     private int _remainingRounds;
@@ -95,6 +98,21 @@ public class SummonedCreatureVisual : MonoBehaviour
         UpdateDurationVisuals();
     }
 
+    private void OnDestroy()
+    {
+        // The objects this visual built go with it when only the component is removed (TokenView.ClearSummonVisual).
+        DestroyBuilt(_auraRenderer != null ? _auraRenderer.gameObject : null);
+        DestroyBuilt(_durationBgRenderer != null ? _durationBgRenderer.gameObject : null);
+        DestroyBuilt(_badgeText != null ? _badgeText.gameObject : null);
+        DestroyBuilt(_flash);
+    }
+
+    private static void DestroyBuilt(GameObject go)
+    {
+        if (go != null)
+            Destroy(go);
+    }
+
     private void BuildVisuals()
     {
         Sprite badgeSprite = CreateSquareSprite(24, 2);
@@ -172,6 +190,7 @@ public class SummonedCreatureVisual : MonoBehaviour
     {
         Sprite pulseSprite = CreateCircleSprite(32);
         GameObject fx = new GameObject("SummonFlash");
+        _flash = fx;
         fx.transform.SetParent(transform, false);
         fx.transform.localPosition = new Vector3(0f, 0f, 0f);
         SpriteRenderer sr = fx.AddComponent<SpriteRenderer>();

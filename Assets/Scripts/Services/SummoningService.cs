@@ -292,7 +292,7 @@ public class SummoningService : MonoBehaviour
                 }
             }
 
-            var visual = summon.Controller.GetComponent<SummonedCreatureVisual>();
+            var visual = summon.Controller.SummonVisual;
             if (visual != null)
                 visual.SetDuration(summon.RemainingRounds, summon.TotalDurationRounds);
 
