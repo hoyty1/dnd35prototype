@@ -335,7 +335,7 @@ What moves: `TurnControl.CombatEnded()` closes the group; the banner and button 
 - **Step 14 (`TryNPCDomainPowerForAI` through `RunAIAction`):** any wait it adds is caught by the re-grep.
 - **Sidecars.** `groups.jsonl` and `presentation.jsonl` go beside `caststages.jsonl` (`ScenarioRunner.WriteCastStages`), written after `ai-timing.tsv`. `soak-rows.tsv` is untouched, because `SoakStats.MergeRuns` reads it by column index. `JobResult.Grouping`, `JobResult.GroupCheck` and `JobResult.PresentationCheck` are new `summary.json` fields, never trace events.
 - **The equality gate doubles as a batch 14 check.** The on/off and fine-mode equalities run on batch 14's final behaviour, so they also prove its neutral parts stay neutral under the new pacing.
-- **Baseline.** Batch 14's final regression is the baseline. If the editor does not reproduce those hashes, step 1 first records a fresh baseline at its parent commit (batch 14's own rule).
+- **Baseline.** Batch 14's closing regression is the baseline: the follow-up regression of 2026-11-23 on b739140 (`docs/TESTING.md` 3.2, batch 20261123-232643), which supersedes the final regression's hashes for soak seeds 38 and 48 (AI-091). If the editor does not reproduce those hashes, step 1 first records a fresh baseline at its parent commit (batch 14's own rule).
 
 ### Files (new unless marked; Unity generates the metas)
 
