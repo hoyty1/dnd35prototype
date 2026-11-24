@@ -32,6 +32,7 @@ public static class ActionIds
     // Magic and items
     public const string CastSpell = "cast-spell";
     public const string MaintainConcentration = "maintain-concentration";
+    public const string DismissSummon = "dismiss-summon";
     public const string UseItem = "use-item";
     public const string RetrieveItem = "retrieve-item";
 

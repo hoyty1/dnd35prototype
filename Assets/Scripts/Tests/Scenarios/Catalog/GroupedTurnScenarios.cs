@@ -38,6 +38,7 @@ namespace Tests.Scenarios
             yield return S("summon-slain-off-its-move-next-still-acts", SummonSlainOffItsMoveNextStillActs);
             yield return S("lesser-globe-stays-put", LesserGlobeStaysPut);
             yield return S("panicked-grappled-pc-escape-square-ai", PanickedGrappledPcEscapeSquareAi);
+            yield return S("dismiss-summon-caster-standard", DismissSummonCasterStandard);
             yield return S("ai-speed-pacing-kind-follows-turns", AiSpeedPacingKindFollowsTurns);
         }
 
@@ -228,9 +229,9 @@ namespace Tests.Scenarios
         /// summons for <paramref name="rounds"/> rounds) and adopts it as <paramref name="key"/>; <paramref name="hp"/> above 0
         /// caps its hit points.
         /// </summary>
-        private static bool SummonAndAdopt(ScenarioContext ctx, string casterKey, string key, int x, int y, SummonMonsterOption option, int rounds, int hp = 0)
+        private static bool SummonAndAdopt(ScenarioContext ctx, string casterKey, string key, int x, int y, SummonMonsterOption option, int rounds, int hp = 0, string spellId = null)
         {
-            CharacterController summon = ctx.Gm.Harness_SummonIntoFight(ctx.Get(casterKey), new Vector2Int(x, y), option, rounds);
+            CharacterController summon = ctx.Gm.Harness_SummonIntoFight(ctx.Get(casterKey), new Vector2Int(x, y), option, rounds, spellId);
             if (summon == null)
             {
                 ctx.Note(key + ": the summon spawn failed");
@@ -687,6 +688,58 @@ namespace Tests.Scenarios
             bool on = g != null && (g.CenterPosition - centre).sqrMagnitude < 1e-8f;
             ctx.Note("globe " + when + ": " + (g != null ? g.CenterPosition.ToString("F3") : "none") + ", casting square " + centre.ToString("F3"));
             return on;
+        }
+
+        // ── SPL-336: dismissing a summon (PHB p.176) ─────────────
+
+        /// <summary>
+        /// Dismissing a summon is its caster's standard action, within the spell's range (PHB p.176, (D) Dismissible;
+        /// SPL-336, owner ruling 2026-11-24). A Scripted wizard 3 (Close range 25 ft. + 5 ft. per 2 levels = 30 ft., 6
+        /// squares) has two Summon Monster I dogs: one adjacent, one 9 squares away. Its fighter ally cannot dismiss either
+        /// (not their caster); the far dog is out of range; the caster dismisses the near dog through the catalog action
+        /// (the shared executor, RunAIAction for a Scripted actor): the dog leaves play at once, the caster's standard
+        /// action is spent, and the far dog is still summoned.
+        /// </summary>
+        private static ScenarioDef DismissSummonCasterStandard()
+        {
+            var near = new Vector2Int(6, 10);
+            return Rules("rules/dismiss-summon-caster-standard", "Only the caster dismisses its summon, for a standard action, within the spell's range (PHB p.176; SPL-336)")
+                .Covers("SPL-336", "PHB p.176", "PHB p.285", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("caster", ActorSource.Stats(() => Wizard("Summoner Wizard", 3)), 5, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Ally", 3)), 5, 12, Control.Scripted)
+                .Npc("orc", "orc_warrior", 17, 17, Control.Idle)
+                .Adopted("dog", Control.Scripted, CharacterTeam.Player)
+                .Adopted("far", Control.Scripted, CharacterTeam.Player)
+                .Initiative("caster", "ally", "orc")
+                .Turn("caster", 1,
+                    Step.Assert("Summon two dogs with Summon Monster I: one adjacent, one 9 squares away", ctx =>
+                        SummonAndAdopt(ctx, "caster", "dog", near.x, near.y, CelestialDog(), 10, 0, SpellNames.SUMMON_MONSTER_1)
+                        && SummonAndAdopt(ctx, "caster", "far", 14, 10, CelestialDog(), 10, 0, SpellNames.SUMMON_MONSTER_1)),
+                    Step.Assert("The ally is refused (not the caster); the far dog is refused (out of range); the near dog is allowed", ctx =>
+                    {
+                        CharacterController caster = ctx.Get("caster"), ally = ctx.Get("ally");
+                        Legality byAlly = ctx.Gm.CheckDismissSummon(ally, ctx.Get("dog"));
+                        Legality farDog = ctx.Gm.CheckDismissSummon(caster, ctx.Get("far"));
+                        Legality nearDog = ctx.Gm.CheckDismissSummon(caster, ctx.Get("dog"));
+                        ctx.Note("ally: " + byAlly.Bar + " " + byAlly.Reason + "; far: " + farDog.Bar + " " + farDog.Reason + "; near: " + nearDog.Ok);
+                        return !byAlly.Ok && byAlly.Bar == LegalityBar.Target && !farDog.Ok && farDog.Bar == LegalityBar.Range && nearDog.Ok;
+                    }),
+                    Step.Action(ActionIds.DismissSummon, "dog"),
+                    Step.Assert("The near dog left play at once, the standard action is spent, the far dog is still summoned", ctx =>
+                    {
+                        CharacterController caster = ctx.Get("caster"), dog = ctx.Get("dog"), far = ctx.Get("far");
+                        string held = StillInPlay(ctx, dog, near);
+                        bool standardSpent = caster.Actions != null && !caster.Actions.HasStandardAction;
+                        bool farActive = ctx.Gm.Harness_IsActiveSummon(far);
+                        ctx.Note("dismissed dog held by " + (held ?? "nothing") + "; standard spent " + standardSpent + "; far still summoned " + farActive);
+                        return held == null && dog.IsRemovedFromPlay && standardSpent && farActive;
+                    }),
+                    Step.EndTurn())
+                .Turn("ally", 1, Step.Pass())
+                .Turn("far", 1, Step.Pass())
+                .Expect("The dismissal checks hold", Expect.AssertsPass())
+                .Build();
         }
 
         // ── Step 5: the escape square of a forced grappling PC (batch 13 C7) ─────────────

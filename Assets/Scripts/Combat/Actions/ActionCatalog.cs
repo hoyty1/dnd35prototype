@@ -293,6 +293,10 @@ public static class ActionCatalog
                 "PHB p.176 (concentration), Table 8-2", ImplStatus.Delegating)
             .Run(new MaintainConcentrationActionExecutor(), ActionUiAfter.ShowChoices)
             .For(c => c.Spellcasting != null));
+        l.Add(Def(ActionIds.DismissSummon, "Dismiss a Summon", Mg, ActionCostType.Standard, ProvokeRule.No, ActionTargetKind.Creature, ActionRoles.Support,
+                "PHB p.176 ((D) Dismissible: the caster, within range, speaking words of dismissal; a standard action that does not provoke), p.285-289 (the summon spells are (D)), Table 8-2; SPL-336",
+                ImplStatus.New)
+            .Run(new DismissSummonActionExecutor(), ActionUiAfter.ShowChoices));
         l.Add(Def(ActionIds.UseItem, "Use an Item", I, ActionCostType.Standard, ProvokeRule.Varies, ActionTargetKind.Item,
                 ActionRoles.Item | ActionRoles.Heal | ActionRoles.Support,
                 "PHB p.141-142, Table 8-2 (retrieve: move, Yes; potion, oil: standard, Yes); DMG p.213 (scroll: the casting time, Yes; wand: standard, No), p.229 (administer: full-round); D7",

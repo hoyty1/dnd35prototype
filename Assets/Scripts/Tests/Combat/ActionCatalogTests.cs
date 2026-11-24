@@ -715,6 +715,7 @@ public static class ActionCatalogTests
         new object[] { ActionIds.TotalDefense, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.CastSpell, ActionCostType.Standard, ProvokeRule.Yes, ImplStatus.Delegating, "" },
         new object[] { ActionIds.MaintainConcentration, ActionCostType.Standard, ProvokeRule.No, ImplStatus.Delegating, "" },
+        new object[] { ActionIds.DismissSummon, ActionCostType.Standard, ProvokeRule.No, ImplStatus.New, "" },
         new object[] { ActionIds.UseItem, ActionCostType.Standard, ProvokeRule.Varies, ImplStatus.Extracted, "" },
         new object[] { ActionIds.RetrieveItem, ActionCostType.Move, ProvokeRule.Yes, ImplStatus.New, "" },
         new object[] { ActionIds.Move, ActionCostType.Move, ProvokeRule.ByMovement, ImplStatus.Extracted, "" },

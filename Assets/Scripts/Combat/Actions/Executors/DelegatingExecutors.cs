@@ -889,6 +889,46 @@ public sealed class MaintainConcentrationActionExecutor : IActionExecutor
 }
 
 /// <summary>
+/// Dismiss a summon (status New; PHB p.176, SPL-336): the caster ends its own (D) summon spell for a standard action that
+/// does not provoke, within the spell's range. The rule is GameManager.CheckDismissSummon and the act
+/// GameManager.TryDismissSummon, for every creature: the PC's dismissal (GameManager.RequestDismissSummon, the summon's
+/// context menu or a right-click on an AI-run summon, through RunPlayerAction) and an NPC caster's (RunAIAction; no AI
+/// routine chooses it yet, docs/systems/AI_ACTION_COVERAGE.md).
+/// </summary>
+public sealed class DismissSummonActionExecutor : IActionExecutor
+{
+    public Legality CanStart(CharacterController actor)
+    {
+        GameManager gm = ExecutorUtil.Gm;
+        return gm != null ? gm.CheckDismissSummon(actor, null) : Legality.Refused(LegalityBar.Other, "no GameManager");
+    }
+
+    public Legality CanExecute(ActionContext ctx)
+    {
+        if (ctx == null)
+            return Legality.Refused(LegalityBar.Other, "no context");
+        if (ctx.Target == null)
+            return Legality.Refused(LegalityBar.Target, "no summon chosen");
+        GameManager gm = ExecutorUtil.Gm;
+        return gm != null ? gm.CheckDismissSummon(ctx.Actor, ctx.Target) : Legality.Refused(LegalityBar.Other, "no GameManager");
+    }
+
+    public IEnumerator Execute(ActionContext ctx, ActionOutcome o)
+    {
+        Legality legal = CanExecute(ctx);
+        if (!legal.Ok)
+        {
+            o.Refuse(legal);
+            yield break;
+        }
+        GameManager gm = ExecutorUtil.Gm;
+        o.Performed = gm.TryDismissSummon(ctx.Actor, ctx.Target, out Legality refusal);
+        if (!o.Performed)
+            o.Refuse(refusal);
+    }
+}
+
+/// <summary>
 /// Deliver a held charge (PHB p.141; SPL-156): the AI's delivery (the cast core with HeldChargeDeliveryRules' cost); a
 /// caller's own delivery request (the Discharge button's) runs through the cast core with its decider.
 /// </summary>

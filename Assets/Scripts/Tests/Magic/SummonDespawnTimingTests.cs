@@ -333,7 +333,9 @@ public static class SummonDespawnTimingTests
     /// A player-run creature that leaves play during its own turn (CRE-312) leaves CurrentCharacter and so ActivePC null:
     /// every PC tail ends that turn by reference (GameManager.IsVacatedPlayerTurn), never through Unity's
     /// destroyed-object null. ShowActionChoices (the tail of most PC paths: a grapple-escape move, a provoking cast)
-    /// ends it; EndCurrentTurn sends it through EndActivePCTurn's cleanup (the dismiss confirm, the forced-turn tails);
+    /// ends it; EndCurrentTurn sends it through EndActivePCTurn's cleanup (the forced-turn tails); a dismissal is its caster's
+    /// own standard action since SPL-336 (GameManager.RequestDismissSummon runs the catalog action for the active PC), so it
+    /// never vacates the dismissed summon's own turn;
     /// AfterAttackDelay and DelayedEndActivePCTurn end it before they read ActivePC; the grapple moves ask
     /// IsCurrentTurnOf; and the harness's summon removal marks the summon out of play as the game's does. The scenario
     /// rules/summon-slain-off-its-move-next-still-acts plays the attack tail and the ShowActionChoices tail.
@@ -352,9 +354,10 @@ public static class SummonDespawnTimingTests
         string endCurrent = Body(gm, "public void EndCurrentTurn()") ?? "";
         Assert(endCurrent.Contains("if (IsPlayerTurn || IsVacatedPlayerTurn)"),
             "EndCurrentTurn sends a vacated player turn through EndActivePCTurn (highlights, buttons, attack-sequence state)");
-        string dismiss = gm.Substring(Math.Max(0, gm.IndexOf("ReferenceEquals(_turnService.VacatedTurnOwner, dismissed)", StringComparison.Ordinal)));
-        Assert(dismiss.Length > 0 && Regex.IsMatch(dismiss.Substring(0, Math.Min(400, dismiss.Length)), @"EndCurrentTurn\(\)"),
-            "The dismiss confirm ends the dismissed summon's own turn through EndCurrentTurn, so through EndActivePCTurn");
+        string dismiss = Body(gm, "public void RequestDismissSummon(") ?? "";
+        Assert(dismiss.Contains("CharacterController pc = ActivePC;") && dismiss.Contains("RunPlayerAction(ActionContext.For(ActionIds.DismissSummon, pc,")
+               && !dismiss.Contains("VacatedTurnOwner"),
+            "The PC dismissal runs the caster's catalog action for the active PC (SPL-336), so it never ends a summon's own turn");
 
         string actions = Regex.Replace(Source("_Core/GameManager.CombatActions.cs"), @"//[^\n]*", "");
         string after = Body(actions, "private IEnumerator AfterAttackDelay(") ?? "";

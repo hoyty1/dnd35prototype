@@ -2498,6 +2498,13 @@ public partial class GameManager : MonoBehaviour
 
         if (!summon.IsControllable)
         {
+            // An AI-run summon takes no commands, but its caster can still dismiss it on the caster's own turn (PHB p.176,
+            // SPL-336): RequestDismissSummon checks the shared rule and asks for confirmation.
+            if (ActivePC != null && ReferenceEquals(active.Caster, ActivePC))
+            {
+                RequestDismissSummon(summon);
+                return true;
+            }
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "This summoned ally is AI-controlled. Direct command menus are unavailable."));
             return true;
         }
@@ -10681,35 +10688,148 @@ public partial class GameManager : MonoBehaviour
         return $"{character.Stats.CharacterName} [S] ({remaining} {roundsWord})";
     }
 
+    /// <summary>
+    /// The PC side of dismissing a summon (SPL-336): the summon's context menu, or a right-click on an AI-run summon during
+    /// its caster's turn. The active PC must pass the shared rule (<see cref="CheckDismissSummon"/>); after a confirmation
+    /// the dismissal runs as the catalog action <see cref="ActionIds.DismissSummon"/> (RunPlayerAction), the same executor
+    /// an NPC caster would use.
+    /// </summary>
     public void RequestDismissSummon(CharacterController summon)
     {
-        if (!IsPlayerTurn || summon == null || summon.Team != CharacterTeam.Player)
+        CharacterController pc = ActivePC;
+        if (!IsPlayerTurn || pc == null || summon == null || CombatUI == null)
             return;
 
-        var active = GetActiveSummon(summon);
-        if (active == null || CombatUI == null) return;
+        ActionContext check = ActionContext.For(ActionIds.DismissSummon, pc, ActorSource.Ui, summon);
+        Legality legal = check.Definition != null && check.Definition.Executor != null
+            ? check.Definition.Executor.CanExecute(check)
+            : Legality.Refused(LegalityBar.Other, "no dismiss action");
+        if (!legal.Ok)
+        {
+            ShowActionRefusal(pc, check, legal);
+            return;
+        }
 
-        string summonName = active.Controller != null && active.Controller.Stats != null
-            ? active.Controller.Stats.CharacterName
-            : "this summon";
-
+        string summonName = summon.Stats != null ? summon.Stats.CharacterName : "this summon";
         CombatUI.ShowConfirmationDialog(
             title: "Dismiss Summon",
-            message: $"Dismiss {summonName}?",
+            message: $"Dismiss {summonName}? (standard action)",
             confirmLabel: "Yes",
             cancelLabel: "No",
-            onConfirm: () =>
-            {
-                CharacterController dismissed = active.Controller;
-                _activeSummons.Remove(active);
-                StartCoroutine(DespawnSummonWithEffect(active, "dismissed"));
-                UpdateAllStatsUI();
-                // A player-run summon dismissed during its own turn left the order at once (CRE-312): its turn ends here,
-                // or nothing would end it. Who may dismiss, and at what cost, is SPL-336.
-                if (CurrentPhase == TurnPhase.PCTurn && _turnService != null && ReferenceEquals(_turnService.VacatedTurnOwner, dismissed))
-                    EndCurrentTurn();
-            },
+            onConfirm: () => RunPlayerAction(ActionContext.For(ActionIds.DismissSummon, pc, ActorSource.Ui, summon)),
             onCancel: null);
+    }
+
+    /// <summary>
+    /// The summon spells whose Duration line ends in (D): Summon Monster I-IV and Summon Nature's Ally I-IV, 1 round/level
+    /// (D) (PHB p.285-289). Summon Swarm is not (concentration + 2 rounds, PHB p.289), and a summon made by an item has no
+    /// spell to dismiss.
+    /// </summary>
+    private static bool IsDismissibleSummonSpell(string spellId)
+    {
+        switch (spellId)
+        {
+            case SpellNames.SUMMON_MONSTER_1:
+            case SpellNames.SUMMON_MONSTER_2:
+            case SpellNames.SUMMON_MONSTER_3:
+            case SpellNames.SUMMON_MONSTER_4:
+            case SpellNames.SUMMON_NATURES_ALLY_1:
+            case SpellNames.SUMMON_NATURES_ALLY_2:
+            case SpellNames.SUMMON_NATURES_ALLY_3:
+            case SpellNames.SUMMON_NATURES_ALLY_4:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="caster"/> may dismiss <paramref name="summon"/> now (PHB p.176, (D) Dismissible; SPL-336),
+    /// one rule for every creature (the PC UI and the AI reach it through the catalog's DismissSummonActionExecutor):
+    /// - only the summon's own caster, from a (D) summon spell (<see cref="IsDismissibleSummonSpell"/>);
+    /// - a standard action that does not provoke (PHB p.176, Table 8-2), so on the caster's turn with one left;
+    /// - the caster within the spell's range of the summon (Close for every summon spell: CasterLevelRules.RangeSquares at
+    ///   the caster's caster level, to the summon's nearest square, CasterLevelRules.DistanceToTarget);
+    /// - the words of dismissal spoken: a spell with a verbal component cannot be dismissed inside a Silence (PHB p.176,
+    ///   p.279; only the Silence centred on the caster is known, CharacterStats.SilenceActive, SPL-166);
+    /// - not by a creature that can take no actions (ConditionRules.DeniesAllActions), and not while grappling (PHB
+    ///   p.156: only the grapple actions, the reading total defense applies).
+    /// A null <paramref name="summon"/> asks whether the caster can dismiss any of its summons. Pure: no log, no state change.
+    /// </summary>
+    internal Legality CheckDismissSummon(CharacterController caster, CharacterController summon)
+    {
+        Legality alive = ExecutorUtil.Alive(caster);
+        if (!alive.Ok)
+            return alive;
+        if (summon == null)
+        {
+            Legality first = Legality.Refused(LegalityBar.Resource, "no summon of this creature can be dismissed");
+            for (int i = 0; i < _activeSummons.Count; i++)
+            {
+                ActiveSummonInstance s = _activeSummons[i];
+                if (s == null || s.Controller == null || !ReferenceEquals(s.Caster, caster))
+                    continue;
+                Legality one = CheckDismissSummon(caster, s.Controller);
+                if (one.Ok)
+                    return one;
+                first = one;
+            }
+            return first;
+        }
+
+        ActiveSummonInstance active = GetActiveSummon(summon);
+        if (active == null || summon.IsRemovedFromPlay)
+            return Legality.Refused(LegalityBar.Target, "it is not an active summon");
+        if (!ReferenceEquals(active.Caster, caster))
+        {
+            string casterName = active.Caster != null && active.Caster.Stats != null ? active.Caster.Stats.CharacterName : "its caster";
+            return Legality.Refused(LegalityBar.Target, $"only {casterName}, its caster, can dismiss it (PHB p.176)");
+        }
+        if (!IsDismissibleSummonSpell(active.SourceSpellId))
+            return Legality.Refused(LegalityBar.Target, "the spell that summoned it is not dismissible (PHB p.176)");
+        if (ConditionRules.DeniesAllActions(caster))
+            return Legality.Refused(LegalityBar.Condition, "a creature that can take no actions cannot dismiss a spell (PHB p.307-311)");
+        if (caster.IsGrappling())
+            return Legality.Refused(LegalityBar.Condition, "a grappling creature can take only the grapple actions (PHB p.156)");
+
+        SpellData spell = SpellDatabase.GetSpell(active.SourceSpellId);
+        if (spell == null)
+            return Legality.Refused(LegalityBar.Other, "the summon's spell is unknown");
+        if (spell.HasVerbalComponent && caster.Stats.SilenceActive)
+            return Legality.Refused(LegalityBar.Condition, "the words of dismissal cannot be spoken inside a Silence (PHB p.176, p.279)");
+        int range = CasterLevelRules.RangeSquares(caster, spell);
+        int distance = CasterLevelRules.DistanceToTarget(caster, summon);
+        if (range > 0 && distance > range)
+            return Legality.Refused(LegalityBar.Range, $"the summon is {distance * 5} ft. away, beyond the spell's {range * 5} ft. range (PHB p.176)");
+        if (!ActionCosts.CanAfford(caster, ActionCostType.Standard))
+            return Legality.Refused(LegalityBar.Action, "dismissing a spell is a standard action (PHB p.176)");
+        return Legality.Allowed();
+    }
+
+    /// <summary>
+    /// Dismisses <paramref name="summon"/> for <paramref name="caster"/> (SPL-336): <see cref="CheckDismissSummon"/>, the
+    /// standard action paid (ActionCosts.TryPay; no AoO), the dismissal line, then the summon leaves play at once through
+    /// DespawnSummonWithEffect (CRE-312). False, with nothing changed, when the rule refuses.
+    /// </summary>
+    internal bool TryDismissSummon(CharacterController caster, CharacterController summon, out Legality refusal)
+    {
+        refusal = CheckDismissSummon(caster, summon);
+        if (refusal.Ok && summon == null)
+            refusal = Legality.Refused(LegalityBar.Target, "no summon chosen");
+        if (!refusal.Ok)
+            return false;
+        if (!ActionCosts.TryPay(caster, ActionCostType.Standard))
+        {
+            refusal = Legality.Refused(LegalityBar.Action, "dismissing a spell is a standard action (PHB p.176)");
+            return false;
+        }
+
+        ActiveSummonInstance active = GetActiveSummon(summon);
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✋", $"{caster.Stats.CharacterName} dismisses {summon.Stats.CharacterName} (standard action, PHB p.176)."));
+        _activeSummons.Remove(active);
+        StartCoroutine(DespawnSummonWithEffect(active, "dismissed"));
+        UpdateAllStatsUI();
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════

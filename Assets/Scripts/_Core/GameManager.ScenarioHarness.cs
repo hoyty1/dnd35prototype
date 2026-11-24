@@ -848,13 +848,13 @@ public partial class GameManager
     /// active summon list for <paramref name="rounds"/> rounds, so it is despawned by the game's own path
     /// (<see cref="DespawnSummonWithEffect"/>). Null when the spawn fails.
     /// </summary>
-    internal CharacterController Harness_SummonIntoFight(CharacterController caster, Vector2Int cell, SummonMonsterOption option, int rounds)
+    internal CharacterController Harness_SummonIntoFight(CharacterController caster, Vector2Int cell, SummonMonsterOption option, int rounds, string sourceSpellId = null)
     {
         CharacterController summon = SpawnSummonedCreature(caster, cell, option);
         if (summon == null)
             return null;
         InsertIntoInitiative(summon, caster);
-        RegisterActiveSummon(summon, caster, sourceSpellId: null, durationRoundsOverride: Mathf.Max(1, rounds));
+        RegisterActiveSummon(summon, caster, sourceSpellId: sourceSpellId, durationRoundsOverride: Mathf.Max(1, rounds));
         UpdateAllStatsUI();
         return summon;
     }
