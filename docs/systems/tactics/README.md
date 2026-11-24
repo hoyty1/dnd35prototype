@@ -240,7 +240,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CRE-031 |
 | 7 | Movement modes: fly 42 (+ fly variants), climb 10+2, swim 3+2+1, burrow 4, earth glide 6. Prerequisite for flyby, ink-cloud escape and burrow-ambush AI | 60+ | High (positioning) | High (no fly/swim/climb speed exists on `NPCDefinition`) | GRID-027 (flight only; swim, climb and burrow not filed); AI-019 |
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
-| 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, real-time timing | 25+14+5 | Med | Med | CMB-007, CRE-014 |
+| 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, the ingested secondary delay (real-time timing fixed 2026-11-24, CMB-007) | 25+14+5 | Med | Med | CMB-307, CRE-014 |
 | 10 | Fast healing as its own field (not regeneration) | 22 | Low (AI: n/a) | Med | CRE-017 |
 | 11 | Smite (template and paladin): one executor; target alignment; the summon-AI formula (done 2026-10-14: `SmiteRules`, CHR-020, CMB-021, AI-056) | 22+8+11+4+3 | Med | Med | - |
 | 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-008, CRE-017 (AI-040 fixed in batch 13 step 18) |
@@ -267,7 +267,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 | 2 | Improved grab | 49 | implemented | yes | `HasImprovedGrab` + trigger attack name; grab creatures may also grapple normally (CMB-014 fixed). Size limit and per-creature grab maxima from the MM done (CMB-126); trigger attacks differ for a few entries (CRE-047); constrict values still need an MM check. |
 | 3 | Scent | 47 | partial | partial | Copied at spawn (`NPCSetup.cs:904`), read only for invisible-target scoring (`AIService.cs:2444`). The hell hound entry's data_only/no rating was wrong. |
 | 4 | Flight | 42 | missing | partial | No fly speed exists on `NPCDefinition` (only `BaseSpeed`); flyers walk. |
-| 5 | Poison (injury, bite) | 25 | partial | yes | `PoisonOnHitId` is used by 13 attacks over 10 poison ids. Secondary damage timed in real seconds (CMB-007). |
+| 5 | Poison (injury, bite) | 25 | partial | yes | `PoisonOnHitId` is used by 13 attacks over 10 poison ids. Secondary damage 10 rounds after exposure at the exposure turn's count, resolved at combat end if still pending (`PoisonTiming`, CMB-007 fixed 2026-11-24). |
 | 6 | Constrict | 22 | missing | no | Text only in 10 creature files; no logic (`CREATURES.md:111`). |
 | 7 | Fast healing | 22 | missing | n/a | Mephits model it as `RegenerationAmount = 2` (CRE-017), so it is partly a stand-in. A downed regenerator now counts as out of the fight (CORE-034, fixed 2026-10-08). |
 | 8 | Smite good | 22 | partial | partial | `GainsSmiteGood` becomes `HasTemplateSmiteGood` (`NPCSetup.cs:981`). Every target has its MM alignment (the spawn copies it since CRE-002 was fixed on 2026-10-08, and every definition sets one since the CRE-056 data fix of 2026-10-14); one smite rule for PCs, NPCs and summons since 2026-10-14 (`SmiteRules`, AI-056 fixed). Family total with the `*_template` ids is 31+. |

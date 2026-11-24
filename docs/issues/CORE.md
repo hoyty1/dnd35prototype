@@ -32,7 +32,7 @@
 
 ## Performance
 
-- **CORE-021** · **Low** — **A per-frame list allocation for poison timers.** `UpdatePoisonTimers` runs every frame and allocates a new List via `GetAllCharacters()`. (The victory-check logging this entry also named went with the old predicates on 2026-10-08, CORE-011.) *Evidence:* Assets/Scripts/_Core/GameManager.cs (`UpdatePoisonTimers`). *Fix:* Reuse a cached list in `UpdatePoisonTimers`.
+None open (CORE-021 went with `UpdatePoisonTimers`, 2026-11-24).
 
 ## Dead code, duplication and tech debt
 

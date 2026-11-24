@@ -2209,8 +2209,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // Poison secondary timers continue regardless of input/turn state.
-        UpdatePoisonTimers();
+        // Poison secondaries are counted in rounds at initiative counts (PoisonTiming, CMB-007), not here.
 
         // Scenario harness runs drive the game through code; ignore mouse and keyboard world input.
         if (ScenarioHooks.SuppressPlayerInput)
@@ -2257,45 +2256,6 @@ public partial class GameManager : MonoBehaviour
     {
         DiseaseDatabase.Initialize();
         PoisonDatabase.Initialize();
-    }
-
-    private void UpdatePoisonTimers()
-    {
-        List<CharacterController> characters = GetAllCharacters();
-        if (characters == null || characters.Count == 0)
-            return;
-
-        for (int c = 0; c < characters.Count; c++)
-        {
-            CharacterController character = characters[c];
-            if (character == null || character.ActivePoisons == null || character.ActivePoisons.Count == 0)
-                continue;
-
-            for (int i = character.ActivePoisons.Count - 1; i >= 0; i--)
-            {
-                ActivePoison poison = character.ActivePoisons[i];
-                if (poison == null || poison.PoisonData == null)
-                {
-                    character.ActivePoisons.RemoveAt(i);
-                    continue;
-                }
-
-                if (poison.SecondaryResolved)
-                {
-                    character.ActivePoisons.RemoveAt(i);
-                    continue;
-                }
-
-                poison.TimeUntilSecondary -= Time.deltaTime;
-                if (poison.TimeUntilSecondary <= 0f)
-                {
-                    character.ProcessPoisonSecondaryDamage(poison);
-
-                    if (poison.SecondaryResolved)
-                        character.ActivePoisons.RemoveAt(i);
-                }
-            }
-        }
     }
 
     /// <summary>Delegates to <see cref="EffectService.ProcessDailyEffects"/>.</summary>
@@ -3768,6 +3728,8 @@ public partial class GameManager : MonoBehaviour
         // only those with no anchor in the initiative order tick here, at the round boundary (PHB p.138, CMB-006).
         TickAllSpellDurations(TicksAtRoundBoundary, roundBoundary: true);
         _conditionService?.OnRoundBoundary(TicksAtRoundBoundary);
+        if (PoisonTiming.TickAtRoundBoundary(GetAllCharacters(), TicksAtRoundBoundary) > 0) // unanchored poison secondaries (CMB-007)
+            UpdateAllStatsUI();
 
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
@@ -3811,6 +3773,9 @@ public partial class GameManager : MonoBehaviour
         TickRageAtCount(count);
         // A caster's new turn owes a new concentration on its maintained spell (ConcentrationRules, SPL-153).
         TickSpellConcentrationAtCount(count);
+        // A poison's secondary save comes 10 rounds after exposure, at the exposure turn's count (DMG p.296, CMB-007).
+        if (PoisonTiming.TickAtCount(GetAllCharacters(), count) > 0)
+            UpdateAllStatsUI();
     }
 
     /// <summary>
@@ -3820,7 +3785,9 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void OnInitiativeCountRemoved(CharacterController removed, CharacterController heir)
     {
-        int moved = TurnDurations.Reanchor(GetAllCharacters(), removed, heir);
+        List<CharacterController> all = GetAllCharacters();
+        int moved = TurnDurations.Reanchor(all, removed, heir);
+        moved += PoisonTiming.Reanchor(all, removed, heir); // pending poison secondaries follow the same heir (CMB-007)
         if (moved > 0)
             Debug.Log($"[Duration] {moved} duration(s) anchored to {removed?.Stats?.CharacterName ?? "<removed>"} now tick at {(heir != null && heir.Stats != null ? heir.Stats.CharacterName + "'s count" : "the round boundary")}.");
     }
@@ -3857,6 +3824,11 @@ public partial class GameManager : MonoBehaviour
 
         CurrentPhase = TurnPhase.CombatOver;
         TurnControl.CombatEnded(); // presentation only (grouped AI turns): the pacing kind
+        // A combat-end poison secondary can still drop the last PC: the victory then becomes a defeat (CMB-007).
+        bool poisonDefeat = ResolvePendingPoisonSecondariesAtCombatEnd("OnCombatEnded") > 0
+            && isVictory && GetCombatEndSides().PlayersOut;
+        if (poisonDefeat)
+            isVictory = false;
         // Every bard's song and its effects end with the fight, on both sides (BardicMusicRules, CHR-026, CHR-069).
         EndAllBardicMusicForCombatEnd();
         EffectService.ClearAll();
@@ -3876,6 +3848,10 @@ public partial class GameManager : MonoBehaviour
             CaptureDefeatedEnemiesSnapshotForXP("OnCombatEnded.Victory", countPartyControlled: true);
             BeginPostCombatLootCollection();
             Debug.Log($"[LootFlow] OnCombatEnded post-invoke state | waitingLoot={WaitingForLootCollection} | lootUiAssigned={LootCollectionUI != null}");
+        }
+        else if (poisonDefeat)
+        {
+            TurnVictoryIntoDefeatIfPartyOut("OnCombatEnded");
         }
         else
         {

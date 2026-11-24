@@ -5283,7 +5283,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Apply poison exposure and resolve initial poison save/damage.
-    /// Secondary damage is handled after a delay by GameManager poison ticking.
+    /// The secondary save comes 10 rounds later at the exposure turn's initiative count (PoisonTiming, CMB-007).
     /// </summary>
     public void ApplyPoison(string poisonId, int dcModifier = 0)
     {
@@ -5306,6 +5306,7 @@ public class CharacterController : MonoBehaviour
 
         ActivePoison activePoison = new ActivePoison(poison)
         {
+            SaveDC = dc, // the secondary save uses the same DC (DMG p.296)
             InitialSaveSucceeded = save.Succeeded
         };
 
@@ -5319,7 +5320,7 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Called by GameManager when the poison's secondary timer expires.
+    /// Called by PoisonTiming when the poison's secondary save comes due (10 rounds after exposure, or at combat end).
     /// </summary>
     public void ProcessPoisonSecondaryDamage(ActivePoison poison)
     {
@@ -5333,7 +5334,8 @@ public class CharacterController : MonoBehaviour
             return;
         }
 
-        int dc = poison.PoisonData.FortitudeDC;
+        // The DC figured at exposure, as for the initial save (a wild-shaped druid's own DC, CHR-020; DMG p.296).
+        int dc = poison.SaveDC;
         // The one save roll (SaveRollRules, D13), with the poison context (CHR-018).
         SaveRoll save = SaveRollRules.Roll(Stats, SavingThrowType.Fortitude, dc,
             SaveContext.Poison(poison.PoisonData.Id ?? poison.PoisonData.Name), "Poison secondary Fort save");

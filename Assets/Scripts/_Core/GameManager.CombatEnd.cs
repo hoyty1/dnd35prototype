@@ -274,6 +274,10 @@ public partial class GameManager
             Debug.LogWarning("[LootFlow] PartyStash is null before BeginPostCombatLootCollection. Initialization will be attempted.");
 
         CaptureDefeatedEnemiesSnapshotForXP($"{sourceContext}.Victory", countPartyControlled: true);
+        // A combat-end poison secondary can still drop the last PC: the victory then becomes a defeat (CMB-007).
+        if (ResolvePendingPoisonSecondariesAtCombatEnd($"{sourceContext}.Victory") > 0
+            && TurnVictoryIntoDefeatIfPartyOut($"{sourceContext}.Victory"))
+            return;
         BeginPostCombatLootCollection();
         Debug.Log($"[CombatEnd] Post-combat loot collection invoked | source={sourceContext} | waitingAfter={WaitingForLootCollection} | phaseAfter={CurrentPhase}");
     }
@@ -297,7 +301,80 @@ public partial class GameManager
         CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
         CombatUI?.SetActionButtonsVisible(false);
 
+        ResolvePendingPoisonSecondariesAtCombatEnd($"{sourceContext}.Defeat");
         ShowDefeatScreen();
+    }
+
+    /// <summary>
+    /// The fight is over (the phase is already <see cref="TurnPhase.CombatOver"/>): every poison secondary still pending
+    /// resolves now, victim by victim in initiative order, before the loot window or the defeat screen opens (CMB-007).
+    /// Delegated RAW reading, 2026-11-16 (docs/systems/RULES_COVERAGE.md 4.1): DMG p.296 times the secondary 1 minute after
+    /// exposure, and that minute passes before the party can loot, rest or start another fight, so it is not dropped and
+    /// not carried into the next encounter. Called from <see cref="HandleCombatVictoryDetected"/>,
+    /// <see cref="HandleCombatDefeatDetected"/> and OnCombatEnded; a second call finds nothing left. Creatures of the
+    /// fight's initiative order come first, in that order (TurnService.OrderAtLastCombatEnd once the order is cleared),
+    /// then any other active creature with a pending secondary. Returns how many secondary saves were rolled. A victory
+    /// route re-checks the party side afterwards (<see cref="TurnVictoryIntoDefeatIfPartyOut"/>): a secondary that drops the
+    /// last PC turns the victory into a defeat (delegated RAW reading, 2026-11-24, RULES_COVERAGE 4.1).
+    /// </summary>
+    private int ResolvePendingPoisonSecondariesAtCombatEnd(string sourceContext)
+    {
+        List<CharacterController> all = GetAllCharacters();
+        bool anyPending = false;
+        foreach (CharacterController c in all)
+        {
+            if (PoisonTiming.HasPending(c))
+            {
+                anyPending = true;
+                break;
+            }
+        }
+        if (!anyPending)
+            return 0;
+
+        var order = new List<CharacterController>();
+        if (_turnService != null)
+        {
+            if (_turnService.InitiativeOrder != null && _turnService.InitiativeOrder.Count > 0)
+            {
+                foreach (TurnService.InitiativeEntry entry in _turnService.InitiativeOrder)
+                    if (entry != null && entry.Character != null)
+                        order.Add(entry.Character);
+            }
+            else if (_turnService.OrderAtLastCombatEnd != null)
+            {
+                order.AddRange(_turnService.OrderAtLastCombatEnd);
+            }
+        }
+        order.RemoveAll(c => c == null || !all.Contains(c));
+        foreach (CharacterController c in all)
+            if (!order.Contains(c))
+                order.Add(c);
+
+        int resolved = PoisonTiming.ResolvePendingAtCombatEnd(order);
+        Debug.Log($"[Poison] {resolved} pending secondary save(s) resolved at combat end | source={sourceContext}");
+        UpdateAllStatsUI();
+        return resolved;
+    }
+
+    /// <summary>
+    /// After the combat-end poison secondaries of a victory route: when the party side is now out of the fight (every PC
+    /// dead, dying, unconscious or under the enemy's control, <see cref="CombatEndRules"/>), the fight is lost after all:
+    /// the defeat screen opens instead of the loot window, and this returns true (delegated RAW reading, 2026-11-24,
+    /// docs/systems/RULES_COVERAGE.md 4.1, CMB-007). The phase is already CombatOver, so the defeat route itself is not
+    /// re-entered.
+    /// </summary>
+    private bool TurnVictoryIntoDefeatIfPartyOut(string sourceContext)
+    {
+        CombatEndRules.SideCounts sides = GetCombatEndSides();
+        if (!sides.PlayersOut)
+            return false;
+        Debug.Log($"[CombatEnd] Defeat after the combat-end poison secondaries | source={sourceContext} | party={sides.PlayersIn}/{sides.PlayersAll} in");
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", "DEFEAT! Poison has felled the last hero standing."));
+        CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+        CombatUI?.SetActionButtonsVisible(false);
+        ShowDefeatScreen();
+        return true;
     }
 
     private void ShowDefeatScreen()

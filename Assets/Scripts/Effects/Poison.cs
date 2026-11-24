@@ -38,32 +38,47 @@ public class PoisonData
     }
 
     /// <summary>
-    /// Delay to secondary effect in seconds.
-    /// DMG poison defaults are commonly 1 minute (10 rounds), with some ingested poisons at 10 minutes.
+    /// Rounds from exposure to the secondary save (DMG p.296: secondary damage comes 1 minute after exposure, and a
+    /// minute is 10 rounds, PHB p.138). Ingested poisons keep the 100 rounds (10 minutes) the game has always used for
+    /// them, a possibly intentional deviation from the DMG's 1 minute for every type that waits for the owner (CMB-307).
+    /// Counted at an initiative count like any duration (PoisonTiming, CMB-007), never in real time.
     /// </summary>
-    public float GetSecondaryDamageDelaySeconds()
+    public int GetSecondaryDamageDelayRounds()
     {
         switch (Type)
         {
             case PoisonType.Ingested:
-                return 600f;
+                return PoisonTiming.IngestedSecondaryDelayRounds;
             case PoisonType.Contact:
             case PoisonType.Injury:
             case PoisonType.Inhaled:
             default:
-                return 60f;
+                return PoisonTiming.SecondaryDelayRounds;
         }
     }
 }
 
 /// <summary>
-/// Runtime state for poison currently affecting a character.
+/// Runtime state for poison currently affecting a character. The secondary save comes after
+/// <see cref="RoundsUntilSecondary"/> rounds, counted at <see cref="DurationAnchor"/>'s initiative count (the creature
+/// whose count was current at exposure, as for every duration: TurnDurations, CMB-006; PoisonTiming, CMB-007).
 /// </summary>
 [Serializable]
 public class ActivePoison
 {
     public PoisonData PoisonData;
-    public float TimeUntilSecondary;
+    /// <summary>Rounds left before the secondary save; it rolls when this reaches 0 at the anchor's count.</summary>
+    public int RoundsUntilSecondary;
+    /// <summary>
+    /// The creature at whose initiative count the delay loses a round (TurnDurations.CurrentAnchor at exposure); null
+    /// (exposure outside any count) or a creature no longer in the initiative order ticks at the round boundary.
+    /// </summary>
+    [NonSerialized] public CharacterController DurationAnchor;
+    /// <summary>
+    /// The Fortitude DC of both saves, figured once at exposure (a wild-shaped druid's DC is figured for her,
+    /// WildShapeRules.OnHitSaveDcModifier): DMG p.296 gives a poison one DC, for the initial and the secondary save.
+    /// </summary>
+    public int SaveDC;
     public bool InitialSaveSucceeded;
     public bool SecondarySaveSucceeded;
     public bool SecondaryResolved;
@@ -71,7 +86,9 @@ public class ActivePoison
     public ActivePoison(PoisonData data)
     {
         PoisonData = data;
-        TimeUntilSecondary = data != null ? data.GetSecondaryDamageDelaySeconds() : 60f;
+        RoundsUntilSecondary = data != null ? data.GetSecondaryDamageDelayRounds() : PoisonTiming.SecondaryDelayRounds;
+        DurationAnchor = TurnDurations.CurrentAnchor;
+        SaveDC = data != null ? data.FortitudeDC : 0;
     }
 
     public string GetStatusSummary()
@@ -80,7 +97,10 @@ public class ActivePoison
             return "Unknown poison";
 
         if (!SecondaryResolved)
-            return $"{PoisonData.Name} (secondary in {Math.Max(0, (int)Math.Ceiling(TimeUntilSecondary))}s)";
+        {
+            int rounds = Math.Max(0, RoundsUntilSecondary);
+            return $"{PoisonData.Name} (secondary in {rounds} round{(rounds == 1 ? "" : "s")})";
+        }
 
         return $"{PoisonData.Name} (resolved)";
     }

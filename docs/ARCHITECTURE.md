@@ -110,9 +110,8 @@ Awake-before-wiring caveat: `AddComponent<GameManager>()` runs `GameManager.Awak
 - Services read `CombatUI` through lambdas (`() => CombatUI`) for this reason.
 - New code that needs scene references must read them in `Start` or later, or take a provider.
 
-`Update` (:2205) does three things:
+`Update` does two things (poison secondaries are counted in rounds at initiative counts since 2026-11-24, `PoisonTiming`, CMB-007, not here):
 
-- It ticks poison timers every frame, in real time.
 - It returns early (after hiding the hover tooltip) while `ScenarioHooks.SuppressPlayerInput` is set (scenario harness runs) or while any of `WaitingForCharacterCreation`, `WaitingForEncounterSelection`, `WaitingForPreCombatInventory`, `WaitingForLootCollection` or `WaitingForDefeatChoice` is set. These flags are how modal phases block world input.
 - Otherwise it feeds `InputService` and updates the hover previews.
 

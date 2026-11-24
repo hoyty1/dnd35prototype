@@ -47,6 +47,14 @@ public class TurnService : MonoBehaviour
     private int _lastCountReachedRound = -1;
 
     public IReadOnlyList<InitiativeEntry> InitiativeOrder => _initiativeOrder;
+
+    private readonly List<CharacterController> _orderAtLastCombatEnd = new List<CharacterController>();
+
+    /// <summary>
+    /// The creatures of the initiative order as it stood when <see cref="EndCombat"/> last ran, in order: the order is
+    /// cleared before <see cref="OnCombatEnded"/> is raised, and the combat-end poison secondaries resolve in it (CMB-007).
+    /// </summary>
+    public IReadOnlyList<CharacterController> OrderAtLastCombatEnd => _orderAtLastCombatEnd;
     public int CurrentInitiativeIndex => _currentInitiativeIndex;
     public int CurrentRound => _currentRound;
     public CharacterController CurrentCharacter => _currentCharacter;
@@ -78,6 +86,7 @@ public class TurnService : MonoBehaviour
         IReadOnlyList<CharacterController> forcedFirstCharacters = null)
     {
         _initiativeOrder.Clear();
+        _orderAtLastCombatEnd.Clear(); // only ever the order of the fight that just ended (CMB-007)
         _currentInitiativeIndex = 0;
         _currentRound = 0;
         _currentCharacter = null;
@@ -286,6 +295,10 @@ public class TurnService : MonoBehaviour
         Debug.Log($"[TurnService][Flow] EndCombat ENTER | combatActive={_combatActive} | initiativeCount={_initiativeOrder.Count} | currentRound={_currentRound}");
         _combatActive = false;
         _currentCharacter = null;
+        _orderAtLastCombatEnd.Clear();
+        foreach (InitiativeEntry entry in _initiativeOrder)
+            if (entry != null && entry.Character != null)
+                _orderAtLastCombatEnd.Add(entry.Character);
         _initiativeOrder.Clear();
         _currentInitiativeIndex = 0;
         ResetCountReached();
@@ -306,6 +319,7 @@ public class TurnService : MonoBehaviour
         _combatActive = false;
         _currentCharacter = null;
         _initiativeOrder.Clear();
+        _orderAtLastCombatEnd.Clear(); // a reset fight leaves no order for the combat-end poison secondaries (CMB-007)
         _currentInitiativeIndex = 0;
         _currentRound = 0;
         ResetCountReached();
