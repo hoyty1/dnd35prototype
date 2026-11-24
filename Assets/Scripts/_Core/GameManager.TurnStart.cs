@@ -204,6 +204,7 @@ public partial class GameManager
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.SetActionButtonsVisible(false);
+        TurnControl.AiTurnStarting(pc); // presentation only (grouped AI turns): the pacing kind
         StartCoroutine(forcedTurn);
         return true;
     }

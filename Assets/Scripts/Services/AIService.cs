@@ -231,7 +231,7 @@ public class AIService : MonoBehaviour
 
         _gameManager.CombatUI?.SetTurnIndicator($"{_gameManager.GetSummonDisplayName(npc)}'s turn...");
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Summon("", $"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>"));
-        yield return new WaitForSeconds(0.6f);
+        yield return CombatPacing.Wait(0.6f);
         if (CombatEnded())
             yield break;
 
@@ -276,7 +276,7 @@ public class AIService : MonoBehaviour
             CharacterController source = fascinatedDecision != null ? fascinatedDecision.CasterSource : null;
             string sourceName = source != null && source.Stats != null ? source.Stats.CharacterName : "nothing";
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} stares blankly at {sourceName} and takes no actions."));
-            yield return new WaitForSeconds(0.25f);
+            yield return CombatPacing.Wait(0.25f);
             yield break;
         }
 
@@ -411,7 +411,7 @@ public class AIService : MonoBehaviour
 
         if (_gameManager.TryExecuteAnimateRopeEscapeForNpc(npc))
         {
-            yield return new WaitForSeconds(0.35f);
+            yield return CombatPacing.Wait(0.35f);
             if (CombatEnded())
                 yield break;
         }
@@ -445,7 +445,7 @@ public class AIService : MonoBehaviour
             // p.176): the same choice as below, against a grapple attack as the other standard action.
             if (TryMaintainConcentrationTurn(npc, targetPC, grappling: true))
             {
-                yield return new WaitForSeconds(0.5f);
+                yield return CombatPacing.Wait(0.5f);
                 if (!KeepsRoutineAfterAbility(npc))
                 {
                     yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -457,7 +457,7 @@ public class AIService : MonoBehaviour
             // actions.
             if (TryGrappledSpellcastForAI(npc, targetPC))
             {
-                yield return new WaitForSeconds(0.5f);
+                yield return CombatPacing.Wait(0.5f);
                 if (!KeepsRoutineAfterAbility(npc))
                 {
                     yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -502,7 +502,7 @@ public class AIService : MonoBehaviour
         {
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"{npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through the boundary!"));
             // NPC skips offensive actions but could still move within sphere
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             yield break;
         }
 
@@ -518,7 +518,7 @@ public class AIService : MonoBehaviour
         // action follows (UseMoveAfterStandardAction, batch 14 step 11, AI-077: a standard and a move action, PHB p.138).
         if (!isSummon && _gameManager.TryNPCLayOnHandsTurnForAI(npc))
         {
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -531,7 +531,7 @@ public class AIService : MonoBehaviour
         // Undead button runs (D9). Its move action follows, as after lay on hands (batch 14 step 11, AI-077).
         if (!isSummon && _gameManager.TryNPCTurnUndeadTurnForAI(npc))
         {
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -562,7 +562,7 @@ public class AIService : MonoBehaviour
         // turn goes on (to cast while Inspire Courage lingers).
         if (_gameManager.TryNPCBardicMusicTurnForAI(npc))
         {
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -576,7 +576,7 @@ public class AIService : MonoBehaviour
         // AI-077). Otherwise the turn goes on, and a cast or the end of the turn ends the spell.
         if (TryMaintainConcentrationTurn(npc, targetPC))
         {
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, targetPC, StyleWithoutProfile(behavior)));
@@ -662,7 +662,7 @@ public class AIService : MonoBehaviour
                         if (healCasted)
                         {
                             Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully healed {healTarget.Stats.CharacterName}.");
-                            yield return new WaitForSeconds(0.5f);
+                            yield return CombatPacing.Wait(0.5f);
                             // The move action after the cure (batch 14 step 11, AI-077); a quickened cure keeps the routine going.
                             if (!KeepsRoutineAfterAbility(npc))
                             {
@@ -685,7 +685,7 @@ public class AIService : MonoBehaviour
                     if (buffCasted)
                     {
                         Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully cast buff spell.");
-                        yield return new WaitForSeconds(0.5f);
+                        yield return CombatPacing.Wait(0.5f);
                         // The move action after the buff (batch 14 step 11, AI-077).
                         if (!KeepsRoutineAfterAbility(npc))
                         {
@@ -781,7 +781,7 @@ public class AIService : MonoBehaviour
         // The move executor spent the move action before the first step (D3).
 
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} moves to search for enemies."));
-        yield return new WaitForSeconds(0.35f);
+        yield return CombatPacing.Wait(0.35f);
     }
 
     private bool TryFindSearchDestination(CharacterController npc, out Vector2Int destination)
@@ -928,7 +928,7 @@ public class AIService : MonoBehaviour
         // turn, when the compulsion pass looks again.
         _gameManager.ApplyCondition(npc, CombatConditionType.Cowering, 1, source, sourceNameOverride: "Turned (cornered)", sourceCategory: "Turned");
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} is turned and cannot flee: it cowers, unable to act."));
-        yield return new WaitForSeconds(0.35f);
+        yield return CombatPacing.Wait(0.35f);
     }
 
     /// <summary>
@@ -956,7 +956,7 @@ public class AIService : MonoBehaviour
         if (CombatEnded() || !npc.CanTakeTurnActions() || advanceMove.Refused)
             yield break; // a refused move spends nothing (D3); the executor spent this one before the first step
         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
-        yield return new WaitForSeconds(0.5f);
+        yield return CombatPacing.Wait(0.5f);
     }
 
     // ── The move left after a standard-action ability (batch 14 step 11, AI-077; decision D1, design choice C8) ──
@@ -1092,7 +1092,7 @@ public class AIService : MonoBehaviour
                 if (!approach && ctx.Threatened && TryFiveFootStepOutOfThreat(npc, from, breaksTurning))
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} takes a 5-foot step away from {from.Stats.CharacterName} to keep its distance."));
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                     yield break;
                 }
                 SquareCell cell = approach
@@ -1109,7 +1109,7 @@ public class AIService : MonoBehaviour
                 _gameManager.CombatUI?.ShowCombatLog(approach
                     ? CombatLogHelper.Info("", $"{name} advances toward {from.Stats.CharacterName}.")
                     : CombatLogHelper.Info("", $"{name} backs away from {from.Stats.CharacterName} to keep its distance."));
-                yield return new WaitForSeconds(0.5f);
+                yield return CombatPacing.Wait(0.5f);
                 yield break;
             }
         }
@@ -1383,7 +1383,7 @@ public class AIService : MonoBehaviour
         yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(action, outcome));
         if (!outcome.Performed || CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
             yield break;
-        yield return new WaitForSeconds(0.5f);
+        yield return CombatPacing.Wait(0.5f);
         if (!KeepsRoutineAfterAbility(npc))
             yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
     }
@@ -1879,7 +1879,7 @@ public class AIService : MonoBehaviour
                     if (!_gameManager.TryTakeFiveFootStepForAI(npc, ctx.TouchSquare.Value))
                         yield break;
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} takes a 5-foot step to reach {patientName}."));
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                 }
                 else
                 {
@@ -1895,7 +1895,7 @@ public class AIService : MonoBehaviour
                     if (!move.Performed)
                         yield break; // refused, nothing spent: today's turn
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} moves to reach {patientName}."));
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                 }
                 outcome.Moved = true;
                 if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
@@ -1906,7 +1906,7 @@ public class AIService : MonoBehaviour
                 if (TryExecuteSpellcastAction(npc, patient, IsHealingEffectSpell))
                 {
                     Debug.Log($"[AI][Healer] {name} moved and healed {patientName}.");
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                     // A quickened cure keeps the standard action (PHB p.98): the kiter uses it.
                     outcome.TurnDone = !KeepsRoutineAfterAbility(npc);
                 }
@@ -1930,7 +1930,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 outcome.Moved = true;
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{name} moves toward {patientName} to heal them."));
-                yield return new WaitForSeconds(0.5f);
+                yield return CombatPacing.Wait(0.5f);
                 yield break;
             }
         }
@@ -1983,7 +1983,7 @@ public class AIService : MonoBehaviour
                     Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
                     if (TryExecuteRangedSpecialAttack(npc, target)) // the core ran the combat-end check
                     {
-                        yield return new WaitForSeconds(0.8f);
+                        yield return CombatPacing.Wait(0.8f);
                         yield break;
                     }
                 }
@@ -1997,7 +1997,7 @@ public class AIService : MonoBehaviour
         // ExecuteNPCTurn. With no spell worth casting nothing is spent and the melee turn goes on.
         if (TryCastBeforeMelee(npc, target, profile))
         {
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
@@ -2055,7 +2055,7 @@ public class AIService : MonoBehaviour
                         ActivateTerrainManipulation(npc);
 
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                 }
             }
         }
@@ -2084,7 +2084,7 @@ public class AIService : MonoBehaviour
                 Debug.Log($"[AI] {npc.Stats.CharacterName} attempting engulf");
                 if (TryExecuteEngulf(npc, target))
                 {
-                    yield return new WaitForSeconds(0.8f);
+                    yield return CombatPacing.Wait(0.8f);
                     yield break;
                 }
             }
@@ -2120,7 +2120,7 @@ public class AIService : MonoBehaviour
                         Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
                         if (TryExecuteRangedSpecialAttack(npc, target)) // the core ran the combat-end check
                         {
-                            yield return new WaitForSeconds(0.8f);
+                            yield return CombatPacing.Wait(0.8f);
                             yield break;
                         }
                     }
@@ -2251,7 +2251,7 @@ public class AIService : MonoBehaviour
             if (npc.Stats.IsSpellcaster && TryExecuteSpellcastAction(npc, target, dragonCastFilter, 0f))
             {
                 Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} cast a spell (priority 1/2).");
-                yield return new WaitForSeconds(0.8f);
+                yield return CombatPacing.Wait(0.8f);
                 // The move action after the cast (batch 14 step 11, AI-077); a quickened cast keeps the routine going.
                 if (!KeepsRoutineAfterAbility(npc))
                 {
@@ -2308,7 +2308,7 @@ public class AIService : MonoBehaviour
                         // The executor spent the move action before the first step.
                         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                             $"{npc.Stats.CharacterName} maneuvers into optimal breath weapon position!"));
-                        yield return new WaitForSeconds(0.4f);
+                        yield return CombatPacing.Wait(0.4f);
                     }
                 }
                 else if (bp.RequiresMove)
@@ -2356,7 +2356,7 @@ public class AIService : MonoBehaviour
                                     // The executor spent the move action before the first step.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
-                                    yield return new WaitForSeconds(0.3f);
+                                    yield return CombatPacing.Wait(0.3f);
                                 }
                             }
                         }
@@ -2408,7 +2408,7 @@ public class AIService : MonoBehaviour
                                     // The executor spent the move action before the first step.
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
-                                    yield return new WaitForSeconds(0.3f);
+                                    yield return CombatPacing.Wait(0.3f);
                                 }
                             }
                         }
@@ -2452,7 +2452,7 @@ public class AIService : MonoBehaviour
                 if (!advanceMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                 }
             }
         }
@@ -2522,7 +2522,7 @@ public class AIService : MonoBehaviour
             if (blindAttackAllowed && (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue))
             {
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
-                yield return new WaitForSeconds(0.45f);
+                yield return CombatPacing.Wait(0.45f);
                 yield break;
             }
 
@@ -2539,7 +2539,7 @@ public class AIService : MonoBehaviour
                         yield break; // dropped while moving (CMB-073), or refused before the first step: nothing spent (D3)
                     // The executor spent the move action before the first step.
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment."));
-                    yield return new WaitForSeconds(0.4f);
+                    yield return CombatPacing.Wait(0.4f);
                 }
             }
 
@@ -2550,7 +2550,7 @@ public class AIService : MonoBehaviour
         // quickened cast keeps the routine going (PHB p.98).
         if (TryExecuteSpellcastAction(npc, closestPC))
         {
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, closestPC, CombatStyle.Ranged));
@@ -2577,7 +2577,7 @@ public class AIService : MonoBehaviour
                     riskIsTooHigh = false;
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("", $"{npc.Stats.CharacterName} takes a tactical 5-foot step to avoid incoming attacks before firing."));
                     Debug.Log($"[AI][RangedAoO] {npc.Stats.CharacterName} 5-foot steps to {stepDestination} (expected={riskAssessment.ExpectedDamage:F1}, tolerance={riskAssessment.RiskTolerance:F1})");
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                 }
                 else
                 {
@@ -2630,7 +2630,7 @@ public class AIService : MonoBehaviour
                     else
                         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} retreats to maintain distance!"));
 
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                 }
             }
         }
@@ -2652,7 +2652,7 @@ public class AIService : MonoBehaviour
         // not wanted), and a quickened cast keeps the routine going (batch 14 step 11, AI-077).
         if (TryExecuteSpellcastAction(npc, rangedTarget))
         {
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, rangedTarget, CombatStyle.Ranged));
@@ -2676,7 +2676,7 @@ public class AIService : MonoBehaviour
                 // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
                 while (_gameManager.IsAwaitingCounterTripChoice)
                     yield return null;
-                yield return new WaitForSeconds(0.8f);
+                yield return CombatPacing.Wait(0.8f);
             }
             yield break;
         }
@@ -2684,7 +2684,7 @@ public class AIService : MonoBehaviour
         // No target in reach or range: the profile's alternatives (C1) through the catalog: another target, the preferred
         // range or an approach (then the attack with the standard action left, AI-045), or total defense.
         yield return _gameManager.StartCoroutine(RunOutOfReachAlternatives(npc, rangedTarget, CombatStyle.Ranged, allowThrow: true));
-        yield return new WaitForSeconds(0.3f);
+        yield return CombatPacing.Wait(0.3f);
     }
 
     /// <summary>
@@ -2887,7 +2887,7 @@ public class AIService : MonoBehaviour
             castFirstTried = true;
             if (TryCastBeforeMelee(npc, target, profile))
             {
-                yield return new WaitForSeconds(0.8f);
+                yield return CombatPacing.Wait(0.8f);
                 // The move action after the cast (batch 14 step 11, AI-077); a quickened cast keeps the routine going.
                 if (!KeepsRoutineAfterAbility(npc))
                 {
@@ -2927,7 +2927,7 @@ public class AIService : MonoBehaviour
                 if (withdrawAttempt.Started)
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} withdraws from {target.Stats.CharacterName}."));
-                    yield return new WaitForSeconds(0.45f);
+                    yield return CombatPacing.Wait(0.45f);
                     yield break;
                 }
             }
@@ -2936,7 +2936,7 @@ public class AIService : MonoBehaviour
         // No withdraw was made: the cast-first step the withdraw test held back.
         if (!castFirstTried && TryCastBeforeMelee(npc, target, profile))
         {
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             if (!KeepsRoutineAfterAbility(npc))
             {
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
@@ -2967,7 +2967,7 @@ public class AIService : MonoBehaviour
                 if (!advanceMove.Refused) // a refused move spends nothing and the routine goes on (D3; the executor spent this one first)
                 {
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
                 }
             }
         }
@@ -3023,7 +3023,7 @@ public class AIService : MonoBehaviour
         if (target == null)
         {
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} finds no living creatures to swarm."));
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
             yield break;
         }
 
@@ -3054,7 +3054,7 @@ public class AIService : MonoBehaviour
             }
 
             if (!swarmMove.Refused) // a refused move spends nothing (D3; the executor spent this one first)
-                yield return new WaitForSeconds(0.35f);
+                yield return CombatPacing.Wait(0.35f);
         }
 
         // ── Death/disable re-check before swarm attack phase ──
@@ -3078,7 +3078,7 @@ public class AIService : MonoBehaviour
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} shuffles toward {target.Stats.CharacterName}."));
         }
 
-        yield return new WaitForSeconds(0.3f);
+        yield return CombatPacing.Wait(0.3f);
 
         // ── Swarm automatic damage (MM p.239): At the end of the swarm's turn,
         // any creature whose space the swarm occupies takes swarm damage automatically
@@ -3139,7 +3139,7 @@ public class AIService : MonoBehaviour
                 DamageResolutionResult dealt = _gameManager.DealDamage(victim, damage, swarmPacket);
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {dealt.FinalDamage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll){GameManager.DescribeMitigation(dealt)}"));
 
-                yield return new WaitForSeconds(0.25f);
+                yield return CombatPacing.Wait(0.25f);
 
                 // Check if victim died from swarm damage
                 if (victim.Stats.IsDead)
@@ -3167,7 +3167,7 @@ public class AIService : MonoBehaviour
                         _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!"));
                         victim.ApplyNauseatedCondition(1, $"{swarm.Stats.CharacterName} Distraction");
                     }
-                    yield return new WaitForSeconds(0.2f);
+                    yield return CombatPacing.Wait(0.2f);
                 }
 
                 // ── Poison rider (if applicable) ──
@@ -4055,7 +4055,7 @@ public class AIService : MonoBehaviour
         {
             if (CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
                 yield break;
-            yield return new WaitForSeconds(0.5f);
+            yield return CombatPacing.Wait(0.5f);
             if (!KeepsRoutineAfterAbility(npc))
                 yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
             yield break;
@@ -4071,7 +4071,7 @@ public class AIService : MonoBehaviour
         {
             if (CombatEnded() || npc.IsDead || !npc.CanTakeTurnActions())
                 yield break;
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
         }
 
         yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(
@@ -4477,7 +4477,7 @@ public class AIService : MonoBehaviour
         Debug.Log($"[AI][Spell] {npc.Stats.CharacterName} delivers the held {held.Name} to {target.Stats.CharacterName}");
         // Through the catalog's deliver-held-charge entry (batch 13 step 6), whose executor runs TryNPCDeliverHeldChargeForAI.
         _gameManager.RunAIActionNow(ActionContext.For(ActionIds.DeliverHeldCharge, npc, ActorSource.AI, target));
-        yield return new WaitForSeconds(0.5f);
+        yield return CombatPacing.Wait(0.5f);
     }
 
     private CharacterController SelectBestSpellTarget(CharacterController caster, SpellData spell, CharacterController fallbackTarget)
@@ -4952,7 +4952,7 @@ public class AIService : MonoBehaviour
     {
         if (npc == null || !npc.CanTakeTurnActions() || !npc.Actions.HasStandardAction)
         {
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
             yield break;
         }
 
@@ -4961,14 +4961,14 @@ public class AIService : MonoBehaviour
 
         if (!bestWallCell.HasValue)
         {
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
             yield break;
         }
 
         WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(bestWallCell.Value);
         if (wall == null || wall.IsBreached(bestWallCell.Value))
         {
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
             yield break;
         }
 
@@ -4993,7 +4993,7 @@ public class AIService : MonoBehaviour
         else
         {
             Debug.Log($"[AI] {npc.Stats.CharacterName} is adjacent to Wall of Ice but STR check DC {dc} too high (STR mod {strMod}), skipping.");
-            yield return new WaitForSeconds(0.3f);
+            yield return CombatPacing.Wait(0.3f);
         }
     }
 

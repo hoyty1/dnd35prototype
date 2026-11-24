@@ -88,7 +88,7 @@ public sealed class CharmedBehaviorController
                     yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(CharmedMove(gameManager, actor, adjacentCell, healMove)));
                     if (!actor.CanTakeTurnActions())
                         yield break;
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                 }
 
                 if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) <= 1 && actor.Actions.HasStandardAction)
@@ -122,7 +122,7 @@ public sealed class CharmedBehaviorController
                 yield return gameManager.StartCoroutine(AdministerHealingPotion(gameManager, actor, caster, result => acted = result));
                 if (acted)
                 {
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                     yield break;
                 }
             }
@@ -132,7 +132,7 @@ public sealed class CharmedBehaviorController
         if (hostileToCaster == null)
         {
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("💞", $"{actor.Stats.CharacterName} stays near {caster.Stats.CharacterName}."));
-            yield return new WaitForSeconds(0.25f);
+            yield return CombatPacing.Wait(0.25f);
             yield break;
         }
 
@@ -143,7 +143,7 @@ public sealed class CharmedBehaviorController
             yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(CharmedMove(gameManager, actor, approachCell, approachMove)));
             if (!actor.CanTakeTurnActions())
                 yield break;
-            yield return new WaitForSeconds(0.35f);
+            yield return CombatPacing.Wait(0.35f);
         }
 
         // Only an attack the AI attack guard allows (batch 13 step 5, D1: reach, range, ammunition; C1: melee reach for a

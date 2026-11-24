@@ -1750,6 +1750,6 @@ public partial class GameManager
         if (!outcome.Started || outcome.InterruptedByAoO || outcome.ChargerDropped || outcome.CombatEnded || CurrentPhase == TurnPhase.CombatOver)
             yield break;
 
-        yield return new WaitForSeconds(0.8f);
+        yield return CombatPacing.Wait(0.8f);
     }
 }

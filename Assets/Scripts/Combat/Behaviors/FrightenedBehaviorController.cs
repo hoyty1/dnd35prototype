@@ -136,7 +136,7 @@ public sealed class FrightenedBehaviorController
             actor.SetFightingDefensively(true);
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{actorName} is cornered by fear and fights defensively."));
         }
-        yield return new WaitForSeconds(0.25f);
+        yield return CombatPacing.Wait(0.25f);
     }
 
     /// <summary>
@@ -215,7 +215,7 @@ public sealed class FrightenedBehaviorController
                 {
                     result.Outcome = FlightOutcome.Fled;
                     gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("", $"😱 {actorName} flees in terror from {sourceName}.{logSuffix}"));
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                     yield break;
                 }
                 if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
@@ -245,7 +245,7 @@ public sealed class FrightenedBehaviorController
                 if (!runAttempt.Refused)
                 {
                     gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🏃", $"{actorName} runs from {sourceName}, provoking attacks of opportunity!{logSuffix}"));
-                    yield return new WaitForSeconds(0.35f);
+                    yield return CombatPacing.Wait(0.35f);
                     yield break;
                 }
                 result.Outcome = FlightOutcome.Cornered; // refused before the first step (no path, or the shared legality): nothing spent, try the move below
@@ -275,7 +275,7 @@ public sealed class FrightenedBehaviorController
                 // The executor spent the move action (or converted the standard action) before the first step (D3); a
                 // flight stopped on the way stays spent.
                 gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{actorName} runs from {sourceName} in terror!{logSuffix}"));
-                yield return new WaitForSeconds(0.35f);
+                yield return CombatPacing.Wait(0.35f);
                 yield break;
             }
         }

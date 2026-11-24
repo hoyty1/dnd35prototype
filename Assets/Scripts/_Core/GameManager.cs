@@ -1214,6 +1214,7 @@ public partial class GameManager : MonoBehaviour
         WaitingForEncounterSelection = false;
         _postCombatLootCollectionTriggered = false;
         CurrentPhase = TurnPhase.CombatOver;
+        TurnControl.CombatEnded(); // presentation only (grouped AI turns): the pacing kind
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         CombatUI?.ResetAllUI(clearCombatLog: true);
@@ -3747,6 +3748,7 @@ public partial class GameManager : MonoBehaviour
         else
         {
             Debug.Log($"[CombatPhase] Entering NPC turn for {characterName}");
+            TurnControl.AiTurnStarting(character); // presentation only (grouped AI turns): the pacing kind
             StartCoroutine(SingleNPCTurnFromInitiative(character));
         }
     }
@@ -3854,6 +3856,7 @@ public partial class GameManager : MonoBehaviour
         });
 
         CurrentPhase = TurnPhase.CombatOver;
+        TurnControl.CombatEnded(); // presentation only (grouped AI turns): the pacing kind
         // Every bard's song and its effects end with the fight, on both sides (BardicMusicRules, CHR-026, CHR-069).
         EndAllBardicMusicForCombatEnd();
         EffectService.ClearAll();
@@ -4189,6 +4192,7 @@ public partial class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(pc, HighlightType.Selected);
 
+        TurnControl.PlayerControlReturned(pc); // presentation only (grouped AI turns): the pacing kind
         CombatUI.ShowActionButtonsForCharacter(pc);
         CombatUI.HideSpecialAttackMenu();
 
@@ -7360,7 +7364,7 @@ public partial class GameManager : MonoBehaviour
                 UpdateAllStatsUI();
 
 
-                yield return new WaitForSeconds(secondsAfterEachAoO);
+                yield return CombatPacing.Wait(secondsAfterEachAoO);
             }
         }
         else

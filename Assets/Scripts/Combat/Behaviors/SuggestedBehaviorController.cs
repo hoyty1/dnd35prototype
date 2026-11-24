@@ -56,7 +56,7 @@ public sealed class SuggestedBehaviorController
         if (suggester == null || suggester.Stats == null)
         {
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows a suggestion and stays out of the fight."));
-            yield return new WaitForSeconds(0.25f);
+            yield return CombatPacing.Wait(0.25f);
             yield break;
         }
 
@@ -85,7 +85,7 @@ public sealed class SuggestedBehaviorController
                     if (withdrawAttempt.Started)
                     {
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and withdraws from the fight."));
-                        yield return new WaitForSeconds(0.3f);
+                        yield return CombatPacing.Wait(0.3f);
                         yield break;
                     }
                     if (gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver || !actor.CanTakeTurnActions())
@@ -107,7 +107,7 @@ public sealed class SuggestedBehaviorController
                     if (!moveAttempt.Refused) // a refused move spends nothing and falls through
                     {
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and moves away from the fight."));
-                        yield return new WaitForSeconds(0.3f);
+                        yield return CombatPacing.Wait(0.3f);
                         yield break;
                     }
                 }
@@ -115,7 +115,7 @@ public sealed class SuggestedBehaviorController
         }
 
         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💬", $"{actorName} follows {suggester.Stats.CharacterName}'s suggestion and stays out of the fight."));
-        yield return new WaitForSeconds(0.25f);
+        yield return CombatPacing.Wait(0.25f);
     }
 
     /// <summary>The reachable cell farthest from <paramref name="from"/> (fewest attacks of opportunity on a tie), or null.</summary>

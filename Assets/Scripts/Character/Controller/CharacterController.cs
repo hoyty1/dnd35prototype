@@ -4437,7 +4437,7 @@ public class CharacterController : MonoBehaviour
             yield break;
 
         Vector2Int oldPosition = GridPosition;
-        float clampedStepDuration = Mathf.Max(0.01f, secondsPerStep);
+        float clampedStepDuration = Mathf.Max(0.01f, CombatPacing.StepSeconds(secondsPerStep)); // pacing only (grouped AI turns)
         SquareGrid grid = CurrentGrid;
 
         // Clear the mover's footprint once before animating.

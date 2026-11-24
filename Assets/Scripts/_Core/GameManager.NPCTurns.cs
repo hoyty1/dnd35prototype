@@ -127,7 +127,7 @@ public partial class GameManager
                 if (!retreatMove.Refused) // a refused move spends nothing (D3)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
-                    yield return new WaitForSeconds(0.45f);
+                    yield return CombatPacing.Wait(0.45f);
                 }
             }
         }
@@ -151,7 +151,7 @@ public partial class GameManager
                 if (!advanceMove.Refused) // a refused move spends nothing and the summon goes on to its attack (D3)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
-                    yield return new WaitForSeconds(0.4f);
+                    yield return CombatPacing.Wait(0.4f);
                 }
             }
         }
@@ -762,7 +762,7 @@ public partial class GameManager
         if (outcome.StartedGrapple && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
             yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
 
-        yield return new WaitForSeconds(1.0f);
+        yield return CombatPacing.Wait(1.0f);
     }
 
     /// <summary>Delegates to AIService.SelectAdaptiveFullAttackTarget for centralized target selection.</summary>
@@ -1062,7 +1062,7 @@ public partial class GameManager
             && npc.IsBarredFromOrdinaryAttackOn(target, out string rangedHoldReason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", rangedHoldReason));
-            yield return new WaitForSeconds(0.4f);
+            yield return CombatPacing.Wait(0.4f);
             yield break;
         }
 
@@ -1073,7 +1073,7 @@ public partial class GameManager
         if (!attackLegality.Ok)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", attackLegality.Reason));
-            yield return new WaitForSeconds(0.4f);
+            yield return CombatPacing.Wait(0.4f);
             yield break;
         }
 
@@ -1103,7 +1103,7 @@ public partial class GameManager
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} makes no attack: {inReach.Reason}."));
             }
-            yield return new WaitForSeconds(0.4f);
+            yield return CombatPacing.Wait(0.4f);
             yield break;
         }
 
@@ -1121,7 +1121,7 @@ public partial class GameManager
                 yield return RunAIAction(ActionContext.For(ActionIds.Reload, npc, ActorSource.AI), reload);
                 reloaded = reload.Performed;
                 if (reloaded || (reload.Spent != ActionCostType.NotAnAction && reload.Spent != ActionCostType.Free))
-                    yield return new WaitForSeconds(0.8f);
+                    yield return CombatPacing.Wait(0.8f);
                 if (CurrentPhase == TurnPhase.CombatOver || !npc.CanTakeTurnActions())
                     yield break;
                 if (reloaded && !ActionCosts.CanAfford(npc, ActionCostType.Standard))
@@ -1131,7 +1131,7 @@ public partial class GameManager
             if (!reloaded || !npc.CanAttackWithEquippedWeapon(out cannotAttackReason))
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
-                yield return new WaitForSeconds(0.6f);
+                yield return CombatPacing.Wait(0.6f);
                 yield break;
             }
         }
@@ -1141,7 +1141,7 @@ public partial class GameManager
         if (!ActionCosts.CanAfford(npc, ActionCostType.Standard) && !npc.ProgressiveAttackPool.HasStartedAttacking)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} makes no attack: no attack action left this turn."));
-            yield return new WaitForSeconds(0.4f);
+            yield return CombatPacing.Wait(0.4f);
             yield break;
         }
 
@@ -1190,7 +1190,7 @@ public partial class GameManager
             // a controllable defender's counter-trip choice (CMB-079).
             while (IsAwaitingCounterTripChoice)
                 yield return null;
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             yield break;
         }
 
@@ -1298,7 +1298,7 @@ public partial class GameManager
             ? $"{npcName} reacquires visual contact on {targetName}."
             : $"{npcName} continues searching for {targetName} in concealment.");
 
-        yield return new WaitForSeconds(0.35f);
+        yield return CombatPacing.Wait(0.35f);
     }
 
     // ========== DETAILED CONSOLE LOGGING ==========
@@ -1549,7 +1549,7 @@ public partial class GameManager
         UpdateAllStatsUI();
         EvaluateCombatEnd("NPCBreathWeapon");
 
-        yield return new WaitForSeconds(1.0f);
+        yield return CombatPacing.Wait(1.0f);
     }
 
     /// <summary>

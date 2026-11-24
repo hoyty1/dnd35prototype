@@ -84,7 +84,7 @@ public sealed class ConfusedBehaviorController
 
             case ConfusedTurnMode.Babble:
                 gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} babbles incoherently and does nothing."));
-                yield return new WaitForSeconds(0.35f);
+                yield return CombatPacing.Wait(0.35f);
                 yield break;
 
             case ConfusedTurnMode.AttackCasterOrSelf:
@@ -153,7 +153,7 @@ public sealed class ConfusedBehaviorController
                     if (!moved)
                         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} tries to flee from {casterName} but cannot move."));
 
-                    yield return new WaitForSeconds(0.25f);
+                    yield return CombatPacing.Wait(0.25f);
                     yield break;
                 }
 
@@ -379,7 +379,7 @@ public sealed class ConfusedBehaviorController
         if (actor.IsPinned() || actor.Actions == null || !actor.CommitStandardAction())
         {
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actor.Stats.CharacterName} flails in confusion but cannot attack this turn."));
-            yield return new WaitForSeconds(0.25f);
+            yield return CombatPacing.Wait(0.25f);
             yield break;
         }
 
@@ -403,6 +403,6 @@ public sealed class ConfusedBehaviorController
 
         gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"{actor.Stats.CharacterName} hits itself for {result.FinalDamage} damage ({hpBefore} → {hpAfter} HP)."));
 
-        yield return new WaitForSeconds(0.35f);
+        yield return CombatPacing.Wait(0.35f);
     }
 }

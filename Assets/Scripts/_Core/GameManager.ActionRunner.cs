@@ -197,7 +197,7 @@ public partial class GameManager
             UpdateAllStatsUI();
             if (afterEachAttack != null && !CombatEndRules.IsOutOfFight(actor))
                 afterEachAttack(aoo);
-            yield return new WaitForSeconds(0.65f);
+            yield return CombatPacing.Wait(0.65f);
         }
 
         outcome.ActorDown = CombatEndRules.IsOutOfFight(actor);

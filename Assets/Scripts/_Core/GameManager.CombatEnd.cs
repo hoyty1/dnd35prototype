@@ -263,6 +263,7 @@ public partial class GameManager
         Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | waitingLootBefore={WaitingForLootCollection}");
 
         CurrentPhase = TurnPhase.CombatOver;
+        TurnControl.CombatEnded(); // presentation only (grouped AI turns): the pacing kind
         TurnDurations.ClearCurrentAnchor(); // effects created after the fight have no initiative count (CMB-006)
         CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
         CombatUI?.SetActionButtonsVisible(false);
@@ -291,6 +292,7 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", "DEFEAT! Every hero is dead, dying or unconscious, or under the enemy's control."));
         CurrentPhase = TurnPhase.CombatOver;
+        TurnControl.CombatEnded(); // presentation only (grouped AI turns): the pacing kind
         TurnDurations.ClearCurrentAnchor(); // effects created after the fight have no initiative count (CMB-006)
         CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
         CombatUI?.SetActionButtonsVisible(false);

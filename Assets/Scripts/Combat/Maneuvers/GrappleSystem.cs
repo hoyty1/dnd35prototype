@@ -2313,7 +2313,7 @@ public partial class GameManager
         if (EvaluateCombatEnd("NPCImprovedGrabHold.Damage"))
             yield break;
 
-        yield return new WaitForSeconds(0.45f);
+        yield return CombatPacing.Wait(0.45f);
     }
 
     /// <summary>
@@ -2356,7 +2356,7 @@ public partial class GameManager
             if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action."));
-                yield return new WaitForSeconds(0.35f);
+                yield return CombatPacing.Wait(0.35f);
                 yield break;
             }
 
@@ -2381,7 +2381,7 @@ public partial class GameManager
             if (chosenAction == null)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no legal grapple actions available."));
-                yield return new WaitForSeconds(0.35f);
+                yield return CombatPacing.Wait(0.35f);
                 yield break;
             }
 
@@ -2488,7 +2488,7 @@ public partial class GameManager
                 break;
 
             float pause = isFreeAction ? 0.35f : (usesIterativeAttack || isRake ? 0.45f : 0.8f);
-            yield return new WaitForSeconds(pause);
+            yield return CombatPacing.Wait(pause);
 
             // A given action (RunGrappleActionForAI) is one action.
             if (forcedAction.HasValue)

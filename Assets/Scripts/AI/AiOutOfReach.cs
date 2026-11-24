@@ -60,7 +60,7 @@ public static class AiOutOfReach
         if (reload.Performed)
         {
             result.Reloaded = true;
-            yield return new WaitForSeconds(0.8f);
+            yield return CombatPacing.Wait(0.8f);
             if (Over(gm, npc) || !ActionCosts.CanAfford(npc, ActionCostType.Standard))
                 yield break;
         }
@@ -142,7 +142,7 @@ public static class AiOutOfReach
                     gm.CombatUI?.ShowCombatLog(alternative == OutOfReachAlternative.PreferredRange
                         ? CombatLogHelper.Info("", $"{name} moves to get a better shot.")
                         : CombatLogHelper.Info("", $"{name} closes in on {focus.Stats.CharacterName}."));
-                    yield return new WaitForSeconds(0.5f);
+                    yield return CombatPacing.Wait(0.5f);
 
                     // AI-045: the move may have brought a target into reach or range; the standard action left attacks it.
                     if (Over(gm, npc) || !AiLegal.CanAttackNow(npc, gm))

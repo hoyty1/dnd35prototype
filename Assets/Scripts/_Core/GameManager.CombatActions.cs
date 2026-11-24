@@ -546,7 +546,7 @@ public partial class GameManager
 
     private IEnumerator ReturnToActionChoicesAfterDelay(float delay)
     {
-        yield return new WaitForSeconds(delay);
+        yield return CombatPacing.Wait(delay);
         if (!IsPlayerTurn) yield break;
 
         CharacterController pc = ActivePC;
@@ -833,7 +833,7 @@ public partial class GameManager
             }
 
             // A tripped mover still takes the other AoOs it already provoked at this step.
-            yield return new WaitForSeconds(secondsAfterEachAoO);
+            yield return CombatPacing.Wait(secondsAfterEachAoO);
         }
     }
 
@@ -2149,7 +2149,7 @@ public partial class GameManager
                 rangedMode: rangedMode));
         }
         if (state.StepsTaken > 0)
-            yield return new WaitForSeconds(0.35f);
+            yield return CombatPacing.Wait(0.35f);
 
         if (attacker.Stats == null || CombatEndRules.IsOutOfFight(attacker))
         {
@@ -2278,7 +2278,7 @@ public partial class GameManager
     private IEnumerator AfterAttackDelay(CharacterController pc, float delay)
     {
         LogMenuFlow("AfterAttackDelay:START", pc, $"delay={delay:0.00}");
-        yield return new WaitForSeconds(delay);
+        yield return CombatPacing.Wait(delay);
 
         LogMenuFlow("AfterAttackDelay:AFTER_WAIT", pc, $"delay={delay:0.00}");
 
@@ -2337,7 +2337,7 @@ public partial class GameManager
     {
         LogMenuFlow("DelayedEndActivePCTurn:START", ActivePC, $"delay={delay}");
 
-        yield return new WaitForSeconds(delay);
+        yield return CombatPacing.Wait(delay);
 
         LogMenuFlow("DelayedEndActivePCTurn:AFTER_DELAY", ActivePC, $"delay={delay}");
 
@@ -2384,7 +2384,7 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
             yield break;
         }
-        yield return new WaitForSeconds(1.0f);
+        yield return CombatPacing.Wait(1.0f);
     }
 
     /// <summary>
@@ -2408,7 +2408,7 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
             yield break;
         }
-        yield return new WaitForSeconds(1.0f);
+        yield return CombatPacing.Wait(1.0f);
     }
 
     /// <summary>

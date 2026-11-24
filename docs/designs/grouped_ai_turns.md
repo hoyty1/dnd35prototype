@@ -1,4 +1,4 @@
-> Status (2026-11-16): plan, nothing built. Asked for by the owner on 2026-10-30. It runs after batch 14 (weighted personalities) and before batch 15 (NPC spellcasting), without renumbering the later batches. Queue `_work/queue_grouped_workflow.js` generated, not launched; the owner launches it. Read-only design pass on master (code unchanged since 5176586): five code mappers, two competing designs, a judge that checked the key claims in the code, and two adversarial checks. Nothing here was compiled, run or verified in Play mode. Anchor on member names: batch 14 moves lines. Paths are under `Assets/Scripts/` unless they start with `docs/`.
+> Status (2026-11-24): step 1 built (the pacing service, PURE: every trace hash and frame count of its test budget equal to batch 14's closing regression; docs/TESTING.md 3.2); steps 2-12 not built. Plan written 2026-11-16. Asked for by the owner on 2026-10-30. It runs after batch 14 (weighted personalities) and before batch 15 (NPC spellcasting), without renumbering the later batches. Queue `_work/queue_grouped_workflow.js` generated, not launched; the owner launches it. Read-only design pass on master (code unchanged since 5176586): five code mappers, two competing designs, a judge that checked the key claims in the code, and two adversarial checks. Nothing here was compiled, run or verified in Play mode. Anchor on member names: batch 14 moves lines. Paths are under `Assets/Scripts/` unless they start with `docs/`.
 
 # Grouped AI turns
 
@@ -454,6 +454,8 @@ Tests:
 - `ActionCatalogTests` (`TestInlineAction`, `TestExecutorSourceScan`) and `MovementLegalityTests` unchanged.
 
 TEST BUDGET: `smoke/*` and `rules/*` seeds 1-3, plus `soak/dmg-random-encounters` seeds 1-10. Every job hash must equal the baseline (broad, because every AI wait is touched).
+
+Built 2026-11-24. The re-grep on batch 14's final code (b6a380a) found 105 game-code `new WaitForSeconds`, not 97: `AIService` has 56 (batch 14 added 8), the other files as listed above. 100 are pacing and now go through `CombatPacing.Wait`; the 5 exempt ones are in `CombatPacing.ExemptWaitSites`. No new `WaitForSeconds` came with the crawl (its `aooWait` is a variable fed to the counted `ResolveMovementAoOsBeforeStep` wait). The marks are placed at their named sites and only set `CombatPacing.Kind`; `CombatEnded` is also marked in `ResetCombatStateForNextEncounter` (the harness reset goes through it), and `PromptOpened` leaves the kind and has no caller until stage 2, since the factor runs until control returns (C2).
 
 ### 2. Poison secondaries in rounds (`gt-poison-rounds`)
 

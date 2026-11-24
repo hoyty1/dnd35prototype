@@ -25,7 +25,7 @@ Step-by-step procedures for the common changes in this project: which files to t
 ## Contents
 
 - Magic: [Add a spell (data)](#add-a-spell-data) · [Implement a single-target, touch or self spell effect](#implement-a-single-target-touch-or-self-spell-effect) · [Implement an area spell](#implement-an-area-spell) · [Make NPCs cast a spell, and test a spell](#make-npcs-cast-a-spell-and-test-a-spell) · [Add a metamagic feat](#add-a-metamagic-feat)
-- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a trait](#add-a-trait) · [Add a combat-log message](#add-a-combat-log-message)
+- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a trait](#add-a-trait) · [Add a combat-log message](#add-a-combat-log-message) · [Add a combat wait](#add-a-combat-wait)
 - Items and economy: [Add a mundane weapon, armor or shield](#add-a-mundane-weapon-armor-or-shield) · [Add a weapon or armor special ability](#add-a-weapon-or-armor-special-ability) · [Add a wondrous item](#add-a-wondrous-item) · [Add a ring](#add-a-ring) · [Add a rod](#add-a-rod) · [Add a staff](#add-a-staff) · [Add a scroll, potion or wand](#add-a-scroll-potion-or-wand) · [Add an item to the store](#add-an-item-to-the-store) · [Make an item craftable](#make-an-item-craftable)
 - Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Add a combat scenario](#add-a-combat-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
 - UI: [Add a combat action button](#add-a-combat-action-button) · [Add a UI panel](#add-a-ui-panel)
@@ -335,6 +335,19 @@ Pitfalls:
 - Helpers wrap the whole string in one `<color>` tag; do not pass pre-colored strings (`ApplySpellBuff` nests colors near `GameManager.SpellCasting.cs:5877`). An empty icon gives a leading space.
 - `CombatLogPanel` rewrites substrings such as "- HIT!", "CRITICAL HIT!", "has been slain!" for highlighting (`CombatLogPanel.cs:417-432`).
 - Prefer `CombatUI?.ShowCombatLog` inside GameManager partials and services; `CombatLogger` (`Combat/Logging/CombatLogger.cs`) is an older set of `Format*` string builders with one live user (`FormatSavingThrow`, from `SavingThrowResolver`); its `Show` and Blink spell-failure formatters were deleted with `SpellResolutionService` in batch 11 step 29, and the rest are unused (CMB-049).
+
+## Add a combat wait
+
+1. A presentation pause in a combat coroutine (after an attack, a move, an AoO, a log line the player should read) is `yield return CombatPacing.Wait(seconds);` with the seconds the site needs (a constant or a variable the caller chooses; the service multiplies, it never chooses). Never `new WaitForSeconds` in game code (nor `new WaitForSecondsRealtime`, nor a target-typed `WaitForSeconds w = new(...)`): `Tests.Combat.CombatPacingTests` scans `Assets/Scripts` without `Tests/` (comments and string literals stripped) and fails on one outside `Combat/Pacing/CombatPacing.cs` and `CombatPacing.ExemptWaitSites`.
+2. A movement tween reads `CombatPacing.StepSeconds(secondsPerStep)` (as `CharacterController.MoveAlongPath` does).
+3. A wait that is not pacing (an animation that polls state, a debug check) stays `new WaitForSeconds` and gets a row in `CombatPacing.ExemptWaitSites` (file, method, number of waits); the scan checks each exempt method holds exactly that many and its file no other.
+4. Rules never wait on time: a rule that must happen later is anchored on the initiative order (`Combat/Core/TurnDurations.cs`), never on a wait, `Time.deltaTime` or a token tween (grouped AI turns steps 2 and 4).
+
+Files: `Combat/Pacing/CombatPacing.cs`, `Combat/Pacing/TurnControl.cs`, `Tests/Combat/CombatPacingTests.cs`. Design: [designs/grouped_ai_turns.md](designs/grouped_ai_turns.md) "The pacing service and the speed factor".
+
+Pitfalls:
+- `CombatPacing.Wait` returns a `WaitForSeconds`, never an `IEnumerator`: `GameManager.RunAIActionNow` drains any `IEnumerator` in place, so a wait helper returning one (or a `WaitUntil`) would change the synchronous AI actions.
+- Keep a wait exactly where it is in its coroutine when you move code: the scenario trace hashes do not see the seconds, but the frame structure (the area trackers' `Update`, the Stalemate halt, `SkipChainRunaway`) depends on each yield.
 
 # Items and economy
 
