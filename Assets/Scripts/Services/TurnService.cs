@@ -45,6 +45,8 @@ public class TurnService : MonoBehaviour
     // The last initiative count reached (CMB-006): its entry and round, so a count is reported once per round.
     private InitiativeEntry _lastCountReachedEntry;
     private int _lastCountReachedRound = -1;
+    // The creature whose turn is running although it left the order during that turn (RemoveFromInitiative; CRE-312).
+    private CharacterController _vacatedTurnOwner;
 
     public IReadOnlyList<InitiativeEntry> InitiativeOrder => _initiativeOrder;
 
@@ -58,6 +60,23 @@ public class TurnService : MonoBehaviour
     public int CurrentInitiativeIndex => _currentInitiativeIndex;
     public int CurrentRound => _currentRound;
     public CharacterController CurrentCharacter => _currentCharacter;
+
+    /// <summary>
+    /// The creature whose turn is still running after it left the initiative order during that turn (a summon slain by
+    /// an AoO on its own move, by a reaction to its own attack, or in its end-of-turn check; grouped AI turns step 4,
+    /// CRE-312), until the advance that ends the turn; null otherwise. <see cref="CurrentCharacter"/> is null meanwhile,
+    /// and <see cref="CurrentInitiativeIndex"/> already holds the slot of the creature that acts next.
+    /// </summary>
+    public CharacterController VacatedTurnOwner => _vacatedTurnOwner;
+
+    /// <summary>
+    /// Whether the turn running now is <paramref name="character"/>'s: it is the current creature, or it left the order
+    /// during its own turn and the turn has not advanced yet (<see cref="VacatedTurnOwner"/>). Reference checks only, so a
+    /// creature destroyed at the end of the frame it left play in gets the same answer in that frame and later.
+    /// </summary>
+    public bool IsCurrentTurnOf(CharacterController character)
+        => !ReferenceEquals(character, null)
+           && (ReferenceEquals(_currentCharacter, character) || ReferenceEquals(_vacatedTurnOwner, character));
     public bool IsCombatActive => _combatActive;
 
     public event Action<CharacterController> OnTurnStarted;
@@ -90,6 +109,7 @@ public class TurnService : MonoBehaviour
         _currentInitiativeIndex = 0;
         _currentRound = 0;
         _currentCharacter = null;
+        _vacatedTurnOwner = null;
         _combatActive = true;
         ResetCountReached();
 
@@ -229,13 +249,41 @@ public class TurnService : MonoBehaviour
                 _currentRound++;
                 TurnDurations.ClearCurrentAnchor();
                 OnNewRound?.Invoke(_currentRound);
+                // A round-boundary removal (an expired summon, synchronous since CRE-312) can empty the order (and so end
+                // the fight, RemoveFromInitiative): there is no turn left to start.
+                if (!_combatActive || _initiativeOrder.Count == 0)
+                    return;
             }
 
             InitiativeEntry entry = _initiativeOrder[_currentInitiativeIndex];
+            // The entries after this count, in order: if a tick at this count (a duration, a poison secondary,
+            // concentration) takes this count's creature out of play, synchronously since CRE-312, the first of them still
+            // in the order is the creature that now comes next, and nobody is skipped.
+            List<InitiativeEntry> following = _initiativeOrder.GetRange(_currentInitiativeIndex + 1, _initiativeOrder.Count - _currentInitiativeIndex - 1);
             ReachInitiativeCount(entry);
+            if (!_combatActive || _initiativeOrder.Count == 0)
+                return;
+            int at = _initiativeOrder.IndexOf(entry);
+            if (at < 0)
+            {
+                _currentInitiativeIndex = _initiativeOrder.Count; // none of the following is left: the round wraps
+                foreach (InitiativeEntry next in following)
+                {
+                    int nextAt = _initiativeOrder.IndexOf(next);
+                    if (nextAt >= 0)
+                    {
+                        _currentInitiativeIndex = nextAt;
+                        break;
+                    }
+                }
+                continue; // the removal shortened the order, so the loop stays bounded
+            }
+            _currentInitiativeIndex = at; // an earlier entry removed at this count shifted it
+
             if (IsEligibleCombatant(entry.Character))
             {
                 _currentCharacter = entry.Character;
+                _vacatedTurnOwner = null;
                 OnTurnStarted?.Invoke(_currentCharacter);
                 return;
             }
@@ -286,7 +334,11 @@ public class TurnService : MonoBehaviour
         if (!_combatActive)
             return;
 
-        _currentInitiativeIndex++;
+        // A creature that left the order during its own turn already handed its slot to the next creature (CRE-312).
+        if (!ReferenceEquals(_vacatedTurnOwner, null))
+            _vacatedTurnOwner = null;
+        else
+            _currentInitiativeIndex++;
         StartTurnAtCurrentIndex();
     }
 
@@ -295,6 +347,7 @@ public class TurnService : MonoBehaviour
         Debug.Log($"[TurnService][Flow] EndCombat ENTER | combatActive={_combatActive} | initiativeCount={_initiativeOrder.Count} | currentRound={_currentRound}");
         _combatActive = false;
         _currentCharacter = null;
+        _vacatedTurnOwner = null;
         _orderAtLastCombatEnd.Clear();
         foreach (InitiativeEntry entry in _initiativeOrder)
             if (entry != null && entry.Character != null)
@@ -318,6 +371,7 @@ public class TurnService : MonoBehaviour
 
         _combatActive = false;
         _currentCharacter = null;
+        _vacatedTurnOwner = null;
         _initiativeOrder.Clear();
         _orderAtLastCombatEnd.Clear(); // a reset fight leaves no order for the combat-end poison secondaries (CMB-007)
         _currentInitiativeIndex = 0;
@@ -334,7 +388,10 @@ public class TurnService : MonoBehaviour
         int insertIdx = ResolveInsertIndex(entry, insertAfter);
 
         _initiativeOrder.Insert(insertIdx, entry);
-        if (insertIdx <= _currentInitiativeIndex)
+        // During a vacated turn (CRE-312) the index already holds the next creature, which has not acted: one inserted at
+        // that index comes before it and acts next, so the index stays.
+        if (insertIdx < _currentInitiativeIndex
+            || (insertIdx == _currentInitiativeIndex && ReferenceEquals(_vacatedTurnOwner, null)))
             _currentInitiativeIndex++;
 
         Debug.Log($"[TurnService][Initiative] Added {combatant.Stats.CharacterName} at position {insertIdx + 1}: {entry.Total}");
@@ -350,12 +407,23 @@ public class TurnService : MonoBehaviour
             return false;
 
         CharacterController durationHeir = GetDurationHeir(index);
+        // The creature whose turn it is leaves during that turn (a summon slain by an AoO on its own move, by a reaction
+        // to its own attack, or dying in its end-of-turn check; grouped AI turns step 4, CRE-312): the next creature now
+        // fills its slot, so the index stays on it (on Count at the last slot, so the round wraps) and the turn is marked
+        // vacated (VacatedTurnOwner): the AdvanceToNextTurn that ends the turn starts that creature without stepping past
+        // it. Further removals in the same turn keep the rules below, which hold because the index now points at a
+        // creature that has not acted yet (a removal of that one lets the next slide in). A removal at the round boundary
+        // (TickSummonDurations, index already 0 and the turn's creature another) is neither case.
+        bool vacated = !ReferenceEquals(_vacatedTurnOwner, null);
+        bool removingCurrentTurn = !vacated && index == _currentInitiativeIndex && ReferenceEquals(_currentCharacter, combatant);
         _initiativeOrder.RemoveAt(index);
         OnInitiativeCountRemoved?.Invoke(combatant, durationHeir);
 
-        if (index < _currentInitiativeIndex)
+        if (removingCurrentTurn)
+            _vacatedTurnOwner = combatant;
+        else if (index < _currentInitiativeIndex)
             _currentInitiativeIndex = Mathf.Max(0, _currentInitiativeIndex - 1);
-        else if (_currentInitiativeIndex >= _initiativeOrder.Count)
+        else if (!vacated && _currentInitiativeIndex >= _initiativeOrder.Count)
             _currentInitiativeIndex = 0;
 
         if (_currentCharacter == combatant)
@@ -398,7 +466,8 @@ public class TurnService : MonoBehaviour
         if (_initiativeOrder.Count == 0)
             return null;
 
-        int index = _currentInitiativeIndex + 1;
+        // After a vacated turn (CRE-312) the index already holds the creature that acts next.
+        int index = ReferenceEquals(_vacatedTurnOwner, null) ? _currentInitiativeIndex + 1 : _currentInitiativeIndex;
         if (index >= _initiativeOrder.Count)
             index = 0;
 
@@ -460,7 +529,8 @@ public class TurnService : MonoBehaviour
                 continue;
 
             string name = $"{GetInitiativeIcon(e.Character)}{e.Character.Stats.CharacterName}";
-            if (i == _currentInitiativeIndex)
+            // No marker while the turn's creature has left the order (CRE-312): the index already holds the next one.
+            if (i == _currentInitiativeIndex && ReferenceEquals(_vacatedTurnOwner, null))
                 parts.Add($"<color=#FFDD44><b>▶{name}</b></color>");
             else
                 parts.Add($"<color={GetInitiativeColorHex(e.Character)}>{name}</color>");

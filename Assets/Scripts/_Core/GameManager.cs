@@ -264,6 +264,25 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
 
+    /// <summary>
+    /// Whether the turn running now is <paramref name="character"/>'s, also after it left play during that turn (a summon
+    /// slain on its own move leaves the initiative order at once, CRE-312, and <see cref="CurrentCharacter"/> is null
+    /// until the turn advances): <see cref="TurnService.IsCurrentTurnOf"/>. A forced turn's tail checks it before it ends
+    /// the turn, so the answer never depends on whether Unity has destroyed the creature yet.
+    /// </summary>
+    public bool IsCurrentTurnOf(CharacterController character)
+        => _turnService != null && _turnService.IsCurrentTurnOf(character);
+
+    /// <summary>
+    /// Whether the running turn is a player-run creature's turn that the creature left during (a Ui summon slain by an AoO
+    /// on its own move or cast, or by a reaction to its own attack, CRE-312): <see cref="CurrentCharacter"/> and so
+    /// <see cref="ActivePC"/> are null, but the turn has not advanced. Every PC tail that would show the action panel or end
+    /// the turn ends it through <see cref="EndActivePCTurn"/> instead (<see cref="ShowActionChoices"/>,
+    /// <see cref="EndCurrentTurn"/>, <see cref="AfterAttackDelay"/>), by reference, never by Unity's destroyed-object null.
+    /// </summary>
+    private bool IsVacatedPlayerTurn
+        => CurrentPhase == TurnPhase.PCTurn && _turnService != null && !ReferenceEquals(_turnService.VacatedTurnOwner, null);
+
     /// <summary>Current combat round number (starts at 1 once combat begins).</summary>
     public int CurrentRound => _turnService != null ? _turnService.CurrentRound : 0;
 
@@ -3465,7 +3484,8 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsActiveCombatant(CharacterController c)
     {
-        return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
+        // A despawned summon stays in the scene until the end of the frame it left play in (CRE-312).
+        return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null && !c.IsRemovedFromPlay;
     }
 
     /// <summary>Get first alive hostile NPC (for backward compat in single-target scenarios).</summary>
@@ -4063,7 +4083,7 @@ public partial class GameManager : MonoBehaviour
 
         yield return StartCoroutine(_confusedBehaviorController.ExecuteDecision(this, pc, decision));
 
-        if (CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+        if (CurrentPhase == TurnPhase.PCTurn && IsCurrentTurnOf(pc))
             EndCurrentTurn();
     }
 
@@ -4091,7 +4111,14 @@ public partial class GameManager : MonoBehaviour
     private void ShowActionChoices()
     {
         CharacterController pc = ActivePC;
-        if (pc == null) return;
+        if (pc == null)
+        {
+            // A player-run creature that left play during its own turn has no choices left: end the turn here, so no PC
+            // tail of the many that return to the action panel leaves it open (CRE-312).
+            if (IsVacatedPlayerTurn)
+                EndActivePCTurn();
+            return;
+        }
 
         // Every PC action comes back here once it has resolved, so this is where a PC-path kill, spell, maneuver,
         // AoO or tick that dropped the last creature of either side ends the combat (CORE-011).
@@ -9278,7 +9305,8 @@ public partial class GameManager : MonoBehaviour
         }
 
         Debug.Log($"[TurnFlow] EndCurrentTurn | isPlayerTurn={IsPlayerTurn} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
-        if (IsPlayerTurn)
+        // A player-run creature's turn that it left during (CRE-312) is still a PC turn: its cleanup runs too.
+        if (IsPlayerTurn || IsVacatedPlayerTurn)
             EndActivePCTurn();
         else
             NextInitiativeTurn();
@@ -10672,9 +10700,14 @@ public partial class GameManager : MonoBehaviour
             cancelLabel: "No",
             onConfirm: () =>
             {
-                StartCoroutine(DespawnSummonWithEffect(active, "dismissed"));
+                CharacterController dismissed = active.Controller;
                 _activeSummons.Remove(active);
+                StartCoroutine(DespawnSummonWithEffect(active, "dismissed"));
                 UpdateAllStatsUI();
+                // A player-run summon dismissed during its own turn left the order at once (CRE-312): its turn ends here,
+                // or nothing would end it. Who may dismiss, and at what cost, is SPL-336.
+                if (CurrentPhase == TurnPhase.PCTurn && _turnService != null && ReferenceEquals(_turnService.VacatedTurnOwner, dismissed))
+                    EndCurrentTurn();
             },
             onCancel: null);
     }

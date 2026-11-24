@@ -177,14 +177,16 @@ public class AIService : MonoBehaviour
 
         yield return _gameManager != null ? _gameManager.StartCoroutine(ExecuteNPCTurnBody(npc, behavior)) : null;
 
-        if (npc != null && _heldChargePlans.TryGetValue(npc, out CharacterController plannedTarget))
+        // Reference checks for the bookkeeping: a summon slain during its own turn leaves play at once and Unity destroys it
+        // at the end of that frame (CRE-312), so Unity's null check would skip closing its records depending on frames.
+        if (!ReferenceEquals(npc, null) && _heldChargePlans.TryGetValue(npc, out CharacterController plannedTarget))
         {
             _heldChargePlans.Remove(npc);
-            if (!CombatEnded() && npc.Stats != null && npc.CanTakeTurnActions())
+            if (npc != null && !npc.IsRemovedFromPlay && !CombatEnded() && npc.Stats != null && npc.CanTakeTurnActions())
                 yield return _gameManager.StartCoroutine(TryDeliverHeldChargeTurn(npc, plannedTarget));
         }
 
-        if (npc != null)
+        if (!ReferenceEquals(npc, null))
         {
             AiDecisionTimer.EndTurn(npc);
             AiDecisionTrace.EndTurn(npc);

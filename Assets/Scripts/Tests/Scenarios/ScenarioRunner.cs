@@ -326,6 +326,35 @@ namespace Tests.Scenarios
             return spec.Control.ToString().ToLowerInvariant();
         }
 
+        /// <summary>
+        /// Adopts <paramref name="c"/>, a creature the game brought into the fight (a summon), as the Adopted actor
+        /// <paramref name="key"/> (ScenarioContext.Adopt, grouped AI turns step 4): the context and SpecOf know it, its
+        /// control is set (Ui: controllable, the PC turn path; Scripted or Idle: the NPC turn path and its typed steps), and
+        /// the trace and the checks register it under the key with an actor line. False when the key is no Adopted actor,
+        /// it or the creature is taken, or the trace already named the creature otherwise (adopt it right after the spawn).
+        /// </summary>
+        internal bool AdoptActor(string key, CharacterController c)
+        {
+            ActorSpec spec = Def != null ? Def.Find(key) : null;
+            if (c == null || spec == null || spec.Source == null || !spec.Source.IsAdopted)
+                return false;
+            if (Ctx.Actors.ContainsKey(key) || SpecOf.ContainsKey(c))
+                return false;
+            string known = Trace != null ? Trace.TryKeyOf(c) : null;
+            if (known != null && known != key)
+                return false;
+            Ctx.Actors[key] = c;
+            SpecOf[c] = spec;
+            c.ConfigureTeamControl(spec.Team, spec.Control == Control.Ui);
+            if (Trace != null)
+            {
+                Trace.RegisterActor(key, c);
+                Trace.EmitActor(key, c, spec);
+            }
+            Checks?.RegisterActor(c);
+            return true;
+        }
+
         public void OnTurnStarted(CharacterController a, string controller)
         {
             if (controller != "ui")
@@ -1245,6 +1274,8 @@ namespace Tests.Scenarios
                     gm.Grid.ClearCreatureOccupancy(kv.Value);
             foreach (ActorSpec spec in def.Actors)
             {
+                if (spec.Source.IsAdopted)
+                    continue; // the game brings it in during the fight; ScenarioContext.Adopt (ScenarioJob.AdoptActor)
                 CharacterController c = placed.First(p => p.Key == spec).Value;
                 if (spec.GamePlaced)
                 {
@@ -1265,6 +1296,8 @@ namespace Tests.Scenarios
             // f. Control
             foreach (ActorSpec spec in def.Actors)
             {
+                if (spec.Source.IsAdopted)
+                    continue;
                 CharacterController c = job.Ctx.Actors[spec.Key];
                 if (spec.Control == Control.Ui)
                 {
@@ -1298,6 +1331,8 @@ namespace Tests.Scenarios
 
             foreach (ActorSpec spec in def.Actors)
             {
+                if (spec.Source.IsAdopted)
+                    continue;
                 CharacterController c = job.Ctx.Actors[spec.Key];
                 foreach (KeyValuePair<CombatConditionType, int> cond in spec.StartConditions)
                     gm.ApplyCondition(c, cond.Key, cond.Value, sourceNameOverride: "ScenarioHarness", sourceCategory: "Harness");
@@ -1324,18 +1359,21 @@ namespace Tests.Scenarios
             job.Checks = new ScenarioChecks(job, gm) { WallClockCapSeconds = job.WallCapSeconds };
             foreach (ActorSpec spec in def.Actors)
             {
+                if (spec.Source.IsAdopted)
+                    continue;
                 CharacterController c = job.Ctx.Actors[spec.Key];
                 job.Trace.RegisterActor(spec.Key, c);
                 job.Checks.RegisterActor(c);
             }
             job.Trace.Install();
+            job.Ctx.AdoptSink = job.AdoptActor;
 
             bool record = def.RecordDice || job.Options.RecordDice;
             // Save fallback: when an actor carries a scenario save tweak of 20 or more either way, every save d20 the
             // scenario does not force itself is a 10, so the tweak decides the save; an unforced natural 1 or 20 would
             // decide it instead (PHB p.177; SaveRollRules since batch 12 step 10). Appended last, so a scenario's own
             // forces win.
-            bool saveFallback = def.Actors.Any(spec => HasDecidingSaveTweak(job.Ctx.Actors[spec.Key]));
+            bool saveFallback = def.Actors.Any(spec => !spec.Source.IsAdopted && HasDecidingSaveTweak(job.Ctx.Actors[spec.Key]));
             if (def.DiceForces.Count > 0 || record || saveFallback)
             {
                 List<DiceForce> forces = def.DiceForces.Select(f => f.Clone()).ToList();
@@ -1380,7 +1418,8 @@ namespace Tests.Scenarios
             if (job.Generated != null)
                 job.Trace.Emit("generated").Set("info", job.Generated.Info);
             foreach (ActorSpec spec in def.Actors)
-                job.Trace.EmitActor(spec.Key, job.Ctx.Actors[spec.Key], spec);
+                if (!spec.Source.IsAdopted)
+                    job.Trace.EmitActor(spec.Key, job.Ctx.Actors[spec.Key], spec);
             // Only a non-default difficulty or a personality warning adds a note, so a scenario with neither keeps its hash.
             if (job.Difficulty != AIService.AIDifficultyLevel.Normal)
                 job.Ctx.Note("ai difficulty " + job.Difficulty);

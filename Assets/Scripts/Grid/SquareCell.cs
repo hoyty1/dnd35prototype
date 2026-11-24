@@ -69,7 +69,8 @@ public class SquareCell : MonoBehaviour
 
     public void AddOccupant(CharacterController occupant)
     {
-        if (occupant == null || _occupants.Contains(occupant))
+        // A creature taken out of play this frame (a despawned summon, CRE-312) never comes back onto the grid.
+        if (occupant == null || occupant.IsRemovedFromPlay || _occupants.Contains(occupant))
             return;
 
         _occupants.Add(occupant);

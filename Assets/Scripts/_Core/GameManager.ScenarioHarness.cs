@@ -835,14 +835,43 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// A summon brought into the running fight at <paramref name="cell"/> the way the summon cast and the item summon
+    /// (<see cref="SpawnItemSummon"/>) bring one: the game's spawn (<see cref="SpawnSummonedCreature"/>: team, control
+    /// from the caster, the summon trackers, <see cref="NPCs"/>), the initiative order right after the caster, and the
+    /// active summon list for <paramref name="rounds"/> rounds, so it is despawned by the game's own path
+    /// (<see cref="DespawnSummonWithEffect"/>). Null when the spawn fails.
+    /// </summary>
+    internal CharacterController Harness_SummonIntoFight(CharacterController caster, Vector2Int cell, SummonMonsterOption option, int rounds)
+    {
+        CharacterController summon = SpawnSummonedCreature(caster, cell, option);
+        if (summon == null)
+            return null;
+        InsertIntoInitiative(summon, caster);
+        RegisterActiveSummon(summon, caster, sourceSpellId: null, durationRoundsOverride: Mathf.Max(1, rounds));
+        UpdateAllStatsUI();
+        return summon;
+    }
+
+    /// <summary>True while <paramref name="summon"/> is still tracked in <c>_activeSummons</c> (false once it left play).</summary>
+    internal bool Harness_IsActiveSummon(CharacterController summon)
+        => !ReferenceEquals(summon, null) && _activeSummons.Exists(s => s != null && ReferenceEquals(s.Controller, summon));
+
+    /// <summary>
     /// Takes a summon made by <see cref="Harness_SpawnSummonedCreature"/> out of play at once: off the grid, out of the
     /// summon trackers, the initiative order, <see cref="NPCs"/> and the parallel AI behaviour list (AI-015), then a
-    /// deferred Destroy.
+    /// deferred Destroy; marked out of play and its view released first, as DespawnSummonWithEffect does.
     /// </summary>
     internal void Harness_DespawnSummon(CharacterController summon)
     {
         if (summon == null)
             return;
+
+        // The production removal's semantics (DespawnSummonWithEffect, CRE-312): the view detaches and fades alone, and
+        // the model is out of play for the grid, IsActiveCombatant and the area scans until Unity destroys it.
+        TokenView view = summon.View;
+        if (view != null)
+            view.PlayDespawnAndRelease();
+        summon.MarkRemovedFromPlay();
 
         _activeSummons.RemoveAll(s => s != null && s.Controller == summon);
         _summonedAllies.Remove(summon);

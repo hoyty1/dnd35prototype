@@ -644,7 +644,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         for (int i = 0; i < allCharacters.Length; i++)
         {
             CharacterController character = allCharacters[i];
-            if (character == null || character.Stats == null || character.Stats.IsDead)
+            if (character == null || character.Stats == null || character.Stats.IsDead || character.IsRemovedFromPlay) // a despawned summon until the frame ends (CRE-312)
                 continue;
 
             if (!IsCharacterInArea(character))
@@ -729,7 +729,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         for (int i = 0; i < allCharacters.Length; i++)
         {
             CharacterController character = allCharacters[i];
-            if (character == null || character.Stats == null || character.Stats.IsDead)
+            if (character == null || character.Stats == null || character.Stats.IsDead || character.IsRemovedFromPlay) // a despawned summon until the frame ends (CRE-312)
                 continue;
 
             if (!IsCharacterInArea(character))

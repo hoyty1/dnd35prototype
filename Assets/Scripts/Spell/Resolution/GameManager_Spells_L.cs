@@ -14,7 +14,7 @@ using UnityEngine;
 public partial class GameManager
 {
     // ═══════════════════════════════════════════════════════════════
-    // LESSER GLOBE OF INVULNERABILITY (PHB p.246)
+    // LESSER GLOBE OF INVULNERABILITY (PHB p.236)
     // ═══════════════════════════════════════════════════════════════
 
     private static bool IsLesserGlobeOfInvulnerabilitySpell(SpellData spell)
@@ -25,8 +25,8 @@ public partial class GameManager
     /// <summary>
     /// Resolves Lesser Globe of Invulnerability: creates a 10-ft radius emanation
     /// centered on the caster that blocks spell effects of 3rd level or lower.
-    /// The emanation moves with the caster.
-    /// PHB p.246
+    /// The emanation moves with the caster (current behaviour; PHB p.236 calls it immobile, owner question SPL-335).
+    /// PHB p.236
     /// </summary>
     private bool TryResolveLesserGlobeSpellEffect(
         CharacterController caster, CharacterController target,
@@ -43,8 +43,9 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
-        // Create the area effect centered on the caster
-        Vector3 centerWorldPos = caster.transform.position;
+        // Create the area effect centred on the caster's space on the grid (PHB p.236: centred on the caster; grouped AI
+        // turns step 4). That it then follows the caster is current behaviour pending SPL-335.
+        Vector3 centerWorldPos = LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter(caster);
 
         GameObject globeObj = new GameObject("LesserGlobeOfInvulnerability_Area");
         globeObj.transform.position = centerWorldPos;

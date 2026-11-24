@@ -592,7 +592,7 @@ public class CreatureTrapSystem : MonoBehaviour
         foreach (var character in allCharacters)
         {
             if (character == null || character.Stats == null) continue;
-            if (!character.gameObject.activeInHierarchy) continue;
+            if (!character.gameObject.activeInHierarchy || character.IsRemovedFromPlay) continue; // a despawned summon until the frame ends (CRE-312)
 
             string creatureType = character.Stats.CreatureType ?? "";
             if (!creatureType.Equals("Elemental", StringComparison.OrdinalIgnoreCase)) continue;

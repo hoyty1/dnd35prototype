@@ -225,7 +225,7 @@ public partial class GameManager
             yield return StartCoroutine(TryStandUpFromProneForAI(pc));
             if (CurrentPhase == TurnPhase.CombatOver || ThreatSystem.IsMoverIncapacitated(pc))
             {
-                if (CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+                if (CurrentPhase == TurnPhase.PCTurn && IsCurrentTurnOf(pc))
                     EndCurrentTurn();
                 yield break;
             }
@@ -237,7 +237,7 @@ public partial class GameManager
             var flight = new FrightenedBehaviorController.FlightResult();
             yield return StartCoroutine(ExecuteFrightenedTurnDecisionForAI(pc, compulsion.Fear, flight));
             if (!panicked && flight.Outcome == FrightenedBehaviorController.FlightOutcome.Cornered
-                && CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+                && CurrentPhase == TurnPhase.PCTurn && ReferenceEquals(CurrentCharacter, pc)) // the menu only for a creature still in the order (CRE-312)
             {
                 CurrentSubPhase = PlayerSubPhase.ChoosingAction;
                 CombatUI?.SetActionButtonsVisible(true);
@@ -248,7 +248,7 @@ public partial class GameManager
         else if (compulsion.Turned && _aiService != null)
             yield return StartCoroutine(_aiService.ExecuteTurnedTurn(pc));
 
-        if (CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+        if (CurrentPhase == TurnPhase.PCTurn && IsCurrentTurnOf(pc))
             EndCurrentTurn();
     }
 

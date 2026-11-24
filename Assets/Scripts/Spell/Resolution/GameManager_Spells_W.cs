@@ -909,7 +909,7 @@ public partial class GameManager
         List<CharacterController> creaturesInArea = new List<CharacterController>();
         foreach (CharacterController ch in allCharacters)
         {
-            if (ch == null || ch.Stats == null || ch.Stats.IsDead)
+            if (ch == null || ch.Stats == null || ch.Stats.IsDead || ch.IsRemovedFromPlay) // a despawned summon until the frame ends (CRE-312)
                 continue;
             if (sphereCells.Contains(ch.GridPosition))
                 creaturesInArea.Add(ch);

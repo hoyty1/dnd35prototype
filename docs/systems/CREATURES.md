@@ -227,7 +227,7 @@ DragonData.cs defines 10 types x 6 ages. The `DragonAgeCategory` enum runs Wyrml
 The flow, spawn pipeline and lifecycle are covered in the architecture part. In brief:
 - **Flow.** Choose the spell, then the list level and creature (`ShowSummonCreatureSelectionMenu`), then the tile, then `PerformSummonMonsterCast`, which builds a summon request for the cast core (its Summon resolve, `ResolveSummonMonsterCast`, since batch 11 step 10).
 - **Spawn.** `SpawnSummonedCreature` clones the NPCDatabase entry, clears `AppliedTemplateIds`, adds `option.TemplateId` and runs `ApplyTemplatesClone`.
-- **Lifecycle.** `RegisterActiveSummon` registers the summon; `TickSummonDurations` runs from `OnNewRound`; `DespawnSummonWithEffect` removes it.
+- **Lifecycle.** `RegisterActiveSummon` registers the summon; `TickSummonDurations` runs from `OnNewRound`; `DespawnSummonWithEffect` removes it at once, its fade left to its token view (grouped AI turns step 4, CRE-312).
 - **Spell-level detection.** It uses the regexes `summon_monster_(\d+)` and `summon_natures_ally_(\d+)` in `SummonMonsterLists`, so the class alias IDs match automatically.
 
 | Spell | Data | List size (code / PHB) | Missing vs PHB list |

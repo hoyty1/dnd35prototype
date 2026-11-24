@@ -320,6 +320,20 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsEncounterPoolSlot { get; internal set; }
 
+    /// <summary>
+    /// True once the game took this creature out of play and destroyed it: a summon's despawn
+    /// (<c>GameManager.DespawnSummonWithEffect</c>, grouped AI turns step 4, CRE-312) removes it from the grid, the
+    /// initiative order and <c>GameManager.NPCs</c> at once and destroys it; Unity destroys the object only at the end of
+    /// the frame, so until then this flag keeps a movement still unwinding in that frame (MoveAlongPath's closing
+    /// occupancy refresh) from putting it back on the grid (<see cref="SquareCell.AddOccupant"/>), and the combatant
+    /// checks (<c>IsActiveCombatant</c>, <see cref="CombatEndRules.IsActiveCombatant"/>) and the scene-wide area scans
+    /// skip it. Cleared by a slot reset (CRE-046).
+    /// </summary>
+    public bool IsRemovedFromPlay { get; private set; }
+
+    /// <summary>Marks this creature as taken out of play (<see cref="IsRemovedFromPlay"/>).</summary>
+    internal void MarkRemovedFromPlay() => IsRemovedFromPlay = true;
+
     [Header("AI Configuration")]
     [Tooltip("Optional AI profile used by AIService for NPC decision making")]
     public AIProfile aiProfile;
@@ -5028,6 +5042,7 @@ public class CharacterController : MonoBehaviour
     {
         StopAllCoroutines();
         StrenuousDamagePending = false;
+        IsRemovedFromPlay = false;
         _currentScaleAnimation = null;
         _grappleAlternateVisibilityCoroutine = null;
 

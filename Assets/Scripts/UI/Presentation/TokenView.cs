@@ -229,7 +229,8 @@ public sealed class TokenView : MonoBehaviour
 
     /// <summary>
     /// Follows the model's destruction: the view leaves <see cref="Live"/> at once and its GameObject (with the status
-    /// icons and the summon visual on it) is destroyed at the end of the frame.
+    /// icons and the summon visual on it) is destroyed at the end of the frame, unless it is playing a despawn
+    /// (<see cref="PlayDespawnAndRelease"/>), which destroys it when the effect ends.
     /// </summary>
     public void Release()
     {
@@ -237,12 +238,52 @@ public sealed class TokenView : MonoBehaviour
             return;
         _released = true;
         _live.Remove(this);
-        if (this == null)
+        if (this == null || _despawning)
             return;
         if (Application.isPlaying)
             Destroy(gameObject);
         else
             DestroyImmediate(gameObject);
+    }
+
+    private bool _despawning;
+
+    /// <summary>True while the view plays a despawn after its model left play (<see cref="PlayDespawnAndRelease"/>).</summary>
+    public bool IsDespawning => _despawning;
+
+    /// <summary>
+    /// A summon leaves play (grouped AI turns step 4, CRE-312): GameManager.DespawnSummonWithEffect does all its rules
+    /// work and destroys the model at once, then the view, detached from the model, keeps the token's last drawn state,
+    /// plays the summon visual's despawn fade (<see cref="SummonedCreatureVisual.PlayDespawnEffect"/>, 0.45 s of game
+    /// time) and destroys itself. Presentation only: no rule waits on it, it is never in <see cref="Live"/>, and area
+    /// tracking (FindObjectsOfType&lt;CharacterController&gt;) and IsActiveCombatant never see it, since the view is not a
+    /// controller. Call it before the model's Destroy. Outside Play mode it releases the view at once.
+    /// </summary>
+    public void PlayDespawnAndRelease()
+    {
+        if (_released || _despawning)
+            return;
+        SyncFromModel(); // the last state the token showed, the death sprite or tint included
+        _released = true;
+        _live.Remove(this);
+        _model = null;
+        _modelTransform = null;
+        _modelRenderer = null;
+        if (!Application.isPlaying)
+        {
+            DestroyImmediate(gameObject);
+            return;
+        }
+        _despawning = true;
+        StartCoroutine(DespawnThenDestroy());
+    }
+
+    private System.Collections.IEnumerator DespawnThenDestroy()
+    {
+        SummonedCreatureVisual visual = _summonVisual;
+        if (visual != null && _body != null && _body.gameObject.activeInHierarchy)
+            yield return visual.PlayDespawnEffect(); // nested on this view, so the view's own destruction stops it
+        Destroy(gameObject);
     }
 
     private void OnDestroy()

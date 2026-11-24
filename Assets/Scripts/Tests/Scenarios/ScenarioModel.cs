@@ -44,7 +44,12 @@ namespace Tests.Scenarios
     /// <summary>The judgement on one job (see docs/TESTING.md 3.4).</summary>
     public enum Verdict { Pass, Fail, Known, XFail, XPass, Inconclusive, Error }
 
-    public enum ActorSourceKind { QuickStart, Stats, Npc }
+    /// <summary>
+    /// Where an actor comes from. <see cref="Adopted"/>: a creature the game brings into the fight while the job runs (a
+    /// summon), which the scenario adopts under the actor's key with <see cref="ScenarioContext.Adopt"/> (grouped AI turns
+    /// step 4); the harness spawns and places nothing for it.
+    /// </summary>
+    public enum ActorSourceKind { QuickStart, Stats, Npc, Adopted }
 
     /// <summary>Where an actor comes from: a class Quick Start character, an exactly built CharacterStats, or an NPC database id.</summary>
     public sealed class ActorSource
@@ -57,7 +62,14 @@ namespace Tests.Scenarios
         public string Label { get; private set; }
 
         /// <summary>True for QuickStart and Stats actors, which take a party (PC) slot.</summary>
-        public bool IsPcSlot => Kind != ActorSourceKind.Npc;
+        public bool IsPcSlot => Kind == ActorSourceKind.QuickStart || Kind == ActorSourceKind.Stats;
+
+        /// <summary>True for an actor the scenario adopts during the fight (<see cref="ActorSourceKind.Adopted"/>).</summary>
+        public bool IsAdopted => Kind == ActorSourceKind.Adopted;
+
+        /// <summary>A creature the game brings in during the fight (a summon), adopted by <see cref="ScenarioContext.Adopt"/>.</summary>
+        public static ActorSource Adopted()
+            => new ActorSource { Kind = ActorSourceKind.Adopted };
 
         public static ActorSource QuickStart(string className)
             => new ActorSource { Kind = ActorSourceKind.QuickStart, ClassName = className };
@@ -85,6 +97,7 @@ namespace Tests.Scenarios
             {
                 case ActorSourceKind.QuickStart: return "quickstart:" + ClassName;
                 case ActorSourceKind.Stats: return "stats";
+                case ActorSourceKind.Adopted: return "adopted";
                 default: return "npc:" + (Label ?? NpcId);
             }
         }
@@ -344,6 +357,16 @@ namespace Tests.Scenarios
                     continue;
                 }
 
+                if (a.Source.IsAdopted)
+                {
+                    // Spawned and placed by the game during the fight; adopted by ScenarioContext.Adopt.
+                    if (a.Control != Control.Scripted && a.Control != Control.Ui && a.Control != Control.Idle)
+                        problems.Add(a.Key + ": an adopted actor is Scripted, Ui or Idle");
+                    if (InitiativeOrder != null && InitiativeOrder.Contains(a.Key))
+                        problems.Add(a.Key + ": an adopted actor joins the initiative when the game brings it in, not in Initiative(...)");
+                    continue;
+                }
+
                 if (a.Source.IsPcSlot)
                 {
                     pcSlots++;
@@ -485,6 +508,17 @@ namespace Tests.Scenarios
         /// <summary>Adds a 'note' event to the trace (scripts use it to mark steps).</summary>
         public void Note(string text) => Trace?.Emit("note").Set("text", text);
 
+        /// <summary>Set by the runner for the job: adopts a creature under an Adopted actor's key (see <see cref="Adopt"/>).</summary>
+        internal Func<string, CharacterController, bool> AdoptSink;
+
+        /// <summary>
+        /// Adopts <paramref name="c"/>, a creature the game brought into the fight (a summon), as the actor
+        /// <paramref name="key"/>, declared with <see cref="ScenarioBuilder.Adopted"/>: <see cref="Get"/> returns it, its turns
+        /// run the actor's typed steps, its control is set and the trace records it under the key. False when the key is
+        /// no Adopted actor, is already adopted, or the creature is null.
+        /// </summary>
+        public bool Adopt(string key, CharacterController c) => AdoptSink != null && AdoptSink(key, c);
+
         /// <summary>The warnings of the personalities the harness gave actors (ActorSpec.Personality), in order (batch 14 step 4).</summary>
         public List<string> PersonalityWarnings { get; } = new List<string>();
     }
@@ -522,6 +556,18 @@ namespace Tests.Scenarios
         public ScenarioBuilder Npc(string key, string npcId, int x, int y, Control control = Control.Ai, CharacterTeam team = CharacterTeam.Enemy)
         {
             _def.Actors.Add(new ActorSpec { Key = key, Team = team, Source = ActorSource.Npc(npcId), Pos = new Vector2Int(x, y), Control = control });
+            return this;
+        }
+
+        /// <summary>
+        /// An actor the game brings into the fight while the job runs (a summon): nothing is spawned for it; a step adopts
+        /// the creature under <paramref name="key"/> with <see cref="ScenarioContext.Adopt"/>, which records it in the trace
+        /// and gives it <paramref name="control"/> (Scripted or Idle: the NPC turn path and its typed steps; Ui: the PC turn
+        /// path, the creature made controllable). Its turn scripts are validated like any actor's.
+        /// </summary>
+        public ScenarioBuilder Adopted(string key, Control control, CharacterTeam team)
+        {
+            _def.Actors.Add(new ActorSpec { Key = key, Team = team, Source = ActorSource.Adopted(), Pos = new Vector2Int(-1, -1), Control = control });
             return this;
         }
 

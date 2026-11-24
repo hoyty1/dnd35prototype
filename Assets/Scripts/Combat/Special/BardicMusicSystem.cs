@@ -397,7 +397,7 @@ public partial class GameManager
     private IEnumerator ExecuteSuggestedForcedPCTurn(CharacterController pc, SuggestedBehaviorController.SuggestedTurnDecision decision)
     {
         yield return StartCoroutine(ExecuteSuggestedTurnDecisionForAI(pc, decision));
-        if (CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+        if (CurrentPhase == TurnPhase.PCTurn && IsCurrentTurnOf(pc))
             EndCurrentTurn();
     }
 }

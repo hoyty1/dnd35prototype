@@ -914,7 +914,7 @@ public partial class GameManager
         globe.CasterLevel = casterLevel;
         globe.RoundsRemaining = durationRounds;
         globe.Caster = caster;
-        globe.CenterPosition = caster.transform.position;
+        globe.CenterPosition = LesserGlobeOfInvulnerabilityAreaEffect.CasterCenter(caster); // the caster's space on the grid (grouped AI turns step 4; following it is SPL-335)
 
         if (AreaEffectManager.HasInstance)
             AreaEffectManager.Instance.RegisterAreaEffect(globe);

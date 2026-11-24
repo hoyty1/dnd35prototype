@@ -2288,8 +2288,10 @@ public partial class GameManager
             yield break;
         }
 
-        // An attacker a reaction or an AoO dropped (dead, dying, unconscious) has no more choices this turn.
-        if (pc != null && pc == ActivePC && CombatEndRules.IsOutOfFight(pc))
+        // An attacker a reaction or an AoO dropped (dead, dying, unconscious) or took out of play (a summon slain, its
+        // turn vacated, CRE-312) has no more choices this turn. Reference checks, so frame timing never decides.
+        if (IsVacatedPlayerTurn
+            || (!ReferenceEquals(pc, null) && IsCurrentTurnOf(pc) && (pc.IsRemovedFromPlay || CombatEndRules.IsOutOfFight(pc))))
         {
             LogMenuFlow("AfterAttackDelay:ATTACKER_OUT_OF_FIGHT", pc);
             EndActivePCTurn();
@@ -2343,6 +2345,13 @@ public partial class GameManager
 
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;
+
+        // A player-run creature that left play during the wait (CRE-312) ends its turn by reference.
+        if (IsVacatedPlayerTurn)
+        {
+            EndActivePCTurn();
+            yield break;
+        }
 
         // SAFETY CHECK: if a submenu opened during the delay window, do not force-close it.
         if (CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())

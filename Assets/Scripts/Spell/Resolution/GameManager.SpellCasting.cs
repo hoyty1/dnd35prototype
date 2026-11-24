@@ -300,6 +300,19 @@ public partial class GameManager
         return summon;
     }
 
+    /// <summary>
+    /// Takes a summon out of play (slain, its duration expired, dismissed). Every rules change happens before any yield,
+    /// so synchronously at the caller's <c>StartCoroutine</c> (grouped AI turns step 4, CRE-312; before it the removal
+    /// waited on the 0.45 s despawn tween, so with any other pacing it landed at another point of the turn sequence, and a
+    /// reset could stop it half done, CORE-013): the grid occupancy; <see cref="NPCs"/> and <c>_npcAIBehaviors</c>
+    /// together (AI-015); the summon lists; the initiative order (TurnService.RemoveFromInitiative, which lets the next
+    /// creature still act when the summon is removed during its own turn); the log line; the initiative and stat panels;
+    /// and the model's Destroy. The model is marked out of play first (<see cref="CharacterController.IsRemovedFromPlay"/>),
+    /// so until Unity destroys it at the end of the frame the grid refuses it, and IsActiveCombatant and the scene-wide
+    /// area scans (FindObjectsOfType&lt;CharacterController&gt;) skip it. The token's mirror view (TokenView) plays the
+    /// despawn fade afterwards and destroys itself; it is no controller, so those scans never see it either. Keeps its name
+    /// and coroutine shape for its callers and the tests (TST-006).
+    /// </summary>
     private IEnumerator DespawnSummonWithEffect(ActiveSummonInstance summon, string reason)
     {
         if (summon == null || summon.Controller == null)
@@ -307,11 +320,13 @@ public partial class GameManager
 
         CharacterController cc = summon.Controller;
 
-        var summonVisual = cc.SummonVisual;
-        if (summonVisual != null)
-            yield return StartCoroutine(summonVisual.PlayDespawnEffect());
+        // Presentation first: the view detaches from the model before the model is destroyed and plays the fade alone.
+        TokenView view = cc.View;
+        if (view != null)
+            view.PlayDespawnAndRelease();
 
-        Grid.ClearCreatureOccupancy(cc);
+        cc.MarkRemovedFromPlay(); // the grid, IsActiveCombatant and the area scans skip it until the frame ends
+        Grid?.ClearCreatureOccupancy(cc);
 
         int npcIdx = NPCs.IndexOf(cc);
         if (npcIdx >= 0)
@@ -337,9 +352,9 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(despawnMessage);
         Debug.Log($"[Summon] Despawned {cc.Stats.CharacterName}: {reason}");
 
-        Destroy(cc.gameObject);
         UpdateInitiativeUI();
         UpdateAllStatsUI();
+        Destroy(cc.gameObject);
     }
 
     private void HandleSummonDeathCleanup(CharacterController maybeSummon)
@@ -5984,8 +5999,8 @@ public partial class GameManager
             anyExpired |= TickCharacterSpellDurations(pc, ticksForAnchor, roundBoundary);
         }
 
-        // Tick active, living NPCs
-        foreach (var npc in NPCs)
+        // Tick active, living NPCs (a copy: a summon an expiry kills leaves NPCs at once, CRE-312)
+        foreach (var npc in NPCs.ToArray())
         {
             if (!IsActiveCombatant(npc) || npc.Stats.IsDead) continue;
             anyExpired |= TickCharacterSpellDurations(npc, ticksForAnchor, roundBoundary);

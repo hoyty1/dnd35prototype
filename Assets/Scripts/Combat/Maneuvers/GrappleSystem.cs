@@ -654,7 +654,7 @@ public partial class GameManager
         if (!showActionChoicesAfterMove)
             yield break;
 
-        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        if (ThreatSystem.IsMoverIncapacitated(actor) && IsCurrentTurnOf(actor) && actor.IsControllable)
         {
             EndActivePCTurn();
             yield break;
@@ -1317,7 +1317,7 @@ public partial class GameManager
         if (!uiContinuation)
             yield break;
 
-        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        if (ThreatSystem.IsMoverIncapacitated(actor) && IsCurrentTurnOf(actor) && actor.IsControllable)
         {
             EndActivePCTurn();
             yield break;
@@ -2174,7 +2174,7 @@ public partial class GameManager
             yield break;
 
         // An AoO on the escape move dropped the PC: its turn ends (CMB-152), as after a dropped PC's ordinary move.
-        if (ThreatSystem.IsMoverIncapacitated(actor) && actor == ActivePC && actor.IsControllable)
+        if (ThreatSystem.IsMoverIncapacitated(actor) && IsCurrentTurnOf(actor) && actor.IsControllable)
         {
             EndActivePCTurn();
             yield break;

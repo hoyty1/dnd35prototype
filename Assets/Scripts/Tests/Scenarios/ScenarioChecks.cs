@@ -179,7 +179,10 @@ namespace Tests.Scenarios
                 return;
             }
 
-            if (_openTurn != null)
+            // A creature that left play during its own turn (a summon slain on it, CRE-312) publishes no turn_end: its turn
+            // closed when it left, also when the next turn starts in the same frame, before Unity destroys it (so the
+            // check reads IsRemovedFromPlay, not only Unity's destroyed-object null).
+            if (_openTurn != null && !_openTurn.IsRemovedFromPlay)
                 Violation(TurnStructure, "turn_start for " + _job.Trace.KeyOf(a) + " while " + _job.Trace.KeyOf(_openTurn) + "'s turn is still open", a);
             _openTurn = a;
             _ownMoveSquares = 0;

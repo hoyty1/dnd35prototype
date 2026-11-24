@@ -65,9 +65,12 @@ public static class CombatEndRules
             || c.HasConditionDirect(CombatConditionType.Asleep);
     }
 
-    /// <summary>A creature that takes part in the combat: present, with stats, and active in the scene.</summary>
+    /// <summary>
+    /// A creature that takes part in the combat: present, with stats, active in the scene, and not taken out of play (a
+    /// despawned summon stays in the scene until the end of the frame it left play in, CRE-312).
+    /// </summary>
     public static bool IsActiveCombatant(CharacterController c)
-        => c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
+        => c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null && !c.IsRemovedFromPlay;
 
     /// <summary>
     /// Whether <paramref name="c"/> is charmed by, commanded by or under the control of a creature on
