@@ -32,7 +32,8 @@ public sealed class AiOutOfReachOutcome
 /// - Approach: the move to the reach or range of the weapon in hand (<see cref="ApproachRangeSquares"/>), then the
 ///   attack as above; skipped when the weapon cannot shoot at all (no ammunition), since closing in cannot help;
 /// - Withdraw: the withdraw away from the focus target (AIService.EvaluateWithdrawRetreatDestination; PHB p.143);
-/// - TotalDefense: total defense (PHB p.142, D2).
+/// - TotalDefense: total defense (PHB p.142, D2), only when a foe can reach the creature next round (AIService.AnyFoeCanReach;
+///   batch 14 step 13, AI-063).
 /// An alternative whose catalog entry the creature may not take now (AiLegal.CanUse: ActorActionSet.AllowsNow, batch 14
 /// step 10, AI-080) is dropped before it is tried. A move to the creature's own square is no move. Before the list, a crossbow that is not loaded and can be reloaded
 /// at all this turn (with a bolt to load: ReloadRules, PHB p.113-114) is reloaded through the catalog's reload entry
@@ -177,6 +178,13 @@ public static class AiOutOfReach
 
                 case OutOfReachAlternative.TotalDefense:
                 {
+                    // Total defense only when a foe can reach the creature next round (batch 14 step 13, AI-063): +4 AC
+                    // against nobody wastes the standard action (a healer with nothing in reach stood in it).
+                    if (!ai.AnyFoeCanReach(npc))
+                    {
+                        Debug.Log($"[AI][OutOfReach] {name}: TotalDefense skipped: no foe can reach it next round");
+                        break;
+                    }
                     var defense = new ActionOutcome();
                     yield return gm.RunAIAction(ActionContext.For(ActionIds.TotalDefense, npc, ActorSource.AI), defense);
                     if (!defense.Performed)

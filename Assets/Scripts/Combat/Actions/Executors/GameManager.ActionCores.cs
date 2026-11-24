@@ -322,7 +322,8 @@ public partial class GameManager
     /// <summary>
     /// Why <paramref name="aider"/> cannot aid <paramref name="ally"/> against <paramref name="opponent"/>, or null (the
     /// aid-another entry's CanExecute after CanStart): the aider can make a melee attack on the opponent (it threatens it
-    /// with its weapon) and the ally, another living creature of its side, is in melee with it (threatens it; PHB p.154).
+    /// with its weapon) and the ally, another living creature of its side, is in melee with it (either threatens the other,
+    /// <see cref="IsEngagedInMelee"/>; PHB p.154).
     /// Delegated RAW reading (2026-10-29, RULES_COVERAGE 4.1): PHB p.154's "in position to make a melee attack" on the
     /// opponent is read as threatening it, since PHB p.137 defines the threatened squares as those into which a creature
     /// can make a melee attack and says an unarmed creature does not normally threaten; so an aider holding only a bow, or
@@ -336,9 +337,25 @@ public partial class GameManager
             return GetCombatantName(opponent) + " is not in melee reach for Aid Another";
         if (ally == null || ally.Stats == null || ally.Stats.IsDead || ally == aider || !TeamUtility.IsAlly(aider, ally))
             return "no ally to aid";
-        if (!ally.ThreatensWith(opponent, ally.GetEquippedWeapon()))
+        if (!IsEngagedInMelee(ally, opponent))
             return GetCombatantName(ally) + " is not in melee range of " + GetCombatantName(opponent);
         return null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="opponent"/> is "engaging" <paramref name="friend"/> in melee for aid another (PHB p.154): either
+    /// threatens the other with the weapon it holds (or its natural or reach weapon's reach; CharacterController.ThreatensWith).
+    /// Delegated RAW reading (2026-11-23, batch 14 step 13 review, RULES_COVERAGE 4.1): PHB p.154 names an opponent "engaging
+    /// a friend in melee combat" and does not say which of them must threaten; the sentence makes the opponent the one
+    /// engaging (it threatens the friend: a reach foe striking the friend from 10 feet engages it), and the friend fighting
+    /// the opponent in melee (the friend threatens it), the reading before this step, is the same melee, so either counts.
+    /// The PC aid menu's ally list and the aid-another entry read it, so PCs and NPCs share one rule.
+    /// </summary>
+    internal static bool IsEngagedInMelee(CharacterController friend, CharacterController opponent)
+    {
+        if (friend == null || opponent == null || friend.Stats == null || opponent.Stats == null)
+            return false;
+        return friend.ThreatensWith(opponent, friend.GetEquippedWeapon()) || opponent.ThreatensWith(friend, opponent.GetEquippedWeapon());
     }
 
     /// <summary>

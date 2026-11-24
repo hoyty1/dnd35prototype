@@ -342,8 +342,11 @@ public sealed class ConfusedBehaviorController
         return best;
     }
 
-    /// <summary>Whether <paramref name="actor"/>'s main weapon is a ranged one a prone attacker cannot use (PHB p.311: every ranged weapon but a crossbow).</summary>
-    private static bool ProneBarsMainWeapon(CharacterController actor)
+    /// <summary>
+    /// Whether <paramref name="actor"/>'s main weapon is a ranged one a prone attacker cannot use (PHB p.311: every ranged
+    /// weapon but a crossbow). Also read by the AI's prone start (AIService.PlannedActionWorksProne, batch 14 step 13).
+    /// </summary>
+    internal static bool ProneBarsMainWeapon(CharacterController actor)
     {
         ItemData weapon = actor != null ? actor.GetEquippedMainWeapon() : null;
         return weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && !weapon.IsCrossbowWeapon;

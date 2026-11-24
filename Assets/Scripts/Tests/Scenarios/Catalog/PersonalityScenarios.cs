@@ -63,6 +63,15 @@ namespace Tests.Scenarios
     /// provokes, even for the critical kobold; rules/ai-healer-no-spell-no-approach, the goblin adept, with no spells before
     /// batch 15, makes no Healing turn and never approaches. The expectations read the "HealerApproach" rows of the decision
     /// trace (outside the hash) besides the hashed moves, casts and AoOs.</para>
+    /// <para>Step 13 (aid another, total defense and posture; AI-063, D3-D5): rules/ai-weak-attacker-aids-offense, a goblin that
+    /// hits the armoured fighter only on a 20 aids the ogre's attack instead; rules/ai-strong-attacker-attacks, the ogre
+    /// attacks; rules/ai-aids-defense-badly-hurt-ally, a goblin with a longspear aids the defense of its badly hurt ally the
+    /// fighter is engaging; rules/ai-total-defense-only-when-reachable (and its "-reachable" and "-charge" twins), total
+    /// defense out of reach only when a foe can reach the creature, by a move or a charge; rules/ai-prone-caster-stays-prone
+    /// (and its "-archer-close" twin), a prone caster facing an archer stays down and casts, and is not stood up again by
+    /// the move after its cast; rules/ai-prone-melee-stands, a prone melee goblin stands as before;
+    /// rules/ai-prone-healer-stands-to-cure, a prone Healer whose cure needs a step stands and cures. The expectations read the
+    /// "MeleeTurnOption" and "ProneStart" rows of the decision trace besides the hashed aid, attacks, casts and conditions.</para>
     /// </summary>
     public static class PersonalityScenarios
     {
@@ -113,6 +122,16 @@ namespace Tests.Scenarios
             yield return S("ai-healer-hurt-ally-no-aoo", AiHealerHurtAllyNoAoO);
             yield return S("ai-healer-cowardly-skips-aoo-approach", AiHealerCowardlySkipsAoOApproach);
             yield return S("ai-healer-no-spell-no-approach", AiHealerNoSpellNoApproach);
+            yield return S("ai-weak-attacker-aids-offense", AiWeakAttackerAidsOffense);
+            yield return S("ai-strong-attacker-attacks", AiStrongAttackerAttacks);
+            yield return S("ai-aids-defense-badly-hurt-ally", AiAidsDefenseBadlyHurtAlly);
+            yield return S("ai-total-defense-only-when-reachable", () => AiTotalDefenseOnlyWhenReachable(19));
+            yield return S("ai-total-defense-only-when-reachable-reachable", () => AiTotalDefenseOnlyWhenReachable(7));
+            yield return S("ai-total-defense-only-when-reachable-charge", () => AiTotalDefenseOnlyWhenReachable(11));
+            yield return S("ai-prone-caster-stays-prone", () => AiProneCasterStaysProne(18));
+            yield return S("ai-prone-caster-stays-prone-archer-close", () => AiProneCasterStaysProne(12));
+            yield return S("ai-prone-melee-stands", AiProneMeleeStands);
+            yield return S("ai-prone-healer-stands-to-cure", AiProneHealerStandsToCure);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("PersonalityScenarios rules/" + name, build);
@@ -1787,6 +1806,265 @@ namespace Tests.Scenarios
                     int d = FinalDistance(v, "adept", "gob");
                     return d >= 3 ? ExpectResult.Pass("distance " + d) : ExpectResult.Fail("distance " + d);
                 })
+                .Build();
+        }
+
+        // ── Batch 14 step 13: aid another, total defense and posture (AI-063, batch 13's C5; D3-D5, C8) ──
+
+        /// <summary>Puts <paramref name="weapon"/> in <paramref name="c"/>'s right hand and empties the left (with <paramref name="ammo"/> pieces of ammunition when given).</summary>
+        private static void Hold(CharacterController c, ItemData weapon, DND35e.Identifiers.ItemID? ammo = null, int ammoCount = 20)
+        {
+            global::Inventory inv = c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+            if (inv == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no inventory");
+            inv.RightHandSlot = null;
+            inv.LeftHandSlot = null;
+            inv.DirectEquip(weapon, EquipSlot.RightHand);
+            if (ammo.HasValue)
+            {
+                ItemData pieces = ItemDatabase.CloneItem(ammo.Value);
+                pieces.Quantity = ammoCount;
+                inv.AddItem(pieces);
+            }
+            inv.RecalculateStats();
+        }
+
+        private static ItemData Longspear()
+        {
+#pragma warning disable CS0618 // the longspear has no ItemID value; the string id is the only key
+            return ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.LONGSPEAR);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>An archer's longbow and 20 arrows in <paramref name="c"/>'s hands (a foe that attacks at range, PHB p.311).</summary>
+        private static void Longbow(CharacterController c)
+            => Hold(c, ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponLongbow), DND35e.Identifiers.ItemID.AmmoArrow, 20);
+
+        /// <summary>One "MeleeTurnOption" decision-trace row (AIService.ChooseMeleeTurnOptionForAI) chose <paramref name="chosen"/>.</summary>
+        private static Func<TraceView, ExpectResult> MeleeTurnRow(string chosen)
+            => v =>
+            {
+                List<global::AiDecisionTrace.Decision> rows = TraceRows("MeleeTurnOption");
+                global::AiDecisionTrace.Decision hit = rows.FirstOrDefault(d => d.Chosen == chosen);
+                return hit != null
+                    ? ExpectResult.Pass(rows.Count + " MeleeTurnOption row(s), one " + chosen + " [" + hit.Reason + "]")
+                    : rows.Count > 0
+                        ? ExpectResult.Fail("chose " + rows[0].Chosen + " [" + rows[0].Reason + "]")
+                        : MissingRow("MeleeTurnOption", 0, "chose " + chosen);
+            };
+
+        /// <summary>One "ProneStart" decision-trace row (AIService.ChooseProneStartForAI) chose <paramref name="chosen"/>.</summary>
+        private static Func<TraceView, ExpectResult> ProneStartRow(string chosen, string reasonPart = null)
+            => v =>
+            {
+                List<global::AiDecisionTrace.Decision> rows = TraceRows("ProneStart");
+                global::AiDecisionTrace.Decision hit = rows.FirstOrDefault(d => d.Chosen == chosen && (reasonPart == null || (d.Reason ?? "").Contains(reasonPart)));
+                return hit != null
+                    ? ExpectResult.Pass("ProneStart " + chosen + " [" + hit.Reason + "]")
+                    : rows.Count > 0
+                        ? ExpectResult.Fail("chose " + rows[0].Chosen + " [" + rows[0].Reason + "]")
+                        : MissingRow("ProneStart", 0, "chose " + chosen);
+            };
+
+        /// <summary>
+        /// The melee layout of the aid scenarios: an idle fighter 3 at (10,10), an AI-run or idle goblin warrior with only a
+        /// morningstar beside it at (11,10), and an ogre (Large, 10-foot reach) beside it on the other side at (8,10); one
+        /// round, everyone sturdy. <paramref name="heroArmor"/> is natural armor added to the fighter.
+        /// </summary>
+        private static ScenarioBuilder AidLayout(string id, string title, bool goblinActs, int heroArmor)
+        {
+            return Rules(id, title)
+                .Covers("AI-063", "PHB p.154", "PHB p.142", "batch 14 step 13")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 10, Control.Idle)
+                .Npc("gob", "goblin_warrior", 11, 10, goblinActs ? Control.Ai : Control.Idle)
+                .Npc("ogre", "ogre", 8, 10, goblinActs ? Control.Idle : Control.Ai)
+                .Tweak("hero", c => { Sturdy(c); c.Stats.NaturalArmorBonus += heroArmor; })
+                .Tweak("gob", c => { Sturdy(c); MorningstarOnly(c); })
+                .Tweak("ogre", Sturdy)
+                .Initiative(goblinActs ? "gob" : "ogre", "hero", goblinActs ? "ogre" : "gob");
+        }
+
+        /// <summary>
+        /// D3 (PHB p.154; batch 14 step 13, C8): the goblin hits the fighter (given +6 natural armor, AC 23) only on a natural 20,
+        /// so its attack is worth little, while its aid roll against AC 10 lands two times in three and +2 lifts the ogre's
+        /// big hits by a tenth: aid offense beats the attack by the margin max(0.5, 0.15 S), and beats total defense (the
+        /// fighter threatens only the goblin, but the goblin's hit points are worth what little it deals with them, the
+        /// exchange rate of TurnOptionValue.TotalDefense). The goblin aids the ogre and does not attack.
+        /// </summary>
+        private static ScenarioDef AiWeakAttackerAidsOffense()
+        {
+            return AidLayout("rules/ai-weak-attacker-aids-offense", "A weak AI attacker aids its strong ally's attack instead of swinging (PHB p.154, D3)",
+                    goblinActs: true, heroArmor: 6)
+                .Expect("The decision trace records AidOffense", MeleeTurnRow("AidOffense"))
+                .Expect("The goblin aids the ogre's attack on the fighter", v =>
+                    v.Log("'s offense vs Hero").Count == 1 ? ExpectResult.Pass("aided") : ExpectResult.Fail(v.Log("aids").Count + " aid line(s)"))
+                .Expect("The goblin makes no attack in round 1", v =>
+                {
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "gob");
+                    return attacks.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(attacks.Count + " attack(s)", attacks[0].Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// D3 (batch 14 step 13): the same melee without the fighter's extra armor, the ogre acting: its own full attack is
+        /// worth far more than +2 on the goblin's next swing, so it attacks, as before the step.
+        /// </summary>
+        private static ScenarioDef AiStrongAttackerAttacks()
+        {
+            return AidLayout("rules/ai-strong-attacker-attacks", "A strong AI attacker attacks rather than aid a weak ally (PHB p.154, D3)",
+                    goblinActs: false, heroArmor: 0)
+                .Expect("The decision trace records Attack", MeleeTurnRow("Attack"))
+                .Expect("The ogre attacks the fighter in round 1", v =>
+                    FirstRoundAttacks(v, "ogre").Count >= 1 ? ExpectResult.Pass("attacked") : ExpectResult.Fail("no attack"))
+                .Expect("Nobody aids another", v => v.Log("'s offense vs").Count + v.Log("'s defense vs").Count == 0
+                    ? ExpectResult.Pass("no aid") : ExpectResult.Fail("an aid line"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D3 (PHB p.154; batch 14 step 13): a goblin with a longspear (10-foot reach, PHB p.113) stands two squares from the
+        /// fighter (+12 natural armor), behind its badly hurt ally (2 of 6 hit points) that fights the fighter. The fighter
+        /// threatens only the hurt goblin, so its next attack is the ally's, and one average hit drops it (the drop weight):
+        /// aid defense (+2 AC against the fighter's next attack) beats the spearman's natural-20 attack and its total
+        /// defense (worth nothing: nobody threatens it while the fighter is engaged). It aids its ally's defense.
+        /// </summary>
+        private static ScenarioDef AiAidsDefenseBadlyHurtAlly()
+        {
+            return Rules("rules/ai-aids-defense-badly-hurt-ally", "An AI creature aids the defense of a badly hurt ally the foe is attacking (PHB p.154, D3)")
+                .Covers("AI-063", "PHB p.154", "PHB p.113", "batch 14 step 13")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 10, 10, Control.Idle)
+                .Npc("gob", "goblin_warrior", 11, 10, Control.Idle)
+                .Npc("spear", "goblin_warrior", 12, 10, Control.Ai)
+                .Tweak("hero", c => { Sturdy(c); c.Stats.NaturalArmorBonus += 12; })
+                .Tweak("gob", c => { MorningstarOnly(c); SetHp(c, 6, 2); })
+                .Tweak("spear", c => { Sturdy(c); Hold(c, Longspear()); })
+                .Initiative("spear", "hero", "gob")
+                .Expect("The decision trace records AidDefense", MeleeTurnRow("AidDefense"))
+                .Expect("The spearman aids the hurt goblin's defense against the fighter", v =>
+                    v.Log("'s defense vs Hero").Count == 1 ? ExpectResult.Pass("aided") : ExpectResult.Fail(v.Log("aids").Count + " aid line(s)"))
+                .Expect("The spearman makes no attack in round 1", v =>
+                {
+                    List<TraceEvent> attacks = FirstRoundAttacks(v, "spear");
+                    return attacks.Count == 0 ? ExpectResult.Pass("no attack") : ExpectResult.Fail(attacks.Count + " attack(s)", attacks[0].Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-063 (batch 14 step 13): a goblin adept with only a morningstar on a test Role whose out-of-reach list is total
+        /// defense alone. With the idle fighter 17 squares off (<paramref name="heroX"/> 19) nobody can reach it next round,
+        /// even by a charge (twice its speed, PHB p.154), so it takes no total defense (before the step it stood in total
+        /// defense against nobody); in the "-reachable" twin the fighter stands 5 squares off, within a move and its reach,
+        /// and in the "-charge" twin 9 squares off, beyond one move but within a charge (batch 14 step 13 review): it takes
+        /// total defense in both (PHB p.142).
+        /// </summary>
+        private static ScenarioDef AiTotalDefenseOnlyWhenReachable(int heroX)
+        {
+            bool reachable = heroX != 19;
+            string id = "rules/ai-total-defense-only-when-reachable" + (heroX == 7 ? "-reachable" : heroX == 11 ? "-charge" : "");
+            ScenarioBuilder b = Rules(id, heroX == 11
+                    ? "Out of reach, an AI creature a foe can charge takes total defense (PHB p.142, p.154, AI-063)"
+                    : reachable
+                    ? "Out of reach, an AI creature a foe can reach takes total defense (PHB p.142, AI-063)"
+                    : "Out of reach, an AI creature no foe can reach takes no total defense (PHB p.142, AI-063)")
+                .Covers("AI-063", "PHB p.142", "batch 14 step 13")
+                .MaxRounds(1)
+                .Npc("npc", "goblin_adept", 2, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), heroX, 10, Control.Idle)
+                .Profile("npc", () => OutOfReachRole(OutOfReachAlternative.TotalDefense))
+                .Tweak("npc", c => { Sturdy(c); MorningstarOnly(c); })
+                .Tweak("hero", Sturdy)
+                .Initiative("npc", "hero");
+            b.Personality("npc", "");
+            ExpectNoCast(b, "npc");
+            return b
+                .Expect(reachable ? "It takes total defense" : "It takes no total defense", v =>
+                {
+                    int defense = v.Log("Goblin Adept takes total defense").Count;
+                    return defense == (reachable ? 1 : 0) ? ExpectResult.Pass(defense + " total defense") : ExpectResult.Fail(defense + " total defense");
+                })
+                .Expect("It does not move", v =>
+                {
+                    int moved = v.Moves("npc", 1).Sum(e => e.Int("sq"));
+                    return moved == 0 ? ExpectResult.Pass("no move") : ExpectResult.Fail("moved " + moved);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (PHB p.311, p.141; batch 14 step 13, C8): the arcane missile adept (Evoker Role) starts prone, eight squares
+        /// from an idle fighter with a longbow (<paramref name="heroX"/> 18), who threatens it neither now nor after a move.
+        /// Its cast works prone and prone gives +4 AC against the arrows, so it stays down and casts (before the step it stood
+        /// up first). In the "-archer-close" twin the archer stands 2 squares off, within the kiter's keep-away distance: the
+        /// move after the cast wishes to keep its distance, but a creature that chose to stay prone is not stood up again
+        /// (AfterStandardActionContext.StayingProne, batch 14 step 13 review).
+        /// </summary>
+        private static ScenarioDef AiProneCasterStaysProne(int heroX)
+        {
+            string id = "rules/ai-prone-caster-stays-prone" + (heroX == 18 ? "" : "-archer-close");
+            return Rules(id, heroX == 18
+                    ? "A prone AI caster facing an archer stays prone and casts (PHB p.311, D5)"
+                    : "A prone AI caster with an archer close by stays prone after its cast (PHB p.311, D5)")
+                .Covers("PHB p.311", "PHB p.141", "batch 14 step 13")
+                .MaxRounds(1)
+                .Npc("adept", "arcane_missile_adept", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), heroX, 10, Control.Idle)
+                .StartCondition("adept", CombatConditionType.Prone, -1)
+                .Tweak("adept", Sturdy)
+                .Tweak("hero", c => { Sturdy(c); Longbow(c); })
+                .Initiative("adept", "hero")
+                .Expect("The decision trace records StayProne", ProneStartRow("StayProne"))
+                .Expect("It casts in round 1", v => FirstCast(v, "adept") != null ? ExpectResult.Pass("cast") : ExpectResult.Fail("no cast"))
+                .Expect("It does not stand up", Expect.None("cond", e => e.Str("actor") == "adept"
+                    && e.Get("type") is CombatConditionType t && t == CombatConditionType.Prone && !e.Bool("added")))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (PHB p.141, Table 8-2; batch 14 step 13): a prone goblin warrior (a melee Role) facing the same archer six
+        /// squares off stands up as before: its attack does not work as well prone (-4, PHB p.311) and it must move to reach
+        /// the fighter.
+        /// </summary>
+        private static ScenarioDef AiProneMeleeStands()
+        {
+            return Rules("rules/ai-prone-melee-stands", "A prone AI melee creature stands up as before (PHB p.141, D5)")
+                .Covers("PHB p.141", "PHB p.311", "batch 14 step 13")
+                .MaxRounds(1)
+                .Npc("gob", "goblin_warrior", 10, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Hero", 3)), 16, 10, Control.Idle)
+                .StartCondition("gob", CombatConditionType.Prone, -1)
+                .Tweak("gob", c => { Sturdy(c); MorningstarOnly(c); })
+                .Tweak("hero", c => { Sturdy(c); Longbow(c); })
+                .Initiative("gob", "hero")
+                .Expect("The decision trace records StandUp (its planned action does not work prone)", ProneStartRow("StandUp", "worksProne=False"))
+                .Expect("It stands up in round 1", v =>
+                    v.Conds("gob", CombatConditionType.Prone).Any(e => !e.Bool("added") && e.Round == 1)
+                        ? ExpectResult.Pass("stood up") : ExpectResult.Fail("still prone"))
+                .Build();
+        }
+
+        /// <summary>
+        /// D5 (batch 14 step 13 review; PHB p.141, p.215): the Healer cleric of the healer layout starts prone, unthreatened,
+        /// an idle archer (the fighter with a longbow) 8 squares off and its wounded kobold ally 2 squares off. Its Healing
+        /// turn's cure is a touch that needs a step (PHB p.175), which a prone creature cannot take, so its plan does not
+        /// work prone (AIService.PlannedActionWorksProne): it stands up, as before the step, and cures the kobold.
+        /// </summary>
+        private static ScenarioDef AiProneHealerStandsToCure()
+        {
+            return HealerLayout("rules/ai-prone-healer-stands-to-cure",
+                    "A prone AI healer with a wounded ally close by stands up and cures it (PHB p.141, D5)",
+                    (10, 10), (12, 10), 10, (10, 18))
+                .Covers("PHB p.311", "batch 14 step 13")
+                .StartCondition("cleric", CombatConditionType.Prone, -1)
+                .Tweak("hero", c => { Sturdy(c); Longbow(c); })
+                .Expect("The decision trace records StandUp (its plan does not work prone)", ProneStartRow("StandUp", "worksProne=False"))
+                .Expect("It stands up in round 1", v =>
+                    v.Conds("cleric", CombatConditionType.Prone).Any(e => !e.Bool("added") && e.Round == 1)
+                        ? ExpectResult.Pass("stood up") : ExpectResult.Fail("still prone"))
+                .Expect("It casts Cure Light Wounds on the kobold", Expect.Count("cast", CureOn("cleric", "kobold"), 1, 1))
                 .Build();
         }
 

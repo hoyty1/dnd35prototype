@@ -1447,7 +1447,14 @@ namespace Tests.AI
             CharacterController cleric = TestHelpers.CreateCleric("Healer_CureSlots", level: 5);
             try
             {
+                // TestHelpers.CreateCleric adds no SpellcastingComponent; give it one with its class slots, as
+                // ClericSpellcastingRulesTests does (fixture fix, batch 14 step 13: the step 12 review's first Play pass).
                 SpellcastingComponent sc = cleric.Spellcasting;
+                if (sc == null)
+                {
+                    sc = cleric.gameObject.AddComponent<SpellcastingComponent>();
+                    sc.Init(cleric.Stats);
+                }
                 if (sc == null || sc.SpellSlots == null || sc.SpellSlots.Count == 0)
                 {
                     Assert(false, "A cleric 5 has spell slots", "");

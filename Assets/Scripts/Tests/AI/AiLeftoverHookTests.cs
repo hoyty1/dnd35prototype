@@ -18,7 +18,11 @@ namespace Tests.AI
 /// would close in (Retreat .8 against Approach -.5) and Berserker closes in where the Role would back away (Approach .6
 /// against Retreat -.8), with the starter scores pinned. Batch 14 step 12 (AI-047, C8): the healer's approach
 /// (AIProfile.DefaultChooseHealerApproach, pinned in AIProfileFrameworkTests) and its tilt (AiBlend.HealerApproach): no
-/// personality and Cowardly keep the Role's choice, a Healer trait keeps a move-and-cure and a partial approach. Pure:
+/// personality and Cowardly keep the Role's choice, a Healer trait keeps a move-and-cure and a partial approach. Batch 14 step
+/// 13 (AI-063, D3-D5, C8): the melee turn's option (TurnOptionValue's aid offense, aid defense and total defense formulas
+/// and their starter constants; AIProfile.DefaultChooseMeleeTurnOption: the attack unless an open alternative beats it by
+/// max(0.5, 0.15 S), total defense only when a foe can reach; AiBlend.MeleeTurn: Cowardly takes total defense, Berserker
+/// keeps the attack, Healer aids) and the prone start (AIProfile.DefaultChooseProneStart). Pure:
 /// contexts are filled by hand. Either mode.
 /// </summary>
 public static class AiLeftoverHookTests
@@ -37,6 +41,10 @@ public static class AiLeftoverHookTests
         TestNoPersonalityKeepsRole();
         TestCowardlyAndBerserkerReorder();
         TestHealerApproachTilt();
+        TestMeleeTurnOptionFormulas();
+        TestMeleeTurnOptionDefault();
+        TestMeleeTurnOptionTilt();
+        TestProneStartDefault();
 
         Debug.Log($"====== AI Leftover Hook Results: {_passed} passed, {_failed} failed ======");
     }
@@ -92,6 +100,10 @@ public static class AiLeftoverHookTests
         Expect("prone melee, focus in reach", Ctx(CombatStyle.Melee, prone: true), AfterStandardActionChoice.Stay);
         Expect("prone caster, threatened, can fight from range: stays down (standing provokes, gains no distance)",
             Ctx(CombatStyle.Ranged, casting: true, prone: true, near: true, threatened: true, ranged: true), AfterStandardActionChoice.Stay);
+        // Batch 14 step 13 review: a creature that chose at its turn start to stay prone is not stood up by a KeepDistance wish.
+        AfterStandardActionContext stayed = Ctx(CombatStyle.Ranged, casting: true, prone: true, near: true, ranged: true);
+        stayed.StayingProne = true;
+        Expect("prone caster that chose to stay prone, foe close, can fight from range: stays down", stayed, AfterStandardActionChoice.Stay);
     }
 
     private static void TestShippedProfilesUseTheDefault()
@@ -237,6 +249,181 @@ public static class AiLeftoverHookTests
         Assert(AiBlend.AfterStandardAction(coward, AfterStandardActionChoice.Stay, noMove) == AfterStandardActionChoice.Stay
                && AiBlend.AfterStandardAction(berserker, AfterStandardActionChoice.Stay, noMove) == AfterStandardActionChoice.Stay,
             "no move left: Cowardly and Berserker stay");
+    }
+    // ── Batch 14 step 13: aid another, total defense and posture (AI-063, D3-D5, C8) ──
+
+    private static bool Near(float a, float b) => Mathf.Abs(a - b) < 0.001f;
+
+    private static void TestMeleeTurnOptionFormulas()
+    {
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.DropWeight, 2f) && DND35.AI.Valuation.TurnOptionValue.AidBonus == 2
+               && DND35.AI.Valuation.TurnOptionValue.TotalDefenseBonus == 4 && DND35.AI.Valuation.TurnOptionValue.AidRollAC == 10,
+            "starter constants: drop weight 2; aid +2 against AC 10 (PHB p.154); total defense +4 (PHB p.142)");
+        // Aid roll +2 against AC 10: 0.65; the ally +4 against AC 18: 0.35, at +6 0.45; 9 damage: 0.65 * 0.1 * 9 = 0.585.
+        float offense = DND35.AI.Valuation.TurnOptionValue.AidOffense(2, 4, 18, 9f);
+        Assert(Near(offense, 0.585f), "aid offense: P(aid) x (H(ally+2) - H(ally)) x D_ally", "got " + offense);
+        // A clamped hit chance gains nothing: the ally needs a 20 at AC 40 with or without +2.
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.AidOffense(2, 4, 40, 9f), 0f), "aid offense: a natural-20-only ally gains nothing");
+        // The opponent +8 against the ally's AC 15: 0.7, at AC 17 0.6; 11 damage, share 1, drop weight 2: 0.65 * 0.1 * 11 * 2 = 1.43.
+        float defense = DND35.AI.Valuation.TurnOptionValue.AidDefense(2, 8, 15, 11f, 1f, 2f);
+        Assert(Near(defense, 1.43f), "aid defense: P(aid) x lost hits at +2 AC x D x share x drop weight", "got " + defense);
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.AidDefense(2, 8, 15, 11f, 0.5f, 1f), 0.3575f), "aid defense: half share, no drop weight");
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.TotalDefensePart(4.9f, 3.4f, 0.5f, 1f), 0.75f), "total defense: (damage at AC - at AC+4) x share x drop weight");
+        // The exchange rate (Q9 default): 0.75 kept off of 2.45 incoming by a creature whose attack is worth 0.18: 0.75 x 0.18 / 2.45.
+        float total = DND35.AI.Valuation.TurnOptionValue.TotalDefense(0.75f, 2.45f, 0.18f);
+        Assert(Near(total, 0.0551f), "total defense: the damage kept off x the creature's attack value per hit point it takes", "got " + total);
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.TotalDefense(1.5f, 1f, 2f), 1.5f) && Near(DND35.AI.Valuation.TurnOptionValue.TotalDefense(1.5f, 0f, 2f), 0f),
+            "total defense: the exchange rate is at most 1; nothing incoming is worth 0");
+        Assert(Near(DND35.AI.Valuation.TurnOptionValue.DropWeightFor(9f, 9), 2f) && Near(DND35.AI.Valuation.TurnOptionValue.DropWeightFor(9f, 10), 1f),
+            "drop weight: 2 when one average hit drops the creature, else 1");
+        var ctx = new MeleeTurnOptionContext { AttackValue = 2f };
+        var big = new MeleeTurnOptionContext { AttackValue = 10f };
+        Assert(Near(ctx.Margin, 0.5f) && Near(big.Margin, 1.5f), "margin: max(0.5, 0.15 S)");
+
+        // The Q9 default's bound (batch 14 step 13 review): with every drop weight 1 the damage kept off is at most the incoming
+        // damage, so total defense is worth at most S and never reaches the threshold S + max(0.5, 0.15 S); with the drop
+        // weight it can pass only when +4 AC removes at least 57.5% of the incoming damage (2 x 0.575 = 1.15).
+        bool bounded = true;
+        bool belowThreshold = true;
+        foreach (float s in new[] { 0.1f, 0.5f, 1f, 2f, 4f, 10f })
+            foreach (float incoming in new[] { 0.2f, 1f, 3f, 8f, 20f })
+                foreach (float removed in new[] { 0f, 0.25f, 0.5f, 0.575f, 0.75f, 1f })
+                {
+                    float plain = DND35.AI.Valuation.TurnOptionValue.TotalDefense(removed * incoming, incoming, s);
+                    bounded &= plain <= s + 1e-4f;
+                    var turn = new MeleeTurnOptionContext { AttackValue = s };
+                    belowThreshold &= plain < s + turn.Margin;
+                    if (removed < 0.575f)
+                        belowThreshold &= DND35.AI.Valuation.TurnOptionValue.TotalDefense(2f * removed * incoming, incoming, s) < s + turn.Margin;
+                }
+        Assert(bounded, "total defense (Q9 default): at most S when no drop weight applies");
+        Assert(belowThreshold, "total defense (Q9 default): below the attack's threshold without a drop weight, or with one when +4 AC removes under 57.5%");
+        // A near-dropped creature (drop weight 2) whose foe hits on 15+ (0.3, at +4 AC 19+, 0.1: two thirds removed), S 4, 4.8 incoming:
+        // 2 x 3.2 x 4 / 4.8 = 5.33 >= 4 + 0.6.
+        float nearDropped = DND35.AI.Valuation.TurnOptionValue.TotalDefense(2f * 3.2f, 4.8f, 4f);
+        Assert(nearDropped >= 4f + new MeleeTurnOptionContext { AttackValue = 4f }.Margin, "total defense (Q9 default): the near-dropped creature against high-roll hits passes", "got " + nearDropped);
+    }
+
+    private static MeleeTurnOptionContext Turn(float s, float offense = -1f, float defense = -1f, float total = -1f, bool reach = true)
+        => new MeleeTurnOptionContext
+        {
+            AttackValue = s,
+            CanAidOffense = offense >= 0f, AidOffenseValue = Mathf.Max(0f, offense),
+            CanAidDefense = defense >= 0f, AidDefenseValue = Mathf.Max(0f, defense),
+            CanTotalDefense = total >= 0f, TotalDefenseValue = Mathf.Max(0f, total), FoeCanReach = reach
+        };
+
+    private static void ExpectTurn(string name, MeleeTurnOptionContext ctx, MeleeTurnOption expected)
+    {
+        MeleeTurnOption got = AIProfile.DefaultChooseMeleeTurnOption(ctx);
+        Assert(got == expected, "melee turn default: " + name + " -> " + expected, "got " + got);
+    }
+
+    private static void TestMeleeTurnOptionDefault()
+    {
+        ExpectTurn("no alternative", Turn(1f), MeleeTurnOption.Attack);
+        ExpectTurn("aid offense below S + 0.5", Turn(1f, offense: 1.4f), MeleeTurnOption.Attack);
+        ExpectTurn("aid offense at S + 0.5", Turn(1f, offense: 1.5f), MeleeTurnOption.AidOffense);
+        ExpectTurn("a strong attack keeps the attack (margin 0.15 S)", Turn(10f, offense: 11.2f, defense: 11f, total: 11.4f), MeleeTurnOption.Attack);
+        ExpectTurn("the best alternative wins", Turn(0.2f, offense: 0.8f, defense: 1.2f, total: 0.9f), MeleeTurnOption.AidDefense);
+        ExpectTurn("total defense when a foe can reach", Turn(0.5f, total: 1.2f), MeleeTurnOption.TotalDefense);
+        ExpectTurn("no total defense when no foe can reach (AI-063)", Turn(0.5f, total: 5f, reach: false), MeleeTurnOption.Attack);
+        ExpectTurn("ties go to aid offense", Turn(0f, offense: 1f, defense: 1f, total: 1f), MeleeTurnOption.AidOffense);
+        Assert(!Turn(0f, total: 5f, reach: false).IsOpen(MeleeTurnOption.TotalDefense) && Near(Turn(0f, total: 5f, reach: false).ValueOf(MeleeTurnOption.TotalDefense), 0f),
+            "total defense is closed and worth 0 when no foe can reach");
+
+        var profiles = new List<AIProfile>();
+        try
+        {
+            profiles.Add(AIProfile.CreateRuntime<HumanoidAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<HealerAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<EvokerAIProfile>());
+            profiles.Add(AIProfile.CreateRuntime<DragonAIProfile>());
+            var turns = new[] { Turn(1f), Turn(0.2f, offense: 0.8f, defense: 1.2f, total: 0.9f), Turn(0.5f, total: 5f, reach: false) };
+            var prones = new[] { Prone(), Prone(threatened: true), Prone(reachable: true, crawl: true) };
+            foreach (AIProfile p in profiles)
+            {
+                bool same = true;
+                foreach (MeleeTurnOptionContext c in turns)
+                    same &= p.ChooseMeleeTurnOption(null, c) == AIProfile.DefaultChooseMeleeTurnOption(c);
+                foreach (ProneStartContext c in prones)
+                    same &= p.ChooseProneStart(null, c) == AIProfile.DefaultChooseProneStart(c);
+                Assert(same, p.GetType().Name + ".ChooseMeleeTurnOption and ChooseProneStart equal the defaults");
+            }
+        }
+        finally
+        {
+            foreach (AIProfile p in profiles)
+                if (p != null)
+                    Object.DestroyImmediate(p);
+        }
+    }
+
+    private static void TestMeleeTurnOptionTilt()
+    {
+        var weakAgainstStrong = Turn(1f, total: 1.3f);
+        Assert(AiBlend.MeleeTurn((PersonalityProfile)null, MeleeTurnOption.Attack, weakAgainstStrong) == MeleeTurnOption.Attack
+               && AiBlend.MeleeTurn((CharacterController)null, MeleeTurnOption.TotalDefense, Turn(0.2f, total: 1.3f)) == MeleeTurnOption.TotalDefense,
+            "melee turn: no personality keeps the Role's choice");
+        Assert(AiBlend.RolesOf(MeleeTurnOption.Attack) == ActionRoles.Attack && AiBlend.RolesOf(MeleeTurnOption.AidOffense) == ActionRoles.Support
+               && AiBlend.RolesOf(MeleeTurnOption.AidDefense) == (ActionRoles.Support | ActionRoles.Defend)
+               && AiBlend.RolesOf(MeleeTurnOption.TotalDefense) == ActionRoles.Defend && Near(AiBlend.MeleeTurnDesireGain, 0.5f),
+            "melee turn roles: Attack, Support, Support and Defend, Defend; the desire gain is 0.5 (starter constant)");
+
+        PersonalityProfile coward = P("Cowardly:1");
+        PersonalityProfile berserker = P("Berserker:1");
+        PersonalityProfile healer = P("Healer:1");
+        PersonalityProfile smart = P("Smart:1");
+        Assert(coward != null && berserker != null && healer != null && smart != null, "the melee turn test personalities build");
+        if (coward == null || berserker == null || healer == null || smart == null)
+            return;
+        MeleeTurnOption role = AIProfile.DefaultChooseMeleeTurnOption(weakAgainstStrong);
+        Assert(role == MeleeTurnOption.Attack, "S 1, total defense 1.3: the Role attacks (1.3 < 1.5)");
+        // Cowardly: the attack 1 x (1 - 0.1) = 0.9, total defense 1.3 x 1.25 = 1.625 >= 0.9 + 0.5. (Hand-filled: under the Q9
+        // default a total defense above S needs a drop weight, a creature one average hit drops; TestMeleeTurnOptionFormulas.)
+        Assert(AiBlend.MeleeTurn(coward, role, weakAgainstStrong) == MeleeTurnOption.TotalDefense, "Cowardly takes total defense instead");
+        Assert(AiBlend.MeleeTurn(berserker, role, weakAgainstStrong) == MeleeTurnOption.Attack, "Berserker attacks as the Role does");
+        Assert(AiBlend.MeleeTurn(smart, role, weakAgainstStrong) == MeleeTurnOption.Attack, "Smart, naming no desire, keeps the Role's attack");
+        // Berserker against the Role's total defense (S 0.2, total defense 1.3): 0.2 x 1.3 = 0.26 against 1.3 x 0.7 = 0.91: kept.
+        var hopeless = Turn(0.2f, total: 1.3f);
+        Assert(AIProfile.DefaultChooseMeleeTurnOption(hopeless) == MeleeTurnOption.TotalDefense
+               && AiBlend.MeleeTurn(berserker, MeleeTurnOption.TotalDefense, hopeless) == MeleeTurnOption.TotalDefense,
+            "a hopeless attack: the Role's total defense, which Berserker keeps (the attack does not beat it by the margin)");
+        // Healer: aid offense 1.2 x 1.3 = 1.56 >= 1 + 0.5.
+        var aid = Turn(1f, offense: 1.2f);
+        Assert(AIProfile.DefaultChooseMeleeTurnOption(aid) == MeleeTurnOption.Attack && AiBlend.MeleeTurn(healer, MeleeTurnOption.Attack, aid) == MeleeTurnOption.AidOffense,
+            "Healer aids where the Role would attack (Support .6)");
+        // No foe can reach: total defense stays closed for every personality.
+        Assert(AiBlend.MeleeTurn(coward, MeleeTurnOption.Attack, Turn(0.1f, total: 9f, reach: false)) == MeleeTurnOption.Attack,
+            "Cowardly takes no total defense when no foe can reach it");
+    }
+
+    private static ProneStartContext Prone(bool threatened = false, bool works = true, bool ranged = true, bool reachable = false, bool crawl = false)
+        => new ProneStartContext
+        {
+            Threatened = threatened,
+            PlannedActionWorksProne = works,
+            RangedFoeInView = ranged,
+            SquareReachableNextTurn = reachable,
+            CanCrawl = crawl,
+            CrawlSquare = crawl ? new Vector2Int(1, 0) : (Vector2Int?)null
+        };
+
+    private static void ExpectProne(string name, ProneStartContext c, ProneStartChoice expected)
+    {
+        ProneStartChoice got = AIProfile.DefaultChooseProneStart(c);
+        Assert(got == expected, "prone start default: " + name + " -> " + expected, "got " + got);
+    }
+
+    private static void TestProneStartDefault()
+    {
+        ExpectProne("unthreatened caster, a foe at range", Prone(), ProneStartChoice.StayProne);
+        ExpectProne("threatened", Prone(threatened: true), ProneStartChoice.StandUp);
+        ExpectProne("its planned action needs standing", Prone(works: false), ProneStartChoice.StandUp);
+        ExpectProne("no foe attacks at range", Prone(ranged: false), ProneStartChoice.StandUp);
+        ExpectProne("a foe could reach it and a safe square is a crawl away", Prone(reachable: true, crawl: true), ProneStartChoice.Crawl);
+        ExpectProne("a foe could reach it and no safe square", Prone(reachable: true), ProneStartChoice.StayProne);
+        ExpectProne("nobody could reach it: no crawl", Prone(crawl: true), ProneStartChoice.StayProne);
     }
 }
 }

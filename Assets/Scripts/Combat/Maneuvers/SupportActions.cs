@@ -169,7 +169,7 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Get all allies (excluding initiator) that are within melee threat range of the selected enemy.
+    /// Get all allies (excluding initiator) in melee with the selected enemy (either threatens the other, IsEngagedInMelee).
     /// </summary>
     private List<CharacterController> GetAlliesInMeleeRange(CharacterController target, CharacterController excludeInitiator)
     {
@@ -184,8 +184,9 @@ public partial class GameManager
             if (ally == null || ally == excludeInitiator)
                 continue;
 
-            ItemData allyWeapon = ally.GetEquippedWeapon();
-            if (ally.ThreatensWith(target, allyWeapon))
+            // The aid-another entry's own test (GetAidAnotherTargetRefusal): either threatens the other (delegated RAW
+            // reading 2026-11-23, PHB p.154).
+            if (IsEngagedInMelee(ally, target))
                 alliesInRange.Add(ally);
         }
 
@@ -200,9 +201,10 @@ public partial class GameManager
     /// such as Weapon Focus and Power Attack, typed effect bonuses such as Bless, conditions, nonproficiency, fighting
     /// defensively) with its melee weapon, or unarmed when it holds none or only a ranged weapon, and no target terms (the AC
     /// is a flat 10, not a creature's); plus the weapon's enhancement or masterwork bonus, which PerformSingleAttackWithCrit
-    /// adds to every weapon attack roll (PHB p.126, DMG p.222).
+    /// adds to every weapon attack roll (PHB p.126, DMG p.222). The AI's aid estimate reads the same modifier
+    /// (AIService.BuildMeleeTurnOptionContext, batch 14 step 13).
     /// </summary>
-    private static int GetAidAnotherAttackModifier(CharacterController actor)
+    internal static int GetAidAnotherAttackModifier(CharacterController actor)
     {
         if (actor == null || actor.Stats == null)
             return 0;

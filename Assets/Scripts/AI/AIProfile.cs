@@ -388,6 +388,67 @@ namespace DND35.AI
             return HealerApproachChoice.Kiter;
         }
 
+        /// <summary>
+        /// AI choice, not a rule (batch 14 step 13, AI-063, batch 13's C5, design choice C8; game direction the owner may
+        /// overrule): what <paramref name="self"/> does with the standard action of a melee turn whose target is in reach:
+        /// the attack, aid another on an ally's attack or AC (PHB p.154, D3) or total defense (PHB p.142, D4). AIService runs
+        /// it before the attack of the aggressive and defensive melee routines. <see cref="DefaultChooseMeleeTurnOption"/>; the
+        /// traits tilt the answer (AiBlend.MeleeTurn).
+        /// </summary>
+        public virtual MeleeTurnOption ChooseMeleeTurnOption(CharacterController self, in MeleeTurnOptionContext ctx)
+            => DefaultChooseMeleeTurnOption(ctx);
+
+        /// <summary>
+        /// The default (C8): the attack is kept unless an open alternative beats it by max(0.5, 0.15 S)
+        /// (MeleeTurnOptionContext.Margin, starter constant); among those that do, the highest value wins (ties in the order
+        /// aid offense, aid defense, total defense). Total defense is open only when a foe can reach the creature.
+        /// </summary>
+        public static MeleeTurnOption DefaultChooseMeleeTurnOption(in MeleeTurnOptionContext ctx)
+        {
+            MeleeTurnOption best = MeleeTurnOption.Attack;
+            float threshold = ctx.AttackValue + ctx.Margin;
+            float bestValue = float.NegativeInfinity;
+            foreach (MeleeTurnOption option in AlternativeMeleeTurnOptions)
+            {
+                if (!ctx.IsOpen(option))
+                    continue;
+                float v = ctx.ValueOf(option);
+                if (v >= threshold && v > bestValue)
+                {
+                    best = option;
+                    bestValue = v;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>The alternatives to the attack, in their tie order.</summary>
+        public static readonly MeleeTurnOption[] AlternativeMeleeTurnOptions =
+            { MeleeTurnOption.AidOffense, MeleeTurnOption.AidDefense, MeleeTurnOption.TotalDefense };
+
+        /// <summary>
+        /// AI choice, not a rule (batch 14 step 13, D5, design choice C8; game direction the owner may overrule): what a prone
+        /// <paramref name="self"/> does at the start of its turn (a grappling creature stays down for the grapple turn and is
+        /// never asked). <see cref="DefaultChooseProneStart"/>.
+        /// </summary>
+        public virtual ProneStartChoice ChooseProneStart(CharacterController self, in ProneStartContext ctx)
+            => DefaultChooseProneStart(ctx);
+
+        /// <summary>
+        /// The default (C8): the creature stays prone when no foe threatens it, its planned action works prone (a cast, or a
+        /// crossbow shot; PHB p.311) and a foe in view attacks at range (+4 AC against it). Then, when a foe could threaten
+        /// its square next turn and a crawl reaches a square no foe threatens now or could next turn, it crawls there (PHB
+        /// p.142; such a crawl provokes nothing). Otherwise it stands up, as before.
+        /// </summary>
+        public static ProneStartChoice DefaultChooseProneStart(in ProneStartContext ctx)
+        {
+            if (ctx.Threatened || !ctx.PlannedActionWorksProne || !ctx.RangedFoeInView)
+                return ProneStartChoice.StandUp;
+            if (ctx.SquareReachableNextTurn && ctx.CanCrawl && ctx.CrawlSquare.HasValue)
+                return ProneStartChoice.Crawl;
+            return ProneStartChoice.StayProne;
+        }
+
         /// <summary>True for the Roles that keep their distance after a standard action (C8): a Ranged Role or a casting one.</summary>
         public static bool KeepsDistanceRole(in AfterStandardActionContext ctx)
             => ctx.Style == CombatStyle.Ranged || ctx.CastingRole;
@@ -395,13 +456,15 @@ namespace DND35.AI
         /// <summary>
         /// A prone creature's move wish becomes standing up (PHB p.141-142: a prone creature cannot take ordinary movement).
         /// A threatened prone creature that wants distance stays down instead: standing up provokes (PHB p.141, Table 8-2)
-        /// and gains it no distance this turn.
+        /// and gains it no distance this turn. So does one that chose at its turn start to stay prone
+        /// (AfterStandardActionContext.StayingProne, batch 14 step 13): standing gains it no distance either, and gives up the
+        /// +4 AC against ranged attacks (PHB p.311).
         /// </summary>
         public static AfterStandardActionChoice StandFirstIfProne(AfterStandardActionChoice wish, in AfterStandardActionContext ctx)
         {
             if (!ctx.Prone || (wish != AfterStandardActionChoice.Approach && wish != AfterStandardActionChoice.KeepDistance))
                 return wish;
-            if (wish == AfterStandardActionChoice.KeepDistance && ctx.Threatened)
+            if (wish == AfterStandardActionChoice.KeepDistance && (ctx.Threatened || ctx.StayingProne))
                 return AfterStandardActionChoice.Stay;
             return AfterStandardActionChoice.StandUp;
         }

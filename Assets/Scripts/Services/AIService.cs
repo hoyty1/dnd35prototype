@@ -210,8 +210,16 @@ public class AIService : MonoBehaviour
     private static string TraceName(CharacterController c)
         => c == null ? "none" : c.Stats != null ? c.Stats.CharacterName : c.name;
 
+    /// <summary>
+    /// The creature whose turn-start prone choice (ChooseProneStartForAI) kept it down this turn (StayProne, or a crawl that
+    /// was made), else null; reset at every AI turn's start. The move after the standard action reads it so a KeepDistance
+    /// wish does not stand it up again (BuildAfterStandardActionContext, AfterStandardActionContext.StayingProne).
+    /// </summary>
+    private CharacterController _stayedProneThisTurn;
+
     private IEnumerator ExecuteNPCTurnBody(CharacterController npc, NPCAIBehavior behavior)
     {
+        _stayedProneThisTurn = null;
         if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
             yield break;
 
@@ -297,18 +305,59 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        // ── Stand up from prone (move action, provokes; PHB p.143, CMB-074) ──
-        // A prone creature cannot take ordinary movement, so it stands first through the same
-        // resolution as the PC Stand Up button. Grappling creatures stay down (grapple turn below).
+        // ── Prone at the turn start (batch 14 step 13, D5, C8) ──
+        // Standing up is a move action that provokes (PHB p.141, Table 8-2; CMB-074), crawling 5 feet a move action that
+        // provokes (PHB p.142), and nothing makes a prone creature stand: the Role's AIProfile.ChooseProneStart decides. By
+        // default it stands, through the same resolution as the PC Stand Up button, unless it is unthreatened, its planned
+        // action works prone (a cast or a crossbow shot, PHB p.311) and a foe in view fights at range. Grappling creatures
+        // stay down (grapple turn below); a frightened, panicked or turned creature stands for its flight, as before.
         if (npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling())
         {
-            yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
-            if (CombatEnded())
-                yield break;
-            if (ThreatSystem.IsMoverIncapacitated(npc))
+            Vector2Int? crawlSquare = null;
+            ProneStartChoice proneChoice = compulsion.Fear == null && !compulsion.Turned
+                ? ChooseProneStartForAI(npc, out crawlSquare)
+                : ProneStartChoice.StandUp;
+            if (proneChoice == ProneStartChoice.Crawl && crawlSquare.HasValue)
             {
-                Debug.Log($"[AI] {npc.Stats.CharacterName} was dropped by an AoO while standing up — turn ended");
-                yield break;
+                ActionContext crawlCtx = ActionContext.For(ActionIds.Crawl, npc, ActorSource.AI);
+                crawlCtx.Cell = crawlSquare.Value;
+                var crawl = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(crawlCtx, crawl));
+                if (CombatEnded())
+                    yield break;
+                if (ThreatSystem.IsMoverIncapacitated(npc))
+                {
+                    Debug.Log($"[AI] {npc.Stats.CharacterName} was dropped by an AoO while crawling — turn ended");
+                    yield break;
+                }
+                if (crawl.Performed)
+                {
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} crawls 5 feet and stays prone."));
+                    _stayedProneThisTurn = npc;
+                }
+                else
+                {
+                    // A refused crawl spends nothing (ActionCore_Crawl: a barrier, an invalid square, a flight rule): the
+                    // creature stands up instead, as before the step, so its move action is not left unused while prone.
+                    Debug.Log($"[AI][ProneStart] {npc.Stats.CharacterName}: crawl refused ({crawl.Refusal.Reason}); stands up instead");
+                    proneChoice = ProneStartChoice.StandUp;
+                }
+            }
+            else if (proneChoice == ProneStartChoice.StayProne)
+            {
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} stays prone and fights from the ground."));
+                _stayedProneThisTurn = npc;
+            }
+            if (proneChoice == ProneStartChoice.StandUp || (proneChoice == ProneStartChoice.Crawl && !crawlSquare.HasValue))
+            {
+                yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
+                if (CombatEnded())
+                    yield break;
+                if (ThreatSystem.IsMoverIncapacitated(npc))
+                {
+                    Debug.Log($"[AI] {npc.Stats.CharacterName} was dropped by an AoO while standing up — turn ended");
+                    yield break;
+                }
             }
         }
 
@@ -937,6 +986,7 @@ public class AIService : MonoBehaviour
         ctx.Style = profile != null ? profile.CombatStyle : styleWithoutProfile;
         ctx.CastingRole = profile != null && profile.IsCastingProfile;
         ctx.Prone = npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling();
+        ctx.StayingProne = ctx.Prone && _stayedProneThisTurn == npc;
         ctx.CanMove = ctx.Prone
             ? npc.Actions.HasMoveAction && AiLegal.CanUse(npc, ActionIds.StandUp, _gameManager)
             : AiLegal.CanMoveNow(npc, _gameManager) && !npc.Stats.MovementBlockedByCondition;
@@ -1091,6 +1141,387 @@ public class AIService : MonoBehaviour
             }
         }
         return found && _gameManager.TryTakeFiveFootStepForAI(npc, best);
+    }
+
+    // ── Aid another, total defense and posture (batch 14 step 13, AI-063, batch 13's C5; decisions D3-D5, design choice C8) ──
+
+    /// <summary>The target's AC as <paramref name="npc"/> knows it (the AcEstimate fact), else its AC.</summary>
+    private static int KnownAC(CharacterController npc, CharacterController target)
+    {
+        DND35.AI.Knowledge.ITargetView view = DND35.AI.Knowledge.KnowledgeService.ViewOf(npc, target);
+        DND35.AI.Knowledge.FactValue ac = view != null ? view.Get(DND35.AI.Knowledge.FactKey.AcEstimate) : DND35.AI.Knowledge.FactValue.Unknown;
+        return ac.IsKnown ? ac.Number : target.Stats.ArmorClass;
+    }
+
+    /// <summary>
+    /// <paramref name="c"/>'s melee attack modifier against <paramref name="target"/> for the AI's estimates: with a melee
+    /// weapon in the main hand the shared attack terms (CharacterController.BuildAttackBonus, CMB-043) plus its enhancement
+    /// or masterwork bonus, as the roll adds them; else its melee attack estimate (CharacterStats.GetMeleeAttackBonus).
+    /// </summary>
+    private static int EstimatedMeleeModifier(CharacterController c, CharacterController target)
+    {
+        ItemData weapon = c.GetEquippedMainWeapon();
+        if (weapon != null && weapon.IsWeapon && weapon.WeaponCat == WeaponCategory.Melee)
+            return c.BuildAttackBonus(target, weapon, false, null, false, 0, c.Stats.BaseAttackBonus, CharacterController.IsWeaponTwoHanded(weapon)).Total
+                   + weapon.GetEnhancementAttackBonus() + weapon.MasterworkAttackBonus;
+        return c.Stats.GetMeleeAttackBonus();
+    }
+
+    /// <summary><paramref name="npc"/> and the living creatures of its side, and the reach of each living foe (TurnOptionValue.FoeReach).</summary>
+    private void GatherSides(CharacterController npc, out List<CharacterController> side, out List<DND35.AI.Valuation.TurnOptionValue.FoeReach> foes)
+    {
+        side = new List<CharacterController>();
+        foes = new List<DND35.AI.Valuation.TurnOptionValue.FoeReach>();
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController c = all[i];
+            if (c == null || c.Stats == null || c.Stats.IsDead)
+                continue;
+            if (c == npc || TeamUtility.IsAlly(npc, c))
+                side.Add(c);
+            else if (_gameManager.IsEnemyTeamForAI(npc, c))
+                foes.Add(new DND35.AI.Valuation.TurnOptionValue.FoeReach(c));
+        }
+    }
+
+    /// <summary>
+    /// Whether a living foe can attack <paramref name="npc"/> next round (TurnOptionValue.FoeReach.ReachOf: it threatens it,
+    /// a ranged weapon in hand covers it, or one move or a charge brings it into reach). Total defense is taken only then (batch 14 step
+    /// 13, AI-063): the melee turn's option and the out-of-reach list's entry (AiOutOfReach.Run).
+    /// </summary>
+    internal bool AnyFoeCanReach(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || _gameManager == null)
+            return false;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Action, npc);
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController c = all[i];
+            if (c == null || c == npc || c.Stats == null || c.Stats.IsDead || !_gameManager.IsEnemyTeamForAI(npc, c))
+                continue;
+            if (new DND35.AI.Valuation.TurnOptionValue.FoeReach(c).ReachOf(npc) != DND35.AI.Valuation.TurnOptionValue.ReachKind.None)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The pure reads of AIProfile.ChooseMeleeTurnOption for <paramref name="npc"/> about to attack <paramref name="target"/>
+    /// (batch 14 step 13, C8; the values of DND35.AI.Valuation.TurnOptionValue):
+    /// <list type="bullet">
+    /// <item>S: the full attack's expected damage on the target when the full-round action is free (AttackValue.ExpectedRoundDamage), else one attack's;</item>
+    /// <item>aid offense and aid defense, when the aid-another entry is legal now: the best pair of a foe the creature
+    /// threatens (it can make a melee attack on it) and an ally in melee with that foe (for aid offense, an ally that
+    /// threatens it; for aid defense, either threatening the other, GameManager.IsEngagedInMelee), each checked by the
+    /// entry's own target rule (GameManager.GetAidAnotherTargetRefusal, PHB p.154); the aid roll's modifier is the roll's own
+    /// (GameManager.GetAidAnotherAttackModifier);</item>
+    /// <item>total defense, when its entry is legal now: the foes' next-round damage it takes away (+4 AC), and whether any
+    /// foe can reach the creature.</item>
+    /// </list>
+    /// Timed in the Action bucket; no dice, nothing changed.
+    /// </summary>
+    internal MeleeTurnOptionContext BuildMeleeTurnOptionContext(CharacterController npc, CharacterController target)
+    {
+        var ctx = new MeleeTurnOptionContext();
+        if (npc == null || npc.Stats == null || npc.Actions == null || target == null || target.Stats == null || _gameManager == null)
+            return ctx;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Action, npc);
+        GatherSides(npc, out List<CharacterController> side, out List<DND35.AI.Valuation.TurnOptionValue.FoeReach> foes);
+
+        int targetAC = KnownAC(npc, target);
+        ctx.AttackValue = npc.Actions.HasFullRoundAction
+            ? DND35.AI.Valuation.AttackValue.ExpectedRoundDamage(npc, targetAC)
+            : DND35.AI.Valuation.TurnOptionValue.SingleAttackDamage(npc, targetAC);
+
+        if (AiLegal.CanUse(npc, ActionIds.AidAnother, _gameManager))
+        {
+            int aidModifier = GameManager.GetAidAnotherAttackModifier(npc);
+            float bestOffense = 0f;
+            float bestDefense = 0f;
+            for (int f = 0; f < foes.Count; f++)
+            {
+                DND35.AI.Valuation.TurnOptionValue.FoeReach reach = foes[f];
+                CharacterController opponent = reach.Foe;
+                if (!DND35.AI.Knowledge.KnowledgeFacts.ThreatensSpaceOf(npc, opponent))
+                    continue;
+                int opponentAC = KnownAC(npc, opponent);
+                float opponentHit = DND35.AI.Valuation.AttackValue.AverageMeleeDamage(opponent);
+                for (int a = 0; a < side.Count; a++)
+                {
+                    CharacterController ally = side[a];
+                    if (ally == npc)
+                        continue;
+                    // The ally attacks the opponent only where it threatens it; the opponent's next attack on the ally needs
+                    // only the opponent to threaten it (the shared rule's "engaging", GameManager.IsEngagedInMelee).
+                    bool allyThreatens = DND35.AI.Knowledge.KnowledgeFacts.ThreatensSpaceOf(ally, opponent);
+                    if (!allyThreatens && !DND35.AI.Knowledge.KnowledgeFacts.ThreatensSpaceOf(opponent, ally))
+                        continue;
+                    if (allyThreatens && DND35.AI.Knowledge.KnowledgeFacts.CanAttackThisRound(ally))
+                    {
+                        float offense = DND35.AI.Valuation.TurnOptionValue.AidOffense(aidModifier, EstimatedMeleeModifier(ally, opponent), opponentAC,
+                            DND35.AI.Valuation.AttackValue.AverageMeleeDamage(ally));
+                        if (offense > bestOffense && _gameManager.GetAidAnotherTargetRefusal(npc, ally, opponent) == null)
+                        {
+                            bestOffense = offense;
+                            ctx.CanAidOffense = true;
+                            ctx.AidOffenseValue = offense;
+                            ctx.AidOffenseAlly = ally;
+                            ctx.AidOffenseOpponent = opponent;
+                        }
+                    }
+                    float share = DND35.AI.Valuation.TurnOptionValue.Share(reach, ally, side);
+                    if (share <= 0f)
+                        continue;
+                    float defense = DND35.AI.Valuation.TurnOptionValue.AidDefense(aidModifier, EstimatedMeleeModifier(opponent, ally), ally.Stats.ArmorClass,
+                        opponentHit, share, DND35.AI.Valuation.TurnOptionValue.DropWeightFor(opponentHit, ally.Stats.CurrentHP));
+                    if (defense > bestDefense && _gameManager.GetAidAnotherTargetRefusal(npc, ally, opponent) == null)
+                    {
+                        bestDefense = defense;
+                        ctx.CanAidDefense = true;
+                        ctx.AidDefenseValue = defense;
+                        ctx.AidDefenseAlly = ally;
+                        ctx.AidDefenseOpponent = opponent;
+                    }
+                }
+            }
+        }
+
+        ctx.CanTotalDefense = AiLegal.CanUse(npc, ActionIds.TotalDefense, _gameManager);
+        if (ctx.CanTotalDefense)
+        {
+            int ac = npc.Stats.ArmorClass;
+            float keptOff = 0f, incoming = 0f;
+            for (int f = 0; f < foes.Count; f++)
+            {
+                DND35.AI.Valuation.TurnOptionValue.FoeReach reach = foes[f];
+                if (reach.ReachOf(npc) == DND35.AI.Valuation.TurnOptionValue.ReachKind.None)
+                    continue;
+                ctx.FoeCanReach = true;
+                float share = DND35.AI.Valuation.TurnOptionValue.Share(reach, npc, side);
+                if (share <= 0f)
+                    continue;
+                float hit = DND35.AI.Valuation.AttackValue.AverageMeleeDamage(reach.Foe);
+                float atAC = reach.DamageOn(npc, ac);
+                incoming += atAC * share;
+                keptOff += DND35.AI.Valuation.TurnOptionValue.TotalDefensePart(atAC,
+                    reach.DamageOn(npc, ac + DND35.AI.Valuation.TurnOptionValue.TotalDefenseBonus), share,
+                    DND35.AI.Valuation.TurnOptionValue.DropWeightFor(hit, npc.Stats.CurrentHP));
+            }
+            ctx.TotalDefenseValue = DND35.AI.Valuation.TurnOptionValue.TotalDefense(keptOff, incoming, ctx.AttackValue);
+        }
+        return ctx;
+    }
+
+    /// <summary>
+    /// The melee turn's option for <paramref name="npc"/> before it attacks <paramref name="target"/> (batch 14 step 13,
+    /// AI-063, batch 13's C5; D3, D4, C8): the Role's AIProfile.ChooseMeleeTurnOption (the default without a profile),
+    /// tilted by the traits (AiBlend.MeleeTurn). For an alternative, <paramref name="action"/> is its catalog context: the
+    /// aid-another entry with its ally, opponent and variant, or the total-defense entry. One trace row "MeleeTurnOption"
+    /// (legacy Attack, the turn before the step). Synchronous: the caller runs the chosen action.
+    /// </summary>
+    private MeleeTurnOption ChooseMeleeTurnOptionForAI(CharacterController npc, CharacterController target, AIProfile profile, out ActionContext action)
+    {
+        action = null;
+        if (npc == null || npc.Stats == null || target == null || _gameManager == null || npc.IsGrappling())
+            return MeleeTurnOption.Attack;
+        MeleeTurnOptionContext ctx = BuildMeleeTurnOptionContext(npc, target);
+        MeleeTurnOption roleChoice = profile != null ? profile.ChooseMeleeTurnOption(npc, ctx) : AIProfile.DefaultChooseMeleeTurnOption(ctx);
+        MeleeTurnOption choice = DND35.AI.Personality.AiBlend.MeleeTurn(npc, roleChoice, ctx);
+        if (!ctx.IsOpen(choice))
+            choice = MeleeTurnOption.Attack;
+        string values = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "S={0:0.##} aidOffense={1:0.##} aidDefense={2:0.##} totalDefense={3:0.##} margin={4:0.##} reach={5}",
+            ctx.AttackValue, ctx.CanAidOffense ? ctx.AidOffenseValue : 0f, ctx.CanAidDefense ? ctx.AidDefenseValue : 0f,
+            ctx.CanTotalDefense ? ctx.ValueOf(MeleeTurnOption.TotalDefense) : 0f, ctx.Margin, ctx.FoeCanReach);
+        if (AiDecisionTrace.HasOpenTurn(npc))
+            AiDecisionTrace.Record(npc, "MeleeTurnOption", choice.ToString(), MeleeTurnOption.Attack.ToString(),
+                ctx.ValueOf(choice) - ctx.AttackValue, values + (choice != roleChoice ? " (Role " + roleChoice + ")" : ""));
+        Debug.Log($"[AI][MeleeTurnOption] {npc.Stats.CharacterName}: {choice} (Role {roleChoice}; {values})");
+
+        switch (choice)
+        {
+            case MeleeTurnOption.AidOffense:
+            case MeleeTurnOption.AidDefense:
+            {
+                bool offense = choice == MeleeTurnOption.AidOffense;
+                action = ActionContext.For(ActionIds.AidAnother, npc, ActorSource.AI, offense ? ctx.AidOffenseAlly : ctx.AidDefenseAlly);
+                action.Opponent = offense ? ctx.AidOffenseOpponent : ctx.AidDefenseOpponent;
+                action.Variant = offense ? AidAnotherActionExecutor.OffenseVariant : AidAnotherActionExecutor.DefenseVariant;
+                return choice;
+            }
+            case MeleeTurnOption.TotalDefense:
+                action = ActionContext.For(ActionIds.TotalDefense, npc, ActorSource.AI);
+                return choice;
+            default:
+                return MeleeTurnOption.Attack;
+        }
+    }
+
+    /// <summary>
+    /// The melee routines' alternative to the attack (batch 14 step 13): the aid another or total defense
+    /// <see cref="ChooseMeleeTurnOptionForAI"/> chose, run through the catalog (RunAIAction); once performed, the move left
+    /// follows (UseMoveAfterStandardAction, D1). <paramref name="outcome"/>.Performed tells the routine its standard action
+    /// was used; a refused alternative leaves the attack.
+    /// </summary>
+    private IEnumerator RunMeleeTurnAlternative(CharacterController npc, CharacterController target, ActionContext action, ActionOutcome outcome)
+    {
+        yield return _gameManager.StartCoroutine(_gameManager.RunAIAction(action, outcome));
+        if (!outcome.Performed || CombatEnded() || npc.Stats == null || !npc.CanTakeTurnActions())
+            yield break;
+        yield return new WaitForSeconds(0.5f);
+        if (!KeepsRoutineAfterAbility(npc))
+            yield return _gameManager.StartCoroutine(UseMoveAfterStandardAction(npc, target, CombatStyle.Melee));
+    }
+
+    /// <summary>
+    /// The prone creature's choice at its turn start (batch 14 step 13, D5, C8): the Role's AIProfile.ChooseProneStart (the
+    /// default without a profile) on <see cref="BuildProneStartContext"/>. <paramref name="crawlSquare"/> is the crawl's
+    /// square. One trace row "ProneStart" (legacy StandUp, the turn before the step).
+    /// </summary>
+    internal ProneStartChoice ChooseProneStartForAI(CharacterController npc, out Vector2Int? crawlSquare)
+    {
+        crawlSquare = null;
+        if (npc == null || npc.Stats == null || _gameManager == null)
+            return ProneStartChoice.StandUp;
+        ProneStartContext ctx = BuildProneStartContext(npc);
+        AIProfile profile = GetProfile(npc);
+        ProneStartChoice choice = profile != null ? profile.ChooseProneStart(npc, ctx) : AIProfile.DefaultChooseProneStart(ctx);
+        if (choice == ProneStartChoice.Crawl)
+        {
+            if (ctx.CrawlSquare.HasValue && ctx.CanCrawl)
+                crawlSquare = ctx.CrawlSquare;
+            else
+                choice = ProneStartChoice.StayProne;
+        }
+        string reason = $"threatened={ctx.Threatened} worksProne={ctx.PlannedActionWorksProne} rangedFoe={ctx.RangedFoeInView} reachable={ctx.SquareReachableNextTurn} crawl={(ctx.CrawlSquare.HasValue ? ctx.CrawlSquare.Value.ToString() : "none")}";
+        if (AiDecisionTrace.HasOpenTurn(npc))
+            AiDecisionTrace.Record(npc, "ProneStart", choice.ToString(), ProneStartChoice.StandUp.ToString(), 0f, reason);
+        Debug.Log($"[AI][ProneStart] {npc.Stats.CharacterName}: {choice} ({reason})");
+        return choice;
+    }
+
+    /// <summary>
+    /// The pure reads of AIProfile.ChooseProneStart for the prone <paramref name="npc"/> (batch 14 step 13, D5, C8): whether
+    /// a foe threatens any square of its space; whether a foe in view fights with a ranged weapon (the WieldsRanged fact);
+    /// whether its planned action works prone (<see cref="PlannedActionWorksProne"/>); and, when all hold, whether a foe
+    /// could threaten its space next turn (after a move or a charge) and the adjacent square a crawl reaches (the crawl
+    /// entry's own destination rule) whose whole shifted space no foe threatens now or could next turn, farthest from the
+    /// nearest foe. A read that cannot change the default answer is
+    /// skipped. Timed in the Action bucket.
+    /// </summary>
+    internal ProneStartContext BuildProneStartContext(CharacterController npc)
+    {
+        var ctx = new ProneStartContext();
+        if (npc == null || npc.Stats == null || _gameManager == null)
+            return ctx;
+        using AiDecisionTimer.Scope timing = AiDecisionTimer.Open(AiTimeBucket.Action, npc);
+        List<CharacterController> all = _gameManager.GetAllCharactersForAI();
+        // Every square of its space: a Large creature threatened on any of them is threatened (PHB p.137).
+        List<Vector2Int> mine = npc.GetOccupiedSquares();
+        for (int s = 0; s < mine.Count && !ctx.Threatened; s++)
+            ctx.Threatened = ThreatSystem.IsSquareThreatened(mine[s], npc, all);
+        if (ctx.Threatened)
+            return ctx;
+
+        GatherSides(npc, out _, out List<DND35.AI.Valuation.TurnOptionValue.FoeReach> foes);
+        CharacterController nearest = null;
+        int nearestDistance = int.MaxValue;
+        for (int i = 0; i < foes.Count; i++)
+        {
+            CharacterController foe = foes[i].Foe;
+            int d = npc.GetMinimumDistanceToTarget(foe, chebyshev: false);
+            if (d < nearestDistance)
+            {
+                nearestDistance = d;
+                nearest = foe;
+            }
+            if (!ctx.RangedFoeInView && foes[i].CanAttack)
+            {
+                DND35.AI.Knowledge.ITargetView view = DND35.AI.Knowledge.KnowledgeService.ViewOf(npc, foe);
+                DND35.AI.Knowledge.FactValue ranged = view != null ? view.Get(DND35.AI.Knowledge.FactKey.WieldsRanged) : DND35.AI.Knowledge.FactValue.Unknown;
+                ctx.RangedFoeInView = ranged.IsKnown && ranged.Flag;
+            }
+        }
+        if (!ctx.RangedFoeInView)
+            return ctx;
+        ctx.PlannedActionWorksProne = PlannedActionWorksProne(npc, nearest);
+        if (!ctx.PlannedActionWorksProne)
+            return ctx;
+
+        for (int i = 0; i < foes.Count && !ctx.SquareReachableNextTurn; i++)
+            for (int s = 0; s < mine.Count && !ctx.SquareReachableNextTurn; s++)
+                ctx.SquareReachableNextTurn = foes[i].CouldThreatenNextTurn(mine[s]);
+        ctx.CanCrawl = AiLegal.CanUse(npc, ActionIds.Crawl, _gameManager);
+        if (!ctx.SquareReachableNextTurn || !ctx.CanCrawl)
+            return ctx;
+
+        int bestDistance = int.MinValue;
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(npc.GridPosition);
+        for (int n = 0; n < neighbors.Length; n++)
+        {
+            Vector2Int cell = neighbors[n];
+            if (!_gameManager.IsValidCrawlDestinationForActions(npc, cell))
+                continue;
+            // The whole space after the crawl, each occupied square shifted by the step: no foe threatens any of it now (the
+            // crawl provokes from a foe threatening the space it leaves or enters, PHB p.142) or could next turn.
+            Vector2Int delta = cell - npc.GridPosition;
+            bool safe = true;
+            for (int i = 0; i < foes.Count && safe; i++)
+                for (int s = 0; s < mine.Count && safe; s++)
+                    safe = !foes[i].CouldThreatenNextTurn(mine[s] + delta);
+            if (!safe)
+                continue;
+            int d = nearest != null ? SquareGridUtils.GetDistance(cell, nearest.GridPosition) : 0;
+            if (d > bestDistance)
+            {
+                bestDistance = d;
+                ctx.CrawlSquare = cell;
+            }
+        }
+        return ctx;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="npc"/>'s turn plan works prone (PHB p.311: no ranged weapon but a crossbow; casting is not
+    /// barred), read from what the turn will do rather than the Role alone (batch 14 step 13 review):
+    /// <list type="bullet">
+    /// <item>a Ranged Role whose main weapon is a crossbow it can shoot now: true;</item>
+    /// <item>a Melee Role: false (its routine must move or 5-foot step, which a prone creature cannot, MovementService);</item>
+    /// <item>a Healer Role: only on an OffensiveSpell turn (HealerAIProfile.DetermineActionPriority): a Healing turn's cure
+    /// is a touch that may need step 12's approach, and a PhysicalAttack turn fights with its weapon;</item>
+    /// <item>a casting Role: its turn's best spell (SelectSpell, the ScoreCastableSpells pick) reaches <paramref name="focus"/>
+    /// from where it lies, and nothing in its main hand would send a turn whose spells find no target to a shot or a throw
+    /// a prone attacker cannot make: a ranged weapon other than a crossbow, or a throwable melee weapon the kiter would
+    /// throw (AiOutOfReach.ApproachRangeSquares). PHB p.311's bar is not enforced on the attack itself yet (CMB-196), so
+    /// this keeps the AI from shooting prone.</item>
+    /// </list>
+    /// No profile: false (it stands, as before).
+    /// </summary>
+    private bool PlannedActionWorksProne(CharacterController npc, CharacterController focus)
+    {
+        AIProfile profile = GetProfile(npc);
+        if (profile == null)
+            return false;
+        ItemData weapon = npc.GetEquippedMainWeapon();
+        if (profile.CombatStyle == CombatStyle.Ranged && weapon != null && weapon.IsCrossbowWeapon && AIProfile.HasUsableRangedWeapon(npc))
+            return true;
+        if (!profile.IsCastingProfile || profile.CombatStyle == CombatStyle.Melee)
+            return false;
+        if (ConfusedBehaviorController.ProneBarsMainWeapon(npc)
+            || (weapon != null && weapon.RangeIncrement > 0 && GameManager.IsThrowableWeapon(weapon, meleeOnly: true)))
+            return false;
+        if (profile is HealerAIProfile healer)
+        {
+            bool hasCastableSpells = HasCastablePreparedSpells(npc);
+            bool hasCastableCure = hasCastableSpells && HealerAIProfile.HasCastableCure(npc, _gameManager);
+            if (healer.DetermineActionPriority(npc, _gameManager.GetAllCharactersForAI(), hasCastableSpells, hasCastableCure) != HealerActionType.OffensiveSpell)
+                return false;
+        }
+        if (focus == null || !HasCastableRangedSpell(npc, focus))
+            return false;
+        return GetBestAvailableSpellRangeInSquares(npc, focus) >= npc.GetMinimumDistanceToTarget(focus, chebyshev: false);
     }
 
     // ── The healer reaches its patient (batch 14 step 12, AI-047, AI-063; decision D1, design choice C8, owner question Q8) ──
@@ -1486,6 +1917,16 @@ public class AIService : MonoBehaviour
                     yield return new WaitForSeconds(0.8f);
                     yield break;
                 }
+            }
+
+            // The standard action's alternatives to the attack (batch 14 step 13, AI-063, C8): aid another (PHB p.154, D3)
+            // or total defense (PHB p.142, D4) where its value beats the attack's by the margin; the move left follows.
+            if (ChooseMeleeTurnOptionForAI(npc, target, profile, out ActionContext alternative) != MeleeTurnOption.Attack)
+            {
+                var alternativeOutcome = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(RunMeleeTurnAlternative(npc, target, alternative, alternativeOutcome));
+                if (alternativeOutcome.Performed || CombatEnded() || !npc.CanTakeTurnActions())
+                    yield break;
             }
 
             // Fall back to normal melee attacks
@@ -2378,6 +2819,15 @@ public class AIService : MonoBehaviour
 
         if (attackTarget != null && !target.Stats.IsDead)
         {
+            // Aid another or total defense where it beats the attack (batch 14 step 13, AI-063, C8), as in the aggressive turn.
+            if (ChooseMeleeTurnOptionForAI(npc, target, profile, out ActionContext alternative) != MeleeTurnOption.Attack)
+            {
+                var alternativeOutcome = new ActionOutcome();
+                yield return _gameManager.StartCoroutine(RunMeleeTurnAlternative(npc, target, alternative, alternativeOutcome));
+                if (alternativeOutcome.Performed || CombatEnded() || !npc.CanTakeTurnActions())
+                    yield break;
+            }
+
             // Each melee attack step may be replaced by a maneuver (CMB-102).
             yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, profile));
         }

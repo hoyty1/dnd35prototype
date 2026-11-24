@@ -564,6 +564,77 @@ namespace DND35.AI.Personality
             }
         }
 
+        // ── Batch 14 step 13: aid another and total defense on a melee turn (AI-063, batch 13's C5, C8) ──
+
+        /// <summary>C8: how far one unit of RoleDesire scales a melee turn option's value (starter constant, the maneuver scorer's 0.5).</summary>
+        public const float MeleeTurnDesireGain = 0.5f;
+
+        /// <summary>
+        /// The melee turn's option (C8; AIProfile.ChooseMeleeTurnOption), tilted by the traits' RoleDesire, as the maneuver
+        /// scorer weighs the attack: each open option's value (MeleeTurnOptionContext.ValueOf) is scaled by
+        /// 1 + <see cref="MeleeTurnDesireGain"/> times the desire for its roles (the attack Attack; aid offense Support; aid
+        /// defense Support or Defend, the larger; total defense Defend), and another option replaces the Role's pick only when
+        /// its scaled value beats the pick's by the context's margin max(0.5, 0.15 S). With no personality, or desires that
+        /// name none of these roles, the Role's choice. One trace row "Personality.MeleeTurnOption" when traced.
+        /// </summary>
+        public static MeleeTurnOption MeleeTurn(PersonalityProfile p, MeleeTurnOption roleChoice, in MeleeTurnOptionContext ctx, object actor = null)
+        {
+            if (p == null)
+                return roleChoice;
+            using (AiDecisionTimer.Open(AiTimeBucket.Personality, actor))
+            {
+                MeleeTurnOption best = ctx.IsOpen(roleChoice) ? roleChoice : DND35.AI.MeleeTurnOption.Attack;
+                float roleScore = MeleeTurnScore(p, best, ctx);
+                float threshold = roleScore + ctx.Margin;
+                float bestScore = float.NegativeInfinity;
+                MeleeTurnOption result = best;
+                var order = new[] { DND35.AI.MeleeTurnOption.Attack, DND35.AI.MeleeTurnOption.AidOffense,
+                    DND35.AI.MeleeTurnOption.AidDefense, DND35.AI.MeleeTurnOption.TotalDefense };
+                foreach (MeleeTurnOption c in order)
+                {
+                    if (c == best || !ctx.IsOpen(c))
+                        continue;
+                    float s = MeleeTurnScore(p, c, ctx);
+                    if (s >= threshold && s > bestScore)
+                    {
+                        result = c;
+                        bestScore = s;
+                    }
+                }
+                if (Tracing(actor))
+                    Trace(actor, "Personality.MeleeTurnOption", result.ToString(), roleChoice.ToString(),
+                        result == best ? 0f : bestScore - roleScore, result == roleChoice ? "Role choice kept" : "RoleDesire");
+                return result;
+            }
+        }
+
+        /// <summary>The creature overload: the Role's choice with no personality.</summary>
+        public static MeleeTurnOption MeleeTurn(CharacterController self, MeleeTurnOption roleChoice, in MeleeTurnOptionContext ctx)
+        {
+            PersonalityProfile p = self != null ? self.Personality : null;
+            return p == null ? roleChoice : MeleeTurn(p, roleChoice, ctx, self);
+        }
+
+        /// <summary>What a melee turn option does for the creature, as the catalog's roles: the attack Attack, aid offense Support, aid defense Support and Defend, total defense Defend.</summary>
+        public static ActionRoles RolesOf(MeleeTurnOption option)
+        {
+            switch (option)
+            {
+                case DND35.AI.MeleeTurnOption.Attack: return ActionRoles.Attack;
+                case DND35.AI.MeleeTurnOption.AidOffense: return ActionRoles.Support;
+                case DND35.AI.MeleeTurnOption.AidDefense: return ActionRoles.Support | ActionRoles.Defend;
+                case DND35.AI.MeleeTurnOption.TotalDefense: return ActionRoles.Defend;
+                default: return ActionRoles.None;
+            }
+        }
+
+        /// <summary>An option's value scaled by the traits' desire for its roles.</summary>
+        public static float MeleeTurnScore(PersonalityProfile p, MeleeTurnOption option, in MeleeTurnOptionContext ctx)
+        {
+            float v = ctx.ValueOf(option);
+            return p == null ? v : v * Mathf.Max(0f, 1f + MeleeTurnDesireGain * p.RoleShift(RolesOf(option)));
+        }
+
         private static bool IsOpen(HealerApproachChoice c, in HealerApproachContext ctx)
         {
             switch (c)

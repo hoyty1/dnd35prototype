@@ -63,6 +63,12 @@ namespace DND35.AI
         public bool CanMove;
         /// <summary>The creature is prone and not grappling, so any move it wants stands it up first (PHB p.141).</summary>
         public bool Prone;
+        /// <summary>
+        /// The creature chose at its turn start to stay prone (or crawled and stayed prone; AIProfile.ChooseProneStart, batch
+        /// 14 step 13): a KeepDistance wish does not stand it up again (<see cref="AIProfile.StandFirstIfProne"/>), which
+        /// would spend its move for no distance and give up the +4 AC against ranged attacks it stayed down for (PHB p.311).
+        /// </summary>
+        public bool StayingProne;
         /// <summary>The routine's focus target is alive, not within the reach or range of the weapon in hand, and not an undead the creature has turned (approaching within 10 feet would end the turning, PHB p.159).</summary>
         public bool FocusOutOfReach;
         /// <summary>A foe is within the keep-away distance (AiBlend.KeepAwayDistance of the kiter's 2 squares).</summary>
@@ -130,6 +136,117 @@ namespace DND35.AI
 
         /// <summary>PartialApproach is a choice: a move brings the healer closer to the patient.</summary>
         public bool CanApproachPartly => HasPatient && PartialSquare.HasValue;
+    }
+
+    /// <summary>
+    /// What an AI-run creature does with the standard action of a melee turn that has a target in reach (batch 14 step 13,
+    /// AI-063, batch 13's C5, design choice C8): AIProfile.ChooseMeleeTurnOption, tilted by the traits' RoleDesire
+    /// (AiBlend.MeleeTurn). Aid another is a standard action, an attack roll against AC 10 for +2 on the friend's next
+    /// attack against the opponent or +2 AC against the opponent's next attack (PHB p.154, D3); total defense is a standard
+    /// action for +4 dodge AC for a round and no attacks of opportunity (PHB p.142, D4). An AI choice, not a rule; batch
+    /// 22's evaluator replaces it.
+    /// </summary>
+    public enum MeleeTurnOption
+    {
+        /// <summary>The routine's attack (or full attack), each step open to a maneuver (AiManeuverChooser).</summary>
+        Attack,
+        /// <summary>Aid another: +2 on an ally's next attack against the opponent (the aid-another entry, variant offense).</summary>
+        AidOffense,
+        /// <summary>Aid another: +2 AC for an ally against the opponent's next attack (the aid-another entry, variant defense).</summary>
+        AidDefense,
+        /// <summary>Total defense (the total-defense entry).</summary>
+        TotalDefense
+    }
+
+    /// <summary>
+    /// The pure reads AIProfile.ChooseMeleeTurnOption decides on (batch 14 step 13, C8), in expected hit points for the
+    /// round (DND35.AI.Valuation.TurnOptionValue). AIService builds it before the melee attack (AIService.BuildMeleeTurnOptionContext);
+    /// a unit test may fill it by hand. An alternative is open only when its catalog entry is legal now and its targets pass
+    /// the entry's own check (GameManager.GetAidAnotherTargetRefusal).
+    /// </summary>
+    public struct MeleeTurnOptionContext
+    {
+        /// <summary>S: the attack's value (the full attack's expected damage when the full-round action is free, else one attack's).</summary>
+        public float AttackValue;
+        /// <summary>The best aid offense (ally and opponent below): aid roll x the ally's gain in hit chance from +2 x its hit damage.</summary>
+        public float AidOffenseValue;
+        public bool CanAidOffense;
+        public CharacterController AidOffenseAlly;
+        public CharacterController AidOffenseOpponent;
+        /// <summary>The best aid defense: aid roll x the opponent's lost hits on the ally at +2 AC x its hit damage x its share on the ally.</summary>
+        public float AidDefenseValue;
+        public bool CanAidDefense;
+        public CharacterController AidDefenseAlly;
+        public CharacterController AidDefenseOpponent;
+        /// <summary>The foes' next-round damage on the creature that +4 AC takes away (0 when no foe can reach it).</summary>
+        public float TotalDefenseValue;
+        /// <summary>The total-defense entry is legal now.</summary>
+        public bool CanTotalDefense;
+        /// <summary>A foe can attack the creature next round (TurnOptionValue.CanReach: it threatens it, a move brings it into reach, or a ranged weapon covers it).</summary>
+        public bool FoeCanReach;
+
+        /// <summary>The margin an alternative must beat the attack by: max(0.5, 0.15 S) (starter constant).</summary>
+        public float Margin => Mathf.Max(0.5f, 0.15f * Mathf.Max(0f, AttackValue));
+
+        /// <summary>Whether <paramref name="option"/> may be chosen (the attack always; total defense only when a foe can reach the creature).</summary>
+        public bool IsOpen(MeleeTurnOption option)
+        {
+            switch (option)
+            {
+                case MeleeTurnOption.Attack: return true;
+                case MeleeTurnOption.AidOffense: return CanAidOffense;
+                case MeleeTurnOption.AidDefense: return CanAidDefense;
+                case MeleeTurnOption.TotalDefense: return CanTotalDefense && FoeCanReach;
+                default: return false;
+            }
+        }
+
+        /// <summary>The value of <paramref name="option"/> in expected hit points.</summary>
+        public float ValueOf(MeleeTurnOption option)
+        {
+            switch (option)
+            {
+                case MeleeTurnOption.Attack: return AttackValue;
+                case MeleeTurnOption.AidOffense: return AidOffenseValue;
+                case MeleeTurnOption.AidDefense: return AidDefenseValue;
+                case MeleeTurnOption.TotalDefense: return FoeCanReach ? TotalDefenseValue : 0f;
+                default: return 0f;
+            }
+        }
+    }
+
+    /// <summary>
+    /// What a prone AI-run creature does at the start of its turn (batch 14 step 13, D5, design choice C8): standing up is
+    /// a move action that provokes (PHB p.141, Table 8-2), crawling 5 feet is a move action that provokes from every
+    /// attacker threatening any point of it (PHB p.142), and prone is -4 on melee attacks, no ranged weapon but a crossbow,
+    /// +4 AC against ranged attacks and -4 against melee (PHB p.311). Nothing makes a prone creature stand: the old
+    /// unconditional stand was an AI choice. AIProfile.ChooseProneStart; an AI choice, not a rule.
+    /// </summary>
+    public enum ProneStartChoice
+    {
+        /// <summary>Stand up with the move action (the stand-up entry), as before batch 14 step 13.</summary>
+        StandUp,
+        /// <summary>Stay down and act from the ground.</summary>
+        StayProne,
+        /// <summary>Crawl 5 feet to ProneStartContext.CrawlSquare (the crawl entry), then act from the ground.</summary>
+        Crawl
+    }
+
+    /// <summary>The pure reads AIProfile.ChooseProneStart decides on (batch 14 step 13, C8). AIService.BuildProneStartContext builds it; a test may fill it by hand.</summary>
+    public struct ProneStartContext
+    {
+        /// <summary>A foe threatens a square of the creature's space (ThreatSystem.IsSquareThreatened): prone, it takes -4 AC against those melee attacks.</summary>
+        public bool Threatened;
+        /// <summary>The creature's turn plan works prone (AIService.PlannedActionWorksProne): a Ranged Role with a crossbow it can shoot, or a non-Melee casting Role whose best spell reaches the nearest foe from the ground and that holds no other ranged or throwable weapon, a Healer only on an OffensiveSpell turn (PHB p.311).</summary>
+        public bool PlannedActionWorksProne;
+        /// <summary>A foe in view fights with a ranged weapon (the WieldsRanged fact), against which prone gives +4 AC (PHB p.311).</summary>
+        public bool RangedFoeInView;
+        /// <summary>A foe could threaten the creature's square next turn (TurnOptionValue.CanReach).</summary>
+        public bool SquareReachableNextTurn;
+        /// <summary>The crawl entry is legal now (prone, a move action, no 5-foot step taken).</summary>
+        public bool CanCrawl;
+        /// <summary>An adjacent square the creature may crawl to that no foe threatens now or could threaten next turn, or null.</summary>
+        public Vector2Int? CrawlSquare;
     }
 
     /// <summary>
