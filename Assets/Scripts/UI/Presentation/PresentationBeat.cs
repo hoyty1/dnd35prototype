@@ -9,7 +9,8 @@ using UnityEngine.UI;
 /// What a recorded presentation beat shows (grouped AI turns, docs/designs/grouped_ai_turns.md "Recording (resolve now,
 /// show later)"). Step 8 builds the facade in Passthrough only, so no beat is queued in play yet: every facade call
 /// applies at once, as before. Step 9 (gt-run-ahead) adds Holding, which records the kinds only a group has (Pace, Step,
-/// Keyframe, Spawned, Removed) besides the facade's, and the ground-item token's beat (UI-058).
+/// Keyframe, Spawned, Removed) besides the facade's, and the ground-item token's beat (UI-058); step 10 the window stop,
+/// step 11 the window break and the overlap tags (Turn, OnLane, Cells, IntoCells).
 /// </summary>
 public enum BeatKind
 {
@@ -62,9 +63,14 @@ public enum BeatKind
     GroundItem,
     /// <summary>
     /// A window stop (CombatPresentation.MarkStop, step 10: S2, a player-run creature's automatic reaction; S7 reserved): it
-    /// shows nothing; step 11's overlap scheduler ends the window at it. <see cref="PresentationBeat.Index"/> holds the StopKind.
+    /// shows nothing; the overlap scheduler (step 11, R7) ends the window at it. <see cref="PresentationBeat.Index"/> holds the StopKind.
     /// </summary>
     WindowStop,
+    /// <summary>
+    /// A window break (S5, step 11; CombatPresentation.NoteLane): a creature's second turn inside the current overlap
+    /// window; the overlap scheduler opens a new window with the turn that holds it. It shows nothing.
+    /// </summary>
+    WindowBreak,
 }
 
 /// <summary>
@@ -102,6 +108,17 @@ public sealed class PresentationBeat
     public Vector3 From, To;
     /// <summary>The renderers an AreaShown beat turns back on.</summary>
     public Renderer[] Renderers;
+    /// <summary>The turn it was recorded in (CombatPresentation's turn key): its overlap lane (step 11).</summary>
+    public int Turn;
+    /// <summary>
+    /// True for a beat of the token-step track (step 11, R2): a Step, or a Keyframe that only settles its token where its
+    /// last Step ended. It plays in its turn's lane, overlapped with other lanes; every other beat is a result beat.
+    /// </summary>
+    public bool OnLane;
+    /// <summary>The cells (CombatPresentation.CellKey) a Step leaves and enters or a Keyframe's token stands on (R4); null when none.</summary>
+    public int[] Cells;
+    /// <summary>The cells a lane beat enters (R4: it waits for every earlier beat on them); null for a result beat.</summary>
+    public int[] IntoCells;
 
     public static PresentationBeat Of(BeatKind kind, CombatUI ui) => new PresentationBeat { Kind = kind, Ui = ui };
 }
@@ -297,6 +314,21 @@ public sealed class TokenPicture
             p.IconSignature = icons.SignatureOf(p.Icons);
         }
         return p;
+    }
+
+    /// <summary>
+    /// True when <paramref name="other"/> draws the same picture but for the position (a token that only moved: the
+    /// keyframe after a step, step 11).
+    /// </summary>
+    public bool DiffersOnlyInPosition(TokenPicture other)
+    {
+        if (other == null || Position == other.Position)
+            return false;
+        return Active == other.Active && Rotation == other.Rotation && Scale == other.Scale
+               && HasRenderer == other.HasRenderer && Sprite == other.Sprite && Color == other.Color && Enabled == other.Enabled
+               && FlipX == other.FlipX && FlipY == other.FlipY && SortingLayerId == other.SortingLayerId
+               && SortingOrder == other.SortingOrder && Material == other.Material && DrawMode == other.DrawMode
+               && Size == other.Size && string.Equals(IconSignature, other.IconSignature, StringComparison.Ordinal);
     }
 
     /// <summary>True when <paramref name="other"/> draws the same picture.</summary>

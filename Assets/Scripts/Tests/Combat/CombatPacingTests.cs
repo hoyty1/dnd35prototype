@@ -167,12 +167,19 @@ public static class CombatPacingTests
     /// </summary>
     private static void WithSettings(Action<GameSettings> body)
     {
+        // Grouping off (grouped AI turns step 11 turns it on by default in play): an AI turn's mark must not open a group here.
         if (Application.isPlaying)
         {
             GameSettings live = GameSettings.Instance;
             float savedSpeed = live.aiTurnSpeed;
+            bool savedGroup = live.groupAiTurns;
+            live.groupAiTurns = false;
             try { body(live); }
-            finally { live.aiTurnSpeed = savedSpeed; }
+            finally
+            {
+                live.aiTurnSpeed = savedSpeed;
+                live.groupAiTurns = savedGroup;
+            }
             return;
         }
 
@@ -181,6 +188,7 @@ public static class CombatPacingTests
         try
         {
             GameSettings temp = go.AddComponent<GameSettings>();
+            temp.groupAiTurns = false;
             SettingsInstanceField.SetValue(null, temp);
             body(temp);
         }

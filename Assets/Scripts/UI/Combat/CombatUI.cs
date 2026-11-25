@@ -182,6 +182,9 @@ public class CombatUI : MonoBehaviour
     /// <summary>The combat HUD's "AI speed" button on the combat log's title bar (grouped AI turns step 6): cycles GameSettings.aiTurnSpeed.</summary>
     public Button AiSpeedButton;
     public Text AiSpeedLabel;
+    /// <summary>The combat HUD's "Group AI turns" toggle beside the AI speed button (grouped AI turns step 11, Q1): turns GameSettings.groupAiTurns on or off.</summary>
+    public Button GroupAiTurnsButton;
+    public Text GroupAiTurnsLabel;
     public Vector2 DefaultCombatLogWindowPosition;
     public Vector2 DefaultCombatLogWindowSize;
     public Vector2 DefaultActionWindowPosition;
@@ -583,6 +586,13 @@ public class CombatUI : MonoBehaviour
     {
         if (AiSpeedLabel != null)
             AiSpeedLabel.text = GameSettings.AiTurnSpeedLabel(GameSettings.CurrentAiTurnSpeed);
+    }
+
+    /// <summary>Shows whether Group AI turns is on, on the "Group AI turns" toggle (GameSettings.CurrentGroupAiTurns).</summary>
+    public void RefreshGroupAiTurnsButton()
+    {
+        if (GroupAiTurnsLabel != null)
+            GroupAiTurnsLabel.text = GameSettings.GroupAiTurnsLabel(GameSettings.CurrentGroupAiTurns);
     }
 
     public void ResetFloatingWindowLayout()

@@ -1369,6 +1369,7 @@ namespace Tests.Scenarios
             _savedPlayback = global::CombatPresentation.Playback;
             _groupingSaved = true;
             GameSettings.Instance.groupAiTurns = job.GroupOn;
+            if (gm.CombatUI != null) gm.CombatUI.RefreshGroupAiTurnsButton();
             global::CombatPresentation.Playback = job.Options.PlaybackFor(job.Options.Mode);
             global::CombatPresentation.ResetGroupLog();
 
@@ -1975,6 +1976,8 @@ namespace Tests.Scenarios
                 {
                     GameSettings.Instance.groupAiTurns = _savedGroupAiTurns;
                     global::CombatPresentation.Playback = _savedPlayback;
+                    CombatUI groupHud = GameManager.Instance != null ? GameManager.Instance.CombatUI : null;
+                    if (groupHud != null) groupHud.RefreshGroupAiTurnsButton();
                 }
                 catch (Exception ex) { job.Notes.Add("restore grouping: " + ex.Message); }
                 _groupingSaved = false;
@@ -2115,7 +2118,7 @@ namespace Tests.Scenarios
                     o.Set("id", g.Id).Set("lanes", new List<string>(g.Lanes)).Set("stop", g.Stop.HasValue ? g.Stop.Value.ToString() : "open")
                      .Set("stops", stops)
                      .Set("openSeq", g.OpenSeq).Set("closeSeq", g.CloseSeq).Set("beats", g.Beats).Set("pendingAtClose", g.PendingAtClose)
-                     .Set("playbackSec", (float)Math.Round(g.PlaybackSeconds, 3));
+                     .Set("windowBreaks", g.WindowBreaks).Set("playbackSec", (float)Math.Round(g.PlaybackSeconds, 3));
                     sb.Append(Json.Serialize(o)).Append('\n');
                 }
                 string file = Path.Combine(RunDir, jobId, GroupsFileName);

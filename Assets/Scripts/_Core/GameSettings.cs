@@ -15,7 +15,7 @@ public enum HPCalculationMode
 /// - No player-facing settings menu is wired yet.
 /// - Default remains Roll (D&D 3.5e standard).
 /// - The AI turn speed (aiTurnSpeed) has a combat HUD button (grouped AI turns step 6).
-/// - Group AI turns (groupAiTurns, step 9) is off by default and has no HUD toggle yet (step 11).
+/// - Group AI turns (groupAiTurns, step 9) is on by default in play (Q1, step 11) and has a combat HUD toggle.
 /// </summary>
 public class GameSettings : MonoBehaviour
 {
@@ -86,27 +86,41 @@ public class GameSettings : MonoBehaviour
     /// <summary>
     /// Group AI turns (grouped AI turns step 9, owner request 2026-10-30; docs/designs/grouped_ai_turns.md "The group"):
     /// the AI-decided turns before the next player-run turn resolve at once and play back together, the rules unchanged
-    /// (CombatPresentation's Holding mode). Read once per group, when TurnControl.AiTurnStarting opens one. Off by default
-    /// until step 11 (Q1's default then turns it on in play with a HUD toggle); the scenario harness sets it from its
-    /// group= option (default off) and restores it. Session-only. Presentation only: no rule reads it.
+    /// (CombatPresentation's Holding mode). Read once per group, when TurnControl.AiTurnStarting opens one. On by default in
+    /// play (step 11, owner question Q1's default), set by the combat HUD's "Group AI turns" toggle and Ctrl+G
+    /// (DebugCommands); the scenario harness sets it from its group= option (default off) and restores it, and the static
+    /// suite runner pins it off while suites run. Session-only. Presentation only: no rule reads it.
     /// </summary>
     public bool groupAiTurns = DefaultGroupAiTurns;
 
-    /// <summary>The default of <see cref="groupAiTurns"/>: off (step 9; Q1 moves it to on in step 11).</summary>
-    public const bool DefaultGroupAiTurns = false;
+    /// <summary>The default of <see cref="groupAiTurns"/> in play: on (step 11, Q1's default; it was off in step 9).</summary>
+    public const bool DefaultGroupAiTurns = true;
 
     /// <summary>
-    /// Whether grouping is on: the live settings object's <see cref="groupAiTurns"/>, or the default when no settings
-    /// object exists yet (this never creates one).
+    /// Whether grouping is on: in Play mode the live settings object's <see cref="groupAiTurns"/>, or the default when no
+    /// settings object exists yet (this never creates one); always off in edit mode, whatever a settings object an
+    /// edit-mode suite created says (no fight is played there, and an edit-mode suite must never open a group).
     /// </summary>
     public static bool CurrentGroupAiTurns
     {
         get
         {
+            if (!Application.isPlaying)
+                return false;
             GameSettings s = _instance;
             return s != null ? s.groupAiTurns : DefaultGroupAiTurns;
         }
     }
+
+    /// <summary>Turns <see cref="groupAiTurns"/> on or off and returns the new value (the HUD toggle and Ctrl+G).</summary>
+    public bool ToggleGroupAiTurns()
+    {
+        groupAiTurns = !groupAiTurns;
+        return groupAiTurns;
+    }
+
+    /// <summary>The HUD label of the grouping toggle: "Group: On" or "Group: Off".</summary>
+    public static string GroupAiTurnsLabel(bool on) => on ? "Group: On" : "Group: Off";
 
     /// <summary>
     /// The AI turn speed in force: the live settings object's <see cref="aiTurnSpeed"/>, or the default when no settings

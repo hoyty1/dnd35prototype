@@ -570,6 +570,16 @@ namespace Tests.Runner
             Random.State savedRandom = Random.state;
             int ranThisCall = 0;
             bool stoppedEarly = false;
+            // Grouped AI turns (step 11, Q1): grouping is on by default in play, but the suites run with it off, as the
+            // scenario harness does unless group= is given; a suite that needs a group opens one itself. In edit mode
+            // grouping is always off (GameSettings.CurrentGroupAiTurns), so only the Play pass pins it.
+            GameSettings groupSettings = playing ? GameSettings.Instance : null;
+            bool savedGroupAiTurns = groupSettings != null && groupSettings.groupAiTurns;
+            if (groupSettings != null)
+            {
+                groupSettings.groupAiTurns = false;
+                RefreshGroupAiTurnsLabel(report);
+            }
 
             try
             {
@@ -642,6 +652,11 @@ namespace Tests.Runner
                     catch (Exception ex) { report.warnings.Add("Could not close the temporary scene: " + ex.Message); }
                 }
                 Random.state = savedRandom;
+                if (groupSettings != null)
+                {
+                    groupSettings.groupAiTurns = savedGroupAiTurns;
+                    RefreshGroupAiTurnsLabel(report);
+                }
             }
 
             report.suites.Sort((a, b) => string.CompareOrdinal(a.type, b.type));
@@ -962,6 +977,20 @@ namespace Tests.Runner
             bool regression = d.unexpectedThrow || d.unexplainedFailures > Math.Max(0, entry.flakyFailures);
             bool stale = d.staleKnown.Count > 0 || d.expectThrowMissing;
             d.verdict = regression ? "REGRESSION" : stale ? "STALE" : "OK";
+        }
+
+        /// <summary>
+        /// Shows the grouping setting the Play pass pinned (or restored) on the combat HUD's "Group AI turns" toggle, as the
+        /// scenario harness does at each job's setup and cleanup, so the label never disagrees with what the suites use.
+        /// </summary>
+        private static void RefreshGroupAiTurnsLabel(StaticRunReport report)
+        {
+            try
+            {
+                CombatUI hud = GameManager.Instance != null ? GameManager.Instance.CombatUI : null;
+                if (hud != null) hud.RefreshGroupAiTurnsButton();
+            }
+            catch (Exception ex) { report.warnings.Add("Could not refresh the Group AI turns label: " + ex.Message); }
         }
 
         private static void Recompute(StaticRunReport report, bool haveBaseline)

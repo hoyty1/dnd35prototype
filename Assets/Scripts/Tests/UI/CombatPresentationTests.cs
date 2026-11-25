@@ -37,6 +37,10 @@ namespace Tests.UI
 /// suppression and before the attack sequence, the spray mark just before ResolveAcidSpray, both through the decider
 /// seam; PromptAttackedReaction closes the group and waits for the drain before its menu; every CatchUp-class method
 /// calls the fallback first; no caller of the S7 kind).
+/// Step 11 (gt-overlap-and-options): the setting is read once per group (a toggle mid-group neither closes nor reopens it;
+/// the next group follows it), and each beat kind maps to its overlap scheduler role (a Step and a settling Keyframe on
+/// the lane, the control and interactive beats barriers, the window stop and break their flags, the rest result beats).
+/// A scheduler fault or stall catches the playback up as a listed fallback. The scheduler itself is PlaybackSchedulerTests.
 /// Needs Play mode (a scene CombatUI and live token views).
 /// Side effects on the shared Play pass: the facade probes add a few "[presentation test]" lines and a turn separator
 /// to the scene's combat log (the log panel cannot trim back; no suite counts its lines). Every other probe restores
@@ -85,6 +89,9 @@ public static class CombatPresentationTests
             Run(TestConfirmationBarrierOrder);
             Run(TestPromptCounterTripWhileHolding);
             Run(TestCatchUpFallback);
+            Run(TestSettingReadOncePerGroup);
+            Run(TestOverlapItemMapping);
+            Run(TestSchedulerFaultFallsBack);
             CombatPresentation.ResetGroupLog();
         }
 
@@ -566,7 +573,7 @@ public static class CombatPresentationTests
             settings.groupAiTurns = false;
             TurnControl.AiTurnStarting(null);
             Assert(!CombatPresentation.Holding && !CombatPresentation.Queueing, "With grouping off an AI turn's mark opens no group (NEUTRAL default)");
-            Assert(GameSettings.DefaultGroupAiTurns == false, "Grouping is off by default (step 9; Q1 in step 11)");
+            Assert(GameSettings.DefaultGroupAiTurns, "Grouping is on by default in play (step 11, Q1's default)");
         }
         finally
         {
@@ -880,6 +887,138 @@ public static class CombatPresentationTests
             }
         }
     }
+
+    // ── Overlap and options (step 11) ──────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>GameSettings.groupAiTurns is read once, when a group opens (TurnControl.AiTurnStarting), never mid-group.</summary>
+    private static void TestSettingReadOncePerGroup()
+    {
+        PaceKind kind = CombatPacing.Kind;
+        GameSettings settings = GameSettings.Instance;
+        bool saved = settings.groupAiTurns;
+        GameManager gm = GameManager.Instance;
+        // A group never opens once the combat is over (TurnControl.CombatIsOver), so the probe puts the scene in an NPC
+        // turn for its duration (the backing field, which skips ScenarioHooks.PhaseChanged) and restores the phase after:
+        // the assertions run whatever phase the Play pass starts in.
+        FieldInfo phaseField = typeof(GameManager).GetField("_currentPhase", BindingFlags.NonPublic | BindingFlags.Instance);
+        object savedPhase = gm != null && phaseField != null ? phaseField.GetValue(gm) : null;
+        try
+        {
+            Assert(phaseField != null, "GameManager._currentPhase exists (the probe leaves a finished combat for its duration)");
+            if (gm != null && phaseField != null && gm.CurrentPhase == GameManager.TurnPhase.CombatOver)
+                phaseField.SetValue(gm, GameManager.TurnPhase.NPCTurn);
+            {
+                settings.groupAiTurns = true;
+                TurnControl.AiTurnStarting(null);
+                GroupRecord g = CombatPresentation.CurrentGroup;
+                Assert(CombatPresentation.Holding && g != null, "With grouping on an AI turn's mark opens a group");
+                settings.groupAiTurns = false;
+                TurnControl.AiTurnStarting(null);
+                Assert(CombatPresentation.Holding && ReferenceEquals(CombatPresentation.CurrentGroup, g) && g.Lanes.Count == 2,
+                    "Turning grouping off mid-group neither closes nor reopens the group: the setting is read once, at the open",
+                    g != null ? g.Lanes.Count.ToString() : "no group");
+                TurnControl.PlayerControlReturned(null);
+                CombatPresentation.CatchUpNow();
+                TurnControl.AiTurnStarting(null);
+                Assert(!CombatPresentation.Holding, "The next group reads the new value (off: no group opens)");
+                TurnControl.PlayerControlReturned(null);
+                settings.groupAiTurns = true;
+                TurnControl.AiTurnStarting(null);
+                Assert(CombatPresentation.Holding && !ReferenceEquals(CombatPresentation.CurrentGroup, g),
+                    "Turned on again, the next AI turn opens a new group");
+                TurnControl.PlayerControlReturned(null);
+            }
+            string control = SourceScan.MethodBody(Src("Combat/Pacing/TurnControl.cs"), "AiTurnStarting") ?? "";
+            Assert(Regex.IsMatch(control, @"if \(!CombatPresentation\.Holding && GameSettings\.CurrentGroupAiTurns"),
+                "AiTurnStarting reads the setting only when no group is open");
+        }
+        finally
+        {
+            settings.groupAiTurns = saved;
+            CombatPresentation.Clear();
+            if (gm != null && phaseField != null && savedPhase != null)
+                phaseField.SetValue(gm, savedPhase);
+            if (kind == PaceKind.Ai)
+                CombatPacing.Kind = PaceKind.Ai;
+            else
+                TurnControl.PlayerControlReturned(null);
+        }
+    }
+
+    /// <summary>Each beat kind's role in the overlap scheduler (CombatPresentation.ToItem).</summary>
+    private static void TestOverlapItemMapping()
+    {
+        var step = CombatPresentation.ToItem(new PresentationBeat
+        {
+            Kind = BeatKind.Step, Seq = 3, Turn = 2, Seconds = 0.2f, Pace = PaceKind.Ai, OnLane = true, Cells = new[] { 1, 2 }, IntoCells = new[] { 2 }
+        });
+        Assert(step.OnLane && step.IsStep && step.ScaleWithSpeed && step.Seq == 3 && step.Turn == 2 && step.IntoCells != null && step.IntoCells[0] == 2,
+            "A Step beat is a lane item with its seconds, kind, turn and cells");
+        var settle = CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Keyframe, OnLane = true, Cells = new[] { 5 }, IntoCells = new[] { 5 } });
+        var fall = CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Keyframe, OnLane = false, Cells = new[] { 5 } });
+        Assert(settle.OnLane && settle.IntoCells != null && !fall.OnLane && fall.IntoCells == null && fall.Cells != null,
+            "A keyframe that settles a step is a lane item; any other keyframe is a result beat with its cells");
+        var pace = CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Pace, Seconds = 0.5f, Pace = PaceKind.Player });
+        Assert(pace.IsPace && !pace.OnLane && !pace.ScaleWithSpeed && pace.Seconds == 0.5f, "A Pace beat is a result-track pause (a Player one never scaled)");
+        Assert(CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Control }).Flags == PlaybackScheduler.ItemFlags.Barrier
+               && CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Interactive }).Flags == PlaybackScheduler.ItemFlags.Barrier,
+            "The control and interactive beats are barriers (R7)");
+        Assert(CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.WindowStop }).Flags == PlaybackScheduler.ItemFlags.StopMark
+               && CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.WindowBreak }).Flags == PlaybackScheduler.ItemFlags.WindowBreak,
+            "The window stop (S2) and the window break (S5) carry their flags");
+        var log = CombatPresentation.ToItem(new PresentationBeat { Kind = BeatKind.Log, Text = "x" });
+        Assert(!log.OnLane && log.Flags == PlaybackScheduler.ItemFlags.None && !log.IsPace, "A log line is a plain result beat");
+    }
+
+    /// <summary>
+    /// The Timed playback's fault isolation and stall watchdog: a scheduler that throws, or stops making progress with the
+    /// group closed for CombatPresentation.StallSeconds, catches the playback up (the queue drains, so input is never
+    /// blocked for good) and lists the fallback for the harness.
+    /// </summary>
+    private static void TestSchedulerFaultFallsBack()
+    {
+        PlaybackMode saved = CombatPresentation.Playback;
+        var order = new List<string>();
+        try
+        {
+            CombatPresentation.Clear();
+            CombatPresentation.ResetGroupLog();
+            CombatPresentation.Playback = PlaybackMode.Timed;
+            CombatPresentation.TimedFrameProbeForTests = s => throw new InvalidOperationException("scheduler fault probe");
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Pace, Seconds = 5f, Pace = PaceKind.Player });
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Deferred, Text = "a", Show = () => order.Add("a") });
+            CombatPresentation.Pump(Frame);
+            Assert(order.Count == 1 && CombatPresentation.PendingBeats == 0, "A scheduler fault catches the playback up: the queue drains at once",
+                string.Join(",", order) + " pending " + CombatPresentation.PendingBeats);
+            Assert(CombatPresentation.CatchUpFallbacks.Count == 1 && CombatPresentation.CatchUpFallbacks[0] == CombatPresentation.SchedulerFallbackName,
+                "The scheduler fault is listed as a presentation fallback", string.Join(", ", CombatPresentation.CatchUpFallbacks));
+
+            CombatPresentation.ResetGroupLog();
+            int frames = 0;
+            CombatPresentation.TimedFrameProbeForTests = s => { if (frames++ > 0) s.Reset(); }; // after the first frame nothing can play
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Pace, Seconds = 5f, Pace = PaceKind.Player });
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Deferred, Text = "b", Show = () => order.Add("b") });
+            for (int i = 0; i < 10; i++)
+                CombatPresentation.Pump(0.06f);
+            Assert(order.Count == 1 && CombatPresentation.PendingBeats == 2 && CombatPresentation.CatchUpFallbacks.Count == 0,
+                "A wait shorter than the watchdog keeps the beats queued", "pending " + CombatPresentation.PendingBeats);
+            for (int i = 0; i < 60 && CombatPresentation.PendingBeats > 0; i++)
+                CombatPresentation.Pump(0.06f);
+            Assert(order.Count == 2 && CombatPresentation.PendingBeats == 0 && CombatPresentation.CatchUpFallbacks.Count == 1
+                   && CombatPresentation.CatchUpFallbacks[0] == CombatPresentation.SchedulerFallbackName,
+                "A stalled scheduler (no beat finished or in flight for StallSeconds, group closed) catches the playback up",
+                string.Join(",", order) + " pending " + CombatPresentation.PendingBeats);
+        }
+        finally
+        {
+            CombatPresentation.TimedFrameProbeForTests = null;
+            CombatPresentation.Playback = saved;
+            CombatPresentation.Clear();
+            CombatPresentation.ResetGroupLog();
+        }
+    }
+
+    private const float Frame = 1f / 60f;
 
     private static void TestCatchUpFallback()
     {

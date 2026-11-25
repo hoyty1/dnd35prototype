@@ -7,7 +7,8 @@
 /// GameSettings.groupAiTurns is on (read once, when the group opens) and the combat is not over, and closes at the first
 /// of the control beat, a prompt to a player-run creature, combat end and a reset. Step 10 adds the stopping points: the
 /// window stops (CombatPresentation.MarkStop, S2) and the prompts (S3: CombatUI.ShowConfirmationDialog and
-/// GameManager.PromptAttackedReaction call <see cref="PromptOpened"/>); the window cap (S5) comes with step 11.
+/// GameManager.PromptAttackedReaction call <see cref="PromptOpened"/>). Step 11 applies the window cap (S5, design choice
+/// C5) here: a creature's second turn in the current overlap window records a window break (CombatPresentation.NoteLane).
 /// </summary>
 public static class TurnControl
 {
@@ -15,7 +16,9 @@ public static class TurnControl
     /// An AI-decided turn starts: GameManager.OnTurnStarted's NPC branch, right before SingleNPCTurnFromInitiative is
     /// started, and GameManager.BeginForcedPCTurn, right before the forced turn is started. Pacing follows the AI from
     /// here until control returns to the player (C2). With grouping on and no group open, a group opens here (the
-    /// character sheet, skills and inventory windows close, C6); the turn is the group's next lane.
+    /// character sheet, skills and inventory windows close, C6); the turn is the group's next lane, and a creature's
+    /// second turn in the current overlap window starts a new window (S5, C5). The setting is read only when a group opens,
+    /// so a toggle mid-group applies from the next group.
     /// </summary>
     public static void AiTurnStarting(CharacterController actor)
     {

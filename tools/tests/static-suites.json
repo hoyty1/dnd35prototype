@@ -2264,11 +2264,22 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 103,
+      "passed": 145,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Grouped AI turns steps 8 and 9 (2026-11-25): the presentation facade in Passthrough, and since step 9 Holding (grouping off opens no group, the holding queue order, queue while behind, the drains, a close on an empty queue, Timed and Instant playback, Clear). Passthrough flags and Defer/WhenDrained at once, Boundary keeps the yield and Random.state, every public CombatUI method classed, the facade and cell gate apply at once, the queue order, the trace channels, the singleton on its own root, and the no-Random/no-rules-write scan of UI/Presentation/. 70/70 in run 20261125T142715Z-play; 77/77 after the review fixes (the trace fault isolation, the area indicator release in rules order, the QueuedClosure beat, the pacing kind and highlights restored; run 20261125T144849Z-play). 103/103 with the step 9 checks (run 20261125T152508Z-play) and after the review fixes (run 20261125T154538Z-play)."
+      "notes": "Grouped AI turns steps 8 and 9 (2026-11-25): the presentation facade in Passthrough, and since step 9 Holding (grouping off opens no group, the holding queue order, queue while behind, the drains, a close on an empty queue, Timed and Instant playback, Clear). Passthrough flags and Defer/WhenDrained at once, Boundary keeps the yield and Random.state, every public CombatUI method classed, the facade and cell gate apply at once, the queue order, the trace channels, the singleton on its own root, and the no-Random/no-rules-write scan of UI/Presentation/. 70/70 in run 20261125T142715Z-play; 77/77 after the review fixes (the trace fault isolation, the area indicator release in rules order, the QueuedClosure beat, the pacing kind and highlights restored; run 20261125T144849Z-play). 103/103 with the step 9 checks (run 20261125T152508Z-play) and after the review fixes (run 20261125T154538Z-play). 129/129 with the step 10 stops and prompts (run 20261125T164128Z-play). Step 11 (gt-overlap-and-options): grouping on by default in play (the default asserted), the setting read once per group (TestSettingReadOncePerGroup), each beat kind's scheduler role (TestOverlapItemMapping); 140/140 in run 20261125T172328Z-play. After the step 11 review: TestSettingReadOncePerGroup puts a finished combat's phase back to an NPC turn for its probe, so its count no longer depends on the scene's phase, and TestSchedulerFaultFallsBack (a scheduler fault or stall catches the playback up as a listed fallback); 145/145 in run 20261125T174357Z-play."
+    },
+    {
+      "type": "Tests.UI.PlaybackSchedulerTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 60,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Grouped AI turns step 11 (gt-overlap-and-options; added 2026-11-25): the pure overlap scheduler PlaybackScheduler (UI/Presentation/PlaybackScheduler.cs) on fake beats: the stagger 0.15 s over the speed and at most 3 lanes, moves overlapping, the result track strictly in seq order, a step into a fallen ally's square waiting for its keyframe, an AoO mid-move, a window at a stop mark and at a barrier, the S5 window cap, a Pace beat at its seconds over the speed with one lane and at the stagger with two, streaming never passing the recording head, and a generated mix checked against R1-R8. No Unity call, so either mode; 56/56 in an edit pass with all=true and in the Play pass 20261125T172328Z-play. After the step 11 review (a beat chained on one that finished earlier in the same Advance starts at once, not on the next frame): TestChainedBeatsDoNotWaitForFrame (a walk's steps contiguous, its length independent of the frame rate, one long Advance playing a whole walk, five zero-length beats of one token in one frame); 60/60 in an edit pass with all=true and in the Play pass 20261125T174357Z-play."
     },
     {
       "type": "Tests.UI.PresentationHoldTests",

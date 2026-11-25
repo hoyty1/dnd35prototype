@@ -35,9 +35,9 @@ public enum GroupStop
 
 /// <summary>
 /// What a window stop marks (grouped AI turns step 10, "Stopping points" S2 and S7; design choice C1). Presentation only:
-/// a mark never pauses the rules. In the sequential playback (step 9) every beat already plays after every earlier one, so
-/// a mark changes nothing on screen yet; step 11's overlap scheduler ends the overlap window at it (the lane holding the
-/// mark plays after every earlier beat, and the next lane opens a new window).
+/// a mark never pauses the rules. The overlap scheduler (step 11, PlaybackScheduler R7) ends the overlap window at it: the
+/// lane holding the mark plays after every earlier beat, at its recorded pacing divided by the AI speed, and the next lane
+/// opens a new window.
 /// </summary>
 public enum StopKind
 {
@@ -85,7 +85,10 @@ public sealed class GroupRecord
     /// (S3), which then opens only after them.
     /// </summary>
     public int PendingAtClose;
+    /// <summary>The Timed playback length at the speed in force when it was recorded, played one beat after another (the overlap playback is shorter).</summary>
     public float PlaybackSeconds;
+    /// <summary>The window breaks recorded (S5, step 11: a creature's second turn in an overlap window).</summary>
+    public int WindowBreaks;
     public readonly List<string> Lanes = new List<string>();
     /// <summary>The window stops recorded while the group was open, in rules order (step 10, S2; CombatPresentation.MarkStop).</summary>
     public readonly List<StopMark> Stops = new List<StopMark>();
@@ -141,9 +144,9 @@ public enum PresentationBoundary
 /// and token change is recorded as a <see cref="PresentationBeat"/> with its call-time values: CombatPacing.Wait records
 /// a Pace beat and returns one frame (<see cref="HoldingWait"/>), each MoveAlongPath step a Step beat, each boundary a
 /// Keyframe beat for every token whose picture changed (TokenPicture), a token created or destroyed meanwhile a Spawned
-/// or Removed beat. The playback (this MonoBehaviour's LateUpdate, single lane, in rules order) shows them: a Pace beat
-/// lasts its seconds divided by the AI speed and a Step beat tweens the token's held view (<see cref="Playback"/> Timed),
-/// or everything applies in the frame (Instant, the harness's fast mode). World input, the I/K/C toggles and End Turn
+/// or Removed beat. The playback (this MonoBehaviour's LateUpdate) shows them: a Pace beat lasts its seconds divided by
+/// the AI speed and a Step beat tweens the token's held view (<see cref="Playback"/> Timed), or everything applies in the
+/// frame, in rules order (Instant, the harness's fast and fine modes). World input, the I/K/C toggles and End Turn
 /// wait while <see cref="BlocksInput"/>. When the queue drains with no group open, the held views copy their models
 /// again and the <see cref="WhenDrained"/> actions run (the loot window). The rules never wait on the playback, so every
 /// rules outcome and trace hash is the same with grouping on or off (NEUTRAL; the harness's group=pair proves it).
@@ -154,6 +157,14 @@ public enum PresentationBoundary
 /// earlier beat (CombatUI.ShowConfirmationDialog, S3; the acid-spray menu closes the group and waits for the drain,
 /// GameManager.PromptAttackedReaction), and any other prompt shown meanwhile catches the playback up first
 /// (<see cref="CatchUpBeforePrompt"/>, the fallback).
+///
+/// Step 11 (gt-overlap-and-options, design choice C5) overlaps the Timed playback: every beat carries its turn (the lane
+/// key) and, for a token step, its cells; the pure PlaybackScheduler plays token steps in parallel lanes, one per turn
+/// (at most 3, each started 0.15 s / speed after the one before), and every other beat on the result track, strictly in
+/// rules order (R1-R8), so the log shows the same lines in the same order as live play and each token's keyframes play
+/// in their rules order. A window ends at a window stop (S2), at a creature's second turn in the window (S5, the
+/// WindowBreak beat <see cref="NoteLane"/> records) and at a barrier (the control and interactive beats). The banner (the
+/// turn indicator) is a result beat, so it names the actor of the result beat playing. The camera does not move (Q2).
 ///
 /// <see cref="Boundary"/> is called at every rules boundary a group has (each CombatPacing.Wait, each MoveAlongPath step,
 /// before the control beat and every Interactive-class call, and in TurnControl.CombatEnded). It records the keyframe
@@ -182,13 +193,52 @@ public sealed class CombatPresentation : MonoBehaviour
     private static CombatPresentation _instance;
     // The queue: beats from _head on wait to be applied, in rules order (seq). The applied prefix is compacted away.
     private static readonly List<PresentationBeat> _queue = new List<PresentationBeat>();
+    // Applied beats leave a null slot (the overlap playback applies out of seq order); _head is the first slot not yet
+    // known to be applied, _pending the beats not applied, and _queue[i].Seq is _queueBaseSeq + i.
     private static int _head;
+    private static int _pending;
+    private static int _queueBaseSeq = 1;
     private static readonly List<Action> _whenDrained = new List<Action>();
     private static int _seq;
     private static bool _holding;
     private static bool _applying;
-    private static bool _headStarted;
-    private static float _headElapsed;
+    // The overlap playback (step 11): the pure scheduler, the highest seq fed to it, and a generation that a reset bumps.
+    private static readonly PlaybackScheduler _scheduler = new PlaybackScheduler();
+    private static int _fedSeq;
+    private static int _schedulerGeneration;
+    private static readonly List<PlaybackScheduler.Item> _finishedScratch = new List<PlaybackScheduler.Item>();
+    private static readonly List<PlaybackScheduler.Item> _inFlightScratch = new List<PlaybackScheduler.Item>();
+    private static float _stallSeconds;
+    private static int _stallFrames;
+
+    /// <summary>
+    /// The Timed playback's watchdog: with the group closed and beats queued, this many seconds of frames (and at least
+    /// <see cref="StallMinFrames"/> of them) with no beat finished or in flight is a stall, and the playback catches up
+    /// (<see cref="SchedulerFallback"/>). Frames with no time (a paused game) never count.
+    /// </summary>
+    internal const float StallSeconds = 2f;
+
+    /// <summary>The fewest stalled frames that trip the watchdog (<see cref="StallSeconds"/>).</summary>
+    internal const int StallMinFrames = 30;
+
+    /// <summary>
+    /// The fallback name a scheduler fault or stall adds to <see cref="CatchUpFallbacks"/> (the harness's
+    /// presentationFallbacks).
+    /// </summary>
+    public const string SchedulerFallbackName = "PlaybackScheduler";
+
+    /// <summary>
+    /// Test seam (Tests.UI.CombatPresentationTests): runs at the start of each Timed frame with the scheduler, before it is
+    /// fed; a probe throws here (the fault isolation) or empties the scheduler (the stall watchdog). Null outside the tests.
+    /// </summary>
+    internal static Action<PlaybackScheduler> TimedFrameProbeForTests;
+
+    // The turn a beat is recorded in (the lane key): changes when TurnService's current creature or the round changes.
+    private static int _turnKey;
+    private static CharacterController _turnCreature;
+    private static int _turnRound;
+    // S5: the creatures with a turn in the current overlap window.
+    private static readonly PlaybackScheduler.WindowCap _windowCap = new PlaybackScheduler.WindowCap();
     private static GroupRecord _group;
     private static int _groupIds;
     private static readonly List<GroupRecord> _groups = new List<GroupRecord>();
@@ -206,12 +256,24 @@ public sealed class CombatPresentation : MonoBehaviour
         _instance = null;
         _queue.Clear();
         _head = 0;
+        _pending = 0;
+        _queueBaseSeq = 1;
         _whenDrained.Clear();
         _seq = 0;
         _holding = false;
         _applying = false;
-        _headStarted = false;
-        _headElapsed = 0f;
+        _scheduler.Reset();
+        _fedSeq = 0;
+        _schedulerGeneration = 0;
+        _finishedScratch.Clear();
+        _inFlightScratch.Clear();
+        _stallSeconds = 0f;
+        _stallFrames = 0;
+        TimedFrameProbeForTests = null;
+        _turnKey = 0;
+        _turnCreature = null;
+        _turnRound = 0;
+        _windowCap.Reset();
         _group = null;
         _groupIds = 0;
         _groups.Clear();
@@ -300,14 +362,14 @@ public sealed class CombatPresentation : MonoBehaviour
         get
         {
             for (int i = _head; i < _queue.Count; i++)
-                if (_queue[i].Kind == BeatKind.Interactive && _queue[i].Show != null)
+                if (_queue[i] != null && _queue[i].Kind == BeatKind.Interactive && _queue[i].Show != null)
                     return true;
             return false;
         }
     }
 
     /// <summary>The beats waiting to be applied.</summary>
-    public static int PendingBeats => _queue.Count - _head;
+    public static int PendingBeats => _pending;
 
     /// <summary>The actions waiting for the queue to drain (<see cref="WhenDrained"/>).</summary>
     public static int PendingDrainActions => _whenDrained.Count;
@@ -341,7 +403,14 @@ public sealed class CombatPresentation : MonoBehaviour
         if (beat == null)
             return;
         beat.Seq = ++_seq;
+        beat.Turn = CurrentTurnKey();
+        if (_queue.Count == 0)
+        {
+            _head = 0;
+            _queueBaseSeq = beat.Seq;
+        }
         _queue.Add(beat);
+        _pending++;
         if (_group != null && _group.IsOpen)
         {
             _group.Beats++;
@@ -349,6 +418,27 @@ public sealed class CombatPresentation : MonoBehaviour
         }
         if (Application.isPlaying)
             _ = Instance; // the playback loop lives on the singleton
+    }
+
+    /// <summary>
+    /// The turn a beat is recorded in (its overlap lane, step 11; docs/designs/grouped_ai_turns.md "Recording", Tags): a
+    /// new key whenever TurnService's current creature or the round changes (a round wrap's beats get a key of their own,
+    /// with the previous creature and the new round). A turn whose creature left initiative mid-turn keeps its key.
+    /// </summary>
+    private static int CurrentTurnKey()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+            return _turnKey;
+        CharacterController c = gm.CurrentCharacter;
+        int round = gm.CurrentRound;
+        if (c != null && (!ReferenceEquals(c, _turnCreature) || round != _turnRound))
+        {
+            _turnCreature = c;
+            _turnRound = round;
+            _turnKey++;
+        }
+        return _turnKey;
     }
 
     // ── The group ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -366,6 +456,7 @@ public sealed class CombatPresentation : MonoBehaviour
         _group = new GroupRecord { Id = ++_groupIds, OpenSeq = _seq + 1 };
         if (_groups.Count < MaxGroupLog)
             _groups.Add(_group);
+        _windowCap.Reset();
         if (Application.isPlaying)
             _ = Instance;
         try
@@ -380,13 +471,23 @@ public sealed class CombatPresentation : MonoBehaviour
         return true;
     }
 
-    /// <summary>Notes an AI-decided turn of the open group as a lane ("round:actor"; TurnControl.AiTurnStarting).</summary>
+    /// <summary>
+    /// Notes an AI-decided turn of the open group as a lane ("round:actor"; TurnControl.AiTurnStarting) and applies the
+    /// window cap (S5, design choice C5, step 11): when <paramref name="actor"/> already has a turn in the current overlap
+    /// window, a WindowBreak beat ends the window and this turn opens the next one (PlaybackScheduler.WindowCap). The rules
+    /// are never paused; the break is a presentation beat only.
+    /// </summary>
     internal static void NoteLane(CharacterController actor, int round)
     {
         if (!_holding || _group == null)
             return;
         string name = actor != null && actor.Stats != null ? actor.Stats.CharacterName : (actor != null ? actor.name : "?");
         _group.Lanes.Add(round + ":" + name);
+        if (_windowCap.Note(actor))
+        {
+            Enqueue(new PresentationBeat { Kind = BeatKind.WindowBreak, Creature = actor });
+            _group.WindowBreaks++;
+        }
     }
 
     // ── Stops (step 10) ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -401,8 +502,8 @@ public sealed class CombatPresentation : MonoBehaviour
     /// the reserved S7 API for readied actions and readied counterspells (CMB-029, SPL-047), with no caller yet.
     ///
     /// The mark is a WindowStop beat in rules order and a <see cref="StopMark"/> on the group record. The rules never wait:
-    /// the reaction resolves at once, as with grouping off. The lane holding the mark plays after every earlier beat (true
-    /// of the sequential playback by construction) and the next lane opens a new window (step 11's scheduler). Nothing is
+    /// the reaction resolves at once, as with grouping off. The lane holding the mark plays after every earlier beat and
+    /// the next lane opens a new window (the overlap scheduler, step 11, R7; the window cap restarts too). Nothing is
     /// traced (the presentation trace of a grouping-off run has no mark either), and outside a group this does nothing.
     /// </summary>
     public static void MarkStop(StopKind kind, CharacterController actor)
@@ -411,6 +512,7 @@ public sealed class CombatPresentation : MonoBehaviour
             return;
         var beat = new PresentationBeat { Kind = BeatKind.WindowStop, Creature = actor, Index = (int)kind };
         Enqueue(beat);
+        _windowCap.Reset(); // the marked turn is a window of its own; the next turn opens a fresh window (R7)
         string name = actor != null && actor.Stats != null ? actor.Stats.CharacterName : (actor != null ? actor.name : "?");
         _group.Stops.Add(new StopMark
         {
@@ -526,9 +628,62 @@ public sealed class CombatPresentation : MonoBehaviour
             TokenPicture pic = TokenPicture.Capture(view);
             if (pic == null || pic.SameAs(view.LastRecorded))
                 continue;
-            view.LastRecorded = pic;
-            Enqueue(new PresentationBeat { Kind = BeatKind.Keyframe, View = view, Picture = pic });
+            EnqueueKeyframe(view, pic);
         }
+    }
+
+    /// <summary>
+    /// Records a token's Keyframe beat, tagged for the overlap playback (step 11): the cells its token stands on (R4),
+    /// and whether it only settles the token where its last Step beat ended (a picture that differs from the last one
+    /// only in position, at that step's end): such a keyframe plays in its turn's lane with the steps; every other one is
+    /// a result beat.
+    /// </summary>
+    private static void EnqueueKeyframe(TokenView view, TokenPicture pic)
+    {
+        TokenPicture prev = view.LastRecorded;
+        bool settle = prev != null && view.LastStepEnd.HasValue && pic.Position == view.LastStepEnd.Value && pic.DiffersOnlyInPosition(prev);
+        view.LastRecorded = pic;
+        int[] cells = CellsOf(view, pic);
+        Enqueue(new PresentationBeat
+        {
+            Kind = BeatKind.Keyframe, View = view, Picture = pic, OnLane = settle, Cells = cells, IntoCells = settle ? cells : null
+        });
+    }
+
+    /// <summary>A cell as one int for the scheduler.</summary>
+    internal static int CellKey(int x, int y) => unchecked(x * 65536 + y);
+
+    /// <summary>The footprint of a creature of <paramref name="size"/> squares based at <paramref name="basePos"/>, as cell keys.</summary>
+    internal static int[] Footprint(Vector2Int basePos, int size)
+    {
+        int n = Mathf.Clamp(size, 1, 8);
+        var cells = new int[n * n];
+        int k = 0;
+        for (int x = 0; x < n; x++)
+            for (int y = 0; y < n; y++)
+                cells[k++] = CellKey(basePos.x + x, basePos.y + y);
+        return cells;
+    }
+
+    /// <summary>
+    /// The cells a keyframe's token stands on: its creature's grid footprint and the cell under its drawn position (a
+    /// mid-step mover is between the two); a token without a creature (a Flaming Sphere) only the latter.
+    /// </summary>
+    private static int[] CellsOf(TokenView view, TokenPicture pic)
+    {
+        Vector2Int under = SquareGridUtils.WorldToGrid(pic.Position);
+        CharacterController c = view.Model != null ? view.Model.GetComponent<CharacterController>() : null;
+        if (c == null)
+            return new[] { CellKey(under.x, under.y) };
+        int[] foot = Footprint(c.GridPosition, c.GetVisualSquaresOccupied());
+        int underKey = CellKey(under.x, under.y);
+        foreach (int k in foot)
+            if (k == underKey)
+                return foot;
+        var all = new int[foot.Length + 1];
+        Array.Copy(foot, all, foot.Length);
+        all[foot.Length] = underKey;
+        return all;
     }
 
     /// <summary>A view's last picture before its model goes (TokenView.PlayDespawnAndRelease while queueing).</summary>
@@ -540,10 +695,7 @@ public sealed class CombatPresentation : MonoBehaviour
         {
             TokenPicture pic = TokenPicture.Capture(view);
             if (pic != null && !pic.SameAs(view.LastRecorded))
-            {
-                view.LastRecorded = pic;
-                Enqueue(new PresentationBeat { Kind = BeatKind.Keyframe, View = view, Picture = pic });
-            }
+                EnqueueKeyframe(view, pic);
         }
         catch (Exception e)
         {
@@ -575,10 +727,22 @@ public sealed class CombatPresentation : MonoBehaviour
     {
         Boundary(PresentationBoundary.Step);
         if (Queueing && mover != null && mover.View != null)
+        {
+            // The overlap playback (step 11): a step plays in its turn's lane; it waits for earlier beats on the cells it
+            // enters (R4), and other steps into the cells it leaves or enters wait for it.
+            int size = mover.GetVisualSquaresOccupied();
+            int[] into = Footprint(to, size);
+            int[] fromCells = Footprint(from, size);
+            var cells = new int[fromCells.Length + into.Length];
+            Array.Copy(fromCells, cells, fromCells.Length);
+            Array.Copy(into, 0, cells, fromCells.Length, into.Length);
+            mover.View.LastStepEnd = endPos;
             Enqueue(new PresentationBeat
             {
-                Kind = BeatKind.Step, View = mover.View, From = startPos, To = endPos, Seconds = secondsPerStep, Pace = CombatPacing.Kind
+                Kind = BeatKind.Step, View = mover.View, From = startPos, To = endPos, Seconds = secondsPerStep, Pace = CombatPacing.Kind,
+                OnLane = true, Cells = cells, IntoCells = into
             });
+        }
         if (!PresentationTrace.Recording)
             return;
         try
@@ -684,9 +848,12 @@ public sealed class CombatPresentation : MonoBehaviour
     public static void CatchUpNow()
     {
         // A beat's apply may make a facade call of its own; it applies at once (_applying), never behind the queue.
+        ResetScheduler(); // every beat applies now, in rules order; later beats start a fresh schedule
         while (PendingBeats > 0)
         {
-            PresentationBeat b = TakeHead();
+            PresentationBeat b = TakeNext();
+            if (b == null)
+                break;
             ApplyGuarded(b);
         }
         Compact(true);
@@ -716,11 +883,14 @@ public sealed class CombatPresentation : MonoBehaviour
         var cells = new List<SquareCell>();
         var beats = new List<PresentationBeat>();
         for (int i = _head; i < _queue.Count; i++)
-            beats.Add(_queue[i]);
+            if (_queue[i] != null)
+                beats.Add(_queue[i]);
         _queue.Clear();
         _head = 0;
-        _headStarted = false;
-        _headElapsed = 0f;
+        _pending = 0;
+        _queueBaseSeq = _seq + 1;
+        ResetScheduler();
+        _windowCap.Reset();
         _applying = true;
         try
         {
@@ -780,7 +950,7 @@ public sealed class CombatPresentation : MonoBehaviour
         }
     }
 
-    // ── Playback (sequential, single lane) ──────────────────────────────────────────────────────────────────────────
+    // ── Playback (overlapped lanes, step 11) ────────────────────────────────────────────────────────────────────────
 
     private void LateUpdate()
     {
@@ -788,53 +958,204 @@ public sealed class CombatPresentation : MonoBehaviour
     }
 
     /// <summary>
-    /// One frame of playback: beats apply in rules order; a Pace beat holds the head for its seconds divided by the AI
-    /// speed and a Step beat tweens its view (Timed), or every available beat applies now (Instant). The playback never
-    /// passes the recording head: it plays what is queued and waits for more while the group records.
+    /// One frame of playback. Timed (play, watch mode): the beats go to the overlap scheduler (PlaybackScheduler, R1-R8:
+    /// token steps in parallel lanes, one per turn, at most 3, staggered; every other beat on the result track, strictly
+    /// in rules order; windows end at a stop, at a creature's second turn and at a barrier); each beat applies when the
+    /// scheduler finishes it, and a Step in flight tweens its held view. Instant (the harness's fast and fine modes):
+    /// every available beat applies now, in rules order. The playback never passes the recording head: it plays what is
+    /// queued and waits for more while the group records.
     /// </summary>
     internal static void Pump(float deltaTime)
     {
         if (PendingBeats == 0)
         {
+            if (_scheduler.Pending > 0)
+                ResetScheduler();
             if (!_holding && (_whenDrained.Count > 0 || TokenView.MaybeAnyHeld))
                 FinishDrain();
             return;
         }
-        float dt = Mathf.Max(0f, deltaTime);
-        bool instant = Playback == PlaybackMode.Instant;
-        while (PendingBeats > 0)
+        if (Playback == PlaybackMode.Instant)
         {
-            PresentationBeat b = _queue[_head];
-            float duration = instant ? 0f : DurationOf(b, PlaybackMode.Timed);
-            if (!_headStarted)
+            ResetScheduler();
+            while (PendingBeats > 0)
             {
-                _headStarted = true;
-                _headElapsed = 0f;
-            }
-            if (duration > 0f)
-            {
-                float need = duration - _headElapsed;
-                if (dt < need)
-                {
-                    _headElapsed += dt;
-                    if (b.Kind == BeatKind.Step && b.View != null)
-                    {
-                        float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_headElapsed / duration));
-                        b.View.ShowStep(Vector3.Lerp(b.From, b.To, t));
-                    }
+                PresentationBeat b = TakeNext();
+                if (b == null)
                     break;
-                }
-                dt -= need;
+                ApplyGuarded(b);
             }
-            TakeHead();
-            ApplyGuarded(b);
+        }
+        else
+        {
+            // Fault isolation: the overlap scheduler is presentation only, so a fault in it must never leave the queue
+            // (and BlocksInput) stuck; it catches the playback up instead, as a listed fallback.
+            try
+            {
+                PumpTimed(Mathf.Max(0f, deltaTime));
+            }
+            catch (Exception ex)
+            {
+                SchedulerFallback("threw " + ex.GetType().Name + ": " + ex.Message);
+            }
         }
         Compact(false);
         if (PendingBeats == 0 && !_holding)
+        {
+            ResetScheduler();
             FinishDrain();
+        }
     }
 
-    /// <summary>The time a beat holds the playback head for (Timed): a Pace beat's seconds and a Step's step seconds, divided by the AI speed.</summary>
+    private static void PumpTimed(float dt)
+    {
+        TimedFrameProbeForTests?.Invoke(_scheduler);
+        FeedScheduler();
+        _scheduler.RecordingOpen = _holding;
+        _finishedScratch.Clear();
+        int generation = _schedulerGeneration;
+        _scheduler.Advance(dt, CombatPacing.Speed, _finishedScratch);
+        foreach (PlaybackScheduler.Item item in _finishedScratch)
+        {
+            if (generation != _schedulerGeneration)
+                break; // a beat's apply reset the presentation (a reset or a catch-up): the rest is gone or applied
+            var b = item.Payload as PresentationBeat;
+            if (b != null && Take(b))
+                ApplyGuarded(b);
+        }
+        int finishedCount = _finishedScratch.Count;
+        _finishedScratch.Clear();
+        if (generation != _schedulerGeneration)
+            return;
+        _inFlightScratch.Clear();
+        _scheduler.CopyInFlight(_inFlightScratch);
+        foreach (PlaybackScheduler.Item item in _inFlightScratch)
+        {
+            var b = item.Payload as PresentationBeat;
+            if (b == null || b.Kind != BeatKind.Step || b.View == null)
+                continue;
+            float t = Mathf.SmoothStep(0f, 1f, item.Progress);
+            b.View.ShowStep(Vector3.Lerp(b.From, b.To, t));
+        }
+        int inFlight = _inFlightScratch.Count;
+        _inFlightScratch.Clear();
+        WatchForStall(dt, finishedCount > 0 || inFlight > 0);
+    }
+
+    /// <summary>
+    /// The stall watchdog (<see cref="StallSeconds"/>): while a group records, the playback may wait at the recording head
+    /// (R1), so only a closed group's queue counts; a frame that finished a beat or has one in flight is progress.
+    /// </summary>
+    private static void WatchForStall(float dt, bool progressed)
+    {
+        if (progressed || _holding || PendingBeats == 0)
+        {
+            _stallSeconds = 0f;
+            _stallFrames = 0;
+            return;
+        }
+        if (dt <= 0f)
+            return;
+        _stallSeconds += dt;
+        _stallFrames++;
+        if (_stallSeconds >= StallSeconds && _stallFrames >= StallMinFrames)
+            SchedulerFallback("made no progress for " + _stallSeconds.ToString("0.0") + " s");
+    }
+
+    /// <summary>
+    /// The scheduler fault or stall fallback: warns (<c>[Presentation] scheduler ...</c>), lists
+    /// <see cref="SchedulerFallbackName"/> in <see cref="CatchUpFallbacks"/> and applies every queued beat at once
+    /// (<see cref="CatchUpNow"/>), so the queue drains and input is never blocked for good.
+    /// </summary>
+    private static void SchedulerFallback(string why)
+    {
+        Debug.LogWarning("[Presentation] scheduler " + why + " with " + PendingBeats + " beats queued; catching up (fallback).");
+        if (_fallbacks.Count < MaxGroupLog)
+            _fallbacks.Add(SchedulerFallbackName);
+        _stallSeconds = 0f;
+        _stallFrames = 0;
+        try
+        {
+            CatchUpNow();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[Presentation] the scheduler fallback's catch-up threw " + ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    /// <summary>Feeds the scheduler every queued beat it has not seen, in rules order.</summary>
+    private static void FeedScheduler()
+    {
+        int from = Math.Max(_head, _fedSeq - _queueBaseSeq + 1);
+        for (int i = Math.Max(0, from); i < _queue.Count; i++)
+        {
+            PresentationBeat b = _queue[i];
+            if (b == null)
+                continue;
+            _scheduler.Add(ToItem(b));
+            _fedSeq = b.Seq;
+        }
+    }
+
+    /// <summary>A beat as a scheduler item: its turn, track, token, cells, timing and window role.</summary>
+    internal static PlaybackScheduler.Item ToItem(PresentationBeat b)
+    {
+        var it = new PlaybackScheduler.Item { Seq = b.Seq, Turn = b.Turn, Payload = b };
+        switch (b.Kind)
+        {
+            case BeatKind.Pace:
+                it.IsPace = true;
+                it.Seconds = b.Seconds;
+                it.ScaleWithSpeed = b.Pace == PaceKind.Ai;
+                break;
+            case BeatKind.Step:
+                it.OnLane = true;
+                it.IsStep = true;
+                it.Seconds = b.Seconds;
+                it.ScaleWithSpeed = b.Pace == PaceKind.Ai;
+                it.Token = b.View;
+                it.Cells = b.Cells;
+                it.IntoCells = b.IntoCells;
+                break;
+            case BeatKind.Keyframe:
+                it.OnLane = b.OnLane;
+                it.Token = b.View;
+                it.Cells = b.Cells;
+                it.IntoCells = b.OnLane ? b.IntoCells : null;
+                break;
+            case BeatKind.Spawned:
+            case BeatKind.Removed:
+                it.Token = b.View;
+                break;
+            case BeatKind.Control:
+            case BeatKind.Interactive:
+                it.Flags = PlaybackScheduler.ItemFlags.Barrier;
+                break;
+            case BeatKind.WindowStop:
+                it.Flags = PlaybackScheduler.ItemFlags.StopMark;
+                break;
+            case BeatKind.WindowBreak:
+                it.Flags = PlaybackScheduler.ItemFlags.WindowBreak;
+                break;
+        }
+        return it;
+    }
+
+    private static void ResetScheduler()
+    {
+        _scheduler.Reset();
+        _stallSeconds = 0f;
+        _stallFrames = 0;
+        _fedSeq = 0;
+        _schedulerGeneration++;
+    }
+
+    /// <summary>
+    /// The beat's sequential Timed length (a Pace beat's seconds and a Step's step seconds over the AI speed), summed into
+    /// GroupRecord.PlaybackSeconds; the overlap playback times beats with PlaybackScheduler.BaseDuration (and R2's
+    /// stagger cap).
+    /// </summary>
     internal static float DurationOf(PresentationBeat b, PlaybackMode mode)
     {
         if (b == null || mode == PlaybackMode.Instant)
@@ -847,22 +1168,45 @@ public sealed class CombatPresentation : MonoBehaviour
         }
     }
 
-    private static PresentationBeat TakeHead()
+    /// <summary>Takes the first beat not applied yet (rules order), or null.</summary>
+    private static PresentationBeat TakeNext()
     {
+        SkipApplied();
+        if (_head >= _queue.Count)
+            return null;
         PresentationBeat b = _queue[_head];
         _queue[_head] = null;
         _head++;
-        _headStarted = false;
-        _headElapsed = 0f;
+        _pending--;
         return b;
+    }
+
+    /// <summary>Takes <paramref name="b"/> out of the queue wherever it is (the overlap playback); false when it is not queued.</summary>
+    private static bool Take(PresentationBeat b)
+    {
+        int i = b.Seq - _queueBaseSeq;
+        if (i < 0 || i >= _queue.Count || !ReferenceEquals(_queue[i], b))
+            return false;
+        _queue[i] = null;
+        _pending--;
+        SkipApplied();
+        return true;
+    }
+
+    private static void SkipApplied()
+    {
+        while (_head < _queue.Count && _queue[_head] == null)
+            _head++;
     }
 
     private static void Compact(bool force)
     {
+        SkipApplied();
         if (_head == 0)
             return;
         if (_head >= _queue.Count)
         {
+            _queueBaseSeq += _queue.Count;
             _queue.Clear();
             _head = 0;
             return;
@@ -870,6 +1214,7 @@ public sealed class CombatPresentation : MonoBehaviour
         if (force || _head > 1024)
         {
             _queue.RemoveRange(0, _head);
+            _queueBaseSeq += _head;
             _head = 0;
         }
     }
@@ -918,7 +1263,8 @@ public sealed class CombatPresentation : MonoBehaviour
                 break;
             case BeatKind.GroundItem: if (b.Cell != null) b.Cell.ApplyGroundItemVisible(b.Flag); break;
             case BeatKind.Pace: break;
-            case BeatKind.WindowStop: break; // step 11's scheduler ends the window here; the sequential playback shows nothing
+            case BeatKind.WindowStop: break; // the scheduler ends the overlap window here (R7); it shows nothing
+            case BeatKind.WindowBreak: break; // S5: the scheduler opens a new window with this turn; it shows nothing
             case BeatKind.Step: if (b.View != null) b.View.ShowStep(b.To); break;
             case BeatKind.Keyframe: if (b.View != null) b.View.ApplyPicture(b.Picture); break;
             case BeatKind.Spawned: if (b.View != null) b.View.ApplySpawned(); break;
@@ -996,7 +1342,7 @@ public sealed class CombatPresentation : MonoBehaviour
         Add(UiCallClass.Live,
             "BuildFlankingIndicator", "SetCurrentTarget", "GetCurrentTarget", "ClearCurrentTarget",
             "ClearCombatLog", "ClearTurnOrderDisplay", "ResetAllUI", "InitializeForCombat", "ShowPositioningInstructions",
-            "ExportCombatLog", "RefreshAiSpeedButton", "ResetFloatingWindowLayout",
+            "ExportCombatLog", "RefreshAiSpeedButton", "RefreshGroupAiTurnsButton", "ResetFloatingWindowLayout",
             "UpdateActionButtons", "RefreshActionButtons", "OnGrappleActionsClicked", "ResetDamageModeToggleVisual",
             "UpdateDamageModeToggle", "UpdateFeatControls", "UpdatePowerAttackLabel", "UpdateRapidShotLabel",
             "SetPCIcon", "SetNPCIcon", "BeginSpontaneousConversion", "ClearSpontaneousCastState",

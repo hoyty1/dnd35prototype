@@ -52,6 +52,12 @@ public sealed class TokenView : MonoBehaviour
     /// </summary>
     internal TokenPicture LastRecorded;
 
+    /// <summary>
+    /// Where the last Step beat recorded for this view while holding ends (step 11): a keyframe that only puts the token
+    /// there is a lane beat with the steps (CombatPresentation.EnqueueKeyframe). Null after a hold starts.
+    /// </summary>
+    internal Vector3? LastStepEnd;
+
     /// <summary>The object this view mirrors (null once it was destroyed).</summary>
     public GameObject Model => _model;
 
@@ -206,6 +212,7 @@ public sealed class TokenView : MonoBehaviour
         _held = true;
         _maybeHeld = true;
         LastRecorded = null;
+        LastStepEnd = null;
         HoldIndicator();
     }
 
@@ -229,6 +236,7 @@ public sealed class TokenView : MonoBehaviour
             return;
         _held = false;
         LastRecorded = null;
+        LastStepEnd = null;
         if (_heldIndicator != null)
             _heldIndicator.ReleaseHold();
         _heldIndicator = null;

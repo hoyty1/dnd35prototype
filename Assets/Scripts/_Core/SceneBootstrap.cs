@@ -601,6 +601,31 @@ public class SceneBootstrap : MonoBehaviour
         aiSpeedLabel.raycastTarget = false;
         combatUI.AiSpeedLabel = aiSpeedLabel;
 
+        // The "Group AI turns" toggle (grouped AI turns step 11, Q1: on by default in play), left of the AI speed button on
+        // the same title bar and clear of the same resize handles. Wired in WireButtons.
+        GameObject groupGO = new GameObject("GroupAiTurnsButton");
+        groupGO.transform.SetParent(logSection.transform, false);
+        RectTransform groupRT = groupGO.AddComponent<RectTransform>();
+        groupRT.anchorMin = new Vector2(1f, 1f);
+        groupRT.anchorMax = new Vector2(1f, 1f);
+        groupRT.pivot = new Vector2(1f, 1f);
+        groupRT.anchoredPosition = new Vector2(-95f, -8f);
+        groupRT.sizeDelta = new Vector2(70f, 13f);
+
+        Image groupImage = groupGO.AddComponent<Image>();
+        groupImage.color = aiSpeedColor;
+
+        Button groupButton = groupGO.AddComponent<Button>();
+        groupButton.colors = aiSpeedColors;
+        combatUI.GroupAiTurnsButton = groupButton;
+
+        Text groupLabel = CreateText(groupGO.transform, "GroupAiTurnsLabel",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            GameSettings.GroupAiTurnsLabel(GameSettings.CurrentGroupAiTurns), 10, new Color(0.9f, 0.95f, 1f), TextAnchor.MiddleCenter);
+        groupLabel.raycastTarget = false;
+        combatUI.GroupAiTurnsLabel = groupLabel;
+
         // --- Scroll Area (holds ScrollRect) ---
         GameObject scrollArea = new GameObject("CombatLogScrollArea");
         scrollArea.transform.SetParent(logSection.transform, false);
@@ -1278,6 +1303,13 @@ public class SceneBootstrap : MonoBehaviour
             ui.AiSpeedButton.onClick.RemoveAllListeners();
             ui.AiSpeedButton.onClick.AddListener(DebugCommands.CycleAiTurnSpeed);
             ui.RefreshAiSpeedButton();
+        }
+
+        if (ui.GroupAiTurnsButton != null)
+        {
+            ui.GroupAiTurnsButton.onClick.RemoveAllListeners();
+            ui.GroupAiTurnsButton.onClick.AddListener(DebugCommands.ToggleGroupAiTurns);
+            ui.RefreshGroupAiTurnsButton();
         }
 
         if (ui.ResetUILayoutButton != null)

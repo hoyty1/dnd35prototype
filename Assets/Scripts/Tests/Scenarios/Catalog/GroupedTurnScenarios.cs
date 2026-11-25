@@ -29,6 +29,9 @@ namespace Tests.Scenarios
     /// Step 10 (gt-stop-points): a player-run creature's AoO or automatic acid spray inside a group is a window stop on the
     /// group record (S2; the owner's ruling, C1), and a defender prompt to a player-run creature closes the group as a
     /// prompt and opens only after the playback has shown every earlier beat (S3, C3); the rules never pause for playback.
+    /// Step 11 (gt-overlap-and-options): a creature's second turn inside an overlap window ends the window (S5, C5), a
+    /// window break on the group record; the overlap itself is the Timed playback's (PlaybackSchedulerTests), and the
+    /// harness's Instant playback shows the same beats in rules order.
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -71,6 +74,7 @@ namespace Tests.Scenarios
             yield return S("group-beetle-acid-spray-prompt", GroupBeetleAcidSprayPrompt);
             yield return S("group-beetle-acid-spray-auto", GroupBeetleAcidSprayAuto);
             yield return S("group-web-cast-inside", GroupWebCastInside);
+            yield return S("group-second-turn-opens-window", GroupSecondTurnOpensWindow);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -384,6 +388,57 @@ namespace Tests.Scenarios
                     && g[0].Lanes[0] == "1:Halted Ally" && g[0].Lanes[1] == "1:Halted Orc"
                         ? null : DescribeAll(g))
                 .Build();
+        }
+
+        /// <summary>
+        /// Two sturdy AI sides for three rounds: every turn is AI-decided, so one group spans the fight (reset by the
+        /// harness halt), and each creature's second turn inside the current overlap window starts a new window (S5,
+        /// design choice C5, grouped AI turns step 11): the ally's round 2 turn breaks the window {ally, orc}, its round 3
+        /// turn the window {ally, orc} of round 2. The rules are never paused (group=pair: the same hash in both reps).
+        /// </summary>
+        private static ScenarioDef GroupSecondTurnOpensWindow()
+        {
+            return Rules("rules/group-second-turn-opens-window", "A creature's second turn in an overlap window opens a new window (grouped AI turns step 11, S5)")
+                .Covers("grouped AI turns step 11", "S5", "C5", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(3)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Window Ally", 3)), 5, 10, Control.Ai)
+                .Npc("orc", "orc_warrior", 15, 10, Control.Ai)
+                .Tweak("ally", Sturdy)
+                .Tweak("orc", c => SturdyNamed(c, "Window Orc"))
+                .Initiative("ally", "orc")
+                .Expect("The fight runs to the round cap", Expect.Outcome(Outcome.Stalemate))
+                .ExpectGroups("One group over rounds 1-3 with a window break at each creature's second turn in a window", g =>
+                {
+                    if (g.Count != 1 || g[0].Stop != GroupStop.Reset || g[0].Lanes.Count < 4
+                        || g[0].Lanes[0] != "1:Window Ally" || g[0].Lanes[1] != "1:Window Orc"
+                        || g[0].Lanes[2] != "2:Window Ally" || g[0].Lanes[3] != "2:Window Orc")
+                        return DescribeAll(g);
+                    int expected = ExpectedWindowBreaks(g[0].Lanes);
+                    return g[0].WindowBreaks == expected && expected >= 2
+                        ? null
+                        : "window breaks " + g[0].WindowBreaks + ", expected " + expected + " (" + DescribeAll(g) + ")";
+                })
+                .Build();
+        }
+
+        /// <summary>The window breaks S5 gives for a group's lanes ("round:actor"): a creature already in the window breaks it.</summary>
+        private static int ExpectedWindowBreaks(IReadOnlyList<string> lanes)
+        {
+            var window = new HashSet<string>();
+            int breaks = 0;
+            foreach (string lane in lanes)
+            {
+                int colon = lane.IndexOf(':');
+                string actor = colon >= 0 ? lane.Substring(colon + 1) : lane;
+                if (window.Contains(actor))
+                {
+                    breaks++;
+                    window.Clear();
+                }
+                window.Add(actor);
+            }
+            return breaks;
         }
 
         /// <summary>
