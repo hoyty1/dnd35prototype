@@ -317,6 +317,8 @@ IDs: updates CRE-016 and CRE-090. NEUTRAL.
 
 Tests: new `SoakStatsColumnsTests` (the hash ignores the appended columns); the new rules scenario; the caster soak recorded as the batch's caster baseline.
 
+*Built (2026-11-25, not committed by the step):* `SoakScenarios.DmgCasters`, `CasterGroupForSeed`, `GenerateCasterEncounter`; `SoakStats.NpcColumns`, `NpcRecord`, `NpcAggregate`, the live reads `SlotsLeft` and `ItemUsesHeld` (start and end, `ScenarioRunner.SoakNpcLive`); `ScenarioTrace.CastStageRecords`; `Tests/Scenarios/Catalog/NpcCasterScenarios.cs`; `SoakStatsColumnsTests` (27 asserts, static edit pass OK). Found while building: the kobold sorcerer row resolves its race to the id "kobold", which `NPCDatabase` lacks (ENC-002), so it prepared no creature (`rules/npc-caster-spawn-has-spells` run 20261125-164641, 3 Error); until step 8 maps it, both caster scenarios stand it in with `kobold_warrior` in the harness only (`SoakScenarios.ApplyMissingBaseStandIns`). The lizardfolk row's crocodile is dropped by `NpcPattern` (ENC-005, DC8, step 8). Review fixes (2026-11-25): `npcNoEffectCasts` counts casts (split at each caster's `begin` stage), not buff steps; `npcDirectEffects` matches the mover's whole name; a not-yet-keyed `name:` caster with an Enemy name counts; the live reads cannot fail a job (a note instead); `SoakStats.Aggregate` names the scenario ids (`byScenario`, `mixedScenarios`, the id per seed row), because `soak/*` now matches both soaks: every like-for-like comparison must name `soak/dmg-random-encounters` or `soak/dmg-casters` (TESTING 3.5 changed accordingly); the DC3 measure is `npc.dc3.endedBeforeNpcSecondTurn` in each run's summary.json (TESTING 3.5); each DMG caster group checks its row's name (`SoakScenarios.RequireDmgRow`). **Step still open:** not run, so not verified in Play mode: the soak runs, the rules re-run and the static passes after the review fixes (the Unity MCP moved to another project's editor during the step), so the caster baseline, the DC3 check, the baseline soak's hash equality and the new scenario's first green run are still open; the resume checklist is in the step's TESTING 3.2 row.
+
 TEST BUDGET: 1 static suite (about 10 asserts), 2 scenarios. Run `QueueFresh("soak/dmg-random-encounters", "1-50", "perSession=10")` (must be hash-equal with the launch baseline), `QueueFresh("soak/dmg-casters", "1-49", "perSession=10")` and `QueueFresh("rules/npc-caster-*", "1-3", "")`.
 
 ### 2. Casting profiles on a melee routine close in (`b15-caster-profile-range`)
@@ -476,7 +478,7 @@ Kind regression. Run, through the Unity MCP:
 2. `QueueFresh("rules/*,smoke/*", "1-5", "")`;
 3. `QueueFresh("soak/dmg-random-encounters", "1-50", "perSession=10")` and `QueueFresh("soak/dmg-casters", "1-49", "perSession=10")`.
 
-Record the figures, the caster columns against step 1's caster baseline, and the AI-080 disagreement counts in TESTING 3.2. A new Fail, or a new kind of AI-080 disagreement, blocks step 12. Change no game code; file any regression as a new issue.
+Record the figures, the caster columns against step 1's caster baseline, and the AI-080 disagreement counts in TESTING 3.2. Since step 1, `rules/*` has one more Known per seed (`rules/npc-caster-spawn-has-spells`, ENC-021, until step 8 turns it into an expectation), and `soak/*` matches both soaks, so run the two soak filters as separate calls, as listed. A new Fail, or a new kind of AI-080 disagreement, blocks step 12. Change no game code; file any regression as a new issue.
 
 ### 12. Spell scores on the attack scale (`b15-ai-spell-scale`)
 
@@ -662,7 +664,7 @@ Batch 15 closes when there are 0 Fail, the static verdicts are OK, and every mov
 - The exact wording of Protection from Evil's mirrored spells (step 17).
 - Which baseline monsters run a Spellcaster profile on a melee routine (step 2).
 - The Quick Start party's ability scores (step 3's expectation).
-- Whether `ResolveCreatureName` parses the three caster rows and the crocodile (step 8).
+- Whether `ResolveCreatureName` parses the three caster rows and the crocodile (step 8). Partly answered by step 1 (2026-11-25, in code and one rules run): the kobold row resolves to the missing id "kobold" (ENC-002) and the crocodile is dropped (ENC-005); the druid and cleric rows were not seen to spawn.
 - The DMG sample pages, checked on 2026-11-16 by sample header: Sample 5th-Level NPC Cleric (human, NG, Healing and Protection) p.114, Druid (lizardfolk) p.115, Sorcerer (kobold, with a viper familiar) p.124, Wizard (drow) p.125.
 - The companion page (PHB p.36).
 - Every batch 14 and grouped-turn member, which are unbuilt.

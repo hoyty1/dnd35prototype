@@ -332,6 +332,11 @@ namespace Tests.Scenarios
         public int HookErrorViolations;
         /// <summary>The definition's GenerateActors result for this job (Def is then a per-job copy), or null.</summary>
         public GeneratedActors Generated;
+        /// <summary>
+        /// A soak job's consumable uses held by each Enemy-team actor at the start (SoakStats.ItemUsesHeld, by actor key), for
+        /// the npcItemUses column (batch 15 step 1); null for other jobs. Read from the live game, never traced.
+        /// </summary>
+        public Dictionary<string, int> SoakItemUsesAtStart;
         /// <summary>Stray combat-log lines destroyed during this job by the leak sweep (a leak like the fixed UI-001).</summary>
         public int LogLeakSwept;
         /// <summary>The last out-of-bound combat-log panel state the sweep recorded this job: {pool holders, line objects}, or null.</summary>
@@ -1600,6 +1605,24 @@ namespace Tests.Scenarios
             foreach (ActorSpec spec in def.Actors)
                 if (!spec.Source.IsAdopted)
                     job.Trace.EmitActor(spec.Key, job.Ctx.Actors[spec.Key], spec);
+            // The soak's NPC item-use column (batch 15 step 1): what each enemy holds now. A read only: no event, no die.
+            // A failure here only costs the statistics column (a job note, outside the hash), never the job's verdict.
+            if (def.Tags.Contains(SoakStats.Tag))
+            {
+                try
+                {
+                    var held = new Dictionary<string, int>(StringComparer.Ordinal);
+                    foreach (ActorSpec spec in def.Actors)
+                        if (!spec.Source.IsAdopted && spec.Team == CharacterTeam.Enemy && job.Ctx.Actors.TryGetValue(spec.Key, out CharacterController c) && c != null)
+                            held[spec.Key] = SoakStats.ItemUsesHeld(c);
+                    job.SoakItemUsesAtStart = held;
+                }
+                catch (Exception ex)
+                {
+                    job.SoakItemUsesAtStart = null;
+                    job.Notes.Add("npc columns (start): " + ex.GetType().Name + ": " + ex.Message);
+                }
+            }
             // Only a non-default difficulty or a personality warning adds a note, so a scenario with neither keeps its hash.
             if (job.Difficulty != AIService.AIDifficultyLevel.Normal)
                 job.Ctx.Note("ai difficulty " + job.Difficulty);
@@ -1727,6 +1750,27 @@ namespace Tests.Scenarios
                 job.Ui = null;
         }
 
+        /// <summary>
+        /// The live half of a soak job's NPC columns (batch 15 step 1, SoakStats.NpcColumns), read before the cleanup: the
+        /// slots each Enemy-team actor the spawn gave spellcasting can still cast, and the consumable uses spent since the
+        /// start. Reads only; nothing reaches the trace.
+        /// </summary>
+        private static SoakStats.NpcLive SoakNpcLive(ScenarioJob job)
+        {
+            var live = new SoakStats.NpcLive();
+            foreach (ActorSpec spec in job.Def.Actors)
+            {
+                if (spec.Source.IsAdopted || spec.Team != CharacterTeam.Enemy || !job.Ctx.Actors.TryGetValue(spec.Key, out CharacterController c) || c == null)
+                    continue;
+                NPCDefinition def = spec.Source.Kind == ActorSourceKind.Npc ? NPCDatabase.Get(spec.Source.NpcId) : null;
+                if (def != null && GameManager.HasCastableSpellForPersonality(def, c))
+                    live.SlotsLeftAtEnd += SoakStats.SlotsLeft(c);
+                if (job.SoakItemUsesAtStart != null && job.SoakItemUsesAtStart.TryGetValue(spec.Key, out int atStart))
+                    live.ItemUses += Math.Max(0, atStart - SoakStats.ItemUsesHeld(c));
+            }
+            return live;
+        }
+
         private JobResult Finalize(ScenarioJob job, GameManager gm)
         {
             var result = new JobResult
@@ -1799,7 +1843,14 @@ namespace Tests.Scenarios
             if (job.Generated != null)
                 result.Generated = job.Generated.Info;
             if (job.Def.Tags.Contains(SoakStats.Tag))
-                result.Soak = SoakStats.ForJob(trace.Events, job.Outcome, result.Rounds);
+            {
+                // The live reads are statistics only: a failure leaves the live columns at 0 with a note (outside the
+                // hash) instead of turning the job into a finalize error without a hash.
+                SoakStats.NpcLive live = null;
+                try { live = SoakNpcLive(job); }
+                catch (Exception ex) { result.Notes.Add("npc columns (end): " + ex.GetType().Name + ": " + ex.Message); }
+                result.Soak = SoakStats.ForJob(trace.Events, job.Outcome, result.Rounds, trace.CastStageRecords, live);
+            }
             List<string> lines = trace.HashLines();
             result.Hash = ScenarioTrace.Hash(lines);
             global::ActionContext.ClearProbe();

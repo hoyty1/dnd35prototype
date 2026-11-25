@@ -16,7 +16,10 @@ namespace Tests.Scenarios
     /// Each run with soak jobs also writes Logs/Scenarios/&lt;runId&gt;/soak-rows.tsv (one line per job), which
     /// <see cref="MergeRuns"/> reads back to aggregate a soak split over several fresh Play sessions.
     /// Since batch 14 step 1 it also holds the AI decision-time rows and summaries (<see cref="TimingRow"/>,
-    /// <see cref="TimingSummary"/>; ai-timing.tsv beside soak-rows.tsv, which stays unchanged), for every run, soak or not.
+    /// <see cref="TimingSummary"/>; ai-timing.tsv, a separate file beside soak-rows.tsv), for every run, soak or not.
+    /// soak-rows.tsv holds the 12 original columns plus <see cref="NpcColumns"/> (append-only since batch 15 step 1).
+    /// The aggregate names the scenario ids it covers ("byScenario") and each per-seed row its id, so a run that mixes
+    /// the two soaks (a "soak/*" filter) shows it; compare a baseline only with a run of the same id.
     /// </summary>
     public static class SoakStats
     {
@@ -25,8 +28,58 @@ namespace Tests.Scenarios
         private static readonly string[] Counters =
             { "turns", "attacks", "hits", "aoos", "maneuvers", "maneuverHits", "casts", "moves", "squares" };
 
+        /// <summary>
+        /// The NPC caster columns (batch 15 step 1, docs/designs/npc_spellcasting_batch15.md), in their soak-rows.tsv order
+        /// after the 12 original columns (append-only: MergeRuns reads by index). "NPC" is every actor on the Enemy team,
+        /// its summons included. Each job's soak record holds them as "npc"; none is a trace event, so no trace hash moves.
+        /// <list type="bullet">
+        /// <item>npcCasts: casts begun ("cast" events, ScenarioHooks.SpellCast; scroll and wand casts included).</item>
+        /// <item>npcCastsByLevel: those casts by the cast event's level ("1:2,2:1"; SpellData.SpellLevel, not yet the
+        /// casting class's level, SPL-008); empty when none.</item>
+        /// <item>npcSlotsLeftAtEnd: 1st-level and higher slots still castable at the job's end: uncast prepared slots
+        /// (not disabled by a negative level or locked by Imbue) plus a spontaneous caster's slots left; counted only for a
+        /// creature the spawn gave spellcasting (GameManager.HasCastableSpellForPersonality), since a reused slot keeps an
+        /// earlier creature's SpellcastingComponent.</item>
+        /// <item>npcFirstCastRound: the round of the first NPC cast, 0 when none.</item>
+        /// <item>npcRefusedPicks: casts the cast core refused at its legality stage (a "legality" cast stage whose detail is
+        /// not "ok").</item>
+        /// <item>npcNoEffectCasts: casts with no effect: the cast stages split into casts at each caster's "begin" stage, a
+        /// cast counted once when it has a "buff" stage and none of its buff stages (one per target on an area buff) is
+        /// "applied".</item>
+        /// <item>npcItemUses: consumable uses: potions and scrolls (a stack counts its quantity) and wand and staff charges
+        /// held at the start minus those held at the end.</item>
+        /// <item>npcDirectEffects: a directed spell effect moved by an NPC (today a Flaming Sphere, by its combat log line,
+        /// whose mover must be an Enemy actor's whole name that no other actor has).</item>
+        /// </list>
+        /// The cast-stage columns also count a caster the trace has not keyed yet ("name:&lt;name&gt;", a summon before its
+        /// first cast event) when the name is an Enemy actor's. The live reads (ScenarioRunner.SoakNpcLive) never fail a job:
+        /// on an exception their columns read 0 and the job gets an "npc columns" note.
+        /// </summary>
+        public static readonly string[] NpcColumns =
+        {
+            "npcCasts", "npcCastsByLevel", "npcSlotsLeftAtEnd", "npcFirstCastRound",
+            "npcRefusedPicks", "npcNoEffectCasts", "npcItemUses", "npcDirectEffects"
+        };
+
+        /// <summary>The combat log text of a Flaming Sphere move (GameManager_FlamingSphere), after the mover's name.</summary>
+        private const string SphereMove = " rolls Flaming Sphere to (";
+
+        /// <summary>The team whose actors the NPC columns count (CharacterTeam.Enemy as the trace writes it).</summary>
+        public const string NpcTeam = "Enemy";
+
+        /// <summary>The number of columns soak-rows.tsv had before the NPC columns (MergeRuns reads older rows too).</summary>
+        public const int BaseRowColumns = 12;
+
+        /// <summary>What a soak job's NPC columns read from the live game at its start and end (not from the trace).</summary>
+        public sealed class NpcLive
+        {
+            public int SlotsLeftAtEnd;
+            public int ItemUses;
+        }
+
         /// <summary>The soak record of one job from its trace.</summary>
-        public static JsonObj ForJob(IReadOnlyList<TraceEvent> events, Outcome outcome, int rounds)
+        internal static JsonObj ForJob(IReadOnlyList<TraceEvent> events, Outcome outcome, int rounds,
+            IReadOnlyList<ScenarioTrace.CastStageRecord> castStages = null, NpcLive live = null)
         {
             var team = new Dictionary<string, string>();
             foreach (TraceEvent e in events)
@@ -119,7 +172,186 @@ namespace Tests.Scenarios
                 bySide.Set(kv.Key, so);
             }
             o.Set("sides", bySide);
+            o.Set("npc", NpcRecord(events, team, castStages, live));
+            // The DC3 measure (batch 15 step 1): the most turns any Enemy actor started. Summary only: not a soak-rows.tsv
+            // column, so a merged report (MergeRuns) does not carry it; each run's summary.json does.
+            var npcTurns = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (TraceEvent e in events)
+                if (e.Ev == "turn_start" && e.Str("actor") != null && team.TryGetValue(e.Str("actor"), out string tt) && tt == NpcTeam)
+                    npcTurns[e.Str("actor")] = npcTurns.TryGetValue(e.Str("actor"), out int k) ? k + 1 : 1;
+            o.Set("npcMaxTurns", npcTurns.Count > 0 ? npcTurns.Values.Max() : 0);
             return o;
+        }
+
+        /// <summary>The NPC columns of one job (<see cref="NpcColumns"/>), from its trace, its cast stages and its live counts.</summary>
+        internal static JsonObj NpcRecord(IReadOnlyList<TraceEvent> events, IReadOnlyDictionary<string, string> team,
+            IReadOnlyList<ScenarioTrace.CastStageRecord> castStages, NpcLive live)
+        {
+            bool IsNpcKey(string key) => key != null && team != null && team.TryGetValue(key, out string t) && t == NpcTeam;
+            // The Enemy team's names, less any name a non-Enemy actor also has (so a party move is never counted as an NPC's).
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            var otherNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TraceEvent e in events)
+            {
+                if (e.Ev != "actor" || string.IsNullOrEmpty(e.Str("name")))
+                    continue;
+                if (IsNpcKey(e.Str("key")))
+                    names.Add(e.Str("name"));
+                else
+                    otherNames.Add(e.Str("name"));
+            }
+            names.ExceptWith(otherNames);
+            // A cast stage names a caster the trace has not keyed yet (a summon before its first cast event) "name:<name>".
+            bool IsNpc(string key) => IsNpcKey(key)
+                || (key != null && key.StartsWith("name:", StringComparison.Ordinal) && names.Contains(key.Substring("name:".Length)));
+
+            int casts = 0, firstRound = 0, direct = 0;
+            var byLevel = new SortedDictionary<int, int>();
+            foreach (TraceEvent e in events)
+            {
+                if (e.Ev == "cast" && IsNpcKey(e.Str("by")))
+                {
+                    casts++;
+                    if (firstRound == 0)
+                        firstRound = e.Round;
+                    int level = e.Int("level");
+                    byLevel[level] = byLevel.TryGetValue(level, out int n) ? n + 1 : 1;
+                }
+                else if (e.Ev == "log" && names.Count > 0)
+                {
+                    // "<icon> <who> rolls Flaming Sphere to (x, y)." (GameManager_FlamingSphere): <who> must be an NPC's
+                    // whole name, the leading icon and spaces stripped.
+                    string text = e.Str("text");
+                    int at = text != null ? text.IndexOf(SphereMove, StringComparison.Ordinal) : -1;
+                    if (at <= 0)
+                        continue;
+                    int start = 0;
+                    while (start < at && !char.IsLetterOrDigit(text[start]))
+                        start++;
+                    if (names.Contains(text.Substring(start, at - start)))
+                        direct++;
+                }
+            }
+
+            // The cast stages, split into casts at each caster's "begin" stage: a refusal is one legality stage that is not
+            // "ok"; a cast with no effect is one whose buff stages (one per target on an area buff) all applied nothing.
+            int refused = 0, noEffect = 0;
+            if (castStages != null)
+            {
+                var open = new Dictionary<string, bool[]>(StringComparer.Ordinal); // caster -> {has a buff stage, any applied}
+                void Close(string by)
+                {
+                    if (open.TryGetValue(by, out bool[] c) && c[0] && !c[1])
+                        noEffect++;
+                    open.Remove(by);
+                }
+                foreach (ScenarioTrace.CastStageRecord st in castStages)
+                {
+                    if (st.By == null || !IsNpc(st.By))
+                        continue;
+                    if (st.Stage == CastStageTrace.Begin)
+                    {
+                        Close(st.By);
+                        open[st.By] = new bool[2];
+                    }
+                    else if (st.Stage == CastStageTrace.Legality && st.Detail != "ok")
+                    {
+                        refused++;
+                    }
+                    else if (st.Stage == CastStageTrace.Buff)
+                    {
+                        if (!open.TryGetValue(st.By, out bool[] c))
+                            open[st.By] = c = new bool[2];
+                        c[0] = true;
+                        if (st.Detail != null && st.Detail.StartsWith("applied", StringComparison.Ordinal))
+                            c[1] = true;
+                    }
+                }
+                foreach (string by in open.Keys.ToList())
+                    Close(by);
+            }
+
+            var o = new JsonObj();
+            o.Set("npcCasts", casts)
+             .Set("npcCastsByLevel", FormatByLevel(byLevel))
+             .Set("npcSlotsLeftAtEnd", live != null ? live.SlotsLeftAtEnd : 0)
+             .Set("npcFirstCastRound", firstRound)
+             .Set("npcRefusedPicks", refused)
+             .Set("npcNoEffectCasts", noEffect)
+             .Set("npcItemUses", live != null ? live.ItemUses : 0)
+             .Set("npcDirectEffects", direct);
+            return o;
+        }
+
+        /// <summary>"1:2,2:1": casts per spell level, ascending; empty when none.</summary>
+        public static string FormatByLevel(IDictionary<int, int> byLevel)
+            => byLevel == null ? "" : string.Join(",", byLevel.OrderBy(kv => kv.Key)
+                .Select(kv => kv.Key.ToString(CultureInfo.InvariantCulture) + ":" + kv.Value.ToString(CultureInfo.InvariantCulture)));
+
+        /// <summary>Parses <see cref="FormatByLevel"/>'s text back (unknown parts are skipped).</summary>
+        public static SortedDictionary<int, int> ParseByLevel(string text)
+        {
+            var d = new SortedDictionary<int, int>();
+            if (string.IsNullOrEmpty(text))
+                return d;
+            foreach (string part in text.Split(','))
+            {
+                int colon = part.IndexOf(':');
+                if (colon > 0
+                    && int.TryParse(part.Substring(0, colon), NumberStyles.Integer, CultureInfo.InvariantCulture, out int level)
+                    && int.TryParse(part.Substring(colon + 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+                    d[level] = (d.TryGetValue(level, out int had) ? had : 0) + n;
+            }
+            return d;
+        }
+
+        /// <summary>
+        /// 1st-level and higher slots <paramref name="c"/> can still cast: uncast prepared slots that hold a spell (not
+        /// disabled by a negative level or locked by Imbue) plus a spontaneous caster's slots left. 0 without a component.
+        /// </summary>
+        public static int SlotsLeft(CharacterController c)
+        {
+            SpellcastingComponent sc = c != null ? c.Spellcasting : null;
+            if (sc == null)
+                return 0;
+            int n = 0;
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null && slot.Level >= 1 && slot.HasSpell && !slot.IsUsed && !slot.DisabledByNegativeLevel && !slot.LockedByImbue)
+                    n++;
+            if (sc.IsSpontaneousCaster)
+                for (int level = 1; level <= 9; level++)
+                    n += Math.Max(0, sc.SpontaneousData.GetSlotsRemaining(level));
+            return n;
+        }
+
+        /// <summary>
+        /// The consumable uses <paramref name="c"/> holds: potions and scrolls (a stack counts its quantity) and the charges
+        /// of its wands and staffs, in its general slots and its hands.
+        /// </summary>
+        public static int ItemUsesHeld(CharacterController c)
+        {
+            global::Inventory inv = c != null && c.InventoryComp != null ? c.InventoryComp.CharacterInventory : null;
+            if (inv == null)
+                return 0;
+            int n = 0;
+            void Count(ItemData item)
+            {
+                if (item == null)
+                    return;
+                if (item.IsWand)
+                    n += Math.Max(0, item.CurrentCharges);
+                else if (item.IsStaff)
+                    n += Math.Max(0, item.StaffCharges);
+                else if (item.IsPotion || item.IsScroll)
+                    n += Math.Max(1, item.Quantity);
+            }
+            if (inv.GeneralSlots != null)
+                foreach (ItemData item in inv.GeneralSlots)
+                    Count(item);
+            Count(inv.RightHandSlot);
+            if (!ReferenceEquals(inv.LeftHandSlot, inv.RightHandSlot))
+                Count(inv.LeftHandSlot);
+            return n;
         }
 
         /// <summary>The run-level aggregate of the jobs that have a soak record.</summary>
@@ -128,6 +360,14 @@ namespace Tests.Scenarios
             var o = new JsonObj();
             int n = results.Count;
             o.Set("jobs", n);
+            // The scenario ids the aggregate covers (jobs per id): more than one means a mixed run ("soak/*" matches both
+            // soak/dmg-random-encounters and soak/dmg-casters), whose figures compare with no recorded baseline.
+            var byScenario = new JsonObj();
+            foreach (IGrouping<string, JobResult> g in results.GroupBy(r => r.Id ?? "").OrderBy(g => g.Key, StringComparer.Ordinal))
+                byScenario.Set(g.Key, g.Count());
+            o.Set("byScenario", byScenario);
+            if (byScenario.Count() > 1)
+                o.Set("mixedScenarios", true);
 
             var outcomes = new JsonObj();
             foreach (IGrouping<Outcome, JobResult> g in results.GroupBy(r => r.Outcome).OrderBy(g => g.Key.ToString(), StringComparer.Ordinal))
@@ -178,13 +418,14 @@ namespace Tests.Scenarios
                 bySide.Set(t, side);
             }
             o.Set("sides", bySide);
+            o.Set("npc", NpcAggregate(results));
 
             // One compact row per job (seed order).
             var rows = new List<JsonObj>();
-            foreach (JobResult r in results.OrderBy(r => r.Seed).ThenBy(r => r.Rep))
+            foreach (JobResult r in results.OrderBy(r => r.Id ?? "", StringComparer.Ordinal).ThenBy(r => r.Seed).ThenBy(r => r.Rep))
             {
                 var row = new JsonObj();
-                row.Set("seed", r.Seed).Set("rep", r.Rep).Set("outcome", r.Outcome).Set("verdict", r.Verdict)
+                row.Set("id", r.Id).Set("seed", r.Seed).Set("rep", r.Rep).Set("outcome", r.Outcome).Set("verdict", r.Verdict)
                    .Set("rounds", r.Rounds).Set("turns", Int(r.Soak, "turns")).Set("wallSec", r.WallSec);
                 if (r.Generated != null)
                     row.Set("encounter", r.Generated.Get("name")).Set("dungeonLevel", r.Generated.Get("dungeonLevel"))
@@ -201,10 +442,71 @@ namespace Tests.Scenarios
                     }
                     row.Set("sides", compact);
                 }
+                if (r.Soak.Get("npc") is JsonObj npc)
+                    row.Set("npc", Int(npc, "npcCasts") + "c [" + (npc.Get("npcCastsByLevel") as string ?? "") + "] / "
+                                   + Int(npc, "npcSlotsLeftAtEnd") + " slots left / first r" + Int(npc, "npcFirstCastRound") + " / "
+                                   + Int(npc, "npcRefusedPicks") + " refused / " + Int(npc, "npcNoEffectCasts") + " no effect / "
+                                   + Int(npc, "npcItemUses") + " items / " + Int(npc, "npcDirectEffects") + " directed");
                 rows.Add(row);
             }
-            o.Set("legend", "sides: attacks a / AoOs o / maneuvers m / casts c / moves mv, down at end / actors");
+            o.Set("legend", "sides: attacks a / AoOs o / maneuvers m / casts c / moves mv, down at end / actors; npc: casts c [by level] / slots left at the end / first cast round / refused picks / no-effect casts / item uses / directed effects");
             o.Set("perSeed", rows);
+            return o;
+        }
+
+        /// <summary>
+        /// The run's NPC column totals (<see cref="NpcColumns"/>) over the jobs whose record has them: the sums, the casts by
+        /// level, the jobs with an NPC cast and their mean first-cast round. A merged row from before batch 15 step 1 has no
+        /// NPC columns and is counted apart ("jobsWithoutNpcColumns").
+        /// </summary>
+        public static JsonObj NpcAggregate(IList<JobResult> results)
+        {
+            var o = new JsonObj();
+            var sums = new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (string c in NpcColumns)
+                if (c != "npcCastsByLevel" && c != "npcFirstCastRound")
+                    sums[c] = 0;
+            var byLevel = new SortedDictionary<int, int>();
+            int jobs = 0, without = 0, withCast = 0, turnsMeasured = 0, beforeSecondTurn = 0;
+            long firstRounds = 0;
+            foreach (JobResult r in results)
+            {
+                if (r.Soak?.Get("npcMaxTurns") is int maxTurns)
+                {
+                    turnsMeasured++;
+                    if (maxTurns < 2)
+                        beforeSecondTurn++;
+                }
+                if (!(r.Soak?.Get("npc") is JsonObj npc))
+                {
+                    without++;
+                    continue;
+                }
+                jobs++;
+                foreach (string c in sums.Keys.ToList())
+                    sums[c] += Int(npc, c);
+                foreach (KeyValuePair<int, int> kv in ParseByLevel(npc.Get("npcCastsByLevel") as string))
+                    byLevel[kv.Key] = (byLevel.TryGetValue(kv.Key, out int had) ? had : 0) + kv.Value;
+                int first = Int(npc, "npcFirstCastRound");
+                if (first > 0)
+                {
+                    withCast++;
+                    firstRounds += first;
+                }
+            }
+            o.Set("jobs", jobs);
+            if (without > 0)
+                o.Set("jobsWithoutNpcColumns", without);
+            var tot = new JsonObj();
+            foreach (KeyValuePair<string, long> kv in sums)
+                tot.Set(kv.Key, kv.Value);
+            o.Set("totals", tot);
+            o.Set("npcCastsByLevel", FormatByLevel(byLevel));
+            o.Set("jobsWithNpcCast", withCast);
+            o.Set("meanFirstCastRound", withCast > 0 ? Math.Round((double)firstRounds / withCast, 3) : 0.0);
+            // DC3 (docs/designs/npc_spellcasting_batch15.md): jobs in which no Enemy actor started a second turn, over the
+            // jobs that carry npcMaxTurns (a per-run summary only: a merged report from soak-rows.tsv has none).
+            o.Set("dc3", new JsonObj().Set("jobsMeasured", turnsMeasured).Set("endedBeforeNpcSecondTurn", beforeSecondTurn));
             return o;
         }
 
@@ -224,13 +526,18 @@ namespace Tests.Scenarios
                         if (kv.Value is JsonObj c)
                             sides.Add(kv.Key + "=" + string.Join(",", c.Select(x => x.Key + ":" + Int(c, x.Key))));
                 string Clean(object o) => Convert.ToString(o, CultureInfo.InvariantCulture)?.Replace('\t', ' ').Replace('\n', ' ') ?? "";
-                sb.Append(string.Join("\t", new[]
+                var fields = new List<string>
                 {
                     Clean(r.Id), Clean(r.Seed), Clean(r.Rep), Clean(r.Outcome), Clean(r.Verdict), Clean(r.Rounds),
                     Clean(Int(r.Soak, "turns")), r.WallSec.ToString("0.###", CultureInfo.InvariantCulture),
                     Clean(r.Generated?.Get("name")), Clean(r.Generated?.Get("dungeonLevel")), Clean(r.Generated?.Get("count")),
                     string.Join(";", sides)
-                })).Append('\n');
+                };
+                // Batch 15 step 1: the NPC columns, appended after the 12 original ones (MergeRuns reads by index).
+                JsonObj npc = r.Soak.Get("npc") as JsonObj;
+                foreach (string c in NpcColumns)
+                    fields.Add(c == "npcCastsByLevel" ? Clean(npc?.Get(c) as string ?? "") : Clean(Int(npc, c)));
+                sb.Append(string.Join("\t", fields)).Append('\n');
             }
             if (sb.Length > 0)
                 Json.WriteFileAtomic(Path.Combine(runDir, RowsFile), sb.ToString());
@@ -387,7 +694,8 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// Writes &lt;runDir&gt;/ai-timing.tsv: a "#" header, then one tab-separated line per AI turn (id, seed, rep, warm-up,
-        /// round, actor, unclosed, total ms, ms per bucket). soak-rows.tsv is untouched (MergeRuns reads it by column index).
+        /// round, actor, unclosed, total ms, ms per bucket). A separate file: soak-rows.tsv keeps its own layout (the 12
+        /// original columns plus <see cref="NpcColumns"/>; MergeRuns reads it by column index).
         /// </summary>
         public static void WriteTimingRows(string runDir, IEnumerable<TimingRow> rows)
         {
@@ -441,7 +749,7 @@ namespace Tests.Scenarios
         private static JobResult FromRow(string line)
         {
             string[] f = line.Split('\t');
-            if (f.Length < 12)
+            if (f.Length < BaseRowColumns)
                 return null;
             int I(string v) => int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ? x : 0;
             var r = new JobResult
@@ -476,6 +784,21 @@ namespace Tests.Scenarios
             }
             r.Soak = new JsonObj();
             r.Soak.Set("outcome", r.Outcome).Set("rounds", r.Rounds).Set("turns", I(f[6])).Set("sides", sides);
+            // npcMaxTurns (the DC3 measure) is not a column: a merged row has none.
+            // A row from before batch 15 step 1 has only the 12 original columns: no "npc" record.
+            if (f.Length >= BaseRowColumns + NpcColumns.Length)
+            {
+                var npc = new JsonObj();
+                for (int i = 0; i < NpcColumns.Length; i++)
+                {
+                    string v = f[BaseRowColumns + i];
+                    if (NpcColumns[i] == "npcCastsByLevel")
+                        npc.Set(NpcColumns[i], v);
+                    else
+                        npc.Set(NpcColumns[i], I(v));
+                }
+                r.Soak.Set("npc", npc);
+            }
             return r;
         }
 

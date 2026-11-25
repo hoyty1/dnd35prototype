@@ -225,6 +225,7 @@ namespace Tests.Scenarios
         private readonly Dictionary<CharacterController, Action<int, int>> _nlHandlers = new Dictionary<CharacterController, Action<int, int>>();
         private readonly Dictionary<CharacterController, JsonObj> _turnStartSnap = new Dictionary<CharacterController, JsonObj>();
         private readonly List<string> _castStages = new List<string>();
+        private readonly List<CastStageRecord> _castStageRecords = new List<CastStageRecord>();
         private static readonly Regex TagRegex = new Regex("<[^>]*>", RegexOptions.CultureInvariant);
 
         private Action<TurnStartedEvent> _onTurnStarted;
@@ -245,6 +246,29 @@ namespace Tests.Scenarios
 
         /// <summary>The cast-stage lines recorded so far (<see cref="ScenarioHooks.CastStage"/>; not part of the hashed trace).</summary>
         public int CastStageCount => _castStages.Count;
+
+        /// <summary>One cast stage as data (batch 15 step 1): the caster's key (or "name:..." for an unkeyed caster), the stage and its detail.</summary>
+        public readonly struct CastStageRecord
+        {
+            public readonly string By;
+            public readonly string Spell;
+            public readonly string Stage;
+            public readonly string Detail;
+
+            public CastStageRecord(string by, string spell, string stage, string detail)
+            {
+                By = by;
+                Spell = spell;
+                Stage = stage;
+                Detail = detail;
+            }
+        }
+
+        /// <summary>
+        /// The cast stages recorded so far as data, the same stages as the caststages.jsonl lines (the soak's NPC columns,
+        /// SoakStats; batch 15 step 1). Outside the hashed trace.
+        /// </summary>
+        public IReadOnlyList<CastStageRecord> CastStageRecords => _castStageRecords;
 
         public ScenarioTrace(ScenarioJob job, GameManager gm)
         {
@@ -739,6 +763,7 @@ namespace Tests.Scenarios
              .Set("stage", stage)
              .Set("detail", detail);
             _castStages.Add(Json.Serialize(o));
+            _castStageRecords.Add(new CastStageRecord(o.Get("by") as string, spell != null ? spell.SpellId : null, stage, detail));
         }
 
         /// <summary>The per-cast context stack went wrong (GameManager.BeginCast, EndCast): a 'cast-stack' violation.</summary>

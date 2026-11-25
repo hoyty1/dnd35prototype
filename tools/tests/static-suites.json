@@ -2096,6 +2096,17 @@
       "notes": "Assertion total 105 or 107 by seed: TestTrampleHoofAttack checks damage and HP only when the hoof attack hits (TST-031). A warning that the total dropped to 105 is expected."
     },
     {
+      "type": "Tests.Scenarios.SoakStatsColumnsTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 31,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Batch 15 step 1 (added 2026-11-25): the soak's NPC caster columns (SoakStats.NpcColumns), append-only in soak-rows.tsv and outside the trace hash. 27 measured before the step's review fixes; 31 is that count plus the 4 asserts the review fixes added (no-effect casts, npcMaxTurns, dc3, byScenario and mixed runs), not yet measured: confirm at the next static edit pass."
+    },
+    {
       "type": "Tests.Services.AttackCalculatorTests",
       "needs": "either",
       "skip": "",
