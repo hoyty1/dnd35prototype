@@ -119,7 +119,10 @@ public class AreaEffectManager : MonoBehaviour
         for (int i = 0; i < copy.Count; i++)
         {
             if (copy[i] != null)
+            {
+                copy[i].ReleaseIndicatorBeforeDestroy(); // its indicator goes in rules order (grouped AI turns step 9)
                 Destroy(copy[i].gameObject);
+            }
         }
 
         activeEffects.Clear();

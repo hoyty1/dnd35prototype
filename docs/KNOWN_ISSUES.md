@@ -38,9 +38,9 @@ Entries per section:
 | [Encounters](issues/ENC.md) | ENC | 0 | 18 | 17 | 35 | ENC-037 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 175 | 195 | 370 | ITM-449 |
 | [AI](issues/AI.md) | AI | 0 | 14 | 43 | 57 | AI-096 |
-| [UI](issues/UI.md) | UI | 0 | 12 | 45 | 57 | UI-059 |
+| [UI](issues/UI.md) | UI | 0 | 12 | 44 | 56 | UI-059 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-050 |
-| **All** | | 1 | 808 | 721 | 1530 | |
+| **All** | | 1 | 808 | 720 | 1529 | |
 
 ## Top issues
 

@@ -5214,6 +5214,7 @@ namespace Tests.Scenarios
         {
             return Rules("rules/combat-log-pool", "The combat log reuses its pooled lines: no orphans, one pool, bounded object count (UI-001)")
                 .Covers("UI-001")
+                .Grouping(GroupMode.Off) // counts pooled lines as they apply (grouped AI turns step 9)
                 .MaxRounds(2)
                 .Pc("scribe", ActorSource.Stats(() => Fighter("Scribe", 1)), 5, 10, Control.Scripted)
                 .Npc("dummy", "target_dummy", 15, 10, Control.Idle)

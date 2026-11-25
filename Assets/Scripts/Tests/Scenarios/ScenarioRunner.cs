@@ -36,6 +36,18 @@ namespace Tests.Scenarios
         /// speed is presentation only: every trace hash must be the same at any speed (docs/TESTING.md 3.4).
         /// </summary>
         public float AiSpeed = 1f;
+        /// <summary>
+        /// group=off|on|pair: GameSettings.groupAiTurns for every job whose scenario does not pin it (grouped AI turns step
+        /// 9; ScenarioBuilder.Grouping wins). Default off. pair runs each (scenario, seed) twice, rep 1 with grouping off
+        /// and rep 2 with it on, and compares them (RepeatCheck on the trace hash, PresentationCheck on the presentation
+        /// sidecar's log channel and token keyframes). Grouping is presentation only: every hash must be the same.
+        /// </summary>
+        public GroupMode Group = GroupMode.Off;
+        /// <summary>
+        /// playback=instant|timed: how the presentation plays a group back (CombatPresentation.Playback); null takes the
+        /// mode's default, instant in fast and fine mode, timed in watch mode.
+        /// </summary>
+        public PlaybackMode? Playback;
 
         public const float DefaultWallCapSeconds = 120f;
 
@@ -98,6 +110,23 @@ namespace Tests.Scenarios
                             default: error = "difficulty must be easy, normal or hard"; return null;
                         }
                         break;
+                    case "group":
+                        switch (val.ToLowerInvariant())
+                        {
+                            case "off": o.Group = GroupMode.Off; break;
+                            case "on": o.Group = GroupMode.On; break;
+                            case "pair": o.Group = GroupMode.Pair; break;
+                            default: error = "group must be off, on or pair"; return null;
+                        }
+                        break;
+                    case "playback":
+                        switch (val.ToLowerInvariant())
+                        {
+                            case "instant": o.Playback = PlaybackMode.Instant; break;
+                            case "timed": o.Playback = PlaybackMode.Timed; break;
+                            default: error = "playback must be instant or timed"; return null;
+                        }
+                        break;
                     case "aispeed":
                         if (!float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out float sp) || !GameSettings.IsAiTurnSpeedChoice(sp))
                         { error = "aiSpeed must be 1, 1.5, 2, 3 or 4"; return null; }
@@ -116,7 +145,21 @@ namespace Tests.Scenarios
                + (Sweep > 0 ? ";sweep=" + Sweep : "") + (RecordDice ? ";record=dice" : "") + (Keep ? ";keep" : "")
                + (WallCapSet ? ";wallCap=" + WallCapSeconds.ToString(CultureInfo.InvariantCulture) : "")
                + (Difficulty.HasValue ? ";difficulty=" + Difficulty.Value.ToString().ToLowerInvariant() : "")
-               + (AiSpeed != 1f ? ";aiSpeed=" + AiSpeed.ToString(CultureInfo.InvariantCulture) : "");
+               + (AiSpeed != 1f ? ";aiSpeed=" + AiSpeed.ToString(CultureInfo.InvariantCulture) : "")
+               + (Group != GroupMode.Off ? ";group=" + Group.ToString().ToLowerInvariant() : "")
+               + (Playback.HasValue ? ";playback=" + Playback.Value.ToString().ToLowerInvariant() : "");
+
+        /// <summary>The playback a job runs with: the playback= option, else timed in watch mode and instant otherwise.</summary>
+        public PlaybackMode PlaybackFor(string mode) => Playback ?? (mode == "watch" ? PlaybackMode.Timed : PlaybackMode.Instant);
+    }
+
+    /// <summary>The harness's grouping option (RunOptions.Group, ScenarioBuilder.Grouping; grouped AI turns step 9).</summary>
+    public enum GroupMode
+    {
+        Off,
+        On,
+        /// <summary>Two reps per (scenario, seed): rep 1 off, rep 2 on, compared.</summary>
+        Pair,
     }
 
     /// <summary>The result of one job, as written to summary.json.</summary>
@@ -138,6 +181,22 @@ namespace Tests.Scenarios
         public int UnfocusedFrames;
         public int FirstDiffSeq;
         public string RepeatCheck;
+        /// <summary>"off" or "on": GameSettings.groupAiTurns during the job (grouped AI turns step 9); null when off and unpaired.</summary>
+        public string Grouping;
+        /// <summary>The job's recorded groups (CombatPresentation.GroupLog), or 0 with grouping off.</summary>
+        public int Groups;
+        /// <summary>
+        /// The scenario's group expectations (ScenarioBuilder.ExpectGroups), checked by the runner on a grouping-on job
+        /// against the in-memory group record: "pass", or "fail: ..." per failed expectation; null when none ran. Never a
+        /// trace event, so the hash cannot depend on it.
+        /// </summary>
+        public string GroupCheck;
+        /// <summary>
+        /// The pair's presentation check (group=pair, rep 2 against rep 1): "same" when the log channel and every token's
+        /// keyframe sequence of presentation.jsonl are equal (scale compared at rest, since the size tween runs on wall
+        /// time), "differs: ..." otherwise; null for an unpaired job or rep 1.
+        /// </summary>
+        public string PresentationCheck;
         public List<string> Violations = new List<string>();
         public List<string> Expectations = new List<string>();
         public List<string> Notes = new List<string>();
@@ -181,6 +240,12 @@ namespace Tests.Scenarios
              .Set("editorFocusedFrames", FocusedFrames).Set("editorUnfocusedFrames", UnfocusedFrames);
             if (RepeatCheck != null)
                 o.Set("repeat", RepeatCheck).Set("firstDiffSeq", FirstDiffSeq);
+            if (Grouping != null)
+                o.Set("grouping", Grouping).Set("groups", Groups);
+            if (GroupCheck != null)
+                o.Set("groupCheck", GroupCheck);
+            if (PresentationCheck != null)
+                o.Set("presentationCheck", PresentationCheck);
             o.Set("expectations", Expectations).Set("violations", Violations);
             if (Notes.Count > 0)
                 o.Set("notes", Notes);
@@ -219,6 +284,12 @@ namespace Tests.Scenarios
         public int MaxRounds;
         public float WallCapSeconds;
         public RunOptions Options;
+        /// <summary>The job's repetitions of its (scenario, seed): the repeat= option, or 2 under group=pair.</summary>
+        public int Reps = 1;
+        /// <summary>The job's grouping (grouped AI turns step 9): the scenario's pin, else the group= option; pair: rep 2 on.</summary>
+        public bool GroupOn;
+        /// <summary>True when this job is one rep of a group=pair (rep 1 off, rep 2 on).</summary>
+        public bool Paired;
         /// <summary>The job's AI difficulty: the scenario's pin, else the run's difficulty= option, else Normal (batch 14 step 4).</summary>
         public AIService.AIDifficultyLevel Difficulty => Def?.AiDifficulty ?? Options?.Difficulty ?? AIService.AIDifficultyLevel.Normal;
         public ScenarioRunner Runner;
@@ -293,7 +364,7 @@ namespace Tests.Scenarios
             if (haltNow && Gm != null && Started)
             {
                 Halting = true;
-                Gm.Harness_HaltCombat(outcome.ToString());
+                ScenarioRunner.HaltCaughtUp(Gm, outcome.ToString());
             }
         }
 
@@ -372,6 +443,18 @@ namespace Tests.Scenarios
             }
             Checks?.RegisterActor(c);
             return true;
+        }
+
+        /// <summary>
+        /// The trace's turn end (before its turn_end event): a Ui step still in flight when the game ends the Ui actor's
+        /// turn (an AoO drops the hero mid-maneuver, say) is emitted here, at rules time, and the rest dropped. Before
+        /// grouped AI turns step 9 the driver's next tick emitted it, so its place among the next turn's events depended on
+        /// how many frames the turn hand-off took (a group's one-frame waits put the next actor's first step ahead of it).
+        /// </summary>
+        public void OnTurnEnded(CharacterController a)
+        {
+            if (Ui != null && !Ui.Done && Ui.Actor == a)
+                Ui.TurnLeft(Gm);
         }
 
         public void OnTurnStarted(CharacterController a, string controller)
@@ -491,6 +574,10 @@ namespace Tests.Scenarios
         private bool _hpModeSaved;
         private float _savedAiSpeed;
         private bool _aiSpeedSaved;
+        private bool _savedGroupAiTurns;
+        private PlaybackMode _savedPlayback;
+        private bool _groupingSaved;
+        private readonly Dictionary<string, List<string>> _firstRepPresentation = new Dictionary<string, List<string>>();
         private AIService _difficultyService;
         private AIService.AIDifficultyLevel? _savedDifficultyOverride;
         private Application.LogCallback _logHandler;
@@ -521,13 +608,22 @@ namespace Tests.Scenarios
 
             int index = 0;
             foreach (ScenarioDef def in defs)
+            {
+                // Grouping (grouped AI turns step 9): the scenario's pin, else the run's group= option. A pair is two reps,
+                // rep 1 off and rep 2 on, compared by RepeatCheck and PresentationCheck.
+                GroupMode group = def.Grouping ?? options.Group;
+                bool pair = group == GroupMode.Pair;
+                int reps = pair ? Math.Max(2, options.Repeat) : options.Repeat;
                 foreach (int seed in seeds)
-                    for (int rep = 1; rep <= options.Repeat; rep++)
+                    for (int rep = 1; rep <= reps; rep++)
                         Jobs.Add(new ScenarioJob
                         {
                             Def = def,
                             Seed = seed,
                             Rep = rep,
+                            Reps = reps,
+                            Paired = pair,
+                            GroupOn = pair ? rep > 1 : group == GroupMode.On,
                             Index = index++,
                             MaxRounds = options.MaxRounds ?? def.MaxRounds,
                             WallCapSeconds = options.WallCapSet
@@ -537,6 +633,7 @@ namespace Tests.Scenarios
                             Options = options,
                             Runner = this
                         });
+            }
 
             State = RunState.Running;
             _runStartRealtime = Time.realtimeSinceStartup;
@@ -769,7 +866,7 @@ namespace Tests.Scenarios
             if (job.Started && gm != null)
             {
                 job.Halting = true;
-                try { gm.Harness_HaltCombat("runner-failed"); } catch (Exception hex) { job.Notes.Add("halt: " + hex.Message); }
+                try { HaltCaughtUp(gm, "runner-failed"); } catch (Exception hex) { job.Notes.Add("halt: " + hex.Message); }
             }
             if (!job.ResultRecorded)
                 RecordResult(job, ErrorResult(job, reason));
@@ -787,7 +884,7 @@ namespace Tests.Scenarios
             {
                 try
                 {
-                    string path = Path.Combine(RunDir, Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "") + ".jsonl");
+                    string path = Path.Combine(RunDir, Slug(job.Def.Id) + "__s" + job.Seed + (job.Reps > 1 ? "__r" + job.Rep : "") + ".jsonl");
                     job.Trace.WriteJsonl(path);
                     r.Path = path.Replace('\\', '/');
                     WriteCastStages(job, Path.GetFileNameWithoutExtension(path), r.Notes);
@@ -889,6 +986,11 @@ namespace Tests.Scenarios
             global::PresentationTrace.Begin();
             if (!job.Decided)
                 TryRun(job, "setup", () => Setup(job, gm));
+            // The recording restarts after the setup (grouped AI turns step 9): what the setup shows (the log lines of a
+            // reused pool slot's previous creature, say) depends on the job before, as the hashed trace's scope does not,
+            // and a group=pair's two reps follow different jobs.
+            if (!job.Decided)
+                global::PresentationTrace.Begin();
 
             // h. Start (from this coroutine, never from an MCP call or a game callback, CORE-012)
             if (!job.Decided)
@@ -922,12 +1024,14 @@ namespace Tests.Scenarios
                 if ((Time.frameCount - job.StartFrame) % LogLeakSweepFrames == 0)
                     SweepLogLeak(job, "monitor");
                 if (!job.Decided && job.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.WallCapSeconds)
-                    job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false);
-                if (!job.Decided)
+                    job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false, diag: GameManager.Harness_PresentationState());
+                // The three prompt answerers wait for the playback, as a player would (grouped AI turns step 9): a dialog the
+                // presentation still holds is never answered before it shows.
+                if (!job.Decided && !gm.PresentationBlocksInput)
                     TryRun(job, "counter-trip", () => HandleCounterTripPrompt(job, gm), Outcome.Exception);
-                if (!job.Decided)
+                if (!job.Decided && !gm.PresentationBlocksInput)
                     TryRun(job, "escape-opposition", () => HandleEscapeOppositionPrompt(job, gm), Outcome.Exception);
-                if (!job.Decided)
+                if (!job.Decided && !gm.PresentationBlocksInput)
                     TryRun(job, "overrun-response", () => HandleOverrunResponsePrompt(job, gm), Outcome.Exception);
                 if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
@@ -938,12 +1042,14 @@ namespace Tests.Scenarios
             if (job.Started)
             {
                 job.Halting = true;
-                TryRun(job, "halt", () => gm.Harness_HaltCombat(job.Outcome.ToString()), Outcome.Exception);
+                TryRun(job, "halt", () => HaltCaughtUp(gm, job.Outcome.ToString()), Outcome.Exception);
                 yield return null;
                 TryRun(job, "halt-recheck", () => gm.Harness_HaltCombat(job.Outcome.ToString() + "-recheck"), Outcome.Exception);
             }
 
-            // j. Finalize (sweep first, so a leak during the job is in the trace)
+            // j. Finalize (sweep first, so a leak during the job is in the trace). The presentation catches up first (grouped
+            // AI turns step 9): what the sweep and the clean check read is what the playback would have shown by now.
+            global::CombatPresentation.CatchUpNow();
             SweepLogLeak(job, "end");
             JobResult result = null;
             Exception finalizeError = TryRunFinal(() => result = Finalize(job, gm), job);
@@ -964,7 +1070,7 @@ namespace Tests.Scenarios
             foreach (string leak in leaks)
             {
                 result.Notes.Add(leak);
-                RunWarnings.Add(job.Def.Id + " s" + job.Seed + (job.Options.Repeat > 1 ? " r" + job.Rep : "") + ": " + leak);
+                RunWarnings.Add(job.Def.Id + " s" + job.Seed + (job.Reps > 1 ? " r" + job.Rep : "") + ": " + leak);
             }
             result.WallSec = Time.realtimeSinceStartup - job.StartRealtime;
             result.Frames = Time.frameCount - job.StartFrame;
@@ -1184,6 +1290,23 @@ namespace Tests.Scenarios
                     problems.Add("token view " + view.Describe() + " is not synced: " + viewProblem);
             }
 
+            // The presentation (grouped AI turns step 9): the caller caught the playback up, so nothing is queued, held or
+            // waiting for a drain, and no view is held or waits for its spawn.
+            if (global::CombatPresentation.Holding)
+                problems.Add("the presentation still holds a group");
+            if (global::CombatPresentation.PendingBeats > 0)
+                problems.Add(global::CombatPresentation.PendingBeats + " presentation beats still queued");
+            if (global::CombatPresentation.PendingDrainActions > 0)
+                problems.Add(global::CombatPresentation.PendingDrainActions + " presentation drain actions still pending");
+            foreach (TokenView view in TokenView.Live)
+                if (view.IsHeld || view.IsHiddenUntilSpawn)
+                    problems.Add("token view " + view.Describe() + " is still held by the presentation");
+            // A view that left Live but still exists (its Removed beat never applied): an orphan root from job to job. A
+            // despawn fade still in flight is allowed.
+            foreach (TokenView view in UnityEngine.Object.FindObjectsByType<TokenView>(FindObjectsInactive.Include))
+                if (view != null && (view.IsPendingRemoval || view.IsReleased) && !view.IsDespawning && !TokenView.Live.Contains(view))
+                    problems.Add("token view " + view.Describe() + " left play but was never removed");
+
             if (AreaEffectManager.HasInstance && AreaEffectManager.Instance.GetActiveEffectCount() > 0)
                 problems.Add(AreaEffectManager.Instance.GetActiveEffectCount() + " active area effects");
 
@@ -1230,6 +1353,14 @@ namespace Tests.Scenarios
             _aiSpeedSaved = true;
             GameSettings.Instance.aiTurnSpeed = job.Options.AiSpeed;
             if (gm.CombatUI != null) gm.CombatUI.RefreshAiSpeedButton();
+            // Grouping and playback (grouped AI turns step 9): the job's (off unless the scenario or group= says so), never
+            // the play setting; the group log starts empty. Saved and restored beside the AI speed.
+            _savedGroupAiTurns = GameSettings.Instance.groupAiTurns;
+            _savedPlayback = global::CombatPresentation.Playback;
+            _groupingSaved = true;
+            GameSettings.Instance.groupAiTurns = job.GroupOn;
+            global::CombatPresentation.Playback = job.Options.PlaybackFor(job.Options.Mode);
+            global::CombatPresentation.ResetGroupLog();
 
             // AI difficulty (batch 14 step 4, C11): the scenario's own, else the run option's, else Normal, so a job never
             // reads the editor's setting. Only a personality reads it.
@@ -1646,16 +1777,29 @@ namespace Tests.Scenarios
             RecordAiTiming(job, result);
             RecordAiTrace(result);
 
-            string slug = Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "");
+            string slug = Slug(job.Def.Id) + "__s" + job.Seed + (job.Reps > 1 ? "__r" + job.Rep : "");
             string path = Path.Combine(RunDir, slug + ".jsonl");
             trace.WriteJsonl(path);
             result.Path = path.Replace('\\', '/');
+            // Grouping (grouped AI turns step 9): the job's group record, its expectations and the groups.jsonl sidecar.
+            RecordGrouping(job, result, slug);
+            // The presentation sidecar's lines, kept before WritePresentation stops the recording (a pair's rep 2 compares them).
+            List<string> presentation = new List<string>(global::PresentationTrace.Lines);
             // The sidecars' notes go on the result: job.Notes was copied into it above.
             WriteCastStages(job, slug, result.Notes);
             WritePresentation(slug, result.Notes);
 
             string repKey = job.Def.Id + "|" + job.Seed;
-            if (job.Options.Repeat > 1)
+            if (job.Paired)
+            {
+                if (job.Rep == 1)
+                    _firstRepPresentation[repKey] = presentation;
+                else if (_firstRepPresentation.TryGetValue(repKey, out List<string> firstPresentation))
+                    result.PresentationCheck = PresentationCompare.Compare(firstPresentation, presentation);
+                else
+                    result.PresentationCheck = PresentationCompare.InconclusivePrefix + "no rep 1 presentation";
+            }
+            if (job.Reps > 1)
             {
                 if (job.Rep == 1)
                 {
@@ -1670,7 +1814,9 @@ namespace Tests.Scenarios
                     }
                     else
                     {
-                        result.RepeatCheck = "differs";
+                        // A pair's reps differ only by grouping: a hash that moves is grouping changing a rules outcome
+                        // (a hidden frame or time dependency), not a nondeterministic game.
+                        result.RepeatCheck = job.Paired ? RepeatDiffersGrouping : "differs";
                         List<string> first = _firstRepLines[repKey];
                         int n = Math.Min(first.Count, lines.Count);
                         int diff = n + 1;
@@ -1685,9 +1831,19 @@ namespace Tests.Scenarios
                         result.FirstDiffSeq = diff;
                     }
                 }
+                // The last rep has been compared: drop the rep 1 copies, so a long pair sweep holds at most one at a time.
+                if (job.Rep >= job.Reps)
+                {
+                    _firstRepLines.Remove(repKey);
+                    _firstRepHash.Remove(repKey);
+                    _firstRepPresentation.Remove(repKey);
+                }
             }
             return result;
         }
+
+        /// <summary>RepeatCheck of a group=pair whose trace hashes differ: grouping changed a rules outcome.</summary>
+        public const string RepeatDiffersGrouping = "differs (grouping)";
 
         /// <summary>Every step has its own guard: one failing restore must not skip the others or end the run.</summary>
         private void Cleanup(ScenarioJob job, GameManager gm)
@@ -1774,6 +1930,16 @@ namespace Tests.Scenarios
                 catch (Exception ex) { job.Notes.Add("restore AI speed: " + ex.Message); }
                 _aiSpeedSaved = false;
             }
+            if (_groupingSaved)
+            {
+                try
+                {
+                    GameSettings.Instance.groupAiTurns = _savedGroupAiTurns;
+                    global::CombatPresentation.Playback = _savedPlayback;
+                }
+                catch (Exception ex) { job.Notes.Add("restore grouping: " + ex.Message); }
+                _groupingSaved = false;
+            }
             if (_difficultyService != null)
             {
                 try { _difficultyService.DifficultyOverride = _savedDifficultyOverride; }
@@ -1830,6 +1996,84 @@ namespace Tests.Scenarios
             finally
             {
                 global::PresentationTrace.Stop();
+            }
+        }
+
+        /// <summary>
+        /// The grouping problems of a run as "id s(seed) r(rep): text" (summary.json's groupCheckFailures,
+        /// presentationDiffs and groupingDiffs; a job's own verdict does not show them); null when none.
+        /// </summary>
+        private List<string> GroupingIds(Func<JobResult, bool> pick, Func<JobResult, string> text)
+        {
+            var ids = Results.Where(pick).Select(r => r.Id + " s" + r.Seed + " r" + r.Rep + ": " + text(r)).ToList();
+            return ids.Count > 0 ? ids : null;
+        }
+
+        /// <summary>
+        /// Halts combat after the presentation caught up (grouped AI turns step 9): the halt's Clear drops the queue, so the
+        /// lines and keyframes a group still held are applied first and the job's presentation trace is complete, as with
+        /// grouping off. Used for every halt a job takes before its result (Decide with haltNow, the runner's halt, a
+        /// runner failure).
+        /// </summary>
+        internal static void HaltCaughtUp(GameManager gm, string reason)
+        {
+            if (gm == null)
+                return;
+            try { global::CombatPresentation.CatchUpNow(); }
+            catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] presentation catch-up before the halt: " + ex.Message); }
+            gm.Harness_HaltCombat(reason);
+        }
+
+        /// <summary>The per-job group record (grouped AI turns step 9; unhashed).</summary>
+        public const string GroupsFileName = "groups.jsonl";
+
+        /// <summary>
+        /// The job's grouping (grouped AI turns step 9): JobResult.Grouping and Groups, the scenario's group expectations
+        /// (ScenarioBuilder.ExpectGroups, checked here on a grouping-on job against the in-memory group record into
+        /// JobResult.GroupCheck, never a trace event) and the groups.jsonl sidecar beside caststages.jsonl (one line per
+        /// group: id, lanes as round and actor, stop kind and seq, beats, playback seconds). A failed write is a note.
+        /// </summary>
+        private void RecordGrouping(ScenarioJob job, JobResult result, string jobId)
+        {
+            IReadOnlyList<global::GroupRecord> groups = global::CombatPresentation.GroupLog;
+            if (job.GroupOn || job.Paired)
+            {
+                result.Grouping = job.GroupOn ? "on" : "off";
+                result.Groups = groups.Count;
+            }
+            if (job.GroupOn && job.Def.GroupExpectations.Count > 0)
+            {
+                var failures = new List<string>();
+                foreach (GroupExpectation e in job.Def.GroupExpectations)
+                {
+                    string problem;
+                    try { problem = e.Check(groups); }
+                    catch (Exception ex) { problem = "check threw " + ex.GetType().Name + ": " + ex.Message; }
+                    if (problem != null)
+                        failures.Add(e.Name + ": " + problem);
+                }
+                result.GroupCheck = failures.Count == 0 ? "pass" : "fail: " + string.Join("; ", failures);
+            }
+            if (groups.Count == 0)
+                return;
+            try
+            {
+                var sb = new StringBuilder();
+                foreach (global::GroupRecord g in groups)
+                {
+                    var o = new JsonObj();
+                    o.Set("id", g.Id).Set("lanes", new List<string>(g.Lanes)).Set("stop", g.Stop.HasValue ? g.Stop.Value.ToString() : "open")
+                     .Set("openSeq", g.OpenSeq).Set("closeSeq", g.CloseSeq).Set("beats", g.Beats)
+                     .Set("playbackSec", (float)Math.Round(g.PlaybackSeconds, 3));
+                    sb.Append(Json.Serialize(o)).Append('\n');
+                }
+                string file = Path.Combine(RunDir, jobId, GroupsFileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(file));
+                File.WriteAllText(file, sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                result.Notes.Add("groups write: " + ex.Message);
             }
         }
 
@@ -2079,16 +2323,25 @@ namespace Tests.Scenarios
             bool fail = Results.Any(r => r.Verdict == Verdict.Fail);
             bool xpass = Results.Any(r => r.Verdict == Verdict.XPass);
             bool repeatDiff = Results.Any(r => r.RepeatCheck == "differs");
+            // Grouping (step 9): a pair whose hashes differ is GROUPING-DIFFERS; one whose presentation differs is
+            // PRESENTATION-DIFFERS; a presentation trace that faulted (an inconclusive check) is an ERROR; a failed group
+            // expectation fails the run.
+            bool groupingDiff = Results.Any(r => r.RepeatCheck == RepeatDiffersGrouping);
+            bool presentationDiff = Results.Any(r => r.PresentationCheck != null && r.PresentationCheck.StartsWith("differs", StringComparison.Ordinal));
+            bool presentationInconclusive = Results.Any(r => r.PresentationCheck != null && r.PresentationCheck.StartsWith(PresentationCompare.InconclusivePrefix, StringComparison.Ordinal));
+            bool groupFail = Results.Any(r => r.GroupCheck != null && r.GroupCheck != "pass");
+            fail = fail || groupFail;
+            error = error || presentationInconclusive;
             // A catalog source that threw drops its remaining definitions, so the run may be a silent subset.
             bool loadError = LoadErrors.Count > 0;
-            RunVerdict = interrupted ? "INTERRUPTED" : error ? "ERROR" : loadError ? "LOADERROR" : fail ? "FAIL" : xpass ? "XPASS" : repeatDiff ? "NONDETERMINISTIC" : AbortRequested ? "ABORTED" : "OK";
+            RunVerdict = interrupted ? "INTERRUPTED" : error ? "ERROR" : loadError ? "LOADERROR" : fail ? "FAIL" : xpass ? "XPASS" : repeatDiff ? "NONDETERMINISTIC" : groupingDiff ? "GROUPING-DIFFERS" : presentationDiff ? "PRESENTATION-DIFFERS" : AbortRequested ? "ABORTED" : "OK";
             List<string> inconclusiveIds = InconclusiveIds();
             if (RunVerdict == "OK" && inconclusiveIds.Count > 0)
                 RunVerdict = "OK (" + inconclusiveIds.Count + " inconclusive)";
 
             // Jobs without a result (a dirty session, an abort or an interruption stopped the run) and how to resume them.
             List<ScenarioJob> notRun = Jobs.Where(j => !j.ResultRecorded).ToList();
-            var notRunList = notRun.Select(j => j.Def.Id + " s" + j.Seed + (j.Options.Repeat > 1 ? " r" + j.Rep : "")).ToList();
+            var notRunList = notRun.Select(j => j.Def.Id + " s" + j.Seed + (j.Reps > 1 ? " r" + j.Rep : "")).ToList();
             JsonObj resume = null;
             if (notRun.Count > 0)
             {
@@ -2109,6 +2362,9 @@ namespace Tests.Scenarios
              .Set("notRun", notRunList).Set("resume", resume)
              .Set("loadErrors", LoadErrors.Count > 0 ? LoadErrors : null)
              .Set("inconclusiveIds", inconclusiveIds)
+             .Set("groupCheckFailures", GroupingIds(r => r.GroupCheck != null && r.GroupCheck != "pass", r => r.GroupCheck))
+             .Set("presentationDiffs", GroupingIds(r => r.PresentationCheck != null && r.PresentationCheck != "same", r => r.PresentationCheck))
+             .Set("groupingDiffs", GroupingIds(r => r.RepeatCheck == RepeatDiffersGrouping, r => "first diff at seq " + r.FirstDiffSeq))
              .Set("totals", Totals()).Set("byId", byId)
              .Set("waiverHits", hits).Set("unusedWaivers", unused)
              .Set("needsFresh", SessionDirty).Set("dirtyReason", DirtyReason)
@@ -2148,6 +2404,136 @@ namespace Tests.Scenarios
             {
                 SummaryError = ex.GetType().Name + ": " + ex.Message;
                 Debug.LogWarning("[ScenarioHarness] summary: " + ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The pair's presentation check (grouped AI turns step 9, JobResult.PresentationCheck): rep 1's presentation.jsonl
+    /// (grouping off) against rep 2's (grouping on). Compared: the log channel ("log" and "sep" lines, in order) and each
+    /// token's keyframe sequence ("kf" lines per tok). A keyframe's scale ("|s=") is compared at rest only, the token's last
+    /// one, since the size tween runs on wall time; with it stripped, repeated keyframes collapse. Rules boundaries, steps,
+    /// state flushes and beat classes are not compared: grouping moves when they apply, not what they show.
+    /// </summary>
+    internal static class PresentationCompare
+    {
+        /// <summary>The prefix of a check that could not compare (a trace faulted or was cut, or rep 1 left none).</summary>
+        public const string InconclusivePrefix = "inconclusive: ";
+
+        public static string Compare(IReadOnlyList<string> first, IReadOnlyList<string> second)
+        {
+            if (first == null || second == null)
+                return null;
+            string broken = Broken(first, 1) ?? Broken(second, 2);
+            if (broken != null)
+                return InconclusivePrefix + broken;
+            if (first.Count == 0 && second.Count == 0)
+                return "same";
+            Digest a = Digest.Of(first);
+            Digest b = Digest.Of(second);
+            int n = Math.Min(a.Log.Count, b.Log.Count);
+            for (int i = 0; i < n; i++)
+                if (a.Log[i] != b.Log[i])
+                    return "differs: log line " + i + " (off " + Short(a.Log[i]) + ", on " + Short(b.Log[i]) + ")";
+            if (a.Log.Count != b.Log.Count)
+                return "differs: log lines " + a.Log.Count + " off, " + b.Log.Count + " on";
+            var tokens = new SortedSet<string>(a.Frames.Keys, StringComparer.Ordinal);
+            tokens.UnionWith(b.Frames.Keys);
+            foreach (string tok in tokens)
+            {
+                a.Frames.TryGetValue(tok, out List<string> fa);
+                b.Frames.TryGetValue(tok, out List<string> fb);
+                fa = fa ?? new List<string>();
+                fb = fb ?? new List<string>();
+                int m = Math.Min(fa.Count, fb.Count);
+                for (int i = 0; i < m; i++)
+                    if (fa[i] != fb[i])
+                        return "differs: " + tok + " keyframe " + i + " (off " + Short(fa[i]) + ", on " + Short(fb[i]) + ")";
+                if (fa.Count != fb.Count)
+                    return "differs: " + tok + " keyframes " + fa.Count + " off, " + fb.Count + " on";
+                a.RestScale.TryGetValue(tok, out string sa);
+                b.RestScale.TryGetValue(tok, out string sb);
+                if (sa != sb)
+                    return "differs: " + tok + " rest scale (off " + sa + ", on " + sb + ")";
+            }
+            return "same";
+        }
+
+        private static string Short(string v) => v == null ? "none" : v.Length <= 80 ? v : v.Substring(0, 80) + "...";
+
+        /// <summary>Why one rep's presentation trace cannot be compared (its "error" or "truncated" line), or null.</summary>
+        private static string Broken(IReadOnlyList<string> lines, int rep)
+        {
+            foreach (string line in lines)
+            {
+                if (line.IndexOf("\"ch\":\"error\"", StringComparison.Ordinal) >= 0)
+                    return "presentation trace faulted in rep " + rep + " (" + Short(line) + ")";
+                if (line.IndexOf("\"ch\":\"truncated\"", StringComparison.Ordinal) >= 0)
+                    return "presentation trace cut at its line cap in rep " + rep;
+            }
+            return null;
+        }
+
+        private sealed class Digest
+        {
+            public readonly List<string> Log = new List<string>();
+            public readonly Dictionary<string, List<string>> Frames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            public readonly Dictionary<string, string> RestScale = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            public static Digest Of(IReadOnlyList<string> lines)
+            {
+                var d = new Digest();
+                foreach (string line in lines)
+                {
+                    string ch = Field(line, "ch");
+                    if (ch == "log" || ch == "sep")
+                        d.Log.Add(ch + ":" + Field(line, "v"));
+                    else if (ch == "kf")
+                    {
+                        string tok = Field(line, "tok") ?? "?";
+                        string v = Field(line, "v") ?? "";
+                        string scale = null;
+                        int s = v.IndexOf("|s=", StringComparison.Ordinal);
+                        if (s >= 0)
+                        {
+                            int e = v.IndexOf('|', s + 1);
+                            scale = e < 0 ? v.Substring(s + 3) : v.Substring(s + 3, e - s - 3);
+                            v = e < 0 ? v.Substring(0, s) : v.Substring(0, s) + v.Substring(e);
+                        }
+                        if (!d.Frames.TryGetValue(tok, out List<string> frames))
+                            d.Frames[tok] = frames = new List<string>();
+                        if (frames.Count == 0 || frames[frames.Count - 1] != v)
+                            frames.Add(v);
+                        if (scale != null)
+                            d.RestScale[tok] = scale;
+                    }
+                }
+                return d;
+            }
+
+            /// <summary>A string field of one trace line ({"n":..,"ch":"..",...,"v":".."}), escapes kept as written.</summary>
+            private static string Field(string line, string key)
+            {
+                string probe = "\"" + key + "\":\"";
+                int i = line.IndexOf(probe, StringComparison.Ordinal);
+                if (i < 0)
+                    return null;
+                int start = i + probe.Length;
+                var sb = new StringBuilder();
+                for (int j = start; j < line.Length; j++)
+                {
+                    char c = line[j];
+                    if (c == '\\' && j + 1 < line.Length)
+                    {
+                        sb.Append(c).Append(line[j + 1]);
+                        j++;
+                        continue;
+                    }
+                    if (c == '"')
+                        return sb.ToString();
+                    sb.Append(c);
+                }
+                return sb.ToString();
             }
         }
     }

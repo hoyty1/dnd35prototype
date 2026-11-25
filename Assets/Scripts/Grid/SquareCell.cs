@@ -288,6 +288,23 @@ public class SquareCell : MonoBehaviour
     internal bool RequestedOverlayOn => _overlayOn;
     internal Color RequestedOverlayColor => _overlayColor;
 
+    /// <summary>Whether the ground-item token should show: the cell holds items (rules state, read at once).</summary>
+    internal bool RequestedGroundItemVisible => _groundItems.Count > 0;
+
+    /// <summary>
+    /// Writes the latest requested highlight, overlay and ground-item token at once (CombatPresentation.Clear: a reset
+    /// drops the queued cell beats and shows the cell's last requested state instead).
+    /// </summary>
+    internal void ApplyRequestedState()
+    {
+        ApplyHighlight(_highlight);
+        if (_overlayOn)
+            ApplyOverlay(_overlayColor);
+        else
+            ApplyOverlayClear();
+        ApplyGroundItemVisible(RequestedGroundItemVisible);
+    }
+
     public void AddGroundItem(ItemData item)
     {
         if (item == null)
@@ -370,13 +387,30 @@ public class SquareCell : MonoBehaviour
         _groundItemTokenRenderer.enabled = false;
     }
 
+    /// <summary>
+    /// The ground-item token follows the cell's items through the presentation gate (UI-058, grouped AI turns step 9):
+    /// shown or hidden at once in Passthrough, at its GroundItem beat while the presentation queues (an AI disarm's
+    /// dropped weapon shows after the swing that dropped it). The item list itself is rules state and changes at once.
+    /// </summary>
     private void RefreshGroundItemTokenVisual()
+    {
+        bool show = _groundItems.Count > 0;
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.GroundItem, Cell = this, Flag = show });
+            return;
+        }
+        ApplyGroundItemVisible(show);
+    }
+
+    /// <summary>Shows or hides the ground-item token's sprite (the former RefreshGroundItemTokenVisual body).</summary>
+    internal void ApplyGroundItemVisible(bool show)
     {
         if (_groundItemTokenRenderer == null)
             EnsureGroundItemTokenVisual();
 
         if (_groundItemTokenRenderer != null)
-            _groundItemTokenRenderer.enabled = _groundItems.Count > 0;
+            _groundItemTokenRenderer.enabled = show;
     }
 
     private static Sprite GetOrCreateGroundItemTokenSprite()

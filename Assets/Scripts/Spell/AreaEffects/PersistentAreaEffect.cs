@@ -235,12 +235,21 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         if (AreaEffectManager.HasInstance)
             AreaEffectManager.Instance.UnregisterAreaEffect(this);
 
-        // The fallback for the sites that destroy an area object directly (AreaEffectManager.ClearAllEffects, the spell
-        // handlers): ExpireEffect and a re-creation release the indicator first (ReleaseIndicator), so it is null here.
-        // In Passthrough it goes at once. This late hook cannot hand the indicator over (grouped AI turns step 9): Unity
-        // is already destroying it as this object's child, so step 9 releases first at those direct sites.
+        // The fallback for a site that destroys an area object directly: ExpireEffect, a re-creation and
+        // AreaEffectManager.ClearAllEffects (ReleaseIndicatorBeforeDestroy, grouped AI turns step 9) release the indicator
+        // first, so it is null here. In Passthrough it goes at once. This late hook cannot hand the indicator over while
+        // the presentation queues: Unity is already destroying it as this object's child (it then just vanishes early).
         if (VisualIndicator != null && !CombatPresentation.AreaHidden(this, VisualIndicator))
             Destroy(VisualIndicator);
+    }
+
+    /// <summary>
+    /// Releases the indicator before a direct destroy of this area object (AreaEffectManager.ClearAllEffects; grouped AI
+    /// turns step 9), so a queued presentation can still show the indicator until its AreaHidden beat.
+    /// </summary>
+    public void ReleaseIndicatorBeforeDestroy()
+    {
+        ReleaseIndicator();
     }
 
     /// <summary>

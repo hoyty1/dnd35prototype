@@ -22,6 +22,10 @@ namespace Tests.Scenarios
     /// (batch 13 C7). Step 6: the AI speed factor follows the turn kind: Ai on an NPC's, a Scripted ally's and a forced PC
     /// turn, Player on a player-run turn from its menu on, through its attack hand-off (C2); the trace is the same at any
     /// aiSpeed= (the scenario notes no speed).
+    /// Step 9 (gt-run-ahead): the rules/group-* scenarios run as group=pair (ScenarioBuilder.Grouping): rep 1 with grouping
+    /// off, rep 2 with it on, and the runner compares the trace hash (RepeatCheck) and the presentation sidecar
+    /// (PresentationCheck); their group expectations (ExpectGroups) check rep 2's group record: which AI-decided turns
+    /// joined a group as its lanes, and what closed it (the control beat, combat end, the harness halt's reset).
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -46,6 +50,17 @@ namespace Tests.Scenarios
             yield return S("panicked-grappled-pc-escape-square-ai", PanickedGrappledPcEscapeSquareAi);
             yield return S("dismiss-summon-caster-standard", DismissSummonCasterStandard);
             yield return S("ai-speed-pacing-kind-follows-turns", AiSpeedPacingKindFollowsTurns);
+            yield return S("group-three-orcs-before-ui-fighter", GroupThreeOrcsBeforeUiFighter);
+            yield return S("group-confused-pc-inside", GroupConfusedPcInside);
+            yield return S("group-dying-pc-skipped-inside", GroupDyingPcSkippedInside);
+            yield return S("group-cornered-frightened-pc-gets-menu", GroupCorneredFrightenedPcGetsMenu);
+            yield return S("group-charmed-pc-ends-group", GroupCharmedPcEndsGroup);
+            yield return S("group-summon-slain-inside", GroupSummonSlainInside);
+            yield return S("group-spans-round-wrap", GroupSpansRoundWrap);
+            yield return S("group-victory-mid-group", GroupVictoryMidGroup);
+            yield return S("group-defeat-mid-group", GroupDefeatMidGroup);
+            yield return S("group-stalemate-halt", GroupStalemateHalt);
+            yield return S("group-lesser-globe-caster-moves", GroupLesserGlobeCasterMoves);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -59,6 +74,343 @@ namespace Tests.Scenarios
         }
 
         private static string SecondaryLine(string name, string poisonName = VenomName) => "^☣ " + name + " makes secondary save vs " + poisonName;
+
+        // ── Step 9: grouped AI turns, run ahead and played back (group=pair) ─────────────
+
+        private static void Named(CharacterController c, string name) => c.Stats.CharacterName = name;
+
+        private static void SturdyNamed(CharacterController c, string name)
+        {
+            Sturdy(c);
+            Named(c, name);
+        }
+
+        private static string Describe(GroupRecord g) =>
+            g == null ? "none" : "[" + string.Join(", ", g.Lanes) + "] " + (g.Stop.HasValue ? g.Stop.Value.ToString() : "open");
+
+        private static string DescribeAll(IReadOnlyList<GroupRecord> groups) =>
+            groups.Count + " groups: " + string.Join("; ", groups.Select(Describe));
+
+        /// <summary>Null when group <paramref name="index"/> (from 0) has exactly <paramref name="lanes"/> and closed by <paramref name="stop"/>.</summary>
+        private static string GroupIs(IReadOnlyList<GroupRecord> groups, int index, GroupStop stop, params string[] lanes)
+        {
+            GroupRecord g = index < groups.Count ? groups[index] : null;
+            if (g != null && g.Stop == stop && g.Lanes.SequenceEqual(lanes))
+                return null;
+            return "group " + (index + 1) + " is " + Describe(g) + ", expected [" + string.Join(", ", lanes) + "] " + stop
+                   + " (" + DescribeAll(groups) + ")";
+        }
+
+        /// <summary>The playback has caught up when a player-run creature's menu is up (S1; the Ui driver waits for it).</summary>
+        private static Step CaughtUp(string what) =>
+            Step.Assert(what, ctx => !CombatPresentation.Holding && !CombatPresentation.BlocksInput);
+
+        /// <summary>
+        /// Three orcs act before the Ui fighter: their three AI turns run ahead as one group, which the fighter's menu closes
+        /// (S1); the menu comes up only once the playback has caught up. Round 2 is a second group of the same three lanes.
+        /// </summary>
+        private static ScenarioDef GroupThreeOrcsBeforeUiFighter()
+        {
+            return Rules("rules/group-three-orcs-before-ui-fighter", "Three orcs' turns run ahead as one group that the Ui fighter's menu closes (grouped AI turns step 9, S1)")
+                .Covers("grouped AI turns step 9", "S1", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(2)
+                .Npc("o1", "orc_warrior", 13, 9, Control.Ai)
+                .Npc("o2", "orc_warrior", 13, 10, Control.Ai)
+                .Npc("o3", "orc_warrior", 13, 11, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Group Fighter", 3)), 10, 10, Control.Ui)
+                .Tweak("o1", c => SturdyNamed(c, "Orc A"))
+                .Tweak("o2", c => SturdyNamed(c, "Orc B"))
+                .Tweak("o3", c => SturdyNamed(c, "Orc C"))
+                .Tweak("hero", Sturdy)
+                .Initiative("o1", "o2", "o3", "hero")
+                .Turn("hero", 0, CaughtUp("The fighter's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .Expect("The fight runs to the round cap", Expect.Outcome(Outcome.Stalemate))
+                .ExpectGroups("Rounds 1 and 2: the three orcs are one group each, closed by the fighter's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Orc A", "1:Orc B", "1:Orc C")
+                    ?? GroupIs(g, 1, GroupStop.Control, "2:Orc A", "2:Orc B", "2:Orc C"))
+                .Build();
+        }
+
+        /// <summary>
+        /// A confused Ui PC whose d% (90: attack the nearest creature, PHB p.212) takes its turn over acts as a forced turn
+        /// inside the group (BeginForcedPCTurn is an AI-decided turn's mark), so the group runs on through it to the orc
+        /// after it and closes at the second PC's menu.
+        /// </summary>
+        private static ScenarioDef GroupConfusedPcInside()
+        {
+            return Rules("rules/group-confused-pc-inside", "A confused PC's forced turn is a lane of the group around it (grouped AI turns step 9; PHB p.212)")
+                .Covers("grouped AI turns step 9", "PHB p.212", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("o1", "orc_warrior", 12, 10, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Confused Hero", 3)), 10, 10, Control.Ui)
+                .Npc("o2", "orc_warrior", 12, 12, Control.Ai)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Clear Ally", 3)), 10, 12, Control.Ui)
+                .StartCondition("hero", CombatConditionType.Confused, 3)
+                .Tweak("o1", c => SturdyNamed(c, "Orc A"))
+                .Tweak("o2", c => SturdyNamed(c, "Orc B"))
+                .Tweak("hero", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Force(100, 90, null, 1)
+                .Initiative("o1", "hero", "o2", "ally")
+                .Turn("ally", 0, CaughtUp("The ally's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The hero rolled 'attack the nearest creature' (d% 90)", v =>
+                    v.Log("Confused Hero is confused \\(d% 90\\)").Count > 0 ? ExpectResult.Pass("rolled 90") : ExpectResult.Fail("no roll of 90"))
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .ExpectGroups("Round 1: the orc, the confused hero's forced turn and the second orc are one group, closed by the ally's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Orc A", "1:Confused Hero", "1:Orc B"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The first orc (Scripted) drops the Ui hero to -3 HP; the dying hero's turn is skipped (StartPCTurn's skip gate,
+        /// no menu, PHB p.145), so it is no lane and does not close the group: both orcs are one group, closed by the
+        /// ally's menu.
+        /// </summary>
+        private static ScenarioDef GroupDyingPcSkippedInside()
+        {
+            return Rules("rules/group-dying-pc-skipped-inside", "A dying PC's skipped turn neither joins nor closes the group (grouped AI turns step 9; PHB p.145)")
+                .Covers("grouped AI turns step 9", "PHB p.145", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("o1", "orc_warrior", 12, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Dying Hero", 3)), 10, 10, Control.Ui)
+                .Npc("o2", "orc_warrior", 15, 15, Control.Idle)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Standing Ally", 3)), 10, 12, Control.Ui)
+                .Tweak("o1", c => SturdyNamed(c, "Orc A"))
+                .Tweak("o2", c => SturdyNamed(c, "Orc B"))
+                .Tweak("ally", Sturdy)
+                .Force(100, 50, CharacterController.StabilizationCheckContext, -1)
+                .Initiative("o1", "hero", "o2", "ally")
+                .Turn("o1", 1, Step.Assert("The hero drops to -3 (fixture)", ctx =>
+                {
+                    ctx.Get("hero").Stats.CurrentHP = -3;
+                    return ctx.Get("hero").Stats.CurrentHP < 0;
+                }), Step.EndTurn())
+                .Turn("ally", 0, CaughtUp("The ally's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The fixture and the menu checks hold", Expect.AssertsPass())
+                .Expect("The dying hero cannot act this turn", v =>
+                    v.Log("Dying Hero .* cannot act this turn").Count > 0 ? ExpectResult.Pass("skipped") : ExpectResult.Fail("no skip line"))
+                .ExpectGroups("Round 1: both orcs are one group across the skipped turn, closed by the ally's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Orc A", "1:Orc B"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The goblin frightens the cornered Ui hero (speed 0, PHB p.310: cornered, it may fight); the hero's turn starts as
+        /// a forced turn (a lane of the goblin's group) that hands the menu back, which closes the group (S1). The player
+        /// then takes total defense.
+        /// </summary>
+        private static ScenarioDef GroupCorneredFrightenedPcGetsMenu()
+        {
+            return Rules("rules/group-cornered-frightened-pc-gets-menu", "A cornered frightened PC's forced turn joins the group, and its menu closes it (grouped AI turns step 9; PHB p.310)")
+                .Covers("grouped AI turns step 9", "PHB p.310", "D15", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("gob", "goblin", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Cornered Hero", 3)), 10, 10, Control.Ui)
+                .Tweak("hero", c => { RulesScenarios.StripOffHand(c); Sturdy(c); c.Stats.BaseSpeed = 0; })
+                .Tweak("gob", c => SturdyNamed(c, "Fear Goblin"))
+                .Initiative("gob", "hero")
+                .Turn("gob", 1, Step.Assert("The goblin frightens the hero (fixture)", ctx =>
+                {
+                    ctx.Gm.ApplyCondition(ctx.Get("hero"), CombatConditionType.Frightened, 3, ctx.Get("gob"), sourceCategory: "Harness");
+                    return ctx.Get("hero").HasCondition(CombatConditionType.Frightened);
+                }), Step.Pass())
+                .Turn("hero", 1, CaughtUp("The hero's menu comes up after the playback caught up"), Step.TotalDefense())
+                .Expect("The fixture and the menu checks hold", Expect.AssertsPass())
+                .Expect("The cornered hero's forced turn ran", v =>
+                    v.Log("cornered by fear").Any(e => e.Round == 1) ? ExpectResult.Pass("cornered") : ExpectResult.Fail("no cornered line"))
+                .Expect("The player's Total Defense step runs", Expect.StepStatus("hero", 1, "TotalDefense", 0, "done"))
+                .ExpectGroups("Round 1: the goblin and the hero's forced turn are one group, closed by the hero's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Fear Goblin", "1:Cornered Hero"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The goblin charms the Ui hero (a fixture standing for a failed Will save, PHB p.209). Charm is no turn compulsion
+        /// (D14): the charmed hero's turn is a player-run turn, so its menu ends the goblin's group. A second, uncharmed Ui
+        /// PC keeps the party under its own control, or the charm alone would end the fight as a defeat (CORE-038's
+        /// control predicate) and the group would close at combat end instead.
+        /// </summary>
+        private static ScenarioDef GroupCharmedPcEndsGroup()
+        {
+            return Rules("rules/group-charmed-pc-ends-group", "A charmed PC's turn is player-run and ends the group (grouped AI turns step 9; PHB p.209, D14)")
+                .Covers("grouped AI turns step 9", "PHB p.209", "D14", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("gob", "goblin", 11, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Charmed Hero", 3)), 10, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Free Ally", 3)), 8, 10, Control.Ui)
+                .Tweak("hero", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Tweak("gob", c => SturdyNamed(c, "Charm Goblin"))
+                .Initiative("gob", "hero", "ally")
+                .Turn("gob", 1, Step.Assert("The goblin charms the hero (fixture)", ctx =>
+                {
+                    CharacterController hero = ctx.Get("hero"), gob = ctx.Get("gob");
+                    var data = new CharmedConditionData { Caster = gob, CasterName = gob.Stats.CharacterName, RemainingRounds = 10 };
+                    ctx.Gm.ApplyCondition(hero, CombatConditionType.Charmed, 10, gob, data, sourceNameOverride: "Charm Person", sourceCategory: "Harness");
+                    return CharmRules.IsCharmedBy(hero, gob);
+                }), Step.Pass())
+                .Turn("hero", 1, CaughtUp("The charmed hero's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The fixture and the menu checks hold", Expect.AssertsPass())
+                .ExpectGroups("Round 1: the goblin is one group, closed by the charmed hero's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Charm Goblin"))
+                .Build();
+        }
+
+        /// <summary>
+        /// rules/summon-slain-leaves-initiative-at-once as a pair: the summon is slain inside a group (every turn is
+        /// AI-decided, so the whole fight is one group, which the halt resets); its view keeps its last picture and goes at
+        /// its Removed beat, and both reps show the same.
+        /// </summary>
+        private static ScenarioDef GroupSummonSlainInside()
+        {
+            return AsPair(SummonSlainLeavesInitiativeAtOnce(), "rules/group-summon-slain-inside",
+                    "A summon slain inside a group leaves at once in the rules and at its beat on screen (grouped AI turns step 9; CRE-312)")
+                .ExpectGroups("Every turn is AI-decided: one group from the first turn, reset by the halt", g =>
+                    g.Count == 1 && g[0].Stop == GroupStop.Reset && g[0].Lanes.Count >= 3 && g[0].Lanes[0].StartsWith("1:", StringComparison.Ordinal)
+                        ? null : DescribeAll(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// The orcs' turns after the Ui hero's and the first orc's turn of the next round are one group across the round
+        /// wrap (S5's window cap comes with step 10).
+        /// </summary>
+        private static ScenarioDef GroupSpansRoundWrap()
+        {
+            return Rules("rules/group-spans-round-wrap", "A group spans the round wrap (grouped AI turns step 9)")
+                .Covers("grouped AI turns step 9", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(2)
+                .Npc("o1", "orc_warrior", 13, 9, Control.Ai)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Wrap Fighter", 3)), 10, 10, Control.Ui)
+                .Npc("o2", "orc_warrior", 13, 10, Control.Ai)
+                .Npc("o3", "orc_warrior", 13, 11, Control.Ai)
+                .Tweak("o1", c => SturdyNamed(c, "Orc A"))
+                .Tweak("o2", c => SturdyNamed(c, "Orc B"))
+                .Tweak("o3", c => SturdyNamed(c, "Orc C"))
+                .Tweak("hero", Sturdy)
+                .Initiative("o1", "hero", "o2", "o3")
+                .Turn("hero", 0, CaughtUp("The fighter's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .ExpectGroups("Round 1's Orc A, then Orc B and Orc C of round 1 with Orc A of round 2 as one group", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Orc A")
+                    ?? GroupIs(g, 1, GroupStop.Control, "1:Orc B", "1:Orc C", "2:Orc A"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The AI ally drops the last goblin inside a group (every d20 a 20): the combat ends mid-group, the group closes at
+        /// combat end (S4) and its beats still play; the loot window waits for them (WhenDrained).
+        /// </summary>
+        private static ScenarioDef GroupVictoryMidGroup()
+        {
+            return Rules("rules/group-victory-mid-group", "A victory mid-group closes the group at combat end (grouped AI turns step 9, S4)")
+                .Covers("grouped AI turns step 9", "S4", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Watching Hero", 3)), 5, 10, Control.Ui)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Victor Ally", 5)), 10, 10, Control.Ai)
+                .Npc("gob", "goblin", 11, 10, Control.Ai)
+                .Tweak("hero", Sturdy)
+                .Tweak("ally", Sturdy)
+                .Tweak("gob", c => { Named(c, "Last Goblin"); c.Stats.CurrentHP = 1; })
+                .Force(20, 20, null, -1)
+                .Initiative("hero", "ally", "gob")
+                .Turn("hero", 0, Step.EndTurn())
+                .Expect("The party wins in round 1", Expect.All(Expect.Outcome(Outcome.Victory), Expect.RoundsAtMost(1)))
+                .ExpectGroups("The ally's turn is one group, closed at combat end", g =>
+                    GroupIs(g, 0, GroupStop.CombatEnd, "1:Victor Ally"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The orc drops the last PC inside its group (every d20 a 20): the defeat closes the group at combat end, and the
+        /// defeat panel is an interactive beat behind the group's beats (S4).
+        /// </summary>
+        private static ScenarioDef GroupDefeatMidGroup()
+        {
+            return Rules("rules/group-defeat-mid-group", "A defeat mid-group closes the group at combat end (grouped AI turns step 9, S4)")
+                .Covers("grouped AI turns step 9", "S4", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Fallen Hero", 1)), 10, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Ai)
+                .Tweak("hero", c => c.Stats.CurrentHP = 1)
+                .Tweak("orc", c => SturdyNamed(c, "Orc Killer"))
+                .Force(20, 20, null, -1)
+                .Initiative("hero", "orc")
+                .Turn("hero", 0, Step.EndTurn())
+                .Expect("The party loses in round 1", Expect.All(Expect.Outcome(Outcome.Defeat), Expect.RoundsAtMost(1)))
+                .ExpectGroups("The orc's turn is one group, closed at combat end", g =>
+                    GroupIs(g, 0, GroupStop.CombatEnd, "1:Orc Killer"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Two sturdy AI sides at the round cap: the harness halts the fight while the group still records (every turn is
+        /// AI-decided); it catches the playback up first (ScenarioRunner.HaltCaughtUp), so both reps show the same, and the
+        /// halt's Clear closes the group as a reset.
+        /// </summary>
+        private static ScenarioDef GroupStalemateHalt()
+        {
+            return Rules("rules/group-stalemate-halt", "The harness halt catches an open group up, then resets it (grouped AI turns step 9, S6)")
+                .Covers("grouped AI turns step 9", "S6", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Pc("ally", ActorSource.Stats(() => RulesScenarios.Fighter("Halted Ally", 3)), 5, 10, Control.Ai)
+                .Npc("orc", "orc_warrior", 15, 10, Control.Ai)
+                .Tweak("ally", Sturdy)
+                .Tweak("orc", c => SturdyNamed(c, "Halted Orc"))
+                .Initiative("ally", "orc")
+                .Expect("The fight is halted as a stalemate", Expect.Outcome(Outcome.Stalemate))
+                .ExpectGroups("One group from the first turn, reset by the halt", g =>
+                    g.Count == 1 && g[0].Stop == GroupStop.Reset && g[0].Lanes.Count >= 2
+                    && g[0].Lanes[0] == "1:Halted Ally" && g[0].Lanes[1] == "1:Halted Orc"
+                        ? null : DescribeAll(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// rules/lesser-globe-stays-put as a pair: the caster casts the Lesser Globe and walks out of it inside one group;
+        /// the globe's indicator shows at its beat and stays where it was cast in both reps.
+        /// </summary>
+        private static ScenarioDef GroupLesserGlobeCasterMoves()
+        {
+            return AsPair(LesserGlobeStaysPut(), "rules/group-lesser-globe-caster-moves",
+                    "The Lesser Globe stays put while its caster moves inside a group (grouped AI turns step 9; PHB p.236, SPL-335)")
+                .ExpectGroups("Every turn is AI-decided: one group from the first turn, reset by the halt", g =>
+                    g.Count == 1 && g[0].Stop == GroupStop.Reset && g[0].Lanes.Count >= 2 ? null : DescribeAll(g))
+                .Build();
+        }
+
+        /// <summary>A copy of a built scenario as a group=pair scenario of its own id and title (its rules checks kept).</summary>
+        private static PairBuilder AsPair(ScenarioDef def, string id, string title)
+        {
+            def.Id = id;
+            def.Title = title;
+            def.Grouping = GroupMode.Pair;
+            if (!def.Covers.Contains("grouped AI turns step 9"))
+                def.Covers.Add("grouped AI turns step 9");
+            return new PairBuilder(def);
+        }
+
+        private sealed class PairBuilder
+        {
+            private readonly ScenarioDef _def;
+            public PairBuilder(ScenarioDef def) { _def = def; }
+            public PairBuilder ExpectGroups(string name, Func<IReadOnlyList<GroupRecord>, string> check)
+            {
+                _def.GroupExpectations.Add(new GroupExpectation { Name = name, Check = check });
+                return this;
+            }
+            public ScenarioDef Build() => _def;
+        }
 
         // ── Step 2: poison secondaries in rounds (CMB-007) ─────────────
 
@@ -260,6 +612,7 @@ namespace Tests.Scenarios
         {
             return Rules("rules/token-view-mirrors-tokens", "Every token renders through its mirror view, which follows its model (grouped AI turns step 3)")
                 .Covers("grouped AI turns step 3", "CRE-046", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Off) // reads live views mid-turn (grouped AI turns step 9)
                 .MaxRounds(2)
                 .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Viewed Hero", 3)), 10, 10, Control.Scripted)
                 .Npc("orc", "orc_warrior", 17, 10, Control.Idle)
@@ -519,7 +872,8 @@ namespace Tests.Scenarios
                     if (next == null)
                         return ExpectResult.Fail("no turn after the expiry line", lines[0].Seq);
                     return lines[0].Round == 2 && next.Str("actor") == "orc"
-                        ? ExpectResult.Pass("expiry #" + lines[0].Seq + " (frame " + lines[0].Frame + "), then the orc's turn #" + next.Seq + " (frame " + next.Frame + ")", lines[0].Seq, next.Seq)
+                        // No frame numbers in the hashed detail: they vary with the AI speed and grouping (grouped AI turns step 9).
+                        ? ExpectResult.Pass("expiry #" + lines[0].Seq + ", then the orc's turn #" + next.Seq, lines[0].Seq, next.Seq)
                         : ExpectResult.Fail("expiry #" + lines[0].Seq + " in round " + lines[0].Round + ", next turn #" + next.Seq + " is " + next.Str("actor"), lines[0].Seq, next.Seq);
                 })
                 .Expect("Both Grappled conditions are removed after the expiry line and before the orc's turn starts (PHB p.173, p.309; CRE-311)", v =>

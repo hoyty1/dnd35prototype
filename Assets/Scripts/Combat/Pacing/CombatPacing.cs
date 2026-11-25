@@ -20,9 +20,14 @@ public enum PaceKind
 /// (<see cref="Speed"/>, GameSettings.aiTurnSpeed). PC-turn pacing (AfterAttackDelay, DelayedEndActivePCTurn,
 /// ReturnToActionChoicesAfterDelay, PromptFullAttackStep, an NPC's AoO dwell during the PC's walk) runs under the
 /// Player kind, so it stays at 1x. The factor is NEUTRAL: every scenario trace hash is identical at any speed, in the
-/// harness's fast and fine modes (docs/TESTING.md 3.4). The recording of a group (stage 2) comes later.
+/// harness's fast and fine modes (docs/TESTING.md 3.4).
 ///
-/// <see cref="Wait"/> always returns a <see cref="WaitForSeconds"/>, never an IEnumerator, a CustomYieldInstruction or
+/// Holding branch (step 9, a recorded group of AI turns; docs/designs/grouped_ai_turns.md "Recording"): <see cref="Wait"/>
+/// records a Pace beat of the caller's seconds and kind and returns one cached WaitForSeconds(0), one frame;
+/// <see cref="StepSeconds"/> returns <see cref="HoldingStepSeconds"/> (one frame), and MoveAlongPath records the step's
+/// own seconds on its Step beat. The playback divides both by the speed when it plays them.
+///
+/// <see cref="Wait"/> always returns a <see cref="WaitForSeconds"/> (the Holding one included), never an IEnumerator, a CustomYieldInstruction or
 /// null: GameManager.RunAIActionNow drains any IEnumerator it is handed in place (and InlineAction passes a leaf yield
 /// through unchanged), so a wait of another type would change the synchronous AI actions.
 ///
@@ -71,11 +76,23 @@ public static class CombatPacing
     /// </summary>
     public static WaitForSeconds Wait(float seconds)
     {
-        // A presentation boundary (grouped AI turns step 8): in Passthrough it only feeds the presentation trace and
-        // never changes the yield returned here.
+        // A presentation boundary (grouped AI turns step 8): the token keyframes while queueing, the presentation trace
+        // while it records; it never changes the yield returned here.
         CombatPresentation.Boundary(PresentationBoundary.Wait);
+        // Holding (step 9): the wait becomes a Pace beat the playback plays later, and the caller yields one frame.
+        if (CombatPresentation.Holding)
+        {
+            CombatPresentation.HoldingWait(seconds, Kind);
+            return HoldingFrame;
+        }
         return new WaitForSeconds(Scaled(seconds, Kind, Speed));
     }
+
+    /// <summary>
+    /// The yield of a pacing wait while holding (step 9): one cached WaitForSeconds(0), one frame, so the frame partition
+    /// the area trackers, the Stalemate halt, SkipChainRunaway and CORE-012's nesting rely on is kept.
+    /// </summary>
+    public static readonly WaitForSeconds HoldingFrame = new WaitForSeconds(0f);
 
     /// <summary>
     /// The seconds one movement step tweens for (CharacterController.MoveAlongPath, which still clamps the result to
@@ -83,8 +100,14 @@ public static class CombatPacing
     /// </summary>
     public static float StepSeconds(float secondsPerStep)
     {
+        // Holding (step 9): one frame per step (MoveAlongPath's 0.01 s floor); the step's own seconds go on its Step beat.
+        if (CombatPresentation.Holding)
+            return HoldingStepSeconds;
         return Scaled(secondsPerStep, Kind, Speed);
     }
+
+    /// <summary>The step seconds while holding: MoveAlongPath's floor, so each recorded step is one frame.</summary>
+    public const float HoldingStepSeconds = 0.01f;
 
     /// <summary>
     /// The game-code waits that are not pacing and stay <c>new WaitForSeconds</c>: file (under Assets/Scripts), method,

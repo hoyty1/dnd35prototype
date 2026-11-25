@@ -555,6 +555,7 @@ namespace Tests.Scenarios
             if (Closed || e.Character == null)
                 return;
             CharacterController a = e.Character;
+            _job.OnTurnEnded(a); // a Ui step in flight is emitted at rules time, before the turn_end event
             ActionEconomy act = a.Actions;
             var econ = new JsonObj();
             if (act != null)

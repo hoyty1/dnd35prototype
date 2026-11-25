@@ -226,6 +226,17 @@ namespace Tests.Scenarios
     }
 
     /// <summary>
+    /// A check of a grouping-on job's group record (grouped AI turns step 9, ScenarioBuilder.ExpectGroups): returns null
+    /// when it holds, else what failed. Run by the runner on the in-memory CombatPresentation.GroupLog after the job, into
+    /// JobResult.GroupCheck; never a trace event, so the hash cannot depend on it.
+    /// </summary>
+    public sealed class GroupExpectation
+    {
+        public string Name;
+        public Func<IReadOnlyList<GroupRecord>, string> Check;
+    }
+
+    /// <summary>
     /// Actors a scenario generates per job (<see cref="ScenarioDef.GenerateActors"/>), for example a DMG random
     /// encounter: the actors, an optional cleanup run after the job's reset, and a description for the trace
     /// ("encounter" event) and the job result.
@@ -277,6 +288,13 @@ namespace Tests.Scenarios
         /// option's, else Normal.
         /// </summary>
         public AIService.AIDifficultyLevel? AiDifficulty;
+        /// <summary>
+        /// The grouping this scenario pins (grouped AI turns step 9), over the run's group= option; null takes the option's.
+        /// A scenario that reads token views or log lines mid-job, as they apply, pins Off.
+        /// </summary>
+        public GroupMode? Grouping;
+        /// <summary>The scenario's group expectations, checked on its grouping-on jobs (GroupExpectation).</summary>
+        public List<GroupExpectation> GroupExpectations = new List<GroupExpectation>();
         /// <summary>
         /// How the runner answers a controllable actor's counter-trip prompt (PHB p.158, CMB-079), by actor key:
         /// true trips back, false declines. An actor not listed trips back.
@@ -544,6 +562,14 @@ namespace Tests.Scenarios
         public ScenarioBuilder WallCap(float seconds) { _def.WallCapSeconds = seconds; return this; }
         /// <summary>Pins the AI difficulty of every job of this scenario (batch 14 step 4, C11; over the difficulty= option).</summary>
         public ScenarioBuilder AiDifficulty(AIService.AIDifficultyLevel level) { _def.AiDifficulty = level; return this; }
+        /// <summary>Pins the grouping of every job of this scenario (grouped AI turns step 9; over the group= option).</summary>
+        public ScenarioBuilder Grouping(GroupMode mode) { _def.Grouping = mode; return this; }
+        /// <summary>A check of the group record of this scenario's grouping-on jobs (GroupExpectation; null means it holds).</summary>
+        public ScenarioBuilder ExpectGroups(string name, Func<IReadOnlyList<GroupRecord>, string> check)
+        {
+            _def.GroupExpectations.Add(new GroupExpectation { Name = name, Check = check });
+            return this;
+        }
 
         /// <summary>A party (PC-slot) actor from a QuickStart or Stats source.</summary>
         public ScenarioBuilder Pc(string key, ActorSource source, int x, int y, Control control = Control.Ai)

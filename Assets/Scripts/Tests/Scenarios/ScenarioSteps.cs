@@ -1208,6 +1208,24 @@ namespace Tests.Scenarios
 
         public bool Done { get; private set; }
 
+        /// <summary>The Ui actor this driver runs the turn of.</summary>
+        public CharacterController Actor => _actor;
+
+        /// <summary>
+        /// The turn is no longer the actor's (the trace's turn end, ScenarioJob.OnTurnEnded, or the next tick): the step in
+        /// flight is emitted, the rest dropped unless End Turn was pressed, and the driver is done.
+        /// </summary>
+        public void TurnLeft(GameManager gm)
+        {
+            if (Done)
+                return;
+            bool over = gm != null && gm.CurrentPhase == GameManager.TurnPhase.CombatOver;
+            FinishCurrent(over ? "combat ended" : "turn passed");
+            if (!_endPressed)
+                ScriptedSteps.DropRest(_job, _actor, PathName, _steps, _index, over ? "combat over" : "turn ended");
+            Done = true;
+        }
+
         public UiTurnDriver(ScenarioJob job, CharacterController actor, List<Step> steps)
         {
             _job = job;
@@ -1254,10 +1272,7 @@ namespace Tests.Scenarios
             bool ourTurn = gm.CurrentCharacter == _actor && gm.CurrentPhase != GameManager.TurnPhase.CombatOver;
             if (!ourTurn)
             {
-                FinishCurrent(gm.CurrentPhase == GameManager.TurnPhase.CombatOver ? "combat ended" : "turn passed");
-                if (!_endPressed)
-                    ScriptedSteps.DropRest(_job, _actor, PathName, _steps, _index, gm.CurrentPhase == GameManager.TurnPhase.CombatOver ? "combat over" : "turn ended");
-                Done = true;
+                TurnLeft(gm);
                 return;
             }
             if (frame <= _actionFrame)
@@ -1340,7 +1355,17 @@ namespace Tests.Scenarios
                 return;
             }
 
-            bool ready = gm.IsPlayerTurn && gm.ActivePC == _actor && gm.CurrentSubPhase == GameManager.PlayerSubPhase.ChoosingAction && prompt == null;
+            bool ready = gm.IsPlayerTurn && gm.ActivePC == _actor && gm.CurrentSubPhase == GameManager.PlayerSubPhase.ChoosingAction && prompt == null
+                && !gm.PresentationBlocksInput; // the playback has caught up, as a player would wait for it (grouped AI turns step 9)
+            // Playback time is not settle time: while the presentation blocks input the settle clocks restart, so a long
+            // timed group never ends as a false SoftLock (a group that never drains ends at the wall cap, which names it).
+            if (gm.PresentationBlocksInput)
+            {
+                _readySince = frame;
+                _readySinceTime = Time.time;
+                _actionFrame = frame;
+                _actionTime = Time.time;
+            }
             if (_awaiting)
             {
                 if (ready)
@@ -1420,6 +1445,9 @@ namespace Tests.Scenarios
         private void SoftLock(GameManager gm, string reason)
         {
             string diag = _job.Checks != null ? _job.Checks.Diagnose() : gm.Harness_DumpState();
+            // The presentation's state goes in the unhashed diag (grouped AI turns step 9): a stuck playback is named there.
+            if (diag == null || !diag.Contains("presentation holding="))
+                diag = (diag != null ? diag + " " : "") + GameManager.Harness_PresentationState();
             _job.Decide(Outcome.SoftLock, reason, haltNow: false, diag: diag);
             Done = true;
         }

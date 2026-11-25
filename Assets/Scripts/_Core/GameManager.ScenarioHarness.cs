@@ -15,6 +15,23 @@ using UnityEngine;
 /// </summary>
 public partial class GameManager
 {
+    /// <summary>
+    /// True while a group's playback blocks input (CombatPresentation.BlocksInput; grouped AI turns step 9): the Ui turn
+    /// driver and the three prompt answerers wait for it, as a player would.
+    /// </summary>
+    internal bool PresentationBlocksInput => CombatPresentation.BlocksInput;
+
+    /// <summary>
+    /// The presentation's state for the harness's failure reasons (grouped AI turns step 9): holding, queued beats, drain
+    /// actions and the open group's id.
+    /// </summary>
+    internal static string Harness_PresentationState()
+    {
+        GroupRecord g = CombatPresentation.CurrentGroup;
+        return "presentation holding=" + CombatPresentation.Holding + " pending=" + CombatPresentation.PendingBeats
+               + " drains=" + CombatPresentation.PendingDrainActions + " group=" + (g != null ? g.Id.ToString() : "none");
+    }
+
     /// <summary>True when the grid, the combat UI and the turn service exist (the scene finished bootstrapping).</summary>
     internal bool Harness_IsReady()
     {
@@ -216,6 +233,9 @@ public partial class GameManager
     {
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();
+        // The presentation (grouped AI turns step 9, S6): an open group closes and the queue empties (the runner catches
+        // the playback up first, ScenarioRunner.HaltCaughtUp, so the job's presentation trace is complete).
+        CombatPresentation.Clear();
         _turnService?.ForceResetWithoutCallbacks($"ScenarioHarness.Halt:{reason}");
         ClearCounterTripPrompt(hideDialog: true);
         ClearGrappleEscapeOppositionPrompt();
@@ -253,6 +273,7 @@ public partial class GameManager
             }
         }
 
+        Step("CombatPresentation.Clear", CombatPresentation.Clear); // grouped AI turns step 9, S6
         Step("ResetCombatStateForNextEncounter", () => ResetCombatStateForNextEncounter(context));
         Step("LootCollectionUI.Close", () => LootCollectionUI?.Close(invokeClosedCallback: false));
         Step("ResetPostCombatLootCollectionState", () => ResetPostCombatLootCollectionState(context));
@@ -307,6 +328,24 @@ public partial class GameManager
 
         Step("ClearDefeatedEnemies", () => _defeatedEnemiesThisCombat.Clear());
 
+        // Every job starts from the same world (found by grouped AI turns step 9's pairs, whose rep 2 saw rep 1's leftovers):
+        // a halted fight never runs the loot pickup, so a thrown or dropped item stayed on its square into the next job,
+        // and the auto-collected coins of every victory added up in the party gold from job to job.
+        Step("ClearGroundItems", () =>
+        {
+            if (Grid == null || Grid.Cells == null)
+                return;
+            foreach (SquareCell cell in Grid.Cells.Values)
+            {
+                if (cell == null || cell.GroundItems.Count == 0)
+                    continue;
+                var items = new List<ItemData>(cell.GroundItems);
+                foreach (ItemData item in items)
+                    cell.RemoveGroundItem(item);
+            }
+        });
+        Step("ResetPartyGold", () => PartyGold = partyGold); // partyGold keeps the starting gold the economy began with
+
         if (NPCs != null)
         {
             for (int i = 0; i < NPCs.Count; i++)
@@ -358,6 +397,7 @@ public partial class GameManager
         sb.Append(" awaitingFullAttack5ft=").Append(_isAwaitingFullAttackFiveFootStepSelection);
         sb.Append(" selectingSpecial=").Append(_isSelectingSpecialAttack);
         sb.Append(" pendingSpell=").Append(_pendingSpell != null ? _pendingSpell.SpellId : "none");
+        sb.Append(' ').Append(Harness_PresentationState());
         return sb.ToString();
     }
 

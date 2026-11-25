@@ -365,7 +365,9 @@ Files: `UI/Presentation/CombatPresentation.cs`, `PresentationBeat.cs`, `Presenta
 
 Pitfalls:
 - A gate must not change Passthrough: the scenario trace hashes and each job's `presentation.jsonl` (docs/TESTING.md 3.4) must stay equal to the step 8 baseline runs.
-- The ground-item token is still drawn outside the gate (UI-058).
+- The ground-item token goes through the gate too (`SquareCell.RefreshGroundItemTokenVisual` records `RequestedGroundItemVisible` and queues a `GroundItem` beat while queueing; UI-058, step 9).
+- A combat wait is `CombatPacing.Wait` (never `new WaitForSeconds` in a combat coroutine): while a group holds (step 9) it records a Pace beat and yields one frame (`CombatPacing.HoldingFrame`), so never time a rules step by wall-clock seconds; a movement step's seconds come from `CombatPacing.StepSeconds`.
+- A new prompt to a player-run creature: call `CombatPresentation.Boundary(PresentationBoundary.Interactive)` first and, while `CombatPresentation.Holding || CombatPresentation.Queueing`, `TurnControl.PromptOpened()` then `CombatPresentation.CatchUpNow()` before it shows (`CombatUI.ShowConfirmationDialog` is the model); a window opened after combat end waits through `CombatPresentation.WhenDrained` (the loot window); new world input or a new toggle key refuses while `CombatPresentation.BlocksInput`.
 - Trace code runs inside rules coroutines: a trace call whose argument is built (a concatenation) goes inside `if (PresentationTrace.Recording)`, and nothing trace-side may throw into its caller (`Boundary`, `RecordStep` and every `PresentationTrace` entry point catch and fault the trace instead).
 
 # Items and economy

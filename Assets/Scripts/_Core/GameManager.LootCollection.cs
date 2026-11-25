@@ -149,27 +149,35 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📭 No loot found. Review results and close loot window to continue."));
 
         Debug.Log($"[LootFlow] Opening unified loot window | waitingForLootCollection={WaitingForLootCollection} | hasTreasure={hasTreasure} | totalItems={totalItems}");
-        LootCollectionUI.Open(
-            lootEntries,
-            generatedTreasure,
-            onLootSingle: TryTransferLootItemInstanceToStash,
-            onClosed: lootedCount =>
-            {
-                WaitingForLootCollection = false;
-                PartyStash?.Unlock();
+        // The dice, the gold, the log lines and WaitingForLootCollection stay at rules time; only the window opens after a
+        // group's playback has shown the fight's end (grouped AI turns step 9, S4; at once when nothing is queued).
+        LootCollectionUI lootUi = LootCollectionUI;
+        CombatPresentation.WhenDrained(() =>
+        {
+            if (lootUi == null)
+                return;
+            lootUi.Open(
+                lootEntries,
+                generatedTreasure,
+                onLootSingle: TryTransferLootItemInstanceToStash,
+                onClosed: lootedCount =>
+                {
+                    WaitingForLootCollection = false;
+                    PartyStash?.Unlock();
 
-                Debug.Log($"[LootFlow] Unified loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
-                Debug.Log($"[LootFlow] Loot collection complete, {lootedCount} items looted");
+                    Debug.Log($"[LootFlow] Unified loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
+                    Debug.Log($"[LootFlow] Loot collection complete, {lootedCount} items looted");
 
-                if (lootedCount > 0)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"📦 {lootedCount} item(s) looted to party stash. Stash unlocked."));
-                else
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📦 Loot window closed. Party stash unlocked."));
+                    if (lootedCount > 0)
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"📦 {lootedCount} item(s) looted to party stash. Stash unlocked."));
+                    else
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📦 Loot window closed. Party stash unlocked."));
 
-                Debug.Log($"[LootFlow] Transitioning from loot to XP flow | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
-                ShowPostCombatXPFlow(lootedCount);
-            },
-            onExitLoop: ExitCombatLoopToMenu);
+                    Debug.Log($"[LootFlow] Transitioning from loot to XP flow | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
+                    ShowPostCombatXPFlow(lootedCount);
+                },
+                onExitLoop: ExitCombatLoopToMenu);
+        });
     }
 
     private void ShowPostCombatXPFlow(int lootedCount)

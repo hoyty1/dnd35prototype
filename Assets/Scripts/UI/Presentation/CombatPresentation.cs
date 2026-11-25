@@ -2,11 +2,53 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>How the presentation layer shows what the rules did. Step 8 builds Passthrough only; step 9 adds Holding.</summary>
+/// <summary>How the presentation layer shows what the rules did (grouped AI turns steps 8 and 9).</summary>
 public enum PresentationMode
 {
     /// <summary>Every facade call applies at once, in the same order and the same frame as before the facade.</summary>
     Passthrough,
+    /// <summary>A group of AI turns is recorded: facade calls become beats that the playback shows later (step 9).</summary>
+    Holding,
+}
+
+/// <summary>How the playback consumes the queue (grouped AI turns step 9, "Playback").</summary>
+public enum PlaybackMode
+{
+    /// <summary>Each Pace beat lasts its seconds divided by the AI speed, each Step beat its step seconds divided by it (play, watch mode).</summary>
+    Timed,
+    /// <summary>Every recorded beat applies in the same frame's LateUpdate (the scenario harness's fast and fine modes).</summary>
+    Instant,
+}
+
+/// <summary>Why a group closed (grouped AI turns "The group" (a)-(d)).</summary>
+public enum GroupStop
+{
+    /// <summary>(a) control returned to a player-run creature: the action buttons show (S1).</summary>
+    Control,
+    /// <summary>(b) a defender or reactor prompt to a player-run creature opened (S3).</summary>
+    Prompt,
+    /// <summary>(c) combat ended (S4).</summary>
+    CombatEnd,
+    /// <summary>(d) a reset or a harness halt (S6).</summary>
+    Reset,
+}
+
+/// <summary>
+/// One recorded group (grouped AI turns step 9): its lanes (the AI-decided turns that opened or continued it, as
+/// "round:actor"), why and at which seq it closed, its beat count and its playback length at the speed in force when it
+/// was recorded. Read by the scenario harness (the groups.jsonl sidecar, ExpectGroups); never a trace event.
+/// </summary>
+public sealed class GroupRecord
+{
+    public int Id;
+    public int OpenSeq;
+    public int CloseSeq;
+    /// <summary>Null while the group is open.</summary>
+    public GroupStop? Stop;
+    public int Beats;
+    public float PlaybackSeconds;
+    public readonly List<string> Lanes = new List<string>();
+    public bool IsOpen => Stop == null;
 }
 
 /// <summary>
@@ -44,35 +86,64 @@ public enum PresentationBoundary
 
 /// <summary>
 /// The presentation layer of grouped AI turns (owner request 2026-10-30; docs/designs/grouped_ai_turns.md
-/// "Recording (resolve now, show later)", "Playback", "Drains and clears"). Step 8 (gt-presentation-gates) builds it in
-/// Passthrough only, a PURE refactor: the <see cref="CombatUI"/> facade (its Queued, Control and Interactive classes),
-/// the SquareCell highlight gate, the PersistentAreaEffect indicator hooks and <see cref="Defer"/> for one-shot visuals
-/// all route through here and every call still applies at once, in the same order and the same frame. Holding (the
-/// recording of a group), the playback loop and the drains come with step 9.
+/// "Recording (resolve now, show later)", "Run-ahead state kept hidden", "Playback", "Drains and clears", "Input").
 ///
-/// <see cref="Boundary"/> is called at every rules boundary a group would have (each CombatPacing.Wait, each
-/// MoveAlongPath step, before the control beat and every Interactive-class call, and in TurnControl.CombatEnded). In
-/// Passthrough it only feeds <see cref="PresentationTrace"/> (the token keyframes; editor and development builds, while
-/// the scenario harness records), never changes a returned yield, and costs one bool read otherwise.
+/// Step 8 (gt-presentation-gates) routed every visual an AI turn can reveal through here: the <see cref="CombatUI"/>
+/// facade (its Queued, Control and Interactive classes), the SquareCell highlight and ground-item gates, the
+/// PersistentAreaEffect indicator hooks and <see cref="Defer"/> for one-shot visuals. In Passthrough each call applies at
+/// once, in the same order and frame as before.
 ///
-/// The singleton (<see cref="Instance"/>, for step 9's playback loop) is a MonoBehaviour on its own lazily created root
+/// Step 9 (gt-run-ahead) adds Holding. The TurnControl marks open a group at an AI-decided turn's start (when
+/// GameSettings.groupAiTurns is on, read once per group) and close it at the control beat, at a defender prompt, at
+/// combat end and at a reset (<see cref="OpenGroup"/>, <see cref="CloseGroup"/>). While a group is open (and afterwards,
+/// while the queue is not empty: queue while behind) the rules run unchanged and at once, and every facade, cell, area
+/// and token change is recorded as a <see cref="PresentationBeat"/> with its call-time values: CombatPacing.Wait records
+/// a Pace beat and returns one frame (<see cref="HoldingWait"/>), each MoveAlongPath step a Step beat, each boundary a
+/// Keyframe beat for every token whose picture changed (TokenPicture), a token created or destroyed meanwhile a Spawned
+/// or Removed beat. The playback (this MonoBehaviour's LateUpdate, single lane, in rules order) shows them: a Pace beat
+/// lasts its seconds divided by the AI speed and a Step beat tweens the token's held view (<see cref="Playback"/> Timed),
+/// or everything applies in the frame (Instant, the harness's fast mode). World input, the I/K/C toggles and End Turn
+/// wait while <see cref="BlocksInput"/>. When the queue drains with no group open, the held views copy their models
+/// again and the <see cref="WhenDrained"/> actions run (the loot window). The rules never wait on the playback, so every
+/// rules outcome and trace hash is the same with grouping on or off (NEUTRAL; the harness's group=pair proves it).
+///
+/// <see cref="Boundary"/> is called at every rules boundary a group has (each CombatPacing.Wait, each MoveAlongPath step,
+/// before the control beat and every Interactive-class call, and in TurnControl.CombatEnded). It records the keyframe
+/// beats while queueing and feeds <see cref="PresentationTrace"/> (editor and development builds, while the scenario
+/// harness records); it never changes a returned yield.
+///
+/// The singleton (<see cref="Instance"/>, the playback loop) is a MonoBehaviour on its own lazily created root
 /// GameObject, never on GameManager: GameManager.Awake runs before scene references are assigned (CORE-009) and
 /// ResetCombatStateForNextEncounter stops GameManager's coroutines (CORE-013), so a reset never stops the playback
 /// silently; <see cref="Clear"/> is explicit.
 ///
 /// Presentation only: nothing here draws from UnityEngine.Random, writes rules state, or calls SetActive or Destroy on a
-/// model (a source scan in Tests.UI.CombatPresentationTests pins it).
+/// model (a source scan in Tests.UI.CombatPresentationTests pins it). A beat's apply that throws is caught and warned
+/// (a presentation fault never reaches a rules caller).
 /// </summary>
 [DisallowMultipleComponent]
+[DefaultExecutionOrder(9000)]
 public sealed class CombatPresentation : MonoBehaviour
 {
     /// <summary>The name of the singleton's root GameObject.</summary>
     public const string RootName = "CombatPresentation";
 
+    /// <summary>The most groups the in-memory group log keeps (the harness clears it per job).</summary>
+    public const int MaxGroupLog = 5000;
+
     private static CombatPresentation _instance;
+    // The queue: beats from _head on wait to be applied, in rules order (seq). The applied prefix is compacted away.
     private static readonly List<PresentationBeat> _queue = new List<PresentationBeat>();
+    private static int _head;
     private static readonly List<Action> _whenDrained = new List<Action>();
     private static int _seq;
+    private static bool _holding;
+    private static bool _applying;
+    private static bool _headStarted;
+    private static float _headElapsed;
+    private static GroupRecord _group;
+    private static int _groupIds;
+    private static readonly List<GroupRecord> _groups = new List<GroupRecord>();
 
     /// <summary>
     /// A test seam (Tests.UI.CombatPresentationTests, the trace fault check): when set, it replaces TokenKeyframe.Capture
@@ -85,14 +156,23 @@ public sealed class CombatPresentation : MonoBehaviour
     {
         _instance = null;
         _queue.Clear();
+        _head = 0;
         _whenDrained.Clear();
         _seq = 0;
+        _holding = false;
+        _applying = false;
+        _headStarted = false;
+        _headElapsed = 0f;
+        _group = null;
+        _groupIds = 0;
+        _groups.Clear();
+        Playback = PlaybackMode.Timed;
         KeyframeSourceForTests = null;
     }
 
     /// <summary>
     /// The singleton, created on first use on its own root GameObject (<see cref="RootName"/>); null outside Play mode.
-    /// Nothing in Passthrough needs it: step 9's playback loop runs on it.
+    /// Its LateUpdate is the playback loop.
     /// </summary>
     public static CombatPresentation Instance
     {
@@ -116,27 +196,56 @@ public sealed class CombatPresentation : MonoBehaviour
             _instance = null;
     }
 
-    /// <summary>The mode in force: Passthrough (step 8).</summary>
-    public static PresentationMode Mode => PresentationMode.Passthrough;
+    /// <summary>
+    /// The playback loop must exist while the presentation blocks input or waits to drain (a destroyed root is re-created
+    /// by the next read), or BlocksInput would stay true with nothing pumping the queue.
+    /// </summary>
+    private static void EnsurePump()
+    {
+        if (_instance == null && Application.isPlaying && (_holding || PendingBeats > 0 || _whenDrained.Count > 0))
+            _ = Instance;
+    }
 
-    /// <summary>True while a group is recorded (step 9). Always false in Passthrough.</summary>
-    public static bool Holding => false;
+    /// <summary>The mode in force: Holding while a group is recorded, Passthrough otherwise.</summary>
+    public static PresentationMode Mode => _holding ? PresentationMode.Holding : PresentationMode.Passthrough;
+
+    /// <summary>True while a group is recorded (from its first AI turn's mark to its close).</summary>
+    public static bool Holding => _holding;
 
     /// <summary>
-    /// True while facade calls are recorded instead of applied: while holding, or while the queue is not empty
-    /// (queue while behind keeps the order across a group close). Never true in Passthrough, where nothing is queued.
+    /// How the playback consumes the queue: Timed in play (the default), Instant for the scenario harness's fast and fine
+    /// modes (RunOptions playback=). Presentation only.
     /// </summary>
-    public static bool Queueing => Holding || _queue.Count > 0;
+    public static PlaybackMode Playback { get; set; } = PlaybackMode.Timed;
 
-    /// <summary>True while world input, the I/K/C toggles and End Turn must wait for the playback (wired in step 9).</summary>
-    public static bool BlocksInput => Queueing;
+    /// <summary>
+    /// True while facade calls are recorded instead of applied: while holding, or while the queue is not empty (queue
+    /// while behind keeps the order across a group close). False while a beat applies, so a facade call made by a beat's
+    /// own apply runs at once.
+    /// </summary>
+    public static bool Queueing => (_holding || PendingBeats > 0) && !_applying;
+
+    /// <summary>
+    /// True while world input, the I/K/C toggles and End Turn must wait for the playback (GameManager.CanProcessWorldInput,
+    /// InputService.HandleKeyboardInput, GameManager.OnEndTurnButtonPressed): while holding or while beats wait.
+    /// </summary>
+    public static bool BlocksInput
+    {
+        get
+        {
+            bool blocks = _holding || PendingBeats > 0;
+            if (blocks)
+                EnsurePump();
+            return blocks;
+        }
+    }
 
     /// <summary>True while an interactive beat waits in the queue (Harness_PendingPrompt joins it in step 10).</summary>
     public static bool HasPendingInteractive
     {
         get
         {
-            for (int i = 0; i < _queue.Count; i++)
+            for (int i = _head; i < _queue.Count; i++)
                 if (_queue[i].Kind == BeatKind.Interactive)
                     return true;
             return false;
@@ -144,14 +253,26 @@ public sealed class CombatPresentation : MonoBehaviour
     }
 
     /// <summary>The beats waiting to be applied.</summary>
-    public static int PendingBeats => _queue.Count;
+    public static int PendingBeats => _queue.Count - _head;
 
     /// <summary>The actions waiting for the queue to drain (<see cref="WhenDrained"/>).</summary>
     public static int PendingDrainActions => _whenDrained.Count;
 
+    /// <summary>The group being recorded, or null.</summary>
+    public static GroupRecord CurrentGroup => _holding ? _group : null;
+
+    /// <summary>The groups recorded since the last <see cref="ResetGroupLog"/> (the scenario harness's per-job record).</summary>
+    public static IReadOnlyList<GroupRecord> GroupLog => _groups;
+
+    /// <summary>Clears the group log (the scenario harness, at each job's start). The queue and the hold are untouched.</summary>
+    public static void ResetGroupLog()
+    {
+        _groups.Clear();
+    }
+
     /// <summary>
-    /// Records a beat in rules order. Only called while <see cref="Queueing"/>; in Passthrough nothing calls it but the
-    /// tests, which empty the queue again.
+    /// Records a beat in rules order. Called by the facade while <see cref="Queueing"/> (and by the tests, which empty the
+    /// queue again).
     /// </summary>
     internal static void Enqueue(PresentationBeat beat)
     {
@@ -159,17 +280,98 @@ public sealed class CombatPresentation : MonoBehaviour
             return;
         beat.Seq = ++_seq;
         _queue.Add(beat);
+        if (_group != null && _group.IsOpen)
+        {
+            _group.Beats++;
+            _group.PlaybackSeconds += DurationOf(beat, PlaybackMode.Timed);
+        }
+        if (Application.isPlaying)
+            _ = Instance; // the playback loop lives on the singleton
     }
 
-    // ── Boundaries and the trace ────────────────────────────────────────────────────────────────────────────────────
+    // ── The group ───────────────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// A rules boundary: the token keyframes are taken here. In Passthrough this feeds only <see cref="PresentationTrace"/>
-    /// while it records (editor and development builds, the scenario harness); otherwise it returns at once. It never
-    /// changes the caller's yield, and reads the tokens only (TokenKeyframe.Capture).
+    /// Opens a group (TurnControl.AiTurnStarting, when grouping is on and no group is open): the presentation holds from
+    /// here. Every live token view is held with a keyframe of its model now (the turn-start work before the mark ran live,
+    /// so the group starts from it). Returns false when a group was already open.
+    /// </summary>
+    internal static bool OpenGroup()
+    {
+        if (_holding)
+            return false;
+        _holding = true;
+        _group = new GroupRecord { Id = ++_groupIds, OpenSeq = _seq + 1 };
+        if (_groups.Count < MaxGroupLog)
+            _groups.Add(_group);
+        if (Application.isPlaying)
+            _ = Instance;
+        try
+        {
+            TokenView.HoldAll();
+            RecordKeyframes();
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[Presentation] group open: " + e.GetType().Name + ": " + e.Message);
+        }
+        return true;
+    }
+
+    /// <summary>Notes an AI-decided turn of the open group as a lane ("round:actor"; TurnControl.AiTurnStarting).</summary>
+    internal static void NoteLane(CharacterController actor, int round)
+    {
+        if (!_holding || _group == null)
+            return;
+        string name = actor != null && actor.Stats != null ? actor.Stats.CharacterName : (actor != null ? actor.name : "?");
+        _group.Lanes.Add(round + ":" + name);
+    }
+
+    /// <summary>
+    /// Closes the open group (the control beat, a prompt, combat end, a reset): the token pictures are recorded one last
+    /// time and the hold ends. Its beats still play (queue while behind keeps later calls in order behind them); when the
+    /// queue is already empty the drain runs now.
+    /// </summary>
+    internal static void CloseGroup(GroupStop stop)
+    {
+        if (!_holding)
+            return;
+        try { RecordKeyframes(); }
+        catch (Exception e) { Debug.LogWarning("[Presentation] group close: " + e.GetType().Name + ": " + e.Message); }
+        _holding = false;
+        if (_group != null)
+        {
+            _group.Stop = stop;
+            _group.CloseSeq = _seq;
+        }
+        _group = null;
+        if (PendingBeats == 0)
+            FinishDrain();
+    }
+
+    // ── Recording ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A pacing wait while holding (CombatPacing.Wait): a Pace beat of <paramref name="seconds"/> under
+    /// <paramref name="kind"/>, which the playback plays later; the caller yields CombatPacing.HoldingFrame (one frame).
+    /// </summary>
+    internal static void HoldingWait(float seconds, PaceKind kind)
+    {
+        Enqueue(new PresentationBeat { Kind = BeatKind.Pace, Seconds = seconds, Pace = kind });
+    }
+
+    /// <summary>
+    /// A rules boundary: while queueing, a Keyframe beat for every live token whose model's picture changed since its last
+    /// one; while the presentation trace records, the boundary line and the trace keyframes. It never changes the
+    /// caller's yield, reads the tokens only, and never throws into a rules caller.
     /// </summary>
     public static void Boundary(PresentationBoundary kind)
     {
+        if (Queueing)
+        {
+            try { RecordKeyframes(); }
+            catch (Exception e) { Debug.LogWarning("[Presentation] keyframes: " + e.GetType().Name + ": " + e.Message); }
+        }
         if (!PresentationTrace.Recording)
             return;
         // Trace only, inside rules coroutines: a throw here (a keyframe of a half-reset creature, say) must never reach
@@ -193,18 +395,79 @@ public sealed class CombatPresentation : MonoBehaviour
         }
     }
 
+    /// <summary>The Keyframe beats of a boundary: each live view whose model's picture differs from its last one.</summary>
+    private static void RecordKeyframes()
+    {
+        IReadOnlyList<TokenView> views = TokenView.Live;
+        for (int i = 0; i < views.Count; i++)
+        {
+            TokenView view = views[i];
+            if (view == null || view.IsReleased || view.IsDespawning || view.Model == null)
+                continue;
+            if (!view.IsHeld)
+                view.Hold();
+            if (view.IsHiddenUntilSpawn)
+                view.SetHidden(true); // a renderer built since (the summon aura) stays hidden too
+            TokenPicture pic = TokenPicture.Capture(view);
+            if (pic == null || pic.SameAs(view.LastRecorded))
+                continue;
+            view.LastRecorded = pic;
+            Enqueue(new PresentationBeat { Kind = BeatKind.Keyframe, View = view, Picture = pic });
+        }
+    }
+
+    /// <summary>A view's last picture before its model goes (TokenView.PlayDespawnAndRelease while queueing).</summary>
+    internal static void RecordFinalKeyframe(TokenView view)
+    {
+        if (view == null || view.Model == null)
+            return;
+        try
+        {
+            TokenPicture pic = TokenPicture.Capture(view);
+            if (pic != null && !pic.SameAs(view.LastRecorded))
+            {
+                view.LastRecorded = pic;
+                Enqueue(new PresentationBeat { Kind = BeatKind.Keyframe, View = view, Picture = pic });
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[Presentation] final keyframe: " + e.GetType().Name + ": " + e.Message);
+        }
+    }
+
+    /// <summary>A view created while queueing (TokenView.Create): it stays hidden until this beat.</summary>
+    internal static void RecordSpawned(TokenView view)
+    {
+        if (view != null)
+            Enqueue(new PresentationBeat { Kind = BeatKind.Spawned, View = view });
+    }
+
+    /// <summary>A view whose model went while queueing (TokenView.Release, PlayDespawnAndRelease): it goes at this beat.</summary>
+    internal static void RecordRemoved(TokenView view, bool despawn)
+    {
+        if (view != null)
+            Enqueue(new PresentationBeat { Kind = BeatKind.Removed, View = view, Flag = despawn });
+    }
+
     /// <summary>
     /// A MoveAlongPath step, called right after the mover's GridPosition becomes <paramref name="to"/> (before its
-    /// tween): a boundary (the keyframes show the mover where the step starts) and, while the trace records, the step.
-    /// Holding (step 9) records it as a step beat; the rules half of the step is untouched.
+    /// tween): a boundary (the keyframes show the mover where the step starts), the trace's step line, and while
+    /// queueing a Step beat (the view tweens from <paramref name="startPos"/> to <paramref name="endPos"/> over
+    /// <paramref name="secondsPerStep"/> divided by the AI speed). The rules half of the step is untouched.
     /// </summary>
     public static void RecordStep(CharacterController mover, Vector2Int from, Vector2Int to, Vector3 startPos, Vector3 endPos, float secondsPerStep)
     {
+        Boundary(PresentationBoundary.Step);
+        if (Queueing && mover != null && mover.View != null)
+            Enqueue(new PresentationBeat
+            {
+                Kind = BeatKind.Step, View = mover.View, From = startPos, To = endPos, Seconds = secondsPerStep, Pace = CombatPacing.Kind
+            });
         if (!PresentationTrace.Recording)
             return;
         try
         {
-            Boundary(PresentationBoundary.Step);
             PresentationTrace.Step(mover != null ? mover.View : null, mover, from, to);
         }
         catch (Exception e)
@@ -233,8 +496,8 @@ public sealed class CombatPresentation : MonoBehaviour
     }
 
     /// <summary>
-    /// A persistent area's indicator was created (PersistentAreaEffect.CreateVisualIndicator). In Passthrough it shows
-    /// at once, as before; Holding (step 9) hides its renderers until its AreaShown beat.
+    /// A persistent area's indicator was created (PersistentAreaEffect.CreateVisualIndicator). In Passthrough it shows at
+    /// once, as before; while queueing its renderers are not drawn (forceRenderingOff) until its AreaShown beat.
     /// </summary>
     public static void AreaShown(PersistentAreaEffect effect, GameObject indicator)
     {
@@ -242,13 +505,24 @@ public sealed class CombatPresentation : MonoBehaviour
             return;
         if (PresentationTrace.Recording)
             PresentationTrace.Applied("area", "+" + AreaLabel(effect));
+        if (!Queueing)
+            return;
+        var hidden = new List<Renderer>();
+        foreach (Renderer r in indicator.GetComponentsInChildren<Renderer>(true))
+        {
+            if (r == null || r.forceRenderingOff)
+                continue;
+            r.forceRenderingOff = true;
+            hidden.Add(r);
+        }
+        Enqueue(new PresentationBeat { Kind = BeatKind.AreaShown, Indicator = indicator, Renderers = hidden.ToArray() });
     }
 
     /// <summary>
-    /// A persistent area's indicator goes (PersistentAreaEffect.ReleaseIndicator: its expiry or a re-creation, in rules
-    /// order; OnDestroy is the fallback of the direct Destroy sites). Returns true when the presentation took the
-    /// indicator over (Holding, step 9: the caller detaches it and the presentation destroys it at its beat); false in
-    /// Passthrough, where the caller destroys it at once as before.
+    /// A persistent area's indicator goes (PersistentAreaEffect.ReleaseIndicator: its expiry, a re-creation or a direct
+    /// destroy site, in rules order; OnDestroy is the fallback). Returns true when the presentation took the indicator
+    /// over (while queueing: the caller detaches it and it is destroyed at its AreaHidden beat); false in Passthrough,
+    /// where the caller destroys it at once as before.
     /// </summary>
     public static bool AreaHidden(PersistentAreaEffect effect, GameObject indicator)
     {
@@ -256,7 +530,10 @@ public sealed class CombatPresentation : MonoBehaviour
             return false;
         if (PresentationTrace.Recording)
             PresentationTrace.Applied("area", "-" + AreaLabel(effect));
-        return false;
+        if (!Queueing)
+            return false;
+        Enqueue(new PresentationBeat { Kind = BeatKind.AreaHidden, Indicator = indicator });
+        return true;
     }
 
     private static string AreaLabel(PersistentAreaEffect effect)
@@ -267,12 +544,15 @@ public sealed class CombatPresentation : MonoBehaviour
         return effect.EffectName + "@" + cell.x + "," + cell.y;
     }
 
-    /// <summary>Runs <paramref name="action"/> at once when the queue is empty (always in Passthrough), else when it drains.</summary>
+    /// <summary>
+    /// Runs <paramref name="action"/> at once when nothing is held or queued, else when the playback drains with no group
+    /// open (S4: the loot window opens after the killing blow is shown).
+    /// </summary>
     public static void WhenDrained(Action action)
     {
         if (action == null)
             return;
-        if (!Queueing)
+        if (!_holding && PendingBeats == 0)
         {
             action();
             return;
@@ -281,36 +561,221 @@ public sealed class CombatPresentation : MonoBehaviour
     }
 
     /// <summary>
-    /// Applies every queued beat at once, in rules order, then runs the pending <see cref="WhenDrained"/> actions. A no-op
-    /// in Passthrough, whose queue is always empty.
+    /// Applies every queued beat at once, in rules order (views snap to their latest keyframes, log lines are appended,
+    /// panels set); with no group open the held views then copy their models again and the pending
+    /// <see cref="WhenDrained"/> actions run. Used before a prompt shows (the step 9 stand-in for step 10's barrier), by
+    /// the scenario harness before it reads the world, and by the tests.
     /// </summary>
     public static void CatchUpNow()
     {
-        // A beat's apply may make a facade call of its own; the queue is taken first, so that call applies at once.
-        while (_queue.Count > 0)
+        // A beat's apply may make a facade call of its own; it applies at once (_applying), never behind the queue.
+        while (PendingBeats > 0)
         {
-            var beats = new List<PresentationBeat>(_queue);
-            _queue.Clear();
-            for (int i = 0; i < beats.Count; i++)
-                ApplyBeat(beats[i]);
+            PresentationBeat b = TakeHead();
+            ApplyGuarded(b);
         }
-        if (_whenDrained.Count > 0)
-        {
-            var actions = new List<Action>(_whenDrained);
-            _whenDrained.Clear();
-            for (int i = 0; i < actions.Count; i++)
-                actions[i]();
-        }
+        Compact(true);
+        if (!_holding)
+            FinishDrain();
     }
 
     /// <summary>
-    /// Drops the queue and the pending drain actions (the reset sites, step 9). Holding's Clear also snaps every view to
-    /// its model and applies the latest cell and area state.
+    /// The reset (ResetCombatStateForNextEncounter, Harness_HaltCombat, Harness_ResetWorld): an open group closes (Reset),
+    /// the pending drain actions are dropped, the queued cells, ground items and area indicators get their latest state,
+    /// a view whose model went is destroyed, every other view copies its model again, and the queue empties. Nothing is
+    /// shown: the log lines and panels the queue held are dropped (the reset rebuilds the UI).
     /// </summary>
     public static void Clear()
     {
-        _queue.Clear();
+        if (_holding)
+        {
+            _holding = false;
+            if (_group != null)
+            {
+                _group.Stop = GroupStop.Reset;
+                _group.CloseSeq = _seq;
+            }
+            _group = null;
+        }
         _whenDrained.Clear();
+        var cells = new List<SquareCell>();
+        var beats = new List<PresentationBeat>();
+        for (int i = _head; i < _queue.Count; i++)
+            beats.Add(_queue[i]);
+        _queue.Clear();
+        _head = 0;
+        _headStarted = false;
+        _headElapsed = 0f;
+        _applying = true;
+        try
+        {
+            foreach (PresentationBeat b in beats)
+            {
+                try
+                {
+                    switch (b.Kind)
+                    {
+                        case BeatKind.CellHighlight:
+                        case BeatKind.CellOverlay:
+                        case BeatKind.GroundItem:
+                            if (b.Cell != null && !cells.Contains(b.Cell))
+                                cells.Add(b.Cell);
+                            break;
+                        case BeatKind.AreaShown:
+                        case BeatKind.AreaHidden:
+                        case BeatKind.Removed:
+                            ApplyBeat(b);
+                            break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[Presentation] clear " + b.Kind + ": " + e.GetType().Name + ": " + e.Message);
+                }
+            }
+            foreach (SquareCell cell in cells)
+            {
+                if (cell == null)
+                    continue;
+                try { cell.ApplyRequestedState(); }
+                catch (Exception e) { Debug.LogWarning("[Presentation] clear cell: " + e.GetType().Name + ": " + e.Message); }
+            }
+        }
+        finally
+        {
+            _applying = false;
+        }
+        try { TokenView.ReleaseAllHolds(); }
+        catch (Exception e) { Debug.LogWarning("[Presentation] clear views: " + e.GetType().Name + ": " + e.Message); }
+    }
+
+    /// <summary>The queue drained with no group open: the held views copy their models again, then the drain actions run.</summary>
+    private static void FinishDrain()
+    {
+        if (_holding || PendingBeats > 0)
+            return;
+        try { TokenView.ReleaseAllHolds(); }
+        catch (Exception e) { Debug.LogWarning("[Presentation] drain views: " + e.GetType().Name + ": " + e.Message); }
+        while (_whenDrained.Count > 0 && !_holding && PendingBeats == 0)
+        {
+            Action a = _whenDrained[0];
+            _whenDrained.RemoveAt(0);
+            try { a(); }
+            catch (Exception e) { Debug.LogWarning("[Presentation] drain action: " + e.GetType().Name + ": " + e.Message); }
+        }
+    }
+
+    // ── Playback (sequential, single lane) ──────────────────────────────────────────────────────────────────────────
+
+    private void LateUpdate()
+    {
+        Pump(Time.deltaTime);
+    }
+
+    /// <summary>
+    /// One frame of playback: beats apply in rules order; a Pace beat holds the head for its seconds divided by the AI
+    /// speed and a Step beat tweens its view (Timed), or every available beat applies now (Instant). The playback never
+    /// passes the recording head: it plays what is queued and waits for more while the group records.
+    /// </summary>
+    internal static void Pump(float deltaTime)
+    {
+        if (PendingBeats == 0)
+        {
+            if (!_holding && (_whenDrained.Count > 0 || TokenView.MaybeAnyHeld))
+                FinishDrain();
+            return;
+        }
+        float dt = Mathf.Max(0f, deltaTime);
+        bool instant = Playback == PlaybackMode.Instant;
+        while (PendingBeats > 0)
+        {
+            PresentationBeat b = _queue[_head];
+            float duration = instant ? 0f : DurationOf(b, PlaybackMode.Timed);
+            if (!_headStarted)
+            {
+                _headStarted = true;
+                _headElapsed = 0f;
+            }
+            if (duration > 0f)
+            {
+                float need = duration - _headElapsed;
+                if (dt < need)
+                {
+                    _headElapsed += dt;
+                    if (b.Kind == BeatKind.Step && b.View != null)
+                    {
+                        float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_headElapsed / duration));
+                        b.View.ShowStep(Vector3.Lerp(b.From, b.To, t));
+                    }
+                    break;
+                }
+                dt -= need;
+            }
+            TakeHead();
+            ApplyGuarded(b);
+        }
+        Compact(false);
+        if (PendingBeats == 0 && !_holding)
+            FinishDrain();
+    }
+
+    /// <summary>The time a beat holds the playback head for (Timed): a Pace beat's seconds and a Step's step seconds, divided by the AI speed.</summary>
+    internal static float DurationOf(PresentationBeat b, PlaybackMode mode)
+    {
+        if (b == null || mode == PlaybackMode.Instant)
+            return 0f;
+        switch (b.Kind)
+        {
+            case BeatKind.Pace: return Mathf.Max(0f, CombatPacing.Scaled(b.Seconds, b.Pace, CombatPacing.Speed));
+            case BeatKind.Step: return Mathf.Max(0.01f, CombatPacing.Scaled(b.Seconds, b.Pace, CombatPacing.Speed));
+            default: return 0f;
+        }
+    }
+
+    private static PresentationBeat TakeHead()
+    {
+        PresentationBeat b = _queue[_head];
+        _queue[_head] = null;
+        _head++;
+        _headStarted = false;
+        _headElapsed = 0f;
+        return b;
+    }
+
+    private static void Compact(bool force)
+    {
+        if (_head == 0)
+            return;
+        if (_head >= _queue.Count)
+        {
+            _queue.Clear();
+            _head = 0;
+            return;
+        }
+        if (force || _head > 1024)
+        {
+            _queue.RemoveRange(0, _head);
+            _head = 0;
+        }
+    }
+
+    private static void ApplyGuarded(PresentationBeat b)
+    {
+        bool was = _applying;
+        _applying = true;
+        try
+        {
+            ApplyBeat(b);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[Presentation] beat " + (b != null ? b.Kind.ToString() : "null") + " #" + (b != null ? b.Seq : 0) + ": "
+                             + e.GetType().Name + ": " + e.Message);
+        }
+        finally
+        {
+            _applying = was;
+        }
     }
 
     /// <summary>Applies one beat: the same apply the facade runs at once in Passthrough.</summary>
@@ -336,8 +801,22 @@ public sealed class CombatPresentation : MonoBehaviour
                     else b.Cell.ApplyOverlayClear();
                 }
                 break;
+            case BeatKind.GroundItem: if (b.Cell != null) b.Cell.ApplyGroundItemVisible(b.Flag); break;
+            case BeatKind.Pace: break;
+            case BeatKind.Step: if (b.View != null) b.View.ShowStep(b.To); break;
+            case BeatKind.Keyframe: if (b.View != null) b.View.ApplyPicture(b.Picture); break;
+            case BeatKind.Spawned: if (b.View != null) b.View.ApplySpawned(); break;
+            case BeatKind.Removed: if (b.View != null) b.View.ApplyRemoved(b.Flag); break;
             case BeatKind.AreaShown:
+                if (b.Renderers != null)
+                    foreach (Renderer r in b.Renderers)
+                        if (r != null)
+                            r.forceRenderingOff = false;
+                break;
             case BeatKind.AreaHidden:
+                if (b.Indicator != null)
+                    Destroy(b.Indicator);
+                break;
             case BeatKind.Control:
             case BeatKind.Interactive:
             case BeatKind.Deferred:

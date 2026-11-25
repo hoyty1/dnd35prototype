@@ -4185,22 +4185,21 @@ public class CombatUI : MonoBehaviour
         ShowAoOConfirmationPrompt(info);
     }
     /// <summary>
-    /// A confirmation dialog (an Interactive barrier, grouped AI turns S3): a presentation boundary, then the show (at
-    /// once in Passthrough; recorded while queueing). The caller's flags are set before the call, as before.
+    /// A confirmation dialog (an Interactive-class call, grouped AI turns S3): a presentation boundary, then the show.
+    /// The caller's flags are set before the call, as before. Until step 10 builds the S3 barrier, a dialog asked for
+    /// while a group holds or the playback is behind (the counter-trip, overrun-response and escape-opposition prompts to
+    /// a player-run defender inside a group) closes the group (TurnControl.PromptOpened), catches the playback up
+    /// (CombatPresentation.CatchUpNow, so nothing it refers to is still unshown) and then shows at once (step 9).
     /// </summary>
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)
     {
         CombatPresentation.Boundary(PresentationBoundary.Interactive);
-        if (CombatPresentation.Queueing)
+        if (CombatPresentation.Holding || CombatPresentation.Queueing)
         {
-            CombatPresentation.Enqueue(new PresentationBeat
-            {
-                Kind = BeatKind.Interactive, Ui = this, Text = title,
-                Show = () => ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel)
-            });
-            return;
+            TurnControl.PromptOpened();
+            CombatPresentation.CatchUpNow();
         }
         ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel);
     }

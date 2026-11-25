@@ -15,6 +15,7 @@ public enum HPCalculationMode
 /// - No player-facing settings menu is wired yet.
 /// - Default remains Roll (D&D 3.5e standard).
 /// - The AI turn speed (aiTurnSpeed) has a combat HUD button (grouped AI turns step 6).
+/// - Group AI turns (groupAiTurns, step 9) is off by default and has no HUD toggle yet (step 11).
 /// </summary>
 public class GameSettings : MonoBehaviour
 {
@@ -80,6 +81,31 @@ public class GameSettings : MonoBehaviour
             if (AiTurnSpeedChoices[i] == speed)
                 return AiTurnSpeedChoices[(i + 1) % AiTurnSpeedChoices.Length];
         return DefaultAiTurnSpeed;
+    }
+
+    /// <summary>
+    /// Group AI turns (grouped AI turns step 9, owner request 2026-10-30; docs/designs/grouped_ai_turns.md "The group"):
+    /// the AI-decided turns before the next player-run turn resolve at once and play back together, the rules unchanged
+    /// (CombatPresentation's Holding mode). Read once per group, when TurnControl.AiTurnStarting opens one. Off by default
+    /// until step 11 (Q1's default then turns it on in play with a HUD toggle); the scenario harness sets it from its
+    /// group= option (default off) and restores it. Session-only. Presentation only: no rule reads it.
+    /// </summary>
+    public bool groupAiTurns = DefaultGroupAiTurns;
+
+    /// <summary>The default of <see cref="groupAiTurns"/>: off (step 9; Q1 moves it to on in step 11).</summary>
+    public const bool DefaultGroupAiTurns = false;
+
+    /// <summary>
+    /// Whether grouping is on: the live settings object's <see cref="groupAiTurns"/>, or the default when no settings
+    /// object exists yet (this never creates one).
+    /// </summary>
+    public static bool CurrentGroupAiTurns
+    {
+        get
+        {
+            GameSettings s = _instance;
+            return s != null ? s.groupAiTurns : DefaultGroupAiTurns;
+        }
     }
 
     /// <summary>

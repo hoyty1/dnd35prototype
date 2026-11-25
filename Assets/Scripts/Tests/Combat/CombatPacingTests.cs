@@ -62,6 +62,7 @@ public static class CombatPacingTests
         Run(TestNoRawWaitsInGameCode);
         Run(TestMarkSites);
         Run(TestTimeReadersAllowlisted);
+        Run(TestHoldingBranch);
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -389,7 +390,10 @@ public static class CombatPacingTests
             int raw = CountRawWaits(src);
             if (string.Equals(full, pacingFile, StringComparison.OrdinalIgnoreCase))
             {
-                Assert(raw == 1, "CombatPacing.cs builds the one WaitForSeconds of the service", raw.ToString());
+                // Two raw waits: the Live branch's per-call wait and the cached one-frame HoldingFrame (step 9); a third fails.
+                Assert(raw == 2, "CombatPacing.cs builds the two WaitForSeconds of the service (Live and HoldingFrame)", raw.ToString());
+                Assert(Regex.IsMatch(src, @"static\s+readonly\s+WaitForSeconds\s+HoldingFrame\s*=\s*new\s+WaitForSeconds\(\s*0f\s*\)"),
+                    "The second raw wait is the cached HoldingFrame field initializer of 0 s");
                 continue;
             }
             if (exempt.TryGetValue(full, out var site))
@@ -410,6 +414,45 @@ public static class CombatPacingTests
             string.Join(", ", offenders));
         Assert(routed > 0, "Game code yields its pacing waits through CombatPacing.Wait", routed.ToString());
         Debug.Log($"  [INFO] {routed} pacing waits through CombatPacing.Wait in {files} game files");
+    }
+
+    private static void TestHoldingBranch()
+    {
+        // Grouped AI turns step 9: while a group holds, Wait records a Pace beat of the caller's seconds and kind and
+        // yields the cached one-frame HoldingFrame; StepSeconds returns HoldingStepSeconds.
+        if (CombatPresentation.Holding || CombatPresentation.PendingBeats > 0)
+        {
+            Assert(false, "The holding check starts from an idle presentation", "holding or beats pending");
+            return;
+        }
+        PaceKind saved = CombatPacing.Kind;
+        FieldInfo queueField = typeof(CombatPresentation).GetField("_queue", BindingFlags.Static | BindingFlags.NonPublic);
+        try
+        {
+            CombatPacing.Kind = PaceKind.Ai;
+            Assert(CombatPresentation.OpenGroup(), "OpenGroup opens a group for the holding check");
+            int before = CombatPresentation.PendingBeats;
+            WaitForSeconds w = CombatPacing.Wait(0.7f);
+            Assert(ReferenceEquals(w, CombatPacing.HoldingFrame), "Wait while holding returns the cached HoldingFrame");
+            Assert(SecondsField != null && (float)SecondsField.GetValue(w) == 0f, "HoldingFrame is a wait of 0 s (one frame)",
+                SecondsField == null ? "no m_Seconds" : SecondsField.GetValue(w).ToString());
+            Assert(CombatPresentation.PendingBeats >= before + 1, "Wait while holding records a beat",
+                (CombatPresentation.PendingBeats - before).ToString());
+            var queue = queueField?.GetValue(null) as List<PresentationBeat>;
+            PresentationBeat last = queue != null && queue.Count > 0 ? queue[queue.Count - 1] : null;
+            Assert(last != null && last.Kind == BeatKind.Pace && last.Seconds == 0.7f && last.Pace == PaceKind.Ai,
+                "The recorded beat is a Pace beat of the caller's seconds and kind",
+                last == null ? "none" : last.Kind + " " + last.Seconds + " " + last.Pace);
+            Assert(CombatPacing.StepSeconds(0.25f) == CombatPacing.HoldingStepSeconds,
+                "StepSeconds while holding is HoldingStepSeconds", CombatPacing.StepSeconds(0.25f).ToString());
+        }
+        finally
+        {
+            CombatPresentation.Clear();
+            CombatPacing.Kind = saved;
+        }
+        Assert(!CombatPresentation.Holding && CombatPresentation.PendingBeats == 0, "Clear ends the hold and empties the queue");
+        Assert(!ReferenceEquals(CombatPacing.Wait(0.3f), CombatPacing.HoldingFrame), "After Clear, Wait is live again");
     }
 
     private static void TestMarkSites()

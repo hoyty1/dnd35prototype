@@ -23,6 +23,12 @@ namespace Tests.UI
 /// the facade's shape in source (the log hook first, the gates, the hooks at their sites, the creature overloads);
 /// the no-Random and no-rules-write scan of UI/Presentation/;
 /// a trace that throws (a keyframe source) faults and stops itself, and never reaches the rules caller.
+/// Step 9 (gt-run-ahead, Holding): with grouping off an AI turn's mark opens no group; an open group holds (a pacing wait
+/// is a Pace beat and one cached one-frame yield, a facade call queues, WhenDrained waits), queue-while-behind keeps a
+/// call after the close behind the group's beats, CatchUpNow applies in rules order and then drains, a close on an empty
+/// queue drains at once, Timed playback holds the head for a Pace beat's seconds and Instant applies at once, and Clear
+/// closes the group as a reset and drops the queue and the drain actions without showing them. The input refusals are
+/// PresentationHoldTests.
 /// Needs Play mode (a scene CombatUI and live token views).
 /// Side effects on the shared Play pass: the facade probes add a few "[presentation test]" lines and a turn separator
 /// to the scene's combat log (the log panel cannot trim back; no suite counts its lines). Every other probe restores
@@ -38,7 +44,7 @@ public static class CombatPresentationTests
         _passed = 0;
         _failed = 0;
 
-        Debug.Log("========== COMBAT PRESENTATION TESTS (grouped AI turns step 8) ==========");
+        Debug.Log("========== COMBAT PRESENTATION TESTS (grouped AI turns steps 8-9) ==========");
 
         PresentationTrace.Stop();
         CombatPresentation.Clear();
@@ -61,6 +67,12 @@ public static class CombatPresentationTests
             Run(TestQueueWhileBehindOrder);
             Run(TestTraceChannels);
             Run(TestTraceFaultIsolated);
+            Run(TestGroupingOffOpensNoGroup);
+            Run(TestHoldingQueueOrder);
+            Run(TestCloseOnEmptyQueueDrains);
+            Run(TestPlaybackTimedAndInstant);
+            Run(TestClearDropsTheGroup);
+            CombatPresentation.ResetGroupLog();
         }
 
         PresentationTrace.Stop();
@@ -526,6 +538,146 @@ public static class CombatPresentationTests
             if (view != null)
                 UnityEngine.Object.DestroyImmediate(view.gameObject);
             UnityEngine.Object.DestroyImmediate(model);
+        }
+    }
+
+    // ── Holding (step 9) ───────────────────────────────────────────────────────────────────────────────────────────
+
+    private static void TestGroupingOffOpensNoGroup()
+    {
+        PaceKind kind = CombatPacing.Kind;
+        GameSettings settings = GameSettings.Instance;
+        bool saved = settings.groupAiTurns;
+        try
+        {
+            settings.groupAiTurns = false;
+            TurnControl.AiTurnStarting(null);
+            Assert(!CombatPresentation.Holding && !CombatPresentation.Queueing, "With grouping off an AI turn's mark opens no group (NEUTRAL default)");
+            Assert(GameSettings.DefaultGroupAiTurns == false, "Grouping is off by default (step 9; Q1 in step 11)");
+        }
+        finally
+        {
+            settings.groupAiTurns = saved;
+            if (kind == PaceKind.Player)
+                TurnControl.PlayerControlReturned(null);
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static void TestHoldingQueueOrder()
+    {
+        var order = new List<string>();
+        try
+        {
+            Assert(CombatPresentation.OpenGroup(), "OpenGroup opens a group when none is open");
+            Assert(!CombatPresentation.OpenGroup(), "OpenGroup refuses a second group while one is open");
+            Assert(CombatPresentation.Holding && CombatPresentation.Mode == PresentationMode.Holding && CombatPresentation.Queueing
+                   && CombatPresentation.BlocksInput, "An open group holds, queues and blocks input");
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            Assert(g != null && g.IsOpen && CombatPresentation.GroupLog.Contains(g), "The open group is the current group and is in the group log");
+            Assert(!TokenView.Live.Any(v => v != null && !v.IsReleased && !v.IsDespawning && v.Model != null && !v.IsHeld),
+                "Every live token view is held while the group records");
+
+            int before = CombatPresentation.PendingBeats;
+            WaitForSeconds w1 = CombatPacing.Wait(0.75f);
+            WaitForSeconds w2 = CombatPacing.Wait(2.5f);
+            Assert(w1 != null && ReferenceEquals(w1, w2), "A pacing wait while holding yields one cached one-frame WaitForSeconds");
+            Assert(CombatPresentation.PendingBeats >= before + 2, "Each pacing wait records a Pace beat", (CombatPresentation.PendingBeats - before).ToString());
+            Assert(CombatPacing.StepSeconds(0.2f) == CombatPacing.HoldingStepSeconds, "A movement step while holding tweens over one frame (HoldingStepSeconds)",
+                CombatPacing.StepSeconds(0.2f).ToString());
+
+            CombatPresentation.Defer(() => order.Add("A"), "A");
+            CombatPresentation.WhenDrained(() => order.Add("drained"));
+            Assert(order.Count == 0 && CombatPresentation.PendingDrainActions == 1, "While holding, Defer queues and WhenDrained waits");
+            int beats = g != null ? g.Beats : 0;
+            CombatPresentation.CloseGroup(GroupStop.Control);
+            Assert(!CombatPresentation.Holding && g != null && g.Stop == GroupStop.Control && g.CloseSeq >= g.OpenSeq && beats > 0,
+                "CloseGroup ends the hold and records the stop, the seq span and the beats", "beats " + beats);
+            Assert(CombatPresentation.Queueing && CombatPresentation.BlocksInput && order.Count == 0,
+                "After the close the presentation is behind: still queueing, still blocking input, nothing shown");
+            CombatPresentation.Defer(() => order.Add("B"), "B");
+            Assert(order.Count == 0, "A call after the close queues behind the group's beats (queue while behind)");
+            CombatPresentation.CatchUpNow();
+            Assert(string.Join(",", order) == "A,B,drained", "CatchUpNow applies in rules order, then runs the drain actions", string.Join(",", order));
+            Assert(!CombatPresentation.Queueing && !CombatPresentation.BlocksInput && !TokenView.AnyHeld,
+                "Drained: Passthrough again and every view copies its model");
+        }
+        finally
+        {
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static void TestCloseOnEmptyQueueDrains()
+    {
+        int ran = 0;
+        try
+        {
+            CombatPresentation.OpenGroup();
+            CombatPresentation.WhenDrained(() => ran++);
+            CombatPresentation.CatchUpNow();
+            Assert(ran == 0 && CombatPresentation.Holding && CombatPresentation.PendingBeats == 0,
+                "CatchUpNow while holding applies the beats but runs no drain action (the group still records)");
+            CombatPresentation.CloseGroup(GroupStop.CombatEnd);
+            Assert(ran == 1 && !CombatPresentation.Queueing, "A close on an empty queue drains at once (S4: the loot window opens now)");
+            CombatPresentation.WhenDrained(() => ran++);
+            Assert(ran == 2, "WhenDrained on an empty queue with no group open runs at once");
+        }
+        finally
+        {
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static void TestPlaybackTimedAndInstant()
+    {
+        PlaybackMode saved = CombatPresentation.Playback;
+        var order = new List<string>();
+        try
+        {
+            CombatPresentation.Playback = PlaybackMode.Timed;
+            var probe = new PresentationBeat { Kind = BeatKind.Pace, Seconds = 1f, Pace = PaceKind.Player };
+            float need = CombatPresentation.DurationOf(probe, PlaybackMode.Timed);
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Pace, Seconds = 1f, Pace = PaceKind.Player });
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Deferred, Text = "after", Show = () => order.Add("after") });
+            CombatPresentation.Pump(need * 0.4f);
+            Assert(need > 0f && order.Count == 0 && CombatPresentation.PendingBeats == 2, "Timed: a Pace beat holds the playback head for its seconds",
+                "need " + need);
+            CombatPresentation.Pump(need * 0.7f);
+            Assert(order.Count == 1 && CombatPresentation.PendingBeats == 0, "Timed: past its seconds the head moves on and the next beat applies");
+            Assert(CombatPresentation.DurationOf(probe, PlaybackMode.Instant) == 0f, "Instant: no beat holds the head");
+
+            CombatPresentation.Playback = PlaybackMode.Instant;
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Pace, Seconds = 5f, Pace = PaceKind.Ai });
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Deferred, Text = "instant", Show = () => order.Add("instant") });
+            CombatPresentation.Pump(0f);
+            Assert(order.Count == 2 && CombatPresentation.PendingBeats == 0, "Instant: one frame applies every queued beat");
+        }
+        finally
+        {
+            CombatPresentation.Playback = saved;
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static void TestClearDropsTheGroup()
+    {
+        int shown = 0;
+        try
+        {
+            CombatPresentation.OpenGroup();
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            CombatPresentation.Defer(() => shown++, "dropped");
+            CombatPresentation.WhenDrained(() => shown++);
+            CombatPresentation.Clear();
+            Assert(!CombatPresentation.Holding && CombatPresentation.PendingBeats == 0 && CombatPresentation.PendingDrainActions == 0 && shown == 0,
+                "Clear ends the hold and drops the queue and the drain actions without showing them");
+            Assert(g != null && g.Stop == GroupStop.Reset, "Clear closes an open group as a reset");
+            Assert(!TokenView.AnyHeld && !CombatPresentation.BlocksInput, "After Clear no view is held and input is free");
+        }
+        finally
+        {
+            CombatPresentation.Clear();
         }
     }
 

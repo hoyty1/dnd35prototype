@@ -8,8 +8,8 @@ using UnityEngine.UI;
 /// <summary>
 /// What a recorded presentation beat shows (grouped AI turns, docs/designs/grouped_ai_turns.md "Recording (resolve now,
 /// show later)"). Step 8 builds the facade in Passthrough only, so no beat is queued in play yet: every facade call
-/// applies at once, as before. The kinds that only Holding records (Pace, Step, Keyframe, Spawned, Removed) come with
-/// step 9.
+/// applies at once, as before. Step 9 (gt-run-ahead) adds Holding, which records the kinds only a group has (Pace, Step,
+/// Keyframe, Spawned, Removed) besides the facade's, and the ground-item token's beat (UI-058).
 /// </summary>
 public enum BeatKind
 {
@@ -48,6 +48,18 @@ public enum BeatKind
     /// arguments; its apply writes its own trace line, so the beat adds no "defer" line.
     /// </summary>
     QueuedClosure,
+    /// <summary>A pacing wait while holding (CombatPacing.Wait): plays for its seconds divided by the AI speed, shows nothing.</summary>
+    Pace,
+    /// <summary>A MoveAlongPath step while holding (CombatPresentation.RecordStep): the token's view tweens over the step.</summary>
+    Step,
+    /// <summary>A token's picture at a boundary while holding (CombatPresentation.Boundary): its view shows it.</summary>
+    Keyframe,
+    /// <summary>A token created while queueing (a summon): its view stays hidden until this beat.</summary>
+    Spawned,
+    /// <summary>A token destroyed (or despawned) while queueing: its view keeps its last keyframe until this beat, then goes.</summary>
+    Removed,
+    /// <summary>SquareCell's ground-item token shows or hides (AddGroundItem, RemoveGroundItem; UI-058).</summary>
+    GroundItem,
 }
 
 /// <summary>
@@ -73,6 +85,18 @@ public sealed class PresentationBeat
     public GameObject Indicator;
     /// <summary>The show of a Deferred, Control or Interactive beat (a closure over call-time values).</summary>
     public Action Show;
+    /// <summary>A Pace beat's seconds, or a Step beat's seconds per step (both divided by the AI speed when played).</summary>
+    public float Seconds;
+    /// <summary>The pacing kind in force when a Pace or Step beat was recorded.</summary>
+    public PaceKind Pace;
+    /// <summary>The token view of a Step, Keyframe, Spawned or Removed beat (a presentation object).</summary>
+    public TokenView View;
+    /// <summary>A Keyframe beat's picture (values and asset references taken at the boundary).</summary>
+    public TokenPicture Picture;
+    /// <summary>A Step beat's world positions.</summary>
+    public Vector3 From, To;
+    /// <summary>The renderers an AreaShown beat turns back on.</summary>
+    public Renderer[] Renderers;
 
     public static PresentationBeat Of(BeatKind kind, CombatUI ui) => new PresentationBeat { Kind = kind, Ui = ui };
 }
@@ -203,6 +227,83 @@ public struct TokenKeyframe
         if (!string.IsNullOrEmpty(Icons))
             sb.Append("|ic=").Append(Icons);
         return sb.ToString();
+    }
+}
+
+/// <summary>
+/// What a token's view draws, taken from its model at a boundary while holding (grouped AI turns step 9): the values and
+/// asset references a Keyframe beat applies to the held view (TokenView.ApplyPicture). Pure reads, like TokenKeyframe.
+/// The grapple blink's momentary <c>enabled</c> is not kept (a grappling token shows as drawn), and the blur pulse's tint
+/// is the one at the boundary (the pulse does not play while held; cosmetic).
+/// </summary>
+public sealed class TokenPicture
+{
+    public bool Active;
+    public Vector3 Position;
+    public Quaternion Rotation;
+    public Vector3 Scale;
+    public bool HasRenderer;
+    public Sprite Sprite;
+    public Color Color;
+    public bool Enabled;
+    public bool FlipX;
+    public bool FlipY;
+    public int SortingLayerId;
+    public int SortingOrder;
+    public Material Material;
+    public SpriteDrawMode DrawMode;
+    public Vector2 Size;
+    public List<StatusEffectIndicator.IconData> Icons;
+    public string IconSignature;
+
+    /// <summary>The picture of <paramref name="view"/>'s model, or null when the model is gone.</summary>
+    public static TokenPicture Capture(TokenView view)
+    {
+        GameObject model = view != null ? view.Model : null;
+        if (model == null)
+            return null;
+        var p = new TokenPicture();
+        Transform t = model.transform;
+        p.Active = model.activeInHierarchy;
+        p.Position = t.position;
+        p.Rotation = t.rotation;
+        p.Scale = t.lossyScale;
+        SpriteRenderer sr = view.ModelRenderer;
+        CharacterController c = model.GetComponent<CharacterController>();
+        if (sr != null)
+        {
+            p.HasRenderer = true;
+            p.Sprite = sr.sprite;
+            p.Color = sr.color;
+            // The grapple blink toggles the model's enabled on the wall clock: a held grappling token stays drawn.
+            p.Enabled = sr.enabled || (c != null && c.PeekGrappleOpponent() != null);
+            p.FlipX = sr.flipX;
+            p.FlipY = sr.flipY;
+            p.SortingLayerId = sr.sortingLayerID;
+            p.SortingOrder = sr.sortingOrder;
+            p.Material = sr.sharedMaterial;
+            p.DrawMode = sr.drawMode;
+            p.Size = sr.drawMode != SpriteDrawMode.Simple ? sr.size : Vector2.zero;
+        }
+        StatusEffectIndicator icons = c != null ? model.GetComponent<StatusEffectIndicator>() : null;
+        if (icons != null)
+        {
+            p.Icons = icons.CaptureIcons();
+            p.IconSignature = icons.SignatureOf(p.Icons);
+        }
+        return p;
+    }
+
+    /// <summary>True when <paramref name="other"/> draws the same picture.</summary>
+    public bool SameAs(TokenPicture other)
+    {
+        if (other == null)
+            return false;
+        return Active == other.Active && Position == other.Position && Rotation == other.Rotation && Scale == other.Scale
+               && HasRenderer == other.HasRenderer && Sprite == other.Sprite && Color == other.Color && Enabled == other.Enabled
+               && FlipX == other.FlipX && FlipY == other.FlipY && SortingLayerId == other.SortingLayerId
+               && SortingOrder == other.SortingOrder && Material == other.Material && DrawMode == other.DrawMode
+               && Size == other.Size && string.Equals(IconSignature, other.IconSignature, StringComparison.Ordinal);
     }
 }
 

@@ -4504,7 +4504,6 @@ public class CharacterController : MonoBehaviour
             yield break;
 
         Vector2Int oldPosition = GridPosition;
-        float clampedStepDuration = Mathf.Max(0.01f, CombatPacing.StepSeconds(secondsPerStep)); // pacing only (grouped AI turns)
         SquareGrid grid = CurrentGrid;
 
         // Clear the mover's footprint once before animating.
@@ -4558,6 +4557,9 @@ public class CharacterController : MonoBehaviour
             // A presentation boundary (grouped AI turns step 8): trace only in Passthrough; the rules half of the step is untouched.
             CombatPresentation.RecordStep(this, fromCell, nextCell.Coords, startPos, endPos, secondsPerStep);
 
+            // Pacing only (grouped AI turns), read per step: a prompt that closes a group mid-move (step 9) returns the
+            // rest of the move to the live step time.
+            float clampedStepDuration = Mathf.Max(0.01f, CombatPacing.StepSeconds(secondsPerStep));
             float elapsed = 0f;
             while (elapsed < clampedStepDuration)
             {

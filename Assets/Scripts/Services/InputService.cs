@@ -181,6 +181,11 @@ public class InputService : MonoBehaviour
 
     private void HandleKeyboardInput()
     {
+        // The I, K and C toggles wait for a group's playback (grouped AI turns step 9, C6: those windows would show
+        // run-ahead state).
+        if (CombatPresentation.BlocksInput)
+            return;
+
         if (WasInventoryTogglePressed())
             OnInventoryToggleRequested?.Invoke();
 

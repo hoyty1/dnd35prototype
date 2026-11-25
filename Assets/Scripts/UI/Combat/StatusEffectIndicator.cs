@@ -71,8 +71,8 @@ public class StatusEffectIndicator : MonoBehaviour
         return true;
     }
 
-    // Held mode (grouped AI turns, docs/designs/grouped_ai_turns.md "Run-ahead state kept hidden"; step 8 adds the API,
-    // unused until step 9): while held, LateUpdate does not rebuild the icons from the creature's live state; they show
+    // Held mode (grouped AI turns, docs/designs/grouped_ai_turns.md "Run-ahead state kept hidden"; step 8 added the API,
+    // step 9 uses it through TokenView's Held mode): while held, LateUpdate does not rebuild the icons from the creature's live state; they show
     // the icon data the presentation applied (each keyframe's), and the tooltip shows that data too.
     private bool _held;
     private List<IconData> _heldIcons;
@@ -81,22 +81,37 @@ public class StatusEffectIndicator : MonoBehaviour
     public bool IsHeld => _held;
 
     /// <summary>
-    /// The icon data of the creature's live state, built by the same builder LateUpdate uses (pure reads); empty before
-    /// Start bound the creature.
+    /// The icon data of the creature's live state, built by the same builder LateUpdate uses (pure reads). The creature is
+    /// bound here too when Start has not run yet (a controller created this frame), so a capture never depends on the
+    /// frame the indicator was added in (grouped AI turns step 9: a group records many turns in few frames).
     /// </summary>
     public List<IconData> CaptureIcons()
     {
+        BindForCapture();
         if (_character == null || _character.Stats == null)
             return new List<IconData>();
         return BuildIconData();
     }
 
-    /// <summary>The signature of <see cref="CaptureIcons"/> ("none" without icons; "" before Start bound the creature).</summary>
+    /// <summary>The signature of <see cref="CaptureIcons"/> ("none" without icons; "" without a creature).</summary>
     public string CaptureIconSignature()
     {
+        BindForCapture();
         if (_character == null || _character.Stats == null)
             return "";
         return BuildSignature(BuildIconData());
+    }
+
+    private void BindForCapture()
+    {
+        if (_character == null)
+            _character = GetComponent<CharacterController>();
+    }
+
+    /// <summary>The signature of an icon list from <see cref="CaptureIcons"/> (grouped AI turns step 9, TokenPicture).</summary>
+    public string SignatureOf(List<IconData> icons)
+    {
+        return BuildSignature(icons ?? new List<IconData>());
     }
 
     /// <summary>Holds the icons: LateUpdate stops rebuilding them from live state.</summary>

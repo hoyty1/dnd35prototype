@@ -1109,6 +1109,10 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log($"[CombatReset] ENTER | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderCount} | currentCharacter={currentCharacterName} | activeNPCs={activeNpcs}");
 
+        // The presentation (grouped AI turns step 9, S6): an open group closes and the queue empties, so everything the
+        // reset does below applies at once.
+        CombatPresentation.Clear();
+
         // No ward save outlives its encounter (WardSaveLedger, D6), nor a pending reaction (the acid spray, D1).
         WardSaveLedger.Clear();
         ClearAttackedReactions();
@@ -2327,6 +2331,10 @@ public partial class GameManager : MonoBehaviour
 
     private bool CanProcessWorldInput()
     {
+        // A group's playback (grouped AI turns step 9, S1): the world waits until what the rules did is on screen.
+        if (CombatPresentation.BlocksInput)
+            return false;
+
         if (!IsPlayerTurn)
             return false;
 
@@ -2583,6 +2591,18 @@ public partial class GameManager : MonoBehaviour
             InventoryUI.Close();
         if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
             CharacterSheetUI.Close();
+    }
+
+    /// <summary>
+    /// A group of AI turns opens (TurnControl.AiTurnStarting; grouped AI turns step 9, design choice C6): the character
+    /// sheet, skills and inventory windows close, so none shows run-ahead state; their I, K and C toggles stay refused
+    /// while the playback blocks input. UI only.
+    /// </summary>
+    internal void ClosePlayerWindowsForGroup()
+    {
+        CloseInventoryIfOpen();
+        if (SkillsUI != null && SkillsUI.IsOpen)
+            SkillsUI.Close();
     }
 
 
@@ -9283,6 +9303,8 @@ public partial class GameManager : MonoBehaviour
 
     public void OnEndTurnButtonPressed()
     {
+        // A group's playback blocks End Turn too (grouped AI turns step 9, S1); IsPlayerTurn is unchanged.
+        if (CombatPresentation.BlocksInput) return;
         if (!IsPlayerTurn) return;
 
         CharacterController pc = ActivePC;

@@ -8,13 +8,23 @@ using UnityEngine;
 /// model's transform. The model's SpriteRenderer keeps every value the game writes but is not drawn
 /// (<c>forceRenderingOff</c>); this view, on its own root GameObject and never a CharacterController, draws it.
 ///
-/// Live mode (the only mode until step 9 adds Held mode): every LateUpdate, after every other script (DefaultExecutionOrder 10000, so
-/// after CharacterController's blur pulse and StatusEffectIndicator), the view copies the model's world position,
-/// rotation, lossy scale, active state and sprite renderer (sprite, colour, enabled, flipX, flipY, sorting layer and
-/// order, material, draw mode and size). It follows the model's destruction (<see cref="Release"/>, called from the
-/// model's OnDestroy, with a null check in LateUpdate as a backstop). The view's root always stays active so that its
-/// LateUpdate keeps running; the model's active state is mirrored on <see cref="Body"/>, which holds the renderer, the
-/// status icon container (StatusEffectIndicator) and the summon visual (SummonedCreatureVisual).
+/// Live mode: every LateUpdate, after every other script (DefaultExecutionOrder 10000, so after CharacterController's
+/// blur pulse and StatusEffectIndicator), the view copies the model's world position, rotation, lossy scale, active
+/// state and sprite renderer (sprite, colour, enabled, flipX, flipY, sorting layer and order, material, draw mode and
+/// size). It follows the model's destruction (<see cref="Release"/>, called from the model's OnDestroy, with a null
+/// check in LateUpdate as a backstop). The view's root always stays active so that its LateUpdate keeps running; the
+/// model's active state is mirrored on <see cref="Body"/>, which holds the renderer, the status icon container
+/// (StatusEffectIndicator) and the summon visual (SummonedCreatureVisual).
+///
+/// Held mode (grouped AI turns step 9): while a group of AI turns is recorded and played back, the view stops copying
+/// its model and shows what the playback applied to it: each Keyframe beat's picture (<see cref="ApplyPicture"/>, taken
+/// from the model at a rules boundary) and, between keyframes, each Step beat's tween (<see cref="ShowStep"/>). The
+/// model's StatusEffectIndicator is held with it, so its icons and tooltip follow the keyframes. A view created while
+/// the presentation queues (a summon) is held and draws nothing until its Spawned beat; a model destroyed while it queues
+/// leaves its view showing its last keyframe until its Removed beat (a despawn plays its fade there). When the queue
+/// drains with no group open, every held view goes back to Live mode and copies its model at once
+/// (<see cref="ReleaseAllHolds"/>, from CombatPresentation's drain and Clear). The blur pulse and the grapple blink do
+/// not play while held (a held grappling token stays drawn; cosmetic).
 ///
 /// Presentation only: the view never draws from UnityEngine.Random, never writes rules state, and never calls SetActive
 /// or Destroy on its model. A reused pool slot (CRE-046) needs no reset: the view copies whatever its model shows.
@@ -31,6 +41,16 @@ public sealed class TokenView : MonoBehaviour
     private Transform _body;
     private SummonedCreatureVisual _summonVisual;
     private bool _released;
+    private bool _held;
+    private bool _hiddenUntilSpawn;
+    private bool _pendingRemoval;
+    private StatusEffectIndicator _heldIndicator;
+
+    /// <summary>
+    /// The picture last recorded for this view while holding (CombatPresentation records a Keyframe beat only when the
+    /// model's picture differs from it); null after a hold starts, so the next boundary records one.
+    /// </summary>
+    internal TokenPicture LastRecorded;
 
     /// <summary>The object this view mirrors (null once it was destroyed).</summary>
     public GameObject Model => _model;
@@ -46,6 +66,15 @@ public sealed class TokenView : MonoBehaviour
 
     /// <summary>True once the view follows its model's destruction; its GameObject is gone at the end of the frame.</summary>
     public bool IsReleased => _released;
+
+    /// <summary>True while the view shows the playback's keyframes instead of copying its model (Held mode, step 9).</summary>
+    public bool IsHeld => _held;
+
+    /// <summary>True while a view created during a recorded group waits for its Spawned beat (it draws nothing until then).</summary>
+    public bool IsHiddenUntilSpawn => _hiddenUntilSpawn;
+
+    /// <summary>True while the view of a model destroyed during a recorded group waits for its Removed beat.</summary>
+    public bool IsPendingRemoval => _pendingRemoval;
 
     /// <summary>The summon aura, duration bar and badge hosted on this view, or null.</summary>
     public SummonedCreatureVisual SummonVisual => _summonVisual;
@@ -68,7 +97,8 @@ public sealed class TokenView : MonoBehaviour
     /// SpriteRenderer when <paramref name="modelRenderer"/> is given, and copies the model once. The caller turns the
     /// model renderer's drawing off (<c>forceRenderingOff</c>). No UnityEngine.Random draw. Live mode is Play mode only:
     /// outside Play mode it returns null (no root is added to the open edit scene, where no OnDestroy would release it),
-    /// and every caller then draws on the model's own transform as before.
+    /// and every caller then draws on the model's own transform as before. A view created while the presentation queues
+    /// (a summon brought in during a recorded group, step 9) is held and hidden until its Spawned beat.
     /// </summary>
     public static TokenView Create(GameObject model, SpriteRenderer modelRenderer)
     {
@@ -90,21 +120,35 @@ public sealed class TokenView : MonoBehaviour
 
         _live.Add(view);
         view.SyncFromModel();
+        if (CombatPresentation.Queueing)
+        {
+            view.Hold();
+            view.SetHidden(true);
+            CombatPresentation.RecordSpawned(view);
+        }
         return view;
     }
 
     private void LateUpdate()
     {
+        if (_held)
+        {
+            // A model destroyed without its OnDestroy release (a backstop): follow it, through the presentation.
+            if (_model == null && !_released)
+                Release();
+            return;
+        }
         SyncFromModel();
     }
 
     /// <summary>
     /// The Live copy LateUpdate runs: the model's active state, world position, rotation, lossy scale and sprite
-    /// renderer. A destroyed model releases the view.
+    /// renderer. A destroyed model releases the view. A held view (step 9) does nothing here: only
+    /// <see cref="ReleaseHold"/> returns it to the model's copy.
     /// </summary>
     public void SyncFromModel()
     {
-        if (_released)
+        if (_released || _held)
             return;
 
         if (_model == null)
@@ -149,11 +193,190 @@ public sealed class TokenView : MonoBehaviour
         if (from.drawMode != SpriteDrawMode.Simple && to.size != from.size) to.size = from.size;
     }
 
+    // ── Held mode (grouped AI turns step 9) ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Starts Held mode: the view keeps what it draws now and from here shows only what the playback applies. The model's
+    /// status icons are held too. No-op on a released view.
+    /// </summary>
+    public void Hold()
+    {
+        if (_released || _held)
+            return;
+        _held = true;
+        _maybeHeld = true;
+        LastRecorded = null;
+        HoldIndicator();
+    }
+
+    private void HoldIndicator()
+    {
+        StatusEffectIndicator ind = _model != null ? _model.GetComponent<StatusEffectIndicator>() : null;
+        if (ind != null && !ind.IsHeld)
+            ind.Hold();
+        _heldIndicator = ind;
+    }
+
+    /// <summary>
+    /// Ends Held mode: the view copies its model again, at once, and the status icons show the live state; a view still
+    /// hidden for its spawn shows. A view waiting for its Removed beat stays as it is.
+    /// </summary>
+    public void ReleaseHold()
+    {
+        if (_hiddenUntilSpawn)
+            SetHidden(false);
+        if (!_held)
+            return;
+        _held = false;
+        LastRecorded = null;
+        if (_heldIndicator != null)
+            _heldIndicator.ReleaseHold();
+        _heldIndicator = null;
+        SyncFromModel();
+    }
+
+    /// <summary>Holds every live view (a group opens).</summary>
+    public static void HoldAll()
+    {
+        IReadOnlyList<TokenView> views = Live;
+        for (int i = 0; i < views.Count; i++)
+            if (views[i] != null)
+                views[i].Hold();
+    }
+
+    /// <summary>Returns every live view to Live mode (the queue drained with no group open, or Clear).</summary>
+    public static void ReleaseAllHolds()
+    {
+        if (!_maybeHeld)
+            return;
+        var views = new List<TokenView>(Live);
+        for (int i = 0; i < views.Count; i++)
+            if (views[i] != null)
+                views[i].ReleaseHold();
+        _maybeHeld = AnyHeld;
+    }
+
+    private static bool _maybeHeld;
+
+    /// <summary>
+    /// False when no view has been held or hidden since the last <see cref="ReleaseAllHolds"/> (a flag, no loop): the
+    /// playback's idle frame reads it instead of <see cref="AnyHeld"/>.
+    /// </summary>
+    public static bool MaybeAnyHeld => _maybeHeld;
+
+    /// <summary>True when any live view is held or hidden for its spawn.</summary>
+    public static bool AnyHeld
+    {
+        get
+        {
+            IReadOnlyList<TokenView> views = Live;
+            for (int i = 0; i < views.Count; i++)
+                if (views[i] != null && (views[i]._held || views[i]._hiddenUntilSpawn))
+                    return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Hides (or shows again) everything the view draws without touching an active state: the Body stays active, so a
+    /// summon visual added at rules time can still start its effect coroutine. CombatPresentation re-applies it at each
+    /// boundary while the view waits, so a renderer built later (the summon aura, the status icons) is hidden too.
+    /// </summary>
+    internal void SetHidden(bool hidden)
+    {
+        _hiddenUntilSpawn = hidden;
+        if (hidden)
+            _maybeHeld = true;
+        if (_body == null)
+            return;
+        Renderer[] renderers = _body.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+            renderers[i].forceRenderingOff = hidden;
+    }
+
+    /// <summary>The Spawned beat: a view created during the group draws from here (its keyframes follow).</summary>
+    internal void ApplySpawned()
+    {
+        if (this == null)
+            return;
+        if (_hiddenUntilSpawn)
+            SetHidden(false);
+    }
+
+    /// <summary>
+    /// A Keyframe beat: the held view draws <paramref name="p"/> (active state, position, rotation, scale, the sprite
+    /// renderer's values and the held status icons).
+    /// </summary>
+    internal void ApplyPicture(TokenPicture p)
+    {
+        if (this == null || p == null || !_held || _body == null)
+            return;
+        if (_body.gameObject.activeSelf != p.Active)
+            _body.gameObject.SetActive(p.Active);
+        _body.SetPositionAndRotation(p.Position, p.Rotation);
+        if (_body.localScale != p.Scale)
+            _body.localScale = p.Scale;
+        if (_renderer != null)
+        {
+            if (!p.HasRenderer)
+            {
+                if (_renderer.enabled)
+                    _renderer.enabled = false;
+            }
+            else
+            {
+                if (_renderer.sprite != p.Sprite) _renderer.sprite = p.Sprite;
+                if (_renderer.color != p.Color) _renderer.color = p.Color;
+                if (_renderer.enabled != p.Enabled) _renderer.enabled = p.Enabled;
+                if (_renderer.flipX != p.FlipX) _renderer.flipX = p.FlipX;
+                if (_renderer.flipY != p.FlipY) _renderer.flipY = p.FlipY;
+                if (_renderer.sortingLayerID != p.SortingLayerId) _renderer.sortingLayerID = p.SortingLayerId;
+                if (_renderer.sortingOrder != p.SortingOrder) _renderer.sortingOrder = p.SortingOrder;
+                if (_renderer.sharedMaterial != p.Material) _renderer.sharedMaterial = p.Material;
+                if (_renderer.drawMode != p.DrawMode) _renderer.drawMode = p.DrawMode;
+                if (p.DrawMode != SpriteDrawMode.Simple && _renderer.size != p.Size) _renderer.size = p.Size;
+            }
+        }
+        if (_heldIndicator == null)
+            HoldIndicator();
+        if (_heldIndicator != null && p.Icons != null)
+            _heldIndicator.ApplyHeld(p.Icons);
+    }
+
+    /// <summary>A Step beat in progress: the held view stands at <paramref name="position"/> (the playback's tween).</summary>
+    internal void ShowStep(Vector3 position)
+    {
+        if (this == null || !_held || _body == null)
+            return;
+        _body.position = position;
+    }
+
+    /// <summary>
+    /// The Removed beat: the view of a model destroyed during the group goes now; a despawn plays its fade first
+    /// (<paramref name="despawn"/>, <see cref="PlayDespawnAndRelease"/>).
+    /// </summary>
+    internal void ApplyRemoved(bool despawn)
+    {
+        if (this == null)
+            return;
+        _pendingRemoval = false;
+        if (despawn && Application.isPlaying && gameObject.activeInHierarchy)
+        {
+            StartCoroutine(DespawnThenDestroy());
+            return;
+        }
+        if (Application.isPlaying)
+            Destroy(gameObject);
+        else
+            DestroyImmediate(gameObject);
+    }
+
     /// <summary>
     /// True when the drawn state equals the model's (active state, position, scale and, with a renderer, sprite,
     /// colour, enabled and flips); <paramref name="problem"/> names the first difference. The tests read it after a
     /// LateUpdate; CleanCheck after its own <see cref="SyncFromModel"/>, since a coroutine resumes before LateUpdate and
-    /// a model changed earlier in that frame (a size animation, the grapple blink) is one copy ahead of its view.
+    /// a model changed earlier in that frame (a size animation, the grapple blink) is one copy ahead of its view. A held
+    /// view is never synced (step 9: the playback has not drained).
     /// </summary>
     public bool IsSyncedWithModel(out string problem)
     {
@@ -161,6 +384,11 @@ public sealed class TokenView : MonoBehaviour
         if (_released || _model == null)
         {
             problem = "released or model gone";
+            return false;
+        }
+        if (_held || _hiddenUntilSpawn)
+        {
+            problem = "held by the presentation (the playback has not drained)";
             return false;
         }
         if (_body.gameObject.activeSelf != _model.activeInHierarchy)
@@ -230,12 +458,26 @@ public sealed class TokenView : MonoBehaviour
     /// <summary>
     /// Follows the model's destruction: the view leaves <see cref="Live"/> at once and its GameObject (with the status
     /// icons and the summon visual on it) is destroyed at the end of the frame, unless it is playing a despawn
-    /// (<see cref="PlayDespawnAndRelease"/>), which destroys it when the effect ends.
+    /// (<see cref="PlayDespawnAndRelease"/>), which destroys it when the effect ends, or the presentation queues (step 9):
+    /// then the view keeps its last keyframe and goes at its Removed beat.
     /// </summary>
     public void Release()
     {
         if (_released)
             return;
+        if (this != null && !_despawning && Application.isPlaying && CombatPresentation.Queueing)
+        {
+            // Hold and record the last picture while the model is still readable (and before _released, which Hold
+            // refuses), then wait for the Removed beat.
+            if (!_held)
+                Hold();
+            CombatPresentation.RecordFinalKeyframe(this);
+            _released = true;
+            _live.Remove(this);
+            _pendingRemoval = true;
+            CombatPresentation.RecordRemoved(this, false);
+            return;
+        }
         _released = true;
         _live.Remove(this);
         if (this == null || _despawning)
@@ -257,13 +499,25 @@ public sealed class TokenView : MonoBehaviour
     /// plays the summon visual's despawn fade (<see cref="SummonedCreatureVisual.PlayDespawnEffect"/>, 0.45 s of game
     /// time) and destroys itself. Presentation only: no rule waits on it, it is never in <see cref="Live"/>, and area
     /// tracking (FindObjectsOfType&lt;CharacterController&gt;) and IsActiveCombatant never see it, since the view is not a
-    /// controller. Call it before the model's Destroy. Outside Play mode it releases the view at once.
+    /// controller. Call it before the model's Destroy. Outside Play mode it releases the view at once. While the
+    /// presentation queues (step 9) the model's last state becomes the view's last keyframe and the fade plays at the
+    /// view's Removed beat.
     /// </summary>
     public void PlayDespawnAndRelease()
     {
         if (_released || _despawning)
             return;
-        SyncFromModel(); // the last state the token showed, the death sprite or tint included
+        bool queued = Application.isPlaying && CombatPresentation.Queueing;
+        if (queued)
+        {
+            if (!_held)
+                Hold();
+            CombatPresentation.RecordFinalKeyframe(this);
+        }
+        else
+        {
+            SyncFromModel(); // the last state the token showed, the death sprite or tint included
+        }
         _released = true;
         _live.Remove(this);
         _model = null;
@@ -275,6 +529,12 @@ public sealed class TokenView : MonoBehaviour
             return;
         }
         _despawning = true;
+        if (queued)
+        {
+            _pendingRemoval = true;
+            CombatPresentation.RecordRemoved(this, true);
+            return;
+        }
         StartCoroutine(DespawnThenDestroy());
     }
 
