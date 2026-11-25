@@ -60,6 +60,11 @@ public enum BeatKind
     Removed,
     /// <summary>SquareCell's ground-item token shows or hides (AddGroundItem, RemoveGroundItem; UI-058).</summary>
     GroundItem,
+    /// <summary>
+    /// A window stop (CombatPresentation.MarkStop, step 10: S2, a player-run creature's automatic reaction; S7 reserved): it
+    /// shows nothing; step 11's overlap scheduler ends the window at it. <see cref="PresentationBeat.Index"/> holds the StopKind.
+    /// </summary>
+    WindowStop,
 }
 
 /// <summary>

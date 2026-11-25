@@ -405,7 +405,9 @@ public partial class GameManager
     /// The PC prompt or selection the game is waiting on, or null when none is open: "aoo" (the AoO
     /// confirmation), "ranged-retarget", "full-attack-5ft", "submenu" (a special-style selection
     /// menu) or "touch-spell" (Cast Now / Discharge Later; the Ui Cast step answers it with
-    /// <see cref="Harness_AnswerTouchSpellPromptCastNow"/>). Other modal prompts (bull rush push and
+    /// <see cref="Harness_AnswerTouchSpellPromptCastNow"/>), and "queued-interactive" while an interactive
+    /// beat (a confirmation dialog or the defeat panel) waits for the grouped AI turns playback
+    /// (CombatPresentation.HasPendingInteractive, step 10, G5). Other modal prompts (bull rush push and
     /// follow, Improved Grab, the disarm item choice) are not listed; a scripted UI step that never
     /// settles reports them through <see cref="Harness_DumpState"/> and the open UI scan.
     /// </summary>
@@ -427,6 +429,8 @@ public partial class GameManager
             return "full-attack-5ft";
         if (CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())
             return "submenu";
+        if (CombatPresentation.HasPendingInteractive)
+            return "queued-interactive";
         return null;
     }
 
@@ -763,6 +767,16 @@ public partial class GameManager
         AnswerCounterTripPrompt(tripBack);
         return true;
     }
+
+    /// <summary>
+    /// The reactor whose acid-spray menu (PromptAttackedReaction, D1; the AttackedReactionMenu) is open, else null: the
+    /// scenario runner answers it through the menu's own option buttons (grouped AI turns step 10).
+    /// </summary>
+    internal CharacterController Harness_PendingAttackedReactionReactor
+        => _attackedReactionPromptReactor != null && CombatUI != null
+           && CombatUI.Harness_OpenSpecialStyleMenuName() == AttackedReactionMenuName
+            ? _attackedReactionPromptReactor
+            : null;
 
     /// <summary>The grappler whose escape-opposition prompt is open (PHB p.156, D10), else null.</summary>
     internal CharacterController Harness_PendingEscapeOppositionGrappler

@@ -26,6 +26,9 @@ namespace Tests.Scenarios
     /// off, rep 2 with it on, and the runner compares the trace hash (RepeatCheck) and the presentation sidecar
     /// (PresentationCheck); their group expectations (ExpectGroups) check rep 2's group record: which AI-decided turns
     /// joined a group as its lanes, and what closed it (the control beat, combat end, the harness halt's reset).
+    /// Step 10 (gt-stop-points): a player-run creature's AoO or automatic acid spray inside a group is a window stop on the
+    /// group record (S2; the owner's ruling, C1), and a defender prompt to a player-run creature closes the group as a
+    /// prompt and opens only after the playback has shown every earlier beat (S3, C3); the rules never pause for playback.
     /// </summary>
     public static class GroupedTurnScenarios
     {
@@ -61,6 +64,13 @@ namespace Tests.Scenarios
             yield return S("group-defeat-mid-group", GroupDefeatMidGroup);
             yield return S("group-stalemate-halt", GroupStalemateHalt);
             yield return S("group-lesser-globe-caster-moves", GroupLesserGlobeCasterMoves);
+            yield return S("group-stops-at-fighter-aoo", GroupStopsAtFighterAoO);
+            yield return S("group-counter-trip-prompt-plays-out-first", GroupCounterTripPromptPlaysOutFirst);
+            yield return S("group-overrun-response-prompt", GroupOverrunResponsePrompt);
+            yield return S("group-escape-opposition-prompt", GroupEscapeOppositionPrompt);
+            yield return S("group-beetle-acid-spray-prompt", GroupBeetleAcidSprayPrompt);
+            yield return S("group-beetle-acid-spray-auto", GroupBeetleAcidSprayAuto);
+            yield return S("group-web-cast-inside", GroupWebCastInside);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("GroupedTurnScenarios rules/" + name, build);
@@ -389,14 +399,277 @@ namespace Tests.Scenarios
                 .Build();
         }
 
+        // ── Step 10: the stopping points (group=pair) ─────────────
+
+        private static string StopsOf(GroupRecord g) => g == null ? "none" : "[" + string.Join(", ", g.Stops) + "]";
+
+        /// <summary>
+        /// Null when group <paramref name="index"/> closed at a prompt (S3) with beats still to play (so the dialog opened
+        /// only after them), has exactly <paramref name="lanes"/> lanes, all from round 1, and no window stop.
+        /// </summary>
+        private static string PromptGroupIs(IReadOnlyList<GroupRecord> groups, int index, int lanes)
+        {
+            GroupRecord g = index < groups.Count ? groups[index] : null;
+            if (g != null && g.Stop == GroupStop.Prompt && g.PendingAtClose > 0 && g.Lanes.Count == lanes
+                && g.Lanes.All(l => l.StartsWith("1:", StringComparison.Ordinal)) && g.Stops.Count == 0)
+                return null;
+            return "group " + (index + 1) + " is " + Describe(g) + " pending " + (g != null ? g.PendingAtClose : 0) + " stops " + StopsOf(g)
+                   + ", expected a Prompt close with beats to play and " + lanes + " round-1 lane(s) (" + DescribeAll(groups) + ")";
+        }
+
+        /// <summary>
+        /// Null when the first group is the orc's round-1 turn closed at the prompt (<see cref="PromptGroupIs"/>) and the
+        /// only other group is the next round's first AI turn, reset by the harness halt at the round cap.
+        /// </summary>
+        private static string PromptThenHalt(IReadOnlyList<GroupRecord> groups)
+        {
+            string first = PromptGroupIs(groups, 0, 1);
+            if (first != null)
+                return first;
+            if (groups.Count == 1)
+                return null;
+            GroupRecord last = groups[1];
+            return groups.Count == 2 && last.Stop == GroupStop.Reset && last.Lanes.All(l => l.StartsWith("2:", StringComparison.Ordinal))
+                ? null
+                : "expected only the round-2 group the halt resets after the prompt group (" + DescribeAll(groups) + ")";
+        }
+
+        /// <summary>The runner's notes that start with <paramref name="prefix"/>.</summary>
+        private static List<TraceEvent> NotesStarting(TraceView v, string prefix) =>
+            v.Of("note").Where(e => (e.Str("text") ?? "").StartsWith(prefix, StringComparison.Ordinal)).ToList();
+
+        /// <summary>
+        /// The owner's ruling (a player-run creature's AoO stops a group; C1, S2): the Ui fighter acts first (it is not
+        /// flat-footed), then the Scripted guard (an AI-run ally) and the Scripted orc run as one group. The orc walks out of
+        /// the squares both threaten: two movement AoOs, resolved at once in the rules as with grouping off. Only the
+        /// fighter's is a window stop (it is player-run: its decider is the prompting one); the guard's is not. The group
+        /// stays open across the stop and closes at the fighter's round-2 menu.
+        /// </summary>
+        private static ScenarioDef GroupStopsAtFighterAoO()
+        {
+            return Rules("rules/group-stops-at-fighter-aoo", "A player-run fighter's AoO inside a group is a window stop; an AI-run guard's is not (grouped AI turns step 10, S2, C1)")
+                .Covers("grouped AI turns step 10", "S2", "C1", "PHB p.137", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Group Fighter", 3)), 10, 10, Control.Ui)
+                .Npc("guard", "orc_warrior", 12, 11, Control.Scripted, CharacterTeam.Player)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("guard", c => SturdyNamed(c, "Guard"))
+                .Tweak("orc", c => SturdyNamed(c, "Orc A"))
+                .Initiative("hero", "guard", "orc")
+                .Turn("hero", 0, CaughtUp("The fighter's menu comes up after the playback caught up"), Step.EndTurn())
+                .Turn("guard", 0, Step.Pass())
+                .Turn("orc", 1, Step.Move(14, 10))
+                .Turn("orc", 2, Step.Pass())
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .Expect("The fighter's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The orc's move is done", Expect.StepStatus("orc", 1, "Move", 0, "done"))
+                .Expect("The orc's move provokes one movement AoO from the fighter and one from the guard (PHB p.137)", v =>
+                {
+                    List<TraceEvent> hero = v.AoOs("hero", "orc", "movement");
+                    List<TraceEvent> guard = v.AoOs("guard", "orc", "movement");
+                    return hero.Count == 1 && guard.Count == 1
+                        ? ExpectResult.Pass("one each", hero[0].Seq, guard[0].Seq)
+                        : ExpectResult.Fail(hero.Count + " by the fighter, " + guard.Count + " by the guard");
+                })
+                .ExpectGroups("Round 1: the guard and the orc are one group with one window stop, the fighter's AoO in the orc's lane, closed by the fighter's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Guard", "1:Orc A")
+                    ?? (g[0].Stops.Count == 1 && g[0].Stops[0].Kind == StopKind.AoO && g[0].Stops[0].Actor == "Group Fighter" && g[0].Stops[0].Lane == "1:Orc A"
+                        ? null : "group 1 stops " + StopsOf(g[0]) + ", expected [AoO:Group Fighter] in lane 1:Orc A"))
+                .Build();
+        }
+
+        /// <summary>
+        /// S3 (C3): the counter-trip prompt (PHB p.158, CMB-079) to the Ui hero inside the Scripted orc's group: the dialog
+        /// is asked for while the group holds, so it closes the group and opens only after the playback has shown the
+        /// orc's turn so far; the rules wait on the prompt's flag as with grouping off, and the runner answers once the
+        /// dialog shows (Trip Back). The rules checks are those of rules/maneuver-trip-counter-ui.
+        /// </summary>
+        private static ScenarioDef GroupCounterTripPromptPlaysOutFirst()
+        {
+            return AsPair(RulesScenarios.CounterTripUi(true), "rules/group-counter-trip-prompt-plays-out-first",
+                    "The counter-trip prompt inside a group opens after the playback caught up (grouped AI turns step 10, S3, C3; PHB p.158)", 10)
+                .ExpectGroups("The orc's round-1 turn is one group, closed by the hero's prompt with beats still to play; then only the halt's reset", g =>
+                    PromptThenHalt(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// S3: the overrun avoid-or-block prompt (PHB p.157, D11) to the Ui fighter inside the Scripted orc's group closes
+        /// the group and opens after the playback caught up; the runner answers Block. The rules checks are those of
+        /// rules/overrun-pc-defender-blocks-ui.
+        /// </summary>
+        private static ScenarioDef GroupOverrunResponsePrompt()
+        {
+            return AsPair(OverrunScenarios.OverrunPcDefenderUi(true), "rules/group-overrun-response-prompt",
+                    "The overrun response prompt inside a group opens after the playback caught up (grouped AI turns step 10, S3; PHB p.157)", 10)
+                .ExpectGroups("The orc's round-1 turn is one group, closed by the hero's prompt with beats still to play; then only the halt's reset", g =>
+                    PromptThenHalt(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// S3: the escape-opposition prompt (PHB p.156, D10) to the Ui grappler: the hero grapples the orc on its own turn,
+        /// then the orc's escape attempt inside its group asks the hero, which closes the group and opens after the
+        /// playback caught up; the runner answers Oppose. The rules checks are those of rules/grapple-escape-opposed-ui.
+        /// </summary>
+        private static ScenarioDef GroupEscapeOppositionPrompt()
+        {
+            return AsPair(ManeuverCoreScenarios.GrappleEscapeOppositionUi(true), "rules/group-escape-opposition-prompt",
+                    "The escape-opposition prompt inside a group opens after the playback caught up (grouped AI turns step 10, S3; PHB p.156)", 10)
+                .ExpectGroups("The orc's round-1 turn is one group, closed by the hero's prompt with beats still to play; then only the halt's reset", g =>
+                    PromptThenHalt(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// S3: a Ui-controlled giant bombardier beetle on the party's side (a Player-team pool creature, controllable like a
+        /// player's summon) is attacked by the Scripted orc inside its group. The NPC attack sequence can wait, so the
+        /// beetle's decider is its acid-spray menu (MM p.285, D1; GameManager.PromptAttackedReaction): it closes the group,
+        /// waits for the playback, then shows; the runner answers Spray through the menu's own option button
+        /// (HandleAttackedReactionPrompt). One spray; no window stop (a prompt, not an automatic reaction).
+        /// </summary>
+        private static ScenarioDef GroupBeetleAcidSprayPrompt()
+        {
+            return Rules("rules/group-beetle-acid-spray-prompt", "A player-run beetle's acid-spray menu inside a group opens after the playback caught up (grouped AI turns step 10, S3; MM p.285, D1)")
+                .Covers("grouped AI turns step 10", "S3", "CRE-040", "MM p.285", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Npc("beetle", "giant_bombardier_beetle", 10, 10, Control.Ui, CharacterTeam.Player)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Far Fighter", 3)), 3, 3, Control.Ui)
+                .Tweak("orc", c => SturdyNamed(c, "Orc A"))
+                .Tweak("beetle", c => SturdyNamed(c, "Group Beetle"))
+                .Tweak("hero", Sturdy)
+                .Initiative("orc", "beetle", "hero")
+                .AttackedReactionAnswer("beetle", true)
+                .Turn("orc", 1, Step.Attack("beetle"))
+                .Turn("beetle", 0, CaughtUp("The beetle's menu comes up after the playback caught up"), Step.EndTurn())
+                .Turn("hero", 0, Step.EndTurn())
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .Expect("The beetle's turn is a Ui turn", Expect.Controller("beetle", "ui"))
+                .Expect("The orc attacked the beetle", Expect.StepStatus("orc", 1, "Attack", 0, "done"))
+                .Expect("The beetle's acid-spray menu was asked once and answered Spray", v =>
+                {
+                    List<TraceEvent> notes = NotesStarting(v, "attacked-reaction prompt for beetle");
+                    return notes.Count == 1 && (notes[0].Str("text") ?? "").Contains("answered Spray")
+                        ? ExpectResult.Pass(notes[0].Str("text"), notes[0].Seq)
+                        : ExpectResult.Fail(notes.Count + " prompts: " + string.Join("; ", notes.Select(e => e.Str("text"))));
+                })
+                .Expect("One spray, after the attack (MM p.285)", Expect.Count("log", e => (e.Str("text") ?? "").Contains("unleashes Acid Spray"), 1, 1))
+                .ExpectGroups("The orc's round-1 turn is one group, closed by the beetle's prompt with beats still to play; then only the halt's reset", g =>
+                    PromptThenHalt(g))
+                .Build();
+        }
+
+        /// <summary>
+        /// S2 for the acid spray: the same Ui beetle is disturbed inside the Scripted orc's group by the orc's effect
+        /// (a fixture: GameManager.DealDamage with the orc as the packet's source creature, MM p.285: damaged by a foe). The
+        /// damage path cannot wait on a prompt, so the AI fallback answers for the player-run beetle (CRE-075) and sprays
+        /// at once in the rules; that automatic reaction is a window stop on the group record. No prompt; the group closes at
+        /// the beetle's menu.
+        /// </summary>
+        private static ScenarioDef GroupBeetleAcidSprayAuto()
+        {
+            return Rules("rules/group-beetle-acid-spray-auto", "A player-run beetle's automatic acid spray inside a group is a window stop (grouped AI turns step 10, S2, C1; MM p.285, CRE-075)")
+                .Covers("grouped AI turns step 10", "S2", "C1", "CRE-075", "MM p.285", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Npc("beetle", "giant_bombardier_beetle", 10, 10, Control.Ui, CharacterTeam.Player)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Far Fighter", 3)), 3, 3, Control.Ui)
+                .Tweak("orc", c => SturdyNamed(c, "Orc A"))
+                .Tweak("beetle", c => SturdyNamed(c, "Group Beetle"))
+                .Tweak("hero", Sturdy)
+                .Initiative("orc", "beetle", "hero")
+                .Turn("orc", 1, Step.Assert("fixture: the orc's effect deals the beetle 1 damage (it is disturbed by a foe)", ctx =>
+                {
+                    DamagePacket packet = DamagePackets.CreatureAttack("Scenario blow", DamageType.Untyped);
+                    packet.SourceCreature = ctx.Get("orc");
+                    ctx.Gm.DealDamage(ctx.Get("beetle"), 1, packet);
+                    return true;
+                }), Step.EndTurn())
+                .Turn("beetle", 0, CaughtUp("The beetle's menu comes up after the playback caught up"), Step.EndTurn())
+                .Turn("hero", 0, Step.EndTurn())
+                .Expect("The fixture and the menu checks hold", Expect.AssertsPass())
+                .Expect("The beetle's turn is a Ui turn", Expect.Controller("beetle", "ui"))
+                .Expect("No acid-spray menu: the damage path cannot wait, so the AI fallback answers (CRE-075)", v =>
+                    NotesStarting(v, "attacked-reaction prompt").Count == 0 ? ExpectResult.Pass("no prompt") : ExpectResult.Fail("a prompt was answered"))
+                .Expect("One spray (MM p.285)", Expect.Count("log", e => (e.Str("text") ?? "").Contains("unleashes Acid Spray"), 1, 1))
+                .ExpectGroups("The orc's turn is one group with the beetle's spray as its window stop, closed by the beetle's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Orc A")
+                    ?? (g[0].Stops.Count == 1 && g[0].Stops[0].Kind == StopKind.AutomaticReaction && g[0].Stops[0].Actor == "Group Beetle"
+                        ? null : "group 1 stops " + StopsOf(g[0]) + ", expected [AutomaticReaction:Group Beetle]"))
+                .Build();
+        }
+
+        /// <summary>
+        /// A cast inside a group with no stop: the Scripted wizard (an AI-run turn) casts Web (PHB p.301: a 20-ft.-radius
+        /// spread, Reflex negates) over the Ui hero inside its group. The cast's area, the hero's save and any entangle
+        /// resolve at once in the rules; nothing prompts the hero (an area spell's save asks no player), so the cast is no
+        /// window stop and no prompt: the group closes at the hero's menu (Control), which comes up after the playback.
+        /// </summary>
+        private static ScenarioDef GroupWebCastInside()
+        {
+            return Rules("rules/group-web-cast-inside", "A Scripted wizard's Web over the Ui hero inside a group closes at the hero's menu, with no stop (grouped AI turns step 10)")
+                .Covers("grouped AI turns step 10", "S1", "PHB p.301", "PC_NPC_PARITY")
+                .Grouping(GroupMode.Pair)
+                .MaxRounds(1)
+                .Npc("wizard", "mist_wizard", 3, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Webbed Fighter", 3)), 10, 10, Control.Ui)
+                .Tweak("wizard", c => { SturdyNamed(c, "Web Wizard"); PrepareOnly(c, 2, SpellNames.WEB); })
+                .Tweak("hero", Sturdy)
+                .Initiative("wizard", "hero")
+                .Turn("wizard", 1, Step.Cast(SpellNames.WEB, "hero"))
+                .Turn("hero", 0, CaughtUp("The hero's menu comes up after the playback caught up"), Step.EndTurn())
+                .Expect("The menu checks hold", Expect.AssertsPass())
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The wizard's cast is done", Expect.StepStatus("wizard", 1, "Cast", 0, "done"))
+                .Expect("The wizard casts Web once", Expect.Count("cast", e => e.Str("by") == "wizard" && e.Str("spell") == SpellNames.WEB, 1, 1))
+                .ExpectGroups("The wizard's round-1 turn is one group with no window stop, closed by the hero's menu", g =>
+                    GroupIs(g, 0, GroupStop.Control, "1:Web Wizard")
+                    ?? (g.All(x => x.Stops.Count == 0) ? null : "stops " + string.Join("; ", g.Select(StopsOf)) + ", expected none"))
+                .Build();
+        }
+
+        /// <summary>
+        /// Prepares <paramref name="spellId"/> (a clone, never the template) in the first unused regular slot of
+        /// <paramref name="level"/> and spends every other unused slot, so it is the caster's only spell. Throws (the job
+        /// ends SetupFailed) when there is no such slot.
+        /// </summary>
+        private static void PrepareOnly(CharacterController c, int level, string spellId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting to prepare " + spellId + " in");
+            bool placed = false;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (slot == null || slot.IsUsed)
+                    continue;
+                if (!placed && slot.Level == level && !slot.IsDomainSlot)
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(spellId).Clone();
+                    placed = true;
+                    continue;
+                }
+                slot.IsUsed = true;
+            }
+            if (!placed)
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no unused regular level-" + level + " slot for " + spellId);
+            sc.SyncPreparedSpellsFromSlots();
+        }
+
         /// <summary>A copy of a built scenario as a group=pair scenario of its own id and title (its rules checks kept).</summary>
-        private static PairBuilder AsPair(ScenarioDef def, string id, string title)
+        private static PairBuilder AsPair(ScenarioDef def, string id, string title, int step = 9)
         {
             def.Id = id;
             def.Title = title;
             def.Grouping = GroupMode.Pair;
-            if (!def.Covers.Contains("grouped AI turns step 9"))
-                def.Covers.Add("grouped AI turns step 9");
+            string covers = "grouped AI turns step " + step;
+            if (!def.Covers.Contains(covers))
+                def.Covers.Add(covers);
             return new PairBuilder(def);
         }
 

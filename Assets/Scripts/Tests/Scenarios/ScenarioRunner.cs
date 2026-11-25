@@ -197,6 +197,12 @@ namespace Tests.Scenarios
         /// time), "differs: ..." otherwise; null for an unpaired job or rep 1.
         /// </summary>
         public string PresentationCheck;
+        /// <summary>
+        /// The S3 fallbacks the job took (grouped AI turns step 10, CombatPresentation.CatchUpFallbacks): the CatchUp-class
+        /// CombatUI methods called while the presentation held or was behind, each unexpected. A warning, never a verdict
+        /// change and never a trace event; summary.json counts them over the run.
+        /// </summary>
+        public List<string> PresentationFallbacks = new List<string>();
         public List<string> Violations = new List<string>();
         public List<string> Expectations = new List<string>();
         public List<string> Notes = new List<string>();
@@ -246,6 +252,8 @@ namespace Tests.Scenarios
                 o.Set("groupCheck", GroupCheck);
             if (PresentationCheck != null)
                 o.Set("presentationCheck", PresentationCheck);
+            if (PresentationFallbacks.Count > 0)
+                o.Set("presentationFallbacks", PresentationFallbacks);
             o.Set("expectations", Expectations).Set("violations", Violations);
             if (Notes.Count > 0)
                 o.Set("notes", Notes);
@@ -1025,7 +1033,7 @@ namespace Tests.Scenarios
                     SweepLogLeak(job, "monitor");
                 if (!job.Decided && job.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.WallCapSeconds)
                     job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false, diag: GameManager.Harness_PresentationState());
-                // The three prompt answerers wait for the playback, as a player would (grouped AI turns step 9): a dialog the
+                // The prompt answerers wait for the playback, as a player would (grouped AI turns steps 9 and 10): a dialog the
                 // presentation still holds is never answered before it shows.
                 if (!job.Decided && !gm.PresentationBlocksInput)
                     TryRun(job, "counter-trip", () => HandleCounterTripPrompt(job, gm), Outcome.Exception);
@@ -1033,6 +1041,8 @@ namespace Tests.Scenarios
                     TryRun(job, "escape-opposition", () => HandleEscapeOppositionPrompt(job, gm), Outcome.Exception);
                 if (!job.Decided && !gm.PresentationBlocksInput)
                     TryRun(job, "overrun-response", () => HandleOverrunResponsePrompt(job, gm), Outcome.Exception);
+                if (!job.Decided && !gm.PresentationBlocksInput)
+                    TryRun(job, "attacked-reaction", () => HandleAttackedReactionPrompt(job, gm), Outcome.Exception);
                 if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
@@ -1677,6 +1687,35 @@ namespace Tests.Scenarios
             job.Ctx?.Note("overrun-response prompt for " + (key ?? "?") + " answered " + (block ? "Block" : "Avoid") + (answered ? string.Empty : " (not open)"));
         }
 
+        /// <summary>
+        /// Answers an open acid-spray menu (a controllable giant bombardier beetle attacked or disturbed where the resolving
+        /// path can wait, MM p.285, D1; GameManager.PromptAttackedReaction) through the menu's own option buttons, as the
+        /// scenario says (<see cref="ScenarioDef.AttackedReactionAnswers"/>; spray by default), and notes it (grouped AI
+        /// turns step 10).
+        /// </summary>
+        private static void HandleAttackedReactionPrompt(ScenarioJob job, GameManager gm)
+        {
+            CharacterController reactor = gm.Harness_PendingAttackedReactionReactor;
+            if (reactor == null || gm.CombatUI == null)
+                return;
+
+            string key = job.Trace != null ? job.Trace.KeyOf(reactor) : null;
+            bool spray = key == null || !job.Def.AttackedReactionAnswers.TryGetValue(key, out bool answer) || answer;
+            string reaction = GameManager.AcidSprayReactionName;
+            UnityEngine.UI.Button option = gm.CombatUI.Harness_FindSpecialStyleOption(spray ? reaction + ":" : "No " + reaction);
+            bool answered = option != null && option.interactable;
+            if (answered)
+            {
+                option.onClick.Invoke();
+                job.Ctx?.Note("attacked-reaction prompt for " + (key ?? "?") + " answered " + (spray ? "Spray" : "Decline"));
+                return;
+            }
+            // No usable option: close the menu the way a player declines (PromptAttackedReaction's wait sees the menu gone,
+            // so the reaction is declined), and note it once; the menu is closed, so a later tick does not see it again.
+            gm.CombatUI.HideSpecialStyleSelectionMenu();
+            job.Ctx?.Note("attacked-reaction prompt for " + (key ?? "?") + " had no usable " + (spray ? "Spray" : "Decline") + " option; declined");
+        }
+
         private static void HandleUiTurn(ScenarioJob job, GameManager gm)
         {
             UiTurnDriver ui = job.Ui;
@@ -2031,7 +2070,8 @@ namespace Tests.Scenarios
         /// The job's grouping (grouped AI turns step 9): JobResult.Grouping and Groups, the scenario's group expectations
         /// (ScenarioBuilder.ExpectGroups, checked here on a grouping-on job against the in-memory group record into
         /// JobResult.GroupCheck, never a trace event) and the groups.jsonl sidecar beside caststages.jsonl (one line per
-        /// group: id, lanes as round and actor, stop kind and seq, beats, playback seconds). A failed write is a note.
+        /// group: id, lanes as round and actor, stop kind and seq, the window stops (step 10), beats, the beats still to play
+        /// at the close, playback seconds). A CatchUp fallback (step 10) is a note. A failed write is a note.
         /// </summary>
         private void RecordGrouping(ScenarioJob job, JobResult result, string jobId)
         {
@@ -2054,6 +2094,13 @@ namespace Tests.Scenarios
                 }
                 result.GroupCheck = failures.Count == 0 ? "pass" : "fail: " + string.Join("; ", failures);
             }
+            // The S3 fallback (grouped AI turns step 10): a CatchUp-class prompt shown while the presentation held or was
+            // behind is unexpected; each one is a job note (summary.json only, never a trace event).
+            foreach (string method in global::CombatPresentation.CatchUpFallbacks)
+            {
+                result.Notes.Add("presentation fallback: " + method + " caught the playback up");
+                result.PresentationFallbacks.Add(method);
+            }
             if (groups.Count == 0)
                 return;
             try
@@ -2062,8 +2109,12 @@ namespace Tests.Scenarios
                 foreach (global::GroupRecord g in groups)
                 {
                     var o = new JsonObj();
+                    var stops = new List<string>();
+                    foreach (global::StopMark s in g.Stops)
+                        stops.Add(s.Kind + ":" + s.Actor + "@" + s.Seq + (s.Lane != null ? " in " + s.Lane : string.Empty));
                     o.Set("id", g.Id).Set("lanes", new List<string>(g.Lanes)).Set("stop", g.Stop.HasValue ? g.Stop.Value.ToString() : "open")
-                     .Set("openSeq", g.OpenSeq).Set("closeSeq", g.CloseSeq).Set("beats", g.Beats)
+                     .Set("stops", stops)
+                     .Set("openSeq", g.OpenSeq).Set("closeSeq", g.CloseSeq).Set("beats", g.Beats).Set("pendingAtClose", g.PendingAtClose)
                      .Set("playbackSec", (float)Math.Round(g.PlaybackSeconds, 3));
                     sb.Append(Json.Serialize(o)).Append('\n');
                 }
@@ -2365,6 +2416,9 @@ namespace Tests.Scenarios
              .Set("groupCheckFailures", GroupingIds(r => r.GroupCheck != null && r.GroupCheck != "pass", r => r.GroupCheck))
              .Set("presentationDiffs", GroupingIds(r => r.PresentationCheck != null && r.PresentationCheck != "same", r => r.PresentationCheck))
              .Set("groupingDiffs", GroupingIds(r => r.RepeatCheck == RepeatDiffersGrouping, r => "first diff at seq " + r.FirstDiffSeq))
+             // The S3 fallbacks over the run (step 10): unexpected, a warning only, never part of the verdict.
+             .Set("presentationFallbackCount", Results.Sum(r => r.PresentationFallbacks.Count))
+             .Set("presentationFallbacks", GroupingIds(r => r.PresentationFallbacks.Count > 0, r => string.Join(", ", r.PresentationFallbacks)))
              .Set("totals", Totals()).Set("byId", byId)
              .Set("waiverHits", hits).Set("unusedWaivers", unused)
              .Set("needsFresh", SessionDirty).Set("dirtyReason", DirtyReason)

@@ -769,6 +769,13 @@ public static class ThreatSystem
             return null;
         }
 
+        // Grouped AI turns S2 (step 10, design choice C1; the owner's ruling that a player-run creature's AoO stops a group):
+        // the AoO is really made from here, so a player-run threatener's AoO inside a group is a window stop. Presentation
+        // only (the AoO resolves at once, as with grouping off); the decider seam names the player-run creature, no new
+        // IsControllable read (docs/systems/PC_NPC_PARITY.md).
+        if (CombatPresentation.Holding && !AttackDeciders.For(threatener).IsSynchronous)
+            CombatPresentation.MarkStop(StopKind.AoO, threatener);
+
         Debug.Log($"[ThreatSystem] === ATTACK OF OPPORTUNITY ===");
         Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes AoO against {target.Stats.CharacterName}!");
 

@@ -984,7 +984,7 @@ namespace Tests.Scenarios
         /// Decline with <paramref name="tripBack"/> false); the orc's Maneuver step settles only after the answer. With
         /// Trip Back the forced dice make the hero's counter-trip land and the orc ends prone; with Decline nothing follows.
         /// </summary>
-        private static ScenarioDef CounterTripUi(bool tripBack)
+        internal static ScenarioDef CounterTripUi(bool tripBack)
         {
             ScenarioBuilder b = Rules(tripBack ? "rules/maneuver-trip-counter-ui" : "rules/maneuver-trip-counter-ui-decline",
                     tripBack

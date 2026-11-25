@@ -29,6 +29,14 @@ namespace Tests.UI
 /// queue drains at once, Timed playback holds the head for a Pace beat's seconds and Instant applies at once, and Clear
 /// closes the group as a reset and drops the queue and the drain actions without showing them. The input refusals are
 /// PresentationHoldTests.
+/// Step 10 (gt-stop-points): the S3 barrier order (a confirmation dialog asked for while a group holds closes it as a
+/// prompt and opens after every earlier beat and before every later one; a hide drops a dialog still queued);
+/// PromptCounterTrip returns true while a group holds, its flag set at rules time (G6); the CatchUp fallback (another
+/// prompt shown while holding or behind closes the group, catches the playback up and is listed); the window stop marks
+/// (S2) and the reserved S7 kind, a group record's only; the seams' source shape (the AoO mark after the Spring Attack
+/// suppression and before the attack sequence, the spray mark just before ResolveAcidSpray, both through the decider
+/// seam; PromptAttackedReaction closes the group and waits for the drain before its menu; every CatchUp-class method
+/// calls the fallback first; no caller of the S7 kind).
 /// Needs Play mode (a scene CombatUI and live token views).
 /// Side effects on the shared Play pass: the facade probes add a few "[presentation test]" lines and a turn separator
 /// to the scene's combat log (the log panel cannot trim back; no suite counts its lines). Every other probe restores
@@ -44,7 +52,7 @@ public static class CombatPresentationTests
         _passed = 0;
         _failed = 0;
 
-        Debug.Log("========== COMBAT PRESENTATION TESTS (grouped AI turns steps 8-9) ==========");
+        Debug.Log("========== COMBAT PRESENTATION TESTS (grouped AI turns steps 8-10) ==========");
 
         PresentationTrace.Stop();
         CombatPresentation.Clear();
@@ -55,6 +63,7 @@ public static class CombatPresentationTests
         Run(TestCombatUiMethodsClassified);
         Run(TestFacadeSourceShape);
         Run(TestPresentationSourceScan);
+        Run(TestStopSeamsSourceShape);
         if (!Application.isPlaying)
         {
             Assert(false, "The facade checks need Play mode (a scene CombatUI and live token views)");
@@ -72,6 +81,10 @@ public static class CombatPresentationTests
             Run(TestCloseOnEmptyQueueDrains);
             Run(TestPlaybackTimedAndInstant);
             Run(TestClearDropsTheGroup);
+            Run(TestStopMarks);
+            Run(TestConfirmationBarrierOrder);
+            Run(TestPromptCounterTripWhileHolding);
+            Run(TestCatchUpFallback);
             CombatPresentation.ResetGroupLog();
         }
 
@@ -678,6 +691,227 @@ public static class CombatPresentationTests
         finally
         {
             CombatPresentation.Clear();
+        }
+    }
+
+    // ── Stopping points (step 10) ──────────────────────────────────────────────────────────────────────────────────
+
+    private static void TestStopSeamsSourceShape()
+    {
+        string threat = SourceScan.MethodBody(Src("Combat/Core/ThreatSystem.cs"), "ExecuteAoO") ?? "";
+        int spring = threat.IndexOf("SpringAttackTarget == threatener", StringComparison.Ordinal);
+        Match aooMark = Regex.Match(threat,
+            @"if \(CombatPresentation\.Holding && !AttackDeciders\.For\(threatener\)\.IsSynchronous\)\s*CombatPresentation\.MarkStop\(StopKind\.AoO, threatener\);");
+        int sequence = threat.IndexOf("RunAttackSequenceSync(", StringComparison.Ordinal);
+        Assert(spring >= 0 && aooMark.Success && sequence > 0 && spring < aooMark.Index && aooMark.Index < sequence
+               && threat.IndexOf("return null;", spring, StringComparison.Ordinal) < aooMark.Index,
+            "S2: ThreatSystem.ExecuteAoO marks a player-run threatener's AoO after the Spring Attack suppression's return and before the attack sequence, through the decider seam");
+
+        string reactions = Src("_Core/GameManager.AttackedReactions.cs");
+        string run = SourceScan.MethodBody(reactions, "RunAttackedReaction") ?? "";
+        Assert(Regex.IsMatch(run,
+                @"if \(CombatPresentation\.Holding && !AttackDeciders\.For\(reactor\)\.IsSynchronous\)\s*CombatPresentation\.MarkStop\(StopKind\.AutomaticReaction, reactor\);\s*ResolveAcidSpray\(reactor, trigger\);"),
+            "S2: RunAttackedReaction marks a player-run beetle's automatic spray just before ResolveAcidSpray, through the decider seam");
+        string prompt = SourceScan.MethodBody(reactions, "PromptAttackedReaction") ?? "";
+        Match wait = Regex.Match(prompt, @"TurnControl\.PromptOpened\(\);\s*while \(CombatPresentation\.BlocksInput\)\s*yield return null;");
+        int menu = prompt.IndexOf("ShowSpecialStyleSelectionMenu(", StringComparison.Ordinal);
+        Assert(wait.Success && menu > wait.Index,
+            "S3: PromptAttackedReaction closes the group (TurnControl.PromptOpened) and waits for the drain before it shows its menu");
+        Assert(!run.Contains("IsControllable") && !prompt.Contains("IsControllable") && !threat.Contains(".IsControllable"),
+            "No new IsControllable read at the stop seams (the decider seam names the player-run creature)");
+
+        string ui = Src("UI/Combat/CombatUI.cs");
+        string confirm = SourceScan.MethodBody(ui, "ShowConfirmationDialog") ?? "";
+        Assert(confirm.Contains("TurnControl.PromptOpened();") && confirm.Contains("BeatKind.Interactive") && !confirm.Contains("CatchUpNow"),
+            "S3: ShowConfirmationDialog closes the group and queues the dialog as an interactive barrier (no catch-up)");
+        var missing = new List<string>();
+        foreach (KeyValuePair<string, UiCallClass> e in CombatPresentation.CombatUiClasses)
+        {
+            if (e.Value != UiCallClass.CatchUp)
+                continue;
+            string body = SourceScan.MethodBody(ui, e.Key) ?? "";
+            if (!Regex.IsMatch(body, @"^\{\s*CombatPresentation\.CatchUpBeforePrompt\(nameof\(" + e.Key + @"\)\);"))
+                missing.Add(e.Key);
+        }
+        Assert(missing.Count == 0, "Every CatchUp-class CombatUI method calls the S3 fallback first", string.Join(", ", missing));
+
+        string harness = Src("_Core/GameManager.ScenarioHarness.cs");
+        Assert((SourceScan.MethodBody(harness, "Harness_PendingPrompt") ?? "").Contains("CombatPresentation.HasPendingInteractive"),
+            "HasPendingInteractive joins Harness_PendingPrompt (G5)");
+
+        string root = Path.Combine(Application.dataPath, "Scripts");
+        var callers = new List<string>();
+        foreach (string file in Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            string rel = file.Substring(root.Length + 1).Replace('\\', '/');
+            if (rel.StartsWith("Tests/", StringComparison.Ordinal) || rel.StartsWith("UI/Presentation/", StringComparison.Ordinal))
+                continue;
+            if (SourceScan.StripComments(file).Contains("StopKind.PlayerReaction"))
+                callers.Add(rel);
+        }
+        Assert(callers.Count == 0, "S7: the reserved MarkStop(StopKind.PlayerReaction, actor) has no caller yet (CMB-029, SPL-047)",
+            string.Join(", ", callers));
+    }
+
+    private static void TestStopMarks()
+    {
+        try
+        {
+            int before = CombatPresentation.PendingBeats;
+            CombatPresentation.MarkStop(StopKind.AoO, null);
+            Assert(CombatPresentation.PendingBeats == before && !CombatPresentation.Queueing, "Outside a group a stop mark does nothing");
+
+            CombatPresentation.OpenGroup();
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            CombatPresentation.NoteLane(null, 1);
+            int beats = CombatPresentation.PendingBeats;
+            CombatPresentation.MarkStop(StopKind.AoO, null);
+            CombatPresentation.MarkStop(StopKind.PlayerReaction, null);
+            Assert(g != null && g.Stops.Count == 2 && g.Stops[0].Kind == StopKind.AoO && g.Stops[1].Kind == StopKind.PlayerReaction
+                   && g.Stops[0].Lane == "1:?" && g.Stops[0].Seq < g.Stops[1].Seq,
+                "A stop mark goes on the group record in rules order, with its kind and lane (S2; the reserved S7 kind)",
+                g != null ? string.Join(", ", g.Stops) : "no group");
+            Assert(CombatPresentation.PendingBeats == beats + 2 && CombatPresentation.Holding,
+                "Each mark is one WindowStop beat; the group stays open (a window stop, not a group stop: the rules never pause)");
+            CombatPresentation.CatchUpNow();
+            Assert(CombatPresentation.PendingBeats == 0 && CombatPresentation.Holding, "A WindowStop beat applies as nothing (the sequential playback)");
+            CombatPresentation.CloseGroup(GroupStop.Control);
+            Assert(g != null && g.Stop == GroupStop.Control && g.PendingAtClose == 0, "The group closes at its control beat, nothing left to play");
+        }
+        finally
+        {
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static readonly FieldInfo ConfirmationPanelField =
+        typeof(CombatUI).GetField("_confirmationPanel", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    private static bool ConfirmationOpen(CombatUI ui) => ui != null && ConfirmationPanelField != null && ConfirmationPanelField.GetValue(ui) as GameObject != null;
+
+    private static void TestConfirmationBarrierOrder()
+    {
+        CombatUI ui = SceneUi();
+        if (ui == null || ConfirmationPanelField == null)
+        {
+            Assert(false, "The S3 barrier check needs the scene's CombatUI and its confirmation panel field");
+            return;
+        }
+        var order = new List<string>();
+        try
+        {
+            ui.HideConfirmationDialog();
+            CombatPresentation.OpenGroup();
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            CombatPresentation.Defer(() => order.Add(ConfirmationOpen(ui) ? "A+dialog" : "A"), "A");
+            ui.ShowConfirmationDialog("Presentation test", "[presentation test] barrier probe", "Yes", "No", null, null);
+            Assert(!CombatPresentation.Holding && g != null && g.Stop == GroupStop.Prompt && g.PendingAtClose > 0,
+                "S3: a confirmation dialog asked for while a group holds closes the group as a prompt, with beats still to play",
+                g != null ? g.Stop + " pending " + g.PendingAtClose : "no group");
+            Assert(CombatPresentation.HasPendingInteractive && !ConfirmationOpen(ui) && CombatPresentation.BlocksInput,
+                "S3: the dialog waits in the queue as an interactive barrier (not shown yet; input still waits)");
+            CombatPresentation.Defer(() => order.Add(ConfirmationOpen(ui) ? "B+dialog" : "B"), "B");
+            CombatPresentation.CatchUpNow();
+            Assert(string.Join(",", order) == "A,B+dialog" && ConfirmationOpen(ui) && !CombatPresentation.HasPendingInteractive,
+                "S3: the dialog opens after every earlier beat and before every later one (C3)", string.Join(",", order));
+            ui.HideConfirmationDialog();
+
+            CombatPresentation.OpenGroup();
+            ui.ShowConfirmationDialog("Presentation test", "[presentation test] dropped probe", "Yes", "No", null, null);
+            ui.HideConfirmationDialog();
+            CombatPresentation.CatchUpNow();
+            Assert(!ConfirmationOpen(ui) && !CombatPresentation.Queueing, "A hide drops a confirmation dialog the playback has not opened yet");
+
+            ui.ShowConfirmationDialog("Presentation test", "[presentation test] passthrough probe", "Yes", "No", null, null);
+            Assert(ConfirmationOpen(ui), "In Passthrough the dialog shows before it returns");
+        }
+        finally
+        {
+            ui.HideConfirmationDialog();
+            CombatPresentation.Clear();
+        }
+    }
+
+    private static void TestPromptCounterTripWhileHolding()
+    {
+        GameManager gm = GameManager.Instance;
+        CombatUI ui = SceneUi();
+        MethodInfo answer = typeof(GameManager).GetMethod("AnswerCounterTripPrompt", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (gm == null || ui == null || answer == null)
+        {
+            Assert(false, "The G6 check needs the scene's GameManager, its CombatUI and AnswerCounterTripPrompt");
+            return;
+        }
+        if (gm.IsAwaitingCounterTripChoice)
+        {
+            Assert(false, "The G6 check needs no counter-trip prompt open");
+            return;
+        }
+        CharacterController defender = Tests.Utilities.TestHelpers.CreateCharacter(name: "Presentation Defender");
+        CharacterController tripper = Tests.Utilities.TestHelpers.CreateCharacter(name: "Presentation Tripper");
+        bool? got = null;
+        try
+        {
+            CombatPresentation.OpenGroup();
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            bool opened = gm.PromptCounterTrip(defender, tripper, b => got = b);
+            Assert(opened && gm.IsAwaitingCounterTripChoice,
+                "G6: PromptCounterTrip returns true while a group holds: its flag is set at rules time, so the rules wait for the answer");
+            Assert(!CombatPresentation.Holding && g != null && g.Stop == GroupStop.Prompt && CombatPresentation.HasPendingInteractive && !ConfirmationOpen(ui),
+                "G6: the prompt closes the group and its dialog waits for the playback (S3)");
+            CombatPresentation.CatchUpNow();
+            Assert(ConfirmationOpen(ui) && gm.IsAwaitingCounterTripChoice, "The dialog opens once the playback reaches it; the prompt is still open");
+            answer.Invoke(gm, new object[] { false });
+            Assert(got == false && !gm.IsAwaitingCounterTripChoice, "The prompt's own answer closes it (Decline)");
+        }
+        finally
+        {
+            if (gm.IsAwaitingCounterTripChoice)
+                answer.Invoke(gm, new object[] { false });
+            ui.HideConfirmationDialog();
+            CombatPresentation.Clear();
+            foreach (CharacterController c in new[] { defender, tripper })
+            {
+                if (c == null)
+                    continue;
+                if (c.View != null)
+                    UnityEngine.Object.DestroyImmediate(c.View.gameObject);
+                UnityEngine.Object.DestroyImmediate(c.gameObject);
+            }
+        }
+    }
+
+    private static void TestCatchUpFallback()
+    {
+        CombatUI ui = SceneUi();
+        if (ui == null)
+        {
+            Assert(false, "The fallback check needs the scene's CombatUI");
+            return;
+        }
+        var order = new List<string>();
+        try
+        {
+            CombatPresentation.ResetGroupLog();
+            CombatPresentation.CatchUpBeforePrompt("Probe");
+            Assert(CombatPresentation.CatchUpFallbacks.Count == 0, "In Passthrough the fallback does nothing");
+
+            CombatPresentation.OpenGroup();
+            GroupRecord g = CombatPresentation.CurrentGroup;
+            CombatPresentation.Defer(() => order.Add("A"), "A");
+            ui.ShowSpecialStyleSelectionMenu("PresentationFallbackProbe", new List<string> { "Probe option" }, null,
+                i => order.Add("picked"), () => order.Add("cancelled"), showWhileActionPanelHidden: true);
+            Assert(order.Count >= 1 && order[0] == "A" && CombatPresentation.PendingBeats == 0 && !CombatPresentation.Holding,
+                "The fallback: a CatchUp-class prompt shown while holding catches the playback up before it shows", string.Join(",", order));
+            Assert(g != null && g.Stop == GroupStop.Prompt, "The fallback closes the open group as a prompt");
+            Assert(CombatPresentation.CatchUpFallbacks.Count == 1 && CombatPresentation.CatchUpFallbacks[0] == "ShowSpecialStyleSelectionMenu",
+                "The fallback is listed for the harness's job note", string.Join(", ", CombatPresentation.CatchUpFallbacks));
+        }
+        finally
+        {
+            ui.HideSpecialStyleSelectionMenu();
+            CombatPresentation.Clear();
+            CombatPresentation.ResetGroupLog();
         }
     }
 

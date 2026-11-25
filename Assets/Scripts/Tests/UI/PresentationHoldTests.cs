@@ -16,7 +16,7 @@ namespace Tests.UI
 /// a held view keeps its picture when its model changes and shows the change only when a Keyframe beat of a later
 /// boundary applies; a view created inside a group stays hidden until its Spawned beat; a model destroyed inside a group
 /// leaves its view drawn until its Removed beat; the source sites: the group open closes the sheet, skills and inventory
-/// windows (C6), a prompt to a player-run creature closes the group and catches up first, the loot window opens through
+/// windows (C6), a prompt to a player-run creature closes the group and waits as an interactive barrier (S3, step 10), the loot window opens through
 /// WhenDrained (S4), and every reset clears the presentation.
 /// Needs Play mode (Awake must run). The test objects sit off the grid and are destroyed afterwards; the presentation is
 /// cleared at the end of every check.
@@ -73,8 +73,9 @@ public static class PresentationHoldTests
             "A group open closes the sheet, skills and inventory windows (C6)");
         string confirm = SourceScan.MethodBody(Src("UI/Combat/CombatUI.cs"), "ShowConfirmationDialog") ?? "";
         int prompt = confirm.IndexOf("TurnControl.PromptOpened()", StringComparison.Ordinal);
-        int catchUp = confirm.IndexOf("CombatPresentation.CatchUpNow()", StringComparison.Ordinal);
-        Assert(prompt >= 0 && catchUp > prompt, "A prompt while holding or behind closes the group, then catches the playback up before it shows");
+        int barrier = confirm.IndexOf("BeatKind.Interactive", StringComparison.Ordinal);
+        // Step 10 replaced step 9's stand-in (close, catch up, show at once) with the S3 barrier (CombatPresentationTests).
+        Assert(prompt >= 0 && barrier > prompt, "A prompt while holding closes the group, and while behind it waits in the queue as an interactive barrier (S3)");
         Assert(Src("_Core/GameManager.LootCollection.cs")
                .Contains("CombatPresentation.WhenDrained("), "The loot window opens when the playback drains (S4)");
         Assert((SourceScan.MethodBody(gm, "ResetCombatStateForNextEncounter") ?? "").Contains("CombatPresentation.Clear()"),

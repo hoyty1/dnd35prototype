@@ -5,8 +5,9 @@
 /// which switches the AI speed factor (step 6) on and off, and since step 9 opens or closes the group the presentation
 /// records (CombatPresentation.OpenGroup and CloseGroup): a group opens at an AI-decided turn's mark when
 /// GameSettings.groupAiTurns is on (read once, when the group opens) and the combat is not over, and closes at the first
-/// of the control beat, a prompt to a player-run creature, combat end and a reset. The window cap (S5) and the stop
-/// marks (S2, S3) come with steps 10 and 11.
+/// of the control beat, a prompt to a player-run creature, combat end and a reset. Step 10 adds the stopping points: the
+/// window stops (CombatPresentation.MarkStop, S2) and the prompts (S3: CombatUI.ShowConfirmationDialog and
+/// GameManager.PromptAttackedReaction call <see cref="PromptOpened"/>); the window cap (S5) comes with step 11.
 /// </summary>
 public static class TurnControl
 {
@@ -59,9 +60,11 @@ public static class TurnControl
     }
 
     /// <summary>
-    /// An interactive prompt to a player-run creature opens (CombatUI.ShowConfirmationDialog while the presentation holds
-    /// or is behind, step 9; GameManager.PromptAttackedReaction in step 10): the group closes. It does not change the
-    /// pacing kind, because the speed factor runs from an AI-decided turn's start until control returns (C2).
+    /// An interactive prompt to a player-run creature opens (S3, step 10: CombatUI.ShowConfirmationDialog while a group
+    /// holds, the dialog then queued as an interactive barrier; GameManager.PromptAttackedReaction before it waits for the
+    /// drain; CombatPresentation.CatchUpBeforePrompt, the fallback): the group closes. Outside a group it does nothing. It
+    /// does not change the pacing kind, because the speed factor runs from an AI-decided turn's start until control
+    /// returns (C2).
     /// </summary>
     public static void PromptOpened()
     {

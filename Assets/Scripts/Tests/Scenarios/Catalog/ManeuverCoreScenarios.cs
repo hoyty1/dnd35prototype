@@ -350,7 +350,7 @@ namespace Tests.Scenarios
         /// check instead (a standard action, PHB p.156), opposed by the hero's grapple check (PHB p.73), and the hero's decider is
         /// asked the same way.
         /// </summary>
-        private static ScenarioDef GrappleEscapeOppositionUi(bool oppose, bool escapeArtist = false)
+        internal static ScenarioDef GrappleEscapeOppositionUi(bool oppose, bool escapeArtist = false)
         {
             string id = "rules/grapple-escape-" + (escapeArtist ? "artist-" : "") + (oppose ? "opposed-ui" : "not-opposed-ui");
             string how = escapeArtist ? "Escape Artist escape" : "escape";

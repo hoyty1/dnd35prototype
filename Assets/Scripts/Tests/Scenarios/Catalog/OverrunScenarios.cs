@@ -115,7 +115,7 @@ namespace Tests.Scenarios
         /// Block: the opposed check is rolled (forced 20 against 1) and the fighter is knocked prone; the standard action is
         /// spent, so the attack is refused.
         /// </summary>
-        private static ScenarioDef OverrunPcDefenderUi(bool block)
+        internal static ScenarioDef OverrunPcDefenderUi(bool block)
         {
             string id = block ? "rules/overrun-pc-defender-blocks-ui" : "rules/overrun-pc-defender-chooses-ui";
             string title = block

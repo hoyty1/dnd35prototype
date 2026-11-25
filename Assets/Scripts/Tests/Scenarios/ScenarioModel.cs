@@ -310,6 +310,12 @@ namespace Tests.Scenarios
         /// blocks, false avoids. An actor not listed blocks.
         /// </summary>
         public Dictionary<string, bool> OverrunResponseAnswers = new Dictionary<string, bool>();
+        /// <summary>
+        /// How the runner answers a controllable reactor's attacked-reaction menu (a giant bombardier beetle's acid spray,
+        /// MM p.285, D1; GameManager.PromptAttackedReaction), by actor key: true sprays, false declines. An actor not listed
+        /// sprays (grouped AI turns step 10).
+        /// </summary>
+        public Dictionary<string, bool> AttackedReactionAnswers = new Dictionary<string, bool>();
 
         /// <summary>A copy for one job with <paramref name="extra"/> actors appended (the lists are new, the rest is shared).</summary>
         internal ScenarioDef WithExtraActors(IEnumerable<ActorSpec> extra)
@@ -398,8 +404,10 @@ namespace Tests.Scenarios
                     pool++;
                     if (string.IsNullOrWhiteSpace(a.Source.NpcId))
                         problems.Add(a.Key + ": Npc source without an id");
-                    if (a.Control == Control.Ui)
-                        problems.Add(a.Key + ": Ui control is only for PC-slot (QuickStart or Stats) actors");
+                    // A Ui pool creature on the Player team is controllable like a player's summon (the PC turn path);
+                    // grouped AI turns step 10's player-run bombardier beetle needs one.
+                    if (a.Control == Control.Ui && a.Team != CharacterTeam.Player)
+                        problems.Add(a.Key + ": Ui control is only for PC-slot (QuickStart or Stats) actors and Player-team Npc actors");
                 }
 
                 if (a.Source.IsPcSlot && a.Team != CharacterTeam.Player)
@@ -444,6 +452,9 @@ namespace Tests.Scenarios
             foreach (string k in OverrunResponseAnswers.Keys)
                 if (Find(k) == null)
                     problems.Add("overrun-response answer for unknown actor '" + k + "'");
+            foreach (string k in AttackedReactionAnswers.Keys)
+                if (Find(k) == null)
+                    problems.Add("attacked-reaction answer for unknown actor '" + k + "'");
 
             foreach (string k in Scripts.Keys)
             {
@@ -674,6 +685,11 @@ namespace Tests.Scenarios
         public ScenarioBuilder CounterTripAnswer(string key, bool tripBack) { _def.CounterTripAnswers[key] = tripBack; return this; }
         public ScenarioBuilder EscapeOppositionAnswer(string key, bool oppose) { _def.EscapeOppositionAnswers[key] = oppose; return this; }
         public ScenarioBuilder OverrunResponseAnswer(string key, bool block) { _def.OverrunResponseAnswers[key] = block; return this; }
+        /// <summary>
+        /// How the runner answers <paramref name="key"/>'s acid-spray menu (a controllable giant bombardier beetle attacked
+        /// where its path can wait, D1): true sprays (the default for every actor), false declines.
+        /// </summary>
+        public ScenarioBuilder AttackedReactionAnswer(string key, bool spray) { _def.AttackedReactionAnswers[key] = spray; return this; }
 
         /// <summary>Forces <paramref name="count"/> d<paramref name="sides"/> rolls (whose context contains <paramref name="ctx"/>, null for any) to <paramref name="value"/>; count -1 forces every one.</summary>
         public ScenarioBuilder Force(int sides, int value, string ctx = null, int count = 1)

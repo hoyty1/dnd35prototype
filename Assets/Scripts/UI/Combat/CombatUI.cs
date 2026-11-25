@@ -563,6 +563,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowDisguiseSelfRaceSelector(string casterName, SizeCategory sizeCategory, List<string> raceOptions, System.Action<string> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowDisguiseSelfRaceSelector)); // S3 fallback (grouped AI turns step 10)
         EnsureDisguiseSelfRaceSelector();
         _disguiseSelfRaceSelector?.Show(casterName, sizeCategory, raceOptions, onSelect, onCancel);
     }
@@ -1035,6 +1036,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType, bool> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSpecialAttackMenu)); // S3 fallback (grouped AI turns step 10)
         HideSpecialStyleSelectionMenu();
         HideBullRushExtraPushChoice();
 
@@ -1317,6 +1319,7 @@ public class CombatUI : MonoBehaviour
         System.Action onCancel,
         bool showWhileActionPanelHidden = false)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSpecialStyleSelectionMenu)); // S3 fallback (grouped AI turns step 10)
         string optionSummary = optionLabels == null ? "<null>" : string.Join(", ", optionLabels);
         LogSpecialStyleMenuLifecycle(
             "SHOW_MENU_CALLED",
@@ -1479,6 +1482,7 @@ public class CombatUI : MonoBehaviour
         System.Action<int> onSelect,
         System.Action onCancel = null)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowBullRushExtraPushChoice)); // S3 fallback (grouped AI turns step 10)
         string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null-attacker>";
         string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null-target>";
 
@@ -2058,6 +2062,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowAoOConfirmationPrompt(AoOProvokingActionInfo actionInfo)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowAoOConfirmationPrompt)); // S3 fallback (grouped AI turns step 10)
         if (actionInfo == null)
         {
             Debug.LogWarning("[CombatUI] ShowAoOConfirmationPrompt called with null actionInfo");
@@ -2357,6 +2362,7 @@ public class CombatUI : MonoBehaviour
     public void ShowSpellSelection(SpellcastingComponent spellComp,
         System.Action<SpellData, MetamagicData> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSpellSelection)); // S3 fallback (grouped AI turns step 10)
         _onSpellSelectedWithMetamagic = onSelect;
         _onSpellSelected = null;
         _onSpellCancelled = onCancel;
@@ -2377,6 +2383,7 @@ public class CombatUI : MonoBehaviour
     public void ShowSpellSelection(SpellcastingComponent spellComp,
         System.Action<SpellData> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSpellSelection)); // S3 fallback (grouped AI turns step 10)
         _onSpellSelected = onSelect;
         _onSpellSelectedWithMetamagic = null;
         _onSpellCancelled = onCancel;
@@ -3464,6 +3471,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowTouchSpellPrompt(SpellData spell, System.Action onCastNow, System.Action onDischargeLater, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowTouchSpellPrompt)); // S3 fallback (grouped AI turns step 10)
         HideTouchSpellPrompt();
 
         Canvas canvas = GetComponentInParent<Canvas>();
@@ -3582,6 +3590,7 @@ public class CombatUI : MonoBehaviour
         System.Action<int, int> onSelect,
         System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSummonCreatureSelection)); // S3 fallback (grouped AI turns step 10)
         HideSummonCreatureSelection();
 
         Canvas canvas = GetComponentInParent<Canvas>();
@@ -3957,6 +3966,7 @@ public class CombatUI : MonoBehaviour
         System.Action onProtectCaster,
         System.Action onDismiss)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSummonContextMenu)); // S3 fallback (grouped AI turns step 10)
         HideSummonContextMenu();
 
         if (summon == null || summon.Stats == null)
@@ -4159,6 +4169,7 @@ public class CombatUI : MonoBehaviour
         List<CharacterController> threateningEnemies,
         System.Action<bool> callback)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowCastDefensivelyPrompt)); // S3 fallback (grouped AI turns step 10)
         int defensiveDC = 15 + (spell != null ? spell.SpellLevel : 0);
         int concentrationBonus = (caster != null && caster.Stats != null)
             ? caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true)
@@ -4185,24 +4196,41 @@ public class CombatUI : MonoBehaviour
         ShowAoOConfirmationPrompt(info);
     }
     /// <summary>
-    /// A confirmation dialog (an Interactive-class call, grouped AI turns S3): a presentation boundary, then the show.
-    /// The caller's flags are set before the call, as before. Until step 10 builds the S3 barrier, a dialog asked for
-    /// while a group holds or the playback is behind (the counter-trip, overrun-response and escape-opposition prompts to
-    /// a player-run defender inside a group) closes the group (TurnControl.PromptOpened), catches the playback up
-    /// (CombatPresentation.CatchUpNow, so nothing it refers to is still unshown) and then shows at once (step 9).
+    /// A confirmation dialog (an Interactive-class call, grouped AI turns S3, step 10; design choice C3): a presentation
+    /// boundary, then the show. The caller's flags are set before the call, as before (the counter-trip, overrun-response
+    /// and escape-opposition prompts: the rules poll them, so they wait for the answer whenever the dialog opens). Asked for
+    /// while a group holds or the playback is behind (a defender prompt to a player-run creature inside a group), it closes
+    /// the group (TurnControl.PromptOpened) and is an interactive barrier: it opens when the playback has played every
+    /// earlier beat. Otherwise it shows at once. <see cref="HideConfirmationDialog"/> drops a dialog still queued.
     /// </summary>
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)
     {
         CombatPresentation.Boundary(PresentationBoundary.Interactive);
-        if (CombatPresentation.Holding || CombatPresentation.Queueing)
-        {
+        if (CombatPresentation.Holding)
             TurnControl.PromptOpened();
-            CombatPresentation.CatchUpNow();
+        if (CombatPresentation.Queueing)
+        {
+            PresentationBeat beat = null;
+            beat = new PresentationBeat
+            {
+                Kind = BeatKind.Interactive, Ui = this, Text = title,
+                Show = () =>
+                {
+                    _queuedConfirmations.Remove(beat);
+                    ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel);
+                }
+            };
+            _queuedConfirmations.Add(beat);
+            CombatPresentation.Enqueue(beat);
+            return;
         }
         ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel);
     }
+
+    // The confirmation dialogs the playback has not opened yet (S3), in queue order, so a hide can drop them.
+    private readonly List<PresentationBeat> _queuedConfirmations = new List<PresentationBeat>();
 
     private void ApplyShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
@@ -4297,9 +4325,16 @@ public class CombatUI : MonoBehaviour
         });
     }
 
-    /// <summary>Closes the open confirmation dialog without running either callback (the caller answers it itself).</summary>
+    /// <summary>
+    /// Closes the open confirmation dialog without running either callback (the caller answers it itself); a dialog still
+    /// queued for the playback (S3) is dropped (every one still queued), so it never opens after its prompt was closed.
+    /// </summary>
     public void HideConfirmationDialog()
     {
+        // A dropped beat keeps its place in the queue with no Show (CombatPresentation.HasPendingInteractive skips it).
+        foreach (PresentationBeat queued in _queuedConfirmations)
+            queued.Show = null;
+        _queuedConfirmations.Clear();
         if (_confirmationPanel != null)
             Destroy(_confirmationPanel);
         _confirmationPanel = null;
@@ -4644,6 +4679,7 @@ public class CombatUI : MonoBehaviour
         string bodyOverride = null,
         Color? optionButtonColorOverride = null)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowPickUpItemSelection)); // S3 fallback (grouped AI turns step 10)
         Debug.Log("[AidUI] ========== ShowPickUpItemSelection START ==========");
         Debug.Log($"[AidUI] ShowPickUpItemSelection called | actor='{actorName}' | options={(itemOptions != null ? itemOptions.Count : 0)} | title='{titleOverride}'");
         VerifyCanvasSettings();
@@ -4892,6 +4928,7 @@ public class CombatUI : MonoBehaviour
         System.Action onCancel,
         Color? optionButtonColorOverride = null)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowCharacterSelectionUI)); // S3 fallback (grouped AI turns step 10)
         Debug.Log($"[AidUI] ShowCharacterSelectionUI called | title='{title}' | characterCount={(characters != null ? characters.Count : 0)}");
 
         if (characters == null)
@@ -4938,6 +4975,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowDropEquippedItemSelection(string actorName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowDropEquippedItemSelection)); // S3 fallback (grouped AI turns step 10)
         HideDropEquippedItemSelection();
 
         Canvas canvas = GetComponentInParent<Canvas>();
@@ -5062,6 +5100,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowDisarmWeaponSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowDisarmWeaponSelection)); // S3 fallback (grouped AI turns step 10)
         ShowItemSelectionDialog(
             panelName: "DisarmWeaponSelectionPanel",
             title: "DISARM TARGET HELD ITEM",
@@ -5074,6 +5113,7 @@ public class CombatUI : MonoBehaviour
 
     public void ShowSunderItemSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
+        CombatPresentation.CatchUpBeforePrompt(nameof(ShowSunderItemSelection)); // S3 fallback (grouped AI turns step 10)
         ShowItemSelectionDialog(
             panelName: "SunderItemSelectionPanel",
             title: "SUNDER TARGET ITEM",

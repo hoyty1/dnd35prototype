@@ -39,6 +39,11 @@ public partial class GameManager
 
     private int _attackedReactionDeferDepth;
     private bool _resolvingAttackedReaction;
+#if UNITY_EDITOR
+    // The reactor whose acid-spray menu is open (PromptAttackedReaction), for the scenario harness's answerer; no rule reads
+    // it. Editor-only like its one reader (GameManager.ScenarioHarness.cs), so a player build has no unread field (CS0414).
+    private CharacterController _attackedReactionPromptReactor;
+#endif
 
     /// <summary>
     /// True while the notices must wait: something is still resolving (a defer scope), a cast is resolving
@@ -131,6 +136,9 @@ public partial class GameManager
         _pendingAttackedReactions.Clear();
         _attackedReactionDeferDepth = 0;
         _resolvingAttackedReaction = false;
+#if UNITY_EDITOR
+        _attackedReactionPromptReactor = null;
+#endif
     }
 
     /// <summary>One reactor's reaction to <paramref name="trigger"/>: the acid spray, when it can spray, has an aim and its decider says so.</summary>
@@ -146,7 +154,14 @@ public partial class GameManager
 
         // The prompt may have waited: the beetle must still be able to spray.
         if (use && CanUseAcidSprayNow(reactor))
+        {
+            // Grouped AI turns S2 (step 10, C1): a player-run beetle's spray inside a group is the AI fallback's answer (a
+            // prompt would have closed the group), so it is a window stop. Presentation only; the decider seam, no new
+            // IsControllable read.
+            if (CombatPresentation.Holding && !AttackDeciders.For(reactor).IsSynchronous)
+                CombatPresentation.MarkStop(StopKind.AutomaticReaction, reactor);
             ResolveAcidSpray(reactor, trigger);
+        }
     }
 
     // ── The acid spray (MM p.285) ───────────────────────────────────────────────────────────────────────────────
@@ -357,7 +372,10 @@ public partial class GameManager
 
     /// <summary>
     /// The controlled beetle's prompt (D1): spray at the creature that attacked or disturbed it, or not. A menu closed
-    /// without an answer declines.
+    /// without an answer declines. Grouped AI turns S3 (step 10, C3): the prompt first closes an open group
+    /// (TurnControl.PromptOpened; its menu is no Interactive-class facade call, so nothing else would close it, and
+    /// CombatPresentation.BlocksInput includes the hold), then waits until the playback has shown every earlier beat, then
+    /// shows its menu as before. Without a group nothing waits.
     /// </summary>
     internal IEnumerator PromptAttackedReaction(CharacterController reactor, CharacterController trigger, string reaction, Action<bool> onResolved)
     {
@@ -366,6 +384,10 @@ public partial class GameManager
             onResolved?.Invoke(ShouldUseAttackedReactionForAI(reactor, trigger, reaction));
             yield break;
         }
+
+        TurnControl.PromptOpened();
+        while (CombatPresentation.BlocksInput)
+            yield return null;
 
         bool resolved = false;
         bool use = false;
@@ -390,10 +412,16 @@ public partial class GameManager
                 resolved = true;
             },
             showWhileActionPanelHidden: true);
+#if UNITY_EDITOR
+        _attackedReactionPromptReactor = resolved ? null : reactor;
+#endif
 
         while (!resolved && CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())
             yield return null;
 
+#if UNITY_EDITOR
+        _attackedReactionPromptReactor = null;
+#endif
         onResolved?.Invoke(resolved && use);
     }
 }

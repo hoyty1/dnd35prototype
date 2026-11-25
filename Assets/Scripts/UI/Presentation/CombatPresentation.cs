@@ -34,6 +34,40 @@ public enum GroupStop
 }
 
 /// <summary>
+/// What a window stop marks (grouped AI turns step 10, "Stopping points" S2 and S7; design choice C1). Presentation only:
+/// a mark never pauses the rules. In the sequential playback (step 9) every beat already plays after every earlier one, so
+/// a mark changes nothing on screen yet; step 11's overlap scheduler ends the overlap window at it (the lane holding the
+/// mark plays after every earlier beat, and the next lane opens a new window).
+/// </summary>
+public enum StopKind
+{
+    /// <summary>S2: a player-run creature makes an attack of opportunity inside a group (ThreatSystem.ExecuteAoO; the owner's ruling).</summary>
+    AoO,
+    /// <summary>
+    /// S2: a player-run creature's attacked reaction that the AI fallback answered (a controllable giant bombardier beetle's
+    /// acid spray where the resolving path cannot wait; GameManager.RunAttackedReaction).
+    /// </summary>
+    AutomaticReaction,
+    /// <summary>
+    /// S7, reserved: a player-run creature's automatic trigger of a readied action or readied counterspell (CMB-029, SPL-047;
+    /// neither exists yet). No caller; a readied prompt would be an Interactive-class call instead.
+    /// </summary>
+    PlayerReaction,
+}
+
+/// <summary>One window stop of a group (CombatPresentation.MarkStop): its kind, the reacting creature, its beat's seq and the lane it fell in.</summary>
+public sealed class StopMark
+{
+    public StopKind Kind;
+    public string Actor;
+    public int Seq;
+    /// <summary>The group's lane in force when the mark was made ("round:actor"), or null before the first lane.</summary>
+    public string Lane;
+
+    public override string ToString() => Kind + ":" + Actor;
+}
+
+/// <summary>
 /// One recorded group (grouped AI turns step 9): its lanes (the AI-decided turns that opened or continued it, as
 /// "round:actor"), why and at which seq it closed, its beat count and its playback length at the speed in force when it
 /// was recorded. Read by the scenario harness (the groups.jsonl sidecar, ExpectGroups); never a trace event.
@@ -46,8 +80,15 @@ public sealed class GroupRecord
     /// <summary>Null while the group is open.</summary>
     public GroupStop? Stop;
     public int Beats;
+    /// <summary>
+    /// The beats still to play when the group closed (step 10): above 0 for a prompt asked while the playback was behind
+    /// (S3), which then opens only after them.
+    /// </summary>
+    public int PendingAtClose;
     public float PlaybackSeconds;
     public readonly List<string> Lanes = new List<string>();
+    /// <summary>The window stops recorded while the group was open, in rules order (step 10, S2; CombatPresentation.MarkStop).</summary>
+    public readonly List<StopMark> Stops = new List<StopMark>();
     public bool IsOpen => Stop == null;
 }
 
@@ -63,7 +104,7 @@ public enum UiCallClass
     Control,
     /// <summary>An interactive barrier (a defender prompt, the defeat panel): a boundary, then the show.</summary>
     Interactive,
-    /// <summary>Any other prompt, menu or picker: catch up first if it is ever called while the queue is behind (step 10).</summary>
+    /// <summary>Any other prompt, menu or picker: it catches up first if it is ever called while the presentation holds or is behind (step 10, CatchUpBeforePrompt).</summary>
     CatchUp,
     /// <summary>Queries, hides, ensures, out-of-combat panels and PC-turn controls: always at once.</summary>
     Live,
@@ -107,6 +148,13 @@ public enum PresentationBoundary
 /// again and the <see cref="WhenDrained"/> actions run (the loot window). The rules never wait on the playback, so every
 /// rules outcome and trace hash is the same with grouping on or off (NEUTRAL; the harness's group=pair proves it).
 ///
+/// Step 10 (gt-stop-points) adds the stopping points: a player-run creature's automatic reaction inside a group is a
+/// window stop (<see cref="MarkStop"/>, S2; the reserved S7 kind for readied actions), a confirmation dialog asked for
+/// while the presentation holds or is behind closes the group and is an interactive barrier the playback opens after every
+/// earlier beat (CombatUI.ShowConfirmationDialog, S3; the acid-spray menu closes the group and waits for the drain,
+/// GameManager.PromptAttackedReaction), and any other prompt shown meanwhile catches the playback up first
+/// (<see cref="CatchUpBeforePrompt"/>, the fallback).
+///
 /// <see cref="Boundary"/> is called at every rules boundary a group has (each CombatPacing.Wait, each MoveAlongPath step,
 /// before the control beat and every Interactive-class call, and in TurnControl.CombatEnded). It records the keyframe
 /// beats while queueing and feeds <see cref="PresentationTrace"/> (editor and development builds, while the scenario
@@ -144,6 +192,7 @@ public sealed class CombatPresentation : MonoBehaviour
     private static GroupRecord _group;
     private static int _groupIds;
     private static readonly List<GroupRecord> _groups = new List<GroupRecord>();
+    private static readonly List<string> _fallbacks = new List<string>();
 
     /// <summary>
     /// A test seam (Tests.UI.CombatPresentationTests, the trace fault check): when set, it replaces TokenKeyframe.Capture
@@ -166,6 +215,7 @@ public sealed class CombatPresentation : MonoBehaviour
         _group = null;
         _groupIds = 0;
         _groups.Clear();
+        _fallbacks.Clear();
         Playback = PlaybackMode.Timed;
         KeyframeSourceForTests = null;
     }
@@ -240,13 +290,17 @@ public sealed class CombatPresentation : MonoBehaviour
         }
     }
 
-    /// <summary>True while an interactive beat waits in the queue (Harness_PendingPrompt joins it in step 10).</summary>
+    /// <summary>
+    /// True while an interactive beat waits in the queue: a confirmation dialog (S3) or the defeat panel (S4) the playback
+    /// has not reached yet (GameManager.Harness_PendingPrompt joins it, step 10, G5). A dropped one (its Show cleared by
+    /// CombatUI.HideConfirmationDialog) does not count: that prompt was already closed.
+    /// </summary>
     public static bool HasPendingInteractive
     {
         get
         {
             for (int i = _head; i < _queue.Count; i++)
-                if (_queue[i].Kind == BeatKind.Interactive)
+                if (_queue[i].Kind == BeatKind.Interactive && _queue[i].Show != null)
                     return true;
             return false;
         }
@@ -264,10 +318,18 @@ public sealed class CombatPresentation : MonoBehaviour
     /// <summary>The groups recorded since the last <see cref="ResetGroupLog"/> (the scenario harness's per-job record).</summary>
     public static IReadOnlyList<GroupRecord> GroupLog => _groups;
 
-    /// <summary>Clears the group log (the scenario harness, at each job's start). The queue and the hold are untouched.</summary>
+    /// <summary>
+    /// The CatchUp fallbacks taken since the last <see cref="ResetGroupLog"/> (<see cref="CatchUpBeforePrompt"/>: a
+    /// CatchUp-class prompt, menu or picker shown while the presentation held or was behind), as the method names. Read by
+    /// the scenario harness (a job note, never a trace event).
+    /// </summary>
+    public static IReadOnlyList<string> CatchUpFallbacks => _fallbacks;
+
+    /// <summary>Clears the group log and the fallback list (the scenario harness, at each job's start). The queue and the hold are untouched.</summary>
     public static void ResetGroupLog()
     {
         _groups.Clear();
+        _fallbacks.Clear();
     }
 
     /// <summary>
@@ -327,6 +389,58 @@ public sealed class CombatPresentation : MonoBehaviour
         _group.Lanes.Add(round + ":" + name);
     }
 
+    // ── Stops (step 10) ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A window stop (grouped AI turns "Stopping points"; design choice C1): a player-run creature reacts automatically
+    /// inside the open group. S2's two seams call it, each gated by <c>CombatPresentation.Holding &amp;&amp;
+    /// !AttackDeciders.For(creature).IsSynchronous</c> (the decider seam, no new IsControllable read; a presentation-only
+    /// consumer, docs/systems/PC_NPC_PARITY.md): ThreatSystem.ExecuteAoO (<see cref="StopKind.AoO"/>, after the Spring
+    /// Attack suppression and before the attack sequence) and GameManager.RunAttackedReaction
+    /// (<see cref="StopKind.AutomaticReaction"/>, just before ResolveAcidSpray). <see cref="StopKind.PlayerReaction"/> is
+    /// the reserved S7 API for readied actions and readied counterspells (CMB-029, SPL-047), with no caller yet.
+    ///
+    /// The mark is a WindowStop beat in rules order and a <see cref="StopMark"/> on the group record. The rules never wait:
+    /// the reaction resolves at once, as with grouping off. The lane holding the mark plays after every earlier beat (true
+    /// of the sequential playback by construction) and the next lane opens a new window (step 11's scheduler). Nothing is
+    /// traced (the presentation trace of a grouping-off run has no mark either), and outside a group this does nothing.
+    /// </summary>
+    public static void MarkStop(StopKind kind, CharacterController actor)
+    {
+        if (!_holding || _group == null)
+            return;
+        var beat = new PresentationBeat { Kind = BeatKind.WindowStop, Creature = actor, Index = (int)kind };
+        Enqueue(beat);
+        string name = actor != null && actor.Stats != null ? actor.Stats.CharacterName : (actor != null ? actor.name : "?");
+        _group.Stops.Add(new StopMark
+        {
+            Kind = kind, Actor = name, Seq = beat.Seq,
+            Lane = _group.Lanes.Count > 0 ? _group.Lanes[_group.Lanes.Count - 1] : null
+        });
+    }
+
+    /// <summary>
+    /// The S3 fallback (grouped AI turns "Stopping points", gap G5): a CatchUp-class CombatUI prompt, menu or picker
+    /// (<see cref="UiCallClass.CatchUp"/>) shown while the presentation holds or is behind. Such a call is not expected (an
+    /// AI-run actor's own prompts go to the AI decider, and a defender prompt is a confirmation dialog or waits for the
+    /// drain, as GameManager.PromptAttackedReaction does), so it warns (<c>[Presentation]</c>), closes an open group as a
+    /// prompt (TurnControl.PromptOpened) and applies every queued beat at once (<see cref="CatchUpNow"/>) before the caller
+    /// shows: a new prompt never opens before the state it refers to is on screen. Each CatchUp-class method calls it
+    /// first (Tests.UI.CombatPresentationTests pins it); it does nothing in Passthrough.
+    /// </summary>
+    public static void CatchUpBeforePrompt(string method)
+    {
+        if (!Queueing)
+            return;
+        Debug.LogWarning("[Presentation] " + (method ?? "?") + " opened while the presentation was "
+                         + (_holding ? "holding a group" : "behind (" + PendingBeats + " beats)") + "; catching up first (S3 fallback).");
+        if (_fallbacks.Count < MaxGroupLog)
+            _fallbacks.Add(method ?? "?");
+        if (_holding)
+            TurnControl.PromptOpened();
+        CatchUpNow();
+    }
+
     /// <summary>
     /// Closes the open group (the control beat, a prompt, combat end, a reset): the token pictures are recorded one last
     /// time and the hold ends. Its beats still play (queue while behind keeps later calls in order behind them); when the
@@ -343,6 +457,7 @@ public sealed class CombatPresentation : MonoBehaviour
         {
             _group.Stop = stop;
             _group.CloseSeq = _seq;
+            _group.PendingAtClose = PendingBeats;
         }
         _group = null;
         if (PendingBeats == 0)
@@ -803,6 +918,7 @@ public sealed class CombatPresentation : MonoBehaviour
                 break;
             case BeatKind.GroundItem: if (b.Cell != null) b.Cell.ApplyGroundItemVisible(b.Flag); break;
             case BeatKind.Pace: break;
+            case BeatKind.WindowStop: break; // step 11's scheduler ends the window here; the sequential playback shows nothing
             case BeatKind.Step: if (b.View != null) b.View.ShowStep(b.To); break;
             case BeatKind.Keyframe: if (b.View != null) b.View.ApplyPicture(b.Picture); break;
             case BeatKind.Spawned: if (b.View != null) b.View.ApplySpawned(); break;
