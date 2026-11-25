@@ -98,6 +98,7 @@ public partial class GameManager
     private void EvictNonPoolNPC(CharacterController npc)
     {
         Debug.Log($"[GameManager] Removing {(npc.Stats != null ? npc.Stats.CharacterName : npc.name)} before the encounter: it is not an enemy pool slot (ENC-001).");
+        npc.ReleaseLinksOnLeavingPlay("removed before the encounter"); // its grapple and feint links end now (CRE-311)
         Grid?.ClearCreatureOccupancy(npc);
         Summoning?.RemoveSummonByController(npc);
         _activeSummons.RemoveAll(s => s != null && s.Controller == npc);

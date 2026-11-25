@@ -306,8 +306,9 @@ public partial class GameManager
     /// waited on the 0.45 s despawn tween, so with any other pacing it landed at another point of the turn sequence, and a
     /// reset could stop it half done, CORE-013): the grid occupancy; <see cref="NPCs"/> and <c>_npcAIBehaviors</c>
     /// together (AI-015); the summon lists; the initiative order (TurnService.RemoveFromInitiative, which lets the next
-    /// creature still act when the summon is removed during its own turn); the log line; the initiative and stat panels;
-    /// and the model's Destroy. The model is marked out of play first (<see cref="CharacterController.IsRemovedFromPlay"/>),
+    /// creature still act when the summon is removed during its own turn); the log line; its links with other creatures
+    /// (CharacterController.ReleaseLinksOnLeavingPlay: its grapple, which frees its partner, and its feint windows, CRE-311;
+    /// PHB p.173, a summoned creature is sent back instantly); the initiative and stat panels; and the model's Destroy. The model is marked out of play first (<see cref="CharacterController.IsRemovedFromPlay"/>),
     /// so until Unity destroys it at the end of the frame the grid refuses it, and IsActiveCombatant and the scene-wide
     /// area scans (FindObjectsOfType&lt;CharacterController&gt;) skip it. The token's mirror view (TokenView) plays the
     /// despawn fade afterwards and destroys itself; it is no controller, so those scans never see it either. Keeps its name
@@ -351,6 +352,13 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(despawnMessage);
         Debug.Log($"[Summon] Despawned {cc.Stats.CharacterName}: {reason}");
+
+        // Sent back instantly (PHB p.173, Conjuration (Summoning)): from now on it holds no one and no one holds it (a
+        // delegated RAW reading, 2026-11-25: grappling is a struggle with an opponent, PHB p.309, and none is left), so its
+        // grapple and feint links end here, not at the end-of-frame OnDestroy, which a decision taken in this frame would
+        // come before (CRE-311). OnDestroy's release stays as the idempotent fallback. The spells it cast do not end yet
+        // (PHB p.173; SPL-337).
+        cc.ReleaseLinksOnLeavingPlay("summon left play: " + reason);
 
         UpdateInitiativeUI();
         UpdateAllStatsUI();

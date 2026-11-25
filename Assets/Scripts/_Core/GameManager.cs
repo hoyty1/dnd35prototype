@@ -878,6 +878,9 @@ public partial class GameManager : MonoBehaviour
             if (activeSummon?.Controller == null)
                 continue;
 
+            // Its grapple and feint links end now, before the rest below reads the party, not at the end-of-frame
+            // OnDestroy (CRE-311).
+            activeSummon.Controller.ReleaseLinksOnLeavingPlay("summon dismissed after combat");
             Grid?.ClearCreatureOccupancy(activeSummon.Controller);
             Destroy(activeSummon.Controller.gameObject);
         }

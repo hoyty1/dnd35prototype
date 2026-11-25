@@ -439,6 +439,7 @@ public partial class GameManager
             CharacterController summon = _activeSummons[i]?.Controller;
             if (summon == null)
                 continue;
+            summon.ReleaseLinksOnLeavingPlay("new party after defeat"); // its feint links end now too, not at OnDestroy (CRE-311)
             Grid?.ClearCreatureOccupancy(summon);
             Destroy(summon.gameObject);
         }

@@ -4163,9 +4163,29 @@ public class CharacterController : MonoBehaviour
             Stats.NonlethalDamageChanged -= OnNonlethalDamageChanged;
         }
 
+        // The fallback for a removal that did not release them already (CRE-311): idempotent.
+        ReleaseLinksOnLeavingPlay("character removed");
+    }
+
+    /// <summary>
+    /// Ends, at once, the links with other creatures that <see cref="OnDestroy"/> clears: the feint windows this creature
+    /// opened on others (their Feinted markers), the feint markers others left on it, and its grapple link, which frees
+    /// its partner (the Grappled and Pinned conditions of both). Rule: a summoned creature whose spell ends is sent back
+    /// instantly (PHB p.173, Conjuration (Summoning)); that its partner is no longer grappling is a delegated RAW reading
+    /// (2026-11-25, docs/systems/RULES_COVERAGE.md 4.1): grappling is a struggle with an opponent (PHB p.309, glossary),
+    /// and none is left. Called when a creature leaves play: a summon sent back as its spell ends, slain or dismissed
+    /// (<c>GameManager.DespawnSummonWithEffect</c>), the harness's summon removal and reset, the post-combat summon
+    /// dismissal (<c>RestorePartyAfterCombat</c>), the new party after a defeat, the pre-encounter eviction
+    /// (<c>EvictNonPoolNPC</c>), and, as the fallback, <see cref="OnDestroy"/>, which Unity runs only at the end of the
+    /// frame (CRE-311: before the fix a decision taken in the despawn's frame still saw the vanished summon as a grapple
+    /// partner). Idempotent: a second call finds nothing left to end and changes nothing. It does not end the spells a
+    /// summon cast (PHB p.173; SPL-337).
+    /// </summary>
+    internal void ReleaseLinksOnLeavingPlay(string reason)
+    {
         ClearOwnedFeintWindowsAndIndicators();
         ClearIncomingFeintIndicators();
-        ReleaseGrappleState("character removed");
+        ReleaseGrappleState(reason);
     }
     /// <summary>
     /// Initialize the character with stats and place on grid.

@@ -227,7 +227,7 @@ DragonData.cs defines 10 types x 6 ages. The `DragonAgeCategory` enum runs Wyrml
 The flow, spawn pipeline and lifecycle are covered in the architecture part. In brief:
 - **Flow.** Choose the spell, then the list level and creature (`ShowSummonCreatureSelectionMenu`), then the tile, then `PerformSummonMonsterCast`, which builds a summon request for the cast core (its Summon resolve, `ResolveSummonMonsterCast`, since batch 11 step 10).
 - **Spawn.** `SpawnSummonedCreature` clones the NPCDatabase entry, clears `AppliedTemplateIds`, adds `option.TemplateId` and runs `ApplyTemplatesClone`.
-- **Lifecycle.** `RegisterActiveSummon` registers the summon; `TickSummonDurations` runs from `OnNewRound`; `DespawnSummonWithEffect` removes it at once, its fade left to its token view (grouped AI turns step 4, CRE-312).
+- **Lifecycle.** `RegisterActiveSummon` registers the summon; `TickSummonDurations` runs from `OnNewRound`; `DespawnSummonWithEffect` removes it at once, its fade left to its token view (grouped AI turns step 4, CRE-312), and ends its grapple and feint links in the same call (`CharacterController.ReleaseLinksOnLeavingPlay`, PHB p.173; that the partner is free before the next turn starts is a delegated RAW reading, RULES_COVERAGE 4.1; CRE-311, 2026-11-25). The spells a summon cast do not yet end with it (SPL-337).
 - **Spell-level detection.** It uses the regexes `summon_monster_(\d+)` and `summon_natures_ally_(\d+)` in `SummonMonsterLists`, so the class alias IDs match automatically.
 
 | Spell | Data | List size (code / PHB) | Missing vs PHB list |

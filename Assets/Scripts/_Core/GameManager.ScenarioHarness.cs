@@ -297,7 +297,12 @@ public partial class GameManager
             _summonedEnemies.Clear();
         });
         foreach (CharacterController summon in summons)
-            Step("RemoveSummon", () => Harness_RemoveSpawnedController(summon));
+            Step("RemoveSummon", () =>
+            {
+                if (summon != null)
+                    summon.ReleaseLinksOnLeavingPlay("ScenarioHarness reset"); // its feint links end now too, not at OnDestroy (CRE-311)
+                Harness_RemoveSpawnedController(summon);
+            });
         Step("DestroySummonProfiles", DestroyUnusedSummonAIProfiles); // the removed summons' AI profiles (AI-017)
 
         Step("ClearDefeatedEnemies", () => _defeatedEnemiesThisCombat.Clear());
@@ -866,7 +871,8 @@ public partial class GameManager
     /// <summary>
     /// Takes a summon made by <see cref="Harness_SpawnSummonedCreature"/> out of play at once: off the grid, out of the
     /// summon trackers, the initiative order, <see cref="NPCs"/> and the parallel AI behaviour list (AI-015), then a
-    /// deferred Destroy; marked out of play and its view released first, as DespawnSummonWithEffect does.
+    /// deferred Destroy; marked out of play, its view released and its grapple and feint links ended first, as
+    /// DespawnSummonWithEffect does (CRE-311).
     /// </summary>
     internal void Harness_DespawnSummon(CharacterController summon)
     {
@@ -879,6 +885,7 @@ public partial class GameManager
         if (view != null)
             view.PlayDespawnAndRelease();
         summon.MarkRemovedFromPlay();
+        summon.ReleaseLinksOnLeavingPlay("harness summon removal"); // its grapple and feint links end at once (CRE-311)
 
         _activeSummons.RemoveAll(s => s != null && s.Controller == summon);
         _summonedAllies.Remove(summon);

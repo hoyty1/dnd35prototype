@@ -28,6 +28,14 @@ namespace Tests.Magic
 ///   cannot come back onto the grid in that frame (CharacterController.IsRemovedFromPlay); its mirror view
 ///   (TokenView) lingers outside the live views, carries no controller and plays the summon visual's despawn fade;
 ///   a source scan that DespawnSummonWithEffect yields nothing before its rules work;
+/// - CRE-311: a summon whose duration runs out (GameManager.TickSummonDurations, the round-boundary expiry) while its
+///   partner grapples it and while it has feinted a third creature ends both links before the call returns, in the
+///   despawn's frame, before Unity destroys it (CharacterController.ReleaseLinksOnLeavingPlay; PHB p.173: a summoned
+///   creature is sent back instantly; that its partner is then free is a delegated RAW reading of 2026-11-25, grappling
+///   being a struggle with an opponent, PHB p.309); the release is idempotent, so the end-of-frame OnDestroy fallback
+///   leaves a grapple the partner starts afterwards alone; a source scan that the game's despawn, the harness's summon
+///   removal, the post-combat summon dismissal, the pre-encounter eviction, the new party after a defeat and the
+///   harness reset all call it before their Destroy, and that OnDestroy keeps it as the fallback;
 /// - a source scan that every PC tail ends a vacated player-run turn by reference (GameManager.IsVacatedPlayerTurn:
 ///   ShowActionChoices, EndCurrentTurn, AfterAttackDelay, DelayedEndActivePCTurn; IsCurrentTurnOf in the grapple moves)
 ///   and that the harness's summon removal marks the summon out of play;
@@ -62,6 +70,7 @@ public static class SummonDespawnTimingTests
             if (GameManager.Instance != null && GameManager.Instance.Grid != null)
             {
                 Run(TestDespawnIsSynchronous);
+                Run(TestExpiryReleasesLinksAtOnce);
                 Run(TestLesserGlobeCentreFromGrid);
             }
             else
@@ -534,6 +543,120 @@ public static class SummonDespawnTimingTests
         }
     }
 
+    /// <summary>
+    /// CRE-311. A celestial dog summoned for 1 round is grappled by an enemy (the enemy started the grapple, as the
+    /// werewolf of soak seed 48 did) and has feinted a bystander. Its duration runs out in GameManager.TickSummonDurations
+    /// (the round-boundary expiry, just before the next creature's turn_start): before the call returns, so in that frame
+    /// and before Unity destroys the dog, the grapple link is gone for both and neither keeps Grappled, and the
+    /// bystander's Feinted marker is gone. Calling the release again (the end-of-frame OnDestroy fallback) changes nothing,
+    /// not even a grapple the freed partner starts afterwards.
+    /// </summary>
+    private static void TestExpiryReleasesLinksAtOnce()
+    {
+        GameManager gm = GameManager.Instance;
+        TurnService turns = gm.GetComponent<TurnService>();
+        MethodInfo spawn = typeof(GameManager).GetMethod("SpawnSummonedCreature", Private);
+        MethodInfo register = typeof(GameManager).GetMethod("RegisterActiveSummon", Private);
+        MethodInfo tick = typeof(GameManager).GetMethod("TickSummonDurations", Private);
+        MethodInfo profiles = typeof(GameManager).GetMethod("DestroyUnusedSummonAIProfiles", Private);
+        MethodInfo establish = typeof(CharacterController).GetMethod("EstablishGrappleWith", Private);
+        MethodInfo feint = typeof(CharacterController).GetMethod("RegisterSuccessfulFeint", Private);
+        FieldInfo behaviorsField = typeof(GameManager).GetField("_npcAIBehaviors", Private);
+        Assert(turns != null && spawn != null && register != null && tick != null && establish != null && feint != null && behaviorsField != null,
+            "CRE-311: the members the expiry release check reflects on exist (TST-006)");
+        if (turns == null || spawn == null || register == null || tick == null || establish == null || feint == null || behaviorsField == null)
+            return;
+        if (turns.IsCombatActive)
+        {
+            Assert(false, "CRE-311: the expiry release check needs a scene with no fight running");
+            return;
+        }
+
+        SquareCell cell = null;
+        for (int y = gm.Grid.Height - 1; y >= 0 && cell == null; y--)
+            for (int x = gm.Grid.Width - 1; x >= 0 && cell == null; x--)
+            {
+                SquareCell c = gm.Grid.GetCell(new Vector2Int(x, y));
+                if (c != null && !c.IsOccupied)
+                    cell = c;
+            }
+        Assert(cell != null, "CRE-311: the scene grid has a free square for the summon");
+        if (cell == null)
+            return;
+
+        CharacterController caster = Make("Expiry Caster");
+        caster.ConfigureTeamControl(CharacterTeam.Player, false);
+        CharacterController partner = Make("Expiry Grappler");
+        partner.ConfigureTeamControl(CharacterTeam.Enemy, false);
+        CharacterController bystander = Make("Expiry Bystander");
+        bystander.ConfigureTeamControl(CharacterTeam.Enemy, false);
+        CharacterController other = Make("Expiry Second Partner");
+        other.ConfigureTeamControl(CharacterTeam.Player, false);
+        var option = new SummonMonsterOption { DisplayName = "Dog", NpcDefinitionId = "dog", TemplateId = "celestial", SummonedCreatureAlignment = Alignment.LawfulGood };
+        CharacterController summon = null;
+        TokenView view = null;
+        var behaviors = (IList)behaviorsField.GetValue(gm);
+        var savedBehaviors = new List<object>();
+        foreach (object b in behaviors)
+            savedBehaviors.Add(b);
+        while (behaviors.Count < gm.NPCs.Count)
+            behaviors.Add(NPCAIBehavior.AggressiveMelee);
+        try
+        {
+            summon = (CharacterController)spawn.Invoke(gm, new object[] { caster, cell.Coords, option, false });
+            Assert(summon != null, "CRE-311: the game's summon spawn brings the celestial dog");
+            if (summon == null)
+                return;
+            register.Invoke(gm, new object[] { summon, caster, null, 1, false, false });
+            turns.AddToInitiative(summon, false);
+            view = summon.View;
+
+            establish.Invoke(partner, new object[] { summon });
+            feint.Invoke(summon, new object[] { bystander });
+            bool linked = partner.IsInAnyGrappleLink(out CharacterController before) && ReferenceEquals(before, summon);
+            Assert(linked && partner.HasCondition(CombatConditionType.Grappled) && summon.HasCondition(CombatConditionType.Grappled)
+                   && bystander.HasCondition(CombatConditionType.Feinted),
+                "CRE-311 before: the enemy grapples the dog (both Grappled) and the bystander is feinted by the dog");
+
+            tick.Invoke(gm, null); // GameManager.TickSummonDurations: 1 round left -> 0 -> DespawnSummonWithEffect("duration expired")
+
+            Assert(!gm.Harness_IsActiveSummon(summon) && summon.IsRemovedFromPlay, "CRE-311: the expired dog left play in the tick");
+            Assert(summon != null, "CRE-311: Unity has not destroyed it yet (Destroy waits for the end of the frame), so the checks below run in the despawn's frame");
+            Assert(!partner.IsInAnyGrappleLink(out _) && !partner.IsGrappling() && !partner.HasCondition(CombatConditionType.Grappled),
+                "CRE-311: in that frame the partner is no longer in a grapple and has no Grappled condition (PHB p.173; PHB p.309, delegated RAW reading)");
+            Assert(!summon.IsInAnyGrappleLink(out _) && !summon.HasCondition(CombatConditionType.Grappled),
+                "CRE-311: in that frame the vanished dog holds no one and no one holds it");
+            Assert(!bystander.HasCondition(CombatConditionType.Feinted), "CRE-311: in that frame the dog's feint marker on the bystander is gone");
+
+            establish.Invoke(partner, new object[] { other });
+            summon.ReleaseLinksOnLeavingPlay("character removed"); // what the end-of-frame OnDestroy runs
+            Assert(partner.IsInAnyGrappleLink(out CharacterController after) && ReferenceEquals(after, other)
+                   && partner.HasCondition(CombatConditionType.Grappled) && other.HasCondition(CombatConditionType.Grappled),
+                "CRE-311: the release is idempotent: the OnDestroy fallback leaves a grapple the freed partner started afterwards alone");
+        }
+        finally
+        {
+            partner.ReleaseGrappleState("test cleanup");
+            if (summon != null)
+                summon.ReleaseGrappleState("test cleanup");
+            if (summon != null && gm.NPCs.Contains(summon))
+                gm.NPCs.Remove(summon);
+            behaviors.Clear();
+            foreach (object b in savedBehaviors)
+                behaviors.Add(b);
+            if (view != null)
+                Object.DestroyImmediate(view.gameObject);
+            if (summon != null)
+            {
+                turns.RemoveFromInitiative(summon);
+                gm.Grid.ClearCreatureOccupancy(summon);
+                Object.DestroyImmediate(summon.gameObject);
+            }
+            DestroyAll(caster, partner, bystander, other);
+            profiles?.Invoke(gm, null);
+        }
+    }
+
     private static void TestLesserGlobeCentreFromGrid()
     {
         GameManager gm = GameManager.Instance;
@@ -591,6 +714,32 @@ public static class SummonDespawnTimingTests
         Assert(view >= 0 && npcs > view && behaviors > npcs && initiative > behaviors && destroy > initiative,
             "It detaches the view first, removes NPCs and the AI behaviour together, then the initiative entry, and destroys the model last",
             $"view {view}, NPCs {npcs}, behaviours {behaviors}, initiative {initiative}, destroy {destroy}");
+
+        // CRE-311: the links end in the despawn's frame, before the Destroy, on every way a creature leaves play.
+        int release = code.IndexOf("cc.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        Assert(release >= 0 && destroy > release, "CRE-311: DespawnSummonWithEffect ends the summon's grapple and feint links before its Destroy");
+        string harness = Regex.Replace(Body(Source("_Core/GameManager.ScenarioHarness.cs"), "internal void Harness_DespawnSummon(") ?? "", @"//[^\n]*", "");
+        int harnessRelease = harness.IndexOf("summon.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        int harnessRemove = harness.IndexOf("Harness_RemoveSpawnedController(", StringComparison.Ordinal);
+        Assert(harnessRelease >= 0 && harnessRemove > harnessRelease, "CRE-311: the harness's summon removal ends the links before it destroys the summon");
+        string rest = Regex.Replace(Body(Source("_Core/GameManager.cs"), "public void RestorePartyAfterCombat(") ?? "", @"//[^\n]*", "");
+        int restRelease = rest.IndexOf("activeSummon.Controller.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        int restDestroy = rest.IndexOf("Destroy(activeSummon.Controller.gameObject)", StringComparison.Ordinal);
+        Assert(restRelease >= 0 && restDestroy > restRelease, "CRE-311: the post-combat summon dismissal ends the links before the Destroy");
+        string evict = Regex.Replace(Body(Source("_Core/GameManager.NPCSetup.cs"), "private void EvictNonPoolNPC(") ?? "", @"//[^\n]*", "");
+        int evictRelease = evict.IndexOf("npc.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        int evictDestroy = evict.IndexOf("Destroy(npc.gameObject)", StringComparison.Ordinal);
+        Assert(evictRelease >= 0 && evictDestroy > evictRelease, "CRE-311: the pre-encounter eviction ends the links before the Destroy");
+        string newParty = Regex.Replace(Body(Source("_Core/GameManager.CombatEnd.cs"), "public void StartNewPartyAfterDefeat(") ?? "", @"//[^\n]*", "");
+        int newPartyRelease = newParty.IndexOf("summon.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        int newPartyDestroy = newParty.IndexOf("Destroy(summon.gameObject)", StringComparison.Ordinal);
+        Assert(newPartyRelease >= 0 && newPartyDestroy > newPartyRelease, "CRE-311: the new party after a defeat ends each summon's links before its Destroy");
+        string reset = Regex.Replace(Body(Source("_Core/GameManager.ScenarioHarness.cs"), "internal string Harness_ResetWorld(") ?? "", @"//[^\n]*", "");
+        int resetRelease = reset.IndexOf("summon.ReleaseLinksOnLeavingPlay(", StringComparison.Ordinal);
+        int resetRemove = reset.IndexOf("Harness_RemoveSpawnedController(summon)", StringComparison.Ordinal);
+        Assert(resetRelease >= 0 && resetRemove > resetRelease, "CRE-311: the harness reset ends each summon's links before it removes the summon");
+        string onDestroy = Regex.Replace(Body(Source("Character/Controller/CharacterController.cs"), "private void OnDestroy()") ?? "", @"//[^\n]*", "");
+        Assert(onDestroy.Contains("ReleaseLinksOnLeavingPlay("), "CRE-311: CharacterController.OnDestroy keeps the release as the fallback");
     }
 
     private static void TestGlobeSourcesReadTheGrid()

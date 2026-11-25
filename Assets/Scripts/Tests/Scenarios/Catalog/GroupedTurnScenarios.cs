@@ -16,6 +16,8 @@ namespace Tests.Scenarios
     /// grid, NPCs, the summon lists and the initiative order at once, its despawn line before the next creature's turn,
     /// while its view plays the fade; a summon slain on its own turn does not cost the next creature its turn; the Lesser
     /// Globe is centred on the caster's grid square when cast, not its token, and stays there (PHB p.236, SPL-335).
+    /// CRE-311: a summon that expires while it grapples ends the grapple for its partner in the despawn itself, before the
+    /// partner's turn starts (PHB p.173; the partner freed, a delegated RAW reading of 2026-11-25, PHB p.309).
     /// Step 5 (CMB-308): a forced PC turn's grapple escape takes the AI decider's escape square and opens no square selection
     /// (batch 13 C7). Step 6: the AI speed factor follows the turn kind: Ai on an NPC's, a Scripted ally's and a forced PC
     /// turn, Player on a player-run turn from its menu on, through its attack hand-off (C2); the trace is the same at any
@@ -34,6 +36,7 @@ namespace Tests.Scenarios
             yield return S("token-view-mirrors-tokens", TokenViewMirrorsTokens);
             yield return S("summon-slain-leaves-initiative-at-once", SummonSlainLeavesInitiativeAtOnce);
             yield return S("summon-expires-leaves-at-once", SummonExpiresLeavesAtOnce);
+            yield return S("summon-expiry-ends-grapple-at-once", SummonExpiryEndsGrappleAtOnce);
             yield return S("summon-slain-on-own-turn-next-still-acts", SummonSlainOnOwnTurnNextStillActs);
             yield return S("summon-slain-off-its-move-next-still-acts", SummonSlainOffItsMoveNextStillActs);
             yield return S("lesser-globe-stays-put", LesserGlobeStaysPut);
@@ -245,6 +248,8 @@ namespace Tests.Scenarios
             return adopted;
         }
 
+        private static bool HasCond(JsonObj snap, string cond) => snap != null && snap.Get("conds") is List<string> l && l.Contains(cond);
+
         private static TurnService Turns(ScenarioContext ctx) => ctx.Gm != null ? ctx.Gm.GetComponent<TurnService>() : null;
 
         /// <summary>What still holds <paramref name="summon"/> in play (null: nothing): NPCs, the initiative order, the active summons, its square.</summary>
@@ -392,6 +397,114 @@ namespace Tests.Scenarios
                 })
                 .Expect("The dog took its round-1 turn", v =>
                     v.TurnsOf("pet").Any(e => e.Round == 1) ? ExpectResult.Pass("round 1 turn") : ExpectResult.Fail("no round-1 turn of the dog"))
+                .Build();
+        }
+
+        /// <summary>
+        /// CRE-311. The grapple drill orc is first in the order; the summoner (Scripted) brings a celestial dog (MM p.271)
+        /// into the fight for 1 round next to it, and the dog grapples the orc on its round-1 turn (forced dice; the orc
+        /// makes no attacks of opportunity). At the round-2 boundary the dog's duration runs out
+        /// (GameManager.TickSummonDurations), just before the orc's turn starts, as the werewolf's in soak seed 48: a
+        /// summoned creature is sent back instantly (PHB p.173), so the grapple ends for the orc (a delegated RAW reading
+        /// of 2026-11-25: grappling is a struggle with an opponent, PHB p.309, and none is left) in the despawn itself:
+        /// both Grappled removals come after the expiry line and before the orc's round-2 turn_start, whose snapshot shows
+        /// neither creature grappled, and the orc (the AI from round 2) does nothing against the vanished dog. Before the
+        /// fix the release waited for the end-of-frame CharacterController.OnDestroy, so a turn start in the despawn's frame
+        /// still saw the grapple, and an AI decision in that frame could target the vanished dog. The expiry point is the
+        /// round-boundary summon tick of SPL-032 (PHB p.138 would end a 1-round summon just before its summoner's count in
+        /// round 2, after the orc's turn): once SPL-032 is fixed, rework the order so the expiry still falls right before
+        /// the partner's turn start, the same-frame case this scenario pins.
+        /// </summary>
+        private static ScenarioDef SummonExpiryEndsGrappleAtOnce()
+        {
+            Vector2Int square = new Vector2Int(7, 10);
+            return Rules("rules/summon-expiry-ends-grapple-at-once", "A summon that expires while grappling frees its partner in the despawn, before the partner's turn (PHB p.173, PHB p.309 delegated RAW reading; CRE-311)")
+                .Covers("CRE-311", "CRE-312", "grouped AI turns step 9", "PHB p.173", "PHB p.309", "SPL-032", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Npc("orc", "orc_grapple_drill", 8, 10, Control.Scripted)
+                .Pc("summoner", ActorSource.Stats(() => RulesScenarios.Fighter("Summoner", 3)), 5, 10, Control.Scripted)
+                .Adopted("pet", Control.Scripted, CharacterTeam.Player)
+                .Tweak("summoner", Sturdy)
+                .Tweak("orc", c => { Sturdy(c); c.Stats.CanMakeAttacksOfOpportunity = false; })
+                .Initiative("orc", "summoner")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", 1)
+                .Force(20, 1, "Grapple check", 1)
+                .Turn("orc", 1, Step.Pass())
+                .AiWhenUnscripted("orc")
+                .Turn("summoner", 1, Step.Assert("Summon the celestial dog next to the orc for 1 round", ctx =>
+                    SummonAndAdopt(ctx, "summoner", "pet", square.x, square.y, CelestialDog(), 1, hp: 0)))
+                .Turn("pet", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("summoner", 2, Step.Pass())
+                .Expect("The summoner's checks hold", Expect.AssertsPass())
+                .Expect("Round 1: the dog grapples the orc, both Grappled at the end of its turn", v =>
+                {
+                    TraceEvent m = v.Maneuvers("pet", SpecialAttackType.Grapple).FirstOrDefault();
+                    if (m == null || !m.Bool("success"))
+                        return ExpectResult.Fail("no successful grapple by the dog");
+                    bool petGr = v.Conds("pet", CombatConditionType.Grappled).Any(e => e.Bool("added") && e.Round == 1);
+                    bool orcGr = v.Conds("orc", CombatConditionType.Grappled).Any(e => e.Bool("added") && e.Round == 1);
+                    return petGr && orcGr ? ExpectResult.Pass("grapple #" + m.Seq + ", both Grappled", m.Seq) : ExpectResult.Fail("Grappled added: dog " + petGr + ", orc " + orcGr, m.Seq);
+                })
+                .Expect("The dog expires at the round-2 boundary, right before the orc's turn (CRE-312)", v =>
+                {
+                    List<TraceEvent> lines = v.Log(ExpiredLine);
+                    if (lines.Count != 1)
+                        return ExpectResult.Fail(lines.Count + " expiry lines", lines.Select(e => e.Seq).ToArray());
+                    TraceEvent next = NextTurnStart(v, lines[0].Seq);
+                    if (next == null)
+                        return ExpectResult.Fail("no turn after the expiry line", lines[0].Seq);
+                    return lines[0].Round == 2 && next.Str("actor") == "orc"
+                        ? ExpectResult.Pass("expiry #" + lines[0].Seq + " (frame " + lines[0].Frame + "), then the orc's turn #" + next.Seq + " (frame " + next.Frame + ")", lines[0].Seq, next.Seq)
+                        : ExpectResult.Fail("expiry #" + lines[0].Seq + " in round " + lines[0].Round + ", next turn #" + next.Seq + " is " + next.Str("actor"), lines[0].Seq, next.Seq);
+                })
+                .Expect("Both Grappled conditions are removed after the expiry line and before the orc's turn starts (PHB p.173, p.309; CRE-311)", v =>
+                {
+                    TraceEvent line = v.Log(ExpiredLine).FirstOrDefault();
+                    TraceEvent turn = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 2);
+                    if (line == null || turn == null)
+                        return ExpectResult.Fail("expiry line " + (line != null) + ", orc round-2 turn " + (turn != null));
+                    TraceEvent petOff = v.Conds("pet", CombatConditionType.Grappled).FirstOrDefault(e => !e.Bool("added"));
+                    TraceEvent orcOff = v.Conds("orc", CombatConditionType.Grappled).FirstOrDefault(e => !e.Bool("added"));
+                    if (petOff == null || orcOff == null)
+                        return ExpectResult.Fail("Grappled removed: dog " + (petOff != null) + ", orc " + (orcOff != null), line.Seq, turn.Seq);
+                    bool inWindow = petOff.Seq > line.Seq && orcOff.Seq > line.Seq && petOff.Seq < turn.Seq && orcOff.Seq < turn.Seq;
+                    return inWindow
+                        ? ExpectResult.Pass("expiry #" + line.Seq + ", removals #" + petOff.Seq + " and #" + orcOff.Seq + ", orc turn #" + turn.Seq, line.Seq, petOff.Seq, orcOff.Seq, turn.Seq)
+                        : ExpectResult.Fail("expiry #" + line.Seq + ", removals #" + petOff.Seq + " and #" + orcOff.Seq + ", orc turn #" + turn.Seq, line.Seq, petOff.Seq, orcOff.Seq, turn.Seq);
+                })
+                .Expect("The orc's round-2 turn_start snapshot shows neither the orc nor the vanished dog grappled (CRE-311)", v =>
+                {
+                    JsonObj o = v.Snapshot("orc", 2, "orc");
+                    if (o == null)
+                        return ExpectResult.Fail("no orc snapshot at its round-2 turn");
+                    JsonObj d = v.Snapshot("pet", 2, "orc"); // the dog may or may not still be listed
+                    bool orcGr = (o.Get("gr") is bool g && g) || HasCond(o, "Grappled");
+                    bool petGr = d != null && ((d.Get("gr") is bool h && h) || HasCond(d, "Grappled"));
+                    return !orcGr && !petGr
+                        ? ExpectResult.Pass("orc free" + (d != null ? ", dog listed and free" : ", dog not listed"))
+                        : ExpectResult.Fail("orc grappled " + orcGr + ", dog grappled " + petGr);
+                })
+                .Expect("The orc's round-2 turn is an AI turn and nothing in it targets the vanished dog", v =>
+                {
+                    TraceEvent t = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 2);
+                    if (t == null)
+                        return ExpectResult.Fail("no orc turn in round 2");
+                    if (t.Str("controller") != "ai")
+                        return ExpectResult.Fail("controller " + t.Str("controller"), t.Seq);
+                    var against = v.Attacks("orc", "pet").Where(e => e.Seq > t.Seq).Select(e => e.Seq)
+                        .Concat(v.Maneuvers("orc").Where(e => e.Seq > t.Seq && e.Str("target") == "pet").Select(e => e.Seq)).ToArray();
+                    return against.Length == 0
+                        ? ExpectResult.Pass("ai turn #" + t.Seq + ", no attack or maneuver against the dog", t.Seq)
+                        : ExpectResult.Fail(against.Length + " attack or maneuver event(s) against the vanished dog", against);
+                })
+                .Expect("The dog took its round-1 turn and none after it expired", v =>
+                {
+                    List<TraceEvent> turns = v.TurnsOf("pet");
+                    return turns.Count == 1 && turns[0].Round == 1
+                        ? ExpectResult.Pass("one turn, round 1", turns[0].Seq)
+                        : ExpectResult.Fail(turns.Count + " turns (rounds " + string.Join(",", turns.Select(e => e.Round)) + ")", turns.Select(e => e.Seq).ToArray());
+                })
                 .Build();
         }
 
