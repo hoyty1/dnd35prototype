@@ -26,14 +26,11 @@ using System.Collections.Generic;
 /// </summary>
 public static class PoisonTiming
 {
-    /// <summary>DMG p.296: secondary damage 1 minute after exposure, 10 rounds (PHB p.138).</summary>
-    public const int SecondaryDelayRounds = 10;
-
     /// <summary>
-    /// The game's ingested-poison delay, 10 minutes. The DMG gives 1 minute for every type; kept as a possibly intentional
-    /// deviation until the owner rules (CMB-307, owner question Q6 of docs/designs/grouped_ai_turns.md).
+    /// DMG p.296-297: secondary damage 1 minute after exposure for every delivery type (contact, ingested, inhaled,
+    /// injury), so 10 rounds (PHB p.138).
     /// </summary>
-    public const int IngestedSecondaryDelayRounds = 100;
+    public const int SecondaryDelayRounds = 10;
 
     /// <summary>
     /// <paramref name="count"/>'s initiative count was reached: every pending poison on <paramref name="victims"/>

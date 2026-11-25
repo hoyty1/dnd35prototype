@@ -14,8 +14,8 @@ namespace Tests.Combat
 /// exposure (DMG p.296-297), 10 rounds (PHB p.138), counted at the initiative count of the creature whose turn it was at
 /// exposure, like every duration (TurnDurations, CMB-006), and never in real time (PoisonTiming).
 ///
-/// Checks: the delay is 10 rounds for injury, contact and inhaled poisons and stays 100 for ingested ones until the owner
-/// rules (CMB-307, Q6); played through TurnService as GameManager wires it, the secondary rolls at the exposure turn's count
+/// Checks: the delay is 10 rounds for every delivery type, injury, contact, inhaled and ingested alike (DMG p.296-297;
+/// owner ruling 2026-11-24, CMB-307, Q6); played through TurnService as GameManager wires it, the secondary rolls at the exposure turn's count
 /// 10 rounds later, before that creature acts, and not at the victim's count; an anchor that leaves the order hands the
 /// poison to the same heir as its durations, and an unanchored poison ticks at the round boundary only; nothing reads
 /// frames or real time (no time field, no per-frame loop in GameManager.Update, ticks only at counts); a secondary still
@@ -130,9 +130,12 @@ public static class PoisonTimingTests
         Assert(new PoisonData { Type = PoisonType.Contact }.GetSecondaryDamageDelayRounds() == 10
                && new PoisonData { Type = PoisonType.Inhaled }.GetSecondaryDamageDelayRounds() == 10,
             "Contact and inhaled poisons also wait 10 rounds (DMG p.296)");
-        Assert(ingested != null && ingested.Type == PoisonType.Ingested && ingested.GetSecondaryDamageDelayRounds() == 100,
-            "An ingested poison keeps the game's 100 rounds until the owner rules (CMB-307, Q6)",
+        Assert(ingested != null && ingested.Type == PoisonType.Ingested && ingested.GetSecondaryDamageDelayRounds() == 10,
+            "An ingested poison's secondary also comes 10 rounds (1 minute) after exposure (DMG p.296-297; owner ruling 2026-11-24, CMB-307)",
             ingested == null ? "(no poison)" : "(rounds=" + ingested.GetSecondaryDamageDelayRounds() + ")");
+        Assert(new PoisonData { Type = PoisonType.Ingested }.GetSecondaryDamageDelayRounds() == PoisonTiming.SecondaryDelayRounds
+               && typeof(PoisonTiming).GetField("IngestedSecondaryDelayRounds", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static) == null,
+            "No delivery type has its own delay: the ingested constant is gone (CMB-307)");
 
         CharacterController victim = Make("Delay Victim");
         try
@@ -148,6 +151,10 @@ public static class PoisonTimingTests
                 p.RoundsUntilSecondary = 1;
                 Assert(p.GetStatusSummary().Contains("secondary in 1 round)"), "One round left reads in the singular", p.GetStatusSummary());
             }
+            ActivePoison swallowed = Expose(victim, IngestedPoison, null);
+            Assert(swallowed != null && swallowed.RoundsUntilSecondary == 10 && !swallowed.SecondaryResolved,
+                "An ingested exposure (arsenic) also counts 10 rounds (DMG p.296-297, CMB-307)",
+                swallowed == null ? "(no poison)" : "(rounds=" + swallowed.RoundsUntilSecondary + ")");
         }
         finally
         {

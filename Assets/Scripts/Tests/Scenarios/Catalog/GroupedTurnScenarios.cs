@@ -9,7 +9,7 @@ namespace Tests.Scenarios
 {
     /// <summary>
     /// Grouped AI turns (docs/designs/grouped_ai_turns.md). Step 2 (CMB-007): a poison's secondary save comes 10 rounds
-    /// after exposure (DMG p.296: 1 minute; PHB p.138: 10 rounds), at the initiative count of the creature whose turn it was
+    /// after exposure (DMG p.296-297: 1 minute for every type, ingested ones included since CMB-307; PHB p.138: 10 rounds), at the initiative count of the creature whose turn it was
     /// at exposure, whatever the real time; one still pending when the fight ends resolves at combat end, in initiative
     /// order, after CombatOver and before the loot window (delegated RAW reading 2026-11-16). Step 3: every token renders
     /// through its mirror view (TokenView), which follows its model. Step 4 (CRE-312): a summon slain or expired leaves the
@@ -27,11 +27,14 @@ namespace Tests.Scenarios
     {
         private const string Venom = "medium_spider_poison"; // MM p.289: Medium monstrous spider, injury, Fort DC 12, 1d3 Str / 1d3 Str
         private const string VenomName = "Medium Spider Venom";
+        private const string Ingested = "arsenic"; // DMG p.296-297: an ingested poison (PoisonType.Ingested)
+        private const string IngestedName = "Arsenic";
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
         {
             yield return S("poison-secondary-after-ten-rounds", PoisonSecondaryAfterTenRounds);
+            yield return S("poison-ingested-secondary-after-ten-rounds", PoisonIngestedSecondaryAfterTenRounds);
             yield return S("poison-secondary-pending-at-combat-end", PoisonSecondaryPendingAtCombatEnd);
             yield return S("token-view-mirrors-tokens", TokenViewMirrorsTokens);
             yield return S("summon-slain-leaves-initiative-at-once", SummonSlainLeavesInitiativeAtOnce);
@@ -55,7 +58,7 @@ namespace Tests.Scenarios
             c.Stats.CurrentHP += 300;
         }
 
-        private static string SecondaryLine(string name) => "^☣ " + name + " makes secondary save vs " + VenomName;
+        private static string SecondaryLine(string name, string poisonName = VenomName) => "^☣ " + name + " makes secondary save vs " + poisonName;
 
         // ── Step 2: poison secondaries in rounds (CMB-007) ─────────────
 
@@ -119,6 +122,67 @@ namespace Tests.Scenarios
                     return v.Before(hero.Seq, line.Seq) && v.Before(ally.Seq, line.Seq) && v.Before(line.Seq, spider.Seq)
                         ? ExpectResult.Pass("hero #" + hero.Seq + ", bystander #" + ally.Seq + ", save #" + line.Seq + ", spider #" + spider.Seq, line.Seq)
                         : ExpectResult.Fail("hero #" + hero.Seq + ", bystander #" + ally.Seq + ", save #" + line.Seq + ", spider #" + spider.Seq, line.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-307 (owner ruling 2026-11-24, grouped AI turns Q6): an ingested poison's secondary save also comes 1 minute,
+        /// 10 rounds, after exposure (DMG p.296-297 give every delivery type the same 1 minute; PHB p.138), not the 100
+        /// rounds (10 minutes) the game used before. The orc's (Scripted) step makes the hero swallow arsenic on the orc's
+        /// turn of round 1, a scripted exposure (no routine in play delivers an ingested poison); the secondary save rolls at
+        /// the orc's count of round 11, after the hero's round-11 turn and before the orc's.
+        /// </summary>
+        private static ScenarioDef PoisonIngestedSecondaryAfterTenRounds()
+        {
+            return Rules("rules/poison-ingested-secondary-after-ten-rounds", "An ingested poison's secondary save also comes 10 rounds after exposure, not 100 (DMG p.296-297, PHB p.138; CMB-307)")
+                .Covers("CMB-307", "CMB-007", "DMG p.296", "DMG p.297", "PHB p.138", "PC_NPC_PARITY")
+                .MaxRounds(11)
+                .Pc("hero", ActorSource.Stats(() => RulesScenarios.Fighter("Poisoned Hero", 3)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 15, 10, Control.Scripted)
+                .Tweak("hero", Sturdy)
+                .Tweak("orc", Sturdy)
+                .Initiative("hero", "orc")
+                .Turn("orc", 1,
+                    Step.Assert("The hero swallows arsenic on the orc's turn: an ingested poison, 10 rounds to go, anchored to the orc's count", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        hero.ApplyPoison(Ingested);
+                        ActivePoison p = hero.ActivePoisons.LastOrDefault();
+                        ctx.Note("ingested exposure rounds=" + (p != null ? p.RoundsUntilSecondary : -1)
+                                 + " type=" + (p != null && p.PoisonData != null ? p.PoisonData.Type.ToString() : "none"));
+                        return p != null && p.PoisonData != null && p.PoisonData.Type == PoisonType.Ingested
+                               && p.RoundsUntilSecondary == 10 && p.DurationAnchor == ctx.Get("orc");
+                    }),
+                    Step.EndTurn())
+                .Turn("orc", 10,
+                    Step.Assert("At the orc's turn of round 10 one round is left", ctx =>
+                    {
+                        ActivePoison p = ctx.Get("hero").ActivePoisons.LastOrDefault();
+                        ctx.Note("ingested round 10 rounds=" + (p != null ? p.RoundsUntilSecondary : -1));
+                        return p != null && !p.SecondaryResolved && p.RoundsUntilSecondary == 1;
+                    }),
+                    Step.EndTurn())
+                .Expect("The exposure and round-10 checks hold", Expect.AssertsPass())
+                .Expect("Exactly one secondary save, in round 11 (DMG p.296-297: 1 minute for every type = 10 rounds, PHB p.138)", v =>
+                {
+                    List<TraceEvent> lines = v.Log(SecondaryLine("Poisoned Hero", IngestedName));
+                    if (lines.Count != 1)
+                        return ExpectResult.Fail(lines.Count + " secondary save lines (rounds " + string.Join(",", lines.Select(e => e.Round)) + ")", lines.Select(e => e.Seq).ToArray());
+                    return lines[0].Round == 11
+                        ? ExpectResult.Pass(lines[0].Str("text"), lines[0].Seq)
+                        : ExpectResult.Fail("secondary save in round " + lines[0].Round, lines[0].Seq);
+                })
+                .Expect("It rolls at the orc's count: after the hero's round-11 turn, before the orc's (CMB-006)", v =>
+                {
+                    TraceEvent line = v.Log(SecondaryLine("Poisoned Hero", IngestedName)).FirstOrDefault();
+                    TraceEvent hero = v.TurnsOf("hero").FirstOrDefault(e => e.Round == 11);
+                    TraceEvent orc = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 11);
+                    if (line == null || hero == null || orc == null)
+                        return ExpectResult.Fail("missing: line " + (line != null) + ", hero " + (hero != null) + ", orc " + (orc != null));
+                    return v.Before(hero.Seq, line.Seq) && v.Before(line.Seq, orc.Seq)
+                        ? ExpectResult.Pass("hero #" + hero.Seq + ", save #" + line.Seq + ", orc #" + orc.Seq, line.Seq)
+                        : ExpectResult.Fail("hero #" + hero.Seq + ", save #" + line.Seq + ", orc #" + orc.Seq, line.Seq);
                 })
                 .Build();
         }

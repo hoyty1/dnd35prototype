@@ -38,23 +38,14 @@ public class PoisonData
     }
 
     /// <summary>
-    /// Rounds from exposure to the secondary save (DMG p.296: secondary damage comes 1 minute after exposure, and a
-    /// minute is 10 rounds, PHB p.138). Ingested poisons keep the 100 rounds (10 minutes) the game has always used for
-    /// them, a possibly intentional deviation from the DMG's 1 minute for every type that waits for the owner (CMB-307).
-    /// Counted at an initiative count like any duration (PoisonTiming, CMB-007), never in real time.
+    /// Rounds from exposure to the secondary save: DMG p.296-297 times every poison's secondary damage 1 minute after
+    /// exposure, whatever its delivery type (contact, ingested, inhaled or injury; the Ingested paragraph gives no other
+    /// timing), and a minute is 10 rounds (PHB p.138). Counted at an initiative count like any duration (PoisonTiming,
+    /// CMB-007), never in real time.
     /// </summary>
     public int GetSecondaryDamageDelayRounds()
     {
-        switch (Type)
-        {
-            case PoisonType.Ingested:
-                return PoisonTiming.IngestedSecondaryDelayRounds;
-            case PoisonType.Contact:
-            case PoisonType.Injury:
-            case PoisonType.Inhaled:
-            default:
-                return PoisonTiming.SecondaryDelayRounds;
-        }
+        return PoisonTiming.SecondaryDelayRounds;
     }
 }
 

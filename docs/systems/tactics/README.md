@@ -240,7 +240,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CRE-031 |
 | 7 | Movement modes: fly 42 (+ fly variants), climb 10+2, swim 3+2+1, burrow 4, earth glide 6. Prerequisite for flyby, ink-cloud escape and burrow-ambush AI | 60+ | High (positioning) | High (no fly/swim/climb speed exists on `NPCDefinition`) | GRID-027 (flight only; swim, climb and burrow not filed); AI-019 |
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
-| 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, the ingested secondary delay (real-time timing fixed 2026-11-24, CMB-007) | 25+14+5 | Med | Med | CMB-307, CRE-014 |
+| 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison (real-time secondary timing fixed 2026-11-24, CMB-007; the ingested secondary delay at the RAW 10 rounds since 2026-11-25, CMB-307) | 25+14+5 | Med | Med | CRE-014 |
 | 10 | Fast healing as its own field (not regeneration) | 22 | Low (AI: n/a) | Med | CRE-017 |
 | 11 | Smite (template and paladin): one executor; target alignment; the summon-AI formula (done 2026-10-14: `SmiteRules`, CHR-020, CMB-021, AI-056) | 22+8+11+4+3 | Med | Med | - |
 | 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-008, CRE-017 (AI-040 fixed in batch 13 step 18) |
