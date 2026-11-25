@@ -2260,6 +2260,17 @@
       "notes": "Grouped AI turns step 3 (gt-token-view, NEUTRAL; added 2026-11-24): every token renders through its mirror view TokenView (UI/Presentation/TokenView.cs). The view is its own root GameObject without a CharacterController, the model's SpriteRenderer has forceRenderingOff and the view's own renderer is drawn, nothing is parented to the model; after the view's LateUpdate (called by reflection, the suites are synchronous) it has the model's sprite, colour, enabled, flipX, flipY, sorting order, position and lossy scale (IsSyncedWithModel), a later change waits for the next LateUpdate; an inactive model hides the view's Body while the root stays active; a destroyed model releases the view (CharacterController.OnDestroy) and a view whose model vanished without that release is released by LateUpdate; the StatusEffectIndicator container (Start by reflection) and the summon aura, duration bar (SetDuration 3 of 6 sizes the fill 0.48) and [S] badge sit on the view's Body, EnsureSummonVisual and SummonVisual reach one visual through the controller, ClearSummonVisual drops it at once (DestroyImmediate) and the next EnsureSummonVisual is a fresh visual, and EnsureSummonVisual copies a reactivation first so the Body is active; a lost status icon container is rebuilt on the view by LateUpdate without an exception; a reused enemy pool slot (GameManager.CreateNPCPoolSlot, two spawns through InitializeNPCFromDefinition, CRE-046) keeps its view, shows the new creature's sprite and loses the old summon visual; a Flaming Sphere draws its quads on its own sprite-less view, which follows its moves and its destruction. Play only (Awake must run). 50/50 in its first Play pass (20261124T153125Z-play); 54/54 after the review fixes (4 assertions added, 2026-11-24)."
     },
     {
+      "type": "Tests.UI.CombatPresentationTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 77,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Grouped AI turns step 8 (2026-11-25): the presentation facade in Passthrough. Passthrough flags and Defer/WhenDrained at once, Boundary keeps the yield and Random.state, every public CombatUI method classed, the facade and cell gate apply at once, the queue order, the trace channels, the singleton on its own root, and the no-Random/no-rules-write scan of UI/Presentation/. 70/70 in run 20261125T142715Z-play; 77/77 after the review fixes (the trace fault isolation, the area indicator release in rules order, the QueuedClosure beat, the pacing kind and highlights restored; run 20261125T144849Z-play)."
+    },
+    {
       "type": "Tests.Magic.SummonDespawnTimingTests",
       "needs": "play",
       "skip": "",

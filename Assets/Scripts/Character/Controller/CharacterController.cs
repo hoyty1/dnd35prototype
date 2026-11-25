@@ -4555,6 +4555,8 @@ public class CharacterController : MonoBehaviour
             // Update logical position for the current animation segment.
             // Occupancy is restored once at the end to avoid clobbering allies while passing through.
             GridPosition = nextCell.Coords;
+            // A presentation boundary (grouped AI turns step 8): trace only in Passthrough; the rules half of the step is untouched.
+            CombatPresentation.RecordStep(this, fromCell, nextCell.Coords, startPos, endPos, secondsPerStep);
 
             float elapsed = 0f;
             while (elapsed < clampedStepDuration)
@@ -10368,6 +10370,19 @@ public class CharacterController : MonoBehaviour
             return;
 
         EndGrappleLink(link, reason);
+    }
+
+    /// <summary>
+    /// The other creature of this creature's grapple link, or null: a pure read for the presentation layer (the token
+    /// keyframe's grapple-blink partner, CombatPresentation.Boundary), with none of <see cref="TryGetGrappleState"/>'s
+    /// cleanup of a stale or broken link, so reading it never changes rules state.
+    /// </summary>
+    public CharacterController PeekGrappleOpponent()
+    {
+        if (!_grappleLinksByCharacter.TryGetValue(this, out GrappleLink link) || link == null)
+            return null;
+        CharacterController other = link.Controller == this ? link.Defender : link.Controller;
+        return other != null ? other : null;
     }
 
     public bool TryGetGrappleState(out CharacterController opponent, out bool isController, out bool isPinned, out bool opponentPinned)

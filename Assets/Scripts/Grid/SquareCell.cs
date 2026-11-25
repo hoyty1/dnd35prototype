@@ -144,9 +144,35 @@ public class SquareCell : MonoBehaviour
 
     public Vector2Int Coords => new Vector2Int(X, Y);
 
+    /// <summary>
+    /// The cell's highlight (the presentation gate, grouped AI turns step 8): the value is stored at once; the renderer
+    /// is written at once in Passthrough, or at its CellHighlight beat while the presentation queues. Nothing reads a
+    /// cell's highlight back.
+    /// </summary>
     public void SetHighlight(HighlightType type)
     {
+        _highlight = type;
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.CellHighlight, Cell = this, Highlight = type });
+            return;
+        }
+        ApplyHighlight(type);
+    }
+
+    /// <summary>The highlight last asked for (stored at call time, whatever the presentation shows).</summary>
+    private HighlightType _highlight;
+
+    /// <summary>The custom overlay last asked for: its colour and whether it is on (stored at call time).</summary>
+    private Color _overlayColor;
+    private bool _overlayOn;
+
+    /// <summary>Writes the highlight to the renderer (the former SetHighlight body).</summary>
+    internal void ApplyHighlight(HighlightType type)
+    {
         if (_sr == null) return;
+        if (PresentationTrace.Recording)
+            PresentationTrace.Cell(Coords, "t:" + type);
         switch (type)
         {
             case HighlightType.None:
@@ -205,22 +231,62 @@ public class SquareCell : MonoBehaviour
     /// </summary>
     public void SetHighlight(Color color)
     {
+        _overlayColor = color;
+        _overlayOn = true;
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.CellOverlay, Cell = this, Color = color, Flag = true });
+            return;
+        }
+        ApplyOverlay(color);
+    }
+
+    /// <summary>Writes the custom overlay colour (the former SetHighlight(Color) body).</summary>
+    internal void ApplyOverlay(Color color)
+    {
         EnsureCustomHighlightOverlay();
         if (_customHighlightOverlay == null)
             return;
 
         _customHighlightOverlay.color = color;
         _customHighlightOverlay.enabled = true;
+        if (PresentationTrace.Recording)
+            PresentationTrace.Cell(Coords, "o:" + PresentationText.ColorText(color));
     }
 
     /// <summary>
-    /// Clear custom overlay highlight used by persistent area effects.
+    /// Clear custom overlay highlight used by persistent area effects (gated like SetHighlight: stored at once, written
+    /// at once in Passthrough, at its beat while the presentation queues).
     /// </summary>
     public void ClearHighlight()
     {
-        if (_customHighlightOverlay != null)
-            _customHighlightOverlay.enabled = false;
+        _overlayOn = false;
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.CellOverlay, Cell = this, Flag = false });
+            return;
+        }
+        ApplyOverlayClear();
     }
+
+    /// <summary>Turns the custom overlay off (the former ClearHighlight body).</summary>
+    internal void ApplyOverlayClear()
+    {
+        if (_customHighlightOverlay != null)
+        {
+            _customHighlightOverlay.enabled = false;
+            if (PresentationTrace.Recording)
+                PresentationTrace.Cell(Coords, "o:off");
+        }
+    }
+
+    /// <summary>
+    /// The highlight and overlay last asked for, whatever the presentation shows: read only by the presentation layer
+    /// (step 9's Clear applies the latest cell state). No rules code reads a cell's highlight.
+    /// </summary>
+    internal HighlightType RequestedHighlight => _highlight;
+    internal bool RequestedOverlayOn => _overlayOn;
+    internal Color RequestedOverlayColor => _overlayColor;
 
     public void AddGroundItem(ItemData item)
     {

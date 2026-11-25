@@ -39,8 +39,8 @@ public partial class GameManager
             yield break;
 
         CurrentPhase = TurnPhase.NPCTurn;
-        CombatUI?.SetActivePC(0); // No PC active
-        CombatUI?.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
+        CombatUI?.SetActivePC(0, null); // No PC active
+        CombatUI?.SetActiveNPC(NPCs.IndexOf(npc), npc); // Highlight active NPC (the creature overload, grouped AI turns step 8)
         CombatUI?.SetActionButtonsVisible(false);
         CombatUI?.HideSummonContextMenu();
 
@@ -52,7 +52,7 @@ public partial class GameManager
 
         if (ShouldSkipTurnDueToHPState(npc))
         {
-            CombatUI?.SetActiveNPC(-1); // Clear NPC highlight
+            CombatUI?.SetActiveNPC(-1, null); // Clear NPC highlight
             if (npc != null && npc.Stats != null)
             {
                 string reason = GetUnableToActReason(npc);

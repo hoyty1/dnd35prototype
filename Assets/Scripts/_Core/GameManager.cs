@@ -4061,15 +4061,16 @@ public partial class GameManager : MonoBehaviour
         int pcIdx = GetPCIndex(pc);
         if (pcIdx > 0)
         {
-            CombatUI.SetActivePC(pcIdx);
-            CombatUI.SetActiveNPC(-1); // Clear NPC highlights when a core party member is active
+            // The creature overloads (grouped AI turns step 8): a recorded highlight resolves against the creature.
+            CombatUI.SetActivePC(pcIdx, pc);
+            CombatUI.SetActiveNPC(-1, null); // Clear NPC highlights when a core party member is active
         }
         else
         {
             // Player-controlled non-party combatants (hirelings, dominated foes, etc.)
             // still use player input but are represented in NPC panels.
-            CombatUI.SetActivePC(0);
-            CombatUI.SetActiveNPC(NPCs.IndexOf(pc));
+            CombatUI.SetActivePC(0, null);
+            CombatUI.SetActiveNPC(NPCs.IndexOf(pc), pc);
         }
 
         // Update initiative UI to highlight current character

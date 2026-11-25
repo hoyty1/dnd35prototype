@@ -22,7 +22,8 @@ public class StatusEffectIndicator : MonoBehaviour
 
     private static Sprite _badgeSprite;
 
-    private struct IconData
+    /// <summary>One status icon's data (public for the held-mode API, grouped AI turns step 8).</summary>
+    public struct IconData
     {
         public string Key;
         public string ShortLabel;
@@ -70,6 +71,61 @@ public class StatusEffectIndicator : MonoBehaviour
         return true;
     }
 
+    // Held mode (grouped AI turns, docs/designs/grouped_ai_turns.md "Run-ahead state kept hidden"; step 8 adds the API,
+    // unused until step 9): while held, LateUpdate does not rebuild the icons from the creature's live state; they show
+    // the icon data the presentation applied (each keyframe's), and the tooltip shows that data too.
+    private bool _held;
+    private List<IconData> _heldIcons;
+
+    /// <summary>True while the icons show applied keyframe data instead of the creature's live state.</summary>
+    public bool IsHeld => _held;
+
+    /// <summary>
+    /// The icon data of the creature's live state, built by the same builder LateUpdate uses (pure reads); empty before
+    /// Start bound the creature.
+    /// </summary>
+    public List<IconData> CaptureIcons()
+    {
+        if (_character == null || _character.Stats == null)
+            return new List<IconData>();
+        return BuildIconData();
+    }
+
+    /// <summary>The signature of <see cref="CaptureIcons"/> ("none" without icons; "" before Start bound the creature).</summary>
+    public string CaptureIconSignature()
+    {
+        if (_character == null || _character.Stats == null)
+            return "";
+        return BuildSignature(BuildIconData());
+    }
+
+    /// <summary>Holds the icons: LateUpdate stops rebuilding them from live state.</summary>
+    public void Hold()
+    {
+        _held = true;
+    }
+
+    /// <summary>Shows <paramref name="icons"/> while held (a keyframe's icon data); rebuilt only when its signature changed.</summary>
+    public void ApplyHeld(List<IconData> icons)
+    {
+        if (!_held || !EnsureContainer())
+            return;
+        _heldIcons = icons != null ? new List<IconData>(icons) : new List<IconData>();
+        string signature = BuildSignature(_heldIcons);
+        if (signature != _lastSignature)
+        {
+            RebuildIcons(_heldIcons);
+            _lastSignature = signature;
+        }
+    }
+
+    /// <summary>Ends the hold: the next LateUpdate shows the live state again.</summary>
+    public void ReleaseHold()
+    {
+        _held = false;
+        _heldIcons = null;
+    }
+
     private void LateUpdate()
     {
         if (!EnsureContainer())
@@ -78,6 +134,13 @@ public class StatusEffectIndicator : MonoBehaviour
             return;
 
         _iconContainer.localPosition = iconOffset;
+
+        if (_held)
+        {
+            // UpdateTooltip takes a null list (no icons applied yet): no per-frame allocation while held.
+            UpdateTooltip(_heldIcons);
+            return;
+        }
 
         List<IconData> iconData = BuildIconData();
         string signature = BuildSignature(iconData);

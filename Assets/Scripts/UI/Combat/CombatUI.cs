@@ -206,7 +206,7 @@ public class CombatUI : MonoBehaviour
     public void UpdateAllStats(CharacterController pc1, CharacterController pc2, CharacterController npc)
     {
         EnsureCharacterInfoPanel();
-        _characterInfoPanel?.UpdateAllStats(pc1, pc2, npc);
+        PresentPanel(_characterInfoPanel?.CaptureAllStats(pc1, pc2, npc));
     }
 
     /// <summary>
@@ -215,7 +215,7 @@ public class CombatUI : MonoBehaviour
     public void UpdateAllStats4PC(List<CharacterController> pcs, List<CharacterController> npcs)
     {
         EnsureCharacterInfoPanel();
-        _characterInfoPanel?.UpdateAllStats4PC(pcs, npcs);
+        PresentPanel(_characterInfoPanel?.CaptureAllStats4PC(pcs, npcs));
     }
 
     /// <summary>
@@ -224,7 +224,23 @@ public class CombatUI : MonoBehaviour
     public void UpdateAllStatsMultiNPC(CharacterController pc1, CharacterController pc2, List<CharacterController> npcs)
     {
         EnsureCharacterInfoPanel();
-        _characterInfoPanel?.UpdateAllStatsMultiNPC(pc1, pc2, npcs);
+        PresentPanel(_characterInfoPanel?.CaptureAllStatsMultiNPC(pc1, pc2, npcs));
+    }
+
+    /// <summary>
+    /// The presentation facade of a stat panel update (grouped AI turns step 8, Queued class): the values were captured
+    /// at call time; the snapshot is written at once in Passthrough, or recorded as a Panel beat while queueing.
+    /// </summary>
+    private void PresentPanel(PanelSnapshot snap)
+    {
+        if (snap == null)
+            return;
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Panel, Ui = this, Panel = snap });
+            return;
+        }
+        CharacterInfoPanel.Apply(snap);
     }
 
     /// <summary>
@@ -237,8 +253,19 @@ public class CombatUI : MonoBehaviour
 
     public void SetTurnIndicator(string message)
     {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.TurnIndicator, Ui = this, Text = message });
+            return;
+        }
+        ApplyTurnIndicator(message);
+    }
+
+    internal void ApplyTurnIndicator(string message)
+    {
         if (TurnIndicatorText != null)
             TurnIndicatorText.text = message;
+        PresentationTrace.State("indicator", message);
     }
 
     /// <summary>
@@ -275,8 +302,19 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateInitiativeDisplay(string initiativeText)
     {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Initiative, Ui = this, Text = initiativeText });
+            return;
+        }
+        ApplyInitiativeDisplay(initiativeText);
+    }
+
+    internal void ApplyInitiativeDisplay(string initiativeText)
+    {
         EnsureInitiativePanel();
         _initiativePanel?.UpdateInitiativeDisplay(initiativeText);
+        PresentationTrace.State("initiative", initiativeText);
     }
 
     /// <summary>
@@ -285,9 +323,21 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ShowCombatLog(string message)
     {
+        // The scenario hook stays the first statement: it runs at rules time, whatever the presentation does.
         ScenarioHooks.CombatLog?.Invoke(message);
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.Log, Ui = this, Text = message });
+            return;
+        }
+        ApplyCombatLog(message);
+    }
+
+    internal void ApplyCombatLog(string message)
+    {
         EnsureCombatLogPanel();
         _combatLogPanel?.AddMessage(message);
+        PresentationTrace.Applied("log", message);
     }
 
     /// <summary>
@@ -295,8 +345,20 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void AddTurnSeparator(int turnNumber)
     {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.TurnSeparator, Ui = this, Index = turnNumber });
+            return;
+        }
+        ApplyTurnSeparator(turnNumber);
+    }
+
+    internal void ApplyTurnSeparator(int turnNumber)
+    {
         EnsureCombatLogPanel();
         _combatLogPanel?.AddTurnSeparator(turnNumber);
+        if (PresentationTrace.Recording)
+            PresentationTrace.Applied("sep", turnNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -373,9 +435,29 @@ public class CombatUI : MonoBehaviour
         SetTurnIndicator("Roll initiative and prepare actions.");
     }
 
+    /// <summary>
+    /// The control beat (grouped AI turns S1, Control class): a presentation boundary, then the show (at once in
+    /// Passthrough; recorded while queueing).
+    /// </summary>
     public void ShowActionButtonsForCharacter(CharacterController character)
     {
+        CombatPresentation.Boundary(PresentationBoundary.Control);
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat
+            {
+                Kind = BeatKind.Control, Ui = this, Creature = character,
+                Show = () => ApplyShowActionButtonsForCharacter(character)
+            });
+            return;
+        }
+        ApplyShowActionButtonsForCharacter(character);
+    }
+
+    private void ApplyShowActionButtonsForCharacter(CharacterController character)
+    {
         string name = character != null && character.Stats != null ? character.Stats.CharacterName : "<null>";
+        PresentationTrace.Applied("control", name);
         Debug.Log($"[CombatUI] Showing action buttons for {name}");
 
         SetActionButtonsVisible(true);
@@ -391,20 +473,49 @@ public class CombatUI : MonoBehaviour
 
     public void AddCombatMessage(string message, MessageType type = MessageType.Normal)
     {
-        EnsureCombatLogPanel();
-        _combatLogPanel?.AddMessage(message, type);
+        PresentQueuedClosure("log", () =>
+        {
+            EnsureCombatLogPanel();
+            _combatLogPanel?.AddMessage(message, type);
+            PresentationTrace.Applied("log", message);
+        });
     }
 
     public void LogAttack(string attacker, string target, int roll, int mod, int total, int ac, bool hit)
     {
-        EnsureCombatLogPanel();
-        _combatLogPanel?.LogAttack(attacker, target, roll, mod, total, ac, hit);
+        PresentQueuedClosure("log", () =>
+        {
+            EnsureCombatLogPanel();
+            _combatLogPanel?.LogAttack(attacker, target, roll, mod, total, ac, hit);
+            if (PresentationTrace.Recording)
+                PresentationTrace.Applied("log", "attack " + attacker + ">" + target + " " + total + " vs " + ac + (hit ? " hit" : " miss"));
+        });
     }
 
     public void LogDamage(string target, int damage, string damageType = "")
     {
-        EnsureCombatLogPanel();
-        _combatLogPanel?.LogDamage(target, damage, damageType);
+        PresentQueuedClosure("log", () =>
+        {
+            EnsureCombatLogPanel();
+            _combatLogPanel?.LogDamage(target, damage, damageType);
+            if (PresentationTrace.Recording)
+                PresentationTrace.Applied("log", "damage " + target + " " + damage + " " + damageType);
+        });
+    }
+
+    /// <summary>
+    /// A rarely used Queued-class call (no caller today): applied at once in Passthrough, recorded as a QueuedClosure beat
+    /// (a closure over the call's own arguments) while queueing. Its apply writes its own trace line, in both paths, so
+    /// the beat adds none (unlike a Deferred beat's "defer" line).
+    /// </summary>
+    private void PresentQueuedClosure(string label, System.Action apply)
+    {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.QueuedClosure, Ui = this, Text = label, Show = apply });
+            return;
+        }
+        apply();
     }
 
     public string ExportCombatLog()
@@ -415,6 +526,17 @@ public class CombatUI : MonoBehaviour
 
     public void SetActionButtonsVisible(bool visible)
     {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.ActionButtonsVisible, Ui = this, Flag = visible });
+            return;
+        }
+        ApplyActionButtonsVisible(visible);
+    }
+
+    internal void ApplyActionButtonsVisible(bool visible)
+    {
+        PresentationTrace.State("buttons", visible ? "1" : "0");
         if (ActionPanel != null)
             ActionPanel.SetActive(visible);
         if (!visible)
@@ -1840,8 +1962,30 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActivePC(int pcNumber)
     {
+        SetActivePC(pcNumber, null);
+    }
+
+    /// <summary>
+    /// Highlight which PC is currently active (1-4; 0 clears all), with the creature it is (the creature overload,
+    /// grouped AI turns step 8): a recorded highlight is resolved against the creature, so a later change of the party
+    /// list cannot shift it. Passthrough applies the index at once.
+    /// </summary>
+    public void SetActivePC(int pcNumber, CharacterController creature)
+    {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.ActivePC, Ui = this, Index = pcNumber, Creature = creature });
+            return;
+        }
+        ApplyActivePC(pcNumber, creature);
+    }
+
+    internal void ApplyActivePC(int pcNumber, CharacterController creature)
+    {
         EnsureCharacterInfoPanel();
         _characterInfoPanel?.SetActivePC(pcNumber);
+        if (PresentationTrace.Recording)
+            PresentationTrace.State("active-pc", pcNumber + (creature != null && creature.Stats != null ? " " + creature.Stats.CharacterName : ""));
     }
 
     /// <summary>
@@ -1849,8 +1993,30 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActiveNPC(int npcIndex)
     {
+        SetActiveNPC(npcIndex, null);
+    }
+
+    /// <summary>
+    /// Highlight which NPC is currently active (0-based index; -1 clears all), with the creature it is (the creature
+    /// overload, grouped AI turns step 8): a recorded highlight is resolved against the creature, so an NPCs.RemoveAt
+    /// before its playback cannot shift it. Passthrough applies the index at once.
+    /// </summary>
+    public void SetActiveNPC(int npcIndex, CharacterController creature)
+    {
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat { Kind = BeatKind.ActiveNPC, Ui = this, Index = npcIndex, Creature = creature });
+            return;
+        }
+        ApplyActiveNPC(npcIndex, creature);
+    }
+
+    internal void ApplyActiveNPC(int npcIndex, CharacterController creature)
+    {
         EnsureCharacterInfoPanel();
         _characterInfoPanel?.SetActiveNPC(npcIndex);
+        if (PresentationTrace.Recording)
+            PresentationTrace.State("active-npc", npcIndex + (creature != null && creature.Stats != null ? " " + creature.Stats.CharacterName : ""));
     }
 
     /// <summary>
@@ -4018,10 +4184,33 @@ public class CombatUI : MonoBehaviour
 
         ShowAoOConfirmationPrompt(info);
     }
+    /// <summary>
+    /// A confirmation dialog (an Interactive barrier, grouped AI turns S3): a presentation boundary, then the show (at
+    /// once in Passthrough; recorded while queueing). The caller's flags are set before the call, as before.
+    /// </summary>
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)
     {
+        CombatPresentation.Boundary(PresentationBoundary.Interactive);
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat
+            {
+                Kind = BeatKind.Interactive, Ui = this, Text = title,
+                Show = () => ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel)
+            });
+            return;
+        }
+        ApplyShowConfirmationDialog(title, message, confirmLabel, cancelLabel, onConfirm, onCancel);
+    }
+
+    private void ApplyShowConfirmationDialog(string title, string message,
+        string confirmLabel, string cancelLabel,
+        System.Action onConfirm, System.Action onCancel)
+    {
+        if (PresentationTrace.Recording)
+            PresentationTrace.Applied("interactive", "confirm: " + title);
         if (_confirmationPanel != null)
             Destroy(_confirmationPanel);
 
@@ -4129,6 +4318,23 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ShowDefeatPanel(string title, string message, System.Action onNewParty, System.Action onQuit)
     {
+        CombatPresentation.Boundary(PresentationBoundary.Interactive);
+        if (CombatPresentation.Queueing)
+        {
+            CombatPresentation.Enqueue(new PresentationBeat
+            {
+                Kind = BeatKind.Interactive, Ui = this, Text = title,
+                Show = () => ApplyShowDefeatPanel(title, message, onNewParty, onQuit)
+            });
+            return;
+        }
+        ApplyShowDefeatPanel(title, message, onNewParty, onQuit);
+    }
+
+    private void ApplyShowDefeatPanel(string title, string message, System.Action onNewParty, System.Action onQuit)
+    {
+        if (PresentationTrace.Recording)
+            PresentationTrace.Applied("interactive", "defeat: " + title);
         HideDefeatPanel();
 
         Canvas canvas = GetComponentInParent<Canvas>();

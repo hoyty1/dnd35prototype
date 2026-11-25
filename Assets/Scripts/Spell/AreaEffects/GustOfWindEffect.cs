@@ -116,11 +116,24 @@ public class GustOfWindEffect
 
     private static Sprite _gustSprite;
 
+    /// <summary>
+    /// The gust's one-shot streaks, a presentation beat (grouped AI turns step 8, CombatPresentation.Defer): the
+    /// caster's square, the cells and the direction are taken now; the streaks are built at once in Passthrough, or at
+    /// their beat while a group is recorded (step 9).
+    /// </summary>
     private void SpawnWindLineVisual()
     {
         if (caster == null || affectedCells == null || affectedCells.Count == 0)
             return;
 
+        Vector2Int origin = caster.GridPosition;
+        var cells = new List<Vector2Int>(affectedCells);
+        Vector2Int direction = windDirection;
+        CombatPresentation.Defer(() => BuildWindLineVisual(origin, cells, direction), "GustOfWind_VFX");
+    }
+
+    private static void BuildWindLineVisual(Vector2 origin, List<Vector2Int> orderedCells, Vector2Int windDirection)
+    {
         Vector3 dir = new Vector3(windDirection.x, windDirection.y, 0f);
         if (dir.sqrMagnitude < 0.01f)
             dir = Vector3.right;
@@ -129,8 +142,6 @@ public class GustOfWindEffect
         Vector3 perp = new Vector3(-dir.y, dir.x, 0f);
         float zRotation = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
-        var orderedCells = new List<Vector2Int>(affectedCells);
-        Vector2 origin = caster.GridPosition;
         orderedCells.Sort((a, b) => Vector2.Dot(((Vector2)a - origin), (Vector2)windDirection)
             .CompareTo(Vector2.Dot(((Vector2)b - origin), (Vector2)windDirection)));
 

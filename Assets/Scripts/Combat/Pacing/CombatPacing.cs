@@ -71,6 +71,9 @@ public static class CombatPacing
     /// </summary>
     public static WaitForSeconds Wait(float seconds)
     {
+        // A presentation boundary (grouped AI turns step 8): in Passthrough it only feeds the presentation trace and
+        // never changes the yield returned here.
+        CombatPresentation.Boundary(PresentationBoundary.Wait);
         return new WaitForSeconds(Scaled(seconds, Kind, Speed));
     }
 

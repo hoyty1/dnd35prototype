@@ -790,13 +790,19 @@ namespace Tests.Scenarios
                     string path = Path.Combine(RunDir, Slug(job.Def.Id) + "__s" + job.Seed + (job.Options.Repeat > 1 ? "__r" + job.Rep : "") + ".jsonl");
                     job.Trace.WriteJsonl(path);
                     r.Path = path.Replace('\\', '/');
-                    WriteCastStages(job, Path.GetFileNameWithoutExtension(path));
+                    WriteCastStages(job, Path.GetFileNameWithoutExtension(path), r.Notes);
+                    WritePresentation(Path.GetFileNameWithoutExtension(path), r.Notes);
                     r.Events = job.Trace.Events.Count;
                 }
                 catch (Exception ex)
                 {
                     r.Notes.Add("trace write: " + ex.Message);
                 }
+            }
+            else
+            {
+                // No trace, no sidecar: the presentation recording still ends with the job (Cleanup stops it again).
+                global::PresentationTrace.Stop();
             }
             return r;
         }
@@ -878,6 +884,9 @@ namespace Tests.Scenarios
             // The AI decision time and decision trace start empty too (batch 14 step 1; outside the trace hash).
             global::AiDecisionTimer.Reset();
             global::AiDecisionTrace.Clear();
+            // The presentation trace (grouped AI turns step 8): the job's applied presentation events, for the unhashed
+            // presentation.jsonl sidecar; nothing reaches the trace or its hash.
+            global::PresentationTrace.Begin();
             if (!job.Decided)
                 TryRun(job, "setup", () => Setup(job, gm));
 
@@ -1641,7 +1650,9 @@ namespace Tests.Scenarios
             string path = Path.Combine(RunDir, slug + ".jsonl");
             trace.WriteJsonl(path);
             result.Path = path.Replace('\\', '/');
-            WriteCastStages(job, slug);
+            // The sidecars' notes go on the result: job.Notes was copied into it above.
+            WriteCastStages(job, slug, result.Notes);
+            WritePresentation(slug, result.Notes);
 
             string repKey = job.Def.Id + "|" + job.Seed;
             if (job.Options.Repeat > 1)
@@ -1689,6 +1700,9 @@ namespace Tests.Scenarios
             }
             try { job.Trace?.Uninstall(); } catch (Exception ex) { job.Notes.Add("uninstall: " + ex.Message); }
             try { ScenarioHooks.ClearAll(); } catch (Exception ex) { job.Notes.Add("clear hooks: " + ex.Message); }
+            // Every job end stops the presentation recording, whichever exit it took (Finalize and ErrorResult stop it
+            // after their write; a job with no trace never wrote one), so no later job, suite or hand play runs with it on.
+            global::PresentationTrace.Stop();
 
             if (!job.Options.Keep && gm != null && gm.Harness_IsReady() && job.Outcome != Outcome.Contaminated)
             {
@@ -1773,9 +1787,10 @@ namespace Tests.Scenarios
         /// <summary>
         /// Writes the job's cast stages (CastStageTrace, batch 11) to &lt;RunDir&gt;/&lt;jobId&gt;/caststages.jsonl, where the
         /// job id is the trace file's name without .jsonl. Only jobs that marked a stage get the file; it is not hashed,
-        /// and a failed write is a job note, never a verdict change.
+        /// and a failed write is a note on <paramref name="notes"/> (the job result's, which already holds the job's notes),
+        /// never a verdict change.
         /// </summary>
-        private void WriteCastStages(ScenarioJob job, string jobId)
+        private void WriteCastStages(ScenarioJob job, string jobId, List<string> notes)
         {
             if (job.Trace == null || job.Trace.CastStageCount == 0)
                 return;
@@ -1785,7 +1800,36 @@ namespace Tests.Scenarios
             }
             catch (Exception ex)
             {
-                job.Notes.Add("caststages write: " + ex.Message);
+                notes.Add("caststages write: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Writes the job's presentation trace (global::PresentationTrace, grouped AI turns step 8) to
+        /// &lt;RunDir&gt;/&lt;jobId&gt;/presentation.jsonl, beside caststages.jsonl and after the job's AI timing was taken, then
+        /// stops the recording. Unhashed: step 9's PresentationCheck compares two runs' files (the log channel and each
+        /// token's keyframes). The file is written when the job's trace recorded at least one line; a trace that faulted
+        /// (PresentationTrace.FaultMessage: it stopped itself and wrote one "error" line) is still written, with a note. A
+        /// failed write is a note on <paramref name="notes"/> (the job result's), never a verdict change; soak-rows.tsv is
+        /// untouched.
+        /// </summary>
+        private void WritePresentation(string jobId, List<string> notes)
+        {
+            try
+            {
+                string fault = global::PresentationTrace.FaultMessage;
+                if (fault != null)
+                    notes.Add("presentation trace faulted (the rest of the job ran untraced): " + fault);
+                if ((global::PresentationTrace.Recording || fault != null) && global::PresentationTrace.Lines.Count > 0)
+                    global::PresentationTrace.Write(Path.Combine(RunDir, jobId, PresentationFileName));
+            }
+            catch (Exception ex)
+            {
+                notes.Add("presentation write: " + ex.Message);
+            }
+            finally
+            {
+                global::PresentationTrace.Stop();
             }
         }
 
@@ -1862,6 +1906,9 @@ namespace Tests.Scenarios
 
         /// <summary>The per-job cast-stage side file (Logs/Scenarios/&lt;runId&gt;/&lt;jobId&gt;/caststages.jsonl).</summary>
         public const string CastStagesFileName = "caststages.jsonl";
+
+        /// <summary>The job's presentation trace sidecar (grouped AI turns step 8; unhashed).</summary>
+        public const string PresentationFileName = "presentation.jsonl";
 
         private static string Slug(string id)
         {

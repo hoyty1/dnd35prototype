@@ -32,6 +32,8 @@ public static class TurnControl
     public static void CombatEnded()
     {
         CombatPacing.Kind = PaceKind.Player;
+        // A presentation boundary (step 8; trace only in Passthrough). Step 9 closes the group here.
+        CombatPresentation.Boundary(PresentationBoundary.CombatEnd);
     }
 
     /// <summary>

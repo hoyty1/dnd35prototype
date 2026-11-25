@@ -675,7 +675,7 @@ public static class CombatPacingTests
     /// parameter list and a body, with no parenthesis or <c>=</c> between the list and the brace, so a call such as
     /// <c>if (Name(x)) {</c> or <c>new Name() {</c> never matches.
     /// </summary>
-    private static string MethodBody(string src, string name)
+    internal static string MethodBody(string src, string name)
     {
         foreach (Match m in Regex.Matches(src, @"([\w<>\[\],.?]+)\s+" + Regex.Escape(name) + @"\s*\([^;{)]*\)[^;{=()]*\{"))
         {
@@ -698,7 +698,7 @@ public static class CombatPacingTests
     /// breaks kept), so a <c>//</c> or <c>/*</c> inside a literal (a URL in a log line) hides no code, and no wait, brace or
     /// call written inside a literal is counted.
     /// </summary>
-    private static string StripComments(string path)
+    internal static string StripComments(string path)
     {
         string s = File.ReadAllText(path);
         var code = new StringBuilder(s.Length);

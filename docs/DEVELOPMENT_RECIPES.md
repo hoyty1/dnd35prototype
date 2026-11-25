@@ -25,7 +25,7 @@ Step-by-step procedures for the common changes in this project: which files to t
 ## Contents
 
 - Magic: [Add a spell (data)](#add-a-spell-data) · [Implement a single-target, touch or self spell effect](#implement-a-single-target-touch-or-self-spell-effect) · [Implement an area spell](#implement-an-area-spell) · [Make NPCs cast a spell, and test a spell](#make-npcs-cast-a-spell-and-test-a-spell) · [Add a metamagic feat](#add-a-metamagic-feat)
-- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a trait](#add-a-trait) · [Add a combat-log message](#add-a-combat-log-message) · [Add a combat wait](#add-a-combat-wait)
+- Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add an action](#add-an-action) · [Add a trait](#add-a-trait) · [Add a combat-log message](#add-a-combat-log-message) · [Add a combat wait](#add-a-combat-wait) · [Add a combat visual or CombatUI method](#add-a-combat-visual-or-combatui-method)
 - Items and economy: [Add a mundane weapon, armor or shield](#add-a-mundane-weapon-armor-or-shield) · [Add a weapon or armor special ability](#add-a-weapon-or-armor-special-ability) · [Add a wondrous item](#add-a-wondrous-item) · [Add a ring](#add-a-ring) · [Add a rod](#add-a-rod) · [Add a staff](#add-a-staff) · [Add a scroll, potion or wand](#add-a-scroll-potion-or-wand) · [Add an item to the store](#add-an-item-to-the-store) · [Make an item craftable](#make-an-item-craftable)
 - Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Add a combat scenario](#add-a-combat-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
 - UI: [Add a combat action button](#add-a-combat-action-button) · [Add a UI panel](#add-a-ui-panel)
@@ -349,6 +349,24 @@ Pitfalls:
 - `CombatPacing.Wait` returns a `WaitForSeconds`, never an `IEnumerator`: `GameManager.RunAIActionNow` drains any `IEnumerator` in place, so a wait helper returning one (or a `WaitUntil`) would change the synchronous AI actions.
 - Keep a wait exactly where it is in its coroutine when you move code: the scenario trace hashes do not see the seconds, but the frame structure (the area trackers' `Update`, the Stalemate halt, `SkipChainRunaway`) depends on each yield.
 - A wait's length must never decide a rule: the harness checks it by running the same jobs at `aiSpeed=1` and `aiSpeed=4` in `mode=fine` (0.1 s of game time per frame) and comparing the hashes (docs/TESTING.md 3.4); a difference is a hidden frame or time rule to file and fix, never to allowlist.
+
+## Add a combat visual or CombatUI method
+
+Everything an AI turn can show passes through `CombatPresentation` (`UI/Presentation/CombatPresentation.cs`, grouped AI turns step 8), so step 9's run-ahead can hold it back and play it in order. Today only Passthrough exists and every gate applies at once, but a visual that skips the gate will appear early once Holding lands.
+
+1. A new public `CombatUI` method gets a row in `CombatPresentation.CombatUiClasses`: Queued (a display write that can wait: write it as `if (CombatPresentation.Queueing) { CombatPresentation.Enqueue(beat); return; } ApplyX(...);`, with a `BeatKind` and a case in `CombatPresentation.ApplyBeat`, or the closure form `PresentQueuedClosure`), Control (the hand-off to the player), Interactive (a modal the game waits on: call `CombatPresentation.Boundary(PresentationBoundary.Interactive)` first), CatchUp (a prompt that needs the screen caught up) or Live (input and layout that never wait). `CombatPresentationTests.TestCombatUiMethodsClassified` fails on an unclassed method. `ShowCombatLog` keeps `ScenarioHooks.CombatLog` as its first statement.
+2. A one-shot world visual (a streak, a flash, a burst) is built inside `CombatPresentation.Defer(() => Build(...), "Label")`: capture the values first, since the closure may run later, and never read rules state inside it (pattern: `GustOfWindEffect.SpawnWindLineVisual` and `BuildWindLineVisual`).
+3. A cell tint goes through `SquareCell.SetHighlight` or `ClearHighlight` (both gated); never write the cell's renderer yourself.
+4. A persistent area's indicator is made in `PersistentAreaEffect.CreateVisualIndicator`, which reports `CombatPresentation.AreaShown`; it goes through `PersistentAreaEffect.ReleaseIndicator` (a re-creation, and `ExpireEffect` before its deferred `Destroy(gameObject)`, so the beat is in rules order), which asks `CombatPresentation.AreaHidden(this, indicator)` and destroys only when it returns false, else detaches it for the presentation. `OnDestroy` asks too, as the fallback of the sites that destroy an area object directly; it cannot hand the indicator over, because Unity is already destroying it as a child, so a new direct destroy site calls `ExpireEffect` or releases first.
+5. A token's look is the model's SpriteRenderer, mirrored by its `TokenView` (combat-and-grid.md "Token views"); a stat panel goes through `CharacterInfoPanel.Capture*` and `Apply`.
+6. Presentation code never draws `Random`, never writes rules state and never calls `SetActive` or `Destroy` on a model; `CombatPresentationTests` scans `UI/Presentation/` for that. A keyframe or trace read uses pure reads only (`CharacterController.PeekGrappleOpponent`, not `TryGetGrappleState`, which ends stale links).
+
+Files: `UI/Presentation/CombatPresentation.cs`, `PresentationBeat.cs`, `PresentationTrace.cs`, `UI/Combat/CombatUI.cs`, `Grid/SquareCell.cs`, `Tests/UI/CombatPresentationTests.cs`. Design: [designs/grouped_ai_turns.md](designs/grouped_ai_turns.md) "Recording" and "`CombatUI` method classes".
+
+Pitfalls:
+- A gate must not change Passthrough: the scenario trace hashes and each job's `presentation.jsonl` (docs/TESTING.md 3.4) must stay equal to the step 8 baseline runs.
+- The ground-item token is still drawn outside the gate (UI-058).
+- Trace code runs inside rules coroutines: a trace call whose argument is built (a concatenation) goes inside `if (PresentationTrace.Recording)`, and nothing trace-side may throw into its caller (`Boundary`, `RecordStep` and every `PresentationTrace` entry point catch and fault the trace instead).
 
 # Items and economy
 

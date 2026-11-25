@@ -30,6 +30,9 @@ namespace Tests.Scenarios
         /// <summary>Restores fast mode and clears the hooks; returns what was still set, or null.</summary>
         public static string CleanUp(string reason)
         {
+            // The presentation trace (grouped AI turns step 8) never records past a run: stopped silently, it is not
+            // reported as leftover state (it changes no rules and no hash).
+            global::PresentationTrace.Stop();
             string hooks = ScenarioHooks.DescribeSet();
             string mode = ScenarioFastMode.HasSavedSettings ? (ScenarioFastMode.CurrentMode ?? "saved") : null;
             if (hooks == null && mode == null)

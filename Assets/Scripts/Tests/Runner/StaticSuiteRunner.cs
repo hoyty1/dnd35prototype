@@ -230,6 +230,7 @@ namespace Tests.Runner
         private static readonly string[] KeptRootNames =
         {
             "AreaEffectManager", "WindEffectManager", "ExperienceCalculator", "GameSettings", "DebugCommands",
+            CombatPresentation.RootName, // the presentation singleton (grouped AI turns step 8), like the managers above
         };
 
         /// <summary>

@@ -235,8 +235,31 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         if (AreaEffectManager.HasInstance)
             AreaEffectManager.Instance.UnregisterAreaEffect(this);
 
-        if (VisualIndicator != null)
+        // The fallback for the sites that destroy an area object directly (AreaEffectManager.ClearAllEffects, the spell
+        // handlers): ExpireEffect and a re-creation release the indicator first (ReleaseIndicator), so it is null here.
+        // In Passthrough it goes at once. This late hook cannot hand the indicator over (grouped AI turns step 9): Unity
+        // is already destroying it as this object's child, so step 9 releases first at those direct sites.
+        if (VisualIndicator != null && !CombatPresentation.AreaHidden(this, VisualIndicator))
             Destroy(VisualIndicator);
+    }
+
+    /// <summary>
+    /// The area's indicator goes, a presentation beat in rules order (grouped AI turns step 8, CombatPresentation.AreaHidden):
+    /// in Passthrough it is destroyed at once, as before; when the presentation takes it over (Holding, step 9) it is
+    /// detached from this object, so this object's destruction does not take it along, and goes at its beat.
+    /// </summary>
+    protected void ReleaseIndicator()
+    {
+        GameObject indicator = VisualIndicator;
+        if (indicator == null)
+            return;
+        VisualIndicator = null;
+        if (CombatPresentation.AreaHidden(this, indicator))
+        {
+            indicator.transform.SetParent(null, true);
+            return;
+        }
+        Destroy(indicator);
     }
 
     protected virtual void OnAreaCreated() { }
@@ -485,10 +508,14 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         gridHighlightApplied = false;
     }
 
+    /// <summary>
+    /// Builds the area's indicator. Its creation and its destruction are presentation beats (grouped AI turns step 8,
+    /// CombatPresentation.AreaShown and AreaHidden): in Passthrough it shows and goes at once, as before; while a group
+    /// is recorded (step 9) it shows at its beat.
+    /// </summary>
     protected virtual void CreateVisualIndicator()
     {
-        if (VisualIndicator != null)
-            Destroy(VisualIndicator);
+        ReleaseIndicator();
 
         if (AffectedCells == null || AffectedCells.Count == 0)
             return;
@@ -499,7 +526,10 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
         GameObject meshObj = CreateVisualMesh();
         if (meshObj == null)
+        {
+            CombatPresentation.AreaShown(this, VisualIndicator);
             return;
+        }
 
         meshObj.name = "AreaVisual";
         meshObj.transform.SetParent(VisualIndicator.transform, false);
@@ -522,6 +552,8 @@ public abstract class PersistentAreaEffect : MonoBehaviour
             renderer.receiveShadows = false;
             renderer.sortingOrder = 2;
         }
+
+        CombatPresentation.AreaShown(this, VisualIndicator);
     }
 
     /// <summary>
@@ -763,6 +795,8 @@ public abstract class PersistentAreaEffect : MonoBehaviour
             AreaEffectManager.Instance.UnregisterAreaEffect(this);
 
         LogEffect("Expires.");
+        // The indicator goes in rules order, before this object's deferred destruction (grouped AI turns step 8).
+        ReleaseIndicator();
         Destroy(gameObject);
     }
 
